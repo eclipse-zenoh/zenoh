@@ -13,15 +13,13 @@
 //
 
 //! Provide [ZBuf] as convenient buffers used for serialization and deserialization.
-pub mod bbuf;
-pub mod slice;
+mod bbuf;
+mod slice;
 pub mod vec;
-pub mod zbuf;
-pub mod zslice;
+mod zbuf;
+mod zslice;
 
 pub use bbuf::*;
-pub use slice::*;
-pub use vec::*;
 pub use zbuf::*;
 pub use zslice::*;
 

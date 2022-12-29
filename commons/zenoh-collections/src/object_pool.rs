@@ -17,7 +17,7 @@ use std::fmt;
 use std::ops::{Deref, DerefMut, Drop};
 use std::sync::{Arc, Weak};
 
-/// Provides a pool of pre-allocated s that are automaticlaly reinserted into
+/// Provides a pool of pre-allocated objects that are automaticlaly reinserted into
 /// the pool when dropped.
 pub struct RecyclingObjectPool<T, F>
 where

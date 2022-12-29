@@ -31,6 +31,7 @@ description = "Internal crate for zenoh."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
+collections = [ "zenoh-collections/async" ]
 test = [ "rand" ]
 shared-memory = [
     "shared_memory", 
@@ -46,4 +47,3 @@ rand = { version = "0.8.5", optional = true }
 serde = { version = "1.0.149", optional = true }
 shared_memory = { version = "=0.12.4", optional = true }
 zenoh-collections = { version = "0.7.0-rc", path = "../zenoh-collections/" }
-zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }

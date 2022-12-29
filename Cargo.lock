@@ -3775,7 +3775,6 @@ dependencies = [
  "serde",
  "shared_memory",
  "zenoh-collections",
- "zenoh-core",
 ]
 
 [[package]]
@@ -4136,13 +4135,13 @@ version = "0.7.0-rc"
 dependencies = [
  "hex",
  "lazy_static",
- "log",
  "rand 0.8.5",
  "serde",
  "uhlc",
  "uuid",
  "zenoh-buffers",
  "zenoh-core",
+ "zenoh-protocol",
 ]
 
 [[package]]

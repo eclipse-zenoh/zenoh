@@ -59,7 +59,7 @@ rand = "0.8.5"
 ringbuffer-spsc = "0.1.8"
 rsa = { version = "0.7.2", optional = true }
 serde = "1.0.149"
-zenoh-buffers = { version = "0.7.0-rc", path = "../../commons/zenoh-buffers/" }
+zenoh-buffers = { version = "0.7.0-rc", path = "../../commons/zenoh-buffers/", features = ["collections"] }
 zenoh-cfg-properties = { version = "0.7.0-rc", path = "../../commons/zenoh-cfg-properties/" }
 zenoh-codec = { version = "0.7.0-rc", path = "../../commons/zenoh-codec/" }
 zenoh-collections = { version = "0.7.0-rc", path = "../../commons/zenoh-collections/" }

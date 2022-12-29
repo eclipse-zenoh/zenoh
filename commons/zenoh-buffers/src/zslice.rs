@@ -23,6 +23,7 @@ use std::ops::{
 use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
+#[cfg(feature = "collections")]
 use zenoh_collections::RecyclingObject;
 #[cfg(feature = "shared-memory")]
 use zenoh_core::{zread, zwrite, Result as ZResult};
@@ -32,8 +33,9 @@ use zenoh_core::{zread, zwrite, Result as ZResult};
 /*************************************/
 #[derive(Clone, Debug)]
 pub enum ZSliceBuffer {
-    NetSharedBuffer(Arc<RecyclingObject<Box<[u8]>>>),
     NetOwnedBuffer(Arc<Vec<u8>>),
+    #[cfg(feature = "collections")]
+    NetSharedBuffer(Arc<RecyclingObject<Box<[u8]>>>),
     #[cfg(feature = "shared-memory")]
     ShmBuffer(Arc<SharedMemoryBuf>),
     #[cfg(feature = "shared-memory")]
@@ -43,8 +45,9 @@ pub enum ZSliceBuffer {
 impl ZSliceBuffer {
     fn as_slice(&self) -> &[u8] {
         match self {
-            Self::NetSharedBuffer(buf) => buf,
             Self::NetOwnedBuffer(buf) => buf.as_slice(),
+            #[cfg(feature = "collections")]
+            Self::NetSharedBuffer(buf) => buf,
             #[cfg(feature = "shared-memory")]
             Self::ShmBuffer(buf) => buf.as_slice(),
             #[cfg(feature = "shared-memory")]
@@ -56,10 +59,11 @@ impl ZSliceBuffer {
     #[allow(clippy::mut_from_ref)]
     unsafe fn as_mut_slice(&self) -> &mut [u8] {
         match self {
+            Self::NetOwnedBuffer(buf) => &mut (*(Arc::as_ptr(buf) as *mut Vec<u8>)),
+            #[cfg(feature = "collections")]
             Self::NetSharedBuffer(buf) => {
                 &mut (*(Arc::as_ptr(buf) as *mut RecyclingObject<Box<[u8]>>))
             }
-            Self::NetOwnedBuffer(buf) => &mut (*(Arc::as_ptr(buf) as *mut Vec<u8>)),
             #[cfg(feature = "shared-memory")]
             Self::ShmBuffer(buf) => (*(Arc::as_ptr(buf) as *mut SharedMemoryBuf)).as_mut_slice(),
             #[cfg(feature = "shared-memory")]
@@ -138,18 +142,6 @@ impl Index<RangeToInclusive<usize>> for ZSliceBuffer {
     }
 }
 
-impl From<Arc<RecyclingObject<Box<[u8]>>>> for ZSliceBuffer {
-    fn from(buf: Arc<RecyclingObject<Box<[u8]>>>) -> Self {
-        Self::NetSharedBuffer(buf)
-    }
-}
-
-impl From<RecyclingObject<Box<[u8]>>> for ZSliceBuffer {
-    fn from(buf: RecyclingObject<Box<[u8]>>) -> Self {
-        Self::NetSharedBuffer(buf.into())
-    }
-}
-
 impl From<Arc<Vec<u8>>> for ZSliceBuffer {
     fn from(buf: Arc<Vec<u8>>) -> Self {
         Self::NetOwnedBuffer(buf)
@@ -159,6 +151,20 @@ impl From<Arc<Vec<u8>>> for ZSliceBuffer {
 impl From<Vec<u8>> for ZSliceBuffer {
     fn from(buf: Vec<u8>) -> Self {
         Self::NetOwnedBuffer(buf.into())
+    }
+}
+
+#[cfg(feature = "collections")]
+impl From<Arc<RecyclingObject<Box<[u8]>>>> for ZSliceBuffer {
+    fn from(buf: Arc<RecyclingObject<Box<[u8]>>>) -> Self {
+        Self::NetSharedBuffer(buf)
+    }
+}
+
+#[cfg(feature = "collections")]
+impl From<RecyclingObject<Box<[u8]>>> for ZSliceBuffer {
+    fn from(buf: RecyclingObject<Box<[u8]>>) -> Self {
+        Self::NetSharedBuffer(buf.into())
     }
 }
 
@@ -246,7 +252,9 @@ impl ZSlice {
     #[inline]
     pub fn get_kind(&self) -> ZSliceKind {
         match &self.buf {
-            ZSliceBuffer::NetSharedBuffer(_) | ZSliceBuffer::NetOwnedBuffer(_) => ZSliceKind::Net,
+            ZSliceBuffer::NetOwnedBuffer(_) => ZSliceKind::Net,
+            #[cfg(feature = "collections")]
+            ZSliceBuffer::NetSharedBuffer(_) => ZSliceKind::Net,
             #[cfg(feature = "shared-memory")]
             ZSliceBuffer::ShmBuffer(_) | ZSliceBuffer::ShmInfo(_) => ZSliceKind::Shm,
         }
@@ -415,28 +423,6 @@ impl From<ZSliceBuffer> for ZSlice {
     }
 }
 
-impl From<Arc<RecyclingObject<Box<[u8]>>>> for ZSlice {
-    fn from(buf: Arc<RecyclingObject<Box<[u8]>>>) -> Self {
-        let end = buf.len();
-        Self {
-            buf: buf.into(),
-            start: 0,
-            end,
-        }
-    }
-}
-
-impl From<RecyclingObject<Box<[u8]>>> for ZSlice {
-    fn from(buf: RecyclingObject<Box<[u8]>>) -> Self {
-        let end = buf.len();
-        Self {
-            buf: buf.into(),
-            start: 0,
-            end,
-        }
-    }
-}
-
 impl From<Arc<Vec<u8>>> for ZSlice {
     fn from(buf: Arc<Vec<u8>>) -> Self {
         let end = buf.len();
@@ -450,6 +436,30 @@ impl From<Arc<Vec<u8>>> for ZSlice {
 
 impl From<Vec<u8>> for ZSlice {
     fn from(buf: Vec<u8>) -> Self {
+        let end = buf.len();
+        Self {
+            buf: buf.into(),
+            start: 0,
+            end,
+        }
+    }
+}
+
+#[cfg(feature = "collections")]
+impl From<Arc<RecyclingObject<Box<[u8]>>>> for ZSlice {
+    fn from(buf: Arc<RecyclingObject<Box<[u8]>>>) -> Self {
+        let end = buf.len();
+        Self {
+            buf: buf.into(),
+            start: 0,
+            end,
+        }
+    }
+}
+
+#[cfg(feature = "collections")]
+impl From<RecyclingObject<Box<[u8]>>> for ZSlice {
+    fn from(buf: RecyclingObject<Box<[u8]>>) -> Self {
         let end = buf.len();
         Self {
             buf: buf.into(),

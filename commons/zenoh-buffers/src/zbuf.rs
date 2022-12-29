@@ -28,6 +28,7 @@ use zenoh_core::Result as ZResult;
 fn get_mut_unchecked<T>(arc: &mut std::sync::Arc<T>) -> &mut T {
     unsafe { &mut (*(std::sync::Arc::as_ptr(arc) as *mut T)) }
 }
+
 #[derive(Debug, Clone, Default, Eq)]
 pub struct ZBuf {
     slices: SingleOrVec<ZSlice>,

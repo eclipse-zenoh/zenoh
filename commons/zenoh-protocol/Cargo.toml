@@ -30,14 +30,13 @@ categories = ["network-programming"]
 description = "Internal crate for zenoh."
 
 [features]
-test = [ "zenoh-buffers/test" ]
+test = [ "rand", "zenoh-buffers/test" ]
 shared-memory = [ "zenoh-buffers/shared-memory" ]
 complete_n = []
 
 [dependencies]
-log = "0.4.17"
 hex = "0.4.3"
-rand = "0.8.5"
+rand = { version = "0.8.5", optional = true }
 serde = "1.0.147"
 uhlc = "0.5.1"
 uuid = "1.2.1"
@@ -46,3 +45,4 @@ zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }
 
 [dev-dependencies]
 lazy_static = "1.4.0"
+zenoh-protocol = { version = "0.7.0-rc", path = ".", features = [ "test" ] }
