@@ -29,14 +29,11 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-async = ["std", "async-std", "async-trait", "flume"]
-std = ["log", "zenoh-core", "zenoh-sync"]
+async = ["std", "async-std"]
+std = ["zenoh-core", "zenoh-sync"]
 default = ["async", "std"]
 
 [dependencies]
 async-std = { version = "=1.12.0", features = ["unstable"], optional = true }
-async-trait = { version = "0.1.59", optional = true }
-flume = { version = "0.10.14", optional = true }
-log = { version = "0.4.17", optional = true }
 zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/", optional = true }
 zenoh-sync = { version = "0.7.0-rc", path = "../zenoh-sync/", optional = true }

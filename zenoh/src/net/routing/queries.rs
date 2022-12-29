@@ -27,7 +27,6 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::{RwLock, Weak};
 use zenoh_buffers::ZBuf;
-use zenoh_collections::Timed;
 use zenoh_protocol::{
     core::{
         key_expr::include::{Includer, DEFAULT_INCLUDER},
@@ -36,6 +35,7 @@ use zenoh_protocol::{
     zenoh::{DataInfo, QueryBody, RoutingContext},
 };
 use zenoh_sync::get_mut_unchecked;
+use zenoh_util::Timed;
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,

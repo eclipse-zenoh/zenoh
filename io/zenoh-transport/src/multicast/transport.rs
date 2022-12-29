@@ -27,7 +27,6 @@ use std::{
     },
     time::Duration,
 };
-use zenoh_collections::{Timed, TimedEvent, TimedHandle, Timer};
 use zenoh_core::{bail, zread, zwrite, Result as ZResult};
 use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::{
@@ -35,6 +34,7 @@ use zenoh_protocol::{
     transport::{tmsg, Join, TransportMessage},
     zenoh::ZenohMessage,
 };
+use zenoh_util::{Timed, TimedEvent, TimedHandle, Timer};
 
 /*************************************/
 /*             TRANSPORT             */
