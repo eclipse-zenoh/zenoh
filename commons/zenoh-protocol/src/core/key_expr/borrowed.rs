@@ -14,10 +14,12 @@
 
 use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
 use crate::core::WireExpr;
-use std::{
-    borrow::Borrow,
+use core::{
     convert::{TryFrom, TryInto},
+    fmt,
+    ops::{Deref, Div},
 };
+use std::borrow::{Borrow, Cow};
 use zenoh_core::{bail, Error as ZError, Result as ZResult};
 
 /// A [`str`] newtype that is statically known to be a valid key expression.
@@ -268,7 +270,7 @@ impl keyexpr {
     /// Much like [`std::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
     /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
     pub unsafe fn from_str_unchecked(s: &str) -> &Self {
-        std::mem::transmute(s)
+        core::mem::transmute(s)
     }
 
     /// # Safety
@@ -277,11 +279,11 @@ impl keyexpr {
     /// Much like [`std::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
     /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
     pub unsafe fn from_slice_unchecked(s: &[u8]) -> &Self {
-        std::mem::transmute(s)
+        core::mem::transmute(s)
     }
 }
 
-impl std::ops::Div for &keyexpr {
+impl Div for &keyexpr {
     type Output = OwnedKeyExpr;
     fn div(self, rhs: Self) -> Self::Output {
         self.join(rhs).unwrap() // Joining 2 key expressions should always result in a canonizable string.
@@ -308,14 +310,14 @@ fn intersection_level_cmp() {
     assert!(Includes < Equals);
 }
 
-impl std::fmt::Debug for keyexpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for keyexpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "ke`{}`", self.as_ref())
     }
 }
 
-impl std::fmt::Display for keyexpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for keyexpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self)
     }
 }
@@ -445,10 +447,10 @@ fn autocanon() {
     assert_eq!(keyexpr::autocanonize(&mut s).unwrap(), "hello/*/**");
 }
 
-impl std::ops::Deref for keyexpr {
+impl Deref for keyexpr {
     type Target = str;
     fn deref(&self) -> &Self::Target {
-        unsafe { std::mem::transmute(self) }
+        unsafe { core::mem::transmute(self) }
     }
 }
 impl AsRef<str> for keyexpr {
@@ -485,7 +487,7 @@ impl<'a> From<&'a keyexpr> for WireExpr<'a> {
     fn from(val: &'a keyexpr) -> Self {
         WireExpr {
             scope: 0,
-            suffix: std::borrow::Cow::Borrowed(val.as_str()),
+            suffix: Cow::Borrowed(val.as_str()),
         }
     }
 }

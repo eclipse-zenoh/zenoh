@@ -89,8 +89,8 @@ pub enum FramePayload {
 impl Frame {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use core::convert::TryInto;
         use rand::Rng;
-        use std::convert::TryInto;
 
         const MIN: usize = 1;
         const MAX: usize = 1_024;
@@ -155,8 +155,8 @@ pub struct FrameHeader {
 impl FrameHeader {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use core::convert::TryInto;
         use rand::Rng;
-        use std::convert::TryInto;
 
         let mut rng = rand::thread_rng();
 

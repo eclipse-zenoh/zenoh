@@ -37,14 +37,18 @@ pub trait Intersector<Left, Right> {
 }
 
 pub(crate) mod restiction {
+    use core::ops::Deref;
+
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct NoBigWilds<T>(pub T);
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct NoSubWilds<T>(pub T);
-    impl<T> std::ops::Deref for NoBigWilds<T> {
+
+    impl<T> Deref for NoBigWilds<T> {
         type Target = T;
+
         fn deref(&self) -> &Self::Target {
             &self.0
         }

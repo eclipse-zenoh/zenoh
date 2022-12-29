@@ -11,16 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use crate::core::key_expr::{
     utils::{Split, Writer},
     DELIMITER, DOUBLE_WILD, SINGLE_WILD,
 };
+use core::{slice, str};
 
 pub trait Canonizable {
     fn canonize(&mut self);
 }
+
 const DOLLAR_STAR: &[u8; 2] = b"$*";
+
 impl Canonizable for &mut str {
     fn canonize(&mut self) {
         let mut writer = Writer {
@@ -97,9 +99,7 @@ impl Canonizable for &mut str {
             writer.write(DOUBLE_WILD)
         }
         *self = unsafe {
-            std::str::from_utf8_unchecked_mut(std::slice::from_raw_parts_mut(
-                writer.ptr, writer.len,
-            ))
+            str::from_utf8_unchecked_mut(slice::from_raw_parts_mut(writer.ptr, writer.len))
         }
     }
 }

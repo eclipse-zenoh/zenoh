@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::ZInt;
+use core::{convert::TryInto, fmt, num::NonZeroU8, ops::BitOr, str::FromStr};
 use zenoh_core::{bail, zresult::ZError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -22,7 +23,7 @@ pub enum WhatAmI {
     Client = 1 << 2,
 }
 
-impl std::str::FromStr for WhatAmI {
+impl FromStr for WhatAmI {
     type Err = ZError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -67,8 +68,8 @@ impl WhatAmI {
     }
 }
 
-impl std::fmt::Display for WhatAmI {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for WhatAmI {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.to_str())
     }
 }
@@ -87,7 +88,7 @@ pub struct WhatAmIVisitor;
 impl<'de> serde::de::Visitor<'de> for WhatAmIVisitor {
     type Value = WhatAmI;
 
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("either 'router', 'client' or 'peer'")
     }
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -126,7 +127,6 @@ impl From<WhatAmI> for ZInt {
     }
 }
 
-use std::{num::NonZeroU8, ops::BitOr};
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct WhatAmIMatcher(pub NonZeroU8);
@@ -140,7 +140,7 @@ impl WhatAmIMatcher {
         WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(rng.gen_range(128..136)) })
     }
 
-    pub fn try_from<T: std::convert::TryInto<u8>>(i: T) -> Option<Self> {
+    pub fn try_from<T: TryInto<u8>>(i: T) -> Option<Self> {
         let i = i.try_into().ok()?;
         if 127 < i && i < 136 {
             Some(WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(i) }))
@@ -176,7 +176,7 @@ impl WhatAmIMatcher {
     }
 }
 
-impl std::str::FromStr for WhatAmIMatcher {
+impl FromStr for WhatAmIMatcher {
     type Err = ();
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -205,7 +205,7 @@ impl serde::Serialize for WhatAmIMatcher {
 pub struct WhatAmIMatcherVisitor;
 impl<'de> serde::de::Visitor<'de> for WhatAmIMatcherVisitor {
     type Value = WhatAmIMatcher;
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("a | separated list of whatami variants ('peer', 'client' or 'router')")
     }
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
@@ -242,8 +242,8 @@ impl<'de> serde::Deserialize<'de> for WhatAmIMatcher {
     }
 }
 
-impl std::fmt::Display for WhatAmIMatcher {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for WhatAmIMatcher {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.to_str())
     }
 }

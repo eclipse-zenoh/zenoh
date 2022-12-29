@@ -13,13 +13,15 @@
 //
 pub mod key_expr;
 
+use core::{
+    convert::{From, TryFrom, TryInto},
+    fmt,
+    hash::{Hash, Hasher},
+    num::NonZeroU64,
+    str::FromStr,
+    sync::atomic::AtomicU64,
+};
 use key_expr::OwnedKeyExpr;
-use std::convert::{From, TryFrom, TryInto};
-use std::fmt;
-use std::hash::{Hash, Hasher};
-use std::num::NonZeroU64;
-use std::str::FromStr;
-use std::sync::atomic::AtomicU64;
 pub use uhlc::{Timestamp, NTP64};
 use uuid::Uuid;
 use zenoh_core::{bail, zerror};
@@ -259,7 +261,7 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
         impl<'de> serde::de::Visitor<'de> for ZenohIdVisitor {
             type Value = ZenohId;
 
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str(&format!("An hex string of 1-{} bytes", ZenohId::MAX_SIZE))
             }
 

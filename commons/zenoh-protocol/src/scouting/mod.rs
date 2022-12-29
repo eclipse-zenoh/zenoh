@@ -33,7 +33,7 @@ pub struct ScoutingMessage {
     pub body: ScoutingBody,
     pub attachment: Option<Attachment>,
     #[cfg(feature = "stats")]
-    pub size: Option<std::num::NonZeroUsize>,
+    pub size: Option<core::num::NonZeroUsize>,
 }
 
 impl ScoutingMessage {

@@ -11,15 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use core::{ptr, str};
 
 pub(crate) struct Writer {
     pub ptr: *mut u8,
     pub len: usize,
 }
+
 impl Writer {
     pub(crate) fn write(&mut self, slice: &[u8]) {
         let len = slice.len();
-        unsafe { std::ptr::copy(slice.as_ptr(), self.ptr.add(self.len), len) };
+        unsafe { ptr::copy(slice.as_ptr(), self.ptr.add(self.len), len) };
         self.len += len
     }
     pub(crate) fn write_byte(&mut self, byte: u8) {
@@ -42,7 +44,7 @@ impl<'a, S: ?Sized, D: ?Sized> Clone for Splitter<'a, S, D> {
     }
 }
 
-// impl<'a, S: Split<D> + ?Sized + std::fmt::Debug, D: ?Sized> Splitter<'a, S, D> {
+// impl<'a, S: Split<D> + ?Sized + fmt::Debug, D: ?Sized> Splitter<'a, S, D> {
 //     pub fn inner(&self) -> Option<&'a S> {
 //         self.s
 //     }
@@ -231,7 +233,7 @@ pub(crate) trait Utf {
 }
 impl Utf for [u8] {
     fn utf(&self) -> &str {
-        unsafe { std::str::from_utf8_unchecked(self) }
+        unsafe { str::from_utf8_unchecked(self) }
     }
 }
 /// This macro is generally useful when introducing new matchers to debug them.

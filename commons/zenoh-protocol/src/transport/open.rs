@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::ZInt;
-use std::time::Duration;
+use core::time::Duration;
 use zenoh_buffers::ZSlice;
 
 /// # Open message

@@ -33,14 +33,13 @@ shared-memory = ["zenoh-buffers/shared-memory", "zenoh-protocol/shared-memory"]
 complete_n = ["zenoh-protocol/complete_n"]
 
 [dependencies]
-rand = "0.8.5"
 uhlc = "0.5.1"
 zenoh-buffers = { version = "0.7.0-rc", path = "../zenoh-buffers/" }
-zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }
 zenoh-protocol = { version = "0.7.0-rc", path = "../zenoh-protocol/" }
 
 [dev-dependencies]
 criterion = "0.4.0"
+rand = "0.8.5"
 uuid = { version = "1.1.2", features = ["v4"] }
 zenoh-protocol = { version = "0.7.0-rc", path = "../zenoh-protocol/", features = [ "test" ] }
 

@@ -13,7 +13,7 @@
 //
 use super::locator::*;
 use crate::core::split_once;
-use std::{convert::TryFrom, fmt, str::FromStr};
+use core::{convert::TryFrom, fmt, str::FromStr};
 use zenoh_core::{zerror, Error as ZError, Result as ZResult};
 
 // Parsing chars

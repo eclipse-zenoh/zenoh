@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::endpoint::*;
-use std::{convert::TryFrom, fmt, hash::Hash, str::FromStr};
+use core::{convert::TryFrom, fmt, hash::Hash, str::FromStr};
 use zenoh_core::{Error as ZError, Result as ZResult};
 
 // Locator

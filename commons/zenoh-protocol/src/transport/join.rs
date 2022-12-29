@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::{ConduitSnList, WhatAmI, ZInt, ZenohId};
-use std::time::Duration;
+use core::time::Duration;
 
 /// # Join message
 ///

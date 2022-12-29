@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::ZInt;
-use core::fmt;
-use std::{borrow::Cow, convert::TryFrom};
+use core::{convert::TryFrom, fmt, mem};
+use std::borrow::Cow;
 
 mod consts {
     pub(super) const MIMES: [&str; 21] = [
@@ -70,7 +70,7 @@ pub enum KnownEncoding {
 
 impl From<KnownEncoding> for u8 {
     fn from(val: KnownEncoding) -> Self {
-        unsafe { std::mem::transmute(val) }
+        unsafe { mem::transmute(val) }
     }
 }
 
@@ -86,23 +86,23 @@ impl From<KnownEncoding> for usize {
     }
 }
 
-impl std::convert::TryFrom<u8> for KnownEncoding {
+impl TryFrom<u8> for KnownEncoding {
     type Error = ();
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         if value < consts::MIMES.len() as u8 + 1 {
-            Ok(unsafe { std::mem::transmute(value) })
+            Ok(unsafe { mem::transmute(value) })
         } else {
             Err(())
         }
     }
 }
 
-impl std::convert::TryFrom<ZInt> for KnownEncoding {
+impl TryFrom<ZInt> for KnownEncoding {
     type Error = ();
 
     fn try_from(value: ZInt) -> Result<Self, Self::Error> {
         if value < consts::MIMES.len() as ZInt + 1 {
-            Ok(unsafe { std::mem::transmute(value as u8) })
+            Ok(unsafe { mem::transmute(value as u8) })
         } else {
             Err(())
         }
@@ -223,12 +223,9 @@ impl From<&'static str> for Encoding {
         for (i, v) in consts::MIMES.iter().enumerate().skip(1) {
             if let Some(suffix) = s.strip_prefix(v) {
                 if suffix.is_empty() {
-                    return Encoding::Exact(unsafe { std::mem::transmute(i as u8) });
+                    return Encoding::Exact(unsafe { mem::transmute(i as u8) });
                 } else {
-                    return Encoding::WithSuffix(
-                        unsafe { std::mem::transmute(i as u8) },
-                        suffix.into(),
-                    );
+                    return Encoding::WithSuffix(unsafe { mem::transmute(i as u8) }, suffix.into());
                 }
             }
         }
@@ -246,9 +243,9 @@ impl From<String> for Encoding {
             if s.starts_with(v) {
                 s.replace_range(..v.len(), "");
                 if s.is_empty() {
-                    return Encoding::Exact(unsafe { std::mem::transmute(i as u8) });
+                    return Encoding::Exact(unsafe { mem::transmute(i as u8) });
                 } else {
-                    return Encoding::WithSuffix(unsafe { std::mem::transmute(i as u8) }, s.into());
+                    return Encoding::WithSuffix(unsafe { mem::transmute(i as u8) }, s.into());
                 }
             }
         }

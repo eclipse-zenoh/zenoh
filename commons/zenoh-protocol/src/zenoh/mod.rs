@@ -25,13 +25,13 @@ use crate::{
         Channel, CongestionControl, ConsolidationMode, QueryTarget, Reliability, WireExpr, ZInt,
     },
 };
+use core::fmt;
 pub use data::*;
 pub use declare::*;
 pub use linkstate::*;
 pub use pull::*;
 pub use query::*;
 pub use routing::*;
-use std::fmt;
 pub use unit::*;
 use zenoh_buffers::ZBuf;
 
@@ -209,7 +209,7 @@ pub struct ZenohMessage {
     pub routing_context: Option<RoutingContext>,
     pub attachment: Option<Attachment>,
     #[cfg(feature = "stats")]
-    pub size: Option<std::num::NonZeroUsize>,
+    pub size: Option<core::num::NonZeroUsize>,
 }
 
 impl ZenohMessage {
@@ -388,8 +388,8 @@ impl ZenohMessage {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use crate::core::Priority;
+        use core::convert::TryInto;
         use rand::Rng;
-        use std::convert::TryInto;
 
         let mut rng = rand::thread_rng();
 

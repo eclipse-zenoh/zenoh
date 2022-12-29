@@ -11,11 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 use super::{canon::Canonizable, keyexpr};
 use crate::core::WireExpr;
-use std::sync::Arc;
-use std::{convert::TryFrom, str::FromStr};
+use core::{
+    convert::TryFrom,
+    fmt,
+    ops::{Deref, Div},
+    str::FromStr,
+};
+use std::{borrow::Cow, sync::Arc};
 
 /// A [`Arc<str>`] newtype that is statically known to be a valid key expression.
 ///
@@ -74,14 +78,14 @@ impl OwnedKeyExpr {
     }
 }
 #[allow(clippy::suspicious_arithmetic_impl)]
-impl std::ops::Div<&keyexpr> for OwnedKeyExpr {
+impl Div<&keyexpr> for OwnedKeyExpr {
     type Output = Self;
     fn div(self, rhs: &keyexpr) -> Self::Output {
         &self / rhs
     }
 }
 #[allow(clippy::suspicious_arithmetic_impl)]
-impl std::ops::Div<&keyexpr> for &OwnedKeyExpr {
+impl Div<&keyexpr> for &OwnedKeyExpr {
     type Output = OwnedKeyExpr;
     fn div(self, rhs: &keyexpr) -> Self::Output {
         let s: String = [self.as_str(), "/", rhs.as_str()].concat();
@@ -95,18 +99,18 @@ fn div() {
     let k = a / &b;
     assert_eq!(k.as_str(), "a/b")
 }
-impl std::fmt::Debug for OwnedKeyExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for OwnedKeyExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
     }
 }
-impl std::fmt::Display for OwnedKeyExpr {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for OwnedKeyExpr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
     }
 }
 
-impl std::ops::Deref for OwnedKeyExpr {
+impl Deref for OwnedKeyExpr {
     type Target = keyexpr;
     fn deref(&self) -> &Self::Target {
         unsafe { keyexpr::from_str_unchecked(&self.0) }
@@ -156,7 +160,7 @@ impl<'a> From<&'a OwnedKeyExpr> for WireExpr<'a> {
     fn from(val: &'a OwnedKeyExpr) -> Self {
         WireExpr {
             scope: 0,
-            suffix: std::borrow::Cow::Borrowed(val.as_str()),
+            suffix: Cow::Borrowed(val.as_str()),
         }
     }
 }

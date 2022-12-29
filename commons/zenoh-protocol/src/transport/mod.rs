@@ -18,20 +18,18 @@ mod join;
 mod keepalive;
 mod open;
 
-use std::time::Duration;
-
+use crate::{
+    common::Attachment,
+    core::{Channel, ConduitSnList, WhatAmI, ZInt, ZenohId},
+};
 pub use close::*;
+use core::time::Duration;
 pub use frame::*;
 pub use init::*;
 pub use join::*;
 pub use keepalive::*;
 pub use open::*;
 use zenoh_buffers::ZSlice;
-
-use crate::{
-    common::Attachment,
-    core::{Channel, ConduitSnList, WhatAmI, ZInt, ZenohId},
-};
 
 pub mod tmsg {
     use crate::common::imsg;
@@ -147,7 +145,7 @@ pub struct TransportMessage {
     pub body: TransportBody,
     pub attachment: Option<Attachment>,
     #[cfg(feature = "stats")]
-    pub size: Option<std::num::NonZeroUsize>,
+    pub size: Option<core::num::NonZeroUsize>,
 }
 
 impl TransportMessage {

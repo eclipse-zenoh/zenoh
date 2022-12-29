@@ -34,6 +34,6 @@ std = ["zenoh-core", "zenoh-sync"]
 default = ["async", "std"]
 
 [dependencies]
-async-std = { version = "=1.12.0", features = ["unstable"], optional = true }
+async-std = { version = "=1.12.0", optional = true }
 zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/", optional = true }
 zenoh-sync = { version = "0.7.0-rc", path = "../zenoh-sync/", optional = true }
