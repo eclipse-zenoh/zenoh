@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::*;
-use std::convert::TryInto;
+use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use core::convert::TryInto;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},

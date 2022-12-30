@@ -11,11 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+extern crate alloc;
+
 use crate::{
     reader::HasReader,
+    vec,
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
 };
-use std::num::NonZeroUsize;
+use alloc::boxed::Box;
+use core::num::NonZeroUsize;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BBuf {
@@ -26,7 +30,7 @@ pub struct BBuf {
 impl BBuf {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            buffer: vec![0u8; capacity].into_boxed_slice(),
+            buffer: vec::uninit(capacity).into_boxed_slice(),
             len: 0,
         }
     }

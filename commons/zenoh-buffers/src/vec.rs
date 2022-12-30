@@ -1,5 +1,3 @@
-use std::num::NonZeroUsize;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -13,10 +11,14 @@ use std::num::NonZeroUsize;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+extern crate alloc;
+
 use crate::{
     reader::HasReader,
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
 };
+use alloc::vec::Vec;
+use core::{mem, num::NonZeroUsize};
 
 /// Allocate a vector with a given capacity and sets the length to that capacity.
 pub fn uninit(capacity: usize) -> Vec<u8> {
@@ -66,7 +68,7 @@ impl Writer for &mut Vec<u8> {
     {
         self.reserve(len);
         unsafe {
-            len = f(std::mem::transmute(&mut self.spare_capacity_mut()[..len]));
+            len = f(mem::transmute(&mut self.spare_capacity_mut()[..len]));
             self.set_len(self.len() + len);
         }
         Ok(())

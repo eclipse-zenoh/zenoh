@@ -11,9 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+extern crate alloc;
+
 use crate::core::ZInt;
+use alloc::borrow::Cow;
 use core::{convert::TryFrom, fmt, mem};
-use std::borrow::Cow;
 
 mod consts {
     pub(super) const MIMES: [&str; 21] = [

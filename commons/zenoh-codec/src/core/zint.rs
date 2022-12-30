@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::*;
-use std::convert::TryInto;
+use crate::{RCodec, WCodec, Zenoh060};
+use core::convert::TryInto;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -114,7 +114,7 @@ where
 
 // impl Zenoh070 {
 //     pub const fn preview_length(&self, x: u64) -> NonZeroU8 {
-//         let x = match std::num::NonZeroU64::new(x) {
+//         let x = match core::num::NonZeroU64::new(x) {
 //             Some(x) => x,
 //             None => {
 //                 return unsafe { NonZeroU8::new_unchecked(1) };
@@ -169,7 +169,7 @@ where
 // pub enum ConversionOrReadError<T, U, E>
 // where
 //     T: TryInto<U>,
-//     <T as TryInto<U>>::Error: std::fmt::Debug + Clone,
+//     <T as TryInto<U>>::Error: core::fmt::Debug + Clone,
 // {
 //     ReadError(E),
 //     ConversionError(<T as TryInto<U>>::Error),
@@ -195,7 +195,7 @@ where
 //         const VLE_LEN: usize = 9;
 //         writer.with_slot(VLE_LEN, move |mut buffer| {
 //             // since leading_zeros will jump conditionally on 0 anyway (`asm {bsr 0}` is UB), might as well jump to return
-//             let x = match std::num::NonZeroU64::new(x) {
+//             let x = match core::num::NonZeroU64::new(x) {
 //                 Some(x) => x,
 //                 None => {
 //                     buffer[0] = 0;
@@ -209,7 +209,7 @@ where
 //             x <<= payload_size;
 //             let serialized = x.to_le_bytes();
 //             unsafe {
-//                 std::ptr::copy_nonoverlapping(
+//                 core::ptr::copy_nonoverlapping(
 //                     serialized.as_ptr(),
 //                     buffer.as_mut_ptr().offset(shift_payload as isize),
 //                     u64::BITS as usize / 8,

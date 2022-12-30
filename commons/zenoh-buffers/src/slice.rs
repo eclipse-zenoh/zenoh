@@ -16,7 +16,7 @@ use crate::{
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     ZSlice,
 };
-use std::{marker::PhantomData, num::NonZeroUsize};
+use core::{marker::PhantomData, mem, num::NonZeroUsize, slice};
 
 // Writer
 impl HasWriter for &mut [u8] {
@@ -38,7 +38,7 @@ impl Writer for &mut [u8] {
         // Safety: this doesn't compile with simple assignment because the compiler
         // doesn't believe that the subslice has the same lifetime as the original slice,
         // so we transmute to assure it that it does.
-        *self = unsafe { std::mem::transmute(&mut self[len..]) };
+        *self = unsafe { mem::transmute(&mut self[len..]) };
         // Safety: this operation is safe since we check if len is non-zero
         Ok(unsafe { NonZeroUsize::new_unchecked(len) })
     }
@@ -53,7 +53,7 @@ impl Writer for &mut [u8] {
         // Safety: this doesn't compile with simple assignment because the compiler
         // doesn't believe that the subslice has the same lifetime as the original slice,
         // so we transmute to assure it that it does.
-        *self = unsafe { std::mem::transmute(&mut self[len..]) };
+        *self = unsafe { mem::transmute(&mut self[len..]) };
         Ok(())
     }
 
@@ -72,7 +72,7 @@ impl Writer for &mut [u8] {
         // Safety: this doesn't compile with simple assignment because the compiler
         // doesn't believe that the subslice has the same lifetime as the original slice,
         // so we transmute to assure it that it does.
-        *self = unsafe { std::mem::transmute(&mut self[len..]) };
+        *self = unsafe { mem::transmute(&mut self[len..]) };
         Ok(())
     }
 }
@@ -97,7 +97,7 @@ impl<'s> BacktrackableWriter for &'s mut [u8] {
 
     fn rewind(&mut self, mark: Self::Mark) -> bool {
         // Safety: SliceMark's lifetime is bound to the slice's lifetime
-        *self = unsafe { std::slice::from_raw_parts_mut(mark.ptr as *mut u8, mark.len) };
+        *self = unsafe { slice::from_raw_parts_mut(mark.ptr as *mut u8, mark.len) };
         true
     }
 }

@@ -18,7 +18,7 @@ mod join;
 mod keepalive;
 mod open;
 
-use crate::*;
+use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},

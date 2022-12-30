@@ -11,15 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+extern crate alloc;
 
 use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
 use crate::core::WireExpr;
+use alloc::borrow::{Borrow, Cow};
 use core::{
     convert::{TryFrom, TryInto},
     fmt,
     ops::{Deref, Div},
 };
-use std::borrow::{Borrow, Cow};
 use zenoh_core::{bail, Error as ZError, Result as ZResult};
 
 /// A [`str`] newtype that is statically known to be a valid key expression.
@@ -107,7 +108,7 @@ impl keyexpr {
     ///
     /// This is notably useful for workspaces:
     /// ```rust
-    /// # use std::convert::TryFrom;
+    /// # use core::convert::TryFrom;
     /// # use zenoh_protocol::core::key_expr::OwnedKeyExpr;
     /// # let get_workspace = || OwnedKeyExpr::try_from("some/workspace").unwrap();
     /// let workspace: OwnedKeyExpr = get_workspace();
@@ -178,7 +179,7 @@ impl keyexpr {
     ///
     /// # Examples:
     /// ```
-    /// # use std::convert::{TryFrom, TryInto};
+    /// # use core::convert::{TryFrom, TryInto};
     /// # use zenoh_protocol::core::key_expr::keyexpr;
     /// assert_eq!(
     ///     ["abc"],
@@ -267,7 +268,7 @@ impl keyexpr {
     /// # Safety
     /// This constructs a [`keyexpr`] without ensuring that it is a valid key-expression.
     ///
-    /// Much like [`std::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
+    /// Much like [`core::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
     /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
     pub unsafe fn from_str_unchecked(s: &str) -> &Self {
         core::mem::transmute(s)
@@ -276,7 +277,7 @@ impl keyexpr {
     /// # Safety
     /// This constructs a [`keyexpr`] without ensuring that it is a valid key-expression.
     ///
-    /// Much like [`std::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
+    /// Much like [`core::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
     /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
     pub unsafe fn from_slice_unchecked(s: &[u8]) -> &Self {
         core::mem::transmute(s)

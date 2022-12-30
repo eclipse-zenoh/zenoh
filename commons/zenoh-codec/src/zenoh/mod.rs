@@ -19,15 +19,17 @@ mod query;
 mod routing;
 mod unit;
 
-use crate::*;
+use crate::{
+    RCodec, WCodec, Zenoh060, Zenoh060Header, Zenoh060HeaderReplyContext, Zenoh060Reliability,
+};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
     common::{imsg, Attachment},
-    core::{Channel, Priority},
-    zenoh::{zmsg, RoutingContext, ZenohBody, ZenohMessage},
+    core::{Channel, Priority, Reliability},
+    zenoh::{zmsg, ReplyContext, RoutingContext, ZenohBody, ZenohMessage},
 };
 
 impl<W> WCodec<&ZenohMessage, &mut W> for Zenoh060

@@ -12,7 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Provide [ZBuf] as convenient buffers used for serialization and deserialization.
+//! Provide differnt buffer implementations used for serialization and deserialization.
+extern crate alloc;
+
 mod bbuf;
 mod slice;
 pub mod vec;
@@ -28,11 +30,11 @@ mod shm;
 #[cfg(feature = "shared-memory")]
 pub use shm::*;
 
-use std::borrow::Cow;
+use alloc::{borrow::Cow, vec::Vec};
 
 pub mod writer {
     use crate::ZSlice;
-    use std::num::NonZeroUsize;
+    use core::num::NonZeroUsize;
 
     #[derive(Debug, Clone, Copy)]
     pub struct DidntWrite;
@@ -43,7 +45,7 @@ pub mod writer {
         fn remaining(&self) -> usize;
 
         fn write_u8(&mut self, byte: u8) -> Result<(), DidntWrite> {
-            self.write_exact(std::slice::from_ref(&byte))
+            self.write_exact(core::slice::from_ref(&byte))
         }
         fn write_zslice(&mut self, slice: &ZSlice) -> Result<(), DidntWrite> {
             self.write_exact(slice.as_slice())
@@ -74,7 +76,7 @@ pub mod writer {
 
 pub mod reader {
     use crate::ZSlice;
-    use std::num::NonZeroUsize;
+    use core::num::NonZeroUsize;
 
     #[derive(Debug, Clone, Copy)]
     pub struct DidntRead;
@@ -96,7 +98,7 @@ pub mod reader {
 
         fn read_u8(&mut self) -> Result<u8, DidntRead> {
             let mut byte = 0;
-            let read = self.read(std::slice::from_mut(&mut byte))?;
+            let read = self.read(core::slice::from_mut(&mut byte))?;
             if read.get() == 1 {
                 Ok(byte)
             } else {

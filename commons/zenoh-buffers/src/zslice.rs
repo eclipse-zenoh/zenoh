@@ -11,22 +11,24 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "shared-memory")]
-use super::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryReader};
+extern crate alloc;
+
 use crate::reader::{BacktrackableReader, DidntRead, HasReader, Reader};
-use std::convert::AsRef;
-use std::fmt;
-use std::num::NonZeroUsize;
-use std::ops::{
-    Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive,
+use alloc::{sync::Arc, vec::Vec};
+use core::{
+    convert::AsRef,
+    fmt,
+    num::NonZeroUsize,
+    ops::{Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive},
 };
-use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
-use std::sync::RwLock;
+use {
+    super::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryReader},
+    std::sync::RwLock,
+    zenoh_core::{zread, zwrite, Result as ZResult},
+};
 #[cfg(feature = "collections")]
-use zenoh_collections::RecyclingObject;
-#[cfg(feature = "shared-memory")]
-use zenoh_core::{zread, zwrite, Result as ZResult};
+use {alloc::boxed::Box, zenoh_collections::RecyclingObject};
 
 /*************************************/
 /*           ZSLICE BUFFER           */
@@ -590,9 +592,8 @@ mod tests {
 
     #[test]
     fn zslice() {
-        let buf = vec![0_u8; 16];
+        let buf = crate::vec::uninit(16);
         let zslice: ZSlice = buf.clone().into();
-        println!("[01] {:?} {:?}", buf.as_slice(), zslice.as_slice());
         assert_eq!(buf.as_slice(), zslice.as_slice());
 
         let buf = (0..16).into_iter().collect::<Vec<u8>>();
@@ -600,7 +601,6 @@ mod tests {
             let mbuf = zslice.as_mut_slice();
             mbuf[..buf.len()].clone_from_slice(&buf[..]);
         }
-        println!("[02] {:?} {:?}", buf.as_slice(), zslice.as_slice());
         assert_eq!(buf.as_slice(), zslice.as_slice());
     }
 }

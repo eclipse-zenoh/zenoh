@@ -240,17 +240,17 @@ impl TransportMulticastInner {
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
     #[allow(unused_mut)] // Required with "shared-memory" feature
-    pub(crate) fn schedule(&self, mut message: ZenohMessage) {
+    pub(crate) fn schedule(&self, mut msg: ZenohMessage) {
         // Multicast transports do not support SHM for the time being
         #[cfg(feature = "shared-memory")]
         {
-            let res = message.map_to_shmbuf(self.manager.shmr.clone());
+            let res = crate::shm::map_to_shmbuf(&mut msg, self.manager.shmr.clone());
             if let Err(e) = res {
                 log::trace!("Failed SHM conversion: {}", e);
                 return;
             }
         }
-        self.schedule_first_fit(message);
+        self.schedule_first_fit(msg);
     }
 
     /*************************************/

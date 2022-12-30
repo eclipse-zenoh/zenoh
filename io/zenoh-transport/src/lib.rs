@@ -21,6 +21,8 @@ mod common;
 mod manager;
 mod multicast;
 mod primitives;
+#[cfg(feature = "shared-memory")]
+mod shm;
 pub mod unicast;
 
 pub use manager::*;

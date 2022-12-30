@@ -11,15 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+extern crate alloc;
+
 use super::{canon::Canonizable, keyexpr};
 use crate::core::WireExpr;
+use alloc::{borrow::Cow, sync::Arc};
 use core::{
     convert::TryFrom,
     fmt,
     ops::{Deref, Div},
     str::FromStr,
 };
-use std::{borrow::Cow, sync::Arc};
 
 /// A [`Arc<str>`] newtype that is statically known to be a valid key expression.
 ///

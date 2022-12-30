@@ -11,14 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::*;
+use crate::{RCodec, WCodec, Zenoh060};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
     SplitBuffer, ZBuf,
 };
 #[cfg(feature = "shared-memory")]
-use zenoh_buffers::{ZSlice, ZSliceBuffer};
+use {
+    crate::Zenoh060Condition,
+    zenoh_buffers::{ZSlice, ZSliceBuffer},
+};
 
 // ZBuf flat
 impl<W> WCodec<&ZBuf, &mut W> for Zenoh060

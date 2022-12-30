@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::zenoh::*;
 use std::sync::{Arc, RwLock};
 use zenoh_buffers::SharedMemoryReader;
 use zenoh_core::Result as ZResult;
+use zenoh_protocol::zenoh::*;
 
 macro_rules! unset_sliced {
     ($msg:expr, $data_info:expr) => {
@@ -47,62 +47,63 @@ macro_rules! set_sliced {
     };
 }
 
-impl ZenohMessage {
-    pub fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
-        let mut res = false;
+pub fn map_to_shmbuf(
+    msg: &mut ZenohMessage,
+    shmr: Arc<RwLock<SharedMemoryReader>>,
+) -> ZResult<bool> {
+    let mut res = false;
 
-        if let Some(attachment) = self.attachment.as_mut() {
-            res = attachment.buffer.map_to_shmbuf(shmr.clone())?;
-        }
-
-        if let ZenohBody::Data(Data {
-            payload, data_info, ..
-        }) = &mut self.body
-        {
-            if payload.has_shminfo() {
-                res = res || payload.map_to_shmbuf(shmr)?;
-                unset_sliced!(self, data_info);
-            }
-        } else if let ZenohBody::Query(Query {
-            body: Some(body), ..
-        }) = &mut self.body
-        {
-            if body.payload.has_shminfo() {
-                res = res || body.payload.map_to_shmbuf(shmr)?;
-                body.data_info.sliced = false;
-            }
-        }
-
-        Ok(res)
+    if let Some(attachment) = msg.attachment.as_mut() {
+        res = attachment.buffer.map_to_shmbuf(shmr.clone())?;
     }
 
-    pub fn map_to_shminfo(&mut self) -> ZResult<bool> {
-        let mut res = false;
-
-        if let Some(attachment) = self.attachment.as_mut() {
-            res = attachment.buffer.map_to_shminfo()?;
+    if let ZenohBody::Data(Data {
+        payload, data_info, ..
+    }) = &mut msg.body
+    {
+        if payload.has_shminfo() {
+            res = res || payload.map_to_shmbuf(shmr)?;
+            unset_sliced!(msg, data_info);
         }
-
-        if let ZenohBody::Data(Data {
-            payload, data_info, ..
-        }) = &mut self.body
-        {
-            if payload.has_shmbuf() {
-                res = res || payload.map_to_shminfo()?;
-                set_sliced!(self, data_info);
-            }
-        } else if let ZenohBody::Query(Query {
-            body: Some(body), ..
-        }) = &mut self.body
-        {
-            if body.payload.has_shmbuf() {
-                res = res || body.payload.map_to_shminfo()?;
-                body.data_info.sliced = true;
-            }
+    } else if let ZenohBody::Query(Query {
+        body: Some(body), ..
+    }) = &mut msg.body
+    {
+        if body.payload.has_shminfo() {
+            res = res || body.payload.map_to_shmbuf(shmr)?;
+            body.data_info.sliced = false;
         }
-
-        Ok(res)
     }
+
+    Ok(res)
+}
+
+pub fn map_to_shminfo(msg: &mut ZenohMessage) -> ZResult<bool> {
+    let mut res = false;
+
+    if let Some(attachment) = msg.attachment.as_mut() {
+        res = attachment.buffer.map_to_shminfo()?;
+    }
+
+    if let ZenohBody::Data(Data {
+        payload, data_info, ..
+    }) = &mut msg.body
+    {
+        if payload.has_shmbuf() {
+            res = res || payload.map_to_shminfo()?;
+            set_sliced!(msg, data_info);
+        }
+    } else if let ZenohBody::Query(Query {
+        body: Some(body), ..
+    }) = &mut msg.body
+    {
+        if body.payload.has_shmbuf() {
+            res = res || body.payload.map_to_shminfo()?;
+            body.data_info.sliced = true;
+        }
+    }
+
+    Ok(res)
 }
 
 // Unused for the time being

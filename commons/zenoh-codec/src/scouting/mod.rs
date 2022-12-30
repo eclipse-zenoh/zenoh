@@ -14,7 +14,7 @@
 mod hello;
 mod scout;
 
-use crate::*;
+use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},

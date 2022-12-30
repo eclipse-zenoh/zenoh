@@ -22,7 +22,7 @@ mod zenohid;
 mod zint;
 mod zslice;
 
-use crate::*;
+use crate::{RCodec, WCodec, Zenoh060};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},

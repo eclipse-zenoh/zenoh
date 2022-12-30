@@ -13,10 +13,11 @@
 //
 
 //! This module defines the wire representation of Key Expressions.
+extern crate alloc;
 
 use crate::core::ExprId;
+use alloc::borrow::Cow;
 use core::{convert::TryInto, fmt};
-use std::borrow::Cow;
 use zenoh_core::{bail, Result as ZResult};
 
 /// A zenoh **resource** is represented by a pair composed by a **key** and a

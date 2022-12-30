@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::{CongestionControl, Encoding, SampleKind, Timestamp, WireExpr, ZInt, ZenohId};
-use std::convert::TryFrom;
+use core::convert::TryFrom;
 use zenoh_buffers::ZBuf;
 
 /// # ReplyContext decorator

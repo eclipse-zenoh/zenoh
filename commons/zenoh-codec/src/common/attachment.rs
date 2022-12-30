@@ -11,7 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::*;
+#[cfg(feature = "shared-memory")]
+use crate::Zenoh060Condition;
+use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},

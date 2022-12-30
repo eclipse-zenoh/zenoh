@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+extern crate alloc;
+
 use crate::{
     reader::{BacktrackableReader, DidntRead, DidntSiphon, HasReader, Reader, SiphonableReader},
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
@@ -18,15 +20,16 @@ use crate::{
 };
 #[cfg(feature = "shared-memory")]
 use crate::{SharedMemoryBuf, SharedMemoryReader};
+use alloc::{sync::Arc, vec::Vec};
+use core::{cmp, iter, mem, num::NonZeroUsize, slice};
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
-use std::{num::NonZeroUsize, sync::Arc};
 use zenoh_collections::SingleOrVec;
 #[cfg(feature = "shared-memory")]
 use zenoh_core::Result as ZResult;
 
-fn get_mut_unchecked<T>(arc: &mut std::sync::Arc<T>) -> &mut T {
-    unsafe { &mut (*(std::sync::Arc::as_ptr(arc) as *mut T)) }
+fn get_mut_unchecked<T>(arc: &mut Arc<T>) -> &mut T {
+    unsafe { &mut (*(Arc::as_ptr(arc) as *mut T)) }
 }
 
 #[derive(Debug, Clone, Default, Eq)]
@@ -84,7 +87,7 @@ impl ZBuf {
 }
 
 impl<'a> SplitBuffer<'a> for ZBuf {
-    type Slices = std::iter::Map<std::slice::Iter<'a, ZSlice>, fn(&'a ZSlice) -> &'a [u8]>;
+    type Slices = iter::Map<slice::Iter<'a, ZSlice>, fn(&'a ZSlice) -> &'a [u8]>;
 
     fn slices(&'a self) -> Self::Slices {
         self.slices.as_ref().iter().map(ZSlice::as_slice)
@@ -271,12 +274,12 @@ impl<'a> Reader for ZBufReader<'a> {
     fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
         let slice = self.inner.slices.get(self.cursor.slice).ok_or(DidntRead)?;
         match (slice.len() - self.cursor.byte).cmp(&len) {
-            std::cmp::Ordering::Less => {
+            cmp::Ordering::Less => {
                 let mut buffer = crate::vec::uninit(len);
                 self.read_exact(&mut buffer)?;
                 Ok(buffer.into())
             }
-            std::cmp::Ordering::Equal => {
+            cmp::Ordering::Equal => {
                 let s = slice
                     .new_sub_slice(self.cursor.byte, slice.len())
                     .ok_or(DidntRead)?;
@@ -285,7 +288,7 @@ impl<'a> Reader for ZBufReader<'a> {
                 self.cursor.byte = 0;
                 Ok(s)
             }
-            std::cmp::Ordering::Greater => {
+            cmp::Ordering::Greater => {
                 let start = self.cursor.byte;
                 self.cursor.byte += len;
                 slice
@@ -363,14 +366,14 @@ impl Iterator for ZBufSliceIterator<'_, '_> {
         let current = &slice[start..];
         let len = current.len();
         match self.remaining.cmp(&len) {
-            std::cmp::Ordering::Less => {
+            core::cmp::Ordering::Less => {
                 let end = start + self.remaining;
                 let slice = slice.new_sub_slice(start, end);
                 self.reader.cursor.byte = end;
                 self.remaining = 0;
                 slice
             }
-            std::cmp::Ordering::Equal => {
+            core::cmp::Ordering::Equal => {
                 let end = start + self.remaining;
                 let slice = slice.new_sub_slice(start, end);
                 self.reader.cursor.slice += 1;
@@ -378,7 +381,7 @@ impl Iterator for ZBufSliceIterator<'_, '_> {
                 self.remaining = 0;
                 slice
             }
-            std::cmp::Ordering::Greater => {
+            core::cmp::Ordering::Greater => {
                 let end = start + len;
                 let slice = slice.new_sub_slice(start, end);
                 self.reader.cursor.slice += 1;
@@ -407,7 +410,7 @@ impl<'a> HasWriter for &'a mut ZBuf {
     fn writer(self) -> Self::Writer {
         ZBufWriter {
             inner: self,
-            cache: Arc::new(vec![]),
+            cache: Arc::new(Vec::new()),
         }
     }
 }
@@ -443,7 +446,7 @@ impl Writer for ZBufWriter<'_> {
     }
 
     fn write_u8(&mut self, byte: u8) -> Result<(), DidntWrite> {
-        self.write_exact(std::slice::from_ref(&byte))
+        self.write_exact(slice::from_ref(&byte))
     }
 
     fn remaining(&self) -> usize {
@@ -463,7 +466,7 @@ impl Writer for ZBufWriter<'_> {
         let prev_cache_len = cache.len();
         cache.reserve(len);
         unsafe {
-            len = f(std::mem::transmute(&mut cache.spare_capacity_mut()[..len]));
+            len = f(mem::transmute(&mut cache.spare_capacity_mut()[..len]));
             cache.set_len(prev_cache_len + len);
         }
         let cache_len = cache.len();

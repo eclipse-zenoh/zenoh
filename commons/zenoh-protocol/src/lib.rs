@@ -21,7 +21,5 @@ pub mod common;
 pub mod core;
 pub mod defaults;
 pub mod scouting;
-#[cfg(feature = "shared-memory")]
-pub mod shm;
 pub mod transport;
 pub mod zenoh;
