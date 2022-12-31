@@ -18,15 +18,9 @@ use crate::{
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     SplitBuffer, ZSlice, ZSliceBuffer,
 };
-#[cfg(feature = "shared-memory")]
-use crate::{SharedMemoryBuf, SharedMemoryReader};
 use alloc::{sync::Arc, vec::Vec};
 use core::{cmp, iter, mem, num::NonZeroUsize, slice};
-#[cfg(feature = "shared-memory")]
-use std::sync::RwLock;
 use zenoh_collections::SingleOrVec;
-#[cfg(feature = "shared-memory")]
-use zenoh_core::Result as ZResult;
 
 fn get_mut_unchecked<T>(arc: &mut Arc<T>) -> &mut T {
     unsafe { &mut (*(Arc::as_ptr(arc) as *mut T)) }
@@ -46,43 +40,12 @@ impl ZBuf {
         self.slices.as_ref().iter()
     }
 
+    pub fn zslices_mut(&mut self) -> impl Iterator<Item = &mut ZSlice> + '_ {
+        self.slices.as_mut().iter_mut()
+    }
+
     pub fn push_zslice(&mut self, zslice: ZSlice) {
         self.slices.push(zslice);
-    }
-
-    #[cfg(feature = "shared-memory")]
-    pub fn has_shminfo(&self) -> bool {
-        self.slices
-            .as_ref()
-            .iter()
-            .any(|s| matches!(&s.buf, ZSliceBuffer::ShmInfo(_)))
-    }
-
-    #[cfg(feature = "shared-memory")]
-    pub fn map_to_shminfo(&mut self) -> ZResult<bool> {
-        let mut res = false;
-        for s in self.slices.as_mut().iter_mut() {
-            res |= s.map_to_shminfo()?;
-        }
-
-        Ok(res)
-    }
-
-    #[cfg(feature = "shared-memory")]
-    pub fn has_shmbuf(&self) -> bool {
-        self.slices
-            .as_ref()
-            .iter()
-            .any(|s| matches!(&s.buf, ZSliceBuffer::ShmBuffer(_)))
-    }
-
-    #[cfg(feature = "shared-memory")]
-    pub fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
-        let mut res = false;
-        for s in self.slices.as_mut().iter_mut() {
-            res |= s.map_to_shmbuf(shmr.clone())?;
-        }
-        Ok(res)
     }
 }
 
@@ -138,39 +101,25 @@ impl PartialEq for ZBuf {
     }
 }
 
-impl From<Vec<u8>> for ZBuf {
-    fn from(v: Vec<u8>) -> ZBuf {
-        let zs: ZSlice = v.into();
+// From impls
+impl<T> From<Arc<T>> for ZBuf
+where
+    T: ZSliceBuffer + 'static,
+{
+    fn from(buf: Arc<T>) -> Self {
+        let zs: ZSlice = buf.into();
         let mut zbuf = ZBuf::default();
         zbuf.push_zslice(zs);
         zbuf
     }
 }
 
-#[cfg(feature = "shared-memory")]
-impl From<Arc<SharedMemoryBuf>> for ZBuf {
-    fn from(smb: Arc<SharedMemoryBuf>) -> ZBuf {
-        let mut zbuf = ZBuf::default();
-        zbuf.push_zslice(smb.into());
-        zbuf
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl From<Box<SharedMemoryBuf>> for ZBuf {
-    fn from(smb: Box<SharedMemoryBuf>) -> ZBuf {
-        let mut zbuf = ZBuf::default();
-        zbuf.push_zslice(smb.into());
-        zbuf
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl From<SharedMemoryBuf> for ZBuf {
-    fn from(smb: SharedMemoryBuf) -> ZBuf {
-        let mut zbuf = ZBuf::default();
-        zbuf.push_zslice(smb.into());
-        zbuf
+impl<T> From<T> for ZBuf
+where
+    T: ZSliceBuffer + 'static,
+{
+    fn from(buf: T) -> Self {
+        Self::from(Arc::new(buf))
     }
 }
 
@@ -430,18 +379,31 @@ impl Writer for ZBufWriter<'_> {
         let prev_cache_len = cache.len();
         cache.extend_from_slice(bytes);
         let cache_len = cache.len();
-        match self.inner.slices.last_mut() {
-            Some(ZSlice {
-                buf: ZSliceBuffer::NetOwnedBuffer(buf),
-                end,
-                ..
-            }) if *end == prev_cache_len && Arc::ptr_eq(buf, &self.cache) => *end = cache_len,
-            _ => self.inner.slices.push(ZSlice {
-                buf: ZSliceBuffer::NetOwnedBuffer(self.cache.clone()),
-                start: prev_cache_len,
-                end: cache_len,
-            }),
+
+        // Verify we are writing on the cache
+        if let Some(ZSlice {
+            buf, ref mut end, ..
+        }) = self.inner.slices.last_mut()
+        {
+            // Verify the previous length of the cache is the right one
+            if *end == prev_cache_len {
+                // Verify the ZSlice is actually a Vec<u8>
+                if let Some(b) = buf.as_any().downcast_ref::<Vec<u8>>() {
+                    // Verify the Vec<u8> of the ZSlice is exactly the one from the cache
+                    if core::ptr::eq(cache.as_ptr(), b.as_ptr()) {
+                        // Simply update the slice length
+                        *end = cache_len;
+                        return Ok(());
+                    }
+                }
+            }
         }
+
+        self.inner.slices.push(ZSlice {
+            buf: self.cache.clone(),
+            start: prev_cache_len,
+            end: cache_len,
+        });
         Ok(())
     }
 
@@ -470,18 +432,31 @@ impl Writer for ZBufWriter<'_> {
             cache.set_len(prev_cache_len + len);
         }
         let cache_len = cache.len();
-        match self.inner.slices.last_mut() {
-            Some(ZSlice {
-                buf: ZSliceBuffer::NetOwnedBuffer(buf),
-                end,
-                ..
-            }) if *end == prev_cache_len && Arc::ptr_eq(buf, &self.cache) => *end = cache_len,
-            _ => self.inner.slices.push(ZSlice {
-                buf: ZSliceBuffer::NetOwnedBuffer(self.cache.clone()),
-                start: prev_cache_len,
-                end: cache_len,
-            }),
+
+        // Verify we are writing on the cache
+        if let Some(ZSlice {
+            buf, ref mut end, ..
+        }) = self.inner.slices.last_mut()
+        {
+            // Verify the previous length of the cache is the right one
+            if *end == prev_cache_len {
+                // Verify the ZSlice is actually a Vec<u8>
+                if let Some(b) = buf.as_any().downcast_ref::<Vec<u8>>() {
+                    // Verify the Vec<u8> of the ZSlice is exactly the one from the cache
+                    if core::ptr::eq(cache.as_ptr(), b.as_ptr()) {
+                        // Simply update the slice length
+                        *end = cache_len;
+                        return Ok(());
+                    }
+                }
+            }
         }
+
+        self.inner.slices.push(ZSlice {
+            buf: self.cache.clone(),
+            start: prev_cache_len,
+            end: cache_len,
+        });
         Ok(())
     }
 }

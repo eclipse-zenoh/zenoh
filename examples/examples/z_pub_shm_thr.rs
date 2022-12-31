@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::{App, Arg};
-use zenoh::buffers::SharedMemoryManager;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
+use zenoh::shm::SharedMemoryManager;
 
 #[async_std::main]
 async fn main() {

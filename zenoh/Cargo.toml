@@ -39,7 +39,7 @@ auth_pubkey = ["zenoh-transport/auth_pubkey"]
 auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
 complete_n = ["zenoh-protocol/complete_n"]
 shared-memory = [
-    "zenoh-buffers/shared-memory",
+    "zenoh-shm",
     "zenoh-protocol/shared-memory",
     "zenoh-transport/shared-memory",
 ]
@@ -61,6 +61,7 @@ default = [
     "transport_udp",
     "transport_unixsock-stream",
     "transport_ws",
+    "shared-memory",
 ]
 
 [dependencies]
@@ -100,6 +101,7 @@ zenoh-crypto = { version = "0.7.0-rc", path = "../commons/zenoh-crypto/" }
 zenoh-link = { version = "0.7.0-rc", path = "../io/zenoh-link/" }
 zenoh-plugin-trait = { version = "0.7.0-rc", path = "../plugins/zenoh-plugin-trait", default-features = false }
 zenoh-protocol = { version = "0.7.0-rc", path = "../commons/zenoh-protocol/" }
+zenoh-shm = { version = "0.7.0-rc", path = "../commons/zenoh-shm/", optional = true }
 zenoh-sync = { version = "0.7.0-rc", path = "../commons/zenoh-sync/" }
 zenoh-transport = { version = "0.7.0-rc", path = "../io/zenoh-transport/" }
 zenoh-util = { version = "0.7.0-rc", path = "../commons/zenoh-util" }

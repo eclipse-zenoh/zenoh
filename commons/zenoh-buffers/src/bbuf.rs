@@ -131,6 +131,7 @@ impl<'a> HasReader for &'a BBuf {
 #[cfg(feature = "test")]
 impl BBuf {
     pub fn rand(len: usize) -> Self {
+        use alloc::vec::Vec;
         use rand::Rng;
 
         let mut rng = rand::thread_rng();

@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::Condition;
 use async_std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use zenoh_core::zasynclock;
-use zenoh_sync::Condition;
 
 pub struct Mvar<T> {
     inner: Mutex<Option<T>>,

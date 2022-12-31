@@ -13,9 +13,13 @@
 //
 use super::LifoQueue;
 use async_std::task;
-use std::fmt;
-use std::ops::{Deref, DerefMut, Drop};
-use std::sync::{Arc, Weak};
+use std::{
+    any::Any,
+    fmt,
+    ops::{Deref, DerefMut, Drop},
+    sync::{Arc, Weak},
+};
+use zenoh_buffers::ZSliceBuffer;
 
 /// Provides a pool of pre-allocated objects that are automaticlaly reinserted into
 /// the pool when dropped.
@@ -118,5 +122,24 @@ impl<T> Drop for RecyclingObject<T> {
 impl<T: fmt::Debug> fmt::Debug for RecyclingObject<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("").field("inner", &self.object).finish()
+    }
+}
+
+// Buffer impl
+impl AsRef<[u8]> for RecyclingObject<Box<[u8]>> {
+    fn as_ref(&self) -> &[u8] {
+        self.deref()
+    }
+}
+
+impl AsMut<[u8]> for RecyclingObject<Box<[u8]>> {
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.deref_mut()
+    }
+}
+
+impl ZSliceBuffer for RecyclingObject<Box<[u8]>> {
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

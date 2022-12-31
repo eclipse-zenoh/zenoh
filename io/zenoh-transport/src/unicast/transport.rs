@@ -442,9 +442,9 @@ impl TransportUnicastInner {
         #[cfg(feature = "shared-memory")]
         {
             let res = if self.config.is_shm {
-                crate::shm::map_to_shminfo(&mut message)
+                crate::shm::map_zmsg_to_shminfo(&mut message)
             } else {
-                crate::shm::map_to_shmbuf(&mut message, self.config.manager.shmr.clone())
+                crate::shm::map_zmsg_to_shmbuf(&mut message, &self.config.manager.shmr)
             };
             if let Err(e) = res {
                 log::trace!("Failed SHM conversion: {}", e);

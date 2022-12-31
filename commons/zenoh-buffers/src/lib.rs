@@ -13,6 +13,7 @@
 //
 
 //! Provide differnt buffer implementations used for serialization and deserialization.
+#![no_std]
 extern crate alloc;
 
 mod bbuf;
@@ -21,16 +22,10 @@ pub mod vec;
 mod zbuf;
 mod zslice;
 
+use alloc::{borrow::Cow, vec::Vec};
 pub use bbuf::*;
 pub use zbuf::*;
 pub use zslice::*;
-
-#[cfg(feature = "shared-memory")]
-mod shm;
-#[cfg(feature = "shared-memory")]
-pub use shm::*;
-
-use alloc::{borrow::Cow, vec::Vec};
 
 pub mod writer {
     use crate::ZSlice;

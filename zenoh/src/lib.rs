@@ -116,6 +116,8 @@ pub mod queryable;
 pub mod sample;
 pub mod subscriber;
 pub mod value;
+#[cfg(feature = "shared-memory")]
+pub use zenoh_shm as shm;
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.

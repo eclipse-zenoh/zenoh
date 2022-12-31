@@ -19,8 +19,8 @@ use zenoh_buffers::{
 };
 #[cfg(feature = "shared-memory")]
 use {
-    crate::Zenoh060Condition,
-    zenoh_buffers::{ZSlice, ZSliceBuffer},
+    crate::Zenoh060Condition, std::any::TypeId, zenoh_buffers::ZSlice,
+    zenoh_shm::SharedMemoryBufInfoSerialized,
 };
 
 // ZBuf flat
@@ -71,11 +71,11 @@ where
         self.codec.write(&mut *writer, x.zslices().count())?;
 
         for zs in x.zslices() {
-            match &zs.buf {
-                ZSliceBuffer::ShmInfo(_) => self
-                    .codec
-                    .write(&mut *writer, super::zslice::kind::SHM_INFO)?,
-                _ => self.codec.write(&mut *writer, super::zslice::kind::RAW)?,
+            if zs.buf.as_any().type_id() == TypeId::of::<SharedMemoryBufInfoSerialized>() {
+                self.codec
+                    .write(&mut *writer, super::zslice::kind::SHM_INFO)?;
+            } else {
+                self.codec.write(&mut *writer, super::zslice::kind::RAW)?;
             }
 
             self.codec.write(&mut *writer, zs)?;
@@ -104,7 +104,8 @@ where
                 }
                 super::zslice::kind::SHM_INFO => {
                     let bytes: Vec<u8> = self.codec.read(&mut *reader)?;
-                    let zslice: ZSlice = ZSliceBuffer::ShmInfo(bytes.into()).into();
+                    let shm_info: SharedMemoryBufInfoSerialized = bytes.into();
+                    let zslice: ZSlice = shm_info.into();
                     zbuf.push_zslice(zslice);
                 }
                 _ => return Err(DidntRead),

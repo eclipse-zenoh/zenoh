@@ -28,11 +28,10 @@ use std::time::Duration;
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::ZSlice;
 use zenoh_codec::{RCodec, Zenoh060};
-use zenoh_collections::RecyclingObjectPool;
 use zenoh_core::{bail, zerror, Result as ZResult};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::transport::TransportMessage;
-use zenoh_sync::Signal;
+use zenoh_sync::{RecyclingObjectPool, Signal};
 
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicast {
@@ -284,7 +283,7 @@ async fn rx_task_stream(
                 }
 
                 // Deserialize all the messages from the current ZBuf
-                let mut zslice = ZSlice::make(buffer.into(), 0, n).unwrap();
+                let mut zslice = ZSlice::make(Arc::new(buffer), 0, n).unwrap();
                 let mut reader = zslice.reader();
                 while reader.can_read() {
                     let msg: TransportMessage = codec
@@ -358,7 +357,7 @@ async fn rx_task_dgram(
                 }
 
                 // Deserialize all the messages from the current ZBuf
-                let mut zslice = ZSlice::make(buffer.into(), 0, n).unwrap();
+                let mut zslice = ZSlice::make(Arc::new(buffer), 0, n).unwrap();
                 let mut reader = zslice.reader();
                 while reader.can_read() {
                     let msg: TransportMessage = codec

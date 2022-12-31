@@ -23,6 +23,7 @@ members = [
   "commons/zenoh-crypto",
   "commons/zenoh-macros",
   "commons/zenoh-protocol",
+  "commons/zenoh-shm",
   "commons/zenoh-sync",
   "commons/zenoh-util",
   "examples",

@@ -22,10 +22,10 @@ use std::sync::Arc;
 use zenoh_cfg_properties::Properties;
 use zenoh_core::zresult::ZError;
 
-#[cfg(feature = "shared-memory")]
-use crate::buffers::SharedMemoryBuf;
 use crate::buffers::ZBuf;
 use crate::prelude::{Encoding, KnownEncoding, Sample, SplitBuffer};
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::SharedMemoryBuf;
 
 /// A zenoh Value.
 #[non_exhaustive]
@@ -98,10 +98,8 @@ impl From<Arc<SharedMemoryBuf>> for Value {
 #[cfg(feature = "shared-memory")]
 impl From<Box<SharedMemoryBuf>> for Value {
     fn from(smb: Box<SharedMemoryBuf>) -> Self {
-        Value {
-            payload: smb.into(),
-            encoding: KnownEncoding::AppOctetStream.into(),
-        }
+        let smb: Arc<SharedMemoryBuf> = smb.into();
+        Self::from(smb)
     }
 }
 

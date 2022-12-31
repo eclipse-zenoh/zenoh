@@ -27,8 +27,6 @@ use std::sync::Arc;
 #[cfg(feature = "shared-memory")]
 use std::sync::RwLock;
 use std::time::Duration;
-#[cfg(feature = "shared-memory")]
-use zenoh_buffers::SharedMemoryReader;
 use zenoh_cfg_properties::{config::*, Properties};
 use zenoh_config::{Config, QueueConf, QueueSizeConf};
 use zenoh_core::{bail, zparse, Result as ZResult};
@@ -38,6 +36,8 @@ use zenoh_protocol::{
     core::{EndPoint, Locator, Priority, WhatAmI, ZInt, ZenohId},
     defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION},
 };
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::SharedMemoryReader;
 
 /// # Examples
 /// ```

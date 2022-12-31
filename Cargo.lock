@@ -3760,6 +3760,7 @@ dependencies = [
  "zenoh-link",
  "zenoh-plugin-trait",
  "zenoh-protocol",
+ "zenoh-shm",
  "zenoh-sync",
  "zenoh-transport",
  "zenoh-util",
@@ -3769,13 +3770,8 @@ dependencies = [
 name = "zenoh-buffers"
 version = "0.7.0-rc"
 dependencies = [
- "bincode",
- "log",
  "rand 0.8.5",
- "serde",
- "shared_memory",
  "zenoh-collections",
- "zenoh-core",
 ]
 
 [[package]]
@@ -3796,15 +3792,14 @@ dependencies = [
  "uuid",
  "zenoh-buffers",
  "zenoh-protocol",
+ "zenoh-shm",
 ]
 
 [[package]]
 name = "zenoh-collections"
 version = "0.7.0-rc"
 dependencies = [
- "async-std",
  "zenoh-core",
- "zenoh-sync",
 ]
 
 [[package]]
@@ -4142,6 +4137,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-shm"
+version = "0.7.0-rc"
+dependencies = [
+ "bincode",
+ "log",
+ "serde",
+ "shared_memory",
+ "zenoh-buffers",
+ "zenoh-core",
+]
+
+[[package]]
 name = "zenoh-sync"
 version = "0.7.0-rc"
 dependencies = [
@@ -4150,6 +4157,8 @@ dependencies = [
  "flume",
  "futures",
  "tokio",
+ "zenoh-buffers",
+ "zenoh-collections",
  "zenoh-core",
 ]
 
@@ -4179,6 +4188,7 @@ dependencies = [
  "zenoh-crypto",
  "zenoh-link",
  "zenoh-protocol",
+ "zenoh-shm",
  "zenoh-sync",
  "zenoh-util",
 ]

@@ -63,7 +63,7 @@ impl TransportMulticastInner {
 
         #[cfg(feature = "shared-memory")]
         {
-            let _ = crate::shm::map_to_shmbuf(&mut msg, self.manager.shmr.clone())?;
+            let _ = crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr)?;
         }
 
         peer.handler.handle_message(msg)

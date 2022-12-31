@@ -25,13 +25,14 @@ mod tests {
         },
         time::Duration,
     };
-    use zenoh_buffers::{SharedMemoryManager, SplitBuffer, ZBuf};
+    use zenoh_buffers::{SplitBuffer, ZBuf};
     use zenoh_core::{zasync_executor_init, Result as ZResult};
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
         zenoh::{Data, ZenohBody, ZenohMessage},
     };
+    use zenoh_shm::SharedMemoryManager;
     use zenoh_transport::{
         unicast::establishment::authenticator::SharedMemoryAuthenticator, TransportEventHandler,
         TransportManager, TransportMulticast, TransportMulticastEventHandler, TransportPeer,

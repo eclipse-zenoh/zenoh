@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::StackBuffer;
+use crate::Condition;
 use async_std::sync::Mutex;
+use zenoh_collections::StackBuffer;
 use zenoh_core::zasynclock;
-use zenoh_sync::Condition;
 
 pub struct LifoQueue<T> {
     not_empty: Condition,

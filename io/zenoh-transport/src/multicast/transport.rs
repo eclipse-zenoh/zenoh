@@ -244,7 +244,7 @@ impl TransportMulticastInner {
         // Multicast transports do not support SHM for the time being
         #[cfg(feature = "shared-memory")]
         {
-            let res = crate::shm::map_to_shmbuf(&mut msg, self.manager.shmr.clone());
+            let res = crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr);
             if let Err(e) = res {
                 log::trace!("Failed SHM conversion: {}", e);
                 return;

@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "shared-memory")]
-use crate::Zenoh060Condition;
 use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -23,6 +21,8 @@ use zenoh_protocol::{
     common::{imsg, Attachment},
     transport::tmsg,
 };
+#[cfg(feature = "shared-memory")]
+use {crate::Zenoh060Condition, std::any::TypeId, zenoh_shm::SharedMemoryBufInfoSerialized};
 
 impl<W> WCodec<&Attachment, &mut W> for Zenoh060
 where
@@ -36,8 +36,14 @@ where
         let mut header = tmsg::id::ATTACHMENT;
 
         #[cfg(feature = "shared-memory")]
-        if x.buffer.has_shminfo() {
-            header |= tmsg::flag::Z;
+        {
+            let has_shminfo = x
+                .buffer
+                .zslices()
+                .any(|s| s.buf.as_any().type_id() == TypeId::of::<SharedMemoryBufInfoSerialized>());
+            if has_shminfo {
+                header |= tmsg::flag::Z;
+            }
         }
 
         self.write(&mut *writer, header)?;

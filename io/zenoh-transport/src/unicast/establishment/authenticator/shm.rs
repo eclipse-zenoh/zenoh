@@ -17,19 +17,23 @@ use super::{
 use crate::unicast::establishment::Cookie;
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
-use std::convert::TryInto;
-use std::sync::{Arc, RwLock};
-use zenoh_buffers::ZSliceBuffer;
+use std::{
+    convert::TryInto,
+    sync::{Arc, RwLock},
+};
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, HasWriter, Writer},
-    SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, ZSlice,
+    ZSlice,
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh060};
 use zenoh_config::Config;
 use zenoh_core::{bail, zerror, zresult::ShmError, Result as ZResult};
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::core::{ZInt, ZenohId};
+use zenoh_shm::{
+    SharedMemoryBuf, SharedMemoryBufInfoSerialized, SharedMemoryManager, SharedMemoryReader,
+};
 
 const SHM_VERSION: ZInt = 0;
 const SHM_NAME: &str = "shmauth";
@@ -74,7 +78,8 @@ where
     fn read(self, reader: &mut R) -> Result<InitSynProperty, Self::Error> {
         let version: ZInt = self.read(&mut *reader)?;
         let bytes: Vec<u8> = self.read(&mut *reader)?;
-        let shm: ZSlice = ZSliceBuffer::ShmInfo(bytes.into()).into();
+        let shm_info: SharedMemoryBufInfoSerialized = bytes.into();
+        let shm: ZSlice = shm_info.into();
         Ok(InitSynProperty { version, shm })
     }
 }
@@ -117,7 +122,8 @@ where
     fn read(self, reader: &mut R) -> Result<InitAckProperty, Self::Error> {
         let challenge: ZInt = self.read(&mut *reader)?;
         let bytes: Vec<u8> = self.read(&mut *reader)?;
-        let shm: ZSlice = ZSliceBuffer::ShmInfo(bytes.into()).into();
+        let shm_info: SharedMemoryBufInfoSerialized = bytes.into();
+        let shm: ZSlice = shm_info.into();
         Ok(InitAckProperty { challenge, shm })
     }
 }
@@ -276,7 +282,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         }
 
         // Try to read from the shared memory
-        match init_syn_property.shm.map_to_shmbuf(self.reader.clone()) {
+        match crate::shm::map_zslice_to_shmbuf(&mut init_syn_property.shm, &self.reader) {
             Ok(res) => {
                 if !res {
                     log::debug!("Peer {} can not operate over SHM: error", cookie.zid);
@@ -339,7 +345,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             .map_err(|_| zerror!("Received InitAck with invalid attachment on link: {}", link))?;
 
         // Try to read from the shared memory
-        match init_ack_property.shm.map_to_shmbuf(self.reader.clone()) {
+        match crate::shm::map_zslice_to_shmbuf(&mut init_ack_property.shm, &self.reader) {
             Ok(res) => {
                 if !res {
                     return Err(ShmError(zerror!("No SHM on link: {}", link)).into());

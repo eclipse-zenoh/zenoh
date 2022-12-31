@@ -27,13 +27,13 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_codec::{RCodec, Zenoh060};
-use zenoh_collections::RecyclingObjectPool;
 use zenoh_core::{bail, zerror, zlock, Result as ZResult};
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId},
     transport::TransportMessage,
 };
+use zenoh_sync::RecyclingObjectPool;
 use zenoh_sync::Signal;
 
 pub(super) struct TransportLinkMulticastConfig {

@@ -13,16 +13,15 @@
 //
 use serde::{Deserialize, Serialize};
 use shared_memory::{Shmem, ShmemConf, ShmemError};
-use std::cmp::Ordering;
-use std::collections::binary_heap::BinaryHeap;
-use std::collections::HashMap;
-use std::fmt;
-use std::mem::align_of;
-use std::sync::atomic;
-use std::sync::atomic::{AtomicPtr, AtomicUsize};
-use zenoh_core::zresult::ShmError;
-use zenoh_core::Result as ZResult;
-use zenoh_core::{bail, zerror};
+use std::{
+    any::Any,
+    cmp,
+    collections::{binary_heap::BinaryHeap, HashMap},
+    fmt, mem,
+    sync::atomic::{AtomicPtr, AtomicUsize, Ordering},
+};
+use zenoh_buffers::ZSliceBuffer;
+use zenoh_core::{bail, zerror, zresult::ShmError, Result as ZResult};
 
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
 const ACCOUNTED_OVERHEAD: usize = 4_096;
@@ -47,13 +46,13 @@ struct Chunk {
 }
 
 impl Ord for Chunk {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
         self.size.cmp(&other.size)
     }
 }
 
 impl PartialOrd for Chunk {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
@@ -127,8 +126,8 @@ pub struct SharedMemoryBuf {
 
 impl std::fmt::Debug for SharedMemoryBuf {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let ptr = self.rc_ptr.load(atomic::Ordering::SeqCst);
-        let rc = unsafe { (*ptr).load(atomic::Ordering::SeqCst) };
+        let ptr = self.rc_ptr.load(Ordering::SeqCst);
+        let rc = unsafe { (*ptr).load(Ordering::SeqCst) };
         f.debug_struct("SharedMemoryBuf")
             .field("rc", &rc)
             .field("buf", &self.buf)
@@ -160,23 +159,23 @@ impl SharedMemoryBuf {
     }
 
     pub fn ref_count(&self) -> usize {
-        let rc = self.rc_ptr.load(atomic::Ordering::SeqCst);
-        unsafe { (*rc).load(atomic::Ordering::SeqCst) }
+        let rc = self.rc_ptr.load(Ordering::SeqCst);
+        unsafe { (*rc).load(Ordering::SeqCst) }
     }
 
     pub fn inc_ref_count(&self) {
-        let rc = self.rc_ptr.load(atomic::Ordering::SeqCst);
-        unsafe { (*rc).fetch_add(1, atomic::Ordering::SeqCst) };
+        let rc = self.rc_ptr.load(Ordering::SeqCst);
+        unsafe { (*rc).fetch_add(1, Ordering::SeqCst) };
     }
 
     pub fn dec_ref_count(&self) {
-        let rc = self.rc_ptr.load(atomic::Ordering::SeqCst);
-        unsafe { (*rc).fetch_sub(1, atomic::Ordering::SeqCst) };
+        let rc = self.rc_ptr.load(Ordering::SeqCst);
+        unsafe { (*rc).fetch_sub(1, Ordering::SeqCst) };
     }
 
     pub fn as_slice(&self) -> &[u8] {
         log::trace!("SharedMemoryBuf::as_slice() == len = {:?}", self.len);
-        let bp = self.buf.load(atomic::Ordering::SeqCst);
+        let bp = self.buf.load(Ordering::SeqCst);
         unsafe { std::slice::from_raw_parts(bp, self.len) }
     }
 
@@ -192,7 +191,7 @@ impl SharedMemoryBuf {
     /// In short, whilst this operation is marked as unsafe, you are safe if you can
     /// guarantee that your in applications only one process at the time will actually write.
     pub unsafe fn as_mut_slice(&mut self) -> &mut [u8] {
-        let bp = self.buf.load(atomic::Ordering::SeqCst);
+        let bp = self.buf.load(Ordering::SeqCst);
         std::slice::from_raw_parts_mut(bp, self.len)
     }
 }
@@ -206,8 +205,8 @@ impl Drop for SharedMemoryBuf {
 impl Clone for SharedMemoryBuf {
     fn clone(&self) -> Self {
         self.inc_ref_count();
-        let rc = self.rc_ptr.load(atomic::Ordering::SeqCst);
-        let bp = self.buf.load(atomic::Ordering::SeqCst);
+        let rc = self.rc_ptr.load(Ordering::SeqCst);
+        let bp = self.buf.load(Ordering::SeqCst);
         SharedMemoryBuf {
             rc_ptr: AtomicPtr::new(rc),
             buf: AtomicPtr::new(bp),
@@ -362,7 +361,7 @@ impl SharedMemoryManager {
             own_segment: shmem,
             free_list,
             busy_list,
-            alignment: align_of::<ChunkHeaderType>(),
+            alignment: mem::align_of::<ChunkHeaderType>(),
         };
         log::trace!(
             "Created SharedMemoryManager for {:?}",
@@ -379,7 +378,7 @@ impl SharedMemoryManager {
             kind: 0,
         };
         let rc = chunk.base_addr as *mut ChunkHeaderType;
-        unsafe { (*rc).store(1, atomic::Ordering::SeqCst) };
+        unsafe { (*rc).store(1, Ordering::SeqCst) };
         let rc_ptr = AtomicPtr::<ChunkHeaderType>::new(rc);
         SharedMemoryBuf {
             rc_ptr,
@@ -440,7 +439,7 @@ impl SharedMemoryManager {
 
     fn is_free_chunk(chunk: &Chunk) -> bool {
         let rc_ptr = chunk.base_addr as *mut ChunkHeaderType;
-        let rc = unsafe { (*rc_ptr).load(atomic::Ordering::SeqCst) };
+        let rc = unsafe { (*rc_ptr).load(Ordering::SeqCst) };
         rc == 0
     }
 
@@ -522,5 +521,54 @@ impl fmt::Debug for SharedMemoryManager {
             .field("free_list.len", &self.free_list.len())
             .field("busy_list.len", &self.busy_list.len())
             .finish()
+    }
+}
+
+// Buffer impls
+// - SharedMemoryBufInfoSerialized
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct SharedMemoryBufInfoSerialized(Vec<u8>);
+
+impl AsRef<[u8]> for SharedMemoryBufInfoSerialized {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_slice()
+    }
+}
+
+impl AsMut<[u8]> for SharedMemoryBufInfoSerialized {
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.0.as_mut_slice()
+    }
+}
+
+impl ZSliceBuffer for SharedMemoryBufInfoSerialized {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+impl From<Vec<u8>> for SharedMemoryBufInfoSerialized {
+    fn from(v: Vec<u8>) -> Self {
+        Self(v)
+    }
+}
+
+// - SharedMemoryBuf
+impl AsRef<[u8]> for SharedMemoryBuf {
+    fn as_ref(&self) -> &[u8] {
+        self.as_slice()
+    }
+}
+
+impl AsMut<[u8]> for SharedMemoryBuf {
+    fn as_mut(&mut self) -> &mut [u8] {
+        unsafe { self.as_mut_slice() }
+    }
+}
+
+impl ZSliceBuffer for SharedMemoryBuf {
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }

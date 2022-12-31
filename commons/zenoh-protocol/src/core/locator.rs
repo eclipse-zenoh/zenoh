@@ -125,14 +125,14 @@ impl Locator {
 //     fn canonicalize(self) -> Self::Output;
 // }
 
-// fn cmp(this: &str, than: &str) -> std::cmp::Ordering {
+// fn cmp(this: &str, than: &str) -> core::cmp::Ordering {
 //     let is_longer = this.len().cmp(&than.len());
 //     let this = this.chars();
 //     let than = than.chars();
 //     let zip = this.zip(than);
 //     for (this, than) in zip {
 //         match this.cmp(&than) {
-//             std::cmp::Ordering::Equal => {}
+//             core::cmp::Ordering::Equal => {}
 //             o => return o,
 //         }
 //     }
@@ -148,7 +148,7 @@ impl Locator {
 //             return true;
 //         };
 //         for (key, _) in iter {
-//             if cmp(key, acc) != std::cmp::Ordering::Greater {
+//             if cmp(key, acc) != core::cmp::Ordering::Greater {
 //                 return false;
 //             }
 //             acc = key;
@@ -165,15 +165,15 @@ impl Locator {
 //         'outer: for (k, v) in self {
 //             for (i, (x, _)) in result.iter().enumerate() {
 //                 match cmp(k, x) {
-//                     std::cmp::Ordering::Less => {
+//                     core::cmp::Ordering::Less => {
 //                         result.insert(i, (k, v));
 //                         continue 'outer;
 //                     }
-//                     std::cmp::Ordering::Equal => {
+//                     core::cmp::Ordering::Equal => {
 //                         result[i].1 = v;
 //                         continue 'outer;
 //                     }
-//                     std::cmp::Ordering::Greater => {}
+//                     core::cmp::Ordering::Greater => {}
 //                 }
 //             }
 //             result.push((k, v))

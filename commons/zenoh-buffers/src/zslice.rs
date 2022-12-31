@@ -14,211 +14,63 @@
 extern crate alloc;
 
 use crate::reader::{BacktrackableReader, DidntRead, HasReader, Reader};
-use alloc::{sync::Arc, vec::Vec};
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{
+    any::Any,
     convert::AsRef,
     fmt,
     num::NonZeroUsize,
     ops::{Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive},
 };
-#[cfg(feature = "shared-memory")]
-use {
-    super::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryReader},
-    std::sync::RwLock,
-    zenoh_core::{zread, zwrite, Result as ZResult},
-};
-#[cfg(feature = "collections")]
-use {alloc::boxed::Box, zenoh_collections::RecyclingObject};
 
 /*************************************/
 /*           ZSLICE BUFFER           */
 /*************************************/
-#[derive(Clone, Debug)]
-pub enum ZSliceBuffer {
-    NetOwnedBuffer(Arc<Vec<u8>>),
-    #[cfg(feature = "collections")]
-    NetSharedBuffer(Arc<RecyclingObject<Box<[u8]>>>),
-    #[cfg(feature = "shared-memory")]
-    ShmBuffer(Arc<SharedMemoryBuf>),
-    #[cfg(feature = "shared-memory")]
-    ShmInfo(Arc<Vec<u8>>),
-}
-
-impl ZSliceBuffer {
+pub trait ZSliceBuffer: AsRef<[u8]> + AsMut<[u8]> + fmt::Debug + Send + Sync {
+    fn as_any(&self) -> &dyn Any;
     fn as_slice(&self) -> &[u8] {
-        match self {
-            Self::NetOwnedBuffer(buf) => buf.as_slice(),
-            #[cfg(feature = "collections")]
-            Self::NetSharedBuffer(buf) => buf,
-            #[cfg(feature = "shared-memory")]
-            Self::ShmBuffer(buf) => buf.as_slice(),
-            #[cfg(feature = "shared-memory")]
-            Self::ShmInfo(buf) => buf.as_slice(),
-        }
+        self.as_ref()
     }
-
-    #[allow(clippy::missing_safety_doc)]
-    #[allow(clippy::mut_from_ref)]
-    unsafe fn as_mut_slice(&self) -> &mut [u8] {
-        match self {
-            Self::NetOwnedBuffer(buf) => &mut (*(Arc::as_ptr(buf) as *mut Vec<u8>)),
-            #[cfg(feature = "collections")]
-            Self::NetSharedBuffer(buf) => {
-                &mut (*(Arc::as_ptr(buf) as *mut RecyclingObject<Box<[u8]>>))
-            }
-            #[cfg(feature = "shared-memory")]
-            Self::ShmBuffer(buf) => (*(Arc::as_ptr(buf) as *mut SharedMemoryBuf)).as_mut_slice(),
-            #[cfg(feature = "shared-memory")]
-            Self::ShmInfo(buf) => &mut (*(Arc::as_ptr(buf) as *mut Vec<u8>)),
-        }
+    fn as_mut_slice(&mut self) -> &mut [u8] {
+        self.as_mut()
     }
 }
 
-impl Deref for ZSliceBuffer {
-    type Target = [u8];
-
-    fn deref(&self) -> &Self::Target {
-        self.as_slice()
+impl ZSliceBuffer for Vec<u8> {
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
-impl AsRef<[u8]> for ZSliceBuffer {
-    fn as_ref(&self) -> &[u8] {
-        self.deref()
+impl ZSliceBuffer for Box<[u8]> {
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
-impl Index<usize> for ZSliceBuffer {
-    type Output = u8;
-
-    fn index(&self, index: usize) -> &Self::Output {
-        &(self.deref())[index]
-    }
-}
-
-impl Index<Range<usize>> for ZSliceBuffer {
-    type Output = [u8];
-
-    fn index(&self, range: Range<usize>) -> &Self::Output {
-        &(self.deref())[range]
-    }
-}
-
-impl Index<RangeFrom<usize>> for ZSliceBuffer {
-    type Output = [u8];
-
-    fn index(&self, range: RangeFrom<usize>) -> &Self::Output {
-        &(self.deref())[range]
-    }
-}
-
-impl Index<RangeFull> for ZSliceBuffer {
-    type Output = [u8];
-
-    fn index(&self, _range: RangeFull) -> &Self::Output {
-        self.deref()
-    }
-}
-
-impl Index<RangeInclusive<usize>> for ZSliceBuffer {
-    type Output = [u8];
-
-    fn index(&self, range: RangeInclusive<usize>) -> &Self::Output {
-        &(self.deref())[range]
-    }
-}
-
-impl Index<RangeTo<usize>> for ZSliceBuffer {
-    type Output = [u8];
-
-    fn index(&self, range: RangeTo<usize>) -> &Self::Output {
-        &(self.deref())[range]
-    }
-}
-
-impl Index<RangeToInclusive<usize>> for ZSliceBuffer {
-    type Output = [u8];
-
-    fn index(&self, range: RangeToInclusive<usize>) -> &Self::Output {
-        &(self.deref())[range]
-    }
-}
-
-impl From<Arc<Vec<u8>>> for ZSliceBuffer {
-    fn from(buf: Arc<Vec<u8>>) -> Self {
-        Self::NetOwnedBuffer(buf)
-    }
-}
-
-impl From<Vec<u8>> for ZSliceBuffer {
-    fn from(buf: Vec<u8>) -> Self {
-        Self::NetOwnedBuffer(buf.into())
-    }
-}
-
-#[cfg(feature = "collections")]
-impl From<Arc<RecyclingObject<Box<[u8]>>>> for ZSliceBuffer {
-    fn from(buf: Arc<RecyclingObject<Box<[u8]>>>) -> Self {
-        Self::NetSharedBuffer(buf)
-    }
-}
-
-#[cfg(feature = "collections")]
-impl From<RecyclingObject<Box<[u8]>>> for ZSliceBuffer {
-    fn from(buf: RecyclingObject<Box<[u8]>>) -> Self {
-        Self::NetSharedBuffer(buf.into())
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl From<Arc<SharedMemoryBuf>> for ZSliceBuffer {
-    fn from(buf: Arc<SharedMemoryBuf>) -> Self {
-        Self::ShmBuffer(buf)
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl From<Box<SharedMemoryBuf>> for ZSliceBuffer {
-    fn from(buf: Box<SharedMemoryBuf>) -> Self {
-        Self::ShmBuffer(buf.into())
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl From<SharedMemoryBuf> for ZSliceBuffer {
-    fn from(buf: SharedMemoryBuf) -> Self {
-        Self::ShmBuffer(buf.into())
+impl<const N: usize> ZSliceBuffer for [u8; N] {
+    fn as_any(&self) -> &dyn Any {
+        self
     }
 }
 
 /*************************************/
 /*               ZSLICE              */
 /*************************************/
-#[derive(Debug)]
-pub enum ZSliceKind {
-    Net,
-    Shm,
-}
-
-impl fmt::Display for ZSliceKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            ZSliceKind::Net => write!(f, "NET"),
-            ZSliceKind::Shm => write!(f, "SHM"),
-        }
-    }
-}
-
 /// A clonable wrapper to a contiguous slice of bytes.
 #[derive(Clone)]
 pub struct ZSlice {
-    pub buf: ZSliceBuffer,
+    pub buf: Arc<dyn ZSliceBuffer>,
     pub(crate) start: usize,
     pub(crate) end: usize,
 }
 
 impl ZSlice {
-    pub fn make(buf: ZSliceBuffer, start: usize, end: usize) -> Result<ZSlice, ZSliceBuffer> {
+    pub fn make(
+        buf: Arc<dyn ZSliceBuffer>,
+        start: usize,
+        end: usize,
+    ) -> Result<ZSlice, Arc<dyn ZSliceBuffer>> {
         if end <= buf.as_slice().len() {
             Ok(ZSlice { buf, start, end })
         } else {
@@ -238,7 +90,7 @@ impl ZSlice {
 
     #[inline]
     pub fn as_slice(&self) -> &[u8] {
-        &self.buf[self.start..self.end]
+        &self.buf.as_slice()[self.start..self.end]
     }
 
     /// # Safety
@@ -248,18 +100,8 @@ impl ZSlice {
     /// undefined behavior in Rust. To use with extreme caution.
     #[allow(clippy::mut_from_ref)]
     pub unsafe fn as_mut_slice(&self) -> &mut [u8] {
-        &mut self.buf.as_mut_slice()[self.start..self.end]
-    }
-
-    #[inline]
-    pub fn get_kind(&self) -> ZSliceKind {
-        match &self.buf {
-            ZSliceBuffer::NetOwnedBuffer(_) => ZSliceKind::Net,
-            #[cfg(feature = "collections")]
-            ZSliceBuffer::NetSharedBuffer(_) => ZSliceKind::Net,
-            #[cfg(feature = "shared-memory")]
-            ZSliceBuffer::ShmBuffer(_) | ZSliceBuffer::ShmInfo(_) => ZSliceKind::Shm,
-        }
+        let buf = unsafe { &mut (*(Arc::as_ptr(&self.buf) as *mut dyn ZSliceBuffer)) };
+        &mut buf.as_mut_slice()[self.start..self.end]
     }
 
     pub(crate) fn new_sub_slice(&self, start: usize, end: usize) -> Option<ZSlice> {
@@ -271,52 +113,6 @@ impl ZSlice {
             })
         } else {
             None
-        }
-    }
-
-    #[cfg(feature = "shared-memory")]
-    pub fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
-        match &self.buf {
-            ZSliceBuffer::ShmInfo(info) => {
-                // Deserialize the shmb info into shm buff
-                let shmbinfo = SharedMemoryBufInfo::deserialize(info)?;
-
-                // First, try in read mode allowing concurrenct lookups
-                let r_guard = zread!(shmr);
-                let smb = r_guard.try_read_shmbuf(&shmbinfo).or_else(|_| {
-                    // Next, try in write mode to eventual link the remote shm
-                    drop(r_guard);
-                    let mut w_guard = zwrite!(shmr);
-                    w_guard.read_shmbuf(&shmbinfo)
-                })?;
-
-                // Replace the content of the slice
-                self.buf = ZSliceBuffer::ShmBuffer(smb.into());
-                // Update the indexes
-                self.start = 0;
-                self.end = self.buf.len();
-                Ok(true)
-            }
-            _ => Ok(false),
-        }
-    }
-
-    #[cfg(feature = "shared-memory")]
-    pub fn map_to_shminfo(&mut self) -> ZResult<bool> {
-        match &self.buf {
-            ZSliceBuffer::ShmBuffer(shmb) => {
-                // Serialize the shmb info
-                let info = shmb.info.serialize()?;
-                // Increase the reference count so to keep the SharedMemoryBuf valid
-                shmb.inc_ref_count();
-                // Replace the content of the slice
-                self.buf = ZSliceBuffer::ShmInfo(info.into());
-                // Update the indexes
-                self.start = 0;
-                self.end = self.buf.len();
-                Ok(true)
-            }
-            _ => Ok(false),
         }
     }
 }
@@ -339,7 +135,7 @@ impl Index<usize> for ZSlice {
     type Output = u8;
 
     fn index(&self, index: usize) -> &Self::Output {
-        &self.buf[self.start + index]
+        &self.buf.as_slice()[self.start + index]
     }
 }
 
@@ -412,95 +208,30 @@ impl fmt::Debug for ZSlice {
             "ZSlice{{ start: {}, end:{}, buf:\n {:02x?} \n}}",
             self.start,
             self.end,
-            &self.buf[..]
+            self.buf.as_slice()
         )
     }
 }
 
 // From impls
-impl From<ZSliceBuffer> for ZSlice {
-    fn from(buf: ZSliceBuffer) -> Self {
-        let end = buf.len();
+impl<T> From<Arc<T>> for ZSlice
+where
+    T: ZSliceBuffer + 'static,
+{
+    fn from(buf: Arc<T>) -> Self {
+        let end = buf.as_slice().len();
         Self { buf, start: 0, end }
     }
 }
 
-impl From<Arc<Vec<u8>>> for ZSlice {
-    fn from(buf: Arc<Vec<u8>>) -> Self {
-        let end = buf.len();
+impl<T> From<T> for ZSlice
+where
+    T: ZSliceBuffer + 'static,
+{
+    fn from(buf: T) -> Self {
+        let end = buf.as_slice().len();
         Self {
-            buf: buf.into(),
-            start: 0,
-            end,
-        }
-    }
-}
-
-impl From<Vec<u8>> for ZSlice {
-    fn from(buf: Vec<u8>) -> Self {
-        let end = buf.len();
-        Self {
-            buf: buf.into(),
-            start: 0,
-            end,
-        }
-    }
-}
-
-#[cfg(feature = "collections")]
-impl From<Arc<RecyclingObject<Box<[u8]>>>> for ZSlice {
-    fn from(buf: Arc<RecyclingObject<Box<[u8]>>>) -> Self {
-        let end = buf.len();
-        Self {
-            buf: buf.into(),
-            start: 0,
-            end,
-        }
-    }
-}
-
-#[cfg(feature = "collections")]
-impl From<RecyclingObject<Box<[u8]>>> for ZSlice {
-    fn from(buf: RecyclingObject<Box<[u8]>>) -> Self {
-        let end = buf.len();
-        Self {
-            buf: buf.into(),
-            start: 0,
-            end,
-        }
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl From<Arc<SharedMemoryBuf>> for ZSlice {
-    fn from(buf: Arc<SharedMemoryBuf>) -> Self {
-        let end = buf.len();
-        Self {
-            buf: buf.into(),
-            start: 0,
-            end,
-        }
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl From<Box<SharedMemoryBuf>> for ZSlice {
-    fn from(buf: Box<SharedMemoryBuf>) -> Self {
-        let end = buf.len();
-        Self {
-            buf: buf.into(),
-            start: 0,
-            end,
-        }
-    }
-}
-
-#[cfg(feature = "shared-memory")]
-impl From<SharedMemoryBuf> for ZSlice {
-    fn from(buf: SharedMemoryBuf) -> Self {
-        let end = buf.len();
-        Self {
-            buf: buf.into(),
+            buf: Arc::new(buf),
             start: 0,
             end,
         }
