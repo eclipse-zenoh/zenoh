@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-extern crate alloc;
-
 use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
 use crate::core::WireExpr;
 use alloc::borrow::{Borrow, Cow};

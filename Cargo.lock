@@ -3286,6 +3286,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "uhlc"
+version = "0.5.1"
+source = "git+https://github.com/atolab/uhlc-rs.git#1ebaf15e111c39c12b513ec7d854884df789ada0"
+dependencies = [
+ "hex",
+ "humantime",
+ "lazy_static",
+ "log",
+ "serde",
+ "spin 0.9.4",
+ "uuid",
+]
+
+[[package]]
 name = "unicode-bidi"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3800,7 +3814,7 @@ dependencies = [
  "serde_json",
  "socket2",
  "stop-token",
- "uhlc",
+ "uhlc 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "uuid",
  "vec_map",
  "zenoh-buffers",
@@ -3842,7 +3856,7 @@ version = "0.7.0-rc"
 dependencies = [
  "criterion",
  "rand 0.8.5",
- "uhlc",
+ "uhlc 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "uuid",
  "zenoh-buffers",
  "zenoh-protocol",
@@ -4180,11 +4194,12 @@ dependencies = [
 name = "zenoh-protocol"
 version = "0.7.0-rc"
 dependencies = [
+ "defmt",
  "hex",
  "lazy_static",
  "rand 0.8.5",
  "serde",
- "uhlc",
+ "uhlc 0.5.1 (git+https://github.com/atolab/uhlc-rs.git)",
  "uuid",
  "zenoh-buffers",
  "zenoh-core",
