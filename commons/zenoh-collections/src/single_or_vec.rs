@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use alloc::{vec, vec::Vec};
 use core::{
     cmp::PartialEq,
     fmt, iter,
@@ -76,6 +77,16 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self.as_ref())
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl<T> defmt::Format for SingleOrVecInner<T>
+where
+    T: defmt::Format,
+{
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{:?}", self.as_ref());
     }
 }
 
@@ -167,6 +178,16 @@ where
     }
 }
 
+#[cfg(feature = "defmt")]
+impl<T> defmt::Format for SingleOrVec<T>
+where
+    T: defmt::Format,
+{
+    fn format(&self, f: defmt::Formatter) {
+        self.0.format(f);
+    }
+}
+
 impl<T> IntoIterator for SingleOrVec<T> {
     type Item = T;
     type IntoIter = IntoIter<T>;
@@ -197,7 +218,7 @@ impl<T> iter::Extend<T> for SingleOrVec<T> {
 }
 
 pub struct IntoIter<T> {
-    pub drain: std::vec::IntoIter<T>,
+    pub drain: alloc::vec::IntoIter<T>,
     pub last: Option<T>,
 }
 
