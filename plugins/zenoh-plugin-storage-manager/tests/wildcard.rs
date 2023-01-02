@@ -161,12 +161,12 @@ async fn test_wild_card_in_order() {
     drop(storage);
 }
 
-fn test_wild_card_out_of_order() {
-    assert_eq!(true, true);
-}
+// fn test_wild_card_out_of_order() {
+//     assert_eq!(true, true);
+// }
 
 #[test]
 fn wildcard_test() {
     task::block_on(async { test_wild_card_in_order().await });
-    task::block_on(async { test_wild_card_out_of_order() });
+    // task::block_on(async { test_wild_card_out_of_order() });
 }

@@ -200,6 +200,9 @@ impl StorageService {
         }
     }
 
+    // @TODO: handle the case where there is a strip_prefix specified for the storage
+    // The storage should only simply save the key, sample pair while put and retrieve the same during get
+    // the trimming during PUT and GET should be handled by the plugin
     async fn process_sample(&self, sample: Sample) {
         trace!("[STORAGE] Processing sample: {}", sample);
         // Call incoming data interceptor (if any)
@@ -209,7 +212,7 @@ impl StorageService {
             sample
         };
 
-        // @TODO: if wildcard, update wildcard_updates
+        // if wildcard, update wildcard_updates
         if sample.key_expr.is_wild() {
             self.register_wildcard_update(sample.clone()).await;
         }
