@@ -63,6 +63,19 @@ impl fmt::Display for Hello {
     }
 }
 
+// #[cfg(feature = "defmt")]
+// impl defmt::Format for Hello {
+//     fn format(&self, f: defmt::Formatter) {
+//         defmt::write!(
+//             f,
+//             "Hello {{ zid: {}, whatami: {}, locators: {} }}",
+//             &self.zid,
+//             &self.whatami,
+//             &self.locators,
+//         );
+//     }
+// }
+
 impl Hello {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {

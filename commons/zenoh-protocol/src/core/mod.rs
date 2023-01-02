@@ -59,6 +59,7 @@ pub mod endpoint;
 pub use endpoint::EndPoint;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Property {
     pub key: ZInt,
     pub value: Vec<u8>,
@@ -86,6 +87,16 @@ impl fmt::Display for SampleKind {
             SampleKind::Put => write!(f, "PUT"),
             SampleKind::Delete => write!(f, "DELETE"),
         }
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for SampleKind {
+    fn format(&self, f: defmt::Formatter) {
+        match self {
+            SampleKind::Put => defmt::write!(f, "PUT"),
+            SampleKind::Delete => defmt::write!(f, "DELETE"),
+        };
     }
 }
 
@@ -219,6 +230,13 @@ impl fmt::Display for ZenohId {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for ZenohId {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", hex::encode_upper(self.as_slice()));
+    }
+}
+
 // A PeerID can be converted into a Timestamp's ID
 impl From<&ZenohId> for uhlc::ID {
     fn from(zid: &ZenohId) -> Self {
@@ -292,6 +310,7 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
 }
 
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum Priority {
     Control = 0,
@@ -343,6 +362,7 @@ impl TryFrom<u8> for Priority {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum Reliability {
     BestEffort,
@@ -356,6 +376,7 @@ impl Default for Reliability {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Channel {
     pub priority: Priority,
     pub reliability: Reliability,
@@ -398,8 +419,41 @@ impl fmt::Display for ConduitSnList {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for ConduitSnList {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "[ ");
+        match self {
+            ConduitSnList::Plain(sn) => {
+                defmt::write!(
+                    f,
+                    "{:?} {{ reliable: {}, best effort: {} }}",
+                    Priority::default(),
+                    sn.reliable,
+                    sn.best_effort
+                );
+            }
+            ConduitSnList::QoS(ref sns) => {
+                for (prio, sn) in sns.iter().enumerate() {
+                    let p: Priority = (prio as u8).try_into().unwrap();
+                    defmt::write!(
+                        f,
+                        "{:?} {{ reliable: {}, best effort: {} }}",
+                        p, sn.reliable, sn.best_effort
+                    );
+                    if p != Priority::Background {
+                        defmt::write!(f, ", ");
+                    }
+                }
+            }
+        }
+        defmt::write!(f, " ]");
+    }
+}
+
 /// The kind of reliability.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ConduitSn {
     pub reliable: ZInt,
     pub best_effort: ZInt,
@@ -407,6 +461,7 @@ pub struct ConduitSn {
 
 /// The kind of congestion control.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum CongestionControl {
     Block,
@@ -421,6 +476,7 @@ impl Default for CongestionControl {
 
 /// The subscription mode.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum SubMode {
     Push,
@@ -441,6 +497,7 @@ pub struct SubInfo {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct QueryableInfo {
     pub complete: ZInt, // Default 0: incomplete
     pub distance: ZInt, // Default 0: no distance
@@ -448,6 +505,7 @@ pub struct QueryableInfo {
 
 /// The kind of consolidation.
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ConsolidationMode {
     /// No consolidation applied: multiple samples may be received for the same key-timestamp.
     None,
@@ -465,6 +523,7 @@ pub enum ConsolidationMode {
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum QueryTarget {
     BestMatching,
     All,

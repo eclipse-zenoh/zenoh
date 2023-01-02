@@ -128,6 +128,13 @@ impl fmt::Display for Protocol<'_> {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for Protocol<'_> {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", self.as_str());
+    }
+}
+
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct ProtocolMut<'a>(&'a mut EndPoint);
@@ -157,6 +164,13 @@ impl fmt::Display for ProtocolMut<'_> {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for ProtocolMut<'_> {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", self.as_str());
+    }
+}
+
 // Address
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -177,6 +191,13 @@ impl AsRef<str> for Address<'_> {
 impl fmt::Display for Address<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for Address<'_> {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", self.as_str());
     }
 }
 
@@ -206,6 +227,13 @@ impl AsRef<str> for AddressMut<'_> {
 impl fmt::Display for AddressMut<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for AddressMut<'_> {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", self.as_str());
     }
 }
 
@@ -241,6 +269,13 @@ impl AsRef<str> for Metadata<'_> {
 impl fmt::Display for Metadata<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for Metadata<'_> {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", self.as_str());
     }
 }
 
@@ -310,6 +345,13 @@ impl fmt::Display for MetadataMut<'_> {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for MetadataMut<'_> {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", self.as_str());
+    }
+}
+
 // Config
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
@@ -342,6 +384,13 @@ impl AsRef<str> for Config<'_> {
 impl fmt::Display for Config<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for Config<'_> {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", self.as_str());
     }
 }
 
@@ -408,6 +457,13 @@ impl AsRef<str> for ConfigMut<'_> {
 impl fmt::Display for ConfigMut<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for ConfigMut<'_> {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", self.as_str());
     }
 }
 
@@ -504,6 +560,13 @@ impl From<Locator> for EndPoint {
 impl fmt::Display for EndPoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.inner)
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for EndPoint {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", &self.inner);
     }
 }
 

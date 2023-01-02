@@ -74,6 +74,13 @@ impl fmt::Display for WhatAmI {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for WhatAmI {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", self.to_str());
+    }
+}
+
 impl serde::Serialize for WhatAmI {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -245,6 +252,13 @@ impl<'de> serde::Deserialize<'de> for WhatAmIMatcher {
 impl fmt::Display for WhatAmIMatcher {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.to_str())
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for WhatAmIMatcher {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", self.to_str());
     }
 }
 

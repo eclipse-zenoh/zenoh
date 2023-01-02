@@ -44,6 +44,7 @@ mod consts {
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum KnownEncoding {
     Empty = 0,
     AppOctetStream = 1,
@@ -215,6 +216,19 @@ impl fmt::Display for Encoding {
                 f.write_str(s)
             }
         }
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for Encoding {
+    fn format(&self, f: defmt::Formatter) {
+        match self {
+            Encoding::Exact(e) => defmt::write!(f, "{}", e.as_ref()),
+            Encoding::WithSuffix(e, s) => {
+                defmt::write!(f, "{}", e.as_ref());
+                defmt::write!(f, "{}", s);
+            }
+        };
     }
 }
 

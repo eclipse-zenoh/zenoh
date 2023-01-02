@@ -109,6 +109,13 @@ impl fmt::Display for Locator {
     }
 }
 
+#[cfg(feature = "defmt")]
+impl defmt::Format for Locator {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", self.0.as_str());
+    }
+}
+
 pub type LocatorProtocol = str;
 
 impl Locator {
