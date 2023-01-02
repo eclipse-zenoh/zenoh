@@ -31,8 +31,12 @@ description = "Internal crate for zenoh."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-test = [ "rand" ]
+default = ["std"]
+std = ["zenoh-collections/std"]
+test = ["rand"]
+defmt = ["dep:defmt", "zenoh-collections/defmt"]
 
 [dependencies]
+defmt = { version = "0.3.2", features = ["alloc"], optional = true }
 rand = { version = "0.8.5", optional = true }
 zenoh-collections = { version = "0.7.0-rc", path = "../zenoh-collections/", default-features = false }

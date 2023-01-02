@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-extern crate alloc;
-
 use crate::reader::{BacktrackableReader, DidntRead, HasReader, Reader};
 use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{
@@ -210,6 +208,13 @@ impl fmt::Debug for ZSlice {
             self.end,
             self.buf.as_slice()
         )
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for ZSlice {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{:02x}", self.as_slice());
     }
 }
 

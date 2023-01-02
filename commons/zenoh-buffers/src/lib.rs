@@ -13,7 +13,7 @@
 //
 
 //! Provide differnt buffer implementations used for serialization and deserialization.
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
 mod bbuf;
@@ -32,6 +32,7 @@ pub mod writer {
     use core::num::NonZeroUsize;
 
     #[derive(Debug, Clone, Copy)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub struct DidntWrite;
 
     pub trait Writer {
@@ -74,6 +75,7 @@ pub mod reader {
     use core::num::NonZeroUsize;
 
     #[derive(Debug, Clone, Copy)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub struct DidntRead;
 
     pub trait Reader {
@@ -114,6 +116,7 @@ pub mod reader {
     }
 
     #[derive(Debug, Clone, Copy)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub struct DidntSiphon;
 
     pub trait SiphonableReader: Reader {

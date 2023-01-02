@@ -3823,6 +3823,7 @@ dependencies = [
 name = "zenoh-buffers"
 version = "0.7.0-rc"
 dependencies = [
+ "defmt",
  "rand 0.8.5",
  "zenoh-collections",
 ]

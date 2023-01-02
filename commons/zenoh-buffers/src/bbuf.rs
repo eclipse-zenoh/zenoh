@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-extern crate alloc;
-
 use crate::{
     reader::HasReader,
     vec,
@@ -22,6 +20,7 @@ use alloc::boxed::Box;
 use core::num::NonZeroUsize;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct BBuf {
     buffer: Box<[u8]>,
     len: usize,
@@ -131,6 +130,7 @@ impl<'a> HasReader for &'a BBuf {
 #[cfg(feature = "test")]
 impl BBuf {
     pub fn rand(len: usize) -> Self {
+        #[allow(unused_imports)]
         use alloc::vec::Vec;
         use rand::Rng;
 
