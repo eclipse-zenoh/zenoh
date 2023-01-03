@@ -3856,7 +3856,7 @@ version = "0.7.0-rc"
 dependencies = [
  "criterion",
  "rand 0.8.5",
- "uhlc 0.5.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "uhlc 0.5.1 (git+https://github.com/atolab/uhlc-rs.git)",
  "uuid",
  "zenoh-buffers",
  "zenoh-protocol",

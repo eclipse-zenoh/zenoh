@@ -22,7 +22,7 @@ use zenoh_protocol::{
     transport::tmsg,
 };
 #[cfg(feature = "shared-memory")]
-use {crate::Zenoh060Condition, std::any::TypeId, zenoh_shm::SharedMemoryBufInfoSerialized};
+use {crate::Zenoh060Condition, core::any::TypeId, zenoh_shm::SharedMemoryBufInfoSerialized};
 
 impl<W> WCodec<&Attachment, &mut W> for Zenoh060
 where
