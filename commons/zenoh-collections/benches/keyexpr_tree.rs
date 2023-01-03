@@ -5,6 +5,7 @@ use std::{
 
 use rand::SeedableRng;
 use zenoh_collections::keyexpr_tree::{
+    box_tree::KeTreePair,
     impls::{KeyedSetProvider, VecSetProvider},
     IKeyExprTree, IKeyExprTreeExt, KeyExprTree,
 };
@@ -15,20 +16,24 @@ fn main() {
         for wildness in [0., 0.1] {
             let results = Benchmarker::benchmark(|b| {
                 let keys = KeySet::generate(total, wildness);
-                let mut tree = KeyExprTree::<_, KeyedSetProvider>::new();
-                let mut vectree = KeyExprTree::<_, VecSetProvider>::new();
+                let mut pair = KeTreePair::new();
+                let mut tree = KeyExprTree::<_, bool, KeyedSetProvider>::new();
+                let mut vectree = KeyExprTree::<_, bool, VecSetProvider>::new();
                 let mut map = HashMap::new();
                 for key in keys.iter() {
+                    b.run_once("pair_insert", || pair.insert(key, 0));
                     b.run_once("ketree_insert", || tree.insert(key, 0));
                     b.run_once("vectree_insert", || vectree.insert(key, 0));
                     b.run_once("hashmap_insert", || map.insert(key.to_owned(), 0));
                 }
                 for key in keys.iter() {
+                    b.run_once("pair_fetch", || pair.node(key));
                     b.run_once("ketree_fetch", || tree.node(key));
                     b.run_once("vectree_fetch", || vectree.node(key));
                     b.run_once("hashmap_fetch", || map.get(key));
                 }
                 for key in keys.iter() {
+                    b.run_once("pair_intersect", || pair.intersecting_nodes(key).count());
                     b.run_once("ketree_intersect", || tree.intersecting_nodes(key).count());
                     b.run_once("vectree_intersect", || {
                         vectree.intersecting_nodes(key).count()
@@ -38,6 +43,7 @@ fn main() {
                     });
                 }
                 for key in keys.iter() {
+                    b.run_once("pair_include", || pair.included_nodes(key).count());
                     b.run_once("ketree_include", || tree.included_nodes(key).count());
                     b.run_once("vectree_include", || vectree.included_nodes(key).count());
                     b.run_once("hashmap_include", || {
@@ -46,15 +52,19 @@ fn main() {
                 }
             });
             for name in [
+                "pair_insert",
                 "ketree_insert",
                 "vectree_insert",
                 "hashmap_insert",
+                "pair_fetch",
                 "ketree_fetch",
                 "vectree_fetch",
                 "hashmap_fetch",
+                "pair_intersect",
                 "ketree_intersect",
                 "vectree_intersect",
                 "hashmap_intersect",
+                "pair_include",
                 "ketree_include",
                 "vectree_include",
                 "hashmap_include",

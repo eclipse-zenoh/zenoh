@@ -13,7 +13,7 @@ use std::{
 };
 
 fn insert<'a, K: TryInto<&'a keyexpr>, V: Clone + PartialEq + Debug + 'static>(
-    ketree: &mut KeyExprTree<V, KeyedSetProvider>,
+    ketree: &mut KeyExprTree<V, bool, KeyedSetProvider>,
     map: &mut HashMap<OwnedKeyExpr, Option<V>>,
     key: K,
     value: V,
@@ -37,7 +37,7 @@ fn insert<'a, K: TryInto<&'a keyexpr>, V: Clone + PartialEq + Debug + 'static>(
 }
 
 fn insert_vecset<'a, K: TryInto<&'a keyexpr>, V: Clone + PartialEq + Debug + 'static>(
-    ketree: &mut KeyExprTree<V, VecSetProvider>,
+    ketree: &mut KeyExprTree<V, bool, VecSetProvider>,
     map: &mut HashMap<OwnedKeyExpr, Option<V>>,
     key: K,
     value: V,
@@ -235,7 +235,7 @@ fn fuzz() {
 fn pruning() {
     let mut rng = rand::thread_rng();
     let mut fuzzer = KeyExprFuzzer(rand::thread_rng());
-    let mut set = KeyExprTree::<i32, DefaultChildrenProvider>::new();
+    let mut set = KeyExprTree::<i32, bool, DefaultChildrenProvider>::new();
     let dist = rand::distributions::Uniform::new(0, 3);
     while !set
         .tree_iter()

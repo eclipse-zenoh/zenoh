@@ -6,36 +6,102 @@ use std::{
 use crate::keyexpr_tree::*;
 use zenoh_protocol_core::key_expr::keyexpr;
 
-pub struct KeyExprTree<
-    Weight,
-    Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Children>>> = DefaultChildrenProvider,
-> {
-    children: Children::Assoc,
-    has_wilds: bool,
+use super::impls::KeyedSetProvider;
+
+pub trait IWildness: 'static {
+    fn non_wild() -> Self;
+    fn get(&self) -> bool;
+    fn set(&mut self, wildness: bool) -> bool;
+}
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NonWild;
+impl IWildness for NonWild {
+    fn non_wild() -> Self {
+        NonWild
+    }
+    fn get(&self) -> bool {
+        false
+    }
+    fn set(&mut self, wildness: bool) -> bool {
+        if wildness {
+            panic!("Attempted to set NonWild to wild, which breaks its contract. You likely attempted to insert a wild key into a `NonWild` tree. Use `bool` instead to make wildness determined at runtime.")
+        }
+        false
+    }
+}
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct UnknownWildness;
+impl IWildness for UnknownWildness {
+    fn non_wild() -> Self {
+        UnknownWildness
+    }
+    fn get(&self) -> bool {
+        true
+    }
+    fn set(&mut self, _wildness: bool) -> bool {
+        true
+    }
+}
+impl IWildness for bool {
+    fn non_wild() -> Self {
+        false
+    }
+    fn get(&self) -> bool {
+        *self
+    }
+    fn set(&mut self, wildness: bool) -> bool {
+        std::mem::replace(self, wildness)
+    }
 }
 
-impl<Weight, Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Children>>>>
-    KeyExprTree<Weight, Children>
+#[repr(C)]
+pub struct KeyExprTree<
+    Weight,
+    Wildness: IWildness = bool,
+    Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>> = DefaultChildrenProvider,
+> {
+    children: Children::Assoc,
+    wildness: Wildness,
+}
+
+impl<
+        Weight,
+        Wildness: IWildness,
+        Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>>,
+    > KeyExprTree<Weight, Wildness, Children>
 {
     pub fn new() -> Self {
         KeyExprTree {
             children: Default::default(),
-            has_wilds: false,
+            wildness: Wildness::non_wild(),
         }
     }
 }
+impl<
+        Weight,
+        Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>>,
+        Wildness: IWildness,
+    > Default for KeyExprTree<Weight, Wildness, Children>
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
-impl<Weight, Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Children>>>>
-    IKeyExprTree<Weight> for KeyExprTree<Weight, Children>
+impl<
+        Weight,
+        Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>>,
+        Wildness: IWildness,
+    > IKeyExprTree<Weight> for KeyExprTree<Weight, Wildness, Children>
 where
     Weight: 'static,
     Children: 'static,
     Children::Assoc: IChildren<
-            Box<KeyExprTreeNode<Weight, Children>>,
-            Node = Box<KeyExprTreeNode<Weight, Children>>,
+            Box<KeyExprTreeNode<Weight, Wildness, Children>>,
+            Node = Box<KeyExprTreeNode<Weight, Wildness, Children>>,
         > + 'static,
 {
-    type Node = KeyExprTreeNode<Weight, Children>;
+    type Node = KeyExprTreeNode<Weight, Wildness, Children>;
     fn node(&self, at: &keyexpr) -> Option<&Self::Node> {
         let mut chunks = at.chunks();
         let mut node = self.children.child_at(chunks.next().unwrap())?;
@@ -70,7 +136,7 @@ where
 
     fn node_mut_or_create(&mut self, at: &keyexpr) -> &mut Self::Node {
         if at.is_wild() {
-            self.has_wilds = true;
+            self.wildness.set(true);
         }
         let mut chunks = at.chunks();
         let root = NonNull::from(&*self);
@@ -99,24 +165,25 @@ where
         node
     }
     type TreeIterItem<'a> = <Self::TreeIter<'a> as Iterator>::Item;
-    type TreeIter<'a> = TreeIter<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>;
+    type TreeIter<'a> =
+        TreeIter<'a, Children, Box<KeyExprTreeNode<Weight, Wildness, Children>>, Weight>;
     fn tree_iter(&self) -> Self::TreeIter<'_> {
         TreeIter::new(&self.children)
     }
     type TreeIterItemMut<'a> = <Self::TreeIterMut<'a> as Iterator>::Item;
     type TreeIterMut<'a> =
-        TreeIterMut<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>;
+        TreeIterMut<'a, Children, Box<KeyExprTreeNode<Weight, Wildness, Children>>, Weight>;
     fn tree_iter_mut(&mut self) -> Self::TreeIterMut<'_> {
         TreeIterMut::new(&mut self.children)
     }
 
     type IntersectionItem<'a> = <Self::Intersection<'a> as Iterator>::Item;
     type Intersection<'a> = IterOrOption<
-        Intersection<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>,
+        Intersection<'a, Children, Box<KeyExprTreeNode<Weight, Wildness, Children>>, Weight>,
         &'a Self::Node,
     >;
     fn intersecting_nodes<'a>(&'a self, ke: &'a keyexpr) -> Self::Intersection<'a> {
-        if self.has_wilds || ke.is_wild() {
+        if self.wildness.get() || ke.is_wild() {
             Intersection::new(&self.children, ke).into()
         } else {
             let node = self.node(ke);
@@ -126,11 +193,11 @@ where
 
     type IntersectionItemMut<'a> = <Self::IntersectionMut<'a> as Iterator>::Item;
     type IntersectionMut<'a> = IterOrOption<
-        IntersectionMut<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>,
+        IntersectionMut<'a, Children, Box<KeyExprTreeNode<Weight, Wildness, Children>>, Weight>,
         &'a mut Self::Node,
     >;
     fn intersecting_nodes_mut<'a>(&'a mut self, ke: &'a keyexpr) -> Self::IntersectionMut<'a> {
-        if self.has_wilds || ke.is_wild() {
+        if self.wildness.get() || ke.is_wild() {
             IntersectionMut::new(&mut self.children, ke).into()
         } else {
             let node = self.node_mut(ke);
@@ -140,11 +207,11 @@ where
 
     type InclusionItem<'a> = <Self::Inclusion<'a> as Iterator>::Item;
     type Inclusion<'a> = IterOrOption<
-        Inclusion<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>,
+        Inclusion<'a, Children, Box<KeyExprTreeNode<Weight, Wildness, Children>>, Weight>,
         &'a Self::Node,
     >;
     fn included_nodes<'a>(&'a self, ke: &'a keyexpr) -> Self::Inclusion<'a> {
-        if self.has_wilds || ke.is_wild() {
+        if self.wildness.get() || ke.is_wild() {
             Inclusion::new(&self.children, ke).into()
         } else {
             let node = self.node(ke);
@@ -154,11 +221,11 @@ where
 
     type InclusionItemMut<'a> = <Self::InclusionMut<'a> as Iterator>::Item;
     type InclusionMut<'a> = IterOrOption<
-        InclusionMut<'a, Children, Box<KeyExprTreeNode<Weight, Children>>, Weight>,
+        InclusionMut<'a, Children, Box<KeyExprTreeNode<Weight, Wildness, Children>>, Weight>,
         &'a mut Self::Node,
     >;
     fn included_nodes_mut<'a>(&'a mut self, ke: &'a keyexpr) -> Self::InclusionMut<'a> {
-        if self.has_wilds || ke.is_wild() {
+        if self.wildness.get() || ke.is_wild() {
             InclusionMut::new(&mut self.children, ke).into()
         } else {
             let node = self.node_mut(ke);
@@ -177,7 +244,7 @@ where
                     false
                 }
             });
-        self.has_wilds = wild;
+        self.wildness.set(wild);
     }
 }
 pub enum IterOrOption<Iter: Iterator, Item> {
@@ -196,6 +263,30 @@ where
         }
     }
 }
+pub struct Coerced<Iter: Iterator, Item> {
+    iter: Iter,
+    _item: std::marker::PhantomData<Item>,
+}
+
+impl<Iter: Iterator, Item> Coerced<Iter, Item> {
+    pub fn new(iter: Iter) -> Self {
+        Self {
+            iter,
+            _item: Default::default(),
+        }
+    }
+}
+impl<Iter: Iterator, Item> Iterator for Coerced<Iter, Item>
+where
+    Iter::Item: Coerce<Item>,
+{
+    type Item = Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next().map(Coerce::coerce)
+    }
+}
+
 trait Coerce<Into> {
     fn coerce(self) -> Into;
 }
@@ -215,26 +306,16 @@ impl<Iter: Iterator, Item> From<Iter> for IterOrOption<Iter, Item> {
     }
 }
 
-impl<Weight, Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Children>>>> Default
-    for KeyExprTree<Weight, Children>
-{
-    fn default() -> Self {
-        Self {
-            children: Default::default(),
-            has_wilds: false,
-        }
-    }
-}
-
-pub struct KeyExprTreeNode<Weight, Children: IChildrenProvider<Box<Self>>> {
-    parent: Parent<Weight, Children>,
+#[repr(C)]
+pub struct KeyExprTreeNode<Weight, Wildness: IWildness, Children: IChildrenProvider<Box<Self>>> {
+    parent: Parent<Weight, Wildness, Children>,
     chunk: OwnedKeyExpr,
     children: Children::Assoc,
     weight: Option<Weight>,
 }
 
-impl<Weight, Children: IChildrenProvider<Box<Self>>> IKeyExprTreeNode<Weight>
-    for KeyExprTreeNode<Weight, Children>
+impl<Weight, Wildness: IWildness, Children: IChildrenProvider<Box<Self>>> IKeyExprTreeNode<Weight>
+    for KeyExprTreeNode<Weight, Wildness, Children>
 where
     Children::Assoc: IChildren<Box<Self>>,
 {
@@ -287,7 +368,8 @@ where
     }
 }
 
-impl<Weight, Children: IChildrenProvider<Box<Self>>> KeyExprTreeNode<Weight, Children>
+impl<Weight, Wildness: IWildness, Children: IChildrenProvider<Box<Self>>>
+    KeyExprTreeNode<Weight, Wildness, Children>
 where
     Children::Assoc: IChildren<Box<Self>>,
 {
@@ -323,29 +405,251 @@ enum PruneResult {
     Wild,
 }
 
-impl<Weight, Children: IChildrenProvider<Box<Self>>> HasChunk
-    for KeyExprTreeNode<Weight, Children>
+impl<Weight, Wildness: IWildness, Children: IChildrenProvider<Box<Self>>> HasChunk
+    for KeyExprTreeNode<Weight, Wildness, Children>
 {
     fn chunk(&self) -> &keyexpr {
         &self.chunk
     }
 }
-impl<Weight, Children: IChildrenProvider<Box<Self>>> AsRef<Self>
-    for KeyExprTreeNode<Weight, Children>
+impl<Weight, Wildness: IWildness, Children: IChildrenProvider<Box<Self>>> AsRef<Self>
+    for KeyExprTreeNode<Weight, Wildness, Children>
 {
     fn as_ref(&self) -> &Self {
         self
     }
 }
-impl<Weight, Children: IChildrenProvider<Box<Self>>> AsMut<Self>
-    for KeyExprTreeNode<Weight, Children>
+impl<Weight, Wildness: IWildness, Children: IChildrenProvider<Box<Self>>> AsMut<Self>
+    for KeyExprTreeNode<Weight, Wildness, Children>
 {
     fn as_mut(&mut self) -> &mut Self {
         self
     }
 }
 
-enum Parent<Weight, Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Children>>>> {
-    Root(NonNull<KeyExprTree<Weight, Children>>),
-    Node(NonNull<KeyExprTreeNode<Weight, Children>>),
+enum Parent<
+    Weight,
+    Wildness: IWildness,
+    Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>>,
+> {
+    Root(NonNull<KeyExprTree<Weight, Wildness, Children>>),
+    Node(NonNull<KeyExprTreeNode<Weight, Wildness, Children>>),
+}
+
+pub struct KeTreePair<Weight: 'static> {
+    non_wilds: KeyExprTree<Weight, NonWild, KeyedSetProvider>,
+    wilds: KeyExprTree<Weight, UnknownWildness, KeyedSetProvider>,
+}
+
+impl<Weight: 'static> Default for KeTreePair<Weight> {
+    fn default() -> Self {
+        Self {
+            non_wilds: Default::default(),
+            wilds: Default::default(),
+        }
+    }
+}
+
+impl<Weight: 'static> KeTreePair<Weight> {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+impl<Weight: 'static> IKeyExprTree<Weight> for KeTreePair<Weight> {
+    type Node = KeyExprTreeNode<Weight, UnknownWildness, KeyedSetProvider>;
+
+    fn node(&self, at: &keyexpr) -> Option<&Self::Node> {
+        if at.is_wild() {
+            self.wilds.node(at)
+        } else {
+            unsafe { std::mem::transmute(self.non_wilds.node(at)) }
+        }
+    }
+
+    fn node_mut(&mut self, at: &keyexpr) -> Option<&mut Self::Node> {
+        if at.is_wild() {
+            self.wilds.node_mut(at)
+        } else {
+            unsafe { std::mem::transmute(self.non_wilds.node_mut(at)) }
+        }
+    }
+
+    fn remove(&mut self, at: &keyexpr) -> Option<Weight> {
+        if at.is_wild() {
+            self.wilds.remove(at)
+        } else {
+            self.non_wilds.remove(at)
+        }
+    }
+
+    fn node_mut_or_create(&mut self, at: &keyexpr) -> &mut Self::Node {
+        if at.is_wild() {
+            self.wilds.node_mut_or_create(at)
+        } else {
+            unsafe { std::mem::transmute(self.non_wilds.node_mut_or_create(at)) }
+        }
+    }
+
+    type TreeIterItem<'a> = &'a Self::Node;
+    type TreeIter<'a> = TransmuteChain<
+        Coerced<<KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::TreeIter<
+            'a,
+        >, &'a <KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::Node>,
+        Coerced<<KeyExprTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::TreeIter<
+            'a,
+        >, &'a Self::Node>,
+    >;
+
+    fn tree_iter(&self) -> Self::TreeIter<'_> {
+        Coerced::new(self.non_wilds.tree_iter()).tchain(Coerced::new(self.wilds.tree_iter()))
+    }
+
+    type TreeIterItemMut<'a> = &'a mut Self::Node;
+    type TreeIterMut<'a> = TransmuteChain<
+    Coerced<<KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::TreeIterMut<
+        'a,
+    >, &'a mut <KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::Node>,
+    Coerced<<KeyExprTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::TreeIterMut<
+        'a,
+    >, &'a mut Self::Node>,
+>;
+
+    fn tree_iter_mut(&mut self) -> Self::TreeIterMut<'_> {
+        Coerced::new(self.non_wilds.tree_iter_mut())
+            .tchain(Coerced::new(self.wilds.tree_iter_mut()))
+    }
+
+    type IntersectionItem<'a> = &'a Self::Node;
+    type Intersection<'a> = TransmuteChain<
+        <KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::Intersection<
+            'a,
+        >,
+        <KeyExprTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::Intersection<
+            'a,
+        >,
+    >;
+
+    fn intersecting_nodes<'a>(&'a self, key: &'a keyexpr) -> Self::Intersection<'a> {
+        self.non_wilds
+            .intersecting_nodes(key)
+            .tchain(self.wilds.intersecting_nodes(key))
+    }
+
+    type IntersectionItemMut<'a> = &'a mut Self::Node;
+    type IntersectionMut<'a> = TransmuteChain<
+    <KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::IntersectionMut<
+        'a,
+    >,
+    <KeyExprTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::IntersectionMut<
+        'a,
+    >,
+>;
+
+    fn intersecting_nodes_mut<'a>(&'a mut self, key: &'a keyexpr) -> Self::IntersectionMut<'a> {
+        self.non_wilds
+            .intersecting_nodes_mut(key)
+            .tchain(self.wilds.intersecting_nodes_mut(key))
+    }
+
+    type InclusionItem<'a> = &'a Self::Node;
+    type Inclusion<'a> = TransmuteChain<
+        <KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::Inclusion<'a>,
+        <KeyExprTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::Inclusion<
+            'a,
+        >,
+    >;
+
+    fn included_nodes<'a>(&'a self, key: &'a keyexpr) -> Self::Inclusion<'a> {
+        self.non_wilds
+            .included_nodes(key)
+            .tchain(self.wilds.included_nodes(key))
+    }
+
+    type InclusionItemMut<'a> = &'a mut Self::Node;
+    type InclusionMut<'a> = TransmuteChain<
+            <KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::InclusionMut<
+                'a,
+            >,
+            <KeyExprTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::InclusionMut<
+                'a,
+            >,
+    >;
+
+    fn included_nodes_mut<'a>(&'a mut self, key: &'a keyexpr) -> Self::InclusionMut<'a> {
+        self.non_wilds
+            .included_nodes_mut(key)
+            .tchain(self.wilds.included_nodes_mut(key))
+    }
+
+    fn prune_where<F: FnMut(&mut Self::Node) -> bool>(&mut self, mut predicate: F) {
+        self.non_wilds
+            .prune_where(|node| predicate(unsafe { std::mem::transmute(node) }));
+        self.wilds.prune_where(predicate)
+    }
+}
+
+enum TransmuteChainInner<A, B> {
+    First(A, B),
+    Second(B),
+    Done,
+}
+pub struct TransmuteChain<A, B> {
+    inner: TransmuteChainInner<A, B>,
+}
+trait ITChain<T: Sized>: Sized {
+    fn tchain(self, chain: T) -> TransmuteChain<Self, T>;
+}
+impl<T: Iterator + Sized, U: Iterator + Sized> ITChain<U> for T {
+    fn tchain(self, chain: U) -> TransmuteChain<Self, U> {
+        TransmuteChain {
+            inner: TransmuteChainInner::First(self, chain),
+        }
+    }
+}
+impl<A: Iterator, B: Iterator> Iterator for TransmuteChain<A, B>
+where
+    A::Item: TransmuteInto<B::Item>,
+{
+    type Item = B::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.inner {
+            TransmuteChainInner::First(a, _) => match a.next() {
+                Some(i) => Some(i.transmute_into()),
+                None => unsafe {
+                    let TransmuteChainInner::First(_a, b) = std::ptr::read(&self.inner) else {std::hint::unreachable_unchecked()};
+                    std::ptr::write(&mut self.inner, TransmuteChainInner::Second(b));
+                    self.next()
+                },
+            },
+            TransmuteChainInner::Second(b) => match b.next() {
+                Some(i) => Some(i),
+                None => {
+                    self.inner = TransmuteChainInner::Done;
+                    None
+                }
+            },
+            TransmuteChainInner::Done => None,
+        }
+    }
+}
+
+trait TransmuteInto<T> {
+    fn transmute_into(self) -> T;
+}
+impl<'a, Weight: 'static>
+    TransmuteInto<&'a mut KeyExprTreeNode<Weight, UnknownWildness, KeyedSetProvider>>
+    for &'a mut KeyExprTreeNode<Weight, NonWild, KeyedSetProvider>
+{
+    fn transmute_into(self) -> &'a mut KeyExprTreeNode<Weight, UnknownWildness, KeyedSetProvider> {
+        unsafe { std::mem::transmute(self) }
+    }
+}
+impl<'a, Weight: 'static>
+    TransmuteInto<&'a KeyExprTreeNode<Weight, UnknownWildness, KeyedSetProvider>>
+    for &'a KeyExprTreeNode<Weight, NonWild, KeyedSetProvider>
+{
+    fn transmute_into(self) -> &'a KeyExprTreeNode<Weight, UnknownWildness, KeyedSetProvider> {
+        unsafe { std::mem::transmute(self) }
+    }
 }
