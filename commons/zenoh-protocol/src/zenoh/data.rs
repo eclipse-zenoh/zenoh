@@ -36,10 +36,12 @@ use zenoh_buffers::ZBuf;
 /// - if F==1 then the message is a REPLY_FINAL
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReplierInfo {
     pub id: ZenohId,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReplyContext {
     pub qid: ZInt,
     pub replier: Option<ReplierInfo>,
@@ -115,6 +117,7 @@ impl ReplyContext {
 ///
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+// #[cfg_attr(feature = "defmt", derive(defmt::Format))] // FIXME: Requires defmt::Format for uhlc::Timestamp
 pub struct DataInfo {
     #[cfg(feature = "shared-memory")]
     pub sliced: bool,
@@ -172,6 +175,7 @@ impl DataInfo {
 ///
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+// #[cfg_attr(feature = "defmt", derive(defmt::Format))] // FIXME: Requires defmt::Format for DataInfo
 pub struct Data {
     pub key: WireExpr<'static>,
     pub data_info: Option<DataInfo>,

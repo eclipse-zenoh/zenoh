@@ -24,6 +24,7 @@ use crate::core::CongestionControl;
 ///
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Unit {
     pub congestion_control: CongestionControl,
     pub reply_context: Option<ReplyContext>,

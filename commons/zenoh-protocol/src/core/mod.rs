@@ -491,6 +491,7 @@ impl Default for SubMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SubInfo {
     pub reliability: Reliability,
     pub mode: SubMode,

@@ -41,9 +41,11 @@ pub(crate) mod restiction {
 
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub struct NoBigWilds<T>(pub T);
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub struct NoSubWilds<T>(pub T);
 
     impl<T> Deref for NoBigWilds<T> {

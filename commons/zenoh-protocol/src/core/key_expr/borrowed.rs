@@ -295,12 +295,14 @@ impl Div for &keyexpr {
 ///
 /// You can check for intersection with `level >= SetIntersecionLevel::Intersection` and for inclusion with `level >= SetIntersectionLevel::Includes`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SetIntersectionLevel {
     Disjoint,
     Intersects,
     Includes,
     Equals,
 }
+
 #[test]
 fn intersection_level_cmp() {
     use SetIntersectionLevel::*;
@@ -320,6 +322,14 @@ impl fmt::Display for keyexpr {
         f.write_str(self)
     }
 }
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for keyexpr {
+    fn format(&self, f: defmt::Formatter) {
+        defmt::write!(f, "{}", self);
+    }
+}
+
 #[repr(i8)]
 enum KeyExprConstructionError {
     LoneDollarStar = -1,

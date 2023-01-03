@@ -24,6 +24,7 @@ use crate::core::{QueryableInfo, Reliability, SubInfo, SubMode, WireExpr, ZInt};
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Declare {
     pub declarations: Vec<Declaration>,
 }
@@ -45,6 +46,7 @@ impl Declare {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Declaration {
     Resource(Resource),
     ForgetResource(ForgetResource),
@@ -88,6 +90,7 @@ impl Declaration {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Resource {
     pub expr_id: ZInt,
     pub key: WireExpr<'static>,
@@ -116,6 +119,7 @@ impl Resource {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ForgetResource {
     pub expr_id: ZInt,
 }
@@ -142,6 +146,7 @@ impl ForgetResource {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Publisher {
     pub key: WireExpr<'static>,
 }
@@ -164,6 +169,7 @@ impl Publisher {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ForgetPublisher {
     pub key: WireExpr<'static>,
 }
@@ -188,6 +194,7 @@ impl ForgetPublisher {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Subscriber {
     pub key: WireExpr<'static>,
     pub info: SubInfo,
@@ -226,6 +233,7 @@ impl Subscriber {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ForgetSubscriber {
     pub key: WireExpr<'static>,
 }
@@ -250,6 +258,7 @@ impl ForgetSubscriber {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Queryable {
     pub key: WireExpr<'static>,
     pub info: QueryableInfo,
@@ -280,6 +289,7 @@ impl Queryable {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ForgetQueryable {
     pub key: WireExpr<'static>,
 }

@@ -79,6 +79,7 @@ impl OwnedKeyExpr {
         OwnedKeyExpr(s.into())
     }
 }
+
 #[allow(clippy::suspicious_arithmetic_impl)]
 impl Div<&keyexpr> for OwnedKeyExpr {
     type Output = Self;
@@ -86,6 +87,7 @@ impl Div<&keyexpr> for OwnedKeyExpr {
         &self / rhs
     }
 }
+
 #[allow(clippy::suspicious_arithmetic_impl)]
 impl Div<&keyexpr> for &OwnedKeyExpr {
     type Output = OwnedKeyExpr;
@@ -94,6 +96,7 @@ impl Div<&keyexpr> for &OwnedKeyExpr {
         OwnedKeyExpr::autocanonize(s).unwrap() // Joining 2 key expressions should always result in a canonizable string.
     }
 }
+
 #[test]
 fn div() {
     let a = OwnedKeyExpr::new("a").unwrap();
@@ -101,14 +104,23 @@ fn div() {
     let k = a / &b;
     assert_eq!(k.as_str(), "a/b")
 }
+
 impl fmt::Debug for OwnedKeyExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
     }
 }
+
 impl fmt::Display for OwnedKeyExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
+    }
+}
+
+#[cfg(feature = "defmt")]
+impl defmt::Format for OwnedKeyExpr {
+    fn format(&self, f: defmt::Formatter) {
+        self.as_ref().format(f);
     }
 }
 
@@ -118,6 +130,7 @@ impl Deref for OwnedKeyExpr {
         unsafe { keyexpr::from_str_unchecked(&self.0) }
     }
 }
+
 impl AsRef<str> for OwnedKeyExpr {
     fn as_ref(&self) -> &str {
         &self.0

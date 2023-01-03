@@ -193,6 +193,7 @@ pub mod zmsg {
 // Zenoh messages at zenoh level
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq)]
+// #[cfg_attr(feature = "defmt", derive(defmt::Format))] // FIXME: Requires defmt::Format for Data and Query
 pub enum ZenohBody {
     Data(Data),
     Unit(Unit),
@@ -383,6 +384,20 @@ impl fmt::Display for ZenohMessage {
         fmt::Debug::fmt(self, f)
     }
 }
+
+// FIXME: Requires defmt::Format for ZenohBody
+// #[cfg(feature = "defmt")]
+// impl defmt::Format for ZenohMessage {
+//     fn format(&self, f: defmt::Formatter) {
+//         defmt::write!(
+//             f,
+//             "{} {} {} {}",
+//             self.body, self.channel, self.routing_context, self.attachment
+//         );
+//         #[cfg(feature = "stats")]
+//         defmt::write!(f, " {}", self.size);
+//     }
+// }
 
 impl ZenohMessage {
     #[cfg(feature = "test")]
