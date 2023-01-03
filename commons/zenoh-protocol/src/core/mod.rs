@@ -439,7 +439,9 @@ impl defmt::Format for ConduitSnList {
                     defmt::write!(
                         f,
                         "{:?} {{ reliable: {}, best effort: {} }}",
-                        p, sn.reliable, sn.best_effort
+                        p,
+                        sn.reliable,
+                        sn.best_effort,
                     );
                     if p != Priority::Background {
                         defmt::write!(f, ", ");
