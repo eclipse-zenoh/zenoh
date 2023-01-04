@@ -84,7 +84,7 @@ jobs:
           args: --verbose --all-targets
 
       - name: Install nextest
-        run: cargo install cargo-nextest
+        run: cargo install cargo-nextest --locked
 
       - name: Run tests
         uses: actions-rs/cargo@v1

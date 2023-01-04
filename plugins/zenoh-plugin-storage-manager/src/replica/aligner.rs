@@ -12,11 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use super::{LogEntry, Snapshotter};
-use async_std::sync::Arc;
-use async_std::sync::RwLock;
+use super::{Digest, EraType, LogEntry, Snapshotter};
+use super::{CONTENTS, ERA, INTERVALS, SUBINTERVALS};
+use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
-use log::{error, trace};
+use log::{debug, error, trace};
 use std::collections::{HashMap, HashSet};
 use std::str;
 use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
@@ -29,7 +29,7 @@ pub struct Aligner {
     session: Arc<Session>,
     digest_key: OwnedKeyExpr,
     snapshotter: Arc<Snapshotter>,
-    rx_digest: Receiver<(String, super::Digest)>,
+    rx_digest: Receiver<(String, Digest)>,
     tx_sample: Sender<Sample>,
     digests_processed: RwLock<HashSet<u64>>,
 }
@@ -38,7 +38,7 @@ impl Aligner {
     pub async fn start_aligner(
         session: Arc<Session>,
         digest_key: OwnedKeyExpr,
-        rx_digest: Receiver<(String, super::Digest)>,
+        rx_digest: Receiver<(String, Digest)>,
         tx_sample: Sender<Sample>,
         snapshotter: Arc<Snapshotter>,
     ) {
@@ -55,16 +55,24 @@ impl Aligner {
 
     pub async fn start(&self) {
         while let Ok((from, incoming_digest)) = self.rx_digest.recv_async().await {
-            trace!(
-                "[ALIGNER]Processing digest: {:?} from {}",
-                incoming_digest,
-                from
-            );
             if self.in_processed(incoming_digest.checksum).await {
-                trace!("[ALIGNER]Skipping already processed digest");
+                trace!(
+                    "[ALIGNER]Skipping already processed digest: {}",
+                    incoming_digest.checksum
+                );
+                continue;
+            } else if self.snapshotter.get_digest().await.checksum == incoming_digest.checksum {
+                trace!(
+                    "[ALIGNER]Skipping matching digest: {}",
+                    incoming_digest.checksum
+                );
                 continue;
             } else {
                 // process this digest
+                debug!(
+                    "[ALIGNER]Processing digest: {:?} from {}",
+                    incoming_digest, from
+                );
                 self.process_incoming_digest(incoming_digest, &from).await;
             }
         }
@@ -72,42 +80,39 @@ impl Aligner {
 
     async fn in_processed(&self, checksum: u64) -> bool {
         let processed_set = self.digests_processed.read().await;
-        let processed = processed_set.contains(&checksum);
-        drop(processed_set);
-        if processed {
-            trace!("[ALIGNER]Dropping {} since already processed", checksum);
-            true
-        } else {
-            false
-        }
+        processed_set.contains(&checksum)
     }
 
     //identify alignment requirements
-    async fn process_incoming_digest(&self, other: super::Digest, from: &str) {
+    async fn process_incoming_digest(&self, other: Digest, from: &str) {
         let checksum = other.checksum;
         let timestamp = other.timestamp;
-        let missing_content = self.get_missing_content(other, from).await;
-        trace!("[REPLICA] Missing content is {:?}", missing_content);
+        let (missing_content, no_content_err) = self.get_missing_content(&other, from).await;
+        trace!("[ALIGNER] Missing content is {:?}", missing_content);
 
+        // If missing content is not identified, it showcases some problem
+        // The problem will be addressed in the future rounds, hence will not count as processed
         if !missing_content.is_empty() {
-            let missing_data = self
+            let (missing_data, no_data_err) = self
                 .get_missing_data(&missing_content, timestamp, from)
                 .await;
 
-            trace!("[REPLICA] Missing data is {:?}", missing_data);
+            // Missing data might be empty since some samples in digest might be outdated
+            trace!("[ALIGNER] Missing data is {:?}", missing_data);
 
             for (key, (ts, value)) in missing_data {
                 let sample = Sample::new(key, value).with_timestamp(ts);
-                trace!("[REPLICA] Adding sample {:?} to storage", sample);
-                match self.tx_sample.send_async(sample).await {
-                    Ok(()) => continue,
-                    Err(e) => error!("Error adding sample to storage: {}", e),
-                }
+                debug!("[ALIGNER] Adding sample {:?} to storage", sample);
+                self.tx_sample
+                    .send_async(sample)
+                    .await
+                    .unwrap_or_else(|e| error!("[ALIGNER] Error adding sample to storage: {}", e));
             }
 
-            let mut processed = self.digests_processed.write().await;
-            (*processed).insert(checksum);
-            drop(processed);
+            if no_content_err && no_data_err {
+                let mut processed = self.digests_processed.write().await;
+                (*processed).insert(checksum);
+            }
         }
     }
 
@@ -116,17 +121,15 @@ impl Aligner {
         missing_content: &[LogEntry],
         timestamp: Timestamp,
         from: &str,
-    ) -> HashMap<OwnedKeyExpr, (Timestamp, Value)> {
+    ) -> (HashMap<OwnedKeyExpr, (Timestamp, Value)>, bool) {
         let mut result = HashMap::new();
         let properties = format!(
             "timestamp={}&{}={}",
             timestamp,
-            super::CONTENTS,
+            CONTENTS,
             serde_json::to_string(missing_content).unwrap()
         );
-        let replies = self
-            .perform_query(from.to_string(), properties.clone())
-            .await;
+        let (replies, no_err) = self.perform_query(from, properties.clone()).await;
 
         for sample in replies {
             result.insert(
@@ -134,267 +137,214 @@ impl Aligner {
                 (sample.timestamp.unwrap(), sample.value),
             );
         }
-        result
+        (result, no_err)
     }
 
-    async fn get_missing_content(&self, other: super::Digest, from: &str) -> Vec<LogEntry> {
+    async fn get_missing_content(&self, other: &Digest, from: &str) -> (Vec<LogEntry>, bool) {
         // get my digest
         let this = &self.snapshotter.get_digest().await;
 
-        // get first level diff of digest wrt other - subintervals, of HOT, intervals of WARM and COLD if misaligned
-        let mis_eras = this.get_era_diff(other.eras.clone());
-        let mut missing_content = Vec::new();
-        if mis_eras.contains(&super::EraType::Cold) {
-            // perform cold alignment
-            let mut cold_data = self
-                .perform_cold_alignment(this, from.to_string(), other.timestamp)
-                .await;
-            missing_content.append(&mut cold_data);
-        }
-        if mis_eras.contains(&super::EraType::Warm) {
-            // perform warm alignment
-            let mut warm_data = self
-                .perform_warm_alignment(this, from.to_string(), other.clone())
-                .await;
-            missing_content.append(&mut warm_data);
-        }
-        if mis_eras.contains(&super::EraType::Hot) {
-            // perform hot alignment
-            let mut hot_data = self
-                .perform_hot_alignment(this, from.to_string(), other)
-                .await;
-            missing_content.append(&mut hot_data);
-        }
-        missing_content.into_iter().collect()
+        let cold_alignment =
+            self.perform_era_alignment(&EraType::Cold, this, from.to_string(), other);
+        let warm_alignment =
+            self.perform_era_alignment(&EraType::Warm, this, from.to_string(), other);
+        let hot_alignment =
+            self.perform_era_alignment(&EraType::Hot, this, from.to_string(), other);
+
+        let ((cold_data, no_cold_err), (warm_data, no_warm_err), (hot_data, no_hot_err)) =
+            futures::join!(cold_alignment, warm_alignment, hot_alignment);
+        (
+            [cold_data, warm_data, hot_data].concat(),
+            no_cold_err && no_warm_err && no_hot_err,
+        )
     }
 
-    //perform cold alignment
-    // if COLD misaligned, ask for interval hashes for cold for the other digest timestamp and replica
-    // for misaligned intervals, ask subinterval hashes
-    // for misaligned subintervals, ask content
-    async fn perform_cold_alignment(
+    // perform era alignment
+    // for a misaligned era, get missing intervals, then subintervals and then log entry
+    async fn perform_era_alignment(
         &self,
-        this: &super::Digest,
+        era: &EraType,
+        this: &Digest,
         other_rep: String,
-        timestamp: Timestamp,
-    ) -> Vec<LogEntry> {
-        let properties = format!("timestamp={}&{}=cold", timestamp, super::ERA);
-        // expecting sample.value to be a vec of intervals with their checksum
-        let reply_content = self.perform_query(other_rep.to_string(), properties).await;
-        let mut other_intervals: HashMap<u64, u64> = HashMap::new();
-        for each in reply_content {
-            match serde_json::from_str(&each.value.to_string()) {
-                Ok((i, c)) => {
-                    other_intervals.insert(i, c);
-                }
-                Err(e) => error!("Error decoding reply: {}", e),
-            };
+        other: &Digest,
+    ) -> (Vec<LogEntry>, bool) {
+        if !this.era_has_diff(era, &other.eras) {
+            return (Vec::new(), true);
         }
         // get era diff
-        let diff_intervals = this.get_interval_diff(other_intervals.clone());
-        if !diff_intervals.is_empty() {
-            let mut diff_string = Vec::new();
-            for each_int in diff_intervals {
-                diff_string.push(each_int.to_string());
-            }
-            let properties = format!(
-                "timestamp={}&{}=[{}]",
-                timestamp,
-                super::INTERVALS,
-                diff_string.join(",")
-            );
-            // expecting sample.value to be a vec of subintervals with their checksum
-            let reply_content = self.perform_query(other_rep.to_string(), properties).await;
-            let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
+        let (diff_intervals, no_era_err) =
+            self.get_interval_diff(era, this, other, &other_rep).await;
+        // get interval diff
+        let (diff_subintervals, no_int_err) = self
+            .get_subinterval_diff(era, diff_intervals, this, other, &other_rep)
+            .await;
+        // get subinterval diff
+        let (diff_content, no_sub_err) = self
+            .get_content_diff(diff_subintervals, this, other, &other_rep)
+            .await;
+        (diff_content, no_era_err && no_int_err && no_sub_err)
+    }
+
+    async fn get_interval_diff(
+        &self,
+        era: &EraType,
+        this: &Digest,
+        other: &Digest,
+        other_rep: &str,
+    ) -> (HashSet<u64>, bool) {
+        let (other_intervals, no_err) = if era.eq(&EraType::Cold) {
+            let properties = format!("timestamp={}&{}=cold", other.timestamp, ERA);
+            let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
+            let mut other_intervals: HashMap<u64, u64> = HashMap::new();
+            // expecting sample.value to be a vec of intervals with their checksum
             for each in reply_content {
                 match serde_json::from_str(&each.value.to_string()) {
                     Ok((i, c)) => {
-                        other_subintervals.insert(i, c);
+                        other_intervals.insert(i, c);
                     }
-                    Err(e) => error!("Error decoding reply: {}", e),
+                    Err(e) => {
+                        error!("[ALIGNER] Error decoding reply: {}", e);
+                        no_err = false;
+                    }
                 };
             }
-            // get intervals diff
-            let diff_subintervals = this.get_subinterval_diff(other_subintervals);
-            trace!(
-                "[ALIGNER] The subintervals that need alignment are : {:?}",
-                diff_subintervals
-            );
-            if !diff_subintervals.is_empty() {
-                let mut diff_string = Vec::new();
-                for each_sub in diff_subintervals {
-                    diff_string.push(each_sub.to_string());
-                }
-                let properties = format!(
-                    "timestamp={}&{}=[{}]",
-                    timestamp,
-                    super::SUBINTERVALS,
-                    diff_string.join(",")
-                );
-                // expecting sample.value to be a vec of log entries with their checksum
-                let reply_content = self.perform_query(other_rep.to_string(), properties).await;
-                let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
-                for each in reply_content {
-                    match serde_json::from_str(&each.value.to_string()) {
-                        Ok((i, c)) => {
-                            other_content.insert(i, c);
-                        }
-                        Err(e) => error!("Error decoding reply: {}", e),
-                    };
-                }
-                // get subintervals diff
-                let result = this.get_full_content_diff(other_content);
-                trace!("[ALIGNER] The missing content is {:?}", result);
-                return result;
-            }
-        }
-        Vec::new()
-    }
-
-    async fn perform_query(&self, from: String, properties: String) -> Vec<Sample> {
-        let selector = KeyExpr::from(&self.digest_key)
-            .join(&from)
-            .unwrap()
-            .with_parameters(&properties);
-        trace!("[ALIGNER]Sending Query '{}'...", selector);
-        let mut return_val = Vec::new();
-        let replies = self
-            .session
-            .get(&selector)
-            .consolidation(QueryConsolidation::AUTO)
-            .accept_replies(zenoh::query::ReplyKeyExpr::Any)
-            .res()
-            .await
-            .unwrap();
-        while let Ok(reply) = replies.recv_async().await {
-            match reply.sample {
-                Ok(sample) => {
-                    trace!(
-                        "[ALIGNER] Received ('{}': '{}')",
-                        sample.key_expr.as_str(),
-                        sample.value
-                    );
-                    return_val.push(sample);
-                }
-                Err(err) => error!("Query failed on selector '{}' ::{}", selector, err),
-            }
-        }
-        return_val
-    }
-
-    //peform warm alignment
-    // if WARM misaligned, ask for subinterval hashes of misaligned intervals
-    // for misaligned subintervals, ask content
-    async fn perform_warm_alignment(
-        &self,
-        this: &super::Digest,
-        other_rep: String,
-        other: super::Digest,
-    ) -> Vec<LogEntry> {
-        // get interval hashes for WARM intervals from other
-        let other_intervals = other.get_era_content(super::EraType::Warm);
+            (other_intervals, no_err)
+        } else {
+            // get the diff of intervals from the digest itself
+            (other.get_era_content(era), true)
+        };
         // get era diff
-        let diff_intervals = this.get_interval_diff(other_intervals);
+        (this.get_interval_diff(other_intervals), no_err)
+    }
 
-        // properties = timestamp=xxx,intervals=[www,ee,rr]
+    async fn get_subinterval_diff(
+        &self,
+        era: &EraType,
+        diff_intervals: HashSet<u64>,
+        this: &Digest,
+        other: &Digest,
+        other_rep: &str,
+    ) -> (HashSet<u64>, bool) {
         if !diff_intervals.is_empty() {
-            let mut diff_string = Vec::new();
-            for each_int in diff_intervals {
-                diff_string.push(each_int.to_string());
-            }
-            let properties = format!(
-                "timestamp={}&{}=[{}]",
-                other.timestamp,
-                super::INTERVALS,
-                diff_string.join(",")
-            );
-            // expecting sample.value to be a vec of subintervals with their checksum
-            let reply_content = self.perform_query(other_rep.to_string(), properties).await;
-            let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
-            for each in reply_content {
-                match serde_json::from_str(&each.value.to_string()) {
-                    Ok((i, c)) => {
-                        other_subintervals.insert(i, c);
-                    }
-                    Err(e) => error!("Error decoding reply: {}", e),
-                };
-            }
-            // get intervals diff
-            let diff_subintervals = this.get_subinterval_diff(other_subintervals);
-            if !diff_subintervals.is_empty() {
+            let (other_subintervals, no_err) = if era.eq(&EraType::Hot) {
+                // get subintervals for mismatching intervals from other
+                (other.get_interval_content(diff_intervals), true)
+            } else {
                 let mut diff_string = Vec::new();
-                // properties = timestamp=xxx,subintervals=[www,ee,rr]
-                for each_sub in diff_subintervals {
-                    diff_string.push(each_sub.to_string());
+                for each_int in diff_intervals {
+                    diff_string.push(each_int.to_string());
                 }
                 let properties = format!(
                     "timestamp={}&{}=[{}]",
                     other.timestamp,
-                    super::SUBINTERVALS,
+                    INTERVALS,
                     diff_string.join(",")
                 );
-                // expecting sample.value to be a vec of log entries with their checksum
-                let reply_content = self.perform_query(other_rep.to_string(), properties).await;
-                let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
+                // expecting sample.value to be a vec of subintervals with their checksum
+                let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
+                let mut other_subintervals: HashMap<u64, u64> = HashMap::new();
                 for each in reply_content {
                     match serde_json::from_str(&each.value.to_string()) {
                         Ok((i, c)) => {
-                            other_content.insert(i, c);
+                            other_subintervals.insert(i, c);
                         }
-                        Err(e) => error!("Error decoding reply: {}", e),
+                        Err(e) => {
+                            error!("[ALIGNER] Error decoding reply: {}", e);
+                            no_err = false;
+                        }
                     };
                 }
-                // get subintervals diff
-                return this.get_full_content_diff(other_content);
-            }
+                (other_subintervals, no_err)
+            };
+            // get intervals diff
+            (this.get_subinterval_diff(other_subintervals), no_err)
+        } else {
+            (HashSet::new(), true)
         }
-        Vec::new()
     }
 
-    //perform hot alignment
-    // if HOT misaligned, ask for content(timestamps) of misaligned subintervals
-    async fn perform_hot_alignment(
+    async fn get_content_diff(
         &self,
-        this: &super::Digest,
-        other_rep: String,
-        other: super::Digest,
-    ) -> Vec<LogEntry> {
-        // get interval hashes for HOT intervals from other
-        let other_intervals = other.get_era_content(super::EraType::Hot);
-        // get era diff
-        let diff_intervals = this.get_interval_diff(other_intervals);
-
-        // get subintervals for mismatching intervals from other
-        let other_subintervals = other.get_interval_content(diff_intervals);
-        // get intervals diff
-        let diff_subintervals = this.get_subinterval_diff(other_subintervals);
-
+        diff_subintervals: HashSet<u64>,
+        this: &Digest,
+        other: &Digest,
+        other_rep: &str,
+    ) -> (Vec<LogEntry>, bool) {
         if !diff_subintervals.is_empty() {
             let mut diff_string = Vec::new();
-            // properties = timestamp=xxx,subintervals=[www,ee,rr]
             for each_sub in diff_subintervals {
                 diff_string.push(each_sub.to_string());
             }
             let properties = format!(
                 "timestamp={}&{}=[{}]",
                 other.timestamp,
-                super::SUBINTERVALS,
+                SUBINTERVALS,
                 diff_string.join(",")
             );
             // expecting sample.value to be a vec of log entries with their checksum
-            let reply_content = self.perform_query(other_rep.to_string(), properties).await;
+            let (reply_content, mut no_err) = self.perform_query(other_rep, properties).await;
             let mut other_content: HashMap<u64, Vec<LogEntry>> = HashMap::new();
             for each in reply_content {
                 match serde_json::from_str(&each.value.to_string()) {
                     Ok((i, c)) => {
                         other_content.insert(i, c);
                     }
-                    Err(e) => error!("Error decoding reply: {}", e),
+                    Err(e) => {
+                        error!("[ALIGNER] Error decoding reply: {}", e);
+                        no_err = false;
+                    }
                 };
             }
             // get subintervals diff
-            return this.get_full_content_diff(other_content);
+            let result = this.get_full_content_diff(other_content);
+            (result, no_err)
+        } else {
+            (Vec::new(), true)
         }
-        Vec::new()
+    }
+
+    async fn perform_query(&self, from: &str, properties: String) -> (Vec<Sample>, bool) {
+        let mut no_err = true;
+        let selector = KeyExpr::from(&self.digest_key)
+            .join(&from)
+            .unwrap()
+            .with_parameters(&properties);
+        trace!("[ALIGNER] Sending Query '{}'...", selector);
+        let mut return_val = Vec::new();
+        match self
+            .session
+            .get(&selector)
+            .consolidation(QueryConsolidation::AUTO)
+            .accept_replies(zenoh::query::ReplyKeyExpr::Any)
+            .res()
+            .await
+        {
+            Ok(replies) => {
+                while let Ok(reply) = replies.recv_async().await {
+                    match reply.sample {
+                        Ok(sample) => {
+                            trace!(
+                                "[ALIGNER] Received ('{}': '{}')",
+                                sample.key_expr.as_str(),
+                                sample.value
+                            );
+                            return_val.push(sample);
+                        }
+                        Err(err) => {
+                            error!(
+                                "[ALIGNER] Received error for query on selector {} :{}",
+                                selector, err
+                            );
+                            no_err = false;
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                error!("[ALIGNER] Query failed on selector `{}`: {}", selector, err);
+                no_err = false;
+            }
+        };
+        (return_val, no_err)
     }
 }

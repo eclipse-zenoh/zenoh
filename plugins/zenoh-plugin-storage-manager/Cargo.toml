@@ -59,6 +59,9 @@ zenoh-plugin-trait = { version = "0.7.0-rc", path = "../zenoh-plugin-trait", def
 zenoh-util = { version = "0.7.0-rc", path = "../../commons/zenoh-util" }
 zenoh_backend_traits = { version = "0.7.0-rc", path = "../zenoh-backend-traits/" }
 
+[dev-dependencies]
+async-global-executor = "2.3.1"
+
 [build-dependencies]
 rustc_version = "0.4.0"
 
@@ -68,4 +71,4 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2022 ZettaScale Technology"
 section = "net"
 license-file = ["../../LICENSE", "0"]
-depends = "zenohd (=0.7.0~rc)"
+depends = "zenohd (=0.7.0-rc)"

@@ -308,6 +308,7 @@ impl Snapshotter {
         )
         .await;
         *digest = updated_digest;
+        drop(digest);
 
         self.flush().await;
     }
@@ -317,8 +318,10 @@ impl Snapshotter {
         let replica_data = &self.content;
         let stable = replica_data.stable_log.read().await;
         let volatile = replica_data.volatile_log.read().await;
-        trace!("Stable log updated:: {:?}", stable);
-        trace!("Volatile log updated:: {:?}", volatile);
+        let digest = replica_data.digest.read().await;
+        trace!("Stable log:: {:?}", stable);
+        trace!("Volatile log:: {:?}", volatile);
+        trace!("Digest:: {:?}", digest);
     }
 
     // Expose digest

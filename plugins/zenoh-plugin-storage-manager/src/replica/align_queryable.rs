@@ -129,7 +129,7 @@ impl AlignQueryable {
         // TODO: Discuss if having timestamp is useful
         match diff_required {
             AlignComponent::Era(era) => {
-                let intervals = self.get_intervals(era).await;
+                let intervals = self.get_intervals(&era).await;
                 let mut result = Vec::new();
                 for (i, c) in intervals {
                     result.push(AlignData::Interval(i, c));
@@ -249,7 +249,7 @@ impl AlignQueryable {
         None
     }
 
-    async fn get_intervals(&self, era: EraType) -> HashMap<u64, u64> {
+    async fn get_intervals(&self, era: &EraType) -> HashMap<u64, u64> {
         let digest = self.snapshotter.get_digest().await;
         digest.get_era_content(era)
     }
