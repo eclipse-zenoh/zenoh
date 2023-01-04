@@ -31,6 +31,7 @@ use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 use zenoh_backend_traits::config::ReplicaConfig;
+use zenoh_backend_traits::config::StorageConfig;
 
 pub mod align_queryable;
 pub mod aligner;
@@ -75,11 +76,9 @@ pub struct Replica {
 impl Replica {
     // This function starts the replica by initializing all the components
     pub async fn start(
-        config: ReplicaConfig,
+        config: StorageConfig,
         session: Arc<Session>,
         store_intercept: StoreIntercept,
-        key_expr: OwnedKeyExpr,
-        complete: bool,
         name: &str,
         rx: Receiver<StorageMessage>,
     ) {
@@ -92,11 +91,13 @@ impl Replica {
             }
         };
 
+        let replica_config = config.replica_config.as_ref().unwrap();
+        let key_expr = config.key_expr.clone();
         let replica = Replica {
             name: name.to_string(),
             session,
             key_expr,
-            replica_config: config,
+            replica_config: replica_config.clone(),
             digests_published: RwLock::new(HashSet::new()),
         };
 
@@ -108,9 +109,9 @@ impl Replica {
         // channel for storage to send logging information back
         let (tx_log, rx_log) = flume::unbounded();
 
-        let config = replica.replica_config.clone();
         // snapshotter
-        let snapshotter = Arc::new(Snapshotter::new(rx_log, &startup_entries, &config).await);
+        let snapshotter =
+            Arc::new(Snapshotter::new(rx_log, &startup_entries, &replica.replica_config).await);
         // digest sub
         let digest_sub = replica.start_digest_sub(tx_digest).fuse();
         // queryable for alignment
@@ -146,8 +147,7 @@ impl Replica {
         // channel to pipe the receiver to storage
         let storage_task = StorageService::start(
             replica.session.clone(),
-            replica.key_expr.clone(),
-            complete,
+            config,
             &replica.name,
             store_intercept,
             rx,

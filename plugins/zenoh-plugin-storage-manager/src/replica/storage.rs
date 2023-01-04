@@ -24,6 +24,7 @@ use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
+use zenoh_backend_traits::config::StorageConfig;
 use zenoh_backend_traits::{Capability, History, StorageInsertionResult};
 
 pub struct ReplicationService {
@@ -34,6 +35,7 @@ pub struct ReplicationService {
 
 pub struct StorageService {
     session: Arc<Session>,
+    strip_prefix: Option<OwnedKeyExpr>,
     key_expr: OwnedKeyExpr,
     complete: bool,
     name: String,
@@ -50,8 +52,7 @@ pub struct StorageService {
 impl StorageService {
     pub async fn start(
         session: Arc<Session>,
-        key_expr: OwnedKeyExpr,
-        complete: bool,
+        config: StorageConfig,
         name: &str,
         store_intercept: StoreIntercept,
         rx: Receiver<StorageMessage>,
@@ -63,8 +64,9 @@ impl StorageService {
         // }
         let mut storage_service = StorageService {
             session,
-            key_expr,
-            complete,
+            strip_prefix: config.strip_prefix,
+            key_expr: config.key_expr,
+            complete: config.complete,
             name: name.to_string(),
             storage: Mutex::new(store_intercept.storage),
             capability: store_intercept.capability,
@@ -223,44 +225,63 @@ impl StorageService {
             vec![sample.key_expr.clone().into()]
         };
 
-        for k in matching_keys {
+        for key in matching_keys {
             if !self
-                .is_deleted(&k.clone(), sample.get_timestamp().unwrap())
+                .is_deleted(&key.clone(), sample.get_timestamp().unwrap())
                 .await
                 && (self.capability.history.eq(&History::All)
                     || (self.capability.history.eq(&History::Latest)
-                        && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
+                        && self.is_latest(&key, sample.get_timestamp().unwrap()).await))
             {
                 // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
                 // get the relevant wild card entry and use that value and timestamp to update the storage
                 let sample_to_store = match self
-                    .ovderriding_wild_update(&k, sample.get_timestamp().unwrap())
+                    .ovderriding_wild_update(&key, sample.get_timestamp().unwrap())
                     .await
                 {
                     Some(overriding_sample) => {
                         let mut sample_to_store =
-                            Sample::new(KeyExpr::from(k.clone()), overriding_sample.value)
-                                .with_timestamp(overriding_sample.timestamp.unwrap());
+                            Sample::new(KeyExpr::from(key.clone()), overriding_sample.value)
+                                .with_timestamp(overriding_sample.timestamp.unwrap())
+                                .with_source_info(overriding_sample.source_info);
                         sample_to_store.kind = overriding_sample.kind;
                         sample_to_store
                     }
                     None => {
                         let mut sample_to_store =
-                            Sample::new(KeyExpr::from(k.clone()), sample.value.clone())
-                                .with_timestamp(sample.timestamp.unwrap());
+                            Sample::new(KeyExpr::from(key.clone()), sample.value.clone())
+                                .with_timestamp(sample.timestamp.unwrap())
+                                .with_source_info(sample.source_info.clone());
                         sample_to_store.kind = sample.kind;
                         sample_to_store
                     }
                 };
 
+                // strip the prefix if present
+                let k = match &self.strip_prefix {
+                    Some(prefix) => match key.strip_prefix(prefix).as_slice() {
+                        [ke] => OwnedKeyExpr::from(*ke),
+                        _ => {
+                            warn!(
+                                "Received a Sample with keyexpr not starting with path_prefix '{}': '{}'",
+                                prefix,
+                                key
+                            );
+                            // skip this particular key since it doesn't match the prefix
+                            continue;
+                        }
+                    },
+                    None => key.clone(),
+                };
+
                 let mut storage = self.storage.lock().await;
                 let result = if sample.kind == SampleKind::Put {
-                    storage.put(k.clone(), sample_to_store.clone()).await
+                    storage.put(k, sample_to_store.clone()).await
                 } else if sample.kind == SampleKind::Delete {
                     // register a tombstone
-                    self.mark_tombstone(k.clone(), sample_to_store.timestamp.unwrap())
+                    self.mark_tombstone(key.clone(), sample_to_store.timestamp.unwrap())
                         .await;
-                    storage.delete(k.clone()).await
+                    storage.delete(k).await
                 } else {
                     Err("sample kind not implemented".into())
                 };
@@ -273,7 +294,7 @@ impl StorageService {
                         .as_ref()
                         .unwrap()
                         .log_propagation
-                        .send((k.clone(), *sample_to_store.get_timestamp().unwrap()));
+                        .send((key, *sample_to_store.get_timestamp().unwrap()));
                     match sending {
                         Ok(_) => (),
                         Err(e) => {
@@ -375,8 +396,29 @@ impl StorageService {
         };
         let mut storage = self.storage.lock().await;
         for key in matching_keys {
-            match storage.get(key, q.parameters()).await {
+            // strip the prefix if present
+            let k = match &self.strip_prefix {
+                Some(prefix) => match key.strip_prefix(prefix).as_slice() {
+                    [ke] => OwnedKeyExpr::from(*ke),
+                    _ => {
+                        warn!(
+                            "Received a Sample with keyexpr not starting with path_prefix '{}': '{}'",
+                            prefix,
+                            key
+                        );
+                        // skip this particular key since it doesn't match the prefix
+                        continue;
+                    }
+                },
+                None => key.clone(),
+            };
+
+            match storage.get(k, q.parameters()).await {
                 Ok(sample) => {
+                    // add back the prefix
+                    let sample = Sample::new(key, sample.value)
+                        .with_timestamp(sample.timestamp.unwrap())
+                        .with_source_info(sample.source_info);
                     // apply outgoing interceptor on results
                     let sample = if let Some(ref interceptor) = self.out_interceptor {
                         interceptor(sample)
