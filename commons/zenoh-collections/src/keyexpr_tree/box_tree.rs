@@ -653,3 +653,36 @@ impl<'a, Weight: 'static>
         unsafe { std::mem::transmute(self) }
     }
 }
+
+impl<
+        K: AsRef<keyexpr>,
+        Weight,
+        Wildness: IWildness,
+        Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>>,
+    > std::iter::FromIterator<(K, Weight)> for KeyExprTree<Weight, Wildness, Children>
+where
+    Weight: 'static,
+    Children: 'static,
+    Children::Assoc: IChildren<
+            Box<KeyExprTreeNode<Weight, Wildness, Children>>,
+            Node = Box<KeyExprTreeNode<Weight, Wildness, Children>>,
+        > + 'static,
+{
+    fn from_iter<T: IntoIterator<Item = (K, Weight)>>(iter: T) -> Self {
+        let mut tree = Self::default();
+        for (key, value) in iter {
+            tree.node_mut_or_create(key.as_ref()).weight = Some(value);
+        }
+        tree
+    }
+}
+
+impl<K: AsRef<keyexpr>, Weight> std::iter::FromIterator<(K, Weight)> for KeTreePair<Weight> {
+    fn from_iter<T: IntoIterator<Item = (K, Weight)>>(iter: T) -> Self {
+        let mut tree = Self::default();
+        for (key, value) in iter {
+            tree.node_mut_or_create(key.as_ref()).weight = Some(value);
+        }
+        tree
+    }
+}

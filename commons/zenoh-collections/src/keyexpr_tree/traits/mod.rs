@@ -102,6 +102,21 @@ pub trait IKeyExprTreeExt<Weight>: IKeyExprTree<Weight> {
     fn prune(&mut self) {
         self.prune_where(|node| node.weight().is_none())
     }
+    #[allow(clippy::type_complexity)]
+    fn key_value_pairs<'a>(
+        &'a self,
+    ) -> std::iter::FilterMap<
+        Self::TreeIter<'a>,
+        fn(Self::TreeIterItem<'a>) -> Option<(OwnedKeyExpr, &'a Weight)>,
+    >
+    where
+        Self::TreeIterItem<'a>: AsNode<Self::Node>,
+    {
+        self.tree_iter().filter_map(|node| {
+            unsafe { std::mem::transmute::<_, Option<&Weight>>(node.as_node().weight()) }
+                .map(|w| (node.as_node().keyexpr(), w))
+        })
+    }
 }
 
 pub trait IKeyExprTreeNode<Weight> {

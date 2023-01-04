@@ -4107,6 +4107,7 @@ dependencies = [
 name = "zenoh-plugin-storage-manager"
 version = "0.7.0-rc"
 dependencies = [
+ "async-global-executor",
  "async-std",
  "async-trait",
  "clap",
