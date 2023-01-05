@@ -3126,6 +3126,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
+name = "token-cell"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4454b08003534428f308e17630259c284d81ab1e4c5bd927ba6802ba71bacf95"
+dependencies = [
+ "paste",
+]
+
+[[package]]
 name = "tokio"
 version = "1.23.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3822,6 +3831,7 @@ dependencies = [
  "keyed-set",
  "log",
  "rand 0.8.5",
+ "token-cell",
  "zenoh-core",
  "zenoh-protocol-core",
  "zenoh-sync",

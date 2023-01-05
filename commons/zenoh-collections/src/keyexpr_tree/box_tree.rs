@@ -8,54 +8,8 @@ use zenoh_protocol_core::key_expr::keyexpr;
 
 use super::impls::KeyedSetProvider;
 
-pub trait IWildness: 'static {
-    fn non_wild() -> Self;
-    fn get(&self) -> bool;
-    fn set(&mut self, wildness: bool) -> bool;
-}
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NonWild;
-impl IWildness for NonWild {
-    fn non_wild() -> Self {
-        NonWild
-    }
-    fn get(&self) -> bool {
-        false
-    }
-    fn set(&mut self, wildness: bool) -> bool {
-        if wildness {
-            panic!("Attempted to set NonWild to wild, which breaks its contract. You likely attempted to insert a wild key into a `NonWild` tree. Use `bool` instead to make wildness determined at runtime.")
-        }
-        false
-    }
-}
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct UnknownWildness;
-impl IWildness for UnknownWildness {
-    fn non_wild() -> Self {
-        UnknownWildness
-    }
-    fn get(&self) -> bool {
-        true
-    }
-    fn set(&mut self, _wildness: bool) -> bool {
-        true
-    }
-}
-impl IWildness for bool {
-    fn non_wild() -> Self {
-        false
-    }
-    fn get(&self) -> bool {
-        *self
-    }
-    fn set(&mut self, wildness: bool) -> bool {
-        std::mem::replace(self, wildness)
-    }
-}
-
 #[repr(C)]
-pub struct KeyExprTree<
+pub struct KeBoxTree<
     Weight,
     Wildness: IWildness = bool,
     Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>> = DefaultChildrenProvider,
@@ -68,10 +22,10 @@ impl<
         Weight,
         Wildness: IWildness,
         Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>>,
-    > KeyExprTree<Weight, Wildness, Children>
+    > KeBoxTree<Weight, Wildness, Children>
 {
     pub fn new() -> Self {
-        KeyExprTree {
+        KeBoxTree {
             children: Default::default(),
             wildness: Wildness::non_wild(),
         }
@@ -81,7 +35,7 @@ impl<
         Weight,
         Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>>,
         Wildness: IWildness,
-    > Default for KeyExprTree<Weight, Wildness, Children>
+    > Default for KeBoxTree<Weight, Wildness, Children>
 {
     fn default() -> Self {
         Self::new()
@@ -92,7 +46,7 @@ impl<
         Weight,
         Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>>,
         Wildness: IWildness,
-    > IKeyExprTree<Weight> for KeyExprTree<Weight, Wildness, Children>
+    > IKeyExprTree<Weight> for KeBoxTree<Weight, Wildness, Children>
 where
     Weight: 'static,
     Children: 'static,
@@ -124,10 +78,10 @@ where
         if !node.children.is_empty() {
             node.weight.take()
         } else {
-            let chunk = node.chunk();
+            let chunk = unsafe { std::mem::transmute::<_, &keyexpr>(node.chunk()) };
             match node.parent {
-                Parent::Root(root) => unsafe { &mut (*root.as_ptr()).children },
-                Parent::Node(parent) => unsafe { &mut (*parent.as_ptr()).children },
+                None => &mut self.children,
+                Some(parent) => unsafe { &mut (*parent.as_ptr()).children },
             }
             .remove(chunk)
             .and_then(|node| node.weight)
@@ -139,13 +93,12 @@ where
             self.wildness.set(true);
         }
         let mut chunks = at.chunks();
-        let root = NonNull::from(&*self);
         let mut node = self
             .children
             .entry(chunks.next().unwrap())
             .get_or_insert_with(move |k| {
                 Box::new(KeyExprTreeNode {
-                    parent: Parent::Root(root),
+                    parent: None,
                     chunk: k.into(),
                     children: Default::default(),
                     weight: None,
@@ -155,7 +108,7 @@ where
             let parent = NonNull::from(node.as_ref());
             node = node.children.entry(chunk).get_or_insert_with(move |k| {
                 Box::new(KeyExprTreeNode {
-                    parent: Parent::Node(parent),
+                    parent: Some(parent),
                     chunk: k.into(),
                     children: Default::default(),
                     weight: None,
@@ -308,7 +261,7 @@ impl<Iter: Iterator, Item> From<Iter> for IterOrOption<Iter, Item> {
 
 #[repr(C)]
 pub struct KeyExprTreeNode<Weight, Wildness: IWildness, Children: IChildrenProvider<Box<Self>>> {
-    parent: Parent<Weight, Wildness, Children>,
+    parent: Option<NonNull<Self>>,
     chunk: OwnedKeyExpr,
     children: Children::Assoc,
     weight: Option<Weight>,
@@ -321,18 +274,15 @@ where
 {
     type Parent = Self;
     fn parent(&self) -> Option<&Self> {
-        match &self.parent {
-            Parent::Root(_) => None,
-            Parent::Node(node) => Some(unsafe {
-                // this is safe, as a mutable reference to the parent was needed to get a mutable reference to this node in the first place.
-                node.as_ref()
-            }),
-        }
+        self.parent.as_ref().map(|node| unsafe {
+            // this is safe, as a mutable reference to the parent was needed to get a mutable reference to this node in the first place.
+            node.as_ref()
+        })
     }
     fn parent_mut(&mut self) -> Option<&mut Self> {
         match &mut self.parent {
-            Parent::Root(_) => None,
-            Parent::Node(node) => Some(unsafe {
+            None => None,
+            Some(node) => Some(unsafe {
                 // this is safe, as a mutable reference to the parent was needed to get a mutable reference to this node in the first place.
                 node.as_mut()
             }),
@@ -427,18 +377,9 @@ impl<Weight, Wildness: IWildness, Children: IChildrenProvider<Box<Self>>> AsMut<
     }
 }
 
-enum Parent<
-    Weight,
-    Wildness: IWildness,
-    Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>>,
-> {
-    Root(NonNull<KeyExprTree<Weight, Wildness, Children>>),
-    Node(NonNull<KeyExprTreeNode<Weight, Wildness, Children>>),
-}
-
 pub struct KeTreePair<Weight: 'static> {
-    non_wilds: KeyExprTree<Weight, NonWild, KeyedSetProvider>,
-    wilds: KeyExprTree<Weight, UnknownWildness, KeyedSetProvider>,
+    non_wilds: KeBoxTree<Weight, NonWild, KeyedSetProvider>,
+    wilds: KeBoxTree<Weight, UnknownWildness, KeyedSetProvider>,
 }
 
 impl<Weight: 'static> Default for KeTreePair<Weight> {
@@ -492,10 +433,10 @@ impl<Weight: 'static> IKeyExprTree<Weight> for KeTreePair<Weight> {
 
     type TreeIterItem<'a> = &'a Self::Node;
     type TreeIter<'a> = TransmuteChain<
-        Coerced<<KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::TreeIter<
+        Coerced<<KeBoxTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::TreeIter<
             'a,
-        >, &'a <KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::Node>,
-        Coerced<<KeyExprTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::TreeIter<
+        >, &'a <KeBoxTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::Node>,
+        Coerced<<KeBoxTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::TreeIter<
             'a,
         >, &'a Self::Node>,
     >;
@@ -506,10 +447,10 @@ impl<Weight: 'static> IKeyExprTree<Weight> for KeTreePair<Weight> {
 
     type TreeIterItemMut<'a> = &'a mut Self::Node;
     type TreeIterMut<'a> = TransmuteChain<
-    Coerced<<KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::TreeIterMut<
+    Coerced<<KeBoxTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::TreeIterMut<
         'a,
-    >, &'a mut <KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::Node>,
-    Coerced<<KeyExprTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::TreeIterMut<
+    >, &'a mut <KeBoxTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::Node>,
+    Coerced<<KeBoxTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::TreeIterMut<
         'a,
     >, &'a mut Self::Node>,
 >;
@@ -521,10 +462,10 @@ impl<Weight: 'static> IKeyExprTree<Weight> for KeTreePair<Weight> {
 
     type IntersectionItem<'a> = &'a Self::Node;
     type Intersection<'a> = TransmuteChain<
-        <KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::Intersection<
+        <KeBoxTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::Intersection<
             'a,
         >,
-        <KeyExprTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::Intersection<
+        <KeBoxTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::Intersection<
             'a,
         >,
     >;
@@ -537,10 +478,10 @@ impl<Weight: 'static> IKeyExprTree<Weight> for KeTreePair<Weight> {
 
     type IntersectionItemMut<'a> = &'a mut Self::Node;
     type IntersectionMut<'a> = TransmuteChain<
-    <KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::IntersectionMut<
+    <KeBoxTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::IntersectionMut<
         'a,
     >,
-    <KeyExprTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::IntersectionMut<
+    <KeBoxTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::IntersectionMut<
         'a,
     >,
 >;
@@ -553,8 +494,8 @@ impl<Weight: 'static> IKeyExprTree<Weight> for KeTreePair<Weight> {
 
     type InclusionItem<'a> = &'a Self::Node;
     type Inclusion<'a> = TransmuteChain<
-        <KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::Inclusion<'a>,
-        <KeyExprTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::Inclusion<
+        <KeBoxTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::Inclusion<'a>,
+        <KeBoxTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::Inclusion<
             'a,
         >,
     >;
@@ -567,10 +508,10 @@ impl<Weight: 'static> IKeyExprTree<Weight> for KeTreePair<Weight> {
 
     type InclusionItemMut<'a> = &'a mut Self::Node;
     type InclusionMut<'a> = TransmuteChain<
-            <KeyExprTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::InclusionMut<
+            <KeBoxTree<Weight, NonWild, KeyedSetProvider> as IKeyExprTree<Weight>>::InclusionMut<
                 'a,
             >,
-            <KeyExprTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::InclusionMut<
+            <KeBoxTree<Weight, UnknownWildness, KeyedSetProvider> as IKeyExprTree<Weight>>::InclusionMut<
                 'a,
             >,
     >;
@@ -659,7 +600,7 @@ impl<
         Weight,
         Wildness: IWildness,
         Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>>,
-    > std::iter::FromIterator<(K, Weight)> for KeyExprTree<Weight, Wildness, Children>
+    > std::iter::FromIterator<(K, Weight)> for KeBoxTree<Weight, Wildness, Children>
 where
     Self: IKeyExprTree<Weight>,
 {

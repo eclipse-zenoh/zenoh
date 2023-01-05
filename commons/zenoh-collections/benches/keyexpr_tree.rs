@@ -5,9 +5,7 @@ use std::{
 
 use rand::SeedableRng;
 use zenoh_collections::keyexpr_tree::{
-    box_tree::KeTreePair,
-    impls::{KeyedSetProvider, VecSetProvider},
-    IKeyExprTree, IKeyExprTreeExt, KeyExprTree,
+    box_tree::KeTreePair, impls::VecSetProvider, IKeyExprTree, IKeyExprTreeExt, KeBoxTree,
 };
 use zenoh_protocol_core::key_expr::{fuzzer::KeyExprFuzzer, OwnedKeyExpr};
 
@@ -17,8 +15,8 @@ fn main() {
             let results = Benchmarker::benchmark(|b| {
                 let keys = KeySet::generate(total, wildness);
                 let mut pair = KeTreePair::new();
-                let mut tree = KeyExprTree::<_, bool, KeyedSetProvider>::new();
-                let mut vectree = KeyExprTree::<_, bool, VecSetProvider>::new();
+                let mut tree: KeBoxTree<_> = KeBoxTree::new();
+                let mut vectree: KeBoxTree<_, bool, VecSetProvider> = KeBoxTree::new();
                 let mut map = HashMap::new();
                 for key in keys.iter() {
                     b.run_once("pair_insert", || pair.insert(key, 0));

@@ -57,68 +57,6 @@ pub trait IKeyExprTree<Weight> {
     fn prune_where<F: FnMut(&mut Self::Node) -> bool>(&mut self, predicate: F);
 }
 
-type Keys<I, Item> = std::iter::FilterMap<I, fn(Item) -> Option<OwnedKeyExpr>>;
-impl<Weight, T: IKeyExprTree<Weight>> IKeyExprTreeExt<Weight> for T {}
-fn filter_map_weighted_node_to_key<N: IKeyExprTreeNode<W>, I: AsNode<N>, W>(
-    item: I,
-) -> Option<OwnedKeyExpr> {
-    let node = item.as_node();
-    node.weight().is_some().then(|| node.keyexpr())
-}
-pub trait IKeyExprTreeExt<Weight>: IKeyExprTree<Weight> {
-    fn weight_at(&self, at: &keyexpr) -> Option<&Weight> {
-        self.node(at)
-            .and_then(<Self::Node as IKeyExprTreeNode<Weight>>::weight)
-    }
-    fn weight_at_mut(&mut self, at: &keyexpr) -> Option<&mut Weight> {
-        self.node_mut(at)
-            .and_then(<Self::Node as IKeyExprTreeNode<Weight>>::weight_mut)
-    }
-    fn insert(&mut self, at: &keyexpr, weight: Weight) -> Option<Weight> {
-        self.node_mut_or_create(at).insert_weight(weight)
-    }
-    fn intersecting_keys<'a>(
-        &'a self,
-        key: &'a keyexpr,
-    ) -> Keys<Self::Intersection<'a>, Self::IntersectionItem<'a>>
-    where
-        Self::IntersectionItem<'a>: AsNode<Self::Node>,
-        Self::Node: IKeyExprTreeNode<Weight>,
-    {
-        self.intersecting_nodes(key)
-            .filter_map(filter_map_weighted_node_to_key)
-    }
-    fn included_keys<'a>(
-        &'a self,
-        key: &'a keyexpr,
-    ) -> Keys<Self::Inclusion<'a>, Self::InclusionItem<'a>>
-    where
-        Self::InclusionItem<'a>: AsNode<Self::Node>,
-        Self::Node: IKeyExprTreeNode<Weight>,
-    {
-        self.included_nodes(key)
-            .filter_map(filter_map_weighted_node_to_key)
-    }
-    fn prune(&mut self) {
-        self.prune_where(|node| node.weight().is_none())
-    }
-    #[allow(clippy::type_complexity)]
-    fn key_value_pairs<'a>(
-        &'a self,
-    ) -> std::iter::FilterMap<
-        Self::TreeIter<'a>,
-        fn(Self::TreeIterItem<'a>) -> Option<(OwnedKeyExpr, &'a Weight)>,
-    >
-    where
-        Self::TreeIterItem<'a>: AsNode<Self::Node>,
-    {
-        self.tree_iter().filter_map(|node| {
-            unsafe { std::mem::transmute::<_, Option<&Weight>>(node.as_node().weight()) }
-                .map(|w| (node.as_node().keyexpr(), w))
-        })
-    }
-}
-
 pub trait IKeyExprTreeNode<Weight> {
     type Parent;
     fn parent(&self) -> Option<&Self::Parent>;
@@ -185,4 +123,66 @@ pub trait AsNode<T: ?Sized> {
 }
 pub trait AsNodeMut<T: ?Sized>: AsNode<T> {
     fn as_node_mut(&mut self) -> &mut T;
+}
+
+type Keys<I, Item> = std::iter::FilterMap<I, fn(Item) -> Option<OwnedKeyExpr>>;
+impl<Weight, T: IKeyExprTree<Weight>> IKeyExprTreeExt<Weight> for T {}
+fn filter_map_weighted_node_to_key<N: IKeyExprTreeNode<W>, I: AsNode<N>, W>(
+    item: I,
+) -> Option<OwnedKeyExpr> {
+    let node = item.as_node();
+    node.weight().is_some().then(|| node.keyexpr())
+}
+pub trait IKeyExprTreeExt<Weight>: IKeyExprTree<Weight> {
+    fn weight_at(&self, at: &keyexpr) -> Option<&Weight> {
+        self.node(at)
+            .and_then(<Self::Node as IKeyExprTreeNode<Weight>>::weight)
+    }
+    fn weight_at_mut(&mut self, at: &keyexpr) -> Option<&mut Weight> {
+        self.node_mut(at)
+            .and_then(<Self::Node as IKeyExprTreeNode<Weight>>::weight_mut)
+    }
+    fn insert(&mut self, at: &keyexpr, weight: Weight) -> Option<Weight> {
+        self.node_mut_or_create(at).insert_weight(weight)
+    }
+    fn intersecting_keys<'a>(
+        &'a self,
+        key: &'a keyexpr,
+    ) -> Keys<Self::Intersection<'a>, Self::IntersectionItem<'a>>
+    where
+        Self::IntersectionItem<'a>: AsNode<Self::Node>,
+        Self::Node: IKeyExprTreeNode<Weight>,
+    {
+        self.intersecting_nodes(key)
+            .filter_map(filter_map_weighted_node_to_key)
+    }
+    fn included_keys<'a>(
+        &'a self,
+        key: &'a keyexpr,
+    ) -> Keys<Self::Inclusion<'a>, Self::InclusionItem<'a>>
+    where
+        Self::InclusionItem<'a>: AsNode<Self::Node>,
+        Self::Node: IKeyExprTreeNode<Weight>,
+    {
+        self.included_nodes(key)
+            .filter_map(filter_map_weighted_node_to_key)
+    }
+    fn prune(&mut self) {
+        self.prune_where(|node| node.weight().is_none())
+    }
+    #[allow(clippy::type_complexity)]
+    fn key_value_pairs<'a>(
+        &'a self,
+    ) -> std::iter::FilterMap<
+        Self::TreeIter<'a>,
+        fn(Self::TreeIterItem<'a>) -> Option<(OwnedKeyExpr, &'a Weight)>,
+    >
+    where
+        Self::TreeIterItem<'a>: AsNode<Self::Node>,
+    {
+        self.tree_iter().filter_map(|node| {
+            unsafe { std::mem::transmute::<_, Option<&Weight>>(node.as_node().weight()) }
+                .map(|w| (node.as_node().keyexpr(), w))
+        })
+    }
 }
