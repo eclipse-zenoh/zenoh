@@ -25,6 +25,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_config::ValidatedMap;
+use zenoh_config::WhatAmI;
 use zenoh_core::Result as ZResult;
 use zenoh_protocol::proto::QueryBody;
 use zenoh_protocol::proto::{DataInfo, RoutingContext};
@@ -81,13 +82,13 @@ impl AdminSpace {
                 .try_into()
                 .unwrap(),
             Arc::new(Box::new(|context, key, args| {
-                linkstate_routers_data(context, key, args).boxed()
+                linkstate_data(context, WhatAmI::Router, key, args).boxed()
             })),
         );
         handlers.insert(
             [&root_key, "/linkstate/peers"].concat().try_into().unwrap(),
             Arc::new(Box::new(|context, key, args| {
-                linkstate_peers_data(context, key, args).boxed()
+                linkstate_data(context, WhatAmI::Peer, key, args).boxed()
             })),
         );
 
@@ -577,44 +578,27 @@ pub async fn router_data(
     )
 }
 
-pub async fn linkstate_routers_data(
+pub async fn linkstate_data(
     context: &AdminContext,
+    net_type: WhatAmI,
     _key: &KeyExpr<'_>,
     _args: &str,
 ) -> (ZBuf, Encoding) {
     let tables = zread!(context.runtime.router.tables);
+    let net = match net_type {
+        WhatAmI::Router => tables.routers_net.as_ref(),
+        _ => tables.peers_net.as_ref(),
+    };
 
     (
         ZBuf::from(
-            tables
-                .routers_net
-                .as_ref()
-                .unwrap()
-                .dot()
+            net.map(|net| net.dot())
+                .unwrap_or_else(|| "graph {}".to_string())
                 .as_bytes()
                 .to_vec(),
         ),
         KnownEncoding::TextPlain.into(),
     )
-}
-
-pub async fn linkstate_peers_data(
-    context: &AdminContext,
-    _key: &KeyExpr<'_>,
-    _args: &str,
-) -> (ZBuf, Encoding) {
-    let data: Vec<u8> = context
-        .runtime
-        .router
-        .tables
-        .read()
-        .unwrap()
-        .peers_net
-        .as_ref()
-        .unwrap()
-        .dot()
-        .into();
-    (ZBuf::from(data), KnownEncoding::TextPlain.into())
 }
 
 pub async fn plugins_status(
