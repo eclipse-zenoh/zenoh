@@ -1404,6 +1404,27 @@ fn compute_final_route(
                         }
                     }
                 }
+            } else {
+                for qabl in qabls.iter() {
+                    if qabl.direction.0.id != src_face.id && qabl.complete > 0 {
+                        #[cfg(feature = "complete_n")]
+                        {
+                            route.entry(qabl.direction.0.id).or_insert_with(|| {
+                                let mut direction = qabl.direction.clone();
+                                let qid = insert_pending_query(&mut direction.0, query.clone());
+                                (direction, qid, *target)
+                            });
+                        }
+                        #[cfg(not(feature = "complete_n"))]
+                        {
+                            route.entry(qabl.direction.0.id).or_insert_with(|| {
+                                let mut direction = qabl.direction.clone();
+                                let qid = insert_pending_query(&mut direction.0, query.clone());
+                                (direction, qid)
+                            });
+                        }
+                    }
+                }
             }
             route
         }
