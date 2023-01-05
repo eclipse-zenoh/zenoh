@@ -201,8 +201,8 @@ pub trait Storage: Send + Sync {
     /// Function called for each incoming delete request to this storage.
     async fn delete(&mut self, key: OwnedKeyExpr) -> ZResult<StorageInsertionResult>;
 
-    /// Function to retrieve the samepl associated with a single key.
-    async fn get(&mut self, key_expr: OwnedKeyExpr, parameters: &str) -> ZResult<Sample>;
+    /// Function to retrieve the sample associated with a single key.
+    async fn get(&mut self, key: OwnedKeyExpr, parameters: &str) -> ZResult<Sample>;
 
     /// Function called to get the list of all storage content (key, timestamp)
     /// The latest Timestamp corresponding to each key is either the timestamp of the delete or put whichever is the latest.
