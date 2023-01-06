@@ -13,7 +13,6 @@
 //
 use super::face::FaceState;
 use super::router::Tables;
-use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
@@ -637,28 +636,5 @@ pub fn unregister_expr(_tables: &mut Tables, face: &mut Arc<FaceState>, expr_id:
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),
         None => log::error!("Undeclare unknown resource!"),
-    }
-}
-
-#[inline]
-pub(super) fn elect_router<'a>(key_expr: &str, routers: &'a [ZenohId]) -> &'a ZenohId {
-    if routers.len() == 1 {
-        &routers[0]
-    } else {
-        routers
-            .iter()
-            .map(|router| {
-                let mut hasher = DefaultHasher::new();
-                for b in key_expr.as_bytes() {
-                    hasher.write_u8(*b);
-                }
-                for b in router.as_slice() {
-                    hasher.write_u8(*b);
-                }
-                (router, hasher.finish())
-            })
-            .max_by(|(_, s1), (_, s2)| s1.partial_cmp(s2).unwrap())
-            .unwrap()
-            .0
     }
 }
