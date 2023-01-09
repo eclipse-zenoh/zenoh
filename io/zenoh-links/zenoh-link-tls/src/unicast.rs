@@ -518,6 +518,16 @@ impl TlsServerConfig {
                 .map_err(|e| zerror!(e))
                 .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
 
+        if keys.len() == 0 {
+            keys = rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_server_private_key))
+                .map_err(|e| zerror!(e))
+                .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
+        }
+
+        if keys.len() == 0 {
+            return Err(zerror!("No private key found.").into());
+        }
+
         let certs: Vec<Certificate> =
             rustls_pemfile::certs(&mut Cursor::new(&tls_server_certificate))
                 .map_err(|e| zerror!(e))
