@@ -6,7 +6,9 @@ use std::{
 use rand::SeedableRng;
 use zenoh_protocol::core::key_expr::{fuzzer::KeyExprFuzzer, OwnedKeyExpr};
 use zenoh_util::keyexpr_tree::{
-    box_tree::KeTreePair, impls::VecSetProvider, IKeyExprTree, IKeyExprTreeExt, KeBoxTree,
+    box_tree::KeTreePair,
+    impls::{HashMapProvider, VecSetProvider},
+    IKeyExprTree, IKeyExprTreeExt, KeBoxTree,
 };
 
 fn main() {
@@ -17,17 +19,20 @@ fn main() {
                 let mut pair = KeTreePair::new();
                 let mut tree: KeBoxTree<_> = KeBoxTree::new();
                 let mut vectree: KeBoxTree<_, bool, VecSetProvider> = KeBoxTree::new();
+                let mut hashtree: KeBoxTree<_, bool, HashMapProvider> = KeBoxTree::new();
                 let mut map = HashMap::new();
                 for key in keys.iter() {
                     b.run_once("pair_insert", || pair.insert(key, 0));
                     b.run_once("ketree_insert", || tree.insert(key, 0));
                     b.run_once("vectree_insert", || vectree.insert(key, 0));
+                    b.run_once("hashtree_insert", || hashtree.insert(key, 0));
                     b.run_once("hashmap_insert", || map.insert(key.to_owned(), 0));
                 }
                 for key in keys.iter() {
                     b.run_once("pair_fetch", || pair.node(key));
                     b.run_once("ketree_fetch", || tree.node(key));
                     b.run_once("vectree_fetch", || vectree.node(key));
+                    b.run_once("hashtree_fetch", || hashtree.node(key));
                     b.run_once("hashmap_fetch", || map.get(key));
                 }
                 for key in keys.iter() {
@@ -35,6 +40,9 @@ fn main() {
                     b.run_once("ketree_intersect", || tree.intersecting_nodes(key).count());
                     b.run_once("vectree_intersect", || {
                         vectree.intersecting_nodes(key).count()
+                    });
+                    b.run_once("hashtree_intersect", || {
+                        hashtree.intersecting_nodes(key).count()
                     });
                     b.run_once("hashmap_intersect", || {
                         map.iter().filter(|(k, _)| key.intersects(k)).count()
@@ -44,6 +52,7 @@ fn main() {
                     b.run_once("pair_include", || pair.included_nodes(key).count());
                     b.run_once("ketree_include", || tree.included_nodes(key).count());
                     b.run_once("vectree_include", || vectree.included_nodes(key).count());
+                    b.run_once("hashtree_include", || hashtree.included_nodes(key).count());
                     b.run_once("hashmap_include", || {
                         map.iter().filter(|(k, _)| key.includes(k)).count()
                     });
@@ -53,18 +62,22 @@ fn main() {
                 "pair_insert",
                 "ketree_insert",
                 "vectree_insert",
+                "hashtree_insert",
                 "hashmap_insert",
                 "pair_fetch",
                 "ketree_fetch",
                 "vectree_fetch",
+                "hashtree_fetch",
                 "hashmap_fetch",
                 "pair_intersect",
                 "ketree_intersect",
                 "vectree_intersect",
+                "hashtree_intersect",
                 "hashmap_intersect",
                 "pair_include",
                 "ketree_include",
                 "vectree_include",
+                "hashtree_include",
                 "hashmap_include",
             ] {
                 let b = results.benches.get(name).unwrap();

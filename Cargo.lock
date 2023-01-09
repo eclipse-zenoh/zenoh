@@ -3132,9 +3132,9 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "token-cell"
-version = "1.4.0"
+version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "056444baa987b4f28467b9d17fcb17ba3a33f3b117ad2f140e084416a2d4edc7"
+checksum = "3e5109915ae70c45bc922c0d17c1b3ea853da5122f62be1db857b51eb035aae4"
 dependencies = [
  "paste",
 ]

@@ -45,10 +45,11 @@ impl<T: HasChunk + AsNode<T> + AsNodeMut<T> + 'static> IChildren<T> for Vec<T> {
     fn is_empty(&self) -> bool {
         self.is_empty()
     }
-    type Entry<'a, 'b> = Entry<'a, 'b, T> where Self: 'a + 'b, T: 'b;
+    type Entry<'a, 'b> = Entry<'a, 'b, T> where Self: 'a , 'a: 'b, T: 'b;
     fn entry<'a, 'b>(&'a mut self, chunk: &'b keyexpr) -> Self::Entry<'a, 'b>
     where
-        Self: 'a + 'b,
+        Self: 'a,
+        'a: 'b,
         T: 'b,
     {
         let this = unsafe { &mut *(self as *mut Self) };

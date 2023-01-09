@@ -86,7 +86,8 @@ pub trait IChildren<T: ?Sized> {
     fn child_at_mut<'a, 'b>(&'a mut self, chunk: &'b keyexpr) -> Option<&'a mut Self::Node>;
     type Entry<'a, 'b>: IEntry<'a, 'b, T>
     where
-        Self: 'a + 'b,
+        Self: 'a,
+        'a: 'b,
         T: 'b;
     fn remove(&mut self, chunk: &keyexpr) -> Option<Self::Node>;
     fn entry<'a, 'b>(&'a mut self, chunk: &'b keyexpr) -> Self::Entry<'a, 'b>
