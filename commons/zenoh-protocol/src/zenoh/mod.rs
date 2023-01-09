@@ -391,7 +391,10 @@ impl defmt::Format for ZenohMessage {
         defmt::write!(
             f,
             "{} {} {} {}",
-            self.body, self.channel, self.routing_context, self.attachment
+            self.body,
+            self.channel,
+            self.routing_context,
+            self.attachment
         );
         #[cfg(feature = "stats")]
         defmt::write!(f, " {}", self.size);
