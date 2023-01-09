@@ -15,8 +15,11 @@ use super::super::AuthenticatedPeerLink;
 use super::AResult;
 use crate::TransportManager;
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::core::ZInt;
-use zenoh_protocol::proto::{tmsg, Attachment, TransportMessage};
+use zenoh_protocol::{
+    common::Attachment,
+    core::ZInt,
+    transport::{tmsg, TransportMessage},
+};
 
 /*************************************/
 /*             ACCEPT                */
@@ -34,15 +37,15 @@ pub(super) async fn send(
     input: Input,
 ) -> AResult<()> {
     // Build OpenAck message
-    let mut message = TransportMessage::make_open_ack(
+    let message = TransportMessage::make_open_ack(
         manager.config.unicast.lease,
         input.initial_sn,
         input.attachment,
     );
 
-    // Send the message on the link
+    // Send the message on the
     let _ = link
-        .write_transport_message(&mut message)
+        .write_transport_message(&message)
         .await
         .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
 

@@ -354,9 +354,9 @@ checksum = "7a40729d2133846d9ed0ea60a8b9541bccddab49cd30f0715a1da672fe9a2524"
 
 [[package]]
 name = "async-trait"
-version = "0.1.59"
+version = "0.1.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "31e6e93155431f3931513b243d371981bb2770112b370c82745a1d19d2f99364"
+checksum = "677d1d8ab452a3936018a687b20e6f7cf5363d713b732b8884001317b0e48aa3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -403,6 +403,12 @@ name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e1b586273c5702936fe7b7d6896644d8be71e6314cfe09d3167c95f712589e8"
+
+[[package]]
+name = "base64"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ea22880d78093b0cbe17c89f64a7d457941e65759157ec6cb31a31d652b05e5"
 
 [[package]]
 name = "base64ct"
@@ -1897,9 +1903,9 @@ checksum = "427c3892f9e783d91cc128285287e70a59e206ca452770ece88a76f7a3eddd72"
 
 [[package]]
 name = "paste"
-version = "1.0.9"
+version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1de2e551fb905ac83f73f7aedf2f0cb4a0da7e35efa24a202a936269f1f18e1"
+checksum = "cf1c2c742266c2f1041c914ba65355a83ae8747b05f208319784083583494b4b"
 
 [[package]]
 name = "pem"
@@ -2158,9 +2164,9 @@ dependencies = [
 
 [[package]]
 name = "polling"
-version = "2.5.1"
+version = "2.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "166ca89eb77fd403230b9c156612965a81e094ec6ec3aa13663d4c8b113fa748"
+checksum = "22122d5ec4f9fe1b3916419b76be1e80bcb93f618d071d2edf841b137b2a2bd6"
 dependencies = [
  "autocfg",
  "cfg-if 1.0.0",
@@ -2334,11 +2340,10 @@ dependencies = [
 
 [[package]]
 name = "rayon"
-version = "1.6.0"
+version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e060280438193c554f654141c9ea9417886713b7acd75974c85b18a69a88e0b"
+checksum = "6db3a213adf02b3bcfd2d3846bb41cb22857d131789e01df434fb7e7bc0759b7"
 dependencies = [
- "crossbeam-deque",
  "either",
  "rayon-core",
 ]
@@ -2620,18 +2625,18 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "serde"
-version = "1.0.149"
+version = "1.0.152"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "256b9932320c590e707b94576e3cc1f7c9024d0ee6612dfbcf1cb106cbe8e055"
+checksum = "bb7d1f0d3021d347a83e556fc4683dea2ea09d87bccdf88ff5c12545d89d5efb"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.149"
+version = "1.0.152"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4eae9b04cbffdfd550eb462ed33bc6a1b68c935127d008b27444d08380f94e4"
+checksum = "af487d118eecd09402d70a5d72551860e788df87b464af30e5ea6a38c75c541e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3127,9 +3132,9 @@ checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
 name = "token-cell"
-version = "1.3.0"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4454b08003534428f308e17630259c284d81ab1e4c5bd927ba6802ba71bacf95"
+checksum = "056444baa987b4f28467b9d17fcb17ba3a33f3b117ad2f140e084416a2d4edc7"
 dependencies = [
  "paste",
 ]
@@ -3533,9 +3538,9 @@ dependencies = [
 
 [[package]]
 name = "webpki-roots"
-version = "0.22.5"
+version = "0.22.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "368bfe657969fb01238bb756d351dcade285e0f6fcbd36dcb23359a5169975be"
+checksum = "b6c71e40d7d2c34a5106301fb632274ca37242cd0c9d3e64dbece371a40a2d87"
 dependencies = [
  "webpki",
 ]
@@ -3761,7 +3766,7 @@ dependencies = [
  "async-global-executor",
  "async-std",
  "async-trait",
- "base64 0.13.1",
+ "base64 0.20.0",
  "env_logger",
  "event-listener",
  "flume",
@@ -3785,6 +3790,7 @@ dependencies = [
  "vec_map",
  "zenoh-buffers",
  "zenoh-cfg-properties",
+ "zenoh-codec",
  "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
@@ -3792,7 +3798,7 @@ dependencies = [
  "zenoh-link",
  "zenoh-plugin-trait",
  "zenoh-protocol",
- "zenoh-protocol-core",
+ "zenoh-shm",
  "zenoh-sync",
  "zenoh-transport",
  "zenoh-util",
@@ -3802,14 +3808,8 @@ dependencies = [
 name = "zenoh-buffers"
 version = "0.7.0-rc"
 dependencies = [
- "async-std",
- "bincode",
- "hex",
- "log",
- "serde",
- "shared_memory",
+ "rand 0.8.5",
  "zenoh-collections",
- "zenoh-core",
 ]
 
 [[package]]
@@ -3821,20 +3821,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-codec"
+version = "0.7.0-rc"
+dependencies = [
+ "criterion",
+ "rand 0.8.5",
+ "uhlc",
+ "uuid",
+ "zenoh-buffers",
+ "zenoh-protocol",
+ "zenoh-shm",
+]
+
+[[package]]
 name = "zenoh-collections"
 version = "0.7.0-rc"
 dependencies = [
  "async-std",
  "async-trait",
- "criterion",
  "flume",
- "keyed-set",
  "log",
- "rand 0.8.5",
- "token-cell",
  "zenoh-core",
- "zenoh-protocol-core",
- "zenoh-sync",
 ]
 
 [[package]]
@@ -3850,7 +3857,7 @@ dependencies = [
  "validated_struct",
  "zenoh-cfg-properties",
  "zenoh-core",
- "zenoh-protocol-core",
+ "zenoh-protocol",
  "zenoh-util",
 ]
 
@@ -3930,7 +3937,7 @@ dependencies = [
  "zenoh-link-udp",
  "zenoh-link-unixsock_stream",
  "zenoh-link-ws",
- "zenoh-protocol-core",
+ "zenoh-protocol",
 ]
 
 [[package]]
@@ -3941,11 +3948,12 @@ dependencies = [
  "async-trait",
  "flume",
  "serde",
+ "typenum",
  "zenoh-buffers",
  "zenoh-cfg-properties",
+ "zenoh-codec",
  "zenoh-core",
  "zenoh-protocol",
- "zenoh-protocol-core",
 ]
 
 [[package]]
@@ -3965,7 +3973,7 @@ dependencies = [
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
- "zenoh-protocol-core",
+ "zenoh-protocol",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -3986,7 +3994,7 @@ dependencies = [
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
- "zenoh-protocol-core",
+ "zenoh-protocol",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -4000,7 +4008,7 @@ dependencies = [
  "log",
  "zenoh-core",
  "zenoh-link-commons",
- "zenoh-protocol-core",
+ "zenoh-protocol",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -4021,7 +4029,7 @@ dependencies = [
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
- "zenoh-protocol-core",
+ "zenoh-protocol",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -4034,10 +4042,11 @@ dependencies = [
  "async-trait",
  "log",
  "socket2",
+ "zenoh-buffers",
  "zenoh-collections",
  "zenoh-core",
  "zenoh-link-commons",
- "zenoh-protocol-core",
+ "zenoh-protocol",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -4054,7 +4063,7 @@ dependencies = [
  "uuid",
  "zenoh-core",
  "zenoh-link-commons",
- "zenoh-protocol-core",
+ "zenoh-protocol",
  "zenoh-sync",
 ]
 
@@ -4071,7 +4080,7 @@ dependencies = [
  "url",
  "zenoh-core",
  "zenoh-link-commons",
- "zenoh-protocol-core",
+ "zenoh-protocol",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -4158,28 +4167,26 @@ dependencies = [
 name = "zenoh-protocol"
 version = "0.7.0-rc"
 dependencies = [
- "criterion",
- "log",
- "rand 0.8.5",
- "uhlc",
- "uuid",
- "zenoh-buffers",
- "zenoh-core",
- "zenoh-protocol-core",
-]
-
-[[package]]
-name = "zenoh-protocol-core"
-version = "0.7.0-rc"
-dependencies = [
- "criterion",
  "hex",
- "itertools",
  "lazy_static",
  "rand 0.8.5",
  "serde",
  "uhlc",
  "uuid",
+ "zenoh-buffers",
+ "zenoh-core",
+ "zenoh-protocol",
+]
+
+[[package]]
+name = "zenoh-shm"
+version = "0.7.0-rc"
+dependencies = [
+ "bincode",
+ "log",
+ "serde",
+ "shared_memory",
+ "zenoh-buffers",
  "zenoh-core",
 ]
 
@@ -4192,6 +4199,8 @@ dependencies = [
  "flume",
  "futures",
  "tokio",
+ "zenoh-buffers",
+ "zenoh-collections",
  "zenoh-core",
 ]
 
@@ -4214,14 +4223,16 @@ dependencies = [
  "serde",
  "zenoh-buffers",
  "zenoh-cfg-properties",
+ "zenoh-codec",
  "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
  "zenoh-crypto",
  "zenoh-link",
  "zenoh-protocol",
- "zenoh-protocol-core",
+ "zenoh-shm",
  "zenoh-sync",
+ "zenoh-util",
 ]
 
 [[package]]
@@ -4229,23 +4240,30 @@ name = "zenoh-util"
 version = "0.7.0-rc"
 dependencies = [
  "async-std",
+ "async-trait",
  "clap",
+ "criterion",
+ "flume",
  "futures",
  "hex",
  "home",
  "humantime",
+ "keyed-set",
  "lazy_static",
  "libc",
  "libloading",
  "log",
  "pnet",
  "pnet_datalink",
+ "rand 0.8.5",
  "shellexpand",
+ "token-cell",
  "winapi",
  "zenoh-cfg-properties",
  "zenoh-collections",
  "zenoh-core",
  "zenoh-crypto",
+ "zenoh-protocol",
  "zenoh-sync",
 ]
 

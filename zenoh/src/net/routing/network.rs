@@ -18,8 +18,10 @@ use std::convert::TryInto;
 use vec_map::VecMap;
 use zenoh_config::whatami::WhatAmIMatcher;
 use zenoh_link::Locator;
-use zenoh_protocol::core::{WhatAmI, ZInt, ZenohId};
-use zenoh_protocol::proto::{LinkState, ZenohMessage};
+use zenoh_protocol::{
+    core::{WhatAmI, ZInt, ZenohId},
+    zenoh::{LinkState, ZenohMessage},
+};
 use zenoh_transport::TransportUnicast;
 
 #[derive(Clone)]

@@ -20,7 +20,7 @@ use std::sync::Arc;
 use std::{borrow::Cow, fmt};
 use zenoh_core::{bail, zerror, Error as ZError, Result as ZResult};
 use zenoh_link_commons::{LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait};
-use zenoh_protocol_core::{EndPoint, Locator};
+use zenoh_protocol::core::{EndPoint, Locator};
 
 pub struct LinkMulticastUdp {
     // The unicast socket address of this link
@@ -274,28 +274,20 @@ impl LinkManagerMulticastUdp {
 #[async_trait]
 impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
     async fn new_link(&self, endpoint: &EndPoint) -> ZResult<LinkMulticast> {
-        let locator = &endpoint.locator;
-        let mut mcast_addrs = get_udp_addrs(locator)
+        let mcast_addrs = get_udp_addrs(endpoint.address())
             .await?
-            .drain(..)
             .filter(|a| a.ip().is_multicast())
             .collect::<Vec<SocketAddr>>();
 
-        let iface = if let Some(config) = &endpoint.config {
-            config.get(UDP_MULTICAST_SRC_IFACE)
-        } else {
-            None
-        };
-
         let mut errs: Vec<ZError> = vec![];
-        for mcast_addr in mcast_addrs.drain(..) {
+        for maddr in mcast_addrs {
             match self
-                .new_link_inner(&mcast_addr, iface.map(|x| x.as_str()))
+                .new_link_inner(&maddr, endpoint.config().get(UDP_MULTICAST_SRC_IFACE))
                 .await
             {
                 Ok((mcast_sock, ucast_sock, ucast_addr)) => {
                     let link = Arc::new(LinkMulticastUdp::new(
-                        ucast_addr, ucast_sock, mcast_addr, mcast_sock,
+                        ucast_addr, ucast_sock, maddr, mcast_sock,
                     ));
 
                     return Ok(LinkMulticast(link));
@@ -307,7 +299,7 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
         }
 
         if errs.is_empty() {
-            errs.push(zerror!("No multicast addresses available").into());
+            errs.push(zerror!("No UDP multicast addresses available").into());
         }
 
         bail!(

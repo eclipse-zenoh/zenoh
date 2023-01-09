@@ -1,3 +1,5 @@
+use crate::common::batch::WError;
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -11,11 +13,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::batch::SerializationBatch;
+// use super::batch::SerializationBatch;
+use super::batch::{Encode, WBatch};
 use super::conduit::{TransportChannelTx, TransportConduitTx};
-use super::protocol::core::Priority;
-use super::protocol::io::WBuf;
-use super::protocol::proto::{TransportMessage, ZenohMessage};
 use async_std::prelude::FutureExt;
 use flume::{bounded, Receiver, Sender};
 use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
@@ -23,9 +23,19 @@ use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread;
 use std::time::Duration;
+use zenoh_buffers::{
+    reader::{HasReader, Reader},
+    writer::HasWriter,
+    ZBuf,
+};
+use zenoh_codec::{WCodec, Zenoh060};
 use zenoh_config::QueueSizeConf;
 use zenoh_core::zlock;
-use zenoh_protocol::proto::MessageWriter;
+use zenoh_protocol::{
+    core::{Channel, Priority},
+    transport::TransportMessage,
+    zenoh::ZenohMessage,
+};
 
 // It's faster to work directly with nanoseconds.
 // Backoff will never last more the u32::MAX nanoseconds.
@@ -37,11 +47,11 @@ const TSLOT: NanoSeconds = 100;
 // Inner structure to reuse serialization batches
 struct StageInRefill {
     n_ref_r: Receiver<()>,
-    s_ref_r: RingBufferReader<SerializationBatch, RBLEN>,
+    s_ref_r: RingBufferReader<WBatch, RBLEN>,
 }
 
 impl StageInRefill {
-    fn pull(&mut self) -> Option<SerializationBatch> {
+    fn pull(&mut self) -> Option<WBatch> {
         self.s_ref_r.pull()
     }
 
@@ -53,7 +63,7 @@ impl StageInRefill {
 // Inner structure to link the initial stage with the final stage of the pipeline
 struct StageInOut {
     n_out_w: Sender<()>,
-    s_out_w: RingBufferWriter<SerializationBatch, RBLEN>,
+    s_out_w: RingBufferWriter<WBatch, RBLEN>,
     bytes: Arc<AtomicU16>,
     backoff: Arc<AtomicBool>,
 }
@@ -68,7 +78,7 @@ impl StageInOut {
     }
 
     #[inline]
-    fn move_batch(&mut self, batch: SerializationBatch) {
+    fn move_batch(&mut self, batch: WBatch) {
         let _ = self.s_out_w.push(batch);
         self.bytes.store(0, Ordering::Relaxed);
         let _ = self.n_out_w.try_send(());
@@ -77,13 +87,13 @@ impl StageInOut {
 
 // Inner structure containing mutexes for current serialization batch and SNs
 struct StageInMutex {
-    current: Arc<Mutex<Option<SerializationBatch>>>,
+    current: Arc<Mutex<Option<WBatch>>>,
     conduit: TransportConduitTx,
 }
 
 impl StageInMutex {
     #[inline]
-    fn current(&self) -> MutexGuard<'_, Option<SerializationBatch>> {
+    fn current(&self) -> MutexGuard<'_, Option<WBatch>> {
         zlock!(self.current)
     }
 
@@ -102,13 +112,11 @@ struct StageIn {
     s_ref: StageInRefill,
     s_out: StageInOut,
     mutex: StageInMutex,
-    fragbuf: WBuf,
+    fragbuf: ZBuf,
 }
 
 impl StageIn {
     fn push_zenoh_message(&mut self, msg: &mut ZenohMessage, priority: Priority) -> bool {
-        // Lock the channel. We are the only one that will be writing on it.
-        let mut channel = self.mutex.channel(msg.is_reliable());
         // Lock the current serialization batch.
         let mut c_guard = self.mutex.current();
 
@@ -146,30 +154,53 @@ impl StageIn {
             };
         }
 
-        macro_rules! zserialize_rets {
+        macro_rules! zretok {
             ($batch:expr) => {{
-                if $batch.serialize_zenoh_message(msg, priority, &mut channel.sn) {
-                    let bytes = $batch.len();
-                    *c_guard = Some($batch);
-                    drop(c_guard);
-                    self.s_out.notify(bytes);
-                    return true;
-                }
+                let bytes = $batch.len();
+                *c_guard = Some($batch);
+                drop(c_guard);
+                self.s_out.notify(bytes);
+                return true;
             }};
         }
 
         // Get the current serialization batch.
         let mut batch = zgetbatch_rets!(false);
         // Attempt the serialization on the current batch
-        zserialize_rets!(batch);
+        let e = match batch.encode(&*msg) {
+            Ok(_) => zretok!(batch),
+            Err(e) => e,
+        };
 
-        // The first serialization attempt has failed. This means that the current
-        // batch is full. Therefore, we move the current batch to stage out.
+        // Lock the channel. We are the only one that will be writing on it.
+        let mut tch = self.mutex.channel(msg.is_reliable());
+
+        // Create the channel
+        let channel = Channel {
+            reliability: msg.channel.reliability,
+            priority,
+        };
+
+        // Retrieve the next SN
+        let mut sn = tch.sn.get();
+
+        if let WError::NewFrame = e {
+            // Attempt a serialization with a new frame
+            if batch.encode((&*msg, channel, sn)).is_ok() {
+                zretok!(batch);
+            };
+        }
+
         if !batch.is_empty() {
+            // Move out existing batch
             self.s_out.move_batch(batch);
             batch = zgetbatch_rets!(false);
-            zserialize_rets!(batch);
         }
+
+        // Attempt a second serialization on fully empty batch
+        if batch.encode((&*msg, channel, sn)).is_ok() {
+            zretok!(batch);
+        };
 
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
@@ -178,47 +209,48 @@ impl StageIn {
 
         // Take the expandable buffer and serialize the totality of the message
         self.fragbuf.clear();
-        self.fragbuf.write_zenoh_message(msg);
+
+        let mut writer = self.fragbuf.writer();
+        let codec = Zenoh060::default();
+        codec.write(&mut writer, &*msg).unwrap();
 
         // Fragment the whole message
-        let mut to_write = self.fragbuf.len();
-        let mut fragbuf_reader = self.fragbuf.reader();
-        while to_write > 0 {
+        let mut reader = self.fragbuf.reader();
+        while reader.can_read() {
             // Get the current serialization batch
             // Treat all messages as non-droppable once we start fragmenting
             batch = zgetbatch_rets!(true);
 
-            // Serialize the message
-            let written = batch.serialize_zenoh_fragment(
-                msg.channel.reliability,
-                priority,
-                &mut channel.sn,
-                &mut fragbuf_reader,
-                to_write,
-            );
-
-            // Update the amount of bytes left to write
-            to_write -= written;
-
-            // 0 bytes written means error
-            if written != 0 {
-                // Move the serialization batch into the OUT pipeline
-                self.s_out.move_batch(batch);
-            } else {
-                *c_guard = Some(batch);
-                log::warn!(
-                    "Zenoh message dropped because it can not be fragmented: {:?}",
-                    msg
-                );
-                break;
+            // Serialize the message fragmnet
+            match batch.encode((&mut reader, channel, sn)) {
+                Ok(_) => {
+                    // Update the SN
+                    sn = tch.sn.get();
+                    // Move the serialization batch into the OUT pipeline
+                    self.s_out.move_batch(batch);
+                }
+                Err(_) => {
+                    // Restore the sequence number
+                    tch.sn.set(sn).unwrap();
+                    // Reinsert the batch
+                    *c_guard = Some(batch);
+                    log::warn!(
+                        "Zenoh message dropped because it can not be fragmented: {:?}",
+                        msg
+                    );
+                    break;
+                }
             }
         }
+
+        // Clean the fragbuf
+        self.fragbuf.clear();
 
         true
     }
 
     #[inline]
-    fn push_transport_message(&mut self, mut msg: TransportMessage) -> bool {
+    fn push_transport_message(&mut self, msg: TransportMessage) -> bool {
         // Lock the current serialization batch.
         let mut c_guard = self.mutex.current();
 
@@ -245,38 +277,39 @@ impl StageIn {
             };
         }
 
-        macro_rules! zserialize_rets {
+        macro_rules! zretok {
             ($batch:expr) => {{
-                if $batch.serialize_transport_message(&mut msg) {
-                    let bytes = $batch.len();
-                    *c_guard = Some($batch);
-                    drop(c_guard);
-                    self.s_out.notify(bytes);
-                    return true;
-                }
+                let bytes = $batch.len();
+                *c_guard = Some($batch);
+                drop(c_guard);
+                self.s_out.notify(bytes);
+                return true;
             }};
         }
 
         // Get the current serialization batch.
         let mut batch = zgetbatch_rets!();
         // Attempt the serialization on the current batch
-        zserialize_rets!(batch);
+        // Attempt the serialization on the current batch
+        match batch.encode(&msg) {
+            Ok(_) => zretok!(batch),
+            Err(_) => {
+                if !batch.is_empty() {
+                    self.s_out.move_batch(batch);
+                    batch = zgetbatch_rets!();
+                }
+            }
+        };
 
         // The first serialization attempt has failed. This means that the current
         // batch is full. Therefore, we move the current batch to stage out.
-        if !batch.is_empty() {
-            self.s_out.move_batch(batch);
-            batch = zgetbatch_rets!();
-            zserialize_rets!(batch);
-        }
-
-        false
+        batch.encode(&msg).is_ok()
     }
 }
 
 // The result of the pull operation
 enum Pull {
-    Some(SerializationBatch),
+    Some(WBatch),
     None,
     Backoff(NanoSeconds),
 }
@@ -317,8 +350,8 @@ impl Backoff {
 
 // Inner structure to link the final stage with the initial stage of the pipeline
 struct StageOutIn {
-    s_out_r: RingBufferReader<SerializationBatch, RBLEN>,
-    current: Arc<Mutex<Option<SerializationBatch>>>,
+    s_out_r: RingBufferReader<WBatch, RBLEN>,
+    current: Arc<Mutex<Option<WBatch>>>,
     backoff: Backoff,
 }
 
@@ -387,11 +420,11 @@ impl StageOutIn {
 
 struct StageOutRefill {
     n_ref_w: Sender<()>,
-    s_ref_w: RingBufferWriter<SerializationBatch, RBLEN>,
+    s_ref_w: RingBufferWriter<WBatch, RBLEN>,
 }
 
 impl StageOutRefill {
-    fn refill(&mut self, batch: SerializationBatch) {
+    fn refill(&mut self, batch: WBatch) {
         assert!(self.s_ref_w.push(batch).is_none());
         let _ = self.n_ref_w.try_send(());
     }
@@ -409,14 +442,11 @@ impl StageOut {
     }
 
     #[inline]
-    fn refill(&mut self, batch: SerializationBatch) {
+    fn refill(&mut self, batch: WBatch) {
         self.s_ref.refill(batch);
     }
 
-    fn drain(
-        &mut self,
-        guard: &mut MutexGuard<'_, Option<SerializationBatch>>,
-    ) -> Vec<SerializationBatch> {
+    fn drain(&mut self, guard: &mut MutexGuard<'_, Option<WBatch>>) -> Vec<WBatch> {
         let mut batches = vec![];
         // Empty the ring buffer
         while let Some(mut batch) = self.s_in.s_out_r.pull() {
@@ -442,7 +472,7 @@ pub(crate) struct TransmissionPipelineConf {
 impl Default for TransmissionPipelineConf {
     fn default() -> Self {
         Self {
-            is_streamed: true,
+            is_streamed: false,
             batch_size: u16::MAX,
             queue_size: [1; Priority::NUM],
             backoff: Duration::from_micros(1),
@@ -477,14 +507,11 @@ impl TransmissionPipeline {
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
-            let (mut s_ref_w, s_ref_r) = RingBuffer::<SerializationBatch, RBLEN>::init();
+            let (mut s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::init();
             // Fill the refill ring buffer with batches
             for _ in 0..*num {
                 assert!(s_ref_w
-                    .push(SerializationBatch::new(
-                        config.batch_size,
-                        config.is_streamed
-                    ))
+                    .push(WBatch::new(config.batch_size, config.is_streamed))
                     .is_none());
             }
             // Create the channel for notifying that new batches are in the refill ring buffer
@@ -493,11 +520,8 @@ impl TransmissionPipeline {
 
             // Create the refill ring buffer
             // This is a SPSC ring buffer
-            let (s_out_w, s_out_r) = RingBuffer::<SerializationBatch, RBLEN>::init();
-
-            // The batch being serialized upon
+            let (s_out_w, s_out_r) = RingBuffer::<WBatch, RBLEN>::init();
             let current = Arc::new(Mutex::new(None));
-            // Counters for signaling
             let bytes = Arc::new(AtomicU16::new(0));
             let backoff = Arc::new(AtomicBool::new(false));
 
@@ -513,7 +537,7 @@ impl TransmissionPipeline {
                     current: current.clone(),
                     conduit: conduit[prio].clone(),
                 },
-                fragbuf: WBuf::new(config.batch_size as usize, false),
+                fragbuf: ZBuf::default(),
             }));
 
             // The stage out for this priority
@@ -599,7 +623,7 @@ pub(crate) struct TransmissionPipelineConsumer {
 }
 
 impl TransmissionPipelineConsumer {
-    pub(crate) async fn pull(&mut self) -> Option<(SerializationBatch, usize)> {
+    pub(crate) async fn pull(&mut self) -> Option<(WBatch, usize)> {
         while self.active.load(Ordering::Relaxed) {
             // Calculate the backoff maximum
             let mut bo = NanoSeconds::MAX;
@@ -627,11 +651,11 @@ impl TransmissionPipelineConsumer {
         None
     }
 
-    pub(crate) fn refill(&mut self, batch: SerializationBatch, priority: usize) {
+    pub(crate) fn refill(&mut self, batch: WBatch, priority: usize) {
         self.stage_out[priority].refill(batch);
     }
 
-    pub(crate) fn drain(&mut self) -> Vec<(SerializationBatch, usize)> {
+    pub(crate) fn drain(&mut self) -> Vec<(WBatch, usize)> {
         // Drain the remaining batches
         let mut batches = vec![];
 
@@ -642,7 +666,7 @@ impl TransmissionPipelineConsumer {
             .iter()
             .map(|x| x.s_in.current.clone())
             .collect::<Vec<_>>();
-        let mut currents: Vec<MutexGuard<'_, Option<SerializationBatch>>> =
+        let mut currents: Vec<MutexGuard<'_, Option<WBatch>>> =
             locks.iter().map(|x| zlock!(x)).collect::<Vec<_>>();
 
         for (prio, s_out) in self.stage_out.iter_mut().enumerate() {
@@ -655,21 +679,30 @@ impl TransmissionPipelineConsumer {
         batches
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_std::prelude::FutureExt;
-    use async_std::task;
-    use std::convert::TryFrom;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
-    use std::time::{Duration, Instant};
-    use zenoh_buffers::reader::HasReader;
-    use zenoh_protocol::io::ZBuf;
-    use zenoh_protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES};
-    use zenoh_protocol::proto::MessageReader;
-    use zenoh_protocol::proto::{Frame, FramePayload, TransportBody, ZenohMessage};
-    use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, ZInt};
+    use async_std::{prelude::FutureExt, task};
+    use std::{
+        convert::TryFrom,
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        time::{Duration, Instant},
+    };
+    use zenoh_buffers::{
+        reader::{DidntRead, HasReader},
+        ZBuf,
+    };
+    use zenoh_codec::{RCodec, Zenoh060};
+    use zenoh_protocol::{
+        core::{Channel, CongestionControl, Priority, Reliability, ZInt},
+        defaults::{BATCH_SIZE, SEQ_NUM_RES},
+        transport::{Frame, FramePayload, TransportBody},
+        zenoh::ZenohMessage,
+    };
 
     const SLEEP: Duration = Duration::from_millis(100);
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -729,27 +762,35 @@ mod tests {
                 batches += 1;
                 bytes += batch.len() as usize;
                 // Create a ZBuf for deserialization starting from the batch
-                let zbuf: ZBuf = batch.get_serialized_messages().to_vec().into();
+                let bytes = batch.as_bytes();
                 // Deserialize the messages
-                let mut reader = zbuf.reader();
-                while let Some(msg) = reader.read_transport_message() {
-                    match msg.body {
-                        TransportBody::Frame(Frame { payload, .. }) => match payload {
-                            FramePayload::Messages { messages } => {
-                                msgs += messages.len();
-                            }
-                            FramePayload::Fragment { is_final, .. } => {
-                                fragments += 1;
-                                if is_final {
+                let mut reader = bytes.reader();
+                let codec = Zenoh060::default();
+
+                loop {
+                    let res: Result<TransportMessage, DidntRead> = codec.read(&mut reader);
+                    match res {
+                        Ok(msg) => {
+                            match msg.body {
+                                TransportBody::Frame(Frame { payload, .. }) => match payload {
+                                    FramePayload::Messages { messages } => {
+                                        msgs += messages.len();
+                                    }
+                                    FramePayload::Fragment { is_final, .. } => {
+                                        fragments += 1;
+                                        if is_final {
+                                            msgs += 1;
+                                        }
+                                    }
+                                },
+                                _ => {
                                     msgs += 1;
                                 }
                             }
-                        },
-                        _ => {
-                            msgs += 1;
+                            println!("Pipeline Flow [<<<]: Pulled {} msgs", msgs + 1);
                         }
+                        Err(_) => break,
                     }
-                    println!("Pipeline Flow [<<<]: Pulled {} msgs", msgs + 1);
                 }
                 println!("Pipeline Flow [+++]: Refill {} msgs", msgs + 1);
                 // Reinsert the batch

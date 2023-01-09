@@ -74,7 +74,7 @@ pub trait SessionExt {
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received : {:?}", sample);
+    ///     println!("Received: {:?}", sample);
     /// }
     /// # })
     /// ```

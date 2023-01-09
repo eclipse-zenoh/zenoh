@@ -20,11 +20,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::ZBuf;
-use zenoh_core::zasync_executor_init;
-use zenoh_core::Result as ZResult;
-use zenoh_link::{EndPoint, Link};
-use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
+use zenoh_core::{zasync_executor_init, Result as ZResult};
+use zenoh_link::Link;
+use zenoh_protocol::{
+    core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
+    zenoh::ZenohMessage,
+};
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -315,6 +316,7 @@ async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn conduits_tcp_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -326,7 +328,7 @@ fn conduits_tcp_only() {
         });
     }
     // Define the locators
-    let endpoints: Vec<EndPoint> = vec!["tcp/127.0.0.1:13447".parse().unwrap()];
+    let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 10000).parse().unwrap()];
     // Run
     task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
 }
@@ -334,6 +336,7 @@ fn conduits_tcp_only() {
 #[cfg(feature = "transport_ws")]
 #[test]
 fn conduits_ws_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -345,7 +348,7 @@ fn conduits_ws_only() {
         });
     }
     // Define the locators
-    let endpoints: Vec<EndPoint> = vec!["ws/127.0.0.1:13448".parse().unwrap()];
+    let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", 10010).parse().unwrap()];
     // Run
     task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
 }

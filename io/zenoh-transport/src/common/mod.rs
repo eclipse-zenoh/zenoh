@@ -18,5 +18,3 @@ pub(crate) mod pipeline;
 pub(crate) mod seq_num;
 #[cfg(feature = "stats")]
 pub(crate) mod stats;
-
-use super::protocol;

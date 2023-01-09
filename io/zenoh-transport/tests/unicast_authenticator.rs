@@ -11,22 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task;
+use async_std::{prelude::FutureExt, task};
 #[cfg(feature = "auth_pubkey")]
 use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
-use std::any::Any;
 #[cfg(feature = "auth_usrpwd")]
 use std::collections::HashMap;
-use std::collections::HashSet;
-use std::iter::FromIterator;
-use std::sync::Arc;
-use std::time::Duration;
-use zenoh_core::zasync_executor_init;
-use zenoh_core::Result as ZResult;
-use zenoh_link::{EndPoint, Link};
-use zenoh_protocol::core::{WhatAmI, ZenohId};
-use zenoh_protocol::proto::ZenohMessage;
+use std::{any::Any, collections::HashSet, iter::FromIterator, sync::Arc, time::Duration};
+use zenoh_core::{zasync_executor_init, Result as ZResult};
+use zenoh_link::Link;
+use zenoh_protocol::{
+    core::{EndPoint, WhatAmI, ZenohId},
+    zenoh::ZenohMessage,
+};
 #[cfg(feature = "auth_pubkey")]
 use zenoh_transport::unicast::establishment::authenticator::PubKeyAuthenticator;
 #[cfg(feature = "shared-memory")]
@@ -34,7 +30,7 @@ use zenoh_transport::unicast::establishment::authenticator::SharedMemoryAuthenti
 #[cfg(feature = "auth_usrpwd")]
 use zenoh_transport::unicast::establishment::authenticator::UserPasswordAuthenticator;
 use zenoh_transport::{
-    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 
@@ -119,6 +115,7 @@ impl TransportEventHandler for SHClientAuthenticator {
 #[cfg(feature = "auth_pubkey")]
 async fn authenticator_multilink(endpoint: &EndPoint) {
     use std::convert::TryFrom;
+    use zenoh_transport::TransportManager;
 
     // Create the router transport manager
     let router_id = ZenohId::try_from([1]).unwrap();
@@ -518,6 +515,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
 #[cfg(feature = "auth_usrpwd")]
 async fn authenticator_user_password(endpoint: &EndPoint) {
     use std::convert::TryFrom;
+    use zenoh_transport::TransportManager;
 
     /* [CLIENT] */
     let client01_id = ZenohId::try_from([2]).unwrap();
@@ -700,6 +698,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
 #[cfg(feature = "shared-memory")]
 async fn authenticator_shared_memory(endpoint: &EndPoint) {
     use std::convert::TryFrom;
+    use zenoh_transport::TransportManager;
 
     /* [CLIENT] */
     let client_id = ZenohId::try_from([2]).unwrap();
@@ -790,50 +789,53 @@ async fn run(endpoint: &EndPoint) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn authenticator_tcp() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "tcp/127.0.0.1:11447".parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8000).parse().unwrap();
     task::block_on(run(&endpoint));
 }
 
 #[cfg(feature = "transport_udp")]
 #[test]
 fn authenticator_udp() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "udp/127.0.0.1:11447".parse().unwrap();
+    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8010).parse().unwrap();
     task::block_on(run(&endpoint));
 }
 
 #[cfg(feature = "transport_ws")]
 #[test]
 fn authenticator_ws() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "ws/127.0.0.1:11449".parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8020).parse().unwrap();
     task::block_on(run(&endpoint));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn authenticator_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
-    let endpoint: EndPoint = "unixsock-stream/zenoh-test-unix-socket-10.sock"
-        .parse()
-        .unwrap();
+    let f1 = "zenoh-test-unix-socket-10.sock";
+    let _ = std::fs::remove_file(f1);
+    let endpoint: EndPoint = format!("unixsock-stream/{}", f1).parse().unwrap();
     task::block_on(run(&endpoint));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-10.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(feature = "transport_tls")]
@@ -841,6 +843,7 @@ fn authenticator_unix() {
 fn authenticator_tls() {
     use zenoh_link::tls::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -920,16 +923,19 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = "tls/localhost:11448".parse().unwrap();
-    endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-            (TLS_SERVER_CERTIFICATE_RAW, cert),
-            (TLS_SERVER_PRIVATE_KEY_RAW, key),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    let mut endpoint: EndPoint = format!("tls/localhost:{}", 8030).parse().unwrap();
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
     task::block_on(run(&endpoint));
 }
@@ -939,6 +945,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 fn authenticator_quic() {
     use zenoh_link::quic::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -1018,16 +1025,19 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = "quic/localhost:11448".parse().unwrap();
-    endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-            (TLS_SERVER_CERTIFICATE_RAW, cert),
-            (TLS_SERVER_PRIVATE_KEY_RAW, key),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", 8040).parse().unwrap();
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
     task::block_on(run(&endpoint));
 }

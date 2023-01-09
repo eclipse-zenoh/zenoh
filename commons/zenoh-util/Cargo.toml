@@ -41,20 +41,37 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 async-std = "=1.12.0"
+async-trait = "0.1.60"
 clap = "3.2.23"
+flume = "0.10.14"
 futures = "0.3.25"
 hex = "0.4.3"
 home = "0.5.3"
 humantime = "2.1.0"
+keyed-set = "0.4.4"
 lazy_static = "1.4.0"
 libloading = "0.7.3"
 log = "0.4.17"
 shellexpand = "3.0.0"
+token-cell = "1.4.0"
 zenoh-cfg-properties = { version = "0.7.0-rc", path = "../zenoh-cfg-properties", optional = true }
 zenoh-collections = { version = "0.7.0-rc", path = "../zenoh-collections/", optional = true }
 zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core" }
 zenoh-crypto = { version = "0.7.0-rc", path = "../zenoh-crypto/", optional = true }
+zenoh-protocol = { version = "0.7.0-rc", path = "../zenoh-protocol/" }
 zenoh-sync = { version = "0.7.0-rc", path = "../zenoh-sync/", optional = true }
+
+[dev-dependencies]
+criterion = "0.4.0"
+rand = "0.8.5"
+zenoh-protocol = { version = "0.7.0-rc", path = "../zenoh-protocol/", features = [
+    "test",
+] }
+
+[[bench]]
+name = "keyexpr_tree"
+harness = false
+
 
 [target.'cfg(windows)'.dependencies]
 winapi = { version = "0.3.9", features = ["iphlpapi"] }

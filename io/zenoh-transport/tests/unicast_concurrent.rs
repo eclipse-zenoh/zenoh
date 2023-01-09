@@ -19,12 +19,13 @@ use std::convert::TryFrom;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use zenoh_core::zasync_executor_init;
-use zenoh_core::Result as ZResult;
-use zenoh_link::{EndPoint, Link};
-use zenoh_protocol::core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
-use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::ZenohMessage;
+use zenoh_buffers::ZBuf;
+use zenoh_core::{zasync_executor_init, Result as ZResult};
+use zenoh_link::Link;
+use zenoh_protocol::{
+    core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
+    zenoh::ZenohMessage,
+};
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -363,29 +364,30 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_tcp_concurrent() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint01: Vec<EndPoint> = vec![
-        "tcp/127.0.0.1:7447".parse().unwrap(),
-        "tcp/127.0.0.1:7448".parse().unwrap(),
-        "tcp/127.0.0.1:7449".parse().unwrap(),
-        "tcp/127.0.0.1:7450".parse().unwrap(),
-        "tcp/127.0.0.1:7451".parse().unwrap(),
-        "tcp/127.0.0.1:7452".parse().unwrap(),
-        "tcp/127.0.0.1:7453".parse().unwrap(),
-        "tcp/127.0.0.1:7454".parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9000).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9001).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9002).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9003).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9004).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9005).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9006).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9007).parse().unwrap(),
     ];
     let endpoint02: Vec<EndPoint> = vec![
-        "tcp/127.0.0.1:7455".parse().unwrap(),
-        "tcp/127.0.0.1:7456".parse().unwrap(),
-        "tcp/127.0.0.1:7457".parse().unwrap(),
-        "tcp/127.0.0.1:7458".parse().unwrap(),
-        "tcp/127.0.0.1:7459".parse().unwrap(),
-        "tcp/127.0.0.1:7460".parse().unwrap(),
-        "tcp/127.0.0.1:7461".parse().unwrap(),
-        "tcp/127.0.0.1:7462".parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9010).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9011).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9012).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9013).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9014).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9015).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9016).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 9017).parse().unwrap(),
     ];
 
     task::block_on(async {
@@ -396,29 +398,30 @@ fn transport_tcp_concurrent() {
 #[cfg(feature = "transport_ws")]
 #[test]
 fn transport_ws_concurrent() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint01: Vec<EndPoint> = vec![
-        "ws/127.0.0.1:7463".parse().unwrap(),
-        "ws/127.0.0.1:7464".parse().unwrap(),
-        "ws/127.0.0.1:7465".parse().unwrap(),
-        "ws/127.0.0.1:7466".parse().unwrap(),
-        "ws/127.0.0.1:7467".parse().unwrap(),
-        "ws/127.0.0.1:7468".parse().unwrap(),
-        "ws/127.0.0.1:7469".parse().unwrap(),
-        "ws/127.0.0.1:7470".parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9020).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9021).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9022).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9023).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9024).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9025).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9026).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9027).parse().unwrap(),
     ];
     let endpoint02: Vec<EndPoint> = vec![
-        "ws/127.0.0.1:7471".parse().unwrap(),
-        "ws/127.0.0.1:7472".parse().unwrap(),
-        "ws/127.0.0.1:7473".parse().unwrap(),
-        "ws/127.0.0.1:7474".parse().unwrap(),
-        "ws/127.0.0.1:7475".parse().unwrap(),
-        "ws/127.0.0.1:7476".parse().unwrap(),
-        "ws/127.0.0.1:7477".parse().unwrap(),
-        "ws/127.0.0.1:7478".parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9030).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9031).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9032).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9033).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9034).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9035).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9036).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 9037).parse().unwrap(),
     ];
 
     task::block_on(async {

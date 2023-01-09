@@ -36,8 +36,7 @@ async-std = { version = "=1.12.0", default-features = false }
 async-trait = "0.1.59"
 log = "0.4.17"
 zenoh-core = { version = "0.7.0-rc", path = "../../../commons/zenoh-core/" }
-
 zenoh-link-commons = { version = "0.7.0-rc", path = "../../zenoh-link-commons/" }
-zenoh-protocol-core = { version = "0.7.0-rc", path = "../../../commons/zenoh-protocol-core/" }
+zenoh-protocol = { version = "0.7.0-rc", path = "../../../commons/zenoh-protocol/" }
 zenoh-sync = { version = "0.7.0-rc", path = "../../../commons/zenoh-sync/" }
 zenoh-util = { version = "0.7.0-rc", path = "../../../commons/zenoh-util/" }

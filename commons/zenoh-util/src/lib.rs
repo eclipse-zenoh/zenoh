@@ -28,11 +28,17 @@ pub use zenoh_core as core;
 #[cfg(features = "zenoh-crypto")]
 #[deprecated = "This module is now a separate crate. Use the `zenoh_crypto` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_crypto as crypto;
+
 pub mod ffi;
+
+pub mod keyexpr_tree;
+
 mod lib_loader;
 pub mod net;
 pub mod time_range;
 pub use lib_loader::*;
+pub mod timer;
+pub use timer::*;
 #[cfg(features = "zenoh-cfg-properties")]
 #[deprecated = "This module is now a separate crate. Use the `zenoh_cfg_properties` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_cfg_properties as properties;

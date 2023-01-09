@@ -23,13 +23,13 @@ use std::future::Ready;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
-use zenoh_protocol_core::SubInfo;
+use zenoh_protocol::core::SubInfo;
 
 /// The subscription mode.
-pub use zenoh_protocol_core::SubMode;
+pub use zenoh_protocol::core::SubMode;
 
 /// The kind of reliability.
-pub use zenoh_protocol_core::Reliability;
+pub use zenoh_protocol::core::Reliability;
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
@@ -64,7 +64,7 @@ impl fmt::Debug for SubscriberState {
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
-///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
+///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
 ///     .res()
 ///     .await
 ///     .unwrap();
@@ -97,7 +97,7 @@ pub(crate) struct SubscriberInner<'a> {
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let subscriber = session
 ///     .declare_subscriber("key/expression")
-///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
+///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
 ///     .pull_mode()
 ///     .res()
 ///     .await
@@ -121,7 +121,7 @@ impl<'a> PullSubscriberInner<'a> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
+    ///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
     ///     .pull_mode()
     ///     .res()
     ///     .await
@@ -306,7 +306,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session
     ///     .declare_subscriber("key/expression")
-    ///     .callback(|sample| { println!("Received : {} {}", sample.key_expr, sample.value); })
+    ///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
     ///     .res()
     ///     .await
     ///     .unwrap();
@@ -381,7 +381,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received : {} {}", sample.key_expr, sample.value);
+    ///     println!("Received: {} {}", sample.key_expr, sample.value);
     /// }
     /// # })
     /// ```
@@ -608,7 +608,7 @@ where
 ///     .await
 ///     .unwrap();
 /// while let Ok(sample) = subscriber.recv_async().await {
-///     println!("Received : {} {}", sample.key_expr, sample.value);
+///     println!("Received: {} {}", sample.key_expr, sample.value);
 /// }
 /// # })
 /// ```

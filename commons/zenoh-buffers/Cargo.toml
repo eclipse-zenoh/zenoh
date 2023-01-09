@@ -31,15 +31,8 @@ description = "Internal crate for zenoh."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-shared-memory = ["shared_memory", "serde", "log", "bincode"]
+test = [ "rand" ]
 
 [dependencies]
-
-async-std = { version = "=1.12.0", default-features = false }
-bincode = { version = "1.3.3", optional = true }
-hex = "0.4.3"
-log = { version = "0.4.17", optional = true }
-serde = { version = "1.0.149", optional = true }
-shared_memory = { version = "=0.12.4", optional = true }
-zenoh-collections = { version = "0.7.0-rc", path = "../zenoh-collections/" }
-zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }
+rand = { version = "0.8.5", optional = true }
+zenoh-collections = { version = "0.7.0-rc", path = "../zenoh-collections/", default-features = false }

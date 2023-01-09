@@ -15,7 +15,7 @@ use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline}
 use super::transport::TransportMulticastInner;
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
-use crate::common::batch::SerializationBatch;
+use crate::common::batch::WBatch;
 use crate::common::pipeline::{
     TransmissionPipelineConf, TransmissionPipelineConsumer, TransmissionPipelineProducer,
 };
@@ -25,15 +25,15 @@ use async_std::task::JoinHandle;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use zenoh_buffers::buffer::InsertBuffer;
 use zenoh_buffers::reader::{HasReader, Reader};
-use zenoh_buffers::{ZBuf, ZSlice};
-use zenoh_collections::RecyclingObjectPool;
-use zenoh_core::{bail, Result as ZResult};
-use zenoh_core::{zerror, zlock};
+use zenoh_codec::{RCodec, Zenoh060};
+use zenoh_core::{bail, zerror, zlock, Result as ZResult};
 use zenoh_link::{LinkMulticast, Locator};
-use zenoh_protocol::proto::{MessageReader, TransportMessage};
-use zenoh_protocol_core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId};
+use zenoh_protocol::{
+    core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId},
+    transport::TransportMessage,
+};
+use zenoh_sync::RecyclingObjectPool;
 use zenoh_sync::Signal;
 
 pub(super) struct TransportLinkMulticastConfig {
@@ -192,11 +192,11 @@ async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
     link: LinkMulticast,
     config: TransportLinkMulticastConfig,
-    mut next_sns: Vec<ConduitSn>,
+    mut last_sns: Vec<ConduitSn>,
     #[cfg(feature = "stats")] stats: Arc<TransportMulticastStatsAtomic>,
 ) -> ZResult<()> {
     enum Action {
-        Pull((SerializationBatch, usize)),
+        Pull((WBatch, usize)),
         Join,
         KeepAlive,
         Stop,
@@ -234,11 +234,11 @@ async fn tx_task(
                 let bytes = batch.as_bytes();
                 link.write_all(bytes).await?;
                 // Keep track of next SNs
-                if let Some(sn) = batch.sn.reliable {
-                    next_sns[priority].reliable = sn.next;
+                if let Some(sn) = batch.latest_sn.reliable {
+                    last_sns[priority].reliable = sn;
                 }
-                if let Some(sn) = batch.sn.best_effort {
-                    next_sns[priority].best_effort = sn.next;
+                if let Some(sn) = batch.latest_sn.best_effort {
+                    last_sns[priority].best_effort = sn;
                 }
                 #[cfg(feature = "stats")]
                 {
@@ -250,25 +250,32 @@ async fn tx_task(
             }
             Action::Join => {
                 let attachment = None;
-                let initial_sns = if next_sns.len() == Priority::NUM {
-                    let tmp: [ConduitSn; Priority::NUM] = next_sns.clone().try_into().unwrap();
+                let next_sns = last_sns
+                    .iter()
+                    .map(|c| ConduitSn {
+                        reliable: (1 + c.reliable) % config.sn_resolution,
+                        best_effort: (1 + c.best_effort) % config.sn_resolution,
+                    })
+                    .collect::<Vec<ConduitSn>>();
+                let next_sns = if next_sns.len() == Priority::NUM {
+                    let tmp: [ConduitSn; Priority::NUM] = next_sns.try_into().unwrap();
                     ConduitSnList::QoS(tmp.into())
                 } else {
                     assert_eq!(next_sns.len(), 1);
                     ConduitSnList::Plain(next_sns[0])
                 };
-                let mut message = TransportMessage::make_join(
+                let message = TransportMessage::make_join(
                     config.version,
                     config.whatami,
                     config.zid,
                     config.lease,
                     config.sn_resolution,
-                    initial_sns,
+                    next_sns,
                     attachment,
                 );
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.write_transport_message(&mut message).await?;
+                let n = link.write_transport_message(&message).await?;
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(1);
@@ -280,10 +287,10 @@ async fn tx_task(
             Action::KeepAlive => {
                 let zid = Some(config.zid);
                 let attachment = None;
-                let mut message = TransportMessage::make_keep_alive(zid, attachment);
+                let message = TransportMessage::make_keep_alive(zid, attachment);
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.write_transport_message(&mut message).await?;
+                let n = link.write_transport_message(&message).await?;
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(1);
@@ -340,8 +347,9 @@ async fn rx_task(
         Ok(Action::Stop)
     }
 
-    // The ZBuf to read a message batch onto
-    let mut zbuf = ZBuf::default();
+    // The codec
+    let codec = Zenoh060::default();
+
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
     let mut n = rx_buffer_size / mtu;
@@ -350,11 +358,8 @@ async fn rx_task(
     }
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
-        // Clear the zbuf
-        zbuf.clear();
         // Retrieve one buffer
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
-
         // Async read from the underlying link
         let action = read(&link, &mut buffer).race(stop(signal.clone())).await?;
         match action {
@@ -367,25 +372,17 @@ async fn rx_task(
                 #[cfg(feature = "stats")]
                 transport.stats.inc_rx_bytes(n);
 
-                // Add the received bytes to the ZBuf for deserialization
-                let zs = ZSlice::make(buffer.into(), 0, n)
-                    .map_err(|_| zerror!("{}: decoding error", link))?;
-                zbuf.append(zs);
-
                 // Deserialize all the messages from the current ZBuf
-                let mut reader = zbuf.reader();
+                let mut reader = buffer[0..n].reader();
                 while reader.can_read() {
-                    match reader.read_transport_message() {
-                        Some(msg) => {
-                            #[cfg(feature = "stats")]
-                            transport.stats.inc_rx_t_msgs(1);
+                    let msg: TransportMessage = codec
+                        .read(&mut reader)
+                        .map_err(|_| zerror!("{}: decoding error", link))?;
 
-                            transport.receive_message(msg, &loc)?
-                        }
-                        None => {
-                            bail!("{}: decoding error", link);
-                        }
-                    }
+                    #[cfg(feature = "stats")]
+                    transport.stats.inc_rx_t_msgs(1);
+
+                    transport.receive_message(msg, &loc)?
                 }
             }
             Action::Stop => break,

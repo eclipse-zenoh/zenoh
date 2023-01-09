@@ -454,7 +454,7 @@ pub async fn run(runtime: Runtime, conf: Config) {
     app.at("*").get(query).put(write).patch(write).delete(write);
 
     if let Err(e) = app.listen(conf.http_port).await {
-        log::error!("Unable to start http server for REST : {:?}", e);
+        log::error!("Unable to start http server for REST: {:?}", e);
     }
 }
 

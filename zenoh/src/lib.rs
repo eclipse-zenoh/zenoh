@@ -53,7 +53,7 @@
 //!     let session = zenoh::open(config::default()).res().await.unwrap();
 //!     let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
 //!     while let Ok(sample) = subscriber.recv_async().await {
-//!         println!("Received : {}", sample);
+//!         println!("Received: {}", sample);
 //!     };
 //! }
 //! ```
@@ -116,6 +116,8 @@ pub mod queryable;
 pub mod sample;
 pub mod subscriber;
 pub mod value;
+#[cfg(feature = "shared-memory")]
+pub use zenoh_shm as shm;
 
 /// A collection of useful buffers used by zenoh internally and exposed to the user to facilitate
 /// reading and writing data.
@@ -125,7 +127,7 @@ pub use zenoh_buffers as buffers;
 pub mod time {
     use std::convert::TryFrom;
 
-    pub use zenoh_protocol_core::{Timestamp, TimestampId, NTP64};
+    pub use zenoh_protocol::core::{Timestamp, TimestampId, NTP64};
 
     /// Generates a reception [`Timestamp`] with id=0x01.  
     /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)

@@ -11,11 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "stats")]
-use super::protocol::proto::ZenohBody;
-use super::protocol::proto::ZenohMessage;
 use super::transport::TransportMulticastInner;
 use zenoh_core::zread;
+#[cfg(feature = "stats")]
+use zenoh_protocol::zenoh::ZenohBody;
+use zenoh_protocol::zenoh::ZenohMessage;
 
 //noinspection ALL
 impl TransportMulticastInner {

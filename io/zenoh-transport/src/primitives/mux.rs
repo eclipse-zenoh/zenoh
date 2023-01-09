@@ -1,6 +1,3 @@
-use zenoh_protocol::proto::QueryBody;
-use zenoh_protocol_core::ConsolidationMode;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -15,16 +12,19 @@ use zenoh_protocol_core::ConsolidationMode;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::super::TransportUnicast;
-use super::protocol::core::{
-    Channel, CongestionControl, QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId,
-};
-use super::protocol::io::ZBuf;
-use super::protocol::proto::{
-    zmsg, DataInfo, Declaration, ForgetPublisher, ForgetQueryable, ForgetResource,
-    ForgetSubscriber, Publisher, Queryable, ReplierInfo, ReplyContext, Resource, RoutingContext,
-    Subscriber, ZenohMessage,
-};
 use super::Primitives;
+use zenoh_buffers::ZBuf;
+use zenoh_protocol::{
+    core::{
+        Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, SubInfo,
+        WireExpr, ZInt, ZenohId,
+    },
+    zenoh::{
+        zmsg, DataInfo, Declaration, ForgetPublisher, ForgetQueryable, ForgetResource,
+        ForgetSubscriber, Publisher, QueryBody, Queryable, ReplierInfo, ReplyContext, Resource,
+        RoutingContext, Subscriber, ZenohMessage,
+    },
+};
 
 pub struct Mux {
     handler: TransportUnicast,

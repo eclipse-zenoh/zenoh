@@ -13,7 +13,6 @@
 //
 use crate::unicast::{
     establishment::authenticator::*,
-    protocol::core::ZenohId,
     transport::{TransportUnicastConfig, TransportUnicastInner},
     TransportConfigUnicast, TransportUnicast,
 };
@@ -30,8 +29,10 @@ use zenoh_core::{
     bail, zasynclock, zasyncread, zasyncwrite, zerror, zlock, zparse, Result as ZResult,
 };
 use zenoh_link::*;
-use zenoh_protocol::proto::tmsg;
-use zenoh_protocol_core::locators::LocatorProtocol;
+use zenoh_protocol::{
+    core::{locator::LocatorProtocol, ZenohId},
+    transport::tmsg,
+};
 
 /*************************************/
 /*         TRANSPORT CONFIG          */
@@ -311,19 +312,19 @@ impl TransportManager {
     /*              LISTENER             */
     /*************************************/
     pub async fn add_listener_unicast(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let manager = self.new_link_manager_unicast(endpoint.locator.protocol())?;
+        let manager = self.new_link_manager_unicast(endpoint.protocol().as_str())?;
         // Fill and merge the endpoint configuration
-        if let Some(config) = self.config.endpoint.get(endpoint.locator.protocol()) {
-            endpoint.extend_configuration(config.iter().map(|(k, v)| (k.clone(), v.clone())));
+        if let Some(config) = self.config.endpoint.get(endpoint.protocol().as_str()) {
+            endpoint.config_mut().extend(config.iter())?;
         };
         manager.new_listener(endpoint).await
     }
 
     pub async fn del_listener_unicast(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let lm = self.get_link_manager_unicast(endpoint.locator.protocol())?;
+        let lm = self.get_link_manager_unicast(endpoint.protocol().as_str())?;
         lm.del_listener(endpoint).await?;
         if lm.get_listeners().is_empty() {
-            self.del_link_manager_unicast(endpoint.locator.protocol())?;
+            self.del_link_manager_unicast(endpoint.protocol().as_str())?;
         }
         Ok(())
     }
@@ -452,7 +453,7 @@ impl TransportManager {
     ) -> ZResult<TransportUnicast> {
         if self
             .locator_inspector
-            .is_multicast(&endpoint.locator)
+            .is_multicast(&endpoint.to_locator())
             .await?
         {
             bail!(
@@ -462,10 +463,10 @@ impl TransportManager {
         }
 
         // Automatically create a new link manager for the protocol if it does not exist
-        let manager = self.new_link_manager_unicast(endpoint.locator.protocol())?;
+        let manager = self.new_link_manager_unicast(endpoint.protocol().as_str())?;
         // Fill and merge the endpoint configuration
-        if let Some(config) = self.config.endpoint.get(endpoint.locator.protocol()) {
-            endpoint.extend_configuration(config.iter().map(|(k, v)| (k.clone(), v.clone())));
+        if let Some(config) = self.config.endpoint.get(endpoint.protocol().as_str()) {
+            endpoint.config_mut().extend(config.iter())?;
         };
 
         // Create a new link associated by calling the Link Manager

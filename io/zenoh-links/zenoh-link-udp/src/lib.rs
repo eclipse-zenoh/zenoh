@@ -20,15 +20,15 @@
 mod multicast;
 mod unicast;
 
-use std::{convert::TryFrom, net::SocketAddr};
+use std::net::SocketAddr;
 
 use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 pub use multicast::*;
 pub use unicast::*;
-use zenoh_core::{zconfigurable, Result as ZResult};
+use zenoh_core::{zconfigurable, zerror, Result as ZResult};
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol_core::Locator;
+use zenoh_protocol::core::{endpoint::Address, Locator};
 
 // NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
 //       UDP buffer size on the host to a reasonable size. Usually, default values for UDP buffers
@@ -77,11 +77,9 @@ impl LocatorInspector for UdpLocatorInspector {
     }
 
     async fn is_multicast(&self, locator: &Locator) -> ZResult<bool> {
-        let mut is_multicast = false;
-        let addrs = get_udp_addrs(locator).await?;
-        for a in addrs.iter() {
-            is_multicast |= a.ip().is_multicast();
-        }
+        let is_multicast = get_udp_addrs(locator.address())
+            .await?
+            .any(|x| x.ip().is_multicast());
         Ok(is_multicast)
     }
 }
@@ -90,11 +88,15 @@ pub mod config {
     pub const UDP_MULTICAST_SRC_IFACE: &str = "src_iface";
 }
 
-pub(crate) async fn get_udp_addrs(locator: &Locator) -> ZResult<Vec<SocketAddr>> {
-    let addrs = locator.address().to_socket_addrs().await?;
-    Ok(addrs.collect())
+pub async fn get_udp_addrs(address: Address<'_>) -> ZResult<impl Iterator<Item = SocketAddr>> {
+    let iter = address
+        .as_str()
+        .to_socket_addrs()
+        .await
+        .map_err(|e| zerror!("{}", e))?;
+    Ok(iter)
 }
 
 pub(crate) fn socket_addr_to_udp_locator(addr: &SocketAddr) -> Locator {
-    Locator::try_from(format!("udp/{}", addr)).unwrap()
+    Locator::new(UDP_LOCATOR_PREFIX, addr.to_string(), "").unwrap()
 }
