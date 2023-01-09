@@ -112,7 +112,11 @@ impl Storage for MemoryStorage {
         }
     }
 
-    async fn delete(&mut self, key: OwnedKeyExpr) -> ZResult<StorageInsertionResult> {
+    async fn delete(
+        &mut self,
+        key: OwnedKeyExpr,
+        timestamp: Timestamp,
+    ) -> ZResult<StorageInsertionResult> {
         trace!("delete for {}", key);
         self.map.write().await.remove_entry(&key);
         return Ok(StorageInsertionResult::Deleted);

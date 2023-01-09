@@ -199,7 +199,11 @@ pub trait Storage: Send + Sync {
     async fn put(&mut self, key: OwnedKeyExpr, sample: Sample) -> ZResult<StorageInsertionResult>;
 
     /// Function called for each incoming delete request to this storage.
-    async fn delete(&mut self, key: OwnedKeyExpr) -> ZResult<StorageInsertionResult>;
+    async fn delete(
+        &mut self,
+        key: OwnedKeyExpr,
+        timestamp: Timestamp,
+    ) -> ZResult<StorageInsertionResult>;
 
     /// Function to retrieve the sample associated with a single key.
     async fn get(&mut self, key: OwnedKeyExpr, parameters: &str) -> ZResult<Sample>;

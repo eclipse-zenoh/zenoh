@@ -249,9 +249,9 @@ impl StorageService {
             if !self
                 .is_deleted(&k.clone(), sample.get_timestamp().unwrap())
                 .await
-                // && (self.capability.history.eq(&History::All)
-                //     || (self.capability.history.eq(&History::Latest)
-                //         && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
+            // && (self.capability.history.eq(&History::All)
+            //     || (self.capability.history.eq(&History::Latest)
+            //         && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
             {
                 trace!("Sample `{}` identified as neded processing", sample);
                 // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
@@ -290,7 +290,9 @@ impl StorageService {
                     self.mark_tombstone(k.clone(), sample_to_store.timestamp.unwrap())
                         .await;
                     trace!("deleting {} from storage", k);
-                    storage.delete(k.clone()).await
+                    storage
+                        .delete(k.clone(), sample_to_store.timestamp.unwrap())
+                        .await
                 } else {
                     Err("sample kind not implemented".into())
                 };
