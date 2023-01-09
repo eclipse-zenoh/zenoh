@@ -103,7 +103,7 @@ where
                     reader.read_zslices(len, |s| zbuf.push_zslice(s))?;
                 }
                 super::zslice::kind::SHM_INFO => {
-                    let bytes: alloc::vec::Vec<u8> = self.codec.read(&mut *reader)?;
+                    let bytes: Vec<u8> = self.codec.read(&mut *reader)?;
                     let shm_info: SharedMemoryBufInfoSerialized = bytes.into();
                     let zslice: ZSlice = shm_info.into();
                     zbuf.push_zslice(zslice);
