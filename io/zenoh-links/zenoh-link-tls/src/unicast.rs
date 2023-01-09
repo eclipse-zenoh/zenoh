@@ -41,7 +41,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_core::Result as ZResult;
-use zenoh_core::{zasynclock, zerror, zread, zwrite};
+use zenoh_core::{bail, zasynclock, zerror, zread, zwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
@@ -517,6 +517,16 @@ impl TlsServerConfig {
             rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_server_private_key))
                 .map_err(|e| zerror!(e))
                 .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
+
+        if keys.is_empty() {
+            keys = rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_server_private_key))
+                .map_err(|e| zerror!(e))
+                .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
+        }
+
+        if keys.is_empty() {
+            bail!("No private key found");
+        }
 
         let certs: Vec<Certificate> =
             rustls_pemfile::certs(&mut Cursor::new(&tls_server_certificate))
