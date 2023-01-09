@@ -242,8 +242,9 @@ impl StorageService {
             );
             trace!(
                 "latest timestamp check: {}",
-                self.capability.history.eq(&History::Latest)
-                    && self.is_latest(&k, sample.get_timestamp().unwrap()).await
+                // self.capability.history.eq(&History::Latest)
+                //     &&
+                self.is_latest(&k, sample.get_timestamp().unwrap()).await
             );
             if !self
                 .is_deleted(&k.clone(), sample.get_timestamp().unwrap())
@@ -379,12 +380,18 @@ impl StorageService {
     async fn is_latest(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
         // @TODO: if cache exists, read from there
         let mut storage = self.storage.lock().await;
+        trace!("check if latest");
         if let Ok(sample) = storage.get(key_expr.clone(), "").await {
+            trace!(
+                "comparing the current timestamp {:?} with the one in the storage {:?}",
+                timestamp,
+                sample.get_timestamp().unwrap()
+            );
             if sample.get_timestamp().unwrap() > timestamp {
                 return false;
             }
         }
-        drop(storage);
+        // drop(storage);
         true
     }
 
