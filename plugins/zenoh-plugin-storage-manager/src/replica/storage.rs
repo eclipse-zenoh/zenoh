@@ -383,9 +383,10 @@ impl StorageService {
         trace!("check if latest");
         if let Ok(sample) = storage.get(key_expr.clone(), "").await {
             trace!(
-                "comparing the current timestamp {:?} with the one in the storage {:?}",
+                "comparing the current timestamp {:?} with the one in the storage {:?}, result : {}",
                 timestamp,
-                sample.get_timestamp().unwrap()
+                sample.get_timestamp().unwrap(),
+                sample.get_timestamp().unwrap() > timestamp
             );
             if sample.get_timestamp().unwrap() > timestamp {
                 return false;
