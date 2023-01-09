@@ -129,7 +129,7 @@ pub mod tmsg {
 
 // Zenoh messages at zenoh-transport level
 #[derive(Debug, Clone, PartialEq, Eq)]
-// #[cfg_attr(feature = "defmt", derive(defmt::Format))] // FIXME: Requires defmt::Format for Frame
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum TransportBody {
     InitSyn(InitSyn),
     InitAck(InitAck),
@@ -142,7 +142,7 @@ pub enum TransportBody {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-// #[cfg_attr(feature = "defmt", derive(defmt::Format))] // FIXME: Requires defmt::Format for TransportBody
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct TransportMessage {
     pub body: TransportBody,
     pub attachment: Option<Attachment>,

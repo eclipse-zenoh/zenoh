@@ -52,7 +52,7 @@ use zenoh_buffers::ZSlice;
 ///       place at this stage. Then, the F bit is used to detect the last fragment during re-ordering.
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-// #[cfg_attr(feature = "defmt", derive(defmt::Format))] // FIXME: Requires defmt::Format for FramePayload
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Frame {
     pub channel: Channel,
     pub sn: ZInt,
@@ -60,7 +60,7 @@ pub struct Frame {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-// #[cfg_attr(feature = "defmt", derive(defmt::Format))] // FIXME: Requires defmt::Format for ZenohMessage
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum FramePayload {
     /// ```text
     /// The Payload of a fragmented Frame.

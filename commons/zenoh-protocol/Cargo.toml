@@ -42,7 +42,11 @@ std = [
 test = ["rand", "zenoh-buffers/test"]
 shared-memory = ["std"]
 complete_n = []
-defmt = ["dep:defmt", "zenoh-buffers/defmt"]
+defmt = [
+    "dep:defmt",
+    "uhlc/defmt",
+    "zenoh-buffers/defmt"
+]
 
 [dependencies]
 defmt = { version = "0.3.2", features = ["alloc"], optional = true }

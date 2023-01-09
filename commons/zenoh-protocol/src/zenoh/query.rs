@@ -30,7 +30,7 @@ use zenoh_buffers::ZBuf;
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-// #[cfg_attr(feature = "defmt", derive(defmt::Format))] // FIXME: Requires defmt::Format for DataInfo
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct QueryBody {
     pub data_info: DataInfo,
     pub payload: ZBuf,
@@ -73,7 +73,7 @@ impl QueryBody {
 /// ~   QueryBody   ~ if B==1
 /// +---------------+
 #[derive(Debug, Clone, PartialEq, Eq)]
-// #[cfg_attr(feature = "defmt", derive(defmt::Format))] // FIXME: Requires defmt::Format for QueryBody
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Query {
     pub key: WireExpr<'static>,
     pub parameters: String,

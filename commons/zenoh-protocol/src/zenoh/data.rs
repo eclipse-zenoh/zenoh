@@ -117,7 +117,7 @@ impl ReplyContext {
 ///
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-// #[cfg_attr(feature = "defmt", derive(defmt::Format))] // FIXME: Requires defmt::Format for uhlc::Timestamp
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct DataInfo {
     #[cfg(feature = "shared-memory")]
     pub sliced: bool,
@@ -175,7 +175,7 @@ impl DataInfo {
 ///
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-// #[cfg_attr(feature = "defmt", derive(defmt::Format))] // FIXME: Requires defmt::Format for DataInfo
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Data {
     pub key: WireExpr<'static>,
     pub data_info: Option<DataInfo>,
