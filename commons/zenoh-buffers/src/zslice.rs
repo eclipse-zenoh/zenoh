@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::reader::{BacktrackableReader, DidntRead, HasReader, Reader};
-use alloc::{boxed::Box, format, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use core::{
     any::Any,
     convert::AsRef,
@@ -20,6 +20,9 @@ use core::{
     num::NonZeroUsize,
     ops::{Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive},
 };
+
+#[cfg(feature = "defmt")]
+use alloc::format;
 
 /*************************************/
 /*           ZSLICE BUFFER           */
