@@ -240,18 +240,18 @@ impl StorageService {
                 "capability check: {}",
                 self.capability.history.eq(&History::All)
             );
-            trace!(
-                "latest timestamp check: {}",
-                // self.capability.history.eq(&History::Latest)
-                //     &&
-                self.is_latest(&k, sample.get_timestamp().unwrap()).await
-            );
+            // trace!(
+            //     "latest timestamp check: {}",
+            //     // self.capability.history.eq(&History::Latest)
+            //     //     &&
+            //     self.is_latest(&k, sample.get_timestamp().unwrap()).await
+            // );
             if !self
                 .is_deleted(&k.clone(), sample.get_timestamp().unwrap())
                 .await
-                && (self.capability.history.eq(&History::All)
-                    || (self.capability.history.eq(&History::Latest)
-                        && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
+                // && (self.capability.history.eq(&History::All)
+                //     || (self.capability.history.eq(&History::Latest)
+                //         && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
             {
                 trace!("Sample `{}` identified as neded processing", sample);
                 // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
