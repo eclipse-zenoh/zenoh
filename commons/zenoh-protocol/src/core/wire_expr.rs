@@ -44,6 +44,7 @@ use zenoh_core::{bail, Result as ZResult};
 // +---------------+
 //
 #[derive(PartialEq, Eq, Hash, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WireExpr<'a> {
     pub scope: ExprId, // 0 marks global scope
     pub suffix: Cow<'a, str>,
@@ -138,14 +139,6 @@ impl fmt::Display for WireExpr<'_> {
         } else {
             write!(f, "{}:{}", self.scope, self.suffix)
         }
-    }
-}
-
-#[cfg(feature = "defmt")]
-impl defmt::Format for WireExpr<'_> {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
     }
 }
 

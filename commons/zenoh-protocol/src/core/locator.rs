@@ -19,6 +19,7 @@ use zenoh_core::{Error as ZError, Result as ZResult};
 /// A `String` that respects the [`Locator`] canon form: `<proto>/<address>[?<metadata>]`,
 /// such that `<metadata>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[serde(into = "String")]
 #[serde(try_from = "String")]
 pub struct Locator(pub(super) EndPoint);
@@ -106,14 +107,6 @@ impl FromStr for Locator {
 impl fmt::Display for Locator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.0.as_str())
-    }
-}
-
-#[cfg(feature = "defmt")]
-impl defmt::Format for Locator {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
     }
 }
 

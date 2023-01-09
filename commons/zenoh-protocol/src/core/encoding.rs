@@ -120,6 +120,7 @@ impl AsRef<str> for KnownEncoding {
 /// A zenoh encoding is a HTTP Mime type represented, for wire efficiency,
 /// as an integer prefix (that maps to a string) and a string suffix.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Encoding {
     Exact(KnownEncoding),
     WithSuffix(KnownEncoding, Cow<'static, str>),
@@ -216,14 +217,6 @@ impl fmt::Display for Encoding {
                 f.write_str(s)
             }
         }
-    }
-}
-
-#[cfg(feature = "defmt")]
-impl defmt::Format for Encoding {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
     }
 }
 

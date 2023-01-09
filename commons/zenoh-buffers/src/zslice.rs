@@ -21,9 +21,6 @@ use core::{
     ops::{Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive},
 };
 
-#[cfg(feature = "defmt")]
-use alloc::format;
-
 /*************************************/
 /*           ZSLICE BUFFER           */
 /*************************************/
@@ -217,8 +214,7 @@ impl fmt::Debug for ZSlice {
 #[cfg(feature = "defmt")]
 impl defmt::Format for ZSlice {
     fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
+        defmt::write!(f, "{:02x}", self.as_slice());
     }
 }
 

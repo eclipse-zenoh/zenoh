@@ -204,6 +204,7 @@ pub enum ZenohBody {
 }
 
 #[derive(Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ZenohMessage {
     pub body: ZenohBody,
     pub channel: Channel,
@@ -382,14 +383,6 @@ impl fmt::Debug for ZenohMessage {
 impl fmt::Display for ZenohMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         fmt::Debug::fmt(self, f)
-    }
-}
-
-#[cfg(feature = "defmt")]
-impl defmt::Format for ZenohMessage {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
     }
 }
 

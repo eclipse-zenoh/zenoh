@@ -108,6 +108,7 @@ where
 // Protocol
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Protocol<'a>(pub(super) &'a str);
 
 impl<'a> Protocol<'a> {
@@ -128,16 +129,9 @@ impl fmt::Display for Protocol<'_> {
     }
 }
 
-#[cfg(feature = "defmt")]
-impl defmt::Format for Protocol<'_> {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
-    }
-}
-
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ProtocolMut<'a>(&'a mut EndPoint);
 
 impl<'a> ProtocolMut<'a> {
@@ -165,17 +159,10 @@ impl fmt::Display for ProtocolMut<'_> {
     }
 }
 
-#[cfg(feature = "defmt")]
-impl defmt::Format for ProtocolMut<'_> {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
-    }
-}
-
 // Address
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Address<'a>(pub(super) &'a str);
 
 impl<'a> Address<'a> {
@@ -196,16 +183,9 @@ impl fmt::Display for Address<'_> {
     }
 }
 
-#[cfg(feature = "defmt")]
-impl defmt::Format for Address<'_> {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
-    }
-}
-
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct AddressMut<'a>(&'a mut EndPoint);
 
 impl<'a> AddressMut<'a> {
@@ -233,17 +213,10 @@ impl fmt::Display for AddressMut<'_> {
     }
 }
 
-#[cfg(feature = "defmt")]
-impl defmt::Format for AddressMut<'_> {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
-    }
-}
-
 // Metadata
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Metadata<'a>(pub(super) &'a str);
 
 impl<'a> Metadata<'a> {
@@ -276,16 +249,9 @@ impl fmt::Display for Metadata<'_> {
     }
 }
 
-#[cfg(feature = "defmt")]
-impl defmt::Format for Metadata<'_> {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
-    }
-}
-
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct MetadataMut<'a>(&'a mut EndPoint);
 
 impl<'a> MetadataMut<'a> {
@@ -350,17 +316,10 @@ impl fmt::Display for MetadataMut<'_> {
     }
 }
 
-#[cfg(feature = "defmt")]
-impl defmt::Format for MetadataMut<'_> {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
-    }
-}
-
 // Config
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Config<'a>(pub(super) &'a str);
 
 impl<'a> Config<'a> {
@@ -393,16 +352,9 @@ impl fmt::Display for Config<'_> {
     }
 }
 
-#[cfg(feature = "defmt")]
-impl defmt::Format for Config<'_> {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
-    }
-}
-
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ConfigMut<'a>(&'a mut EndPoint);
 
 impl<'a> ConfigMut<'a> {
@@ -466,17 +418,9 @@ impl fmt::Display for ConfigMut<'_> {
         f.write_str(self.as_str())
     }
 }
-
-#[cfg(feature = "defmt")]
-impl defmt::Format for ConfigMut<'_> {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
-    }
-}
-
 /// A `String` that respects the [`EndPoint`] canon form: `<locator>#<config>`, such that `<locator>` is a valid [`Locator`] `<config>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[serde(into = "String")]
 #[serde(try_from = "String")]
 pub struct EndPoint {
@@ -568,14 +512,6 @@ impl From<Locator> for EndPoint {
 impl fmt::Display for EndPoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.inner)
-    }
-}
-
-#[cfg(feature = "defmt")]
-impl defmt::Format for EndPoint {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
     }
 }
 

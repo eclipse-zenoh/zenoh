@@ -15,8 +15,9 @@ use super::ZInt;
 use core::{convert::TryInto, fmt, num::NonZeroU8, ops::BitOr, str::FromStr};
 use zenoh_core::{bail, zresult::ZError};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum WhatAmI {
     Router = 1,
     Peer = 1 << 1,
@@ -71,14 +72,6 @@ impl WhatAmI {
 impl fmt::Display for WhatAmI {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.to_str())
-    }
-}
-
-#[cfg(feature = "defmt")]
-impl defmt::Format for WhatAmI {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
     }
 }
 
@@ -137,6 +130,7 @@ impl From<WhatAmI> for ZInt {
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WhatAmIMatcher(pub NonZeroU8);
 
 impl WhatAmIMatcher {
@@ -210,6 +204,7 @@ impl serde::Serialize for WhatAmIMatcher {
         serializer.serialize_str(self.to_str())
     }
 }
+
 pub struct WhatAmIMatcherVisitor;
 impl<'de> serde::de::Visitor<'de> for WhatAmIMatcherVisitor {
     type Value = WhatAmIMatcher;
@@ -253,14 +248,6 @@ impl<'de> serde::Deserialize<'de> for WhatAmIMatcher {
 impl fmt::Display for WhatAmIMatcher {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.to_str())
-    }
-}
-
-#[cfg(feature = "defmt")]
-impl defmt::Format for WhatAmIMatcher {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
     }
 }
 

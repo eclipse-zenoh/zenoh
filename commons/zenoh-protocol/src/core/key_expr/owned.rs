@@ -27,6 +27,7 @@ use core::{
 ///
 /// See [`keyexpr`](super::borrowed::keyexpr).
 #[derive(Clone, PartialEq, Eq, Hash, serde::Deserialize)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[serde(try_from = "String")]
 pub struct OwnedKeyExpr(pub(crate) Arc<str>);
 impl serde::Serialize for OwnedKeyExpr {
@@ -114,14 +115,6 @@ impl fmt::Debug for OwnedKeyExpr {
 impl fmt::Display for OwnedKeyExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.as_ref().fmt(f)
-    }
-}
-
-#[cfg(feature = "defmt")]
-impl defmt::Format for OwnedKeyExpr {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
     }
 }
 

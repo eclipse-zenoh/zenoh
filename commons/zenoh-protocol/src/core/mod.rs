@@ -66,8 +66,9 @@ pub struct Property {
 }
 
 /// The kind of a `Sample`.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SampleKind {
     /// if the `Sample` was issued by a `put` operation.
     Put = 0,
@@ -90,14 +91,6 @@ impl fmt::Display for SampleKind {
     }
 }
 
-#[cfg(feature = "defmt")]
-impl defmt::Format for SampleKind {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
-    }
-}
-
 impl TryFrom<ZInt> for SampleKind {
     type Error = ZInt;
     fn try_from(kind: ZInt) -> Result<Self, ZInt> {
@@ -111,6 +104,7 @@ impl TryFrom<ZInt> for SampleKind {
 
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ZenohId(uhlc::ID);
 
 impl ZenohId {
@@ -225,14 +219,6 @@ impl fmt::Debug for ZenohId {
 impl fmt::Display for ZenohId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(self, f)
-    }
-}
-
-#[cfg(feature = "defmt")]
-impl defmt::Format for ZenohId {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
     }
 }
 
@@ -382,6 +368,7 @@ pub struct Channel {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ConduitSnList {
     Plain(ConduitSn),
     QoS(Box<[ConduitSn; Priority::NUM]>),
@@ -415,14 +402,6 @@ impl fmt::Display for ConduitSnList {
             }
         }
         write!(f, " ]")
-    }
-}
-
-#[cfg(feature = "defmt")]
-impl defmt::Format for ConduitSnList {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
     }
 }
 

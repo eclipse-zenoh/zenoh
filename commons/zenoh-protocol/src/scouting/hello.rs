@@ -47,6 +47,7 @@ use core::fmt;
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Hello {
     pub zid: Option<ZenohId>,
     pub whatami: WhatAmI,
@@ -60,14 +61,6 @@ impl fmt::Display for Hello {
             .field("whatami", &self.whatami)
             .field("locators", &self.locators)
             .finish()
-    }
-}
-
-#[cfg(feature = "defmt")]
-impl defmt::Format for Hello {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
     }
 }
 

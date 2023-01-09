@@ -19,10 +19,8 @@ use core::{
     ptr, slice,
 };
 
-#[cfg(feature = "defmt")]
-use alloc::format;
-
 #[derive(Clone, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum SingleOrVecInner<T> {
     Single(T),
     Vec(Vec<T>),
@@ -83,18 +81,8 @@ where
     }
 }
 
-#[cfg(feature = "defmt")]
-impl<T> defmt::Format for SingleOrVecInner<T>
-where
-    T: fmt::Debug,
-{
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{:?}", self); // Obtain representation computed by fmt::Debug
-        defmt::write!(f, "{}", s);
-    }
-}
-
 #[derive(Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SingleOrVec<T>(SingleOrVecInner<T>);
 
 impl<T> SingleOrVec<T> {
@@ -179,17 +167,6 @@ where
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
-    }
-}
-
-#[cfg(feature = "defmt")]
-impl<T> defmt::Format for SingleOrVec<T>
-where
-    T: fmt::Debug,
-{
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{:?}", self); // Obtain representation computed by fmt::Debug
-        defmt::write!(f, "{}", s);
     }
 }
 

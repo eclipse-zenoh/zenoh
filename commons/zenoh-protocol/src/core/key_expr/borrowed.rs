@@ -39,6 +39,7 @@ use zenoh_core::{bail, Error as ZError, Result as ZResult};
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
 #[derive(PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct keyexpr(str);
 
 impl keyexpr {
@@ -320,14 +321,6 @@ impl fmt::Debug for keyexpr {
 impl fmt::Display for keyexpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self)
-    }
-}
-
-#[cfg(feature = "defmt")]
-impl defmt::Format for keyexpr {
-    fn format(&self, f: defmt::Formatter) {
-        let s = format!("{}", self); // Obtain representation computed by fmt::Display
-        defmt::write!(f, "{}", s);
     }
 }
 
