@@ -222,6 +222,11 @@ impl StorageService {
         } else {
             vec![sample.key_expr.clone().into()]
         };
+        trace!(
+            "The list of keys matching `{}` is : {:?}",
+            sample.key_expr,
+            matching_keys
+        );
 
         for k in matching_keys {
             if !self
@@ -231,6 +236,7 @@ impl StorageService {
                     || (self.capability.history.eq(&History::Latest)
                         && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
             {
+                trace!("Sample `{}` identified as neded processing", sample);
                 // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
                 // get the relevant wild card entry and use that value and timestamp to update the storage
                 let sample_to_store = match self
@@ -253,13 +259,20 @@ impl StorageService {
                     }
                 };
 
+                trace!(
+                    "Proceed to store the sample `{}` into storage",
+                    sample_to_store
+                );
+
                 let mut storage = self.storage.lock().await;
                 let result = if sample.kind == SampleKind::Put {
+                    trace!("putting {} into storage", sample_to_store);
                     storage.put(k.clone(), sample_to_store.clone()).await
                 } else if sample.kind == SampleKind::Delete {
                     // register a tombstone
                     self.mark_tombstone(k.clone(), sample_to_store.timestamp.unwrap())
                         .await;
+                    trace!("deleting {} from storage", k);
                     storage.delete(k.clone()).await
                 } else {
                     Err("sample kind not implemented".into())
