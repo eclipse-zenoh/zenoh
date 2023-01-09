@@ -26,29 +26,43 @@ use core::{
 /*************************************/
 /*           ZSLICE BUFFER           */
 /*************************************/
-pub trait ZSliceBuffer: AsRef<[u8]> + AsMut<[u8]> + fmt::Debug + Send + Sync {
+pub trait ZSliceBuffer: Send + Sync + fmt::Debug {
+    fn as_slice(&self) -> &[u8];
+    fn as_mut_slice(&mut self) -> &mut [u8];
     fn as_any(&self) -> &dyn Any;
+}
+
+impl ZSliceBuffer for Vec<u8> {
     fn as_slice(&self) -> &[u8] {
         self.as_ref()
     }
     fn as_mut_slice(&mut self) -> &mut [u8] {
         self.as_mut()
     }
-}
-
-impl ZSliceBuffer for Vec<u8> {
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
 
 impl ZSliceBuffer for Box<[u8]> {
+    fn as_slice(&self) -> &[u8] {
+        self.as_ref()
+    }
+    fn as_mut_slice(&mut self) -> &mut [u8] {
+        self.as_mut()
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
 }
 
 impl<const N: usize> ZSliceBuffer for [u8; N] {
+    fn as_slice(&self) -> &[u8] {
+        self.as_ref()
+    }
+    fn as_mut_slice(&mut self) -> &mut [u8] {
+        self.as_mut()
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -79,6 +93,11 @@ impl ZSlice {
     }
 
     #[inline]
+    pub fn range(&self) -> Range<usize> {
+        self.start..self.end
+    }
+
+    #[inline]
     pub fn len(&self) -> usize {
         self.end - self.start
     }
@@ -90,18 +109,7 @@ impl ZSlice {
 
     #[inline]
     pub fn as_slice(&self) -> &[u8] {
-        &self.buf.as_slice()[self.start..self.end]
-    }
-
-    /// # Safety
-    ///
-    /// This function retrieves a mutable slice from a non-mutable reference.
-    /// Mutating the content of the slice without proper syncrhonization is considered
-    /// undefined behavior in Rust. To use with extreme caution.
-    #[allow(clippy::mut_from_ref)]
-    pub unsafe fn as_mut_slice(&self) -> &mut [u8] {
-        let buf = unsafe { &mut (*(Arc::as_ptr(&self.buf) as *mut dyn ZSliceBuffer)) };
-        &mut buf.as_mut_slice()[self.start..self.end]
+        &self.buf.as_slice()[self.range()]
     }
 
     pub(crate) fn new_sub_slice(&self, start: usize, end: usize) -> Option<ZSlice> {
@@ -324,14 +332,13 @@ mod tests {
     #[test]
     fn zslice() {
         let buf = crate::vec::uninit(16);
-        let zslice: ZSlice = buf.clone().into();
+        let mut zslice: ZSlice = buf.clone().into();
         assert_eq!(buf.as_slice(), zslice.as_slice());
 
-        let buf = (0..16).into_iter().collect::<Vec<u8>>();
-        unsafe {
-            let mbuf = zslice.as_mut_slice();
-            mbuf[..buf.len()].clone_from_slice(&buf[..]);
-        }
+        let range = zslice.range();
+        let mbuf = Arc::get_mut(&mut zslice.buf).unwrap();
+        mbuf.as_mut_slice()[range][..buf.len()].clone_from_slice(&buf[..]);
+
         assert_eq!(buf.as_slice(), zslice.as_slice());
     }
 }

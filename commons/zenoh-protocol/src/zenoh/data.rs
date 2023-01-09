@@ -134,7 +134,7 @@ impl DataInfo {
 
         #[cfg(feature = "shared-memory")]
         let sliced = rng.gen_bool(0.5);
-        let kind = SampleKind::try_from(rng.gen_range(0..1)).unwrap();
+        let kind = SampleKind::try_from(rng.gen_range(0..=1)).unwrap();
         let encoding = rng.gen_bool(0.5).then(Encoding::rand);
         let timestamp = rng.gen_bool(0.5).then(|| {
             let time = uhlc::NTP64(rng.gen());

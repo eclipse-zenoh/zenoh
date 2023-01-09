@@ -543,6 +543,14 @@ impl AsMut<[u8]> for SharedMemoryBufInfoSerialized {
 }
 
 impl ZSliceBuffer for SharedMemoryBufInfoSerialized {
+    fn as_slice(&self) -> &[u8] {
+        self.as_ref()
+    }
+
+    fn as_mut_slice(&mut self) -> &mut [u8] {
+        self.as_mut()
+    }
+
     fn as_any(&self) -> &dyn Any {
         self
     }
@@ -568,6 +576,12 @@ impl AsMut<[u8]> for SharedMemoryBuf {
 }
 
 impl ZSliceBuffer for SharedMemoryBuf {
+    fn as_slice(&self) -> &[u8] {
+        self.as_ref()
+    }
+    fn as_mut_slice(&mut self) -> &mut [u8] {
+        self.as_mut()
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
