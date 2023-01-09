@@ -77,7 +77,8 @@ impl fmt::Display for WhatAmI {
 #[cfg(feature = "defmt")]
 impl defmt::Format for WhatAmI {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}", self.to_str());
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 
@@ -258,7 +259,8 @@ impl fmt::Display for WhatAmIMatcher {
 #[cfg(feature = "defmt")]
 impl defmt::Format for WhatAmIMatcher {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}", self.to_str());
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 

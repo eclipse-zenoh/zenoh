@@ -131,7 +131,8 @@ impl fmt::Display for Protocol<'_> {
 #[cfg(feature = "defmt")]
 impl defmt::Format for Protocol<'_> {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}", self.as_str());
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 
@@ -167,7 +168,8 @@ impl fmt::Display for ProtocolMut<'_> {
 #[cfg(feature = "defmt")]
 impl defmt::Format for ProtocolMut<'_> {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}", self.as_str());
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 
@@ -197,7 +199,8 @@ impl fmt::Display for Address<'_> {
 #[cfg(feature = "defmt")]
 impl defmt::Format for Address<'_> {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}", self.as_str());
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 
@@ -233,7 +236,8 @@ impl fmt::Display for AddressMut<'_> {
 #[cfg(feature = "defmt")]
 impl defmt::Format for AddressMut<'_> {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}", self.as_str());
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 
@@ -275,7 +279,8 @@ impl fmt::Display for Metadata<'_> {
 #[cfg(feature = "defmt")]
 impl defmt::Format for Metadata<'_> {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}", self.as_str());
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 
@@ -348,7 +353,8 @@ impl fmt::Display for MetadataMut<'_> {
 #[cfg(feature = "defmt")]
 impl defmt::Format for MetadataMut<'_> {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}", self.as_str());
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 
@@ -390,7 +396,8 @@ impl fmt::Display for Config<'_> {
 #[cfg(feature = "defmt")]
 impl defmt::Format for Config<'_> {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}", self.as_str());
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 
@@ -463,7 +470,8 @@ impl fmt::Display for ConfigMut<'_> {
 #[cfg(feature = "defmt")]
 impl defmt::Format for ConfigMut<'_> {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}", self.as_str());
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 
@@ -566,7 +574,8 @@ impl fmt::Display for EndPoint {
 #[cfg(feature = "defmt")]
 impl defmt::Format for EndPoint {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}", &self.inner);
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 

@@ -93,10 +93,8 @@ impl fmt::Display for SampleKind {
 #[cfg(feature = "defmt")]
 impl defmt::Format for SampleKind {
     fn format(&self, f: defmt::Formatter) {
-        match self {
-            SampleKind::Put => defmt::write!(f, "PUT"),
-            SampleKind::Delete => defmt::write!(f, "DELETE"),
-        };
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 
@@ -233,7 +231,8 @@ impl fmt::Display for ZenohId {
 #[cfg(feature = "defmt")]
 impl defmt::Format for ZenohId {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}", hex::encode_upper(self.as_slice()));
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 
@@ -422,34 +421,8 @@ impl fmt::Display for ConduitSnList {
 #[cfg(feature = "defmt")]
 impl defmt::Format for ConduitSnList {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "[ ");
-        match self {
-            ConduitSnList::Plain(sn) => {
-                defmt::write!(
-                    f,
-                    "{:?} {{ reliable: {}, best effort: {} }}",
-                    Priority::default(),
-                    sn.reliable,
-                    sn.best_effort
-                );
-            }
-            ConduitSnList::QoS(ref sns) => {
-                for (prio, sn) in sns.iter().enumerate() {
-                    let p: Priority = (prio as u8).try_into().unwrap();
-                    defmt::write!(
-                        f,
-                        "{:?} {{ reliable: {}, best effort: {} }}",
-                        p,
-                        sn.reliable,
-                        sn.best_effort,
-                    );
-                    if p != Priority::Background {
-                        defmt::write!(f, ", ");
-                    }
-                }
-            }
-        }
-        defmt::write!(f, " ]");
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 

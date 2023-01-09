@@ -66,13 +66,8 @@ impl fmt::Display for Hello {
 #[cfg(feature = "defmt")]
 impl defmt::Format for Hello {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(
-            f,
-            "Hello {{ zid: {}, whatami: {}, locators: {} }}",
-            &self.zid,
-            &self.whatami,
-            &self.locators,
-        );
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 

@@ -222,13 +222,8 @@ impl fmt::Display for Encoding {
 #[cfg(feature = "defmt")]
 impl defmt::Format for Encoding {
     fn format(&self, f: defmt::Formatter) {
-        match self {
-            Encoding::Exact(e) => defmt::write!(f, "{}", e.as_ref()),
-            Encoding::WithSuffix(e, s) => {
-                defmt::write!(f, "{}", e.as_ref());
-                defmt::write!(f, "{}", s);
-            }
-        };
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 

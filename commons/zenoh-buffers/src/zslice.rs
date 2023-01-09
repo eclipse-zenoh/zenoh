@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::reader::{BacktrackableReader, DidntRead, HasReader, Reader};
-use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, format, sync::Arc, vec::Vec};
 use core::{
     any::Any,
     convert::AsRef,
@@ -214,7 +214,8 @@ impl fmt::Debug for ZSlice {
 #[cfg(feature = "defmt")]
 impl defmt::Format for ZSlice {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{:02x}", self.as_slice());
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 

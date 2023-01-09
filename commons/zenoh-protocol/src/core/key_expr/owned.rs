@@ -120,7 +120,8 @@ impl fmt::Display for OwnedKeyExpr {
 #[cfg(feature = "defmt")]
 impl defmt::Format for OwnedKeyExpr {
     fn format(&self, f: defmt::Formatter) {
-        self.as_ref().format(f);
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 

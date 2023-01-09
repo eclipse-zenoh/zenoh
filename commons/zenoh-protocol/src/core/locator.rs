@@ -112,7 +112,8 @@ impl fmt::Display for Locator {
 #[cfg(feature = "defmt")]
 impl defmt::Format for Locator {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}", self.0.as_str());
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 

@@ -388,16 +388,8 @@ impl fmt::Display for ZenohMessage {
 #[cfg(feature = "defmt")]
 impl defmt::Format for ZenohMessage {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(
-            f,
-            "{} {} {} {}",
-            self.body,
-            self.channel,
-            self.routing_context,
-            self.attachment
-        );
-        #[cfg(feature = "stats")]
-        defmt::write!(f, " {}", self.size);
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 

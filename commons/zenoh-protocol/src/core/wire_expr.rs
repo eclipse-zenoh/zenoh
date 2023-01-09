@@ -144,11 +144,8 @@ impl fmt::Display for WireExpr<'_> {
 #[cfg(feature = "defmt")]
 impl defmt::Format for WireExpr<'_> {
     fn format(&self, f: defmt::Formatter) {
-        if self.scope == 0 {
-            defmt::write!(f, "{}", self.suffix);
-        } else {
-            defmt::write!(f, "{}:{}", self.scope, self.suffix);
-        }
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 

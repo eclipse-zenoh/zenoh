@@ -326,7 +326,8 @@ impl fmt::Display for keyexpr {
 #[cfg(feature = "defmt")]
 impl defmt::Format for keyexpr {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{}", self);
+        let s = format!("{}", self); // Obtain representation computed by fmt::Display
+        defmt::write!(f, "{}", s);
     }
 }
 

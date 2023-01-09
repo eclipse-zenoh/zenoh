@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use alloc::{vec, vec::Vec};
+use alloc::{format, vec, vec::Vec};
 use core::{
     cmp::PartialEq,
     fmt, iter,
@@ -83,10 +83,11 @@ where
 #[cfg(feature = "defmt")]
 impl<T> defmt::Format for SingleOrVecInner<T>
 where
-    T: defmt::Format,
+    T: fmt::Debug,
 {
     fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{:?}", self.as_ref());
+        let s = format!("{:?}", self); // Obtain representation computed by fmt::Debug
+        defmt::write!(f, "{}", s);
     }
 }
 
@@ -181,10 +182,11 @@ where
 #[cfg(feature = "defmt")]
 impl<T> defmt::Format for SingleOrVec<T>
 where
-    T: defmt::Format,
+    T: fmt::Debug,
 {
     fn format(&self, f: defmt::Formatter) {
-        self.0.format(f);
+        let s = format!("{:?}", self); // Obtain representation computed by fmt::Debug
+        defmt::write!(f, "{}", s);
     }
 }
 
