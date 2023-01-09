@@ -15,7 +15,6 @@ use crate::{
     core::{Channel, Priority, Reliability, ZInt},
     zenoh::ZenohMessage,
 };
-use rand::seq::SliceRandom;
 use zenoh_buffers::ZSlice;
 
 /// # Frame message
@@ -156,7 +155,7 @@ impl FrameHeader {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use core::convert::TryInto;
-        use rand::Rng;
+        use rand::{seq::SliceRandom, Rng};
 
         let mut rng = rand::thread_rng();
 
