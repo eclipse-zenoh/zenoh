@@ -37,8 +37,7 @@ std = [
     "rand?/std_rng",
     "serde/std",
     "uhlc/std",
-    "uuid/std",
-    "zenoh-buffers/std"
+    "uuid/std"
 ]
 test = ["rand", "zenoh-buffers/test"]
 shared-memory = ["std"]

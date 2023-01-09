@@ -32,7 +32,6 @@ description = "Internal crate for zenoh."
 default = ["std"]
 std = [
     "uhlc/std",
-    "zenoh-buffers/std",
     "zenoh-protocol/std"
 ]
 shared-memory = [

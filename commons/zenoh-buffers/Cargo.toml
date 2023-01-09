@@ -31,8 +31,6 @@ description = "Internal crate for zenoh."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
-default = ["std"]
-std = ["zenoh-collections/std"]
 test = ["rand"]
 defmt = ["dep:defmt", "zenoh-collections/defmt"]
 

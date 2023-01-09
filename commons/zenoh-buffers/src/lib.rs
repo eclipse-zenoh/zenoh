@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! Provide differnt buffer implementations used for serialization and deserialization.
-#![cfg_attr(not(feature = "std"), no_std)]
+//! Provide different buffer implementations used for serialization and deserialization.
+#![no_std]
 extern crate alloc;
 
 mod bbuf;
