@@ -3,6 +3,7 @@ use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
 pub mod traits;
 pub use traits::*;
 
+pub mod arc_tree;
 pub mod box_tree;
 pub mod impls;
 pub use impls::DefaultChildrenProvider;

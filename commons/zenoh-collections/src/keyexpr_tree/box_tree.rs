@@ -324,11 +324,12 @@ where
     Children::Assoc: IChildren<Box<Self>>,
 {
     fn _keyexpr(&self, capacity: usize) -> String {
-        let s = match self.parent() {
+        let mut s = match self.parent() {
             Some(parent) => parent._keyexpr(capacity + self.chunk.len() + 1) + "/",
             None => String::with_capacity(capacity + self.chunk.len()),
         };
-        s + self.chunk.as_str()
+        s.push_str(self.chunk.as_str());
+        s
     }
     fn _prune<F: FnMut(&mut Self) -> bool>(&mut self, predicate: &mut F) -> PruneResult {
         let mut result = PruneResult::NonWild;
