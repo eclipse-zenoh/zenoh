@@ -24,10 +24,10 @@ use zenoh_core::zresult::ZResult;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
-pub use zenoh_protocol_core::QueryTarget;
+pub use zenoh_protocol::core::QueryTarget;
 
 /// The kind of consolidation.
-pub use zenoh_protocol_core::ConsolidationMode;
+pub use zenoh_protocol::core::ConsolidationMode;
 
 /// The operation: either manual or automatic.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

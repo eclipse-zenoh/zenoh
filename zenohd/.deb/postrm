@@ -20,7 +20,7 @@ set -e
 
 case "$1" in
     purge|remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
-    userdel zenohd
+    userdel zenohd > /dev/null 2>&1 || true
     rm -rf /etc/zenohd /var/zenohd
     ;;
 

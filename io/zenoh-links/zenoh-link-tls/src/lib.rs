@@ -29,7 +29,7 @@ use zenoh_cfg_properties::Properties;
 use zenoh_config::{Config, ZN_FALSE, ZN_TRUE};
 use zenoh_core::{bail, zconfigurable, zerror, Result as ZResult};
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
-use zenoh_protocol_core::Locator;
+use zenoh_protocol::core::{endpoint::Address, Locator};
 
 mod unicast;
 pub use unicast::*;
@@ -137,18 +137,21 @@ pub mod config {
     pub const TLS_CLIENT_AUTH_DEFAULT: &str = ZN_TLS_CLIENT_AUTH_DEFAULT;
 }
 
-pub async fn get_tls_addr(address: &Locator) -> ZResult<SocketAddr> {
-    let addr = address.address();
-    match addr.to_socket_addrs().await?.next() {
+pub async fn get_tls_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
+    match address.as_str().to_socket_addrs().await?.next() {
         Some(addr) => Ok(addr),
-        None => bail!("Couldn't resolve TLS locator address: {}", addr),
+        None => bail!("Couldn't resolve TLS locator address: {}", address),
     }
 }
 
-pub fn get_tls_host(address: &Locator) -> ZResult<&str> {
-    Ok(address.address().split(':').next().unwrap())
+pub fn get_tls_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
+    address
+        .as_str()
+        .split(':')
+        .next()
+        .ok_or_else(|| zerror!("Invalid TLS address").into())
 }
 
-pub fn get_tls_server_name(address: &Locator) -> ZResult<ServerName> {
+pub fn get_tls_server_name(address: &Address<'_>) -> ZResult<ServerName> {
     Ok(ServerName::try_from(get_tls_host(address)?).map_err(|e| zerror!(e))?)
 }

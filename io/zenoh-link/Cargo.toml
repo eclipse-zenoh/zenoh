@@ -54,4 +54,4 @@ zenoh-link-tls = { version = "0.7.0-rc", path = "../zenoh-links/zenoh-link-tls/"
 zenoh-link-udp = { version = "0.7.0-rc", path = "../zenoh-links/zenoh-link-udp/", optional = true }
 zenoh-link-unixsock_stream = { version = "0.7.0-rc", path = "../zenoh-links/zenoh-link-unixsock_stream/", optional = true }
 zenoh-link-ws = { version = "0.7.0-rc", path = "../zenoh-links/zenoh-link-ws/", optional = true }
-zenoh-protocol-core = { version = "0.7.0-rc", path = "../../commons/zenoh-protocol-core/" }
+zenoh-protocol = { version = "0.7.0-rc", path = "../../commons/zenoh-protocol/" }

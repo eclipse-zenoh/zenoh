@@ -26,13 +26,13 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     let info = session.info();
-    println!("zid : {}", info.zid().res().await);
+    println!("zid: {}", info.zid().res().await);
     println!(
-        "routers zid : {:?}",
+        "routers zid: {:?}",
         info.routers_zid().res().await.collect::<Vec<ZenohId>>()
     );
     println!(
-        "peers zid : {:?}",
+        "peers zid: {:?}",
         info.peers_zid().res().await.collect::<Vec<ZenohId>>()
     );
 }

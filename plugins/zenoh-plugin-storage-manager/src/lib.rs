@@ -221,7 +221,7 @@ impl StorageRuntimeInner {
                     Ok(())
                 }
                 Err(e) => bail!(
-                    "Failed to load Backend {} from {} : {}",
+                    "Failed to load Backend {} from {}: {}",
                     volume_id,
                     lib_path.display(),
                     e
@@ -229,7 +229,7 @@ impl StorageRuntimeInner {
             }
         } else {
             bail!(
-                "Failed to instantiate volume {} from {} : function {}(VolumeConfig) not found in lib",
+                "Failed to instantiate volume {} from {}: function {}(VolumeConfig) not found in lib",
                 volume_id,
                 lib_path.display(),
                 String::from_utf8_lossy(CREATE_VOLUME_FN_NAME)

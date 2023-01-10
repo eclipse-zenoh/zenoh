@@ -32,11 +32,12 @@ description = "Internal crate for zenoh."
 
 [dependencies]
 async-std = { version = "=1.12.0", default-features = false }
-async-trait = "0.1.59"
+async-trait = "0.1.57"
 flume = "0.10.14"
 serde = "1.0.149"
+typenum = "1.15.0"
 zenoh-buffers = { version = "0.7.0-rc", path = "../../commons/zenoh-buffers/" }
 zenoh-cfg-properties = { version = "0.7.0-rc", path = "../../commons/zenoh-cfg-properties/" }
+zenoh-codec = { version = "0.7.0-rc", path = "../../commons/zenoh-codec/" }
 zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
 zenoh-protocol = { version = "0.7.0-rc", path = "../../commons/zenoh-protocol/" }
-zenoh-protocol-core = { version = "0.7.0-rc", path = "../../commons/zenoh-protocol-core/" }

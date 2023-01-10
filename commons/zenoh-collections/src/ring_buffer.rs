@@ -13,14 +13,14 @@
 //
 use std::collections::VecDeque;
 
-pub(crate) struct RingBuffer<T> {
+pub struct RingBuffer<T> {
     capacity: usize,
     len: usize,
     buffer: VecDeque<T>,
 }
 
 impl<T> RingBuffer<T> {
-    pub(crate) fn new(capacity: usize) -> RingBuffer<T> {
+    pub fn new(capacity: usize) -> RingBuffer<T> {
         let buffer = VecDeque::<T>::with_capacity(capacity);
         RingBuffer {
             capacity,
@@ -30,7 +30,7 @@ impl<T> RingBuffer<T> {
     }
 
     #[inline]
-    pub(crate) fn push(&mut self, elem: T) -> Option<T> {
+    pub fn push(&mut self, elem: T) -> Option<T> {
         if self.len < self.capacity {
             self.buffer.push_back(elem);
             self.len += 1;
@@ -40,7 +40,7 @@ impl<T> RingBuffer<T> {
     }
 
     #[inline]
-    pub(crate) fn pull(&mut self) -> Option<T> {
+    pub fn pull(&mut self) -> Option<T> {
         let x = self.buffer.pop_front();
         if x.is_some() {
             self.len -= 1;
@@ -50,22 +50,22 @@ impl<T> RingBuffer<T> {
 
     #[allow(dead_code)]
     #[inline]
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.buffer.is_empty()
     }
 
     #[inline]
-    pub(crate) fn is_full(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         self.len() == self.capacity()
     }
 
     #[inline]
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.len
     }
 
     #[inline]
-    pub(crate) fn capacity(&self) -> usize {
+    pub fn capacity(&self) -> usize {
         self.capacity
     }
 }

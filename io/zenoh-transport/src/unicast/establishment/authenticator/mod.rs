@@ -35,8 +35,6 @@ use zenoh_config::Config;
 use zenoh_core::Result as ZResult;
 use zenoh_link::{Link, Locator};
 use zenoh_protocol::core::{ZInt, ZenohId};
-#[cfg(feature = "auth_usrpwd")]
-use zenoh_protocol::io::{WBuf, ZBuf};
 
 /*************************************/
 /*              LINK                 */

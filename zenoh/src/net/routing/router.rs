@@ -26,12 +26,13 @@ use std::time::Duration;
 use uhlc::HLC;
 use zenoh_config::whatami::WhatAmIMatcher;
 use zenoh_link::Link;
-use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
-use zenoh_protocol_core::{WhatAmI, ZInt, ZenohId};
+use zenoh_protocol::{
+    core::{WhatAmI, ZInt, ZenohId},
+    zenoh::{ZenohBody, ZenohMessage},
+};
 use zenoh_transport::{DeMux, Mux, Primitives, TransportPeerEventHandler, TransportUnicast};
 // use zenoh_collections::Timer;
-use zenoh_core::zconfigurable;
-use zenoh_core::Result as ZResult;
+use zenoh_core::{zconfigurable, Result as ZResult};
 use zenoh_sync::get_mut_unchecked;
 
 zconfigurable! {

@@ -34,7 +34,7 @@ use zenoh_core::{zasynclock, zerror, zread, zwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
-use zenoh_protocol_core::{EndPoint, Locator};
+use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_sync::Signal;
 
 pub struct LinkUnicastQuic {
@@ -58,7 +58,7 @@ impl LinkUnicastQuic {
         LinkUnicastQuic {
             connection,
             src_addr,
-            src_locator: Locator::new(QUIC_LOCATOR_PREFIX, &src_addr),
+            src_locator: Locator::new(QUIC_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_locator,
             send: AsyncMutex::new(send),
             recv: AsyncMutex::new(recv),
@@ -221,26 +221,23 @@ impl LinkManagerUnicastQuic {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let dst_locator = &endpoint.locator;
-        let domain = get_quic_dns(dst_locator).await?;
-        let addr = get_quic_addr(dst_locator).await?;
-        let host: &str = domain.as_ref().into();
-        let config = &endpoint.config;
+        let epaddr = endpoint.address();
+        let epconf = endpoint.config();
+
+        let domain = get_quic_dns(&epaddr).await?;
+        let addr = get_quic_addr(&epaddr).await?;
+        let host: &str = domain.into();
 
         // Initialize the QUIC connection
         let mut root_cert_store = rustls::RootCertStore::empty();
 
         // Read the certificates
-        let f = if let Some(config) = config {
-            if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
-                value.as_bytes().to_vec()
-            } else if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
-                async_std::fs::read(value)
-                    .await
-                    .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
-            } else {
-                vec![]
-            }
+        let f = if let Some(value) = epconf.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
+            value.as_bytes().to_vec()
+        } else if let Some(value) = epconf.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
+            async_std::fs::read(value)
+                .await
+                .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
         } else {
             vec![]
         };
@@ -295,7 +292,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let link = Arc::new(LinkUnicastQuic::new(
             quic_conn,
             src_addr,
-            dst_locator.to_owned(),
+            endpoint.into(),
             send,
             recv,
         ));
@@ -304,17 +301,18 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let config = match endpoint.config.as_ref() {
-            Some(c) => c,
-            None => bail!("No QUIC configuration provided"),
+        let epaddr = endpoint.address();
+        let epconf = endpoint.config();
+
+        if epconf.is_empty() {
+            bail!("No QUIC configuration provided");
         };
 
-        let locator = &endpoint.locator;
-        let addr = get_quic_addr(locator).await?;
+        let addr = get_quic_addr(&epaddr).await?;
 
-        let f = if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_RAW) {
+        let f = if let Some(value) = epconf.get(TLS_SERVER_CERTIFICATE_RAW) {
             value.as_bytes().to_vec()
-        } else if let Some(value) = config.get(TLS_SERVER_CERTIFICATE_FILE) {
+        } else if let Some(value) = epconf.get(TLS_SERVER_CERTIFICATE_FILE) {
             async_std::fs::read(value)
                 .await
                 .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
@@ -328,9 +326,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .collect();
 
         // Private keys
-        let f = if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_RAW) {
+        let f = if let Some(value) = epconf.get(TLS_SERVER_PRIVATE_KEY_RAW) {
             value.as_bytes().to_vec()
-        } else if let Some(value) = config.get(TLS_SERVER_PRIVATE_KEY_FILE) {
+        } else if let Some(value) = epconf.get(TLS_SERVER_PRIVATE_KEY_FILE) {
             async_std::fs::read(value)
                 .await
                 .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
@@ -378,7 +376,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .map_err(|e| zerror!("Can not create a new QUIC listener on {}: {}", addr, e))?;
 
         // Update the endpoint locator address
-        assert!(endpoint.set_addr(&format!("{}", local_addr)));
+        endpoint = EndPoint::new(
+            endpoint.protocol(),
+            local_addr.to_string(),
+            endpoint.metadata(),
+            endpoint.config(),
+        )?;
 
         // Spawn the accept loop for the listener
         let active = Arc::new(AtomicBool::new(true));
@@ -397,7 +400,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         });
 
         // Initialize the QuicAcceptor
-        let locator = endpoint.locator.clone();
+        let locator = endpoint.to_locator();
         let listener = ListenerUnicastQuic::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
@@ -406,7 +409,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let addr = get_quic_addr(&endpoint.locator).await?;
+        let epaddr = endpoint.address();
+
+        let addr = get_quic_addr(&epaddr).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -436,7 +441,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {
-            let listener_locator = &value.endpoint.locator;
             let (kip, kpt) = (key.ip(), key.port());
 
             // Either ipv4/0.0.0.0 or ipv6/[::]
@@ -446,13 +450,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
                     IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(),
                 };
                 let iter = addrs.drain(..).map(|x| {
-                    let mut l = Locator::new(QUIC_LOCATOR_PREFIX, &SocketAddr::new(x, kpt));
-                    l.metadata = listener_locator.metadata.clone();
-                    l
+                    Locator::new(
+                        value.endpoint.protocol(),
+                        SocketAddr::new(x, kpt).to_string(),
+                        value.endpoint.metadata(),
+                    )
+                    .unwrap()
                 });
                 locators.extend(iter);
             } else {
-                locators.push(listener_locator.clone());
+                locators.push(value.endpoint.to_locator());
             }
         }
 
@@ -531,7 +538,7 @@ async fn accept_task(
         let link = Arc::new(LinkUnicastQuic::new(
             quic_conn,
             src_addr,
-            Locator::new(QUIC_LOCATOR_PREFIX, &dst_addr),
+            Locator::new(QUIC_LOCATOR_PREFIX, dst_addr.to_string(), "")?,
             send,
             recv,
         ));

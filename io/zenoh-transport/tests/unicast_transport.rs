@@ -11,20 +11,24 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task;
-use std::any::Any;
-use std::convert::TryFrom;
+use async_std::{prelude::FutureExt, task};
 use std::fmt::Write as _;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
-use std::time::Duration;
-use zenoh_core::zasync_executor_init;
-use zenoh_core::Result as ZResult;
-use zenoh_link::{EndPoint, Link};
-use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
+use std::{
+    any::Any,
+    convert::TryFrom,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
+use zenoh_buffers::ZBuf;
+use zenoh_core::{zasync_executor_init, Result as ZResult};
+use zenoh_link::Link;
+use zenoh_protocol::{
+    core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
+    zenoh::ZenohMessage,
+};
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -527,15 +531,15 @@ async fn run(
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_unicast_tcp_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "tcp/127.0.0.1:10447".parse().unwrap(),
-        "tcp/[::1]:10447".parse().unwrap(),
-        "tcp/localhost:10453".parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 16000).parse().unwrap(),
+        format!("tcp/[::1]:{}", 16001).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -563,15 +567,15 @@ fn transport_unicast_tcp_only() {
 #[cfg(feature = "transport_udp")]
 #[test]
 fn transport_unicast_udp_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
-        "udp/127.0.0.1:10447".parse().unwrap(),
-        "udp/[::1]:10447".parse().unwrap(),
-        "udp/localhost:10453".parse().unwrap(),
+        format!("udp/127.0.0.1:{}", 16010).parse().unwrap(),
+        format!("udp/[::1]:{}", 16011).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -591,15 +595,15 @@ fn transport_unicast_udp_only() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn transport_unicast_unix_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
+    let f1 = "zenoh-test-unix-socket-5.sock";
+    let _ = std::fs::remove_file(f1);
     // Define the locator
-    let endpoints: Vec<EndPoint> = vec!["unixsock-stream/zenoh-test-unix-socket-5.sock"
-        .parse()
-        .unwrap()];
+    let endpoints: Vec<EndPoint> = vec![format!("unixsock-stream/{}", f1).parse().unwrap()];
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -613,21 +617,22 @@ fn transport_unicast_unix_only() {
     ];
     // Run
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-5.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(feature = "transport_ws")]
 #[test]
 fn transport_unicast_ws_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "ws/127.0.0.1:11447".parse().unwrap(),
-        "ws/[::1]:11447".parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 16020).parse().unwrap(),
+        format!("ws/[::1]:{}", 16021).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -655,16 +660,17 @@ fn transport_unicast_ws_only() {
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
 fn transport_unicast_tcp_udp() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
-        "tcp/127.0.0.1:10448".parse().unwrap(),
-        "udp/127.0.0.1:10448".parse().unwrap(),
-        "tcp/[::1]:10448".parse().unwrap(),
-        "udp/[::1]:10448".parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 16030).parse().unwrap(),
+        format!("udp/127.0.0.1:{}", 16031).parse().unwrap(),
+        format!("tcp/[::1]:{}", 16032).parse().unwrap(),
+        format!("udp/[::1]:{}", 16033).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -688,18 +694,18 @@ fn transport_unicast_tcp_udp() {
 ))]
 #[test]
 fn transport_unicast_tcp_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
+    let f1 = "zenoh-test-unix-socket-6.sock";
+    let _ = std::fs::remove_file(f1);
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
-        "tcp/127.0.0.1:10449".parse().unwrap(),
-        "tcp/[::1]:10449".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-6.sock"
-            .parse()
-            .unwrap(),
+        format!("tcp/127.0.0.1:{}", 16040).parse().unwrap(),
+        format!("tcp/[::1]:{}", 16041).parse().unwrap(),
+        format!("unixsock-stream/{}", f1).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -714,8 +720,8 @@ fn transport_unicast_tcp_unix() {
     ];
     // Run
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-6.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(all(
@@ -725,18 +731,18 @@ fn transport_unicast_tcp_unix() {
 ))]
 #[test]
 fn transport_unicast_udp_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
+    let f1 = "zenoh-test-unix-socket-7.sock";
+    let _ = std::fs::remove_file(f1);
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
-        "udp/127.0.0.1:10449".parse().unwrap(),
-        "udp/[::1]:10449".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-7.sock"
-            .parse()
-            .unwrap(),
+        format!("udp/127.0.0.1:{}", 16050).parse().unwrap(),
+        format!("udp/[::1]:{}", 16051).parse().unwrap(),
+        format!("unixsock-stream/{}", f1).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -751,8 +757,8 @@ fn transport_unicast_udp_unix() {
     ];
     // Run
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-7.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(all(
@@ -763,20 +769,20 @@ fn transport_unicast_udp_unix() {
 ))]
 #[test]
 fn transport_unicast_tcp_udp_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
+    let f1 = "zenoh-test-unix-socket-8.sock";
+    let _ = std::fs::remove_file(f1);
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
-        "tcp/127.0.0.1:10450".parse().unwrap(),
-        "udp/127.0.0.1:10450".parse().unwrap(),
-        "tcp/[::1]:10450".parse().unwrap(),
-        "udp/[::1]:10450".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-8.sock"
-            .parse()
-            .unwrap(),
+        format!("tcp/127.0.0.1:{}", 16060).parse().unwrap(),
+        format!("udp/127.0.0.1:{}", 16061).parse().unwrap(),
+        format!("tcp/[::1]:{}", 16062).parse().unwrap(),
+        format!("udp/[::1]:{}", 16063).parse().unwrap(),
+        format!("unixsock-stream/{}", f1).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -791,8 +797,8 @@ fn transport_unicast_tcp_udp_unix() {
     ];
     // Run
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-8.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
@@ -800,21 +806,26 @@ fn transport_unicast_tcp_udp_unix() {
 fn transport_unicast_tls_only_server() {
     use zenoh_link::tls::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Define the locator
-    let mut endpoint: EndPoint = ("tls/localhost:10451").parse().unwrap();
-    endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
-            (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-            (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    let mut endpoint: EndPoint = format!("tls/localhost:{}", 16070).parse().unwrap();
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
+
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -844,21 +855,25 @@ fn transport_unicast_tls_only_server() {
 fn transport_unicast_quic_only_server() {
     use zenoh_link::quic::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Define the locator
-    let mut endpoint: EndPoint = ("quic/localhost:10452").parse().unwrap();
-    endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
-            (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-            (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", 16080).parse().unwrap();
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
     // Define the reliability and congestion control
     let channel = [
@@ -897,29 +912,35 @@ fn transport_unicast_tls_only_mutual_success() {
 
     // Define the locator
     let mut client_endpoint: EndPoint = ("tls/localhost:10461").parse().unwrap();
-    client_endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
-            (TLS_CLIENT_CERTIFICATE_RAW, CLIENT_CERT),
-            (TLS_CLIENT_PRIVATE_KEY_RAW, CLIENT_KEY),
-            (TLS_CLIENT_AUTH, client_auth),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    client_endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                (TLS_CLIENT_CERTIFICATE_RAW, CLIENT_CERT),
+                (TLS_CLIENT_PRIVATE_KEY_RAW, CLIENT_KEY),
+                (TLS_CLIENT_AUTH, client_auth),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
     // Define the locator
     let mut server_endpoint: EndPoint = ("tls/localhost:10461").parse().unwrap();
-    server_endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
-            (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-            (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
-            (TLS_CLIENT_AUTH, client_auth),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    server_endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
+                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_CLIENT_AUTH, client_auth),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -974,24 +995,30 @@ fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
 
     // Define the locator
     let mut client_endpoint: EndPoint = ("tls/localhost:10462").parse().unwrap();
-    client_endpoint.extend_configuration(
-        [(TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA)]
-            .iter()
-            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    client_endpoint
+        .config_mut()
+        .extend(
+            [(TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA)]
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
     // Define the locator
     let mut server_endpoint: EndPoint = ("tls/localhost:10462").parse().unwrap();
-    server_endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
-            (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-            (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
-            (TLS_CLIENT_AUTH, "true"),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    server_endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
+                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_CLIENT_AUTH, "true"),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -1041,33 +1068,39 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
 
     // Define the locator
     let mut client_endpoint: EndPoint = ("tls/localhost:10463").parse().unwrap();
-    client_endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
-            // Using the SERVER_CERT and SERVER_KEY in the client to simulate the case the client has
-            // wrong certificates and keys. The SERVER_CA (cetificate authority) will not recognize
-            // these certificates as it is expecting to receive CLIENT_CERT and CLIENT_KEY from the
-            // client.
-            (TLS_CLIENT_CERTIFICATE_RAW, SERVER_CERT),
-            (TLS_CLIENT_PRIVATE_KEY_RAW, SERVER_KEY),
-            (TLS_CLIENT_AUTH, client_auth),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    client_endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, SERVER_CA),
+                // Using the SERVER_CERT and SERVER_KEY in the client to simulate the case the client has
+                // wrong certificates and keys. The SERVER_CA (cetificate authority) will not recognize
+                // these certificates as it is expecting to receive CLIENT_CERT and CLIENT_KEY from the
+                // client.
+                (TLS_CLIENT_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_CLIENT_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_CLIENT_AUTH, client_auth),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
     // Define the locator
     let mut server_endpoint: EndPoint = ("tls/localhost:10463").parse().unwrap();
-    server_endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
-            (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
-            (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
-            (TLS_CLIENT_AUTH, client_auth),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    server_endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, CLIENT_CA),
+                (TLS_SERVER_CERTIFICATE_RAW, SERVER_CERT),
+                (TLS_SERVER_PRIVATE_KEY_RAW, SERVER_KEY),
+                (TLS_CLIENT_AUTH, client_auth),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
     // Define the reliability and congestion control
     let channel = [
         Channel {

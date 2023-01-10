@@ -11,15 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task;
-use std::convert::TryFrom;
-use std::sync::Arc;
-use std::time::Duration;
-use zenoh_core::zasync_executor_init;
-use zenoh_core::Result as ZResult;
+use async_std::{prelude::FutureExt, task};
+use std::{convert::TryFrom, sync::Arc, time::Duration};
+use zenoh_core::{zasync_executor_init, Result as ZResult};
 use zenoh_link::EndPoint;
-use zenoh_protocol_core::{WhatAmI, ZenohId};
+use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -440,50 +436,53 @@ async fn openclose_transport(endpoint: &EndPoint) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn openclose_tcp_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "tcp/127.0.0.1:8447".parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 13000).parse().unwrap();
     task::block_on(openclose_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_udp")]
 #[test]
 fn openclose_udp_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "udp/127.0.0.1:8447".parse().unwrap();
+    let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 13010).parse().unwrap();
     task::block_on(openclose_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_ws")]
 #[test]
 fn openclose_ws_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "ws/127.0.0.1:8448".parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 13020).parse().unwrap();
     task::block_on(openclose_transport(&endpoint));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn openclose_unix_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
-    let endpoint: EndPoint = "unixsock-stream/zenoh-test-unix-socket-9.sock"
-        .parse()
-        .unwrap();
+    let f1 = "zenoh-test-unix-socket-9.sock";
+    let _ = std::fs::remove_file(f1);
+    let endpoint: EndPoint = format!("unixsock-stream/{}", f1).parse().unwrap();
     task::block_on(openclose_transport(&endpoint));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-9.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(feature = "transport_tls")]
@@ -491,6 +490,7 @@ fn openclose_unix_only() {
 fn openclose_tls_only() {
     use zenoh_link::tls::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -569,16 +569,19 @@ pVVHiH6WC99p77T9Di99dE5ufjsprfbzkuafgTo2Rz03HgPq64L4po/idP8uBMd6
 tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
-    let mut endpoint: EndPoint = ("tls/localhost:8448").parse().unwrap();
-    endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-            (TLS_SERVER_PRIVATE_KEY_RAW, key),
-            (TLS_SERVER_CERTIFICATE_RAW, cert),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    let mut endpoint: EndPoint = format!("tls/localhost:{}", 13030).parse().unwrap();
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
     task::block_on(openclose_transport(&endpoint));
 }
@@ -667,16 +670,19 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 -----END CERTIFICATE-----";
 
     // Define the locator
-    let mut endpoint: EndPoint = "quic/localhost:8449".parse().unwrap();
-    endpoint.extend_configuration(
-        [
-            (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
-            (TLS_SERVER_PRIVATE_KEY_RAW, key),
-            (TLS_SERVER_CERTIFICATE_RAW, cert),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", 13040).parse().unwrap();
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_ROOT_CA_CERTIFICATE_RAW, ca),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
     task::block_on(openclose_transport(&endpoint));
 }

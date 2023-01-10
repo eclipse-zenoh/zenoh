@@ -15,10 +15,6 @@ use super::multicast::manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
 };
-use super::protocol::core::{WhatAmI, ZInt, ZenohId};
-#[cfg(feature = "shared-memory")]
-use super::protocol::io::SharedMemoryReader;
-use super::protocol::proto::defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION};
 use super::unicast::manager::{
     TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
 };
@@ -33,17 +29,21 @@ use std::sync::RwLock;
 use std::time::Duration;
 use zenoh_cfg_properties::{config::*, Properties};
 use zenoh_config::{Config, QueueConf, QueueSizeConf};
-use zenoh_core::Result as ZResult;
-use zenoh_core::{bail, zparse};
+use zenoh_core::{bail, zparse, Result as ZResult};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
-use zenoh_protocol_core::{EndPoint, Locator, Priority};
+use zenoh_protocol::{
+    core::{EndPoint, Locator, Priority, WhatAmI, ZInt, ZenohId},
+    defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION},
+};
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::SharedMemoryReader;
 
 /// # Examples
 /// ```
 /// use std::sync::Arc;
 /// use std::time::Duration;
-/// use zenoh_protocol_core::{ZenohId, WhatAmI, whatami};
+/// use zenoh_protocol::core::{ZenohId, WhatAmI, whatami};
 /// use zenoh_transport::*;
 /// use zenoh_core::Result as ZResult;
 ///
@@ -405,11 +405,11 @@ impl TransportManager {
     pub async fn add_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
         if self
             .locator_inspector
-            .is_multicast(&endpoint.locator)
+            .is_multicast(&endpoint.to_locator())
             .await?
         {
             // @TODO: multicast
-            unimplemented!();
+            bail!("Unimplemented");
         } else {
             self.add_listener_unicast(endpoint).await
         }
@@ -418,11 +418,11 @@ impl TransportManager {
     pub async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
         if self
             .locator_inspector
-            .is_multicast(&endpoint.locator)
+            .is_multicast(&endpoint.to_locator())
             .await?
         {
             // @TODO: multicast
-            unimplemented!();
+            bail!("Unimplemented");
         } else {
             self.del_listener_unicast(endpoint).await
         }
@@ -454,11 +454,11 @@ impl TransportManager {
     pub async fn open_transport(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
         if self
             .locator_inspector
-            .is_multicast(&endpoint.locator)
+            .is_multicast(&endpoint.to_locator())
             .await?
         {
             // @TODO: multicast
-            unimplemented!();
+            bail!("Unimplemented");
         } else {
             self.open_transport_unicast(endpoint).await
         }

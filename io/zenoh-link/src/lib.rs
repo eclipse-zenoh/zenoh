@@ -18,6 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use std::collections::HashMap;
+#[allow(unused_imports)]
 use std::sync::Arc;
 
 use zenoh_cfg_properties::Properties;
@@ -63,7 +64,7 @@ pub use zenoh_link_ws as ws;
 use zenoh_link_ws::{LinkManagerUnicastWs, WsLocatorInspector, WS_LOCATOR_PREFIX};
 
 pub use zenoh_link_commons::*;
-pub use zenoh_protocol_core::{EndPoint, Locator};
+pub use zenoh_protocol::core::{EndPoint, Locator};
 
 #[derive(Default, Clone)]
 pub struct LocatorInspector {
@@ -85,7 +86,7 @@ impl LocatorInspector {
         #[allow(unused_imports)]
         use zenoh_link_commons::LocatorInspector;
         let protocol = locator.protocol();
-        match protocol {
+        match protocol.as_str() {
             #[cfg(feature = "transport_tcp")]
             TCP_LOCATOR_PREFIX => self.tcp_inspector.is_multicast(locator).await,
             #[cfg(feature = "transport_udp")]

@@ -21,9 +21,9 @@ use crate::time::{new_reception_timestamp, Timestamp};
 #[zenoh_core::unstable]
 use serde::Serialize;
 use std::convert::TryInto;
-use zenoh_protocol::proto::DataInfo;
 #[zenoh_core::unstable]
-use zenoh_protocol_core::ZInt;
+use zenoh_protocol::core::ZInt;
+use zenoh_protocol::zenoh::DataInfo;
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_core::unstable]
