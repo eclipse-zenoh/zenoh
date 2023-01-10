@@ -95,12 +95,16 @@ petgraph = "0.6.2"
 pnet = "0.31.0"
 pnet_datalink = "0.31.0"
 proc-macro2 = "1.0.47"
+quinn = "0.9.3" 
 quote = "1.0.21"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
 rcgen = "0.10.0"
 regex = "1.7.0"
 rustc_version = "0.4.0"
+rustls = "0.20.6"
+rustls-native-certs = "0.6.2"
+rustls-pemfile = "1.0.1"
 serde = { version = "1.0.152", features = ["derive"] }
 serde_json = "1.0.89"
 serde_yaml = "0.9.14"
@@ -117,6 +121,7 @@ unzip-n = "0.1.2"
 uuid = { version = "1.2.2", features = ["v4"] }
 validated_struct = "2.1.0"
 vec_map = "0.8.2"
+webpki = "0.22.0"
 winapi = { version = "0.3.9", features = ["iphlpapi"] }
 
 [profile.dev]
