@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{QueryableInfo, Reliability, SubInfo, SubMode, WireExpr, ZInt};
+use crate::core::{QueryableInfo, SubInfo, WireExpr, ZInt};
 
 /// ```text
 ///  7 6 5 4 3 2 1 0
@@ -203,6 +203,7 @@ pub struct Subscriber {
 impl Subscriber {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use crate::core::{Reliability, SubMode};
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
