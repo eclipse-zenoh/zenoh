@@ -12,21 +12,15 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version.workspace = true
 name = "zenoh"
-version = "0.7.0-rc"
-repository = "https://github.com/eclipse-zenoh/zenoh"
-homepage = "http://zenoh.io"
-authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Julien Enoch <julien@enoch.fr>",
-    "Olivier Hécart <olivier.hecart@zettascale.tech>",
-    "Luca Cominardi <luca.cominardi@zettascale.tech>",
-    "Pierre Avital <pierre.avital@zettascale.tech>",
-]
-edition = "2018"
-license = " EPL-2.0 OR Apache-2.0"
-categories = ["network-programming"]
+version.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+categories.workspace = true
 description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -65,32 +59,30 @@ default = [
 ]
 
 [dependencies]
-async-global-executor = "2.3.1"
-async-std = { version = "=1.12.0", default-features = false, features = [
-    "attributes",
-] }
-async-trait = "0.1.59"
-base64 = "0.20.0"
-env_logger = "0.10.0"
-event-listener = "2.5.3"
-flume = "0.10.14"
-form_urlencoded = "1.1.0"
-futures = "0.3.25"
-git-version = "0.3.5"
-hex = "0.4.3"
-lazy_static = "1.4.0"
-log = "0.4.17"
-ordered-float = "3.4.0"
-petgraph = "0.6.2"
-rand = "0.8.5"
-regex = "1.7.0"
-serde = "1.0.149"
-serde_json = "1.0.89"
-socket2 = "0.4.7"
-stop-token = "0.7.0"
-uhlc = { git = "https://github.com/atolab/uhlc-rs.git", default-features = false } # TODO: Using github source until the no_std update gets released on crates.io
-uuid = { version = "1.2.2", features = ["v4"] }
-vec_map = "0.8.2"
+async-global-executor.workspace = true
+async-std = { workspace = true, default-features = false, features = ["attributes"] }
+async-trait.workspace = true
+base64.workspace = true
+env_logger.workspace = true
+event-listener.workspace = true
+flume.workspace = true
+form_urlencoded.workspace = true
+futures.workspace = true
+git-version.workspace = true
+hex.workspace = true
+lazy_static.workspace = true
+log.workspace = true
+ordered-float.workspace = true
+petgraph.workspace = true
+rand.workspace = true
+regex.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+socket2.workspace = true
+stop-token.workspace = true
+uhlc.workspace = true
+uuid.workspace = true
+vec_map.workspace = true
 zenoh-buffers = { version = "0.7.0-rc", path = "../commons/zenoh-buffers/" }
 zenoh-cfg-properties = { version = "0.7.0-rc", path = "../commons/zenoh-cfg-properties/" }
 zenoh-codec = { version = "0.7.0-rc", path = "../commons/zenoh-codec/" }
@@ -107,7 +99,7 @@ zenoh-transport = { version = "0.7.0-rc", path = "../io/zenoh-transport/" }
 zenoh-util = { version = "0.7.0-rc", path = "../commons/zenoh-util" }
 
 [build-dependencies]
-rustc_version = "0.4.0"
+rustc_version.workspace = true
 
 [lib]
 name = "zenoh"
