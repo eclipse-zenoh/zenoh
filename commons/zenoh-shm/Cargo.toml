@@ -33,5 +33,5 @@ bincode.workspace = true
 log.workspace = true
 serde.workspace = true
 shared_memory.workspace = true
-zenoh-buffers = { version = "0.7.0-rc", path = "../zenoh-buffers" }
-zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core" }
+zenoh-buffers = { version = "0.7.0-rc", path = "../zenoh-buffers/" }
+zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }
