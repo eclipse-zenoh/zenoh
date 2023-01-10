@@ -29,7 +29,7 @@ use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     NewLinkChannelSender,
 };
-use zenoh_protocol_core::{EndPoint, Locator};
+use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_sync::Signal;
 
 use z_serial::ZSerial;
@@ -74,8 +74,8 @@ impl LinkUnicastSerial {
     ) -> Self {
         Self {
             port,
-            src_locator: Locator::new(SERIAL_LOCATOR_PREFIX, &src_path),
-            dst_locator: Locator::new(SERIAL_LOCATOR_PREFIX, &dst_path),
+            src_locator: Locator::new(SERIAL_LOCATOR_PREFIX, src_path, "").unwrap(),
+            dst_locator: Locator::new(SERIAL_LOCATOR_PREFIX, dst_path, "").unwrap(),
             is_connected,
             write_lock: AsyncMutex::new(()),
             read_lock: AsyncMutex::new(()),
@@ -256,7 +256,7 @@ impl ConstructibleLinkManagerUnicast<()> for LinkManagerUnicastSerial {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let path = get_unix_path_as_string(&endpoint.locator);
+        let path = get_unix_path_as_string(endpoint.address());
         let baud_rate = get_baud_rate(&endpoint);
         let exclusive = get_exclusive(&endpoint);
         log::trace!("Opening Serial Link on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
@@ -282,7 +282,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
-        let path = get_unix_path_as_string(&endpoint.locator);
+        let path = get_unix_path_as_string(endpoint.address());
         let baud_rate = get_baud_rate(&endpoint);
         let exclusive = get_exclusive(&endpoint);
         log::trace!("Creating Serial listener on device {path:?}, with baudrate {baud_rate} and exclusive set as {exclusive}");
@@ -329,7 +329,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
             res
         });
 
-        let locator = endpoint.locator.clone();
+        let locator = endpoint.to_locator();
         let listener = ListenerUnicastSerial::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(path, listener);
@@ -338,7 +338,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let path = get_unix_path_as_string(&endpoint.locator);
+        let path = get_unix_path_as_string(endpoint.address());
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&path).ok_or_else(|| {
@@ -366,7 +366,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
     fn get_locators(&self) -> Vec<Locator> {
         zread!(self.listeners)
             .values()
-            .map(|x| x.endpoint.locator.clone())
+            .map(|x| x.endpoint.to_locator())
             .collect()
     }
 }

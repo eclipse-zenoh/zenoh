@@ -11,27 +11,26 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use super::face::FaceState;
+use super::network::Network;
+use super::resource::{elect_router, PullCaches, Resource, Route, SessionContext};
+use super::router::Tables;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::RwLock;
+use zenoh_buffers::ZBuf;
 use zenoh_core::zread;
-use zenoh_protocol_core::key_expr::OwnedKeyExpr;
-use zenoh_sync::get_mut_unchecked;
-
-use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::{DataInfo, RoutingContext};
-use zenoh_protocol_core::{
-    Channel, CongestionControl, Priority, Reliability, SubInfo, SubMode, WhatAmI, WireExpr, ZInt,
-    ZenohId,
+use zenoh_protocol::{
+    core::{
+        key_expr::OwnedKeyExpr, Channel, CongestionControl, Priority, Reliability, SubInfo,
+        SubMode, WhatAmI, WireExpr, ZInt, ZenohId,
+    },
+    zenoh::{DataInfo, RoutingContext},
 };
-
-use super::face::FaceState;
-use super::network::Network;
-use super::resource::{elect_router, PullCaches, Resource, Route, SessionContext};
-use super::router::Tables;
+use zenoh_sync::get_mut_unchecked;
 
 #[inline]
 fn send_sourced_subscription_to_net_childs(
@@ -1190,8 +1189,10 @@ macro_rules! treat_timestamp {
                     }
                 } else {
                     // No DataInfo; add one with a Timestamp
-                    let mut data_info = DataInfo::new();
-                    data_info.timestamp = Some(hlc.new_timestamp());
+                    let data_info = DataInfo {
+                        timestamp: Some(hlc.new_timestamp()),
+                        ..Default::default()
+                    };
                     Some(data_info)
                 }
             },

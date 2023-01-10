@@ -12,9 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 use super::routing::face::Face;
 use super::Runtime;
+use crate::key_expr::KeyExpr;
 use crate::plugins::sealed as plugins;
-use crate::prelude::KeyExpr;
-use crate::prelude::SampleKind;
 use async_std::task;
 use futures::future::{BoxFuture, FutureExt};
 use log::{error, trace};
@@ -27,13 +26,13 @@ use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_config::ValidatedMap;
 use zenoh_config::WhatAmI;
 use zenoh_core::Result as ZResult;
-use zenoh_protocol::proto::QueryBody;
-use zenoh_protocol::proto::{DataInfo, RoutingContext};
-use zenoh_protocol_core::key_expr::OwnedKeyExpr;
-use zenoh_protocol_core::ConsolidationMode;
-use zenoh_protocol_core::{
-    Channel, CongestionControl, Encoding, KnownEncoding, QueryTarget, QueryableInfo, SubInfo,
-    WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+use zenoh_protocol::{
+    core::{
+        key_expr::OwnedKeyExpr, Channel, CongestionControl, ConsolidationMode, Encoding,
+        KnownEncoding, QueryTarget, QueryableInfo, SampleKind, SubInfo, WireExpr, ZInt, ZenohId,
+        EMPTY_EXPR_ID,
+    },
+    zenoh::{DataInfo, QueryBody, RoutingContext},
 };
 use zenoh_transport::{Primitives, TransportUnicast};
 
@@ -334,20 +333,20 @@ impl Primitives for AdminSpace {
                     key
                 );
                 if let Err(e) = self.context.runtime.config.remove(key) {
-                    log::error!("Error deleting conf value {}: {}", key_expr, e)
+                    log::error!("Error deleting conf value {} : {}", key_expr, e)
                 }
             } else {
                 match std::str::from_utf8(&payload.contiguous()) {
                     Ok(json) => {
                         log::trace!(
-                            "Insert conf value /@/router/{}/config/{}:{}",
+                            "Insert conf value /@/router/{}/config/{} : {}",
                             &self.context.zid_str,
                             key,
                             json
                         );
                         if let Err(e) = (&self.context.runtime.config).insert_json5(key, json) {
                             error!(
-                                "Error inserting conf value /@/router/{}/config/{}:{} - {}",
+                                "Error inserting conf value /@/router/{}/config/{} : {} - {}",
                                 &self.context.zid_str, key, json, e
                             );
                         }
@@ -398,7 +397,7 @@ impl Primitives for AdminSpace {
         let key_expr = match self.key_expr_to_string(key_expr) {
             Ok(key_expr) => key_expr.into_owned(),
             Err(e) => {
-                log::error!("Unknown KeyExpr!! ({})", e);
+                log::error!("Unknown KeyExpr: {}", e);
                 // router is not re-entrant
                 task::spawn(async move {
                     primitives.send_reply_final(qid);
@@ -427,8 +426,10 @@ impl Primitives for AdminSpace {
                 |(key, handler)| async {
                     let handler = handler;
                     let (payload, encoding) = handler(&context, &key_expr, &parameters).await;
-                    let mut data_info = DataInfo::new();
-                    data_info.encoding = Some(encoding);
+                    let data_info = DataInfo {
+                        encoding: Some(encoding),
+                        ..Default::default()
+                    };
 
                     primitives.send_reply_data(
                         qid,
@@ -446,8 +447,10 @@ impl Primitives for AdminSpace {
                         let plugins::Response { key, mut value } = status;
                         zenoh_config::sift_privates(&mut value);
                         let payload: Vec<u8> = serde_json::to_vec(&value).unwrap();
-                        let mut data_info = DataInfo::new();
-                        data_info.encoding = Some(KnownEncoding::AppJson.into());
+                        let data_info = DataInfo {
+                            encoding: Some(KnownEncoding::AppJson.into()),
+                            ..Default::default()
+                        };
 
                         primitives.send_reply_data(
                             qid,

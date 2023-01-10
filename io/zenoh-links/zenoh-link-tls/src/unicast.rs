@@ -40,13 +40,12 @@ use std::net::{IpAddr, Shutdown};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_core::Result as ZResult;
-use zenoh_core::{bail, zasynclock, zerror, zread, zwrite};
+use zenoh_core::{bail, zasynclock, zerror, zread, zwrite, Result as ZResult};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
-use zenoh_protocol_core::locators::ArcProperties;
-use zenoh_protocol_core::{EndPoint, Locator};
+use zenoh_protocol::core::endpoint::Config;
+use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_sync::Signal;
 
 pub struct LinkUnicastTls {
@@ -83,7 +82,7 @@ impl LinkUnicastTls {
         // Set the TLS nodelay option
         if let Err(err) = tcp_stream.set_nodelay(true) {
             log::warn!(
-                "Unable to set NODEALY option on TLS link {} => {} : {}",
+                "Unable to set NODEALY option on TLS link {} => {}: {}",
                 src_addr,
                 dst_addr,
                 err
@@ -98,7 +97,7 @@ impl LinkUnicastTls {
             )),
         ) {
             log::warn!(
-                "Unable to set LINGER option on TLS link {} => {} : {}",
+                "Unable to set LINGER option on TLS link {} => {}: {}",
                 src_addr,
                 dst_addr,
                 err
@@ -109,9 +108,9 @@ impl LinkUnicastTls {
         LinkUnicastTls {
             inner: UnsafeCell::new(socket),
             src_addr,
-            src_locator: Locator::new(TLS_LOCATOR_PREFIX, &src_addr),
+            src_locator: Locator::new(TLS_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_addr,
-            dst_locator: Locator::new(TLS_LOCATOR_PREFIX, &dst_addr),
+            dst_locator: Locator::new(TLS_LOCATOR_PREFIX, dst_addr.to_string(), "").unwrap(),
             write_mtx: AsyncMutex::new(()),
             read_mtx: AsyncMutex::new(()),
         }
@@ -267,13 +266,18 @@ impl LinkManagerUnicastTls {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let locator = &endpoint.locator;
-        let server_name = get_tls_server_name(locator)?;
-        let addr = get_tls_addr(locator).await?;
+        let epaddr = endpoint.address();
+        let epconf = endpoint.config();
 
-        let config = &endpoint
-            .config
-            .ok_or_else(|| zerror!("Could not load config."))?;
+        let server_name = get_tls_server_name(&epaddr)?;
+        let addr = get_tls_addr(&epaddr).await?;
+
+        // Initialize the TLS Config
+        let client_config = TlsClientConfig::new(&epconf)
+            .await
+            .map_err(|e| zerror!("Cannot create a new TLS listener to {endpoint}: {e}"))?;
+        let config = Arc::new(client_config.client_config);
+        let connector = TlsConnector::from(config);
 
         // Initialize the TcpStream
         let tcp_stream = TcpStream::connect(addr).await.map_err(|e| {
@@ -300,13 +304,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
             )
         })?;
 
-        let client_config = TlsClientConfig::new(config)
-            .await
-            .map_err(|e| zerror!("Cannot create a new TLS listener on {addr}. {e}"))?;
-
-        let config = Arc::new(client_config.client_config);
-
-        let connector = TlsConnector::from(config);
+        // Initialize the TlsStream
         let tls_stream = connector
             .connect(server_name.to_owned(), tcp_stream)
             .await
@@ -325,16 +323,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     }
 
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
-        let locator = &endpoint.locator;
-        let addr = get_tls_addr(locator).await?;
-        let host = get_tls_host(locator)?;
+        let epaddr = endpoint.address();
+        let epconf = endpoint.config();
 
-        let config = &endpoint
-            .config
-            .as_ref()
-            .ok_or_else(|| zerror!("Could not load config."))?;
+        let addr = get_tls_addr(&epaddr).await?;
+        let host = get_tls_host(&epaddr)?;
 
-        let tls_server_config = TlsServerConfig::new(config)
+        // Initialize TlsConfig
+        let tls_server_config = TlsServerConfig::new(&epconf)
             .await
             .map_err(|e| zerror!("Cannot create a new TLS listener on {addr}. {e}"))?;
 
@@ -367,8 +363,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         });
 
         // Update the endpoint locator address
-        let mut locator: Locator = locator.to_owned();
-        assert!(locator.set_addr(&format!("{}:{}", host, local_port)));
+        let locator = Locator::new(
+            endpoint.protocol(),
+            format!("{}:{}", host, local_port),
+            endpoint.metadata(),
+        )?;
 
         let listener = ListenerUnicastTls::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
@@ -378,7 +377,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let addr = get_tls_addr(&endpoint.locator).await?;
+        let epaddr = endpoint.address();
+
+        let addr = get_tls_addr(&epaddr).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -408,7 +409,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {
-            let listener_locator = &value.endpoint.locator;
             let (kip, kpt) = (key.ip(), key.port());
 
             // Either ipv4/0.0.0.0 or ipv6/[::]
@@ -418,13 +418,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
                     IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(),
                 };
                 let iter = addrs.drain(..).map(|x| {
-                    let mut l = Locator::new(TLS_LOCATOR_PREFIX, &SocketAddr::new(x, kpt));
-                    l.metadata = listener_locator.metadata.clone();
-                    l
+                    Locator::new(
+                        value.endpoint.protocol(),
+                        SocketAddr::new(x, kpt).to_string(),
+                        value.endpoint.metadata(),
+                    )
+                    .unwrap()
                 });
                 locators.extend(iter);
             } else {
-                locators.push(listener_locator.clone());
+                locators.push(value.endpoint.to_locator());
             }
         }
 
@@ -508,7 +511,7 @@ struct TlsServerConfig {
 }
 
 impl TlsServerConfig {
-    pub async fn new(config: &ArcProperties) -> ZResult<TlsServerConfig> {
+    pub async fn new(config: &Config<'_>) -> ZResult<TlsServerConfig> {
         let mut client_auth: bool = TLS_CLIENT_AUTH_DEFAULT.parse().unwrap();
         let tls_server_private_key = TlsServerConfig::load_tls_private_key(config).await?;
         let tls_server_certificate = TlsServerConfig::load_tls_certificate(config).await?;
@@ -564,7 +567,7 @@ impl TlsServerConfig {
         Ok(TlsServerConfig { server_config: sc })
     }
 
-    async fn load_tls_private_key(config: &ArcProperties) -> ZResult<Vec<u8>> {
+    async fn load_tls_private_key(config: &Config<'_>) -> ZResult<Vec<u8>> {
         load_tls_key(
             config,
             TLS_SERVER_PRIVATE_KEY_RAW,
@@ -573,7 +576,7 @@ impl TlsServerConfig {
         .await
     }
 
-    async fn load_tls_certificate(config: &ArcProperties) -> ZResult<Vec<u8>> {
+    async fn load_tls_certificate(config: &Config<'_>) -> ZResult<Vec<u8>> {
         load_tls_certificate(
             config,
             TLS_SERVER_CERTIFICATE_RAW,
@@ -588,7 +591,7 @@ struct TlsClientConfig {
 }
 
 impl TlsClientConfig {
-    pub async fn new(config: &ArcProperties) -> ZResult<TlsClientConfig> {
+    pub async fn new(config: &Config<'_>) -> ZResult<TlsClientConfig> {
         let mut client_auth: bool = TLS_CLIENT_AUTH_DEFAULT.parse().unwrap();
         if let Some(value) = config.get(TLS_CLIENT_AUTH) {
             client_auth = value.parse()?
@@ -631,7 +634,7 @@ impl TlsClientConfig {
         Ok(TlsClientConfig { client_config: cc })
     }
 
-    async fn load_tls_private_key(config: &ArcProperties) -> ZResult<Vec<u8>> {
+    async fn load_tls_private_key(config: &Config<'_>) -> ZResult<Vec<u8>> {
         load_tls_key(
             config,
             TLS_CLIENT_PRIVATE_KEY_RAW,
@@ -640,7 +643,7 @@ impl TlsClientConfig {
         .await
     }
 
-    async fn load_tls_certificate(config: &ArcProperties) -> ZResult<Vec<u8>> {
+    async fn load_tls_certificate(config: &Config<'_>) -> ZResult<Vec<u8>> {
         load_tls_certificate(
             config,
             TLS_CLIENT_CERTIFICATE_RAW,
@@ -651,7 +654,7 @@ impl TlsClientConfig {
 }
 
 async fn load_tls_key(
-    config: &ArcProperties,
+    config: &Config<'_>,
     tls_private_key_raw_config_key: &str,
     tls_private_key_file_config_key: &str,
 ) -> ZResult<Vec<u8>> {
@@ -673,7 +676,7 @@ async fn load_tls_key(
 }
 
 async fn load_tls_certificate(
-    config: &ArcProperties,
+    config: &Config<'_>,
     tls_certificate_raw_config_key: &str,
     tls_certificate_file_config_key: &str,
 ) -> ZResult<Vec<u8>> {
@@ -687,7 +690,7 @@ async fn load_tls_certificate(
     Err(zerror!("Missing tls certificates.").into())
 }
 
-fn load_trust_anchors(config: &ArcProperties) -> ZResult<Option<RootCertStore>> {
+fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
     let mut root_cert_store = RootCertStore::empty();
     if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
         let mut pem = BufReader::new(value.as_bytes());

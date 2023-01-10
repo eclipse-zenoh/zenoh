@@ -105,6 +105,13 @@ jobs:
           args: run --release --verbose
         env:
           ASYNC_STD_THREAD_COUNT: 4
+      - name: Run doctests
+        uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --doc
+        env:
+          ASYNC_STD_THREAD_COUNT: 4
 
   doc:
     name: Doc generation
@@ -338,10 +345,11 @@ jobs:
           cd commons/zenoh-collections && cargo publish && cd -
           cd commons/zenoh-crypto && cargo publish && cd -
           cd commons/zenoh-util && cargo publish && cd -
-          cd commons/zenoh-protocol-core && cargo publish && cd -
-          cd commons/zenoh-config && cargo publish && cd -
           cd commons/zenoh-buffers && cargo publish && cd -
           cd commons/zenoh-protocol && cargo publish && cd -
+          cd commons/zenoh-codec && cargo publish && cd -
+          cd commons/zenoh-shm && cargo publish && cd -
+          cd commons/zenoh-config && cargo publish && cd -
           cd io/zenoh-link-commons && cargo publish && cd -
           cd io/zenoh-links/zenoh-link-udp && cargo publish && cd -
           cd io/zenoh-links/zenoh-link-tcp && cargo publish && cd -

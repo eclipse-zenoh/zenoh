@@ -11,15 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task;
-use std::time::Duration;
-use std::{convert::TryFrom, sync::Arc};
+use async_std::{prelude::FutureExt, task};
+use std::{convert::TryFrom, sync::Arc, time::Duration};
 use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
-use zenoh_link::EndPoint;
-use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
+use zenoh_protocol::{
+    core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
+    zenoh::ZenohMessage,
+};
 use zenoh_transport::{DummyTransportEventHandler, TransportManager};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -127,12 +126,13 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_unicast_defragmentation_tcp_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Define the locators
-    let endpoint: EndPoint = "tcp/127.0.0.1:14447".parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 11000).parse().unwrap();
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -163,12 +163,13 @@ fn transport_unicast_defragmentation_tcp_only() {
 #[cfg(feature = "transport_ws")]
 #[test]
 fn transport_unicast_defragmentation_ws_only() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Define the locators
-    let endpoint: EndPoint = "ws/127.0.0.1:14448".parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 11010).parse().unwrap();
     // Define the reliability and congestion control
     let channel = [
         Channel {

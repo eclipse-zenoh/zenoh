@@ -21,7 +21,7 @@ use crate::unicast::establishment::{close_link, transport_finalize, InputFinaliz
 use crate::{TransportManager, TransportUnicast};
 use zenoh_core::Result as ZResult;
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
-use zenoh_protocol::proto::tmsg;
+use zenoh_protocol::transport::tmsg;
 
 type OError = (zenoh_core::Error, Option<u8>);
 type OResult<T> = Result<T, OError>;

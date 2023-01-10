@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::protocol::core::ZInt;
 use zenoh_core::{bail, Result as ZResult};
+use zenoh_protocol::core::ZInt;
 
 /// Sequence Number
 ///

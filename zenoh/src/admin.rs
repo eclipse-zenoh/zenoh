@@ -24,8 +24,10 @@ use crate::{
     Sample, Session, ZResult,
 };
 use zenoh_core::SyncResolve;
-use zenoh_protocol::proto::DataInfo;
-use zenoh_protocol_core::{Encoding, KnownEncoding, SampleKind, WireExpr};
+use zenoh_protocol::{
+    core::{Encoding, KnownEncoding, SampleKind, WireExpr},
+    zenoh::{DataInfo, ZenohMessage},
+};
 use zenoh_transport::{TransportEventHandler, TransportPeerEventHandler};
 
 macro_rules! ke_for_sure {
@@ -153,7 +155,7 @@ pub(crate) struct PeerHandler {
 }
 
 impl TransportPeerEventHandler for PeerHandler {
-    fn handle_message(&self, _msg: zenoh_protocol::proto::ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
         Ok(())
     }
 

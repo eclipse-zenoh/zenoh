@@ -30,37 +30,34 @@ categories = ["network-programming"]
 description = "Internal crate for zenoh."
 
 [features]
-shared-memory = ["zenoh-buffers/shared-memory"]
-complete_n = ["zenoh-protocol-core/complete_n"]
+default = ["std"]
+std = [
+    "hex/std",
+    "rand?/std",
+    "rand?/std_rng",
+    "serde/std",
+    "uhlc/std",
+    "uuid/std"
+]
+test = ["rand", "zenoh-buffers/test"]
+shared-memory = ["std"]
+complete_n = []
+defmt = [
+    "dep:defmt",
+    "uhlc/defmt",
+    "zenoh-buffers/defmt"
+]
 
 [dependencies]
-log = "0.4.17"
-uhlc = "0.5.1"
-zenoh-buffers = { version = "0.7.0-rc", path = "../zenoh-buffers/" }
+defmt = { version = "0.3.2", features = ["alloc"], optional = true }
+hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
+rand = { version = "0.8.5", default-features = false, features = ["alloc", "getrandom"], optional = true }
+serde = { version = "1.0.147", default-features = false, features = ["alloc"] }
+uhlc = { git = "https://github.com/atolab/uhlc-rs.git", default-features = false } # TODO: Using github source until the no_std update gets released on crates.io
+uuid = { version = "1.2.1", default-features = false } # Needs a getrandom::getrandom() custom implementation on embedded (in root crate)
+zenoh-buffers = { version = "0.7.0-rc", path = "../zenoh-buffers/", default-features = false }
 zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }
-zenoh-protocol-core = { version = "0.7.0-rc", path = "../zenoh-protocol-core/" }
 
 [dev-dependencies]
-criterion = "0.4.0"
-rand = "0.8.5"
-uuid = { version = "1.2.2", features = ["v4"] }
-
-[[bench]]
-name = "codec_bench"
-harness = false
-
-[[bench]]
-name = "rwbuf_bench"
-harness = false
-
-[[bench]]
-name = "data_creation"
-harness = false
-
-[[bench]]
-name = "frame_codec"
-harness = false
-
-[[bench]]
-name = "tables_bench"
-harness = false
+lazy_static = "1.4.0"
+zenoh-protocol = { version = "0.7.0-rc", path = ".", features = ["test"] }

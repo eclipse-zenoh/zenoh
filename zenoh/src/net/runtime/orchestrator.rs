@@ -18,20 +18,19 @@ use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
-use zenoh_buffers::reader::HasReader;
-use zenoh_buffers::SplitBuffer;
+use zenoh_buffers::reader::DidntRead;
+use zenoh_buffers::{reader::HasReader, writer::HasWriter};
+use zenoh_codec::{RCodec, WCodec, Zenoh060};
 use zenoh_config::{unwrap_or_default, EndPoint, ModeDependent};
-use zenoh_core::Result as ZResult;
-use zenoh_core::{bail, zerror};
+use zenoh_core::{bail, zerror, Result as ZResult};
 use zenoh_link::Locator;
-use zenoh_protocol::io::{WBuf, ZBuf};
-use zenoh_protocol::proto::{Hello, Scout, TransportBody, TransportMessage};
-use zenoh_protocol::proto::{MessageReader, MessageWriter};
-use zenoh_protocol_core::{whatami::WhatAmIMatcher, WhatAmI, ZenohId};
+use zenoh_protocol::{
+    core::{whatami::WhatAmIMatcher, WhatAmI, ZenohId},
+    scouting::{Hello, Scout, ScoutingBody, ScoutingMessage},
+};
 use zenoh_transport::TransportUnicast;
 
 const RCV_BUF_SIZE: usize = u16::MAX as usize;
-const SEND_BUF_INITIAL_SIZE: usize = 8;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
 const SCOUT_MAX_PERIOD: Duration = Duration::from_millis(8_000);
 const SCOUT_PERIOD_INCREASE_FACTOR: u32 = 2;
@@ -276,7 +275,7 @@ impl Runtime {
             match self.manager().add_listener(endpoint).await {
                 Ok(listener) => log::debug!("Listener {} added", listener),
                 Err(err) => {
-                    log::error!("Unable to open listener {} : {}", listener, err);
+                    log::error!("Unable to open listener {}: {}", listener, err);
                     return Err(err);
                 }
             }
@@ -314,7 +313,7 @@ impl Runtime {
                             }
                         },
                         Err(err) => {
-                            log::error!("Unable to find interface {} : {}", name, err);
+                            log::error!("Unable to find interface {}: {}", name, err);
                             None
                         }
                     },
@@ -327,12 +326,12 @@ impl Runtime {
         let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
-                log::error!("Unable to create datagram socket : {}", err);
+                log::error!("Unable to create datagram socket: {}", err);
                 bail!(err => "Unable to create datagram socket");
             }
         };
         if let Err(err) = socket.set_reuse_address(true) {
-            log::error!("Unable to set SO_REUSEADDR option : {}", err);
+            log::error!("Unable to set SO_REUSEADDR option: {}", err);
             bail!(err => "Unable to set SO_REUSEADDR option");
         }
         let addr: IpAddr = {
@@ -348,7 +347,7 @@ impl Runtime {
         match socket.bind(&SocketAddr::new(addr, sockaddr.port()).into()) {
             Ok(()) => log::debug!("UDP port bound to {}", sockaddr),
             Err(err) => {
-                log::error!("Unable to bind UDP port {} : {}", sockaddr, err);
+                log::error!("Unable to bind UDP port {}: {}", sockaddr, err);
                 bail!(err => "Unable to bind UDP port {}", sockaddr);
             }
         }
@@ -358,7 +357,7 @@ impl Runtime {
                 Ok(()) => log::debug!("Joined multicast group {} on interface 0", sockaddr.ip()),
                 Err(err) => {
                     log::error!(
-                        "Unable to join multicast group {} on interface 0 : {}",
+                        "Unable to join multicast group {} on interface 0: {}",
                         sockaddr.ip(),
                         err
                     );
@@ -378,7 +377,7 @@ impl Runtime {
                                 iface_addr,
                             ),
                             Err(err) => log::warn!(
-                                "Unable to join multicast group {} on interface {} : {}",
+                                "Unable to join multicast group {} on interface {}: {}",
                                 sockaddr.ip(),
                                 iface_addr,
                                 err,
@@ -402,7 +401,7 @@ impl Runtime {
         let socket = match Socket::new(Domain::IPV4, Type::DGRAM, None) {
             Ok(socket) => socket,
             Err(err) => {
-                log::warn!("Unable to create datagram socket : {}", err);
+                log::warn!("Unable to create datagram socket: {}", err);
                 bail!(err=> "Unable to create datagram socket");
             }
         };
@@ -417,7 +416,7 @@ impl Runtime {
                 log::debug!("UDP port bound to {}", local_addr);
             }
             Err(err) => {
-                log::warn!("Unable to bind udp port {}:0 : {}", addr, err);
+                log::warn!("Unable to bind udp port {}:0: {}", addr, err);
                 bail!(err => "Unable to bind udp port {}:0", addr);
             }
         }
@@ -485,11 +484,13 @@ impl Runtime {
     {
         let send = async {
             let mut delay = SCOUT_INITIAL_PERIOD;
-            let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
-            let mut scout = TransportMessage::make_scout(Some(matcher), true, None);
-            wbuf.write_transport_message(&mut scout);
-            let zbuf = wbuf;
-            let zslice = zbuf.contiguous();
+
+            let scout = ScoutingMessage::make_scout(Some(matcher), true, None);
+            let mut wbuf = vec![];
+            let mut writer = wbuf.writer();
+            let codec = Zenoh060::default();
+            codec.write(&mut writer, &scout).unwrap();
+
             loop {
                 for socket in sockets {
                     log::trace!(
@@ -500,9 +501,12 @@ impl Runtime {
                             .local_addr()
                             .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                     );
-                    if let Err(err) = socket.send_to(&zslice, mcast_addr.to_string()).await {
+                    if let Err(err) = socket
+                        .send_to(wbuf.as_slice(), mcast_addr.to_string())
+                        .await
+                    {
                         log::debug!(
-                            "Unable to send {:?} to {} on interface {} : {}",
+                            "Unable to send {:?} to {} on interface {}: {}",
                             scout.body,
                             mcast_addr,
                             socket
@@ -525,28 +529,29 @@ impl Runtime {
                 loop {
                     match socket.recv_from(&mut buf).await {
                         Ok((n, peer)) => {
-                            let zbuf = ZBuf::from(buf.as_slice()[..n].to_vec());
-                            if let Some(msg) = zbuf.reader().read_transport_message() {
+                            let mut reader = buf.as_slice()[..n].reader();
+                            let codec = Zenoh060::default();
+                            let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
+                            if let Ok(msg) = res {
                                 log::trace!("Received {:?} from {}", msg.body, peer);
-                                if let TransportBody::Hello(hello) = &msg.body {
-                                    let whatami = hello.whatami.unwrap_or(WhatAmI::Router);
-                                    if matcher.matches(whatami) {
+                                if let ScoutingBody::Hello(hello) = &msg.body {
+                                    if matcher.matches(hello.whatami) {
                                         if let Loop::Break = f(hello.clone()).await {
                                             break;
                                         }
                                     } else {
-                                        log::warn!("Received unexpected Hello : {:?}", msg.body);
+                                        log::warn!("Received unexpected Hello: {:?}", msg.body);
                                     }
                                 }
                             } else {
                                 log::trace!(
-                                    "Received unexpected UDP datagram from {} : {}",
+                                    "Received unexpected UDP datagram from {}: {:?}",
                                     peer,
-                                    zbuf
+                                    &buf.as_slice()[..n]
                                 );
                             }
                         }
-                        Err(e) => log::debug!("Error receiving UDP datagram : {}", e),
+                        Err(e) => log::debug!("Error receiving UDP datagram: {}", e),
                     }
                 }
             }
@@ -584,13 +589,13 @@ impl Runtime {
                     );
                 } else {
                     log::warn!(
-                        "Unable to connect any locator of scouted peer {} : {:?}",
+                        "Unable to connect any locator of scouted peer {}: {:?}",
                         zid,
                         locators
                     );
                 }
             } else {
-                log::trace!("Already connected scouted peer : {}", zid);
+                log::trace!("Already connected scouted peer: {}", zid);
             }
         }
     }
@@ -605,8 +610,8 @@ impl Runtime {
         let scout = async {
             Runtime::scout(sockets, what, addr, move |hello| async move {
                 log::info!("Found {:?}", hello);
-                if let Some(locators) = &hello.locators {
-                    if let Some(transport) = self.connect(locators).await {
+                if !hello.locators.is_empty() {
+                    if let Some(transport) = self.connect(&hello.locators).await {
                         log::debug!(
                             "Successfully connected to newly scouted {:?} via {:?}",
                             hello,
@@ -616,7 +621,7 @@ impl Runtime {
                     }
                     log::warn!("Unable to connect to scouted {:?}", hello);
                 } else {
-                    log::warn!("Received Hello with no locators : {:?}", hello);
+                    log::warn!("Received Hello with no locators: {:?}", hello);
                 }
                 Loop::Continue
             })
@@ -639,14 +644,14 @@ impl Runtime {
         Runtime::scout(ucast_sockets, what, addr, move |hello| async move {
             match &hello.zid {
                 Some(zid) => {
-                    if let Some(locators) = &hello.locators {
-                        self.connect_peer(zid, locators).await
+                    if !hello.locators.is_empty() {
+                        self.connect_peer(zid, &hello.locators).await
                     } else {
-                        log::warn!("Received Hello with no locators : {:?}", hello);
+                        log::warn!("Received Hello with no locators: {:?}", hello);
                     }
                 }
                 None => {
-                    log::warn!("Received Hello with no zid : {:?}", hello);
+                    log::warn!("Received Hello with no zid: {:?}", hello);
                 }
             }
             Loop::Continue
@@ -691,22 +696,27 @@ impl Runtime {
                 continue;
             }
 
-            let zbuf = ZBuf::from(buf.as_slice()[..n].to_vec());
-            if let Some(msg) = zbuf.reader().read_transport_message() {
+            let mut reader = buf.as_slice()[..n].reader();
+            let codec = Zenoh060::default();
+            let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
+            if let Ok(msg) = res {
                 log::trace!("Received {:?} from {}", msg.body, peer);
-                if let TransportBody::Scout(Scout {
+                if let ScoutingBody::Scout(Scout {
                     what, zid_request, ..
                 }) = &msg.body
                 {
                     let what = what.or(Some(WhatAmI::Router.into())).unwrap();
                     if what.matches(self.whatami) {
-                        let mut wbuf = WBuf::new(SEND_BUF_INITIAL_SIZE, false);
+                        let mut wbuf = vec![];
+                        let mut writer = wbuf.writer();
+                        let codec = Zenoh060::default();
+
                         let zid = if *zid_request {
                             Some(self.manager().zid())
                         } else {
                             None
                         };
-                        let mut hello = TransportMessage::make_hello(
+                        let hello = ScoutingMessage::make_hello(
                             zid,
                             Some(self.whatami),
                             Some(self.get_locators()),
@@ -721,16 +731,19 @@ impl Runtime {
                                 .local_addr()
                                 .map_or("unknown".to_string(), |addr| addr.ip().to_string())
                         );
-                        wbuf.write_transport_message(&mut hello);
-                        let zbuf = wbuf;
-                        let zslice = zbuf.contiguous();
-                        if let Err(err) = socket.send_to(&zslice, peer).await {
-                            log::error!("Unable to send {:?} to {} : {}", hello.body, peer, err);
+                        codec.write(&mut writer, &hello).unwrap();
+
+                        if let Err(err) = socket.send_to(wbuf.as_slice(), peer).await {
+                            log::error!("Unable to send {:?} to {}: {}", hello.body, peer, err);
                         }
                     }
                 }
             } else {
-                log::trace!("Received unexpected UDP datagram from {} : {}", peer, zbuf);
+                log::trace!(
+                    "Received unexpected UDP datagram from {}: {:?}",
+                    peer,
+                    &buf.as_slice()[..n]
+                );
             }
         }
     }

@@ -17,24 +17,18 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-#[macro_use]
-pub mod fifo_queue;
-pub use fifo_queue::*;
-
-pub mod lifo_queue;
-pub use lifo_queue::*;
-
-pub mod object_pool;
-pub use object_pool::*;
-
-pub(crate) mod ring_buffer;
-pub(crate) use ring_buffer::*;
-
-pub(crate) mod stack_buffer;
-pub(crate) use stack_buffer::*;
-
-pub mod timer;
-pub use timer::*;
+#![cfg_attr(not(feature = "std"), no_std)]
+extern crate alloc;
 
 pub mod single_or_vec;
 pub use single_or_vec::*;
+
+#[cfg(feature = "std")]
+pub mod ring_buffer;
+#[cfg(feature = "std")]
+pub use ring_buffer::*;
+
+#[cfg(feature = "std")]
+pub mod stack_buffer;
+#[cfg(feature = "std")]
+pub use stack_buffer::*;

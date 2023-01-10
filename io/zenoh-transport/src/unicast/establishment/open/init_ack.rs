@@ -12,16 +12,19 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::unicast::establishment::open::OResult;
-use crate::unicast::establishment::{attachment_from_properties, properties_from_attachment};
 use crate::unicast::establishment::{
     authenticator::AuthenticatedPeerLink, EstablishmentProperties,
 };
 use crate::TransportManager;
+use std::convert::TryFrom;
+use zenoh_buffers::ZSlice;
 use zenoh_core::{zasyncread, zerror};
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::core::{Property, WhatAmI, ZInt, ZenohId};
-use zenoh_protocol::io::ZSlice;
-use zenoh_protocol::proto::{tmsg, Attachment, Close, TransportBody};
+use zenoh_protocol::{
+    common::Attachment,
+    core::{Property, WhatAmI, ZInt, ZenohId},
+    transport::{tmsg, Close, TransportBody},
+};
 
 #[cfg(feature = "shared-memory")]
 use crate::unicast::establishment::authenticator::PeerAuthenticatorId;
@@ -109,9 +112,8 @@ pub(super) async fn recv(
     auth_link.peer_id = Some(init_ack.zid);
 
     let mut init_ack_properties = match msg.attachment.take() {
-        Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
-        }
+        Some(att) => EstablishmentProperties::try_from(&att)
+            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
 
@@ -159,6 +161,14 @@ pub(super) async fn recv(
         }
     }
 
+    let open_syn_attachment = if ps_attachment.is_empty() {
+        None
+    } else {
+        let att = Attachment::try_from(&ps_attachment)
+            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        Some(att)
+    };
+
     let output = Output {
         zid: init_ack.zid,
         whatami: init_ack.whatami,
@@ -166,7 +176,7 @@ pub(super) async fn recv(
         is_qos: init_ack.is_qos,
         is_shm,
         cookie: init_ack.cookie,
-        open_syn_attachment: attachment_from_properties(&ps_attachment).ok(),
+        open_syn_attachment,
     };
     Ok(output)
 }

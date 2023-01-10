@@ -38,7 +38,7 @@ use zenoh_core::{zerror, zread, zwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
-use zenoh_protocol_core::{EndPoint, Locator};
+use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_sync::Signal;
 
 use super::{get_ws_addr, get_ws_url, TCP_ACCEPT_THROTTLE_TIME, WS_DEFAULT_MTU, WS_LOCATOR_PREFIX};
@@ -84,9 +84,9 @@ impl LinkUnicastWs {
             recv,
             send,
             src_addr,
-            src_locator: Locator::new(WS_LOCATOR_PREFIX, &src_addr),
+            src_locator: Locator::new(WS_LOCATOR_PREFIX, src_addr.to_string(), "").unwrap(),
             dst_addr,
-            dst_locator: Locator::new(WS_LOCATOR_PREFIX, &dst_addr),
+            dst_locator: Locator::new(WS_LOCATOR_PREFIX, dst_addr.to_string(), "").unwrap(),
             leftovers: AsyncMutex::new(None),
         }
     }
@@ -291,7 +291,7 @@ impl LinkManagerUnicastWs {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let dst_url = get_ws_url(&endpoint.locator).await?;
+        let dst_url = get_ws_url(endpoint.address()).await?;
 
         let (stream, _) = tokio_tungstenite::connect_async(&dst_url)
             .await
@@ -325,7 +325,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let addr = get_ws_addr(&endpoint.locator).await?;
+        let addr = get_ws_addr(endpoint.address()).await?;
 
         // Bind the TCP socket
         let socket = TcpListener::bind(addr).await.map_err(|e| {
@@ -345,7 +345,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
         })?;
 
         // Update the endpoint locator address
-        assert!(endpoint.set_addr(&format!("{}", local_addr)));
+        endpoint = EndPoint::new(
+            endpoint.protocol(),
+            local_addr.to_string(),
+            endpoint.metadata(),
+            endpoint.config(),
+        )?;
 
         // Spawn the accept loop for the listener
         let active = Arc::new(AtomicBool::new(true));
@@ -363,7 +368,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
             res
         });
 
-        let locator = endpoint.locator.clone();
+        let locator = endpoint.to_locator();
         let listener = ListenerUnicastWs::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
         zwrite!(self.listeners).insert(local_addr, listener);
@@ -372,7 +377,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let addr = get_ws_addr(&endpoint.locator).await?;
+        let addr = get_ws_addr(endpoint.address()).await?;
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
@@ -404,38 +409,40 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
 
         let guard = zread!(self.listeners);
         for (key, value) in guard.iter() {
-            let listener_locator = &value.endpoint.locator;
+            let listener_locator = value.endpoint.to_locator();
             if key.ip() == default_ipv4 {
                 match zenoh_util::net::get_local_addresses() {
                     Ok(ipaddrs) => {
                         for ipaddr in ipaddrs {
                             if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv4() {
-                                let mut l = Locator::new(
+                                let l = Locator::new(
                                     WS_LOCATOR_PREFIX,
-                                    &SocketAddr::new(ipaddr, key.port()),
-                                );
-                                l.metadata = value.endpoint.locator.metadata.clone();
+                                    SocketAddr::new(ipaddr, key.port()).to_string(),
+                                    value.endpoint.metadata(),
+                                )
+                                .unwrap();
                                 locators.push(l);
                             }
                         }
                     }
-                    Err(err) => log::error!("Unable to get local addresses : {}", err),
+                    Err(err) => log::error!("Unable to get local addresses: {}", err),
                 }
             } else if key.ip() == default_ipv6 {
                 match zenoh_util::net::get_local_addresses() {
                     Ok(ipaddrs) => {
                         for ipaddr in ipaddrs {
                             if !ipaddr.is_loopback() && !ipaddr.is_multicast() && ipaddr.is_ipv6() {
-                                let mut l = Locator::new(
+                                let l = Locator::new(
                                     WS_LOCATOR_PREFIX,
-                                    &SocketAddr::new(ipaddr, key.port()),
-                                );
-                                l.metadata = value.endpoint.locator.metadata.clone();
+                                    SocketAddr::new(ipaddr, key.port()).to_string(),
+                                    value.endpoint.metadata(),
+                                )
+                                .unwrap();
                                 locators.push(l);
                             }
                         }
                     }
-                    Err(err) => log::error!("Unable to get local addresses : {}", err),
+                    Err(err) => log::error!("Unable to get local addresses: {}", err),
                 }
             } else {
                 locators.push(listener_locator.clone());

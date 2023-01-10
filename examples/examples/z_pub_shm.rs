@@ -14,9 +14,9 @@
 use async_std::task::sleep;
 use clap::{App, Arg};
 use std::time::Duration;
-use zenoh::buffers::SharedMemoryManager;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
+use zenoh::shm::SharedMemoryManager;
 
 const N: usize = 10;
 const K: u32 = 3;

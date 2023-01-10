@@ -44,6 +44,6 @@ tokio-tungstenite = "0.18.0"
 url = "2.3.1"
 zenoh-core = { version = "0.7.0-rc", path = "../../../commons/zenoh-core/" }
 zenoh-link-commons = { version = "0.7.0-rc", path = "../../zenoh-link-commons/" }
-zenoh-protocol-core = { version = "0.7.0-rc", path = "../../../commons/zenoh-protocol-core/" }
+zenoh-protocol = { version = "0.7.0-rc", path = "../../../commons/zenoh-protocol/" }
 zenoh-sync = { version = "0.7.0-rc", path = "../../../commons/zenoh-sync/" }
 zenoh-util = { version = "0.7.0-rc", path = "../../../commons/zenoh-util/" }

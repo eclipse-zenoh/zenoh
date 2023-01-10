@@ -11,6 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use super::face::FaceState;
+use super::network::Network;
+use super::resource::{
+    elect_router, QueryRoute, QueryTargetQabl, QueryTargetQablSet, Resource, SessionContext,
+};
+use super::router::Tables;
+use crate::prelude::KeyExpr;
 use async_trait::async_trait;
 use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
@@ -19,24 +26,16 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::{RwLock, Weak};
-use zenoh_collections::Timed;
+use zenoh_buffers::ZBuf;
+use zenoh_protocol::{
+    core::{
+        key_expr::include::{Includer, DEFAULT_INCLUDER},
+        ConsolidationMode, QueryTarget, QueryableInfo, WhatAmI, WireExpr, ZInt, ZenohId,
+    },
+    zenoh::{DataInfo, QueryBody, RoutingContext},
+};
 use zenoh_sync::get_mut_unchecked;
-
-use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::{DataInfo, QueryBody, RoutingContext};
-use zenoh_protocol_core::key_expr::include::{Includer, DEFAULT_INCLUDER};
-use zenoh_protocol_core::{
-    ConsolidationMode, QueryTarget, QueryableInfo, WhatAmI, WireExpr, ZInt, ZenohId,
-};
-
-use crate::prelude::KeyExpr;
-
-use super::face::FaceState;
-use super::network::Network;
-use super::resource::{
-    elect_router, QueryRoute, QueryTargetQabl, QueryTargetQablSet, Resource, SessionContext,
-};
-use super::router::Tables;
+use zenoh_util::Timed;
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,

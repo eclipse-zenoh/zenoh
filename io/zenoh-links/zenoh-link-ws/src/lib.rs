@@ -23,7 +23,7 @@ use std::net::SocketAddr;
 use url::Url;
 use zenoh_core::{bail, zconfigurable, Result as ZResult};
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol_core::Locator;
+use zenoh_protocol::core::{endpoint::Address, Locator};
 mod unicast;
 pub use unicast::*;
 
@@ -57,18 +57,17 @@ zconfigurable! {
     static ref TCP_ACCEPT_THROTTLE_TIME: u64 = 100_000;
 }
 
-pub async fn get_ws_addr(address: &Locator) -> ZResult<SocketAddr> {
-    let addr = address.address();
-    match addr.to_socket_addrs().await?.next() {
+pub async fn get_ws_addr(address: Address<'_>) -> ZResult<SocketAddr> {
+    match address.as_str().to_socket_addrs().await?.next() {
         Some(addr) => Ok(addr),
         None => bail!("Couldn't resolve WebSocket locator address: {}", address),
     }
 }
 
-pub async fn get_ws_url(address: &Locator) -> ZResult<Url> {
+pub async fn get_ws_url(address: Address<'_>) -> ZResult<Url> {
     match Url::parse(&format!(
         "{}://{}",
-        address.protocol(),
+        WS_LOCATOR_PREFIX,
         get_ws_addr(address).await?
     )) {
         Ok(url) => Ok(url),

@@ -20,12 +20,11 @@
 mod unicast;
 
 use async_trait::async_trait;
-use std::path::Path;
 use std::str::FromStr;
 pub use unicast::*;
 use zenoh_core::{zconfigurable, Result as ZResult};
 use zenoh_link_commons::LocatorInspector;
-use zenoh_protocol_core::{EndPoint, Locator};
+use zenoh_protocol::core::{endpoint::Address, EndPoint, Locator};
 
 // Maximum MTU (Serial PDU) in bytes.
 const SERIAL_MAX_MTU: u16 = z_serial::MAX_MTU as u16;
@@ -58,36 +57,24 @@ impl LocatorInspector for SerialLocatorInspector {
     }
 }
 
-pub fn get_unix_path(locator: &Locator) -> &Path {
-    locator.address().as_ref()
-}
-
 pub fn get_baud_rate(endpoint: &EndPoint) -> u32 {
-    match &endpoint.config {
-        Some(config) => {
-            if let Some(baudrate) = config.get(config::PORT_BAUD_RATE_RAW) {
-                return u32::from_str(baudrate).unwrap_or(DEFAULT_BAUDRATE);
-            }
-            DEFAULT_BAUDRATE
-        }
-        None => DEFAULT_BAUDRATE,
+    if let Some(baudrate) = endpoint.config().get(config::PORT_BAUD_RATE_RAW) {
+        u32::from_str(baudrate).unwrap_or(DEFAULT_BAUDRATE)
+    } else {
+        DEFAULT_BAUDRATE
     }
 }
 
 pub fn get_exclusive(endpoint: &EndPoint) -> bool {
-    match &endpoint.config {
-        Some(config) => {
-            if let Some(exclusive) = config.get(config::PORT_EXCLUSIVE_RAW) {
-                return bool::from_str(exclusive).unwrap_or(DEFAULT_EXCLUSIVE);
-            }
-            DEFAULT_EXCLUSIVE
-        }
-        None => DEFAULT_EXCLUSIVE,
+    if let Some(exclusive) = endpoint.config().get(config::PORT_EXCLUSIVE_RAW) {
+        bool::from_str(exclusive).unwrap_or(DEFAULT_EXCLUSIVE)
+    } else {
+        DEFAULT_EXCLUSIVE
     }
 }
 
-pub fn get_unix_path_as_string(locator: &Locator) -> String {
-    locator.address().to_owned()
+pub fn get_unix_path_as_string(address: Address<'_>) -> String {
+    address.as_str().to_owned()
 }
 
 pub mod config {

@@ -22,12 +22,21 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-pub mod backoff;
-pub use backoff::*;
-pub mod condition;
-pub use condition::*;
+pub mod fifo_queue;
+pub use fifo_queue::*;
+
+pub mod lifo_queue;
+pub use lifo_queue::*;
+
+pub mod object_pool;
+pub use object_pool::*;
+
 pub mod mvar;
 pub use mvar::*;
+
+pub mod condition;
+pub use condition::*;
+
 pub mod signal;
 pub use signal::*;
 

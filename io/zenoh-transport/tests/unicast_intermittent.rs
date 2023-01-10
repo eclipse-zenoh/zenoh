@@ -20,12 +20,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
-use zenoh_core::zasync_executor_init;
-use zenoh_core::Result as ZResult;
-use zenoh_link::{EndPoint, Link};
-use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol_core::{Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId};
+use zenoh_buffers::ZBuf;
+use zenoh_core::{zasync_executor_init, Result as ZResult};
+use zenoh_link::Link;
+use zenoh_protocol::{
+    core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
+    zenoh::ZenohMessage,
+};
 use zenoh_transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -385,25 +386,23 @@ async fn transport_intermittent(endpoint: &EndPoint) {
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_tcp_intermittent() {
-    env_logger::init();
-
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "tcp/127.0.0.1:12447".parse().unwrap();
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12000).parse().unwrap();
     task::block_on(transport_intermittent(&endpoint));
 }
 
 #[cfg(feature = "transport_ws")]
 #[test]
 fn transport_ws_intermittent() {
-    env_logger::init();
-
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "ws/127.0.0.1:12448".parse().unwrap();
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12010).parse().unwrap();
     task::block_on(transport_intermittent(&endpoint));
 }

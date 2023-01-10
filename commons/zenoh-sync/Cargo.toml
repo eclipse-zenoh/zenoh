@@ -34,6 +34,8 @@ event-listener = "2.5.3"
 flume = "0.10.14"
 futures = "0.3.25"
 tokio = { version = "1.23.1", features = ["sync"] }
+zenoh-buffers = { version = "0.7.0-rc", path = "../zenoh-buffers/" }
+zenoh-collections = { version = "0.7.0-rc", path = "../zenoh-collections/" }
 zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }
 
 [dev-dependencies]

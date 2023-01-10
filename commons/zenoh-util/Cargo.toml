@@ -41,7 +41,9 @@ maintenance = { status = "actively-developed" }
 
 [dependencies]
 async-std = "=1.12.0"
+async-trait = "0.1.60"
 clap = "3.2.23"
+flume = "0.10.14"
 futures = "0.3.25"
 hex = "0.4.3"
 home = "0.5.3"

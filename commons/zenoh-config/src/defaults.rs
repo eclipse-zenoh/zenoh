@@ -16,11 +16,11 @@ use super::*;
 macro_rules! mode_accessor {
     ($type:ty) => {
         #[inline]
-        pub fn get(whatami: zenoh_protocol_core::WhatAmI) -> &'static $type {
+        pub fn get(whatami: zenoh_protocol::core::WhatAmI) -> &'static $type {
             match whatami {
-                zenoh_protocol_core::WhatAmI::Router => router,
-                zenoh_protocol_core::WhatAmI::Peer => peer,
-                zenoh_protocol_core::WhatAmI::Client => client,
+                zenoh_protocol::core::WhatAmI::Router => router,
+                zenoh_protocol::core::WhatAmI::Peer => peer,
+                zenoh_protocol::core::WhatAmI::Client => client,
             }
         }
     };

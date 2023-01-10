@@ -1,3 +1,5 @@
+use std::convert::TryFrom;
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -11,13 +13,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::{properties_from_attachment, AuthenticatedPeerLink, EstablishmentProperties};
+use super::super::{AuthenticatedPeerLink, EstablishmentProperties};
 use super::AResult;
 use crate::TransportManager;
 use zenoh_core::zerror;
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::core::{WhatAmI, ZInt, ZenohId};
-use zenoh_protocol::proto::{tmsg, TransportBody};
+use zenoh_protocol::{
+    core::{WhatAmI, ZInt, ZenohId},
+    transport::{tmsg, TransportBody},
+};
 
 /*************************************/
 /*             ACCEPT                */
@@ -91,9 +95,8 @@ pub(super) async fn recv(
 
     // Validate the InitSyn with the peer authenticators
     let init_syn_properties: EstablishmentProperties = match msg.attachment.take() {
-        Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
-        }
+        Some(att) => EstablishmentProperties::try_from(&att)
+            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
 
