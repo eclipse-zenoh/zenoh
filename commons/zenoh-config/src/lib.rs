@@ -24,6 +24,7 @@ use std::{
     collections::HashMap,
     fmt,
     io::Read,
+    iter::FromIterator,
     marker::PhantomData,
     net::SocketAddr,
     path::Path,
@@ -74,8 +75,8 @@ pub fn client<I: IntoIterator<Item = T>, T: Into<EndPoint>>(peers: I) -> Config 
     config.set_mode(Some(WhatAmI::Client)).unwrap();
     config
         .connect
-        .endpoints
-        .extend(peers.into_iter().map(|t| t.into()));
+        .set_endpoints(Some(peers.into_iter().map(|v| v.into()).collect()))
+        .unwrap();
     config
 }
 
@@ -111,15 +112,20 @@ validated_struct::validator! {
         id: ZenohId,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
-        /// Which zenoh nodes to connect to.
+        /// Which endpoints to connect to. E.g. tcp/localhost:7447.
+        /// By configuring the endpoints, it is possible to tell zenoh which router/peer to connect to at startup.
+        /// Accepts a single value or different values for router, peer and client.
         pub connect: #[derive(Default)]
         ConnectConfig {
-            pub endpoints: Vec<EndPoint>,
+            pub endpoints: Option<ModeDependentValue<Vec<EndPoint>>>,
         },
-        /// Which endpoints to listen on. `zenohd` will add `tcp/[::]:7447` to these locators if left empty.
+        /// Which endpoints to listen on. E.g. tcp/localhost:7447.
+        /// By configuring the endpoints, it is possible to tell zenoh which are the endpoints that other routers,
+        /// peers, or client can use to establish a zenoh session.
+        /// Accepts a single value or different values for router, peer and client.
         pub listen: #[derive(Default)]
         ListenConfig {
-            pub endpoints: Vec<EndPoint>,
+            pub endpoints: Option<ModeDependentValue<Vec<EndPoint>>>,
         },
         pub scouting: #[derive(Default)]
         ScoutingConf {
@@ -1143,6 +1149,15 @@ pub enum ModeDependentValue<T> {
     Dependent(ModeValues<T>),
 }
 
+impl<T> Default for ModeDependentValue<T>
+where
+    T: Default,
+{
+    fn default() -> Self {
+        Self::Unique(T::default())
+    }
+}
+
 impl<T> ModeDependent<T> for ModeDependentValue<T> {
     #[inline]
     fn router(&self) -> Option<&T> {
@@ -1166,6 +1181,21 @@ impl<T> ModeDependent<T> for ModeDependentValue<T> {
             Self::Unique(v) => Some(v),
             Self::Dependent(o) => o.client(),
         }
+    }
+}
+
+impl<T> From<T> for ModeDependentValue<T> {
+    fn from(v: T) -> Self {
+        Self::Unique(v)
+    }
+}
+
+impl<T> FromIterator<T> for ModeDependentValue<Vec<T>> {
+    fn from_iter<I>(iter: I) -> Self
+    where
+        I: IntoIterator<Item = T>,
+    {
+        Self::from(iter.into_iter().collect::<Vec<T>>())
     }
 }
 
@@ -1251,6 +1281,43 @@ impl<'a> serde::Deserialize<'a> for ModeDependentValue<WhatAmIMatcher> {
     }
 }
 
+impl<'a> serde::Deserialize<'a> for ModeDependentValue<Vec<EndPoint>> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'a>,
+    {
+        struct UniqueOrDependent<U>(PhantomData<fn() -> U>);
+
+        impl<'de> Visitor<'de> for UniqueOrDependent<ModeDependentValue<Vec<EndPoint>>> {
+            type Value = ModeDependentValue<Vec<EndPoint>>;
+
+            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+                formatter.write_str("Vec<EndPoint> or mode dependent Vec<EndPoint>")
+            }
+
+            fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+            where
+                A: serde::de::SeqAccess<'de>,
+            {
+                let mut vec = Vec::new();
+                while let Some(elem) = seq.next_element()? {
+                    vec.push(elem);
+                }
+                Ok(ModeDependentValue::Unique(vec))
+            }
+
+            fn visit_map<M>(self, map: M) -> Result<Self::Value, M::Error>
+            where
+                M: MapAccess<'de>,
+            {
+                ModeValues::deserialize(de::value::MapAccessDeserializer::new(map))
+                    .map(ModeDependentValue::Dependent)
+            }
+        }
+        deserializer.deserialize_any(UniqueOrDependent(PhantomData))
+    }
+}
+
 impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
     #[inline]
     fn router(&self) -> Option<&T> {
@@ -1284,5 +1351,19 @@ impl<T> ModeDependent<T> for Option<ModeDependentValue<T>> {
 macro_rules! unwrap_or_default {
     ($val:ident$(.$field:ident($($param:ident)?))*) => {
         $val$(.$field($($param)?))*.clone().unwrap_or(zenoh_config::defaults$(::$field$(($param))?)*.into())
+    };
+}
+
+#[macro_export]
+macro_rules! unwrap_or_default_seq {
+    ($val:ident$(.$field:ident($($param:ident)?))*) => {
+        if let Some(seq) = $val$(.$field($($param)?))* {
+            seq.clone()
+        } else {
+            zenoh_config::defaults$(::$field$(($param))?)*.iter().filter_map(|e|{
+                use std::convert::TryInto;
+                (*e).try_into().ok()
+            }).collect()
+        }
     };
 }

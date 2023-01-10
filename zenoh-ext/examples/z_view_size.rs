@@ -90,14 +90,14 @@ fn parse_args() -> (Config, String, Option<String>, usize, u64) {
     if let Some(values) = args.values_of("connect") {
         config
             .connect
-            .endpoints
-            .extend(values.map(|v| v.parse().unwrap()))
+            .set_endpoints(Some(values.map(|v| v.parse().unwrap()).collect()))
+            .unwrap();
     }
     if let Some(values) = args.values_of("listeners") {
         config
             .listen
-            .endpoints
-            .extend(values.map(|v| v.parse().unwrap()))
+            .set_endpoints(Some(values.map(|v| v.parse().unwrap()).collect()))
+            .unwrap();
     }
 
     let group = args.value_of("group").unwrap().to_string();

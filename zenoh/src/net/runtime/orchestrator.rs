@@ -20,7 +20,7 @@ use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 use zenoh_buffers::reader::HasReader;
 use zenoh_buffers::SplitBuffer;
-use zenoh_config::{unwrap_or_default, EndPoint, ModeDependent};
+use zenoh_config::{unwrap_or_default, unwrap_or_default_seq, EndPoint, ModeDependent};
 use zenoh_core::Result as ZResult;
 use zenoh_core::{bail, zerror};
 use zenoh_link::Locator;
@@ -39,8 +39,6 @@ const CONNECTION_TIMEOUT: Duration = Duration::from_millis(10_000);
 const CONNECTION_RETRY_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
 const CONNECTION_RETRY_MAX_PERIOD: Duration = Duration::from_millis(4_000);
 const CONNECTION_RETRY_PERIOD_INCREASE_FACTOR: u32 = 2;
-const ROUTER_DEFAULT_LISTENER: &str = "tcp/[::]:7447";
-const PEER_DEFAULT_LISTENER: &str = "tcp/[::]:0";
 
 pub enum Loop {
     Continue,
@@ -60,7 +58,7 @@ impl Runtime {
         let (peers, scouting, addr, ifaces, timeout) = {
             let guard = self.config.lock();
             (
-                guard.connect().endpoints().clone(),
+                unwrap_or_default_seq!(guard.connect().endpoints().client()),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
                 unwrap_or_default!(guard.scouting().multicast().address()),
                 unwrap_or_default!(guard.scouting().multicast().interface()),
@@ -113,14 +111,9 @@ impl Runtime {
     async fn start_peer(&self) -> ZResult<()> {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
             let guard = &self.config.lock();
-            let listeners = if guard.listen().endpoints().is_empty() {
-                vec![PEER_DEFAULT_LISTENER.parse().unwrap()]
-            } else {
-                guard.listen().endpoints().clone()
-            };
             (
-                listeners,
-                guard.connect().endpoints().clone(),
+                unwrap_or_default_seq!(guard.listen().endpoints().peer()),
+                unwrap_or_default_seq!(guard.connect().endpoints().peer()),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().peer()),
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().peer()),
@@ -147,14 +140,9 @@ impl Runtime {
     async fn start_router(&self) -> ZResult<()> {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces) = {
             let guard = self.config.lock();
-            let listeners = if guard.listen().endpoints().is_empty() {
-                vec![ROUTER_DEFAULT_LISTENER.parse().unwrap()]
-            } else {
-                guard.listen().endpoints().clone()
-            };
             (
-                listeners,
-                guard.connect().endpoints().clone(),
+                unwrap_or_default_seq!(guard.listen().endpoints().router()),
+                unwrap_or_default_seq!(guard.connect().endpoints().router()),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
                 *unwrap_or_default!(guard.scouting().multicast().listen().router()),
                 *unwrap_or_default!(guard.scouting().multicast().autoconnect().router()),
@@ -221,7 +209,10 @@ impl Runtime {
     }
 
     pub(crate) async fn update_peers(&self) -> ZResult<()> {
-        let peers = { self.config.lock().connect().endpoints().clone() };
+        let peers = {
+            let guard = self.config.lock();
+            unwrap_or_default_seq!(guard.connect().endpoints().router())
+        };
         let tranports = self.manager().get_transports();
 
         if self.whatami == WhatAmI::Client {
@@ -752,7 +743,10 @@ impl Runtime {
             }
             _ => {
                 if let Some(endpoint) = &*zread!(session.endpoint) {
-                    let peers = { session.runtime.config.lock().connect().endpoints().clone() };
+                    let peers = {
+                        let guard = session.runtime.config.lock();
+                        unwrap_or_default_seq!(guard.connect().endpoints().router())
+                    };
                     if peers.contains(endpoint) {
                         let endpoint = endpoint.clone();
                         let runtime = session.runtime.clone();
