@@ -111,6 +111,7 @@ socket2 = "0.4.7"
 stop-token = "0.7.0"
 syn = "1.0.105"
 tokio = "1.23.1"
+typenum = "1.15.0"
 uhlc = { git = "https://github.com/atolab/uhlc-rs.git" } # TODO: Using github source until the no_std update gets released on crates.io
 unzip-n = "0.1.2"
 uuid = { version = "1.2.2", features = ["v4"] }
