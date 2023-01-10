@@ -19,7 +19,7 @@ use zenoh_buffers::{
 };
 #[cfg(feature = "shared-memory")]
 use {
-    crate::Zenoh060Condition, std::any::TypeId, zenoh_buffers::ZSlice,
+    crate::Zenoh060Condition, core::any::TypeId, zenoh_buffers::ZSlice,
     zenoh_shm::SharedMemoryBufInfoSerialized,
 };
 

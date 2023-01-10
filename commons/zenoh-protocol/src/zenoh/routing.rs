@@ -27,6 +27,7 @@ use crate::core::ZInt;
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct RoutingContext {
     pub tree_id: ZInt,
 }

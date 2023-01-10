@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use alloc::{vec, vec::Vec};
 use core::{
     cmp::PartialEq,
     fmt, iter,
@@ -19,6 +20,7 @@ use core::{
 };
 
 #[derive(Clone, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum SingleOrVecInner<T> {
     Single(T),
     Vec(Vec<T>),
@@ -80,6 +82,7 @@ where
 }
 
 #[derive(Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SingleOrVec<T>(SingleOrVecInner<T>);
 
 impl<T> SingleOrVec<T> {
@@ -197,7 +200,7 @@ impl<T> iter::Extend<T> for SingleOrVec<T> {
 }
 
 pub struct IntoIter<T> {
-    pub drain: std::vec::IntoIter<T>,
+    pub drain: alloc::vec::IntoIter<T>,
     pub last: Option<T>,
 }
 

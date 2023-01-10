@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header, Zenoh060Reliability};
+use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},

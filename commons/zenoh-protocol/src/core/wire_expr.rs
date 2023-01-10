@@ -13,8 +13,6 @@
 //
 
 //! This module defines the wire representation of Key Expressions.
-extern crate alloc;
-
 use crate::core::ExprId;
 use alloc::borrow::Cow;
 use core::{convert::TryInto, fmt};
@@ -46,6 +44,7 @@ use zenoh_core::{bail, Result as ZResult};
 // +---------------+
 //
 #[derive(PartialEq, Eq, Hash, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WireExpr<'a> {
     pub scope: ExprId, // 0 marks global scope
     pub suffix: Cow<'a, str>,
