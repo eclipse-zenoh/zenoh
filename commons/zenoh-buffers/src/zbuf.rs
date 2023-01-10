@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-extern crate alloc;
-
 use crate::{
     reader::{BacktrackableReader, DidntRead, DidntSiphon, HasReader, Reader, SiphonableReader},
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
@@ -27,6 +25,7 @@ fn get_mut_unchecked<T>(arc: &mut Arc<T>) -> &mut T {
 }
 
 #[derive(Debug, Clone, Default, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ZBuf {
     slices: SingleOrVec<ZSlice>,
 }
@@ -125,12 +124,14 @@ where
 
 // Reader
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ZBufPos {
     slice: usize,
     byte: usize,
 }
 
 #[derive(Debug, Clone)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ZBufReader<'a> {
     inner: &'a ZBuf,
     cursor: ZBufPos,
@@ -348,6 +349,7 @@ impl Iterator for ZBufSliceIterator<'_, '_> {
 
 // Writer
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ZBufWriter<'a> {
     inner: &'a mut ZBuf,
     cache: Arc<Vec<u8>>,

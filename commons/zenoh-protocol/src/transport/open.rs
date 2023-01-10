@@ -43,6 +43,7 @@ use zenoh_buffers::ZSlice;
 /// (***) the cookie MUST be the same received in the INIT message with A==1 from the corresponding peer
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct OpenSyn {
     pub lease: Duration,
     pub initial_sn: ZInt,
@@ -76,6 +77,7 @@ impl OpenSyn {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct OpenAck {
     pub lease: Duration,
     pub initial_sn: ZInt,

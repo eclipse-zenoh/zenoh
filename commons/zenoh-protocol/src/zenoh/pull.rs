@@ -28,6 +28,7 @@ use crate::core::{WireExpr, ZInt};
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Pull {
     pub key: WireExpr<'static>,
     pub pull_id: ZInt,

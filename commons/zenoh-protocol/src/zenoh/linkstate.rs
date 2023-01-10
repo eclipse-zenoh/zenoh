@@ -30,6 +30,7 @@ use crate::core::{Locator, WhatAmI, ZInt, ZenohId};
 // ~    [links]    ~
 // +---------------+
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct LinkState {
     pub psid: ZInt,
     pub sn: ZInt,
@@ -89,6 +90,7 @@ impl LinkState {
 // ~ [link_states] ~
 // +---------------+
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct LinkStateList {
     pub link_states: Vec<LinkState>,
 }

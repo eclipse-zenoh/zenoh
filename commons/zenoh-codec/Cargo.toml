@@ -29,20 +29,33 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-shared-memory = ["zenoh-shm", "zenoh-protocol/shared-memory"]
+default = ["std"]
+std = [
+    "uhlc/std",
+    "zenoh-protocol/std"
+]
+shared-memory = [
+    "std",
+    "zenoh-shm",
+    "zenoh-protocol/shared-memory"
+]
 complete_n = ["zenoh-protocol/complete_n"]
+defmt = [
+    "zenoh-buffers/defmt",
+    "zenoh-protocol/defmt"
+]
 
 [dependencies]
-uhlc = "0.5.1"
-zenoh-buffers = { version = "0.7.0-rc", path = "../zenoh-buffers/" }
-zenoh-protocol = { version = "0.7.0-rc", path = "../zenoh-protocol/" }
+uhlc = { git = "https://github.com/atolab/uhlc-rs.git", default-features = false } # TODO: Using github source until the no_std update gets released on crates.io
+zenoh-buffers = { version = "0.7.0-rc", path = "../zenoh-buffers/", default-features = false }
+zenoh-protocol = { version = "0.7.0-rc", path = "../zenoh-protocol/", default-features = false }
 zenoh-shm = { version = "0.7.0-rc", path = "../zenoh-shm/", optional = true }
 
 [dev-dependencies]
 criterion = "0.4.0"
 rand = "0.8.5"
 uuid = { version = "1.1.2", features = ["v4"] }
-zenoh-protocol = { version = "0.7.0-rc", path = "../zenoh-protocol/", features = [ "test" ] }
+zenoh-protocol = { version = "0.7.0-rc", path = "../zenoh-protocol/", features = ["test"] }
 
 [[bench]]
 name = "codec"

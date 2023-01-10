@@ -29,8 +29,10 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-std = ["zenoh-core"]
 default = ["std"]
+std = ["zenoh-core"]
+defmt = ["dep:defmt"]
 
 [dependencies]
+defmt = { version = "0.3.2", features = ["alloc"], optional = true }
 zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/", optional = true }

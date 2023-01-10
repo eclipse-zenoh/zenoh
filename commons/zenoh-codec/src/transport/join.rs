@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use alloc::boxed::Box;
 use core::time::Duration;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},

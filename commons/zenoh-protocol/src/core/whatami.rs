@@ -15,8 +15,9 @@ use super::ZInt;
 use core::{convert::TryInto, fmt, num::NonZeroU8, ops::BitOr, str::FromStr};
 use zenoh_core::{bail, zresult::ZError};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum WhatAmI {
     Router = 1,
     Peer = 1 << 1,
@@ -129,6 +130,7 @@ impl From<WhatAmI> for ZInt {
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WhatAmIMatcher(pub NonZeroU8);
 
 impl WhatAmIMatcher {
@@ -202,6 +204,7 @@ impl serde::Serialize for WhatAmIMatcher {
         serializer.serialize_str(self.to_str())
     }
 }
+
 pub struct WhatAmIMatcherVisitor;
 impl<'de> serde::de::Visitor<'de> for WhatAmIMatcherVisitor {
     type Value = WhatAmIMatcher;

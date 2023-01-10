@@ -88,7 +88,7 @@ serde = "1.0.149"
 serde_json = "1.0.89"
 socket2 = "0.4.7"
 stop-token = "0.7.0"
-uhlc = "0.5.1"
+uhlc = { git = "https://github.com/atolab/uhlc-rs.git", default-features = false } # TODO: Using github source until the no_std update gets released on crates.io
 uuid = { version = "1.2.2", features = ["v4"] }
 vec_map = "0.8.2"
 zenoh-buffers = { version = "0.7.0-rc", path = "../commons/zenoh-buffers/" }

@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-extern crate alloc;
-
 use crate::{
     reader::HasReader,
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
