@@ -35,4 +35,4 @@ defmt = ["dep:defmt"]
 
 [dependencies]
 defmt = { workspace = true, optional = true }
-zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/", optional = true }
+zenoh-core = { path = "../zenoh-core/", optional = true }

@@ -47,15 +47,15 @@ defmt = [
 
 [dependencies]
 uhlc = { workspace = true, default-features = false }
-zenoh-buffers = { version = "0.7.0-rc", path = "../zenoh-buffers/", default-features = false }
-zenoh-protocol = { version = "0.7.0-rc", path = "../zenoh-protocol/", default-features = false }
-zenoh-shm = { version = "0.7.0-rc", path = "../zenoh-shm/", optional = true }
+zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
+zenoh-protocol = { path = "../zenoh-protocol/", default-features = false }
+zenoh-shm = { path = "../zenoh-shm/", optional = true }
 
 [dev-dependencies]
 criterion.workspace = true
 rand.workspace = true
 uuid.workspace = true
-zenoh-protocol = { version = "0.7.0-rc", path = "../zenoh-protocol/", features = ["test"] }
+zenoh-protocol = { path = "../zenoh-protocol/", features = ["test"] }
 
 [[bench]]
 name = "codec"

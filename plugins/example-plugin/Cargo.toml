@@ -35,7 +35,7 @@ env_logger.workspace = true
 futures.workspace = true
 log.workspace = true
 serde_json.workspace = true
-zenoh = { version = "0.7.0-rc", path = "../../zenoh/", default-features = false }
-zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
-zenoh-plugin-trait = { version = "0.7.0-rc", path = "../zenoh-plugin-trait/" }
-zenoh-util = { version = "0.7.0-rc", path = "../../commons/zenoh-util/" }
+zenoh = { path = "../../zenoh/", default-features = false }
+zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh-plugin-trait = { path = "../zenoh-plugin-trait/" }
+zenoh-util = { path = "../../commons/zenoh-util/" }

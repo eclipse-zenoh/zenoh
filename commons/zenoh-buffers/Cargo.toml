@@ -31,4 +31,4 @@ defmt = ["dep:defmt", "zenoh-collections/defmt"]
 [dependencies]
 defmt = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
-zenoh-collections = { version = "0.7.0-rc", path = "../zenoh-collections/", default-features = false }
+zenoh-collections = { path = "../zenoh-collections/", default-features = false }

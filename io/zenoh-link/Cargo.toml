@@ -37,15 +37,15 @@ transport_serial = ["zenoh-link-serial"]
 async-std = { workspace = true, default-features = false }
 async-trait.workspace = true
 rcgen = { workspace = true, optional = true }
-zenoh-cfg-properties = { version = "0.7.0-rc", path = "../../commons/zenoh-cfg-properties/" }
-zenoh-config = { version = "0.7.0-rc", path = "../../commons/zenoh-config/" }
-zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
-zenoh-link-commons = { version = "0.7.0-rc", path = "../zenoh-link-commons/" }
-zenoh-link-quic = { version = "0.7.0-rc", path = "../zenoh-links/zenoh-link-quic/", optional = true }
-zenoh-link-serial = { version = "0.7.0-rc", path = "../zenoh-links/zenoh-link-serial/", optional = true }
-zenoh-link-tcp = { version = "0.7.0-rc", path = "../zenoh-links/zenoh-link-tcp/", optional = true }
-zenoh-link-tls = { version = "0.7.0-rc", path = "../zenoh-links/zenoh-link-tls/", optional = true }
-zenoh-link-udp = { version = "0.7.0-rc", path = "../zenoh-links/zenoh-link-udp/", optional = true }
-zenoh-link-unixsock_stream = { version = "0.7.0-rc", path = "../zenoh-links/zenoh-link-unixsock_stream/", optional = true }
-zenoh-link-ws = { version = "0.7.0-rc", path = "../zenoh-links/zenoh-link-ws/", optional = true }
-zenoh-protocol = { version = "0.7.0-rc", path = "../../commons/zenoh-protocol/" }
+zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
+zenoh-config = { path = "../../commons/zenoh-config/" }
+zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh-link-commons = { path = "../zenoh-link-commons/" }
+zenoh-link-quic = { path = "../zenoh-links/zenoh-link-quic/", optional = true }
+zenoh-link-serial = { path = "../zenoh-links/zenoh-link-serial/", optional = true }
+zenoh-link-tcp = { path = "../zenoh-links/zenoh-link-tcp/", optional = true }
+zenoh-link-tls = { path = "../zenoh-links/zenoh-link-tls/", optional = true }
+zenoh-link-udp = { path = "../zenoh-links/zenoh-link-udp/", optional = true }
+zenoh-link-unixsock_stream = { path = "../zenoh-links/zenoh-link-unixsock_stream/", optional = true }
+zenoh-link-ws = { path = "../zenoh-links/zenoh-link-ws/", optional = true }
+zenoh-protocol = { path = "../../commons/zenoh-protocol/" }

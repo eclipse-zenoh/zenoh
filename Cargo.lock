@@ -3809,7 +3809,7 @@ dependencies = [
  "zenoh-codec",
  "zenoh-collections",
  "zenoh-config",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-crypto",
  "zenoh-link",
  "zenoh-plugin-trait",
@@ -3833,8 +3833,8 @@ dependencies = [
 name = "zenoh-cfg-properties"
 version = "0.7.0-rc"
 dependencies = [
- "zenoh-core",
- "zenoh-macros",
+ "zenoh-core 0.7.0-rc",
+ "zenoh-macros 0.7.0-rc",
 ]
 
 [[package]]
@@ -3855,7 +3855,7 @@ name = "zenoh-collections"
 version = "0.7.0-rc"
 dependencies = [
  "defmt",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
 ]
 
 [[package]]
@@ -3870,7 +3870,7 @@ dependencies = [
  "serde_yaml",
  "validated_struct",
  "zenoh-cfg-properties",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-protocol",
  "zenoh-util",
 ]
@@ -3882,7 +3882,19 @@ dependencies = [
  "anyhow",
  "async-std",
  "lazy_static",
- "zenoh-macros",
+ "zenoh-macros 0.7.0-rc",
+]
+
+[[package]]
+name = "zenoh-core"
+version = "0.7.0-rc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b0f55158f3f83555db74d4cf5ebc34f90df5d2992cc0de67eba69b99628605e"
+dependencies = [
+ "anyhow",
+ "async-std",
+ "lazy_static",
+ "zenoh-macros 0.7.0-rc (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -3894,7 +3906,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "sha3",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
 ]
 
 [[package]]
@@ -3928,7 +3940,7 @@ dependencies = [
  "log",
  "serde",
  "zenoh",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -3942,7 +3954,7 @@ dependencies = [
  "rcgen",
  "zenoh-cfg-properties",
  "zenoh-config",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-link-commons",
  "zenoh-link-quic",
  "zenoh-link-serial",
@@ -3966,7 +3978,7 @@ dependencies = [
  "zenoh-buffers",
  "zenoh-cfg-properties",
  "zenoh-codec",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-protocol",
 ]
 
@@ -3985,7 +3997,7 @@ dependencies = [
  "webpki",
  "zenoh-cfg-properties",
  "zenoh-config",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-sync",
@@ -4006,7 +4018,7 @@ dependencies = [
  "zenoh-cfg-properties",
  "zenoh-collections",
  "zenoh-config",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-sync",
@@ -4020,7 +4032,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "log",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-sync",
@@ -4041,7 +4053,7 @@ dependencies = [
  "webpki-roots",
  "zenoh-cfg-properties",
  "zenoh-config",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-sync",
@@ -4058,7 +4070,7 @@ dependencies = [
  "socket2",
  "zenoh-buffers",
  "zenoh-collections",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-sync",
@@ -4075,7 +4087,7 @@ dependencies = [
  "log",
  "nix 0.26.1",
  "uuid",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-sync",
@@ -4092,7 +4104,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "url",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-sync",
@@ -4102,6 +4114,19 @@ dependencies = [
 [[package]]
 name = "zenoh-macros"
 version = "0.7.0-rc"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "rustc_version 0.4.0",
+ "syn",
+ "unzip-n",
+]
+
+[[package]]
+name = "zenoh-macros"
+version = "0.7.0-rc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a9ac20b120990778cca204ee46c43a37ed4ffbc331e95702615490f9c169de8"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4131,7 +4156,7 @@ dependencies = [
  "tide",
  "zenoh",
  "zenoh-cfg-properties",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-plugin-trait",
  "zenoh-util",
 ]
@@ -4159,7 +4184,7 @@ dependencies = [
  "urlencoding",
  "zenoh",
  "zenoh-collections",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-plugin-trait",
  "zenoh-util",
  "zenoh_backend_traits",
@@ -4172,8 +4197,8 @@ dependencies = [
  "libloading",
  "log",
  "serde_json",
- "zenoh-core",
- "zenoh-macros",
+ "zenoh-core 0.7.0-rc",
+ "zenoh-macros 0.7.0-rc",
  "zenoh-util",
 ]
 
@@ -4189,7 +4214,7 @@ dependencies = [
  "uhlc",
  "uuid",
  "zenoh-buffers",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-protocol",
 ]
 
@@ -4202,7 +4227,7 @@ dependencies = [
  "serde",
  "shared_memory",
  "zenoh-buffers",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
 ]
 
 [[package]]
@@ -4216,7 +4241,7 @@ dependencies = [
  "tokio",
  "zenoh-buffers",
  "zenoh-collections",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
 ]
 
 [[package]]
@@ -4241,7 +4266,7 @@ dependencies = [
  "zenoh-codec",
  "zenoh-collections",
  "zenoh-config",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc (registry+https://github.com/rust-lang/crates.io-index)",
  "zenoh-crypto",
  "zenoh-link",
  "zenoh-protocol",
@@ -4272,7 +4297,7 @@ dependencies = [
  "winapi",
  "zenoh-cfg-properties",
  "zenoh-collections",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-crypto",
  "zenoh-sync",
 ]
@@ -4286,7 +4311,7 @@ dependencies = [
  "derive_more",
  "serde_json",
  "zenoh",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-util",
 ]
 
@@ -4324,7 +4349,7 @@ dependencies = [
  "log",
  "serde_json",
  "zenoh",
- "zenoh-core",
+ "zenoh-core 0.7.0-rc",
  "zenoh-plugin-trait",
  "zenoh-util",
 ]

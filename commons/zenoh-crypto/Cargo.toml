@@ -34,4 +34,4 @@ hmac.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
 sha3.workspace = true
-zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }
+zenoh-core = { path = "../zenoh-core/" }

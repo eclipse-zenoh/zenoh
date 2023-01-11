@@ -34,6 +34,6 @@ no_mangle = []
 libloading.workspace = true
 log.workspace = true
 serde_json.workspace = true
-zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
-zenoh-macros = { version = "0.7.0-rc", path = "../../commons/zenoh-macros/" }
-zenoh-util = { version = "0.7.0-rc", path = "../../commons/zenoh-util/" }
+zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh-macros = { path = "../../commons/zenoh-macros/" }
+zenoh-util = { path = "../../commons/zenoh-util/" }

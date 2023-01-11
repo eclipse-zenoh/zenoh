@@ -37,7 +37,7 @@ git-version.workspace = true
 json5.workspace = true
 lazy_static.workspace = true
 log.workspace = true
-zenoh = { version = "0.7.0-rc", path = "../zenoh/", features = ["unstable"], default-features = false }
+zenoh = { path = "../zenoh/", features = ["unstable"], default-features = false }
 
 [dev-dependencies]
 rand.workspace = true

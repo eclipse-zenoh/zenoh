@@ -30,8 +30,8 @@ async-trait.workspace = true
 flume.workspace = true
 serde.workspace = true
 typenum.workspace = true
-zenoh-buffers = { version = "0.7.0-rc", path = "../../commons/zenoh-buffers/" }
-zenoh-cfg-properties = { version = "0.7.0-rc", path = "../../commons/zenoh-cfg-properties/" }
-zenoh-codec = { version = "0.7.0-rc", path = "../../commons/zenoh-codec/" }
-zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
-zenoh-protocol = { version = "0.7.0-rc", path = "../../commons/zenoh-protocol/" }
+zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
+zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
+zenoh-codec = { path = "../../commons/zenoh-codec/" }
+zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh-protocol = { path = "../../commons/zenoh-protocol/" }

@@ -46,11 +46,11 @@ log.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tide.workspace = true
-zenoh = { version = "0.7.0-rc", path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
-zenoh-cfg-properties = { version = "0.7.0-rc", path = "../../commons/zenoh-cfg-properties/" }
-zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
-zenoh-plugin-trait = { version = "0.7.0-rc", path = "../zenoh-plugin-trait/", default-features = false }
-zenoh-util = { version = "0.7.0-rc", path = "../../commons/zenoh-util/" }
+zenoh = { path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
+zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
+zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh-plugin-trait = { path = "../zenoh-plugin-trait/", default-features = false }
+zenoh-util = { path = "../../commons/zenoh-util/" }
 
 [build-dependencies]
 rustc_version.workspace = true

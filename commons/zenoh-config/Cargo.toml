@@ -31,7 +31,7 @@ serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
 validated_struct = { workspace = true, features = ["json5", "json_get"] }
-zenoh-cfg-properties = { version = "0.7.0-rc", path = "../zenoh-cfg-properties/" }
-zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }
-zenoh-protocol = { version = "0.7.0-rc", path = "../zenoh-protocol/" }
-zenoh-util = { version = "0.7.0-rc", path = "../zenoh-util/" }
+zenoh-cfg-properties = { path = "../zenoh-cfg-properties/" }
+zenoh-core = { path = "../zenoh-core/" }
+zenoh-protocol = { path = "../zenoh-protocol/" }
+zenoh-util = { path = "../zenoh-util/" }

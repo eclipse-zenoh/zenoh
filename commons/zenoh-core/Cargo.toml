@@ -32,4 +32,4 @@ description = "Internal crate for zenoh."
 anyhow.workspace = true
 async-std.workspace = true
 lazy_static.workspace = true
-zenoh-macros = { version = "0.7.0-rc", path = "../zenoh-macros/" }
+zenoh-macros = { path = "../zenoh-macros/" }

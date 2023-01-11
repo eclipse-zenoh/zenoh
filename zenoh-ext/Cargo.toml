@@ -41,10 +41,10 @@ flume.workspace = true
 futures.workspace = true
 log.workspace = true
 serde.workspace = true
-zenoh = { version = "0.7.0-rc", path = "../zenoh/", default-features = false, features = ["unstable"] }
-zenoh-core = { version = "0.7.0-rc", path = "../commons/zenoh-core/" }
-zenoh-sync = { version = "0.7.0-rc", path = "../commons/zenoh-sync/" }
-zenoh-util = { version = "0.7.0-rc", path = "../commons/zenoh-util/" }
+zenoh = { path = "../zenoh/", default-features = false, features = ["unstable"] }
+zenoh-core = { path = "../commons/zenoh-core/" }
+zenoh-sync = { path = "../commons/zenoh-sync/" }
+zenoh-util = { path = "../commons/zenoh-util/" }
 
 [dev-dependencies]
 clap.workspace = true
