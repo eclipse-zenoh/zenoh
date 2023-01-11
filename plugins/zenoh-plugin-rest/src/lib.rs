@@ -13,6 +13,7 @@
 //
 
 use async_std::prelude::FutureExt;
+use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
 use futures::StreamExt;
 use http_types::Method;
 use std::convert::TryFrom;
@@ -57,7 +58,7 @@ fn value_to_json(value: Value) -> String {
             value.to_string()
         }
         _ => {
-            format!(r#""{}""#, base64::encode(value.payload.contiguous()))
+            format!(r#""{}""#, b64_std_engine.encode(value.payload.contiguous()))
         }
     }
 }

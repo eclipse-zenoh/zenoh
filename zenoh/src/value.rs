@@ -14,6 +14,7 @@
 
 //! Value primitives.
 
+use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
 use std::borrow::Cow;
 use std::convert::TryFrom;
 #[cfg(feature = "shared-memory")]
@@ -79,7 +80,7 @@ impl std::fmt::Display for Value {
             f,
             "{}",
             String::from_utf8(payload.clone().into_owned())
-                .unwrap_or_else(|_| base64::encode(payload))
+                .unwrap_or_else(|_| b64_std_engine.encode(payload))
         )
     }
 }

@@ -12,17 +12,11 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version = { workspace = true }
 name = "zplugin-example"
-version = "0.7.0-rc"
-authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Julien Enoch <julien@enoch.fr>",
-    "Olivier Hécart <olivier.hecart@zettascale.tech>",
-    "Luca Cominardi <luca.cominardi@zettascale.tech>",
-    "Pierre Avital <pierre.avital@zettascale.tech>",
-]
-edition = "2018"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
 
 [lib]
 # When auto-detecting the "example" plugin, `zenohd` will look for a dynamic library named "zplugin_example"
@@ -35,13 +29,13 @@ name = "zplugin_example"
 crate-type = ["cdylib"]
 
 [dependencies]
-async-std = "=1.12.0"
-clap = "3.2.23"
-env_logger = "0.10.0"
-futures = "0.3.25"
-log = "0.4.17"
-serde_json = "1.0.89"
-zenoh = { version = "0.7.0-rc", path = "../../zenoh", default-features = false }
-zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
-zenoh-plugin-trait = { version = "0.7.0-rc", path = "../zenoh-plugin-trait" }
-zenoh-util = { version = "0.7.0-rc", path = "../../commons/zenoh-util" }
+async-std = { workspace = true }
+clap = { workspace = true }
+env_logger = { workspace = true }
+futures = { workspace = true }
+log = { workspace = true }
+serde_json = { workspace = true }
+zenoh = { path = "../../zenoh/", default-features = false }
+zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh-plugin-trait = { path = "../zenoh-plugin-trait/" }
+zenoh-util = { path = "../../commons/zenoh-util/" }

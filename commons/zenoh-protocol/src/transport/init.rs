@@ -11,10 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    core::{WhatAmI, ZInt, ZenohId},
-    defaults::SEQ_NUM_RES,
-};
+use crate::core::{WhatAmI, ZInt, ZenohId};
 use zenoh_buffers::ZSlice;
 
 /// # Init message
@@ -66,6 +63,7 @@ pub struct InitSyn {
 impl InitSyn {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use crate::defaults::SEQ_NUM_RES;
         use rand::Rng;
 
         let mut rng = rand::thread_rng();

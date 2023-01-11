@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::{CongestionControl, Encoding, SampleKind, Timestamp, WireExpr, ZInt, ZenohId};
-use core::convert::TryFrom;
 use zenoh_buffers::ZBuf;
 
 /// # ReplyContext decorator
@@ -129,6 +128,7 @@ pub struct DataInfo {
 impl DataInfo {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use core::convert::TryFrom;
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
