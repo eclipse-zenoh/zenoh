@@ -94,26 +94,24 @@ impl ReplyContext {
 /// -  6: Reserved
 /// -  7: Payload source_id
 /// -  8: Payload source_sn
-/// -  9: First router_id
-/// - 10: First router_sn
-/// - 11-63: Reserved
+/// -  9-63: Reserved
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+---------+
 /// ~    options    ~
 /// +---------------+
-/// ~      kind     ~ if options & (1 << 0)
+/// ~      kind     ~ if options & (1 << 1)
 /// +---------------+
-/// ~   encoding    ~ if options & (1 << 1)
+/// ~   encoding    ~ if options & (1 << 2)
 /// +---------------+
-/// ~   timestamp   ~ if options & (1 << 2)
+/// ~   timestamp   ~ if options & (1 << 3)
 /// +---------------+
 /// ~   source_id   ~ if options & (1 << 7)
 /// +---------------+
 /// ~   source_sn   ~ if options & (1 << 8)
 /// +---------------+
 ///
-/// - if options & (1 << 5) then the payload is sliced
+/// - if options & (1 << 0) then the payload is sliced
 ///
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
