@@ -58,7 +58,7 @@ zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
 zenoh-codec = { path = "../../commons/zenoh-codec/" }
 zenoh-collections = { path = "../../commons/zenoh-collections/" }
 zenoh-config = { path = "../../commons/zenoh-config/" }
-zenoh-core = { vpath = "../../commons/zenoh-core/" }
+zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-crypto = { path = "../../commons/zenoh-crypto/" }
 zenoh-link = { path = "../zenoh-link/" }
 zenoh-protocol = { path = "../../commons/zenoh-protocol/" }
