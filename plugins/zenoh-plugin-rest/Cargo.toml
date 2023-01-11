@@ -12,14 +12,14 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version.workspace = true
+rust-version = { workspace = true }
 name = "zenoh-plugin-rest"
-version.workspace = true
-repository.workspace = true
-homepage.workspace = true
-authors.workspace = true
-edition.workspace = true
-license.workspace = true
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
 categories = ["network-programming", "web-programming::http-server"]
 description = "The zenoh REST plugin"
 
@@ -32,20 +32,20 @@ name = "zplugin_rest"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-anyhow.workspace = true
-async-std.workspace = true
-base64.workspace = true
-clap.workspace = true
-env_logger.workspace = true
-flume.workspace = true
-futures.workspace = true
-git-version.workspace = true
-http-types.workspace = true
-lazy_static.workspace = true
-log.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-tide.workspace = true
+anyhow = { workspace = true }
+async-std = { workspace = true }
+base64 = { workspace = true }
+clap = { workspace = true }
+env_logger = { workspace = true }
+flume = { workspace = true }
+futures = { workspace = true }
+git-version = { workspace = true }
+http-types = { workspace = true }
+lazy_static = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tide = { workspace = true }
 zenoh = { path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
 zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
 zenoh-core = { path = "../../commons/zenoh-core/" }
@@ -53,7 +53,7 @@ zenoh-plugin-trait = { path = "../zenoh-plugin-trait/", default-features = false
 zenoh-util = { path = "../../commons/zenoh-util/" }
 
 [build-dependencies]
-rustc_version.workspace = true
+rustc_version = { workspace = true }
 
 [[example]]
 name = "z_serve_sse"

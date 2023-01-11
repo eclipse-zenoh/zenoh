@@ -12,24 +12,24 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version.workspace = true
+rust-version = { workspace = true }
 name = "zenoh-config"
-version.workspace = true
-repository.workspace = true
-homepage.workspace = true
-authors.workspace = true
-edition.workspace = true
-license.workspace = true
-categories.workspace = true
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
 description = "Internal crate for zenoh."
 
 [dependencies]
-flume.workspace = true
-json5.workspace = true
-num_cpus.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-serde_yaml.workspace = true
+flume = { workspace = true }
+json5 = { workspace = true }
+num_cpus = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 validated_struct = { workspace = true, features = ["json5", "json_get"] }
 zenoh-cfg-properties = { path = "../zenoh-cfg-properties/" }
 zenoh-core = { path = "../zenoh-core/" }

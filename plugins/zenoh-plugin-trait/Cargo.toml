@@ -12,16 +12,16 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version.workspace = true
+rust-version = { workspace = true }
 name = "zenoh-plugin-trait"
-version.workspace = true
-repository.workspace = true
-homepage.workspace = true
-authors.workspace = true
-edition.workspace = true
-license.workspace = true
-categories.workspace = true
-description.workspace = true
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
+description = { workspace = true }
 
 [lib]
 name = "zenoh_plugin_trait"
@@ -31,9 +31,9 @@ default = ["no_mangle"]
 no_mangle = []
 
 [dependencies]
-libloading.workspace = true
-log.workspace = true
-serde_json.workspace = true
+libloading = { workspace = true }
+log = { workspace = true }
+serde_json = { workspace = true }
 zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-macros = { path = "../../commons/zenoh-macros/" }
 zenoh-util = { path = "../../commons/zenoh-util/" }

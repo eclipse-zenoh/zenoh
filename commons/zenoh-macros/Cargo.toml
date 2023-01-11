@@ -12,24 +12,24 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version.workspace = true
+rust-version = { workspace = true }
 name = "zenoh-macros"
-version.workspace = true
-repository.workspace = true
-homepage.workspace = true
-authors.workspace = true
-edition.workspace = true
-license.workspace = true
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
 categories = ["proc-macros"]
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-proc-macro2.workspace = true
-quote.workspace = true
-rustc_version.workspace = true
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+rustc_version = { workspace = true }
 syn = { workspace = true, features = ["full"] }
-unzip-n.workspace = true
+unzip-n = { workspace = true }
 
 [lib]
 proc-macro = true

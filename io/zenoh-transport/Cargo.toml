@@ -12,15 +12,15 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version.workspace = true
+rust-version = { workspace = true }
 name = "zenoh-transport"
-version.workspace = true
-repository.workspace = true
-homepage.workspace = true
-authors.workspace = true
-edition.workspace = true
-license.workspace = true
-categories.workspace = true
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -42,17 +42,17 @@ transport_serial = ["zenoh-link/transport_serial"]
 stats = []
 
 [dependencies]
-async-executor.workspace = true
-async-global-executor.workspace = true
+async-executor = { workspace = true }
+async-global-executor = { workspace = true }
 async-std = { workspace = true, default-features = false }
-async-trait.workspace = true
-flume.workspace = true
-log.workspace = true
-paste.workspace = true
-rand.workspace = true
-ringbuffer-spsc.workspace = true
+async-trait = { workspace = true }
+flume = { workspace = true }
+log = { workspace = true }
+paste = { workspace = true }
+rand = { workspace = true }
+ringbuffer-spsc = { workspace = true }
 rsa = { workspace = true, optional = true }
-serde.workspace = true
+serde = { workspace = true }
 zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
 zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
 zenoh-codec = { path = "../../commons/zenoh-codec/" }
@@ -67,5 +67,5 @@ zenoh-sync = { path = "../../commons/zenoh-sync/" }
 zenoh-util = { path = "../../commons/zenoh-util/" }
 
 [dev-dependencies]
-env_logger.workspace = true
-panic-message.workspace = true
+env_logger = { workspace = true }
+panic-message = { workspace = true }

@@ -12,15 +12,15 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version.workspace = true
+rust-version = { workspace = true }
 name = "zenoh-protocol"
-version.workspace = true
-repository.workspace = true
-homepage.workspace = true
-authors.workspace = true
-edition.workspace = true
-license.workspace = true
-categories.workspace = true
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
 description = "Internal crate for zenoh."
 
 [features]
@@ -53,5 +53,5 @@ zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
 zenoh-core = { path = "../zenoh-core/" }
 
 [dev-dependencies]
-lazy_static.workspace = true
+lazy_static = { workspace = true }
 zenoh-protocol = { path = ".", features = ["test"] }

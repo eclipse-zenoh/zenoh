@@ -12,16 +12,16 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version.workspace = true
+rust-version = { workspace = true }
 name = "zenoh"
-version.workspace = true
-repository.workspace = true
-homepage.workspace = true
-authors.workspace = true
-edition.workspace = true
-license.workspace = true
-categories.workspace = true
-description.workspace = true
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
+description = { workspace = true }
 readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -59,30 +59,30 @@ default = [
 ]
 
 [dependencies]
-async-global-executor.workspace = true
+async-global-executor = { workspace = true }
 async-std = { workspace = true, default-features = false, features = ["attributes"] }
-async-trait.workspace = true
-base64.workspace = true
-env_logger.workspace = true
-event-listener.workspace = true
-flume.workspace = true
-form_urlencoded.workspace = true
-futures.workspace = true
-git-version.workspace = true
-hex.workspace = true
-lazy_static.workspace = true
-log.workspace = true
-ordered-float.workspace = true
-petgraph.workspace = true
-rand.workspace = true
-regex.workspace = true
-serde.workspace = true
-serde_json.workspace = true
-socket2.workspace = true
-stop-token.workspace = true
-uhlc.workspace = true
-uuid.workspace = true
-vec_map.workspace = true
+async-trait = { workspace = true }
+base64 = { workspace = true }
+env_logger = { workspace = true }
+event-listener = { workspace = true }
+flume = { workspace = true }
+form_urlencoded = { workspace = true }
+futures = { workspace = true }
+git-version = { workspace = true }
+hex = { workspace = true }
+lazy_static = { workspace = true }
+log = { workspace = true }
+ordered-float = { workspace = true }
+petgraph = { workspace = true }
+rand = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+socket2 = { workspace = true }
+stop-token = { workspace = true }
+uhlc = { workspace = true }
+uuid = { workspace = true }
+vec_map = { workspace = true }
 zenoh-buffers = { path = "../commons/zenoh-buffers/" }
 zenoh-cfg-properties = { path = "../commons/zenoh-cfg-properties/" }
 zenoh-codec = { path = "../commons/zenoh-codec/" }
@@ -99,7 +99,7 @@ zenoh-transport = { path = "../io/zenoh-transport/" }
 zenoh-util = { path = "../commons/zenoh-util/" }
 
 [build-dependencies]
-rustc_version.workspace = true
+rustc_version = { workspace = true }
 
 [lib]
 name = "zenoh"

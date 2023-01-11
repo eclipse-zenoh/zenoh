@@ -12,30 +12,30 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version.workspace = true
+rust-version = { workspace = true }
 name = "zenoh_backend_traits"
-version.workspace = true
-repository.workspace = true
-homepage.workspace = true
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
 authors = [
     "kydos <angelo@icorsaro.net>",
     "Julien Enoch <julien@enoch.fr>",
     "Olivier Hécart <olivier.hecart@zettascale.tech>",
     "Luca Cominardi <luca.cominardi@zettascale.tech>",
 ]
-edition.workspace = true
-license.workspace = true
-categories.workspace = true
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
 description = "Zenoh: traits to be implemented by backends libraries"
 
 [badges]
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-async-std.workspace = true
-async-trait.workspace = true
-derive_more.workspace = true
-serde_json.workspace = true
+async-std = { workspace = true }
+async-trait = { workspace = true }
+derive_more = { workspace = true }
+serde_json = { workspace = true }
 zenoh = { path = "../../zenoh/", default-features = false }
 zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-util = { path = "../../commons/zenoh-util/" }

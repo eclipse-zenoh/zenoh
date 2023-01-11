@@ -12,18 +12,18 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version.workspace = true
+rust-version = { workspace = true }
 name = "zenoh-ext"
-version.workspace = true
-repository.workspace = true
-homepage.workspace = true
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
 authors = [
     "kydos <angelo@icorsaro.net>",
     "Julien Enoch <julien@enoch.fr>"
 ]
-edition.workspace = true
-license.workspace = true
-categories.workspace = true
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
 description = "Zenoh: extensions to the client API."
 
 [badges]
@@ -35,19 +35,19 @@ default = []
 
 [dependencies]
 async-std = { workspace = true, default-features = false, features = ["attributes", "unstable"] }
-bincode.workspace = true
-env_logger.workspace = true
-flume.workspace = true
-futures.workspace = true
-log.workspace = true
-serde.workspace = true
+bincode = { workspace = true }
+env_logger = { workspace = true }
+flume = { workspace = true }
+futures = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
 zenoh = { path = "../zenoh/", default-features = false, features = ["unstable"] }
 zenoh-core = { path = "../commons/zenoh-core/" }
 zenoh-sync = { path = "../commons/zenoh-sync/" }
 zenoh-util = { path = "../commons/zenoh-util/" }
 
 [dev-dependencies]
-clap.workspace = true
+clap = { workspace = true }
 
 [[example]]
 name = "z_query_sub"

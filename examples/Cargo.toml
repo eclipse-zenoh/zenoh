@@ -12,15 +12,15 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version.workspace = true
+rust-version = { workspace = true }
 name = "zenoh-examples"
-version.workspace = true
-repository.workspace = true
-homepage.workspace = true
-authors.workspace = true
-edition.workspace = true
-license.workspace = true
-categories.workspace = true
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
 description = "Internal crate for zenoh."
 readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -30,21 +30,21 @@ shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
 async-std = { workspace = true, default-features = false, features = ["attributes"] }
-clap.workspace = true
-env_logger.workspace = true
-flume.workspace = true
-futures.workspace = true
-git-version.workspace = true
-json5.workspace = true
-log.workspace = true
+clap = { workspace = true }
+env_logger = { workspace = true }
+flume = { workspace = true }
+futures = { workspace = true }
+git-version = { workspace = true }
+json5 = { workspace = true }
+log = { workspace = true }
 zenoh = { path = "../zenoh/", default-features = false }
 zenoh-ext = { path = "../zenoh-ext/" }
 
 [dev-dependencies]
-rand.workspace = true
+rand = { workspace = true }
 
 [build-dependencies]
-rustc_version.workspace = true
+rustc_version = { workspace = true }
 
 [package.metadata.deb]
 name = "zenohd"
