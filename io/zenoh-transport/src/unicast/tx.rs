@@ -28,6 +28,7 @@ impl TransportUnicastInner {
                 // block for fairly long time
                 let pl = $pipeline.clone();
                 drop($guard);
+                log::trace!("Scheduled: {:?}", $msg);
                 return pl.push_zenoh_message($msg);
             };
         }
