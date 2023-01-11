@@ -34,7 +34,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 anyhow.workspace = true
 async-std.workspace = true
-base64.workspace = true # Was 0.13.1
+base64.workspace = true
 clap.workspace = true
 env_logger.workspace = true
 flume.workspace = true
