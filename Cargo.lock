@@ -4116,7 +4116,7 @@ version = "0.7.0-rc"
 dependencies = [
  "anyhow",
  "async-std",
- "base64 0.13.1",
+ "base64 0.20.0",
  "clap",
  "env_logger",
  "flume",
