@@ -14,7 +14,7 @@
 
 //! Value primitives.
 
-use base64::{Engine, engine::general_purpose::STANDARD as b64_std_engine};
+use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
 use std::borrow::Cow;
 use std::convert::TryFrom;
 #[cfg(feature = "shared-memory")]

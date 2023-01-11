@@ -13,7 +13,7 @@
 //
 
 use async_std::prelude::FutureExt;
-use base64::{Engine, engine::general_purpose::STANDARD as b64_std_engine};
+use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
 use futures::StreamExt;
 use http_types::Method;
 use std::convert::TryFrom;
