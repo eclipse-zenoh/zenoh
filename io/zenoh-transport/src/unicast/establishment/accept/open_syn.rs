@@ -124,22 +124,24 @@ pub(super) async fn recv(
         let mut att = pa.handle_open_syn(auth_link, &cookie, (po, pc)).await;
 
         #[cfg(feature = "shared-memory")]
-        if pa.id() == super::super::authenticator::PeerAuthenticatorId::Shm {
-            // Check if SHM has been validated from the other side
-            att = match att {
-                Ok(att) => {
-                    is_shm = true;
-                    Ok(att)
-                }
-                Err(e) => {
-                    if e.is::<zenoh_core::zresult::ShmError>() {
-                        is_shm = false;
-                        Ok(None)
-                    } else {
-                        Err(e)
+        {
+            if pa.id() == super::super::authenticator::PeerAuthenticatorId::Shm {
+                // Check if SHM has been validated from the other side
+                att = match att {
+                    Ok(att) => {
+                        is_shm = true;
+                        Ok(att)
                     }
-                }
-            };
+                    Err(e) => {
+                        if e.is::<zenoh_core::zresult::ShmError>() {
+                            is_shm = false;
+                            Ok(None)
+                        } else {
+                            Err(e)
+                        }
+                    }
+                };
+            }
         }
 
         let mut att = att.map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;

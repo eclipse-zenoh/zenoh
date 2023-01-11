@@ -394,8 +394,11 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         let buffer = match attachment.take() {
             Some(p) => p,
             None => {
-                log::debug!("Received OpenSyn with no SHM attachment on link: {}", link);
-                return Ok(None);
+                return Err(ShmError(zerror!(
+                    "Received OpenSyn with no SHM attachment on link: {}",
+                    link
+                ))
+                .into());
             }
         };
 

@@ -209,13 +209,7 @@ impl fmt::Display for ZSlice {
 
 impl fmt::Debug for ZSlice {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "ZSlice{{ start: {}, end:{}, buf:\n {:02x?} \n}}",
-            self.start,
-            self.end,
-            self.buf.as_slice()
-        )
+        write!(f, "{:02x?}", self.as_slice())
     }
 }
 
