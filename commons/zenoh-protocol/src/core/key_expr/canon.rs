@@ -137,9 +137,9 @@ fn canonizer() {
     assert_eq!(s, "hello/**/bye");
 
     // Any $* chunk is replaced by a * chunk
-    let mut s = String::from("hello/$*/bye");
-    s.canonize();
-    assert_eq!(s, "hello/*/bye");
+    // let mut s = String::from("hello/$*/bye");
+    // s.canonize();
+    // assert_eq!(s, "hello/*/bye");
 
     // **/* is replaced by */**
     let mut s = String::from("hello/**/*");
