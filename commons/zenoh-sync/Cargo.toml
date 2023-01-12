@@ -29,14 +29,14 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-std = { workspace = true, features = ["unstable"] }
+async-std = { workspace = true, default-features = true, features = ["unstable"] }
 event-listener = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
-tokio = { workspace = true, features = ["sync"] }
+tokio = { workspace = true, default-features = true, features = ["sync"] }
 zenoh-buffers = { path = "../zenoh-buffers/" }
 zenoh-collections = { path = "../zenoh-collections/" }
 zenoh-core = { path = "../zenoh-core/" }
 
 [dev-dependencies]
-async-std = { workspace = true, features = ["unstable", "attributes"] }
+async-std = { workspace = true, default-features = true, features = ["unstable", "attributes"] }

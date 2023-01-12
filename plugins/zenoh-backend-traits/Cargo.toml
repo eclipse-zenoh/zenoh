@@ -32,7 +32,7 @@ description = "Zenoh: traits to be implemented by backends libraries"
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-async-std = { workspace = true }
+async-std = { workspace = true, default-features = true }
 async-trait = { workspace = true }
 derive_more = { workspace = true }
 serde_json = { workspace = true }

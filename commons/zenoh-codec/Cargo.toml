@@ -46,15 +46,15 @@ defmt = [
 ]
 
 [dependencies]
-uhlc = { workspace = true, default-features = false }
+uhlc = { workspace = true }
 zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
 zenoh-protocol = { path = "../zenoh-protocol/", default-features = false }
 zenoh-shm = { path = "../zenoh-shm/", optional = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
-rand = { workspace = true }
-uuid = { workspace = true }
+rand = { workspace = true, default-features = true }
+uuid = { workspace = true, default-features = true }
 zenoh-protocol = { path = "../zenoh-protocol/", features = ["test"] }
 
 [[bench]]

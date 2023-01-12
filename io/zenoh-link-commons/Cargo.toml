@@ -25,10 +25,10 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-std = { workspace = true, default-features = false }
+async-std = { workspace = true }
 async-trait = { workspace = true }
 flume = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, default-features = true }
 typenum = { workspace = true }
 zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
 zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }

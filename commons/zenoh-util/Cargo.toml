@@ -41,12 +41,12 @@ compat = [
 ]
 
 [dependencies]
-async-std = { workspace = true }
+async-std = { workspace = true, default-features = true }
 async-trait = { workspace = true }
 clap = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
-hex = { workspace = true }
+hex = { workspace = true, default-features = true }
 home = { workspace = true }
 humantime = { workspace = true }
 lazy_static = { workspace = true }

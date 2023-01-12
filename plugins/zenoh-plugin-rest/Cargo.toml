@@ -32,8 +32,8 @@ name = "zplugin_rest"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-anyhow = { workspace = true }
-async-std = { workspace = true }
+anyhow = { workspace = true, default-features = true }
+async-std = { workspace = true, default-features = true }
 base64 = { workspace = true }
 clap = { workspace = true }
 env_logger = { workspace = true }
@@ -43,7 +43,7 @@ git-version = { workspace = true }
 http-types = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
-serde = { workspace = true }
+serde = { workspace = true, default-features = true }
 serde_json = { workspace = true }
 tide = { workspace = true }
 zenoh = { path = "../../zenoh/", default-features = false, features = [ "unstable" ] }

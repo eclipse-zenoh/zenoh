@@ -34,7 +34,7 @@ transport_ws = ["zenoh-link-ws"]
 transport_serial = ["zenoh-link-serial"]
 
 [dependencies]
-async-std = { workspace = true, default-features = false }
+async-std = { workspace = true }
 async-trait = { workspace = true }
 rcgen = { workspace = true, optional = true }
 zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }

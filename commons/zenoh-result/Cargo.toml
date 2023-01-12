@@ -30,5 +30,5 @@ std = ["anyhow/std"]
 defmt = ["dep:defmt"]
 
 [dependencies]
-anyhow = { workspace = true, default-features = false }
+anyhow = { workspace = true }
 defmt = { workspace = true, optional = true }

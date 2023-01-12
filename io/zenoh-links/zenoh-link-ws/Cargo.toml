@@ -32,11 +32,11 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-std = { workspace = true, default-features = false, features = ["unstable", "tokio1"] }
+async-std = { workspace = true, features = ["unstable", "tokio1"] }
 async-trait = { workspace = true }
-futures-util = { workspace = true, default-features = false, features = ["sink", "std"] }
+futures-util = { workspace = true, features = ["sink", "std"] }
 log = { workspace = true }
-tokio = { workspace = true, default-features = false, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
+tokio = { workspace = true, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
 tokio-tungstenite = { workspace = true }
 url = { workspace = true }
 zenoh-core = { path = "../../../commons/zenoh-core/" }
