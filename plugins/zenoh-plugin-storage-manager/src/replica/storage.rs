@@ -229,29 +229,12 @@ impl StorageService {
         );
 
         for k in matching_keys {
-            trace!("checking if sample `{}` needs processing", sample);
-            trace!(
-                "first check result: {}",
-                !self
-                    .is_deleted(&k.clone(), sample.get_timestamp().unwrap())
-                    .await
-            );
-            trace!(
-                "capability check: {}",
-                self.capability.history.eq(&History::All)
-            );
-            // trace!(
-            //     "latest timestamp check: {}",
-            //     // self.capability.history.eq(&History::Latest)
-            //     //     &&
-            //     self.is_latest(&k, sample.get_timestamp().unwrap()).await
-            // );
             if !self
                 .is_deleted(&k.clone(), sample.get_timestamp().unwrap())
                 .await
-            // && (self.capability.history.eq(&History::All)
-            //     || (self.capability.history.eq(&History::Latest)
-            //         && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
+                && (self.capability.history.eq(&History::All)
+                    || (self.capability.history.eq(&History::Latest)
+                        && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
             {
                 trace!("Sample `{}` identified as neded processing", sample);
                 // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
@@ -276,20 +259,13 @@ impl StorageService {
                     }
                 };
 
-                trace!(
-                    "Proceed to store the sample `{}` into storage",
-                    sample_to_store
-                );
-
                 let mut storage = self.storage.lock().await;
                 let result = if sample.kind == SampleKind::Put {
-                    trace!("putting {} into storage", sample_to_store);
                     storage.put(k.clone(), sample_to_store.clone()).await
                 } else if sample.kind == SampleKind::Delete {
                     // register a tombstone
                     self.mark_tombstone(k.clone(), sample_to_store.timestamp.unwrap())
                         .await;
-                    trace!("deleting {} from storage", k);
                     storage
                         .delete(k.clone(), sample_to_store.timestamp.unwrap())
                         .await
@@ -382,14 +358,7 @@ impl StorageService {
     async fn is_latest(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
         // @TODO: if cache exists, read from there
         let mut storage = self.storage.lock().await;
-        trace!("check if latest");
         if let Ok(sample) = storage.get(key_expr.clone(), "").await {
-            trace!(
-                "comparing the current timestamp {:?} with the one in the storage {:?}, result : {}",
-                timestamp,
-                sample.get_timestamp().unwrap(),
-                sample.get_timestamp().unwrap() > timestamp
-            );
             if sample.get_timestamp().unwrap() > timestamp {
                 return false;
             }

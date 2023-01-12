@@ -21,7 +21,6 @@ use zenoh::time::Timestamp;
 use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::*;
 use zenoh_core::Result as ZResult;
-use zenoh_util::{Timed, TimedEvent, TimedHandle, Timer};
 
 pub fn create_memory_backend(config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
     Ok(Box::new(MemoryBackend { config }))
@@ -116,7 +115,7 @@ impl Storage for MemoryStorage {
     async fn delete(
         &mut self,
         key: OwnedKeyExpr,
-        timestamp: Timestamp,
+        _timestamp: Timestamp,
     ) -> ZResult<StorageInsertionResult> {
         trace!("delete for {}", key);
         self.map.write().await.remove_entry(&key);
