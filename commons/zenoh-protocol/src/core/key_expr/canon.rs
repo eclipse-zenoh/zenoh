@@ -37,6 +37,9 @@ impl Canonizable for &mut str {
                     writer.write(between_dollarstar);
                 }
             }
+            *self = unsafe {
+                str::from_utf8_unchecked_mut(slice::from_raw_parts_mut(writer.ptr, writer.len))
+            }
         }
         writer.len = 0;
         let mut ke = self.as_bytes().splitter(&b'/');
@@ -119,4 +122,27 @@ fn canonizer() {
     dbg!(OwnedKeyExpr::autocanonize(String::from("/a/b/")).unwrap_err());
     dbg!(OwnedKeyExpr::autocanonize(String::from("/a/b")).unwrap_err());
     dbg!(OwnedKeyExpr::autocanonize(String::from("a/b/")).unwrap_err());
+
+    //
+    // Check statements declared in https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md
+    //
+    // Any contiguous sequence of $*s is replaced by a single $*
+    let mut s = String::from("hello/foo$*$*/bar");
+    s.canonize();
+    assert_eq!(s, "hello/foo$*/bar");
+
+    // Any contiguous sequence of ** chunks is replaced by a single ** chunk
+    let mut s = String::from("hello/**/**/bye");
+    s.canonize();
+    assert_eq!(s, "hello/**/bye");
+
+    // Any $* chunk is replaced by a * chunk
+    // let mut s = String::from("hello/$*/bye");
+    // s.canonize();
+    // assert_eq!(s, "hello/*/bye");
+
+    // **/* is replaced by */**
+    let mut s = String::from("hello/**/*");
+    s.canonize();
+    assert_eq!(s, "hello/*/**");
 }
