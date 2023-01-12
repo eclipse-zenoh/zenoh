@@ -12,7 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version = "1.66"
 name = "zenohd"
 version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
