@@ -29,7 +29,7 @@ use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
 use zenoh::Session;
 use zenoh_cfg_properties::Properties;
-use zenoh_core::{zerror, Result as ZResult};
+use zenoh_result::{zerror, ZResult};
 
 mod config;
 pub use config::Config;

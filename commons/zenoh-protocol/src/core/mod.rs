@@ -24,7 +24,7 @@ use core::{
 use key_expr::OwnedKeyExpr;
 pub use uhlc::{Timestamp, NTP64};
 use uuid::Uuid;
-use zenoh_core::{bail, zerror};
+use zenoh_result::{bail, zerror};
 
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;
@@ -145,7 +145,7 @@ impl From<uuid::Uuid> for ZenohId {
 macro_rules! derive_tryfrom {
     ($T: ty) => {
         impl TryFrom<$T> for ZenohId {
-            type Error = zenoh_core::Error;
+            type Error = zenoh_result::Error;
             fn try_from(val: $T) -> Result<Self, Self::Error> {
                 Ok(Self(val.try_into()?))
             }
@@ -187,7 +187,7 @@ derive_tryfrom!(&[u8; 16]);
 derive_tryfrom!(&[u8]);
 
 impl FromStr for ZenohId {
-    type Err = zenoh_core::Error;
+    type Err = zenoh_result::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // filter-out '-' characters (in case s has UUID format)
@@ -324,7 +324,7 @@ impl Default for Priority {
 }
 
 impl TryFrom<u8> for Priority {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
 
     fn try_from(conduit: u8) -> Result<Self, Self::Error> {
         match conduit {

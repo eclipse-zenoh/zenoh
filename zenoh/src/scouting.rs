@@ -21,7 +21,8 @@ use std::{fmt, ops::Deref};
 use zenoh_config::{
     whatami::WhatAmIMatcher, ZN_MULTICAST_INTERFACE_DEFAULT, ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
 };
-use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_result::ZResult;
 
 /// Constants and helpers for zenoh `whatami` flags.
 pub use zenoh_protocol::core::WhatAmI;

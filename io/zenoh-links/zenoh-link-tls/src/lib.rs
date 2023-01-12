@@ -27,9 +27,10 @@ use config::{
 };
 use zenoh_cfg_properties::Properties;
 use zenoh_config::{Config, ZN_FALSE, ZN_TRUE};
-use zenoh_core::{bail, zconfigurable, zerror, Result as ZResult};
+use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
 use zenoh_protocol::core::{endpoint::Address, Locator};
+use zenoh_result::{bail, zerror, ZResult};
 
 mod unicast;
 pub use unicast::*;

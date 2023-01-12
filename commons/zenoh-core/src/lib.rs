@@ -22,9 +22,6 @@ pub mod macros;
 pub use macros::*;
 use std::future::{Future, Ready};
 pub use zenoh_macros::*;
-pub mod zresult;
-pub use zresult::Error;
-pub use zresult::ZResult as Result;
 
 pub trait Resolvable {
     type To: Sized + Send;

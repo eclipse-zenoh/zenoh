@@ -11,15 +11,45 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
+#![cfg_attr(not(feature = "std"), no_std)]
+extern crate alloc;
+
 use anyhow::Error as AnyError;
-use std::fmt;
+use core::fmt;
 
+#[cfg(not(feature = "std"))]
+use alloc::string::String;
+
+// +-------+
+// | ERROR |
+// +-------+
+
+#[cfg(feature = "std")]
 pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
+#[cfg(not(feature = "std"))]
+pub type Error = String;
 
-pub type ZResult<T> = Result<T, Error>;
+// +---------+
+// | ZRESULT |
+// +---------+
+
+pub type ZResult<T> = core::result::Result<T, Error>;
+
+// +--------+
+// | ZERROR |
+// +--------+
+
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NegativeI8(i8);
+
 impl NegativeI8 {
     pub const fn new(v: i8) -> Self {
         if v >= 0 {
@@ -33,11 +63,14 @@ impl NegativeI8 {
     pub const MIN: Self = Self::new(i8::MIN);
 }
 
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ZError {
+    #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
     error: AnyError,
     file: &'static str,
     line: u32,
     errno: NegativeI8,
+    #[cfg_attr(all(feature = "defmt", feature = "std"), defmt(Debug2Format))] // Use fmt::Debug only for std version of Error
     source: Option<Error>,
 }
 
@@ -65,18 +98,21 @@ impl ZError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for ZError {
     fn source(&self) -> Option<&'_ (dyn std::error::Error + 'static)> {
         self.source
             .as_ref()
-            .map(|r| unsafe { std::mem::transmute(r.as_ref()) })
+            .map(|r| unsafe { core::mem::transmute(r.as_ref()) })
     }
 }
+
 impl fmt::Debug for ZError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self, f)
     }
 }
+
 impl fmt::Display for ZError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} at {}:{}.", self.error, self.file, self.line)?;
@@ -87,32 +123,48 @@ impl fmt::Display for ZError {
     }
 }
 
+// +----------+
+// | SHMERROR |
+// +----------+
+
 #[derive(Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ShmError(pub ZError);
+
 impl fmt::Display for ShmError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(f)
     }
 }
+
+#[cfg(feature = "std")]
 impl std::error::Error for ShmError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         self.0.source()
     }
 }
 
+// +-------+
+// | ERRNO |
+// +-------+
+
 pub trait ErrNo {
     fn errno(&self) -> NegativeI8;
 }
+
 impl ErrNo for ZError {
     fn errno(&self) -> NegativeI8 {
         self.errno
     }
 }
+
 impl ErrNo for ShmError {
     fn errno(&self) -> NegativeI8 {
         self.0.errno
     }
 }
+
+#[cfg(feature = "std")]
 impl ErrNo for dyn std::error::Error {
     fn errno(&self) -> NegativeI8 {
         match self.downcast_ref::<ZError>() {
@@ -121,6 +173,8 @@ impl ErrNo for dyn std::error::Error {
         }
     }
 }
+
+#[cfg(feature = "std")]
 impl ErrNo for dyn std::error::Error + Send {
     fn errno(&self) -> NegativeI8 {
         match self.downcast_ref::<ZError>() {
@@ -129,6 +183,8 @@ impl ErrNo for dyn std::error::Error + Send {
         }
     }
 }
+
+#[cfg(feature = "std")]
 impl ErrNo for dyn std::error::Error + Send + Sync {
     fn errno(&self) -> NegativeI8 {
         match self.downcast_ref::<ZError>() {
@@ -136,4 +192,54 @@ impl ErrNo for dyn std::error::Error + Send + Sync {
             None => NegativeI8::new(i8::MIN),
         }
     }
+}
+
+// +--------+
+// | MACROS |
+// +--------+
+
+pub use anyhow::anyhow;
+#[macro_export]
+macro_rules! zerror {
+    (($errno:expr) $source: expr => $($t: tt)*) => {
+        $crate::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::NegativeI8::new($errno as i8)).set_source($source)
+    };
+    (($errno:expr) $t: literal) => {
+        $crate::ZError::new($crate::anyhow!($t), file!(), line!(), $crate::NegativeI8::new($errno as i8))
+    };
+    (($errno:expr) $t: expr) => {
+        $crate::ZError::new($t, file!(), line!(), $crate::NegativeI8::new($errno as i8))
+    };
+    (($errno:expr) $($t: tt)*) => {
+        $crate::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::NegativeI8::new($errno as i8))
+    };
+    ($source: expr => $($t: tt)*) => {
+        $crate::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::NegativeI8::MIN).set_source($source)
+    };
+    ($t: literal) => {
+        $crate::ZError::new($crate::anyhow!($t), file!(), line!(), $crate::NegativeI8::MIN)
+    };
+    ($t: expr) => {
+        $crate::ZError::new($t, file!(), line!(), $crate::NegativeI8::MIN)
+    };
+    ($($t: tt)*) => {
+        $crate::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::NegativeI8::MIN)
+    };
+}
+
+// @TODO: re-design ZError and macros
+// This macro is a shorthand for the creation of a ZError
+#[macro_export]
+macro_rules! bail{
+    ($($t: tt)*) => {
+        return Err($crate::zerror!($($t)*).into())
+    };
+}
+
+// This macro is a shorthand for the conversion of any Error into a ZError
+#[macro_export]
+macro_rules! to_zerror {
+    ($kind:ident, $descr:expr) => {
+        |e| Err(zerror!($kind, $descr, e))
+    };
 }

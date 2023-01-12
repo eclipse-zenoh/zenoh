@@ -39,7 +39,7 @@ async-trait = { workspace = true }
 rcgen = { workspace = true, optional = true }
 zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
 zenoh-config = { path = "../../commons/zenoh-config/" }
-zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh-result = { path = "../../commons/zenoh-result/" }
 zenoh-link-commons = { path = "../zenoh-link-commons/" }
 zenoh-link-quic = { path = "../zenoh-links/zenoh-link-quic/", optional = true }
 zenoh-link-serial = { path = "../zenoh-links/zenoh-link-serial/", optional = true }

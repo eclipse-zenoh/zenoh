@@ -32,7 +32,8 @@ use zenoh_protocol::{
 };
 use zenoh_transport::{DeMux, Mux, Primitives, TransportPeerEventHandler, TransportUnicast};
 // use zenoh_collections::Timer;
-use zenoh_core::{zconfigurable, Result as ZResult};
+use zenoh_core::zconfigurable;
+use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
 
 zconfigurable! {

@@ -43,6 +43,7 @@ log = { workspace = true }
 serde = { workspace = true }
 zenoh = { path = "../zenoh/", default-features = false, features = ["unstable"] }
 zenoh-core = { path = "../commons/zenoh-core/" }
+zenoh-result = { path = "../commons/zenoh-result/" }
 zenoh-sync = { path = "../commons/zenoh-sync/" }
 zenoh-util = { path = "../commons/zenoh-util/" }
 

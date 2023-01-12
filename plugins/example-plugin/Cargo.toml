@@ -38,4 +38,5 @@ serde_json = { workspace = true }
 zenoh = { path = "../../zenoh/", default-features = false }
 zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait/" }
+zenoh-result = { path = "../../commons/zenoh-result/" }
 zenoh-util = { path = "../../commons/zenoh-util/" }

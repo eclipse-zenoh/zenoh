@@ -24,7 +24,8 @@ use std::sync::{
 use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
-use zenoh_core::{bail, zlock, Result as ZResult};
+use zenoh_core::zlock;
+use zenoh_result::{bail, ZResult};
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
 pub struct ExamplePlugin {}

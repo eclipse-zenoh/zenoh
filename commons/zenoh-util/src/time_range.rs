@@ -20,7 +20,7 @@ use std::{
     str::FromStr,
     time::{Duration, SystemTime},
 };
-use zenoh_core::{bail, zerror, zresult::ZError};
+use zenoh_result::{bail, zerror, ZError};
 
 const U_TO_SECS: f64 = 0.000001;
 const MS_TO_SECS: f64 = 0.001;

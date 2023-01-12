@@ -23,11 +23,12 @@ use std::net::{IpAddr, Shutdown};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_core::{bail, zerror, zread, zwrite, Error as ZError, Result as ZResult};
+use zenoh_core::{zread, zwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 use zenoh_sync::Signal;
 
 use super::{

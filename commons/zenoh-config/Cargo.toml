@@ -34,4 +34,5 @@ validated_struct = { workspace = true, features = ["json5", "json_get"] }
 zenoh-cfg-properties = { path = "../zenoh-cfg-properties/" }
 zenoh-core = { path = "../zenoh-core/" }
 zenoh-protocol = { path = "../zenoh-protocol/" }
+zenoh-result = { path = "../zenoh-result/" }
 zenoh-util = { path = "../zenoh-util/" }

@@ -19,7 +19,7 @@ use core::{
     fmt,
     ops::{Deref, Div},
 };
-use zenoh_core::{bail, Error as ZError, Result as ZResult};
+use zenoh_result::{bail, Error as ZError, ZResult};
 
 /// A [`str`] newtype that is statically known to be a valid key expression.
 ///

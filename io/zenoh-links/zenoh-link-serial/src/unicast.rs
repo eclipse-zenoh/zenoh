@@ -23,13 +23,13 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_core::Result as ZResult;
-use zenoh_core::{zasynclock, zerror, zread, zwrite};
+use zenoh_core::{zasynclock, zread, zwrite};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_result::{zerror, ZResult};
 use zenoh_sync::Signal;
 
 use z_serial::ZSerial;

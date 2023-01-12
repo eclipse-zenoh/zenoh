@@ -13,7 +13,7 @@
 //
 use super::endpoint::*;
 use core::{convert::TryFrom, fmt, hash::Hash, str::FromStr};
-use zenoh_core::{Error as ZError, Result as ZResult};
+use zenoh_result::{Error as ZError, ZResult};
 
 // Locator
 /// A `String` that respects the [`Locator`] canon form: `<proto>/<address>[?<metadata>]`,

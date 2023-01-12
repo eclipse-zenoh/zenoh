@@ -41,4 +41,5 @@ uuid = { workspace = true }
 zenoh-core = { path = "../../../commons/zenoh-core/" }
 zenoh-link-commons = { path = "../../zenoh-link-commons/" }
 zenoh-protocol = { path = "../../../commons/zenoh-protocol/" }
+zenoh-result = { path = "../../../commons/zenoh-result/" }
 zenoh-sync = { path = "../../../commons/zenoh-sync/" }

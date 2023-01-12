@@ -14,7 +14,7 @@
 use super::locator::*;
 use crate::core::split_once;
 use core::{convert::TryFrom, fmt, str::FromStr};
-use zenoh_core::{zerror, Error as ZError, Result as ZResult};
+use zenoh_result::{zerror, Error as ZError, ZResult};
 
 // Parsing chars
 pub const PROTO_SEPARATOR: char = '/';

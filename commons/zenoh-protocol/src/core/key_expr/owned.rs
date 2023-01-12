@@ -131,19 +131,19 @@ impl AsRef<str> for OwnedKeyExpr {
     }
 }
 impl FromStr for OwnedKeyExpr {
-    type Err = zenoh_core::Error;
+    type Err = zenoh_result::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::try_from(s.to_owned())
     }
 }
 impl TryFrom<&str> for OwnedKeyExpr {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         Self::try_from(s.to_owned())
     }
 }
 impl TryFrom<String> for OwnedKeyExpr {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         <&keyexpr as TryFrom<&str>>::try_from(value.as_str())?;
         Ok(Self(value.into()))

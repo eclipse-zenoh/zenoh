@@ -17,12 +17,13 @@ use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
 #[cfg(feature = "auth_usrpwd")]
 use std::collections::HashMap;
 use std::{any::Any, collections::HashSet, iter::FromIterator, sync::Arc, time::Duration};
-use zenoh_core::{zasync_executor_init, Result as ZResult};
+use zenoh_core::zasync_executor_init;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{EndPoint, WhatAmI, ZenohId},
     zenoh::ZenohMessage,
 };
+use zenoh_result::ZResult;
 #[cfg(feature = "auth_pubkey")]
 use zenoh_transport::unicast::establishment::authenticator::PubKeyAuthenticator;
 #[cfg(feature = "shared-memory")]

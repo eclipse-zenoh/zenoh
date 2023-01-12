@@ -34,4 +34,4 @@ log = { workspace = true }
 serde = { workspace = true }
 shared_memory = { workspace = true }
 zenoh-buffers = { path = "../zenoh-buffers/" }
-zenoh-core = { path = "../zenoh-core/" }
+zenoh-result = { path = "../zenoh-result/" }

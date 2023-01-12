@@ -32,10 +32,10 @@ use serde::Serialize;
 use std::any::Any;
 use std::sync::Arc;
 pub use unicast::*;
-use zenoh_core::Result as ZResult;
 use zenoh_link::Link;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::zenoh::ZenohMessage;
+use zenoh_result::ZResult;
 
 /*************************************/
 /*            TRANSPORT              */

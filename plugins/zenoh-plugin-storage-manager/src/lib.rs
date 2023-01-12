@@ -37,7 +37,8 @@ use zenoh::Session;
 use zenoh_backend_traits::CreateVolume;
 use zenoh_backend_traits::CREATE_VOLUME_FN_NAME;
 use zenoh_backend_traits::{config::*, Volume};
-use zenoh_core::{bail, zlock, Result as ZResult};
+use zenoh_core::zlock;
+use zenoh_result::{bail, ZResult};
 use zenoh_util::LibLoader;
 
 mod backends_mgt;

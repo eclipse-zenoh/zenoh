@@ -56,6 +56,7 @@ zenoh = { path = "../../zenoh/", default-features = false, features = [ "unstabl
 zenoh-collections = { path = "../../commons/zenoh-collections/" }
 zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait/", default-features = false }
+zenoh-result = { path = "../../commons/zenoh-result/" }
 zenoh-util = { path = "../../commons/zenoh-util/" }
 zenoh_backend_traits = { path = "../zenoh-backend-traits/" }
 

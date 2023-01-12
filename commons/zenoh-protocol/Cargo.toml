@@ -31,7 +31,8 @@ std = [
     "rand?/std_rng",
     "serde/std",
     "uhlc/std",
-    "uuid/std"
+    "uuid/std",
+    "zenoh-result/std"
 ]
 test = ["rand", "zenoh-buffers/test"]
 shared-memory = ["std"]
@@ -50,7 +51,7 @@ serde = { workspace = true, default-features = false, features = ["alloc"] }
 uhlc = { workspace = true, default-features = false }
 uuid = { workspace = true, default-features = false } # Needs a getrandom::getrandom() custom implementation on embedded (in root crate)
 zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
-zenoh-core = { path = "../zenoh-core/" }
+zenoh-result = { path = "../zenoh-result/", default-features = false }
 
 [dev-dependencies]
 lazy_static = { workspace = true }

@@ -16,7 +16,7 @@
 use crate::core::ExprId;
 use alloc::borrow::Cow;
 use core::{convert::TryInto, fmt};
-use zenoh_core::{bail, Result as ZResult};
+use zenoh_result::{bail, ZResult};
 
 /// A zenoh **resource** is represented by a pair composed by a **key** and a
 /// **value**, such as, ```(/car/telemetry/speed, 320)```.  A **resource key**
@@ -105,7 +105,7 @@ impl<'a> WireExpr<'a> {
 }
 
 impl TryInto<String> for WireExpr<'_> {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_into(self) -> Result<String, Self::Error> {
         if self.scope == 0 {
             Ok(self.suffix.into_owned())
@@ -116,7 +116,7 @@ impl TryInto<String> for WireExpr<'_> {
 }
 
 impl TryInto<ExprId> for WireExpr<'_> {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_into(self) -> Result<ExprId, Self::Error> {
         self.try_as_id()
     }

@@ -93,6 +93,7 @@ zenoh-crypto = { path = "../commons/zenoh-crypto/" }
 zenoh-link = { path = "../io/zenoh-link/" }
 zenoh-plugin-trait = { path = "../plugins/zenoh-plugin-trait/", default-features = false }
 zenoh-protocol = { path = "../commons/zenoh-protocol/" }
+zenoh-result = { path = "../commons/zenoh-result/" }
 zenoh-shm = { path = "../commons/zenoh-shm/", optional = true }
 zenoh-sync = { path = "../commons/zenoh-sync/" }
 zenoh-transport = { path = "../io/zenoh-transport/" }

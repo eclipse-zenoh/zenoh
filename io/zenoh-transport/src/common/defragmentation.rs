@@ -14,11 +14,11 @@
 use super::seq_num::SeqNum;
 use zenoh_buffers::{reader::HasReader, SplitBuffer, ZBuf, ZSlice};
 use zenoh_codec::{RCodec, Zenoh060Reliability};
-use zenoh_core::{bail, Result as ZResult};
 use zenoh_protocol::{
     core::{Reliability, ZInt},
     zenoh::ZenohMessage,
 };
+use zenoh_result::{bail, ZResult};
 
 #[derive(Debug)]
 pub(crate) struct DefragBuffer {
