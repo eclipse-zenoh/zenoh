@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::endpoint::*;
+use alloc::{borrow::ToOwned, string::String};
 use core::{convert::TryFrom, fmt, hash::Hash, str::FromStr};
 use zenoh_result::{Error as ZError, ZResult};
 

@@ -13,6 +13,12 @@
 //
 use super::locator::*;
 use crate::core::split_once;
+use alloc::{
+    borrow::ToOwned,
+    format,
+    string::String,
+    vec::Vec,
+};
 use core::{convert::TryFrom, fmt, str::FromStr};
 use zenoh_result::{zerror, Error as ZError, ZResult};
 

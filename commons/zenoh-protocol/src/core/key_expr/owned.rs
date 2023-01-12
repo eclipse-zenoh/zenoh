@@ -15,7 +15,12 @@ extern crate alloc;
 
 use super::{canon::Canonizable, keyexpr};
 use crate::core::WireExpr;
-use alloc::{borrow::Cow, sync::Arc};
+use alloc::{
+    borrow::{Cow, ToOwned},
+    boxed::Box,
+    string::String,
+    sync::Arc,
+};
 use core::{
     convert::TryFrom,
     fmt,

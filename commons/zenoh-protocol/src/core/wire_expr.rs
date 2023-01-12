@@ -14,7 +14,10 @@
 
 //! This module defines the wire representation of Key Expressions.
 use crate::core::ExprId;
-use alloc::borrow::Cow;
+use alloc::{
+    borrow::Cow,
+    string::{String, ToString},
+};
 use core::{convert::TryInto, fmt};
 use zenoh_result::{bail, ZResult};
 

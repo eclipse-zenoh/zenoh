@@ -25,6 +25,7 @@ use crate::{
         Channel, CongestionControl, ConsolidationMode, QueryTarget, Reliability, WireExpr, ZInt,
     },
 };
+use alloc::{string::String, vec::Vec};
 use core::fmt;
 pub use data::*;
 pub use declare::*;

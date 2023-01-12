@@ -20,20 +20,22 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
+use alloc::boxed::Box;
 use anyhow::Error as AnyError;
 use core::fmt;
-
-#[cfg(not(feature = "std"))]
-use alloc::string::String;
 
 // +-------+
 // | ERROR |
 // +-------+
 
+// Internally used to replace std::error::Error
+pub trait IError: fmt::Debug + fmt::Display {}
+impl<T> IError for T where T: fmt::Debug + fmt::Display {}
+
 #[cfg(feature = "std")]
 pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 #[cfg(not(feature = "std"))]
-pub type Error = String;
+pub type Error = Box<dyn IError + Send + Sync + 'static>;
 
 // +---------+
 // | ZRESULT |
@@ -70,8 +72,7 @@ pub struct ZError {
     file: &'static str,
     line: u32,
     errno: NegativeI8,
-    #[cfg_attr(all(feature = "defmt", feature = "std"), defmt(Debug2Format))]
-    // Use fmt::Debug only for std version of Error
+    #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
     source: Option<Error>,
 }
 
@@ -99,7 +100,7 @@ impl ZError {
     }
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "std")] // For no_std, ZError automatically implements IError
 impl std::error::Error for ZError {
     fn source(&self) -> Option<&'_ (dyn std::error::Error + 'static)> {
         self.source

@@ -13,6 +13,12 @@
 //
 pub mod key_expr;
 
+use alloc::{
+    boxed::Box,
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 use core::{
     convert::{From, TryFrom, TryInto},
     fmt,

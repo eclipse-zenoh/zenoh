@@ -15,6 +15,7 @@ use crate::core::key_expr::{
     utils::{Split, Writer},
     DELIMITER, DOUBLE_WILD, SINGLE_WILD,
 };
+use alloc::string::String;
 use core::{slice, str};
 
 pub trait Canonizable {

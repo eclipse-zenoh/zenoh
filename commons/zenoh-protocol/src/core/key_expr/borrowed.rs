@@ -13,7 +13,13 @@
 //
 use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
 use crate::core::WireExpr;
-use alloc::borrow::{Borrow, Cow};
+use alloc::{
+    borrow::{Borrow, Cow, ToOwned},
+    format,
+    string::String,
+    vec,
+    vec::Vec,
+};
 use core::{
     convert::{TryFrom, TryInto},
     fmt,
