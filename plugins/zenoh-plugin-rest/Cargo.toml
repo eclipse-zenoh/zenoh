@@ -12,54 +12,48 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version = { workspace = true }
 name = "zenoh-plugin-rest"
-version = "0.7.0-rc"
-repository = "https://github.com/eclipse-zenoh/zenoh"
-homepage = "http://zenoh.io"
-authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Julien Enoch <julien@enoch.fr>",
-    "Olivier Hécart <olivier.hecart@zettascale.tech>",
-    "Luca Cominardi <luca.cominardi@zettascale.tech>",
-    "Pierre Avital <pierre.avital@zettascale.tech>",
-]
-edition = "2018"
-license = " EPL-2.0 OR Apache-2.0"
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
 categories = ["network-programming", "web-programming::http-server"]
 description = "The zenoh REST plugin"
 
 [features]
-no_mangle = ["zenoh-plugin-trait/no_mangle"]
 default = ["no_mangle"]
+no_mangle = ["zenoh-plugin-trait/no_mangle"]
 
 [lib]
 name = "zplugin_rest"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-anyhow = "1.0.66"
-async-std = "=1.12.0"
-base64 = "0.13.1"
-clap = "3.2.23"
-env_logger = "0.10.0"
-flume = "0.10.14"
-futures = "0.3.25"
-git-version = "0.3.5"
-http-types = "2.12.0"
-lazy_static = "1.4.0"
-log = "0.4.17"
-serde = "1.0.149"
-serde_json = "1.0.89"
-tide = "0.16.0"
-zenoh = { version = "0.7.0-rc", path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
-zenoh-cfg-properties = { version = "0.7.0-rc", path = "../../commons/zenoh-cfg-properties" }
-zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
-zenoh-plugin-trait = { version = "0.7.0-rc", path = "../zenoh-plugin-trait", default-features = false }
-zenoh-util = { version = "0.7.0-rc", path = "../../commons/zenoh-util/" }
+anyhow = { workspace = true }
+async-std = { workspace = true }
+base64 = { workspace = true }
+clap = { workspace = true }
+env_logger = { workspace = true }
+flume = { workspace = true }
+futures = { workspace = true }
+git-version = { workspace = true }
+http-types = { workspace = true }
+lazy_static = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tide = { workspace = true }
+zenoh = { path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
+zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
+zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh-plugin-trait = { path = "../zenoh-plugin-trait/", default-features = false }
+zenoh-util = { path = "../../commons/zenoh-util/" }
 
 [build-dependencies]
-rustc_version = "0.4.0"
+rustc_version = { workspace = true }
 
 [[example]]
 name = "z_serve_sse"

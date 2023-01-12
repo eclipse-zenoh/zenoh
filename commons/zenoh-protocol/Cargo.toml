@@ -12,21 +12,15 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version = { workspace = true }
 name = "zenoh-protocol"
-version = "0.7.0-rc"
-repository = "https://github.com/eclipse-zenoh/zenoh"
-homepage = "http://zenoh.io"
-authors = [
-	"kydos <angelo@icorsaro.net>",
-	"Julien Enoch <julien@enoch.fr>",
-	"Olivier Hécart <olivier.hecart@zettascale.tech>",
-	"Luca Cominardi <luca.cominardi@zettascale.tech>",
-	"Pierre Avital <pierre.avital@zettascale.tech>",
-]
-edition = "2018"
-license = " EPL-2.0 OR Apache-2.0"
-categories = ["network-programming"]
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
 description = "Internal crate for zenoh."
 
 [features]
@@ -49,15 +43,15 @@ defmt = [
 ]
 
 [dependencies]
-defmt = { version = "0.3.2", features = ["alloc"], optional = true }
-hex = { version = "0.4.3", default-features = false, features = ["alloc"] }
-rand = { version = "0.8.5", default-features = false, features = ["alloc", "getrandom"], optional = true }
-serde = { version = "1.0.147", default-features = false, features = ["alloc"] }
-uhlc = { git = "https://github.com/atolab/uhlc-rs.git", default-features = false } # TODO: Using github source until the no_std update gets released on crates.io
-uuid = { version = "1.2.1", default-features = false } # Needs a getrandom::getrandom() custom implementation on embedded (in root crate)
-zenoh-buffers = { version = "0.7.0-rc", path = "../zenoh-buffers/", default-features = false }
-zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }
+defmt = { workspace = true, optional = true }
+hex = { workspace = true, default-features = false, features = ["alloc"] }
+rand = { workspace = true, default-features = false, features = ["alloc", "getrandom"], optional = true }
+serde = { workspace = true, default-features = false, features = ["alloc"] }
+uhlc = { workspace = true, default-features = false }
+uuid = { workspace = true, default-features = false } # Needs a getrandom::getrandom() custom implementation on embedded (in root crate)
+zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
+zenoh-core = { path = "../zenoh-core/" }
 
 [dev-dependencies]
-lazy_static = "1.4.0"
-zenoh-protocol = { version = "0.7.0-rc", path = ".", features = ["test"] }
+lazy_static = { workspace = true }
+zenoh-protocol = { path = ".", features = ["test"] }

@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    core::{Channel, Priority, Reliability, ZInt},
+    core::{Channel, ZInt},
     zenoh::ZenohMessage,
 };
 use zenoh_buffers::ZSlice;
@@ -90,6 +90,7 @@ pub enum FramePayload {
 impl Frame {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use crate::core::{Priority, Reliability};
         use core::convert::TryInto;
         use rand::Rng;
 
@@ -158,6 +159,7 @@ pub struct FrameHeader {
 impl FrameHeader {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use crate::core::{Priority, Reliability};
         use core::convert::TryInto;
         use rand::{seq::SliceRandom, Rng};
 
