@@ -34,11 +34,11 @@ use zenoh_buffers::{
 };
 use zenoh_cfg_properties::Properties;
 use zenoh_codec::{RCodec, WCodec, Zenoh060};
-use zenoh_result::{zerror, ZResult};
 use zenoh_protocol::{
     core::{EndPoint, Locator},
     transport::TransportMessage,
 };
+use zenoh_result::{zerror, ZResult};
 
 /*************************************/
 /*            GENERAL                */

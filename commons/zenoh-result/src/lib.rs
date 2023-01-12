@@ -70,7 +70,8 @@ pub struct ZError {
     file: &'static str,
     line: u32,
     errno: NegativeI8,
-    #[cfg_attr(all(feature = "defmt", feature = "std"), defmt(Debug2Format))] // Use fmt::Debug only for std version of Error
+    #[cfg_attr(all(feature = "defmt", feature = "std"), defmt(Debug2Format))]
+    // Use fmt::Debug only for std version of Error
     source: Option<Error>,
 }
 
