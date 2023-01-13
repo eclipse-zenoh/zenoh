@@ -52,11 +52,11 @@ version = "0.7.0-rc" # Zenoh version
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Julien Enoch <julien@enoch.fr>",
-    "Olivier Hécart <olivier.hecart@zettascale.tech>",
-    "Luca Cominardi <luca.cominardi@zettascale.tech>",
-    "Pierre Avital <pierre.avital@zettascale.tech>",
+  "kydos <angelo@icorsaro.net>",
+  "Julien Enoch <julien@enoch.fr>",
+  "Olivier Hécart <olivier.hecart@zettascale.tech>",
+  "Luca Cominardi <luca.cominardi@zettascale.tech>",
+  "Pierre Avital <pierre.avital@zettascale.tech>",
 ]
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
@@ -92,6 +92,7 @@ home = "0.5.4"
 http-types = "2.12.0"
 humantime = "2.1.0"
 json5 = "0.4.1"
+keyed-set = "0.4.4"
 lazy_static = "1.4.0"
 libc = "0.2.138"
 libloading = "0.7.4"
@@ -105,7 +106,7 @@ petgraph = "0.6.2"
 pnet = "0.31.0"
 pnet_datalink = "0.31.0"
 proc-macro2 = "1.0.47"
-quinn = "0.9.3" 
+quinn = "0.9.3"
 quote = "1.0.21"
 rand = "0.8.5"
 rand_chacha = "0.3.1"
@@ -127,6 +128,7 @@ socket2 = "0.4.7"
 stop-token = "0.7.0"
 syn = "1.0.105"
 tide = "0.16.0"
+token-cell = "1.4.1"
 tokio = "1.23.1"
 tokio-tungstenite = "0.18.0"
 typenum = "1.15.0"
