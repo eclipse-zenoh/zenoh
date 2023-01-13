@@ -23,12 +23,14 @@ pub use scout::*;
 
 // Zenoh messages at scouting level
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ScoutingBody {
     Scout(Scout),
     Hello(Hello),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ScoutingMessage {
     pub body: ScoutingBody,
     pub attachment: Option<Attachment>,

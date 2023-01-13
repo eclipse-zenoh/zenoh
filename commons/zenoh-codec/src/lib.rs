@@ -11,6 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#![cfg_attr(not(feature = "std"), no_std)]
+extern crate alloc;
+
 mod common;
 mod core;
 mod scouting;

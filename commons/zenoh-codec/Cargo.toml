@@ -12,37 +12,50 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version = { workspace = true }
 name = "zenoh-codec"
-version = "0.7.0-rc"
-repository = "https://github.com/eclipse-zenoh/zenoh"
-homepage = "http://zenoh.io"
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
 authors = [
 	"kydos <angelo@icorsaro.net>",
 	"Luca Cominardi <luca.cominardi@zettascale.tech>",
 	"Pierre Avital <pierre.avital@zettascale.tech>",
 ]
-edition = "2018"
-license = " EPL-2.0 OR Apache-2.0"
-categories = ["network-programming"]
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-shared-memory = ["zenoh-shm", "zenoh-protocol/shared-memory"]
+default = ["std"]
+std = [
+    "uhlc/std",
+    "zenoh-protocol/std"
+]
+shared-memory = [
+    "std",
+    "zenoh-shm",
+    "zenoh-protocol/shared-memory"
+]
 complete_n = ["zenoh-protocol/complete_n"]
+defmt = [
+    "zenoh-buffers/defmt",
+    "zenoh-protocol/defmt"
+]
 
 [dependencies]
-uhlc = "0.5.1"
-zenoh-buffers = { version = "0.7.0-rc", path = "../zenoh-buffers/" }
-zenoh-protocol = { version = "0.7.0-rc", path = "../zenoh-protocol/" }
-zenoh-shm = { version = "0.7.0-rc", path = "../zenoh-shm/", optional = true }
+uhlc = { workspace = true, default-features = false }
+zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
+zenoh-protocol = { path = "../zenoh-protocol/", default-features = false }
+zenoh-shm = { path = "../zenoh-shm/", optional = true }
 
 [dev-dependencies]
-criterion = "0.4.0"
-rand = "0.8.5"
-uuid = { version = "1.1.2", features = ["v4"] }
-zenoh-protocol = { version = "0.7.0-rc", path = "../zenoh-protocol/", features = [ "test" ] }
+criterion = { workspace = true }
+rand = { workspace = true }
+uuid = { workspace = true }
+zenoh-protocol = { path = "../zenoh-protocol/", features = ["test"] }
 
 [[bench]]
 name = "codec"

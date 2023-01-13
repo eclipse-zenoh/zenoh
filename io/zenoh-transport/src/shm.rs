@@ -24,7 +24,7 @@ macro_rules! unset_sliced {
         // Set the right data info SHM parameters
         if let Some(di) = $data_info {
             di.sliced = false;
-            if di != &DataInfo::default() {
+            if di == &DataInfo::default() {
                 *$data_info = None;
             }
         }
@@ -42,8 +42,10 @@ macro_rules! set_sliced {
             }
             None => {
                 // Create the DataInfo content
-                let mut di = DataInfo::default();
-                di.sliced = true;
+                let di = DataInfo {
+                    sliced: true,
+                    ..Default::default()
+                };
                 *$data_info = Some(di);
             }
         }

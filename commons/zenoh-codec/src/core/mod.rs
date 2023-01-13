@@ -23,6 +23,7 @@ mod zint;
 mod zslice;
 
 use crate::{RCodec, WCodec, Zenoh060};
+use alloc::{string::String, vec::Vec};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},

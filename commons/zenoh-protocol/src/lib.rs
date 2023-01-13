@@ -17,6 +17,9 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+#![cfg_attr(not(feature = "std"), no_std)]
+extern crate alloc;
+
 pub mod common;
 pub mod core;
 pub mod defaults;

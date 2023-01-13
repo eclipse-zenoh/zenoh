@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-extern crate alloc;
-
 use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
 use crate::core::WireExpr;
 use alloc::borrow::{Borrow, Cow};
@@ -41,6 +39,7 @@ use zenoh_core::{bail, Error as ZError, Result as ZResult};
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
 #[derive(PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct keyexpr(str);
 
 impl keyexpr {
@@ -303,12 +302,14 @@ impl Div for &keyexpr {
 ///
 /// You can check for intersection with `level >= SetIntersecionLevel::Intersection` and for inclusion with `level >= SetIntersectionLevel::Includes`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SetIntersectionLevel {
     Disjoint,
     Intersects,
     Includes,
     Equals,
 }
+
 #[test]
 fn intersection_level_cmp() {
     use SetIntersectionLevel::*;
@@ -328,6 +329,7 @@ impl fmt::Display for keyexpr {
         f.write_str(self)
     }
 }
+
 #[repr(i8)]
 enum KeyExprConstructionError {
     LoneDollarStar = -1,

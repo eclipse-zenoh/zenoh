@@ -11,10 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    core::{WhatAmI, ZInt, ZenohId},
-    defaults::SEQ_NUM_RES,
-};
+use crate::core::{WhatAmI, ZInt, ZenohId};
 use zenoh_buffers::ZSlice;
 
 /// # Init message
@@ -54,6 +51,7 @@ use zenoh_buffers::ZSlice;
 /// - if Q==1 then the initiator/responder support QoS.
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct InitSyn {
     pub version: u8,
     pub whatami: WhatAmI,
@@ -65,6 +63,7 @@ pub struct InitSyn {
 impl InitSyn {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use crate::defaults::SEQ_NUM_RES;
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
@@ -90,6 +89,7 @@ impl InitSyn {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct InitAck {
     pub whatami: WhatAmI,
     pub zid: ZenohId,

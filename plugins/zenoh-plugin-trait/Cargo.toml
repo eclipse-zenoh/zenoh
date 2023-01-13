@@ -12,34 +12,28 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version = { workspace = true }
 name = "zenoh-plugin-trait"
-version = "0.7.0-rc"
-repository = "https://github.com/eclipse-zenoh/zenoh"
-homepage = "http://zenoh.io"
-authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Julien Enoch <julien@enoch.fr>",
-    "Olivier Hécart <olivier.hecart@zettascale.tech>",
-    "Luca Cominardi <luca.cominardi@zettascale.tech>",
-    "Pierre Avital <pierre.avital@zettascale.tech>",
-]
-edition = "2018"
-license = " EPL-2.0 OR Apache-2.0"
-categories = ["network-programming"]
-description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
+description = { workspace = true }
 
 [lib]
 name = "zenoh_plugin_trait"
 
 [features]
-no_mangle = []
 default = ["no_mangle"]
+no_mangle = []
 
 [dependencies]
-libloading = "0.7.4"
-log = "0.4.17"
-serde_json = "1.0.89"
-zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
-zenoh-macros = { version = "0.7.0-rc", path = "../../commons/zenoh-macros/" }
-zenoh-util = { version = "0.7.0-rc", path = "../../commons/zenoh-util" }
+libloading = { workspace = true }
+log = { workspace = true }
+serde_json = { workspace = true }
+zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh-macros = { path = "../../commons/zenoh-macros/" }
+zenoh-util = { path = "../../commons/zenoh-util/" }

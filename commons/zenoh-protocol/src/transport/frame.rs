@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    core::{Channel, Priority, Reliability, ZInt},
+    core::{Channel, ZInt},
     zenoh::ZenohMessage,
 };
 use zenoh_buffers::ZSlice;
@@ -51,6 +51,7 @@ use zenoh_buffers::ZSlice;
 ///       place at this stage. Then, the F bit is used to detect the last fragment during re-ordering.
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Frame {
     pub channel: Channel,
     pub sn: ZInt,
@@ -58,6 +59,7 @@ pub struct Frame {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum FramePayload {
     /// ```text
     /// The Payload of a fragmented Frame.
@@ -88,6 +90,7 @@ pub enum FramePayload {
 impl Frame {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use crate::core::{Priority, Reliability};
         use core::convert::TryInto;
         use rand::Rng;
 
@@ -137,6 +140,7 @@ impl Frame {
 
 // FrameHeader
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum FrameKind {
     Messages,
@@ -145,6 +149,7 @@ pub enum FrameKind {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct FrameHeader {
     pub channel: Channel,
     pub sn: ZInt,
@@ -154,6 +159,7 @@ pub struct FrameHeader {
 impl FrameHeader {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use crate::core::{Priority, Reliability};
         use core::convert::TryInto;
         use rand::{seq::SliceRandom, Rng};
 
