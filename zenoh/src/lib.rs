@@ -108,6 +108,7 @@ pub mod selector;
 pub use zenoh_config as config;
 pub mod handlers;
 pub mod info;
+pub mod liveliness;
 pub mod plugins;
 pub mod prelude;
 pub mod publication;

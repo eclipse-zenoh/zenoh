@@ -71,7 +71,7 @@ fn propagate_simple_subscription_to(
     src_face: &mut Arc<FaceState>,
     full_peer_net: bool,
 ) {
-    if src_face.id != dst_face.id
+    if (src_face.id != dst_face.id || res.expr().starts_with(super::PREFIX_LIVELINESS))
         && !dst_face.local_subs.contains(res)
         && match tables.whatami {
             WhatAmI::Router => {
@@ -656,7 +656,10 @@ pub(crate) fn undeclare_client_subscription(
     }
     if client_subs.len() == 1 && !router_subs && !peer_subs {
         let face = &mut client_subs[0];
-        if face.local_subs.contains(res) {
+        if face.local_subs.contains(res)
+            && !(face.whatami == WhatAmI::Client
+                && res.expr().starts_with(super::PREFIX_LIVELINESS))
+        {
             let key_expr = Resource::get_best_key(res, "", face.id);
             face.primitives.forget_subscriber(&key_expr, None);
 

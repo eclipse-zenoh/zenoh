@@ -18,6 +18,8 @@ use crate::config::Notifier;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
 use crate::key_expr::KeyExprInner;
+use crate::liveliness::LivelinessTokenBuilder;
+use crate::liveliness::LivelinessTokenState;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
@@ -81,6 +83,7 @@ pub(crate) struct SessionState {
     pub(crate) publications: Vec<OwnedKeyExpr>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
+    pub(crate) tokens: HashMap<Id, Arc<LivelinessTokenState>>,
     pub(crate) queries: HashMap<ZInt, QueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
@@ -101,6 +104,7 @@ impl SessionState {
             publications: Vec::new(),
             subscribers: HashMap::new(),
             queryables: HashMap::new(),
+            tokens: HashMap::new(),
             queries: HashMap::new(),
             aggregated_subscribers,
             aggregated_publishers,
@@ -657,6 +661,20 @@ impl Session {
         })
     }
 
+    pub fn declare_liveliness<'a, 'b, TryIntoKeyExpr>(
+        &'a self,
+        key_expr: TryIntoKeyExpr,
+    ) -> LivelinessTokenBuilder<'a, 'b>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        LivelinessTokenBuilder {
+            session: SessionRef::Borrow(self),
+            key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
+        }
+    }
+
     /// Put data.
     ///
     /// # Arguments
@@ -947,29 +965,32 @@ impl Session {
             callback,
         });
 
-        let declared_sub = (origin != Locality::SessionLocal)
-            .then(|| {
-                match state
+        let declared_sub = (origin != Locality::SessionLocal
+            && !key_expr
+                .as_str()
+                .starts_with(crate::liveliness::PREFIX_LIVELINESS))
+        .then(|| {
+            match state
                 .aggregated_subscribers // TODO: can this be an OwnedKeyExpr?
                 .iter()
                 .find(|s| s.includes( key_expr))
-                {
-                    Some(join_sub) => {
-                        let joined_sub = state.subscribers.values().any(|s| {
-                            s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
-                        });
-                        (!joined_sub).then(|| join_sub.clone().into())
-                    }
-                    None => {
-                        let twin_sub = state
-                            .subscribers
-                            .values()
-                            .any(|s| s.origin != Locality::SessionLocal && s.key_expr == *key_expr);
-                        (!twin_sub).then(|| key_expr.clone())
-                    }
+            {
+                Some(join_sub) => {
+                    let joined_sub = state.subscribers.values().any(|s| {
+                        s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
+                    });
+                    (!joined_sub).then(|| join_sub.clone().into())
                 }
-            })
-            .flatten();
+                None => {
+                    let twin_sub = state
+                        .subscribers
+                        .values()
+                        .any(|s| s.origin != Locality::SessionLocal && s.key_expr == *key_expr);
+                    (!twin_sub).then(|| key_expr.clone())
+                }
+            }
+        })
+        .flatten();
 
         state.subscribers.insert(sub_state.id, sub_state.clone());
         for res in state
@@ -1043,7 +1064,12 @@ impl Session {
                 res.subscribers.retain(|sub| sub.id != sub_state.id);
             }
 
-            if sub_state.origin != Locality::SessionLocal {
+            if sub_state.origin != Locality::SessionLocal
+                && !sub_state
+                    .key_expr
+                    .as_str()
+                    .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+            {
                 // Note: there might be several Subscribers on the same KeyExpr.
                 // Before calling forget_subscriber(key_expr), check if this was the last one.
                 let key_expr = &sub_state.key_expr;
@@ -1167,6 +1193,7 @@ impl Session {
             })
             .count() as ZInt
     }
+
     pub(crate) fn close_queryable(&self, qid: usize) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(qable_state) = state.queryables.remove(&qid) {
@@ -1210,6 +1237,46 @@ impl Session {
             Err(zerror!("Unable to find queryable").into())
         }
     }
+
+    pub(crate) fn declare_liveliness_inner(
+        &self,
+        key_expr: &KeyExpr,
+    ) -> ZResult<Arc<LivelinessTokenState>> {
+        let mut state = zwrite!(self.state);
+        log::trace!("declare_liveliness({:?})", key_expr);
+        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let key_expr = KeyExpr::from(*crate::liveliness::KE_PREFIX_LIVELINESS / key_expr);
+        let tok_state = Arc::new(LivelinessTokenState {
+            id,
+            key_expr: key_expr.clone().into_owned(),
+        });
+
+        state.tokens.insert(tok_state.id, tok_state.clone());
+        let primitives = state.primitives.as_ref().unwrap().clone();
+        drop(state);
+        let sub_info = SubInfo::default();
+        primitives.decl_subscriber(&key_expr.to_wire(self), &sub_info, None);
+        Ok(tok_state)
+    }
+
+    pub(crate) fn undeclare_liveliness(&self, tid: usize) -> ZResult<()> {
+        let mut state = zwrite!(self.state);
+        if let Some(tok_state) = state.tokens.remove(&tid) {
+            trace!("undeclare_liveliness({:?})", tok_state);
+            // Note: there might be several Tokens on the same KeyExpr.
+            let key_expr = &tok_state.key_expr;
+            let twin_tok = state.tokens.values().any(|s| s.key_expr == *key_expr);
+            if !twin_tok {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                drop(state);
+                primitives.forget_subscriber(&key_expr.to_wire(self), None);
+            }
+            Ok(())
+        } else {
+            Err(zerror!("Unable to find liveliness token").into())
+        }
+    }
+
     pub(crate) fn handle_data(
         &self,
         local: bool,
@@ -1662,15 +1729,45 @@ impl Primitives for Session {
 
     fn decl_subscriber(
         &self,
-        _key_expr: &WireExpr,
+        key_expr: &WireExpr,
         _sub_info: &SubInfo,
         _routing_context: Option<RoutingContext>,
     ) {
-        trace!("recv Decl Subscriber {:?} , {:?}", _key_expr, _sub_info);
+        trace!("recv Decl Subscriber {:?} , {:?}", key_expr, _sub_info);
+        let state = zread!(self.state);
+        match state.wireexpr_to_keyexpr(key_expr, false) {
+            Ok(expr) => {
+                if expr
+                    .as_str()
+                    .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                {
+                    drop(state);
+                    self.handle_data(false, key_expr, None, ZBuf::default());
+                }
+            }
+            Err(err) => log::error!("Received Forget Subscriber for unkown key_expr: {}", err),
+        }
     }
 
-    fn forget_subscriber(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
-        trace!("recv Forget Subscriber {:?}", _key_expr);
+    fn forget_subscriber(&self, key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
+        trace!("recv Forget Subscriber {:?}", key_expr);
+        let state = zread!(self.state);
+        match state.wireexpr_to_keyexpr(key_expr, false) {
+            Ok(expr) => {
+                if expr
+                    .as_str()
+                    .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                {
+                    drop(state);
+                    let data_info = DataInfo {
+                        kind: SampleKind::Delete,
+                        ..Default::default()
+                    };
+                    self.handle_data(false, key_expr, Some(data_info), ZBuf::default());
+                }
+            }
+            Err(err) => log::error!("Received Forget Subscriber for unkown key_expr: {}", err),
+        }
     }
 
     fn decl_queryable(

@@ -27,6 +27,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::{RwLock, Weak};
 use zenoh_buffers::ZBuf;
+use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 use zenoh_protocol::{
     core::{
         key_expr::include::{Includer, DEFAULT_INCLUDER},
@@ -1503,6 +1504,45 @@ fn compute_final_route(
     }
 }
 
+#[inline]
+fn compute_local_replies(
+    tables: &Tables,
+    prefix: &Arc<Resource>,
+    suffix: &str,
+    face: &Arc<FaceState>,
+) -> Vec<(WireExpr<'static>, ZBuf)> {
+    let mut result = vec![];
+    if face.whatami == WhatAmI::Client {
+        let key_expr = prefix.expr() + suffix;
+        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
+            Ok(ke) => ke,
+            Err(e) => {
+                log::warn!("Invalid KE reached the system: {}", e);
+                return result;
+            }
+        };
+        if key_expr.starts_with(super::PREFIX_LIVELINESS) {
+            let res = Resource::get_resource(prefix, suffix);
+            let matches = res
+                .as_ref()
+                .and_then(|res| res.context.as_ref())
+                .map(|ctx| Cow::from(&ctx.matches))
+                .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+            for mres in matches.iter() {
+                let mres = mres.upgrade().unwrap();
+                if (mres.context.is_some()
+                    && (!mres.context().router_subs.is_empty()
+                        || !mres.context().peer_subs.is_empty()))
+                    || mres.session_ctxs.values().any(|ctx| ctx.subs.is_some())
+                {
+                    result.push((Resource::get_best_key(&mres, "", face.id), ZBuf::default()));
+                }
+            }
+        }
+    }
+    result
+}
+
 #[derive(Clone)]
 struct QueryCleanup {
     tables: Arc<RwLock<Tables>>,
@@ -1686,8 +1726,16 @@ pub fn route_query(
             });
 
             let route = compute_final_route(&tables, &route, face, &target, query);
+            let local_replies = compute_local_replies(&tables, prefix, expr.suffix.as_ref(), face);
+            let zid = tables.zid;
 
             drop(tables);
+
+            for (expr, payload) in local_replies {
+                face.primitives
+                    .clone()
+                    .send_reply_data(qid, zid, expr, None, payload);
+            }
 
             if route.is_empty() {
                 log::debug!("Send final reply {}:{} (no matching queryables)", face, qid);
