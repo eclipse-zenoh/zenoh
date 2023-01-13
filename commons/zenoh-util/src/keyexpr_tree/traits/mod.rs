@@ -79,6 +79,26 @@ pub trait IKeyExprTreeNodeMut<Weight>: IKeyExprTreeNode<Weight> {
     fn insert_weight(&mut self, weight: Weight) -> Option<Weight>;
     fn children_mut(&mut self) -> &mut Self::Children;
 }
+pub trait IKeyExprTreeNodeToken<'a, Weight, Token> {
+    type Tokenized: IKeyExprTreeNode<Weight>;
+    fn tokenize(&'a self, token: &'a Token) -> Self::Tokenized;
+    type TokenizedMut: IKeyExprTreeNodeMut<Weight>;
+    fn tokenize_mut(&'a self, token: &'a mut Token) -> Self::TokenizedMut;
+}
+impl<'a, T: 'a, Weight, Token: 'a> IKeyExprTreeNodeToken<'a, Weight, Token> for T
+where
+    (&'a T, &'a Token): IKeyExprTreeNode<Weight>,
+    (&'a T, &'a mut Token): IKeyExprTreeNodeMut<Weight>,
+{
+    type Tokenized = (&'a T, &'a Token);
+    fn tokenize(&'a self, token: &'a Token) -> Self::Tokenized {
+        (self, token)
+    }
+    type TokenizedMut = (&'a T, &'a mut Token);
+    fn tokenize_mut(&'a self, token: &'a mut Token) -> Self::TokenizedMut {
+        (self, token)
+    }
+}
 
 pub trait IChildrenProvider<T> {
     type Assoc: Default + 'static;

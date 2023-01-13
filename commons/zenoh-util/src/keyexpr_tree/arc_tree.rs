@@ -32,31 +32,31 @@ pub struct KeArcTree<
 
 impl<
         'a,
-        Weight,
-        Wildness: IWildness,
+        Weight: 'a,
+        Wildness: IWildness + 'a,
         Children: IChildrenProvider<
-            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
-        >,
-        Token: TokenTrait,
+                Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+            > + 'a,
+        Token: TokenTrait + 'a,
     > ITokenKeyExprTree<'a, Weight, Token> for KeArcTree<Weight, Wildness, Children, Token>
 where
     Children::Assoc: IChildren<
         Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
     >,
 {
-    type Node = Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>;
-
-    fn node(&self, token: &Token, at: &keyexpr) -> Option<Self::Node> {
+    type Node =
+        &'a Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>;
+    fn node(&'a self, token: &'a Token, at: &keyexpr) -> Option<Self::Node> {
         let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
         let mut chunks = at.chunks();
         let mut node = inner.children.child_at(chunks.next().unwrap())?;
         for chunk in chunks {
-            let as_node: &Self::Node = node.as_node();
+            let as_node: Self::Node = node.as_node();
             node = unsafe { (&*as_node.get()).children.child_at(chunk)? };
         }
-        Some(node.as_node().clone())
+        Some(node.as_node())
     }
-    fn node_or_create(&self, token: &mut Token, at: &keyexpr) -> Self::Node {
+    fn node_or_create(&'a self, token: &'a mut Token, at: &keyexpr) -> Self::Node {
         let Ok(inner) = self.inner.try_borrow_mut(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
         if at.is_wild() {
             inner.wildness.set(true);
@@ -80,7 +80,9 @@ where
             .entry(chunks.next().unwrap())
             .get_or_insert_with(|k| construct_node(k, None));
         for chunk in chunks {
-            let as_node: &mut Self::Node = node.as_node_mut();
+            let as_node: &mut Arc<
+                TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>,
+            > = node.as_node_mut();
             node = unsafe {
                 (&mut *as_node.get())
                     .children
@@ -88,7 +90,7 @@ where
                     .get_or_insert_with(|k| construct_node(k, Some(Arc::downgrade(as_node))))
             };
         }
-        node.clone()
+        node
     }
 }
 
@@ -225,34 +227,6 @@ where
         Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
     >,
 {
-    pub fn upgrade(self) -> Option<KeArcTreeNode<Weight, Arc<()>, Wildness, Children, Token>> {
-        let KeArcTreeNode {
-            parent,
-            chunk,
-            children,
-            weight,
-        } = self;
-        match parent {
-            Some(parent) => match parent.upgrade() {
-                Some(arc) => {
-                    let ke_arc_tree_node = KeArcTreeNode {
-                        parent: Some(arc),
-                        chunk,
-                        children,
-                        weight,
-                    };
-                    Some(ke_arc_tree_node)
-                }
-                None => None,
-            },
-            None => Some(KeArcTreeNode {
-                parent: None,
-                chunk,
-                children,
-                weight,
-            }),
-        }
-    }
     /// Under specific circumstances, a node that's been cloned from a tree might have a destroyed parent.
     /// Such a node is "zombified", and becomes unable to perform certain operations such as navigating its parents,
     /// which may be necessary for operations such as [`IKeyExprTreeNode::keyexpr`].
