@@ -337,9 +337,13 @@ impl StorageService {
                 // remember that wild card updates change only existing keys
                 let mut storage = self.storage.lock().await;
                 match storage.get(key_expr.clone(), "").await {
-                    Ok(stored_sample) => {
-                        if stored_sample.get_timestamp().is_some() {
-                            return None;
+                    Ok(stored_samples) => {
+                        for stored_sample in stored_samples {
+                            if stored_sample.get_timestamp().is_some()
+                                && stored_sample.get_timestamp().unwrap() > timestamp
+                            {
+                                return None;
+                            }
                         }
                     }
                     Err(e) => {
@@ -358,9 +362,11 @@ impl StorageService {
     async fn is_latest(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
         // @TODO: if cache exists, read from there
         let mut storage = self.storage.lock().await;
-        if let Ok(sample) = storage.get(key_expr.clone(), "").await {
-            if sample.get_timestamp().unwrap() > timestamp {
-                return false;
+        if let Ok(samples) = storage.get(key_expr.clone(), "").await {
+            for sample in samples {
+                if sample.get_timestamp().unwrap() > timestamp {
+                    return false;
+                }
             }
         }
         // drop(storage);
@@ -384,18 +390,20 @@ impl StorageService {
         let mut storage = self.storage.lock().await;
         for key in matching_keys {
             match storage.get(key, q.parameters()).await {
-                Ok(sample) => {
-                    // apply outgoing interceptor on results
-                    let sample = if let Some(ref interceptor) = self.out_interceptor {
-                        interceptor(sample)
-                    } else {
-                        sample
-                    };
-                    if let Err(e) = q.reply(Ok(sample)).res().await {
-                        warn!(
-                            "Storage {} raised an error sending a query: {}",
-                            self.name, e
-                        )
+                Ok(samples) => {
+                    for sample in samples {
+                        // apply outgoing interceptor on results
+                        let sample = if let Some(ref interceptor) = self.out_interceptor {
+                            interceptor(sample)
+                        } else {
+                            sample
+                        };
+                        if let Err(e) = q.reply(Ok(sample)).res().await {
+                            warn!(
+                                "Storage {} raised an error sending a query: {}",
+                                self.name, e
+                            )
+                        }
                     }
                 }
                 Err(e) => warn!("Storage {} raised an error on query: {}", self.name, e),

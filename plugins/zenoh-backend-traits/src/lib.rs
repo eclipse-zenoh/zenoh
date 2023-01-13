@@ -105,18 +105,18 @@
 //!         // return Ok(StorageInsertionResult::Outdated);
 //!     }
 //!
-//!     async fn delete(&mut self, key: OwnedKeyExpr) -> ZResult<StorageInsertionResult> {
+//!     async fn delete(&mut self, key: OwnedKeyExpr, timestamp: Timestamp) -> ZResult<StorageInsertionResult> {
 //!         // @TODO:
 //!         // delete the actual entry from storage
 //!         return Ok(StorageInsertionResult::Deleted);
 //!     }
 //!
 //!     // When receiving a GET operation
-//!     async fn get(&mut self, key_expr: OwnedKeyExpr, parameters: &str) -> ZResult<Sample> {
+//!     async fn get(&mut self, key_expr: OwnedKeyExpr, parameters: &str) -> ZResult<Vec<Sample>> {
 //!         // @TODO:
 //!         // get the sample with key_expr and return it
 //!         // NOTE: in case parameters is not empty something smarter should be done with returned samples...
-//!         Ok(Sample::new(key_expr, ""))
+//!         Ok(vec!(Sample::new(key_expr, "")))
 //!     }
 //!
 //!     // To get all entries in the datastore
@@ -206,7 +206,7 @@ pub trait Storage: Send + Sync {
     ) -> ZResult<StorageInsertionResult>;
 
     /// Function to retrieve the sample associated with a single key.
-    async fn get(&mut self, key: OwnedKeyExpr, parameters: &str) -> ZResult<Sample>;
+    async fn get(&mut self, key: OwnedKeyExpr, parameters: &str) -> ZResult<Vec<Sample>>;
 
     /// Function called to get the list of all storage content (key, timestamp)
     /// The latest Timestamp corresponding to each key is either the timestamp of the delete or put whichever is the latest.

@@ -122,11 +122,11 @@ impl Storage for MemoryStorage {
         return Ok(StorageInsertionResult::Deleted);
     }
 
-    async fn get(&mut self, key: OwnedKeyExpr, _parameters: &str) -> ZResult<Sample> {
+    async fn get(&mut self, key: OwnedKeyExpr, _parameters: &str) -> ZResult<Vec<Sample>> {
         trace!("get for {}", key);
         // @TODO: use parameters???
         match self.map.read().await.get(&key) {
-            Some(v) => Ok(v.clone()),
+            Some(v) => Ok(vec![v.clone()]),
             None => Err(format!("Key {} is not present", key).into()),
         }
     }
