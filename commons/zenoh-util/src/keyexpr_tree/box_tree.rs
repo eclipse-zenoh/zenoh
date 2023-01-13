@@ -279,15 +279,6 @@ where
             node.as_ref()
         })
     }
-    fn parent_mut(&mut self) -> Option<&mut Self> {
-        match &mut self.parent {
-            None => None,
-            Some(node) => Some(unsafe {
-                // this is safe, as a mutable reference to the parent was needed to get a mutable reference to this node in the first place.
-                node.as_mut()
-            }),
-        }
-    }
     fn keyexpr(&self) -> OwnedKeyExpr {
         unsafe {
             // self._keyexpr is guaranteed to return a valid KE, so no checks are necessary
@@ -297,6 +288,27 @@ where
     fn weight(&self) -> Option<&Weight> {
         self.weight.as_ref()
     }
+    type Child = Box<Self>;
+    type Children = Children::Assoc;
+
+    fn children(&self) -> &Self::Children {
+        &self.children
+    }
+}
+impl<Weight, Wildness: IWildness, Children: IChildrenProvider<Box<Self>>>
+    IKeyExprTreeNodeMut<Weight> for KeyExprTreeNode<Weight, Wildness, Children>
+where
+    Children::Assoc: IChildren<Box<Self>>,
+{
+    fn parent_mut(&mut self) -> Option<&mut Self> {
+        match &mut self.parent {
+            None => None,
+            Some(node) => Some(unsafe {
+                // this is safe, as a mutable reference to the parent was needed to get a mutable reference to this node in the first place.
+                node.as_mut()
+            }),
+        }
+    }
     fn weight_mut(&mut self) -> Option<&mut Weight> {
         self.weight.as_mut()
     }
@@ -305,12 +317,6 @@ where
     }
     fn insert_weight(&mut self, weight: Weight) -> Option<Weight> {
         self.weight.replace(weight)
-    }
-    type Child = Box<Self>;
-    type Children = Children::Assoc;
-
-    fn children(&self) -> &Self::Children {
-        &self.children
     }
 
     fn children_mut(&mut self) -> &mut Self::Children {

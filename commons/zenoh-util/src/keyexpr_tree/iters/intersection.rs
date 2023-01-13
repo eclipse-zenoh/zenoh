@@ -218,7 +218,7 @@ where
 impl<
         'a,
         Children: IChildrenProvider<Node>,
-        Node: IKeyExprTreeNode<Weight, Children = Children::Assoc> + 'a,
+        Node: IKeyExprTreeNodeMut<Weight, Children = Children::Assoc> + 'a,
         Weight,
     > Iterator for IntersectionMut<'a, Children, Node, Weight>
 where

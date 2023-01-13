@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use token_cell::prelude::{TokenCell, TokenCellTrait, TokenTrait};
+
 use super::*;
 
 impl<'a, T: HasChunk> HasChunk for &'a T {
@@ -13,6 +17,16 @@ impl<'a, T: HasChunk> HasChunk for &'a mut T {
 impl<T: HasChunk> HasChunk for Box<T> {
     fn chunk(&self) -> &keyexpr {
         T::chunk(self)
+    }
+}
+impl<T: HasChunk> HasChunk for Arc<T> {
+    fn chunk(&self) -> &keyexpr {
+        T::chunk(self)
+    }
+}
+impl<T: HasChunk, Token: TokenTrait> HasChunk for TokenCell<T, Token> {
+    fn chunk(&self) -> &keyexpr {
+        T::chunk(unsafe { &*self.get() })
     }
 }
 impl<T> AsNode<T> for T {
@@ -45,14 +59,24 @@ impl<T: IKeyExprTreeNode<Weight>, Weight> IKeyExprTreeNode<Weight> for Box<T> {
     fn parent(&self) -> Option<&Self::Parent> {
         T::parent(self)
     }
-    fn parent_mut(&mut self) -> Option<&mut Self::Parent> {
-        T::parent_mut(self)
-    }
     fn keyexpr(&self) -> OwnedKeyExpr {
         T::keyexpr(self)
     }
     fn weight(&self) -> Option<&Weight> {
         T::weight(self)
+    }
+
+    type Child = T::Child;
+    type Children = T::Children;
+
+    fn children(&self) -> &Self::Children {
+        T::children(self)
+    }
+}
+
+impl<T: IKeyExprTreeNodeMut<Weight>, Weight> IKeyExprTreeNodeMut<Weight> for Box<T> {
+    fn parent_mut(&mut self) -> Option<&mut Self::Parent> {
+        T::parent_mut(self)
     }
     fn weight_mut(&mut self) -> Option<&mut Weight> {
         T::weight_mut(self)
@@ -64,13 +88,181 @@ impl<T: IKeyExprTreeNode<Weight>, Weight> IKeyExprTreeNode<Weight> for Box<T> {
         T::insert_weight(self, weight)
     }
 
+    fn children_mut(&mut self) -> &mut Self::Children {
+        T::children_mut(self)
+    }
+}
+
+impl<T: IKeyExprTreeNode<Weight>, Weight, Token: TokenTrait> IKeyExprTreeNode<Weight>
+    for (&TokenCell<T, Token>, &Token)
+{
+    type Parent = T::Parent;
+    fn parent(&self) -> Option<&Self::Parent> {
+        self.0
+            .try_borrow(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .parent()
+    }
+    fn keyexpr(&self) -> OwnedKeyExpr {
+        self.0
+            .try_borrow(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .keyexpr()
+    }
+    fn weight(&self) -> Option<&Weight> {
+        self.0
+            .try_borrow(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .weight()
+    }
+
     type Child = T::Child;
     type Children = T::Children;
 
     fn children(&self) -> &Self::Children {
-        T::children(self)
+        self.0
+            .try_borrow(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .children()
     }
+}
+
+impl<T: IKeyExprTreeNode<Weight>, Weight, Token: TokenTrait> IKeyExprTreeNode<Weight>
+    for (&TokenCell<T, Token>, &mut Token)
+{
+    type Parent = T::Parent;
+    fn parent(&self) -> Option<&Self::Parent> {
+        self.0
+            .try_borrow(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .parent()
+    }
+    fn keyexpr(&self) -> OwnedKeyExpr {
+        self.0
+            .try_borrow(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .keyexpr()
+    }
+    fn weight(&self) -> Option<&Weight> {
+        self.0
+            .try_borrow(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .weight()
+    }
+
+    type Child = T::Child;
+    type Children = T::Children;
+
+    fn children(&self) -> &Self::Children {
+        self.0
+            .try_borrow(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .children()
+    }
+}
+
+impl<T: IKeyExprTreeNodeMut<Weight>, Weight, Token: TokenTrait> IKeyExprTreeNodeMut<Weight>
+    for (&TokenCell<T, Token>, &mut Token)
+{
+    fn parent_mut(&mut self) -> Option<&mut Self::Parent> {
+        self.0
+            .try_borrow_mut(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .parent_mut()
+    }
+    fn weight_mut(&mut self) -> Option<&mut Weight> {
+        self.0
+            .try_borrow_mut(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .weight_mut()
+    }
+    fn take_weight(&mut self) -> Option<Weight> {
+        self.0
+            .try_borrow_mut(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .take_weight()
+    }
+    fn insert_weight(&mut self, weight: Weight) -> Option<Weight> {
+        self.0
+            .try_borrow_mut(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .insert_weight(weight)
+    }
+
     fn children_mut(&mut self) -> &mut Self::Children {
-        T::children_mut(self)
+        self.0
+            .try_borrow_mut(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .children_mut()
+    }
+}
+
+impl<T: IKeyExprTreeNode<Weight>, Weight, Token: TokenTrait> IKeyExprTreeNode<Weight>
+    for (&Arc<TokenCell<T, Token>>, &mut Token)
+{
+    type Parent = T::Parent;
+    fn parent(&self) -> Option<&Self::Parent> {
+        self.0
+            .try_borrow(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .parent()
+    }
+    fn keyexpr(&self) -> OwnedKeyExpr {
+        self.0
+            .try_borrow(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .keyexpr()
+    }
+    fn weight(&self) -> Option<&Weight> {
+        self.0
+            .try_borrow(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .weight()
+    }
+
+    type Child = T::Child;
+    type Children = T::Children;
+
+    fn children(&self) -> &Self::Children {
+        self.0
+            .try_borrow(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .children()
+    }
+}
+
+impl<T: IKeyExprTreeNodeMut<Weight>, Weight, Token: TokenTrait> IKeyExprTreeNodeMut<Weight>
+    for (&Arc<TokenCell<T, Token>>, &mut Token)
+{
+    fn parent_mut(&mut self) -> Option<&mut Self::Parent> {
+        self.0
+            .try_borrow_mut(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .parent_mut()
+    }
+    fn weight_mut(&mut self) -> Option<&mut Weight> {
+        self.0
+            .try_borrow_mut(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .weight_mut()
+    }
+    fn take_weight(&mut self) -> Option<Weight> {
+        self.0
+            .try_borrow_mut(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .take_weight()
+    }
+    fn insert_weight(&mut self, weight: Weight) -> Option<Weight> {
+        self.0
+            .try_borrow_mut(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .insert_weight(weight)
+    }
+
+    fn children_mut(&mut self) -> &mut Self::Children {
+        self.0
+            .try_borrow_mut(self.1)
+            .unwrap_or_else(|_| panic!("Used wrong token to access TokenCell"))
+            .children_mut()
     }
 }

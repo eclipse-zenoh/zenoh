@@ -82,7 +82,7 @@ where
 impl<
         'a,
         Children: IChildrenProvider<Node>,
-        Node: IKeyExprTreeNode<Weight, Children = Children::Assoc> + 'a,
+        Node: IKeyExprTreeNodeMut<Weight, Children = Children::Assoc> + 'a,
         Weight,
     > Iterator for TreeIterMut<'a, Children, Node, Weight>
 where
