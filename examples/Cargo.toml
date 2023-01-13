@@ -115,6 +115,10 @@ name = "z_forward"
 path = "examples/z_forward.rs"
 
 [[example]]
+name = "z_liveliness"
+path = "examples/z_liveliness.rs"
+
+[[example]]
 name = "z_pub_thr"
 path = "examples/z_pub_thr.rs"
 
