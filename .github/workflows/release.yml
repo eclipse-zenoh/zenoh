@@ -45,8 +45,6 @@ jobs:
         with:
           command: clippy
           args: --all-targets --features unstable -- -D warnings
-      - name: Setup jq
-        uses: actions/setup-jq@v1
       - name: Environment setup
         id: env
         shell: bash
@@ -65,6 +63,9 @@ jobs:
           echo "GIT_BRANCH=${GIT_BRANCH}" >> $GITHUB_OUTPUT
           GIT_TAG=`[[ $GITHUB_REF =~ ^refs/tags/.* ]] && echo ${GITHUB_REF/refs\/tags\//} || true`
           echo "GIT_TAG=${GIT_TAG}" >> $GITHUB_OUTPUT
+
+          apt-get update
+          apt-get install -y jq
 
           ZENOH_VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "zenoh") | .version')
           echo "ZENOH_VERSION=${ZENOH_VERSION}" >> $GITHUB_OUTPUT
