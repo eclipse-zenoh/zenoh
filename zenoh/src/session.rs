@@ -18,8 +18,8 @@ use crate::config::Notifier;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
 use crate::key_expr::KeyExprInner;
-use crate::liveliness::LivelinessTokenBuilder;
-use crate::liveliness::LivelinessTokenState;
+#[zenoh_core::unstable]
+use crate::liveliness::{LivelinessTokenBuilder, LivelinessTokenState};
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
@@ -83,6 +83,7 @@ pub(crate) struct SessionState {
     pub(crate) publications: Vec<OwnedKeyExpr>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
+    #[cfg(feature = "unstable")]
     pub(crate) tokens: HashMap<Id, Arc<LivelinessTokenState>>,
     pub(crate) queries: HashMap<ZInt, QueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
@@ -104,6 +105,7 @@ impl SessionState {
             publications: Vec::new(),
             subscribers: HashMap::new(),
             queryables: HashMap::new(),
+            #[cfg(feature = "unstable")]
             tokens: HashMap::new(),
             queries: HashMap::new(),
             aggregated_subscribers,
@@ -661,6 +663,7 @@ impl Session {
         })
     }
 
+    #[zenoh_core::unstable]
     pub fn declare_liveliness<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -965,32 +968,37 @@ impl Session {
             callback,
         });
 
-        let declared_sub = (origin != Locality::SessionLocal
+        #[cfg(not(feature = "unstable"))]
+        let declared_sub = origin != Locality::SessionLocal;
+        #[cfg(feature = "unstable")]
+        let declared_sub = origin != Locality::SessionLocal
             && !key_expr
                 .as_str()
-                .starts_with(crate::liveliness::PREFIX_LIVELINESS))
-        .then(|| {
-            match state
+                .starts_with(crate::liveliness::PREFIX_LIVELINESS);
+
+        let declared_sub = declared_sub
+            .then(|| {
+                match state
                 .aggregated_subscribers // TODO: can this be an OwnedKeyExpr?
                 .iter()
                 .find(|s| s.includes( key_expr))
-            {
-                Some(join_sub) => {
-                    let joined_sub = state.subscribers.values().any(|s| {
-                        s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
-                    });
-                    (!joined_sub).then(|| join_sub.clone().into())
+                {
+                    Some(join_sub) => {
+                        let joined_sub = state.subscribers.values().any(|s| {
+                            s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
+                        });
+                        (!joined_sub).then(|| join_sub.clone().into())
+                    }
+                    None => {
+                        let twin_sub = state
+                            .subscribers
+                            .values()
+                            .any(|s| s.origin != Locality::SessionLocal && s.key_expr == *key_expr);
+                        (!twin_sub).then(|| key_expr.clone())
+                    }
                 }
-                None => {
-                    let twin_sub = state
-                        .subscribers
-                        .values()
-                        .any(|s| s.origin != Locality::SessionLocal && s.key_expr == *key_expr);
-                    (!twin_sub).then(|| key_expr.clone())
-                }
-            }
-        })
-        .flatten();
+            })
+            .flatten();
 
         state.subscribers.insert(sub_state.id, sub_state.clone());
         for res in state
@@ -1064,12 +1072,15 @@ impl Session {
                 res.subscribers.retain(|sub| sub.id != sub_state.id);
             }
 
-            if sub_state.origin != Locality::SessionLocal
+            #[cfg(not(feature = "unstable"))]
+            let send_forget = sub_state.origin != Locality::SessionLocal;
+            #[cfg(feature = "unstable")]
+            let send_forget = sub_state.origin != Locality::SessionLocal
                 && !sub_state
                     .key_expr
                     .as_str()
-                    .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-            {
+                    .starts_with(crate::liveliness::PREFIX_LIVELINESS);
+            if send_forget {
                 // Note: there might be several Subscribers on the same KeyExpr.
                 // Before calling forget_subscriber(key_expr), check if this was the last one.
                 let key_expr = &sub_state.key_expr;
@@ -1238,6 +1249,7 @@ impl Session {
         }
     }
 
+    #[zenoh_core::unstable]
     pub(crate) fn declare_liveliness_inner(
         &self,
         key_expr: &KeyExpr,
@@ -1259,6 +1271,7 @@ impl Session {
         Ok(tok_state)
     }
 
+    #[zenoh_core::unstable]
     pub(crate) fn undeclare_liveliness(&self, tid: usize) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(tok_state) = state.tokens.remove(&tid) {
@@ -1734,39 +1747,45 @@ impl Primitives for Session {
         _routing_context: Option<RoutingContext>,
     ) {
         trace!("recv Decl Subscriber {:?} , {:?}", key_expr, _sub_info);
-        let state = zread!(self.state);
-        match state.wireexpr_to_keyexpr(key_expr, false) {
-            Ok(expr) => {
-                if expr
-                    .as_str()
-                    .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-                {
-                    drop(state);
-                    self.handle_data(false, key_expr, None, ZBuf::default());
+        #[cfg(feature = "unstable")]
+        {
+            let state = zread!(self.state);
+            match state.wireexpr_to_keyexpr(key_expr, false) {
+                Ok(expr) => {
+                    if expr
+                        .as_str()
+                        .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                    {
+                        drop(state);
+                        self.handle_data(false, key_expr, None, ZBuf::default());
+                    }
                 }
+                Err(err) => log::error!("Received Forget Subscriber for unkown key_expr: {}", err),
             }
-            Err(err) => log::error!("Received Forget Subscriber for unkown key_expr: {}", err),
         }
     }
 
     fn forget_subscriber(&self, key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
         trace!("recv Forget Subscriber {:?}", key_expr);
-        let state = zread!(self.state);
-        match state.wireexpr_to_keyexpr(key_expr, false) {
-            Ok(expr) => {
-                if expr
-                    .as_str()
-                    .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-                {
-                    drop(state);
-                    let data_info = DataInfo {
-                        kind: SampleKind::Delete,
-                        ..Default::default()
-                    };
-                    self.handle_data(false, key_expr, Some(data_info), ZBuf::default());
+        #[cfg(feature = "unstable")]
+        {
+            let state = zread!(self.state);
+            match state.wireexpr_to_keyexpr(key_expr, false) {
+                Ok(expr) => {
+                    if expr
+                        .as_str()
+                        .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                    {
+                        drop(state);
+                        let data_info = DataInfo {
+                            kind: SampleKind::Delete,
+                            ..Default::default()
+                        };
+                        self.handle_data(false, key_expr, Some(data_info), ZBuf::default());
+                    }
                 }
+                Err(err) => log::error!("Received Forget Subscriber for unkown key_expr: {}", err),
             }
-            Err(err) => log::error!("Received Forget Subscriber for unkown key_expr: {}", err),
         }
     }
 

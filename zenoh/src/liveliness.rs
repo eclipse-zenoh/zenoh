@@ -12,32 +12,34 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::prelude::*;
-use crate::SessionRef;
-use crate::Undeclarable;
-use std::future::Ready;
-use std::sync::Arc;
-use zenoh_core::AsyncResolve;
-use zenoh_core::Resolvable;
-use zenoh_core::Result as ZResult;
-use zenoh_core::SyncResolve;
+#[zenoh_core::unstable]
+use {
+    crate::prelude::*, crate::SessionRef, crate::Undeclarable, std::future::Ready, std::sync::Arc,
+    zenoh_core::AsyncResolve, zenoh_core::Resolvable, zenoh_core::Result as ZResult,
+    zenoh_core::SyncResolve,
+};
 
+#[zenoh_core::unstable]
 pub(crate) static PREFIX_LIVELINESS: &str = crate::net::routing::PREFIX_LIVELINESS;
 
+#[zenoh_core::unstable]
 lazy_static::lazy_static!(
     pub(crate) static ref KE_PREFIX_LIVELINESS: &'static keyexpr = unsafe { keyexpr::from_str_unchecked(PREFIX_LIVELINESS) };
 );
 
+#[zenoh_core::unstable]
 #[derive(Debug)]
 pub struct LivelinessTokenBuilder<'a, 'b> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
 }
 
+#[zenoh_core::unstable]
 impl<'a> Resolvable for LivelinessTokenBuilder<'a, '_> {
     type To = ZResult<LivelinessToken<'a>>;
 }
 
+#[zenoh_core::unstable]
 impl SyncResolve for LivelinessTokenBuilder<'_, '_> {
     #[inline]
     fn res_sync(self) -> <Self as Resolvable>::To {
@@ -53,6 +55,7 @@ impl SyncResolve for LivelinessTokenBuilder<'_, '_> {
     }
 }
 
+#[zenoh_core::unstable]
 impl AsyncResolve for LivelinessTokenBuilder<'_, '_> {
     type Future = Ready<Self::To>;
 
@@ -61,26 +64,32 @@ impl AsyncResolve for LivelinessTokenBuilder<'_, '_> {
     }
 }
 
+#[zenoh_core::unstable]
 #[derive(Debug)]
 pub(crate) struct LivelinessTokenState {
     pub(crate) id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
 }
 
+#[zenoh_core::unstable]
 #[derive(Debug)]
 pub struct LivelinessToken<'a> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) state: Arc<LivelinessTokenState>,
     pub(crate) alive: bool,
 }
+
+#[zenoh_core::unstable]
 pub struct LivelinessTokenUndeclaration<'a> {
     token: LivelinessToken<'a>,
 }
 
+#[zenoh_core::unstable]
 impl Resolvable for LivelinessTokenUndeclaration<'_> {
     type To = ZResult<()>;
 }
 
+#[zenoh_core::unstable]
 impl SyncResolve for LivelinessTokenUndeclaration<'_> {
     fn res_sync(mut self) -> <Self as Resolvable>::To {
         self.token.alive = false;
@@ -88,6 +97,7 @@ impl SyncResolve for LivelinessTokenUndeclaration<'_> {
     }
 }
 
+#[zenoh_core::unstable]
 impl<'a> AsyncResolve for LivelinessTokenUndeclaration<'a> {
     type Future = Ready<Self::To>;
 
@@ -96,6 +106,7 @@ impl<'a> AsyncResolve for LivelinessTokenUndeclaration<'a> {
     }
 }
 
+#[zenoh_core::unstable]
 impl<'a> LivelinessToken<'a> {
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
@@ -103,12 +114,14 @@ impl<'a> LivelinessToken<'a> {
     }
 }
 
+#[zenoh_core::unstable]
 impl<'a> Undeclarable<(), LivelinessTokenUndeclaration<'a>> for LivelinessToken<'a> {
     fn undeclare_inner(self, _: ()) -> LivelinessTokenUndeclaration<'a> {
         LivelinessTokenUndeclaration { token: self }
     }
 }
 
+#[zenoh_core::unstable]
 impl Drop for LivelinessToken<'_> {
     fn drop(&mut self) {
         if self.alive {
