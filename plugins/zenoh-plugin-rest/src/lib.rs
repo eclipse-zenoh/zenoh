@@ -29,7 +29,7 @@ use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
 use zenoh::Session;
 use zenoh_cfg_properties::Properties;
-use zenoh_core::{zerror, Result as ZResult};
+use zenoh_core::{bail, zerror, Result as ZResult};
 
 mod config;
 pub use config::Config;
@@ -202,7 +202,7 @@ struct RunningPlugin(Config);
 impl RunningPluginTrait for RunningPlugin {
     fn config_checker(&self) -> zenoh::plugins::ValidationFunction {
         Arc::new(|_, _, _| {
-            Err("zenoh-plugin-rest doesn't accept any runtime configuration changes".into())
+            bail!("zenoh-plugin-rest doesn't accept any runtime configuration changes")
         })
     }
 

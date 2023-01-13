@@ -17,10 +17,14 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+
+#![cfg_attr(not(feature = "std"), no_std)]
+extern crate alloc;
+
 pub use lazy_static::lazy_static;
 pub mod macros;
+use core::future::{Future, Ready};
 pub use macros::*;
-use std::future::{Future, Ready};
 pub use zenoh_macros::*;
 pub mod zresult;
 pub use zresult::Error;
@@ -101,7 +105,7 @@ where
     type Future = Ready<<Self as Resolvable>::To>;
 
     fn res_async(self) -> Self::Future {
-        std::future::ready(self.res_sync())
+        core::future::ready(self.res_sync())
     }
 }
 

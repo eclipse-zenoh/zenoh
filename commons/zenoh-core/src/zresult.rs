@@ -12,9 +12,124 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use anyhow::Error as AnyError;
-use std::fmt;
+use core::{any::Any, fmt};
 
-pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
+#[cfg(feature = "std")]
+pub type Error = Box<dyn IError + Send + Sync + 'static>;
+#[cfg(not(feature = "std"))]
+pub type Error = alloc::boxed::Box<dyn IError + Send + Sync + 'static>;
+pub use std_impl::IError;
+impl dyn IError {
+    pub fn is<T: 'static>(&self) -> bool {
+        Any::type_id(self) == core::any::TypeId::of::<T>()
+    }
+    pub fn downcast_ref<T: 'static>(&self) -> Option<&T> {
+        self.is::<T>()
+            .then(|| unsafe { &*(self as *const dyn IError as *const T) })
+    }
+}
+impl dyn IError + Send {
+    pub fn is<T: 'static>(&self) -> bool {
+        Any::type_id(self) == core::any::TypeId::of::<T>()
+    }
+    pub fn downcast_ref<T: 'static>(&self) -> Option<&T> {
+        self.is::<T>()
+            .then(|| unsafe { &*(self as *const dyn IError as *const T) })
+    }
+}
+impl dyn IError + Send + Sync {
+    pub fn is<T: 'static>(&self) -> bool {
+        Any::type_id(self) == core::any::TypeId::of::<T>()
+    }
+    pub fn downcast_ref<T: 'static>(&self) -> Option<&T> {
+        self.is::<T>()
+            .then(|| unsafe { &*(self as *const dyn IError as *const T) })
+    }
+}
+#[cfg(feature = "std")]
+mod std_impl {
+    use super::*;
+    pub trait IError: std::error::Error + core::any::Any {}
+    impl<T: std::error::Error + core::any::Any> IError for T {}
+    impl<T: IError + Send + Sync + 'static> From<T> for super::Error {
+        fn from(value: T) -> Self {
+            Box::new(value)
+        }
+    }
+    impl std::error::Error for ZError {
+        fn source(&self) -> Option<&'_ (dyn std::error::Error + 'static)> {
+            self.source
+                .as_ref()
+                .map(|r| unsafe { core::mem::transmute(r.as_ref()) })
+        }
+    }
+    impl std::error::Error for ShmError {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            self.0.source()
+        }
+    }
+    impl ErrNo for dyn std::error::Error {
+        fn errno(&self) -> NegativeI8 {
+            match self.downcast_ref::<ZError>() {
+                Some(e) => e.errno(),
+                None => NegativeI8::new(i8::MIN),
+            }
+        }
+    }
+    impl ErrNo for dyn std::error::Error + Send {
+        fn errno(&self) -> NegativeI8 {
+            match self.downcast_ref::<ZError>() {
+                Some(e) => e.errno(),
+                None => NegativeI8::new(i8::MIN),
+            }
+        }
+    }
+    impl ErrNo for dyn std::error::Error + Send + Sync {
+        fn errno(&self) -> NegativeI8 {
+            match self.downcast_ref::<ZError>() {
+                Some(e) => e.errno(),
+                None => NegativeI8::new(i8::MIN),
+            }
+        }
+    }
+}
+#[cfg(not(feature = "std"))]
+mod std_impl {
+    use super::*;
+    use core::fmt;
+    pub trait IError: fmt::Debug + fmt::Display + core::any::Any {}
+    impl<T: IError + Send + Sync + 'static> From<T> for super::Error {
+        fn from(value: T) -> super::Error {
+            alloc::boxed::Box::new(value)
+        }
+    }
+    impl IError for super::ShmError {}
+    impl IError for super::ZError {}
+    impl ErrNo for dyn IError {
+        fn errno(&self) -> NegativeI8 {
+            match self.downcast_ref::<ZError>() {
+                Some(e) => e.errno(),
+                None => NegativeI8::new(i8::MIN),
+            }
+        }
+    }
+    impl ErrNo for dyn IError + Send {
+        fn errno(&self) -> NegativeI8 {
+            match self.downcast_ref::<ZError>() {
+                Some(e) => e.errno(),
+                None => NegativeI8::new(i8::MIN),
+            }
+        }
+    }
+    impl ErrNo for dyn IError + Send + Sync {
+        fn errno(&self) -> NegativeI8 {
+            match self.downcast_ref::<ZError>() {
+                Some(e) => e.errno(),
+                None => NegativeI8::new(i8::MIN),
+            }
+        }
+    }
+}
 
 pub type ZResult<T> = Result<T, Error>;
 #[repr(transparent)]
@@ -65,13 +180,6 @@ impl ZError {
     }
 }
 
-impl std::error::Error for ZError {
-    fn source(&self) -> Option<&'_ (dyn std::error::Error + 'static)> {
-        self.source
-            .as_ref()
-            .map(|r| unsafe { std::mem::transmute(r.as_ref()) })
-    }
-}
 impl fmt::Debug for ZError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Display::fmt(&self, f)
@@ -94,11 +202,6 @@ impl fmt::Display for ShmError {
         self.0.fmt(f)
     }
 }
-impl std::error::Error for ShmError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.0.source()
-    }
-}
 
 pub trait ErrNo {
     fn errno(&self) -> NegativeI8;
@@ -111,29 +214,5 @@ impl ErrNo for ZError {
 impl ErrNo for ShmError {
     fn errno(&self) -> NegativeI8 {
         self.0.errno
-    }
-}
-impl ErrNo for dyn std::error::Error {
-    fn errno(&self) -> NegativeI8 {
-        match self.downcast_ref::<ZError>() {
-            Some(e) => e.errno(),
-            None => NegativeI8::new(i8::MIN),
-        }
-    }
-}
-impl ErrNo for dyn std::error::Error + Send {
-    fn errno(&self) -> NegativeI8 {
-        match self.downcast_ref::<ZError>() {
-            Some(e) => e.errno(),
-            None => NegativeI8::new(i8::MIN),
-        }
-    }
-}
-impl ErrNo for dyn std::error::Error + Send + Sync {
-    fn errno(&self) -> NegativeI8 {
-        match self.downcast_ref::<ZError>() {
-            Some(e) => e.errno(),
-            None => NegativeI8::new(i8::MIN),
-        }
     }
 }
