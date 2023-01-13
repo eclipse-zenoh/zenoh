@@ -12,11 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::ZInt;
-use alloc::{
-    borrow::Cow,
-    format,
-    string::String,
-};
+use alloc::{borrow::Cow, format, string::String};
 use core::{convert::TryFrom, fmt, mem};
 
 mod consts {
