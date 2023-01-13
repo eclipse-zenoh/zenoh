@@ -19,8 +19,8 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 pub use lazy_static::lazy_static;
 pub mod macros;
-pub use macros::*;
 use std::future::{Future, Ready};
+pub use macros::*;
 pub use zenoh_macros::*;
 
 pub trait Resolvable {
