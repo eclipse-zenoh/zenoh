@@ -1123,7 +1123,7 @@ fn compute_query_route(
 
     let master = tables.whatami != WhatAmI::Router
         || !tables.full_net(WhatAmI::Peer)
-        || *tables.elect_router(&key_expr, Some(tables.shared_nodes.iter())) == tables.zid;
+        || *tables.elect_router(&key_expr, tables.shared_nodes.iter()) == tables.zid;
 
     for mres in matches.iter() {
         let mres = mres.upgrade().unwrap();

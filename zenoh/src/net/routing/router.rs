@@ -176,54 +176,51 @@ impl Tables {
     }
 
     #[inline]
-    pub(crate) fn get_router_links(
-        &self,
-        peer: ZenohId,
-    ) -> Option<impl Iterator<Item = &ZenohId> + '_> {
-        self.peers_net.as_ref().unwrap().get_links(peer).map(|vec| {
-            vec.iter().filter(move |nid| {
+    pub(crate) fn get_router_links(&self, peer: ZenohId) -> impl Iterator<Item = &ZenohId> + '_ {
+        self.peers_net
+            .as_ref()
+            .unwrap()
+            .get_links(peer)
+            .iter()
+            .filter(move |nid| {
                 if let Some(node) = self.routers_net.as_ref().unwrap().get_node(nid) {
                     node.whatami.unwrap_or(WhatAmI::Router) == WhatAmI::Router
                 } else {
                     false
                 }
             })
-        })
     }
 
     #[inline]
     pub(crate) fn elect_router<'a>(
         &'a self,
         key_expr: &str,
-        routers: Option<impl Iterator<Item = &'a ZenohId>>,
+        mut routers: impl Iterator<Item = &'a ZenohId>,
     ) -> &'a ZenohId {
-        match routers {
-            Some(mut routers) => match routers.next() {
-                None => &self.zid,
-                Some(router) => {
-                    let hash = |r: &ZenohId| {
-                        let mut hasher = DefaultHasher::new();
-                        for b in key_expr.as_bytes() {
-                            hasher.write_u8(*b);
-                        }
-                        for b in r.as_slice() {
-                            hasher.write_u8(*b);
-                        }
-                        hasher.finish()
-                    };
-                    let mut res = router;
-                    let mut h = None;
-                    for router2 in routers {
-                        let h2 = hash(router2);
-                        if h2 > *h.get_or_insert_with(|| hash(res)) {
-                            res = router2;
-                            h = Some(h2);
-                        }
-                    }
-                    res
-                }
-            },
+        match routers.next() {
             None => &self.zid,
+            Some(router) => {
+                let hash = |r: &ZenohId| {
+                    let mut hasher = DefaultHasher::new();
+                    for b in key_expr.as_bytes() {
+                        hasher.write_u8(*b);
+                    }
+                    for b in r.as_slice() {
+                        hasher.write_u8(*b);
+                    }
+                    hasher.finish()
+                };
+                let mut res = router;
+                let mut h = None;
+                for router2 in routers {
+                    let h2 = hash(router2);
+                    if h2 > *h.get_or_insert_with(|| hash(res)) {
+                        res = router2;
+                        h = Some(h2);
+                    }
+                }
+                res
+            }
         }
     }
 
@@ -239,9 +236,7 @@ impl Tables {
             && self
                 .peers_net
                 .as_ref()
-                .map(|net| {
-                    Tables::failover_brokering_to(net.get_links(peer1).unwrap_or(&vec![]), peer2)
-                })
+                .map(|net| Tables::failover_brokering_to(net.get_links(peer1), peer2))
                 .unwrap_or(false)
     }
 
