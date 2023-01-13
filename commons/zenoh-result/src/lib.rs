@@ -37,6 +37,13 @@ pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 #[cfg(not(feature = "std"))]
 pub type Error = Box<dyn IError + Send + Sync + 'static>;
 
+// #[cfg(not(feature = "std"))]
+// impl<T> From<T> for Error where T: IError {
+//     fn from(value: T) -> Self {
+//         Box::new(value)
+//     }
+// }
+
 // +---------+
 // | ZRESULT |
 // +---------+
