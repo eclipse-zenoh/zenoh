@@ -28,12 +28,11 @@ use core::{any::Any, fmt};
 // | ERROR |
 // +-------+
 
-#[cfg(feature = "std")]
-pub type Error = Box<dyn IError + Send + Sync + 'static>;
-#[cfg(not(feature = "std"))]
-pub type Error = alloc::boxed::Box<dyn IError + Send + Sync + 'static>;
-
 pub use std_impl::IError;
+pub type Error = Box<dyn IError + Send + Sync + 'static>;
+
+// FIXME: Until core::error::Error is stabilized, we rescue to our own implementation of an error trait
+// See tracking issue for most recent updates: https://github.com/rust-lang/rust/issues/103765
 
 impl dyn IError {
     pub fn is<T: 'static>(&self) -> bool {
@@ -123,6 +122,7 @@ mod std_impl {
     }
     impl IError for super::ShmError {}
     impl IError for super::ZError {}
+    impl IError for uhlc::SizeError {} // FIXME: Dependency on uhlc won't be needed anymore once we switch to core::error::Error
     impl ErrNo for dyn IError {
         fn errno(&self) -> NegativeI8 {
             match self.downcast_ref::<ZError>() {

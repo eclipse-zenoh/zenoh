@@ -26,9 +26,10 @@ description = "Internal crate for zenoh."
 
 [features]
 default = ["std"]
-std = ["anyhow/std"]
-defmt = ["dep:defmt"]
+std = ["anyhow/std", "uhlc/std"]
+defmt = ["dep:defmt", "uhlc/defmt"]
 
 [dependencies]
 anyhow = { workspace = true }
 defmt = { workspace = true, optional = true }
+uhlc = { workspace = true } # FIXME: Dependency on uhlc won't be needed anymore once we switch to core::error::Error
