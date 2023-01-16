@@ -22,15 +22,13 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
+    use zenoh_buffers::ZBuf;
     use zenoh_cfg_properties::config::*;
-    use zenoh_core::zasync_executor_init;
-    use zenoh_core::Result as ZResult;
-    use zenoh_link::EndPoint;
+    use zenoh_core::{zasync_executor_init, Result as ZResult};
     use zenoh_link::Link;
-    use zenoh_protocol::io::ZBuf;
-    use zenoh_protocol::proto::ZenohMessage;
-    use zenoh_protocol_core::{
-        Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId,
+    use zenoh_protocol::{
+        core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
+        zenoh::ZenohMessage,
     };
     use zenoh_transport::{
         TransportEventHandler, TransportManager, TransportMulticast,
@@ -163,20 +161,20 @@ mod tests {
         println!("Opening transport with {}", endpoint);
         let _ = ztimeout!(peer01_manager.open_transport_multicast(endpoint.clone())).unwrap();
         assert!(peer01_manager
-            .get_transport_multicast(&endpoint.locator)
+            .get_transport_multicast(&endpoint.to_locator())
             .is_some());
         println!("\t{:?}", peer01_manager.get_transports_multicast());
 
         println!("Opening transport with {}", endpoint);
         let _ = ztimeout!(peer02_manager.open_transport_multicast(endpoint.clone())).unwrap();
         assert!(peer02_manager
-            .get_transport_multicast(&endpoint.locator)
+            .get_transport_multicast(&endpoint.to_locator())
             .is_some());
         println!("\t{:?}", peer02_manager.get_transports_multicast());
 
         // Wait to for peer 01 and 02 to join each other
         let peer01_transport = peer01_manager
-            .get_transport_multicast(&endpoint.locator)
+            .get_transport_multicast(&endpoint.to_locator())
             .unwrap();
         ztimeout!(async {
             while peer01_transport.get_peers().unwrap().is_empty() {
@@ -185,7 +183,7 @@ mod tests {
         });
 
         let peer02_transport = peer02_manager
-            .get_transport_multicast(&endpoint.locator)
+            .get_transport_multicast(&endpoint.to_locator())
             .unwrap();
         ztimeout!(async {
             while peer02_transport.get_peers().unwrap().is_empty() {

@@ -21,17 +21,17 @@ pub(crate) mod tx;
 use super::common;
 #[cfg(feature = "stats")]
 use super::common::stats::stats_struct;
-use super::protocol;
-use super::protocol::core::ZInt;
-use super::protocol::proto::{tmsg, ZenohMessage};
 use crate::{TransportMulticastEventHandler, TransportPeer};
 pub use manager::*;
-use std::fmt;
-use std::sync::{Arc, Weak};
+use std::{
+    fmt,
+    sync::{Arc, Weak},
+};
 use transport::{TransportMulticastConfig, TransportMulticastInner};
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zerror, zread};
 use zenoh_link::Link;
+use zenoh_protocol::{core::ZInt, transport::tmsg, zenoh::ZenohMessage};
 
 /*************************************/
 /*              STATS                */

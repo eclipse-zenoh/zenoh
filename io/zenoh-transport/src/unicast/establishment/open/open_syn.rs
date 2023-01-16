@@ -14,10 +14,13 @@
 use super::super::authenticator::AuthenticatedPeerLink;
 use super::OResult;
 use crate::TransportManager;
+use zenoh_buffers::ZSlice;
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::core::ZInt;
-use zenoh_protocol::io::ZSlice;
-use zenoh_protocol::proto::{tmsg, Attachment, TransportMessage};
+use zenoh_protocol::{
+    common::Attachment,
+    core::ZInt,
+    transport::{tmsg, TransportMessage},
+};
 
 pub(super) struct Input {
     pub(super) cookie: ZSlice,
@@ -35,10 +38,10 @@ pub(super) async fn send(
 ) -> OResult<Output> {
     // Build and send an OpenSyn message
     let lease = manager.config.unicast.lease;
-    let mut message =
+    let message =
         TransportMessage::make_open_syn(lease, input.initial_sn, input.cookie, input.attachment);
     let _ = link
-        .write_transport_message(&mut message)
+        .write_transport_message(&message)
         .await
         .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
 

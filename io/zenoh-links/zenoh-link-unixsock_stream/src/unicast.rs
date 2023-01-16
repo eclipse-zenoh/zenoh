@@ -34,13 +34,10 @@ use zenoh_core::{zerror, zread, zwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
-use zenoh_protocol_core::{EndPoint, Locator};
+use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_sync::Signal;
 
-use super::{
-    get_unix_path, get_unix_path_as_string, UNIXSOCKSTREAM_DEFAULT_MTU,
-    UNIXSOCKSTREAM_LOCATOR_PREFIX,
-};
+use super::{get_unix_path_as_string, UNIXSOCKSTREAM_DEFAULT_MTU, UNIXSOCKSTREAM_LOCATOR_PREFIX};
 
 pub struct LinkUnicastUnixSocketStream {
     // The underlying socket as returned from the async-std library
@@ -55,8 +52,8 @@ impl LinkUnicastUnixSocketStream {
     fn new(socket: UnixStream, src_path: &str, dst_path: &str) -> LinkUnicastUnixSocketStream {
         LinkUnicastUnixSocketStream {
             socket,
-            src_locator: Locator::new(UNIXSOCKSTREAM_LOCATOR_PREFIX, &src_path),
-            dst_locator: Locator::new(UNIXSOCKSTREAM_LOCATOR_PREFIX, &dst_path),
+            src_locator: Locator::new(UNIXSOCKSTREAM_LOCATOR_PREFIX, src_path, "").unwrap(),
+            dst_locator: Locator::new(UNIXSOCKSTREAM_LOCATOR_PREFIX, dst_path, "").unwrap(),
         }
     }
 }
@@ -198,7 +195,7 @@ impl LinkManagerUnicastUnixSocketStream {
 #[async_trait]
 impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
-        let path = get_unix_path(&endpoint.locator);
+        let path = get_unix_path_as_string(endpoint.address());
 
         // Create the UnixSocketStream connection
         let stream = UnixStream::connect(&path).await.map_err(|e| {
@@ -253,14 +250,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             e
         })?;
 
-        let remote_path_str = path.to_str().ok_or_else(|| {
-            let e = zerror!(
-                "Can not create a new UnixSocketStream link bound to {:?}",
-                path
-            );
-            log::warn!("{}", e);
-            e
-        })?;
+        let remote_path_str = path.as_str();
 
         let link = Arc::new(LinkUnicastUnixSocketStream::new(
             stream,
@@ -272,7 +262,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
     }
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let path = get_unix_path_as_string(&endpoint.locator);
+        let path = get_unix_path_as_string(endpoint.address());
 
         // Because of the lack of SO_REUSEADDR we have to check if the
         // file is still there and if it is not used by another process.
@@ -365,7 +355,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         })?;
 
         // Update the endpoint with the acutal local path
-        assert!(endpoint.set_addr(local_path_str));
+        endpoint = EndPoint::new(
+            endpoint.protocol(),
+            local_path_str,
+            endpoint.metadata(),
+            endpoint.config(),
+        )?;
 
         // Spawn the accept loop for the listener
         let active = Arc::new(AtomicBool::new(true));
@@ -383,7 +378,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             res
         });
 
-        let locator = endpoint.locator.clone();
+        let locator = endpoint.to_locator();
         let listener = ListenerUnixSocketStream::new(endpoint, active, signal, handle, lock_fd);
         zwrite!(self.listeners).insert(local_path_str.to_owned(), listener);
 
@@ -391,7 +386,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let path = get_unix_path_as_string(&endpoint.locator);
+        let path = get_unix_path_as_string(endpoint.address());
 
         // Stop the listener
         let listener = zwrite!(self.listeners).remove(&path).ok_or_else(|| {
@@ -430,7 +425,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
     fn get_locators(&self) -> Vec<Locator> {
         zread!(self.listeners)
             .values()
-            .map(|x| x.endpoint.locator.clone())
+            .map(|x| x.endpoint.to_locator())
             .collect()
     }
 }

@@ -1,0 +1,62 @@
+#
+# Copyright (c) 2022 ZettaScale Technology
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+#
+[package]
+rust-version = { workspace = true }
+name = "zenoh-codec"
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = [
+	"kydos <angelo@icorsaro.net>",
+	"Luca Cominardi <luca.cominardi@zettascale.tech>",
+	"Pierre Avital <pierre.avital@zettascale.tech>",
+]
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
+description = "Internal crate for zenoh."
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["std"]
+std = [
+    "uhlc/std",
+    "zenoh-protocol/std"
+]
+shared-memory = [
+    "std",
+    "zenoh-shm",
+    "zenoh-protocol/shared-memory"
+]
+complete_n = ["zenoh-protocol/complete_n"]
+defmt = [
+    "zenoh-buffers/defmt",
+    "zenoh-protocol/defmt"
+]
+
+[dependencies]
+uhlc = { workspace = true, default-features = false }
+zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
+zenoh-protocol = { path = "../zenoh-protocol/", default-features = false }
+zenoh-shm = { path = "../zenoh-shm/", optional = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+rand = { workspace = true }
+uuid = { workspace = true }
+zenoh-protocol = { path = "../zenoh-protocol/", features = ["test"] }
+
+[[bench]]
+name = "codec"
+harness = false

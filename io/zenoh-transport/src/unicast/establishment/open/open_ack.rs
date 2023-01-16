@@ -11,15 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::unicast::establishment::authenticator::AuthenticatedPeerLink;
-use crate::unicast::establishment::open::OResult;
-use crate::unicast::establishment::{properties_from_attachment, EstablishmentProperties};
-use crate::TransportManager;
-use std::time::Duration;
+use crate::{
+    unicast::establishment::{
+        authenticator::AuthenticatedPeerLink, open::OResult, EstablishmentProperties,
+    },
+    TransportManager,
+};
+use std::{convert::TryFrom, time::Duration};
 use zenoh_core::{zasyncread, zerror};
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::core::ZInt;
-use zenoh_protocol::proto::{tmsg, Close, TransportBody};
+use zenoh_protocol::{
+    core::ZInt,
+    transport::{tmsg, Close, TransportBody},
+};
 
 pub(super) struct Output {
     pub(super) initial_sn: ZInt,
@@ -76,9 +80,8 @@ pub(super) async fn recv(
     };
 
     let mut opean_ack_properties = match msg.attachment.take() {
-        Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
-        }
+        Some(att) => EstablishmentProperties::try_from(&att)
+            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
     for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {

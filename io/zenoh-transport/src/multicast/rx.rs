@@ -12,17 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::common::conduit::TransportChannelRx;
-use super::protocol::core::{Priority, Reliability, ZInt};
-#[cfg(feature = "stats")]
-use super::protocol::proto::ZenohBody;
-use super::protocol::proto::{
-    Frame, FramePayload, Join, TransportBody, TransportMessage, ZenohMessage,
-};
 use super::transport::{TransportMulticastInner, TransportMulticastPeer};
 use std::sync::MutexGuard;
-use zenoh_core::{bail, zerror, zread};
-use zenoh_core::{zlock, Result as ZResult};
-use zenoh_protocol_core::Locator;
+use zenoh_core::{bail, zerror, zlock, zread, Result as ZResult};
+#[cfg(feature = "stats")]
+use zenoh_protocol::zenoh::ZenohBody;
+use zenoh_protocol::{
+    core::{Locator, Priority, Reliability, ZInt},
+    transport::{Frame, FramePayload, Join, TransportBody, TransportMessage},
+    zenoh::ZenohMessage,
+};
 
 /*************************************/
 /*            TRANSPORT RX           */
@@ -63,7 +62,10 @@ impl TransportMulticastInner {
         }
 
         #[cfg(feature = "shared-memory")]
-        let _ = msg.map_to_shmbuf(self.manager.shmr.clone())?;
+        {
+            let _ = crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr)?;
+        }
+
         peer.handler.handle_message(msg)
     }
 

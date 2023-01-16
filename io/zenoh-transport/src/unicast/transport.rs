@@ -14,8 +14,6 @@
 use super::super::{TransportExecutor, TransportManager, TransportPeerEventHandler};
 use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::TransportLinkUnicast;
-use super::protocol::core::{ConduitSn, Priority, WhatAmI, ZInt, ZenohId};
-use super::protocol::proto::{TransportMessage, ZenohMessage};
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
@@ -23,6 +21,11 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_core::{bail, zasynclock, zerror, zread, zwrite, Result as ZResult};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
+use zenoh_protocol::{
+    core::{ConduitSn, Priority, WhatAmI, ZInt, ZenohId},
+    transport::TransportMessage,
+    zenoh::ZenohMessage,
+};
 
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {
@@ -439,9 +442,9 @@ impl TransportUnicastInner {
         #[cfg(feature = "shared-memory")]
         {
             let res = if self.config.is_shm {
-                message.map_to_shminfo()
+                crate::shm::map_zmsg_to_shminfo(&mut message)
             } else {
-                message.map_to_shmbuf(self.config.manager.shmr.clone())
+                crate::shm::map_zmsg_to_shmbuf(&mut message, &self.config.manager.shmr)
             };
             if let Err(e) = res {
                 log::trace!("Failed SHM conversion: {}", e);

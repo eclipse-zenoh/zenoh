@@ -12,30 +12,24 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version = { workspace = true }
 name = "zenoh-macros"
-version = "0.7.0-rc"
-repository = "https://github.com/eclipse-zenoh/zenoh"
-homepage = "http://zenoh.io"
-authors = [
-	"kydos <angelo@icorsaro.net>",
-	"Julien Enoch <julien@enoch.fr>",
-	"Olivier Hécart <olivier.hecart@zettascale.tech>",
-	"Luca Cominardi <luca.cominardi@zettascale.tech>",
-	"Pierre Avital <pierre.avital@zettascale.tech>",
-]
-edition = "2018"
-license = "EPL-2.0 OR Apache-2.0"
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
 categories = ["proc-macros"]
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-proc-macro2 = "1.0.47"
-quote = "1.0.21"
-rustc_version = "0.4.0"
-syn = { version = "1.0.105", features = ["full"] }
-unzip-n = "0.1.2"
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+rustc_version = { workspace = true }
+syn = { workspace = true, features = ["full"] }
+unzip-n = { workspace = true }
 
 [lib]
 proc-macro = true

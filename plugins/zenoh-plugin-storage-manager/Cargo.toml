@@ -12,58 +12,58 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version = { workspace = true }
 name = "zenoh-plugin-storage-manager"
-version = "0.7.0-rc"
-repository = "https://github.com/eclipse-zenoh/zenoh"
-homepage = "http://zenoh.io"
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
 authors = [
     "kydos <angelo@icorsaro.net>",
     "Julien Enoch <julien@enoch.fr>",
     "Olivier Hécart <olivier.hecart@zettascale.tech>",
     "Luca Cominardi <luca.cominardi@zettascale.tech>",
 ]
-edition = "2018"
-license = " EPL-2.0 OR Apache-2.0"
-categories = ["network-programming"]
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
 description = "The zenoh storages plugin."
 
 [features]
-no_mangle = ["zenoh-plugin-trait/no_mangle"]
 default = ["no_mangle"]
+no_mangle = ["zenoh-plugin-trait/no_mangle"]
 
 [lib]
 name = "zplugin_storage_manager"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-async-std = "=1.12.0"
-async-trait = "0.1.59"
-clap = "3.2.23"
-crc = "3.0.0"
-derive-new = "0.5.9"
-env_logger = "0.10.0"
-flume = "0.10.14"
-futures = "0.3.25"
-git-version = "0.3.5"
-lazy_static = "1.4.0"
-libloading = "0.7.4"
-log = "0.4.17"
-serde = { version = "1.0.149", features = ["derive"] }
-serde_json = "1.0.89"
-urlencoding = "2.1.2"
-zenoh = { version = "0.7.0-rc", path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
-zenoh-collections = { version = "0.7.0-rc", path = "../../commons/zenoh-collections/" }
-zenoh-core = { version = "0.7.0-rc", path = "../../commons/zenoh-core/" }
-zenoh-plugin-trait = { version = "0.7.0-rc", path = "../zenoh-plugin-trait", default-features = false }
-zenoh-util = { version = "0.7.0-rc", path = "../../commons/zenoh-util" }
-zenoh_backend_traits = { version = "0.7.0-rc", path = "../zenoh-backend-traits/" }
+async-std = { workspace = true }
+async-trait = { workspace = true }
+clap = { workspace = true }
+crc = { workspace = true }
+derive-new = { workspace = true }
+env_logger = { workspace = true }
+flume = { workspace = true }
+futures = { workspace = true }
+git-version = { workspace = true }
+lazy_static = { workspace = true }
+libloading = { workspace = true }
+log = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+urlencoding = { workspace = true }
+zenoh = { path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
+zenoh-collections = { path = "../../commons/zenoh-collections/" }
+zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh-plugin-trait = { path = "../zenoh-plugin-trait/", default-features = false }
+zenoh-util = { path = "../../commons/zenoh-util/" }
+zenoh_backend_traits = { path = "../zenoh-backend-traits/" }
 
 [dev-dependencies]
-async-global-executor = "2.3.1"
+async-global-executor = { workspace = true }
 
 [build-dependencies]
-rustc_version = "0.4.0"
+rustc_version = { workspace = true }
 
 [package.metadata.deb]
 name = "zenoh-plugin-storage-manager"

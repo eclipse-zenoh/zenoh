@@ -12,22 +12,16 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version = { workspace = true }
 name = "zenoh"
-version = "0.7.0-rc"
-repository = "https://github.com/eclipse-zenoh/zenoh"
-homepage = "http://zenoh.io"
-authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Julien Enoch <julien@enoch.fr>",
-    "Olivier Hécart <olivier.hecart@zettascale.tech>",
-    "Luca Cominardi <luca.cominardi@zettascale.tech>",
-    "Pierre Avital <pierre.avital@zettascale.tech>",
-]
-edition = "2018"
-license = " EPL-2.0 OR Apache-2.0"
-categories = ["network-programming"]
-description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
+description = { workspace = true }
 readme = "../README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -37,19 +31,19 @@ maintenance = { status = "actively-developed" }
 [features]
 auth_pubkey = ["zenoh-transport/auth_pubkey"]
 auth_usrpwd = ["zenoh-transport/auth_usrpwd"]
-complete_n = ["zenoh-protocol-core/complete_n", "zenoh-protocol/complete_n"]
+complete_n = ["zenoh-protocol/complete_n"]
 shared-memory = [
-    "zenoh-buffers/shared-memory",
+    "zenoh-shm",
     "zenoh-protocol/shared-memory",
     "zenoh-transport/shared-memory",
 ]
 stats = ["zenoh-transport/stats"]
 transport_quic = ["zenoh-transport/transport_quic"]
+transport_serial = ["zenoh-transport/transport_serial"]
 transport_tcp = ["zenoh-transport/transport_tcp"]
 transport_tls = ["zenoh-transport/transport_tls"]
 transport_udp = ["zenoh-transport/transport_udp"]
 transport_unixsock-stream = ["zenoh-transport/transport_unixsock-stream"]
-transport_serial = ["zenoh-transport/transport_serial"]
 transport_ws = ["zenoh-transport/transport_ws"]
 unstable = []
 default = [
@@ -60,51 +54,52 @@ default = [
     "transport_tls",
     "transport_udp",
     "transport_unixsock-stream",
+    "transport_ws",
+    "shared-memory",
 ]
 
 [dependencies]
-async-global-executor = "2.3.1"
-async-std = { version = "=1.12.0", default-features = false, features = [
-    "attributes",
-] }
-async-trait = "0.1.59"
-base64 = "0.13.1"
-env_logger = "0.10.0"
-event-listener = "2.5.3"
-flume = "0.10.14"
-form_urlencoded = "1.1.0"
-futures = "0.3.25"
-git-version = "0.3.5"
-hex = "0.4.3"
-lazy_static = "1.4.0"
-log = "0.4.17"
-ordered-float = "3.4.0"
-petgraph = "0.6.2"
-rand = "0.8.5"
-regex = "1.7.0"
-serde = "1.0.149"
-serde_json = "1.0.89"
-socket2 = "0.4.7"
-stop-token = "0.7.0"
-uhlc = "0.5.1"
-uuid = { version = "1.2.2", features = ["v4"] }
-vec_map = "0.8.2"
-zenoh-buffers = { version = "0.7.0-rc", path = "../commons/zenoh-buffers/" }
-zenoh-cfg-properties = { version = "0.7.0-rc", path = "../commons/zenoh-cfg-properties/" }
-zenoh-collections = { version = "0.7.0-rc", path = "../commons/zenoh-collections/" }
-zenoh-config = { version = "0.7.0-rc", path = "../commons/zenoh-config/" }
-zenoh-core = { version = "0.7.0-rc", path = "../commons/zenoh-core/" }
-zenoh-crypto = { version = "0.7.0-rc", path = "../commons/zenoh-crypto/" }
-zenoh-link = { version = "0.7.0-rc", path = "../io/zenoh-link/" }
-zenoh-plugin-trait = { version = "0.7.0-rc", path = "../plugins/zenoh-plugin-trait", default-features = false }
-zenoh-protocol = { version = "0.7.0-rc", path = "../commons/zenoh-protocol/" }
-zenoh-protocol-core = { version = "0.7.0-rc", path = "../commons/zenoh-protocol-core/" }
-zenoh-sync = { version = "0.7.0-rc", path = "../commons/zenoh-sync/" }
-zenoh-transport = { version = "0.7.0-rc", path = "../io/zenoh-transport/" }
-zenoh-util = { version = "0.7.0-rc", path = "../commons/zenoh-util" }
+async-global-executor = { workspace = true }
+async-std = { workspace = true, default-features = false, features = ["attributes"] }
+async-trait = { workspace = true }
+base64 = { workspace = true }
+env_logger = { workspace = true }
+event-listener = { workspace = true }
+flume = { workspace = true }
+form_urlencoded = { workspace = true }
+futures = { workspace = true }
+git-version = { workspace = true }
+hex = { workspace = true }
+lazy_static = { workspace = true }
+log = { workspace = true }
+ordered-float = { workspace = true }
+petgraph = { workspace = true }
+rand = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+socket2 = { workspace = true }
+stop-token = { workspace = true }
+uhlc = { workspace = true }
+uuid = { workspace = true }
+vec_map = { workspace = true }
+zenoh-buffers = { path = "../commons/zenoh-buffers/" }
+zenoh-cfg-properties = { path = "../commons/zenoh-cfg-properties/" }
+zenoh-codec = { path = "../commons/zenoh-codec/" }
+zenoh-collections = { path = "../commons/zenoh-collections/" }
+zenoh-config = { path = "../commons/zenoh-config/" }
+zenoh-core = { path = "../commons/zenoh-core/" }
+zenoh-crypto = { path = "../commons/zenoh-crypto/" }
+zenoh-link = { path = "../io/zenoh-link/" }
+zenoh-plugin-trait = { path = "../plugins/zenoh-plugin-trait/", default-features = false }
+zenoh-protocol = { path = "../commons/zenoh-protocol/" }
+zenoh-shm = { path = "../commons/zenoh-shm/", optional = true }
+zenoh-sync = { path = "../commons/zenoh-sync/" }
+zenoh-transport = { path = "../io/zenoh-transport/" }
+zenoh-util = { path = "../commons/zenoh-util/" }
 
 [build-dependencies]
-rustc_version = "0.4.0"
+rustc_version = { workspace = true }
 
 [lib]
 name = "zenoh"

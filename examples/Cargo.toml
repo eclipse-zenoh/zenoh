@@ -12,21 +12,15 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version = { workspace = true }
 name = "zenoh-examples"
-version = "0.7.0-rc"
-repository = "https://github.com/eclipse-zenoh/zenoh"
-homepage = "http://zenoh.io"
-authors = [
-  "kydos <angelo@icorsaro.net>",
-  "Julien Enoch <julien@enoch.fr>",
-  "Olivier Hécart <olivier.hecart@zettascale.tech>",
-  "Luca Cominardi <luca.cominardi@zettascale.tech>",
-  "Pierre Avital <pierre.avital@zettascale.tech>",
-]
-edition = "2018"
-license = " EPL-2.0 OR Apache-2.0"
-categories = ["network-programming"]
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
 description = "Internal crate for zenoh."
 readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -35,24 +29,22 @@ readme = "README.md"
 shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
-async-std = { version = "=1.12.0", default-features = false, features = [
-  "attributes",
-] }
-clap = "3.2.23"
-env_logger = "0.10.0"
-flume = "0.10.14"
-futures = "0.3.25"
-git-version = "0.3.5"
-json5 = "0.4.1"
-log = "0.4.17"
-zenoh = { version = "0.7.0-rc", path = "../zenoh/", default-features = false }
-zenoh-ext = { version = "0.7.0-rc", path = "../zenoh-ext/" }
+async-std = { workspace = true, default-features = false, features = ["attributes"] }
+clap = { workspace = true }
+env_logger = { workspace = true }
+flume = { workspace = true }
+futures = { workspace = true }
+git-version = { workspace = true }
+json5 = { workspace = true }
+log = { workspace = true }
+zenoh = { path = "../zenoh/", default-features = false }
+zenoh-ext = { path = "../zenoh-ext/" }
 
 [dev-dependencies]
-rand = "0.8.5"
+rand = { workspace = true }
 
 [build-dependencies]
-rustc_version = "0.4.0"
+rustc_version = { workspace = true }
 
 [package.metadata.deb]
 name = "zenohd"

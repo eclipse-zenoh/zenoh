@@ -14,6 +14,7 @@
 
 //! Value primitives.
 
+use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
 use std::borrow::Cow;
 use std::convert::TryFrom;
 #[cfg(feature = "shared-memory")]
@@ -22,10 +23,10 @@ use std::sync::Arc;
 use zenoh_cfg_properties::Properties;
 use zenoh_core::zresult::ZError;
 
-#[cfg(feature = "shared-memory")]
-use crate::buffers::SharedMemoryBuf;
 use crate::buffers::ZBuf;
 use crate::prelude::{Encoding, KnownEncoding, Sample, SplitBuffer};
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::SharedMemoryBuf;
 
 /// A zenoh Value.
 #[non_exhaustive]
@@ -66,7 +67,7 @@ impl std::fmt::Debug for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         write!(
             f,
-            "Value{{ payload: {}, encoding: {} }}",
+            "Value{{ payload: {:?}, encoding: {} }}",
             self.payload, self.encoding
         )
     }
@@ -79,7 +80,7 @@ impl std::fmt::Display for Value {
             f,
             "{}",
             String::from_utf8(payload.clone().into_owned())
-                .unwrap_or_else(|_| base64::encode(payload))
+                .unwrap_or_else(|_| b64_std_engine.encode(payload))
         )
     }
 }
@@ -98,10 +99,8 @@ impl From<Arc<SharedMemoryBuf>> for Value {
 #[cfg(feature = "shared-memory")]
 impl From<Box<SharedMemoryBuf>> for Value {
     fn from(smb: Box<SharedMemoryBuf>) -> Self {
-        Value {
-            payload: smb.into(),
-            encoding: KnownEncoding::AppOctetStream.into(),
-        }
+        let smb: Arc<SharedMemoryBuf> = smb.into();
+        Self::from(smb)
     }
 }
 

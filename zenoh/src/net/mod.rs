@@ -18,13 +18,6 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 #[doc(hidden)]
-pub(crate) mod protocol {
-    #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
-    pub use zenoh_protocol::{io, proto};
-    #[deprecated = "This module is now a separate crate. Use the crate directly for shorter compile-times"]
-    pub use zenoh_protocol_core as core;
-}
-#[doc(hidden)]
 pub(crate) mod routing;
 #[doc(hidden)]
 pub mod runtime;

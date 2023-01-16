@@ -11,13 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "stats")]
-use super::protocol::proto::ZenohBody;
-use super::protocol::proto::ZenohMessage;
 use super::transport::TransportUnicastInner;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
 use zenoh_core::zread;
+#[cfg(feature = "stats")]
+use zenoh_protocol::zenoh::ZenohBody;
+use zenoh_protocol::zenoh::ZenohMessage;
 
 impl TransportUnicastInner {
     fn schedule_on_link(&self, msg: ZenohMessage) -> bool {
@@ -28,6 +28,7 @@ impl TransportUnicastInner {
                 // block for fairly long time
                 let pl = $pipeline.clone();
                 drop($guard);
+                log::trace!("Scheduled: {:?}", $msg);
                 return pl.push_zenoh_message($msg);
             };
         }

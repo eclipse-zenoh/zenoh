@@ -11,17 +11,23 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::authenticator::AuthenticatedPeerLink;
-use super::super::{attachment_from_properties, properties_from_attachment};
-use super::super::{Cookie, EstablishmentProperties};
+use super::super::{
+    authenticator::AuthenticatedPeerLink,
+    {Cookie, EstablishmentProperties},
+};
 use super::AResult;
-use crate::TransportManager;
-use std::time::Duration;
-use zenoh_core::{zasyncread, zerror};
+use crate::{unicast::establishment::cookie::Zenoh060Cookie, TransportManager};
+use std::{convert::TryFrom, time::Duration};
+use zenoh_buffers::reader::HasReader;
+use zenoh_codec::{RCodec, Zenoh060};
+use zenoh_core::{zasynclock, zasyncread, zerror};
 use zenoh_crypto::hmac;
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::core::{Property, ZInt};
-use zenoh_protocol::proto::{tmsg, Attachment, Close, TransportBody};
+use zenoh_protocol::{
+    common::Attachment,
+    core::{Property, ZInt},
+    transport::{tmsg, Close, TransportBody},
+};
 
 /*************************************/
 /*             ACCEPT                */
@@ -90,48 +96,52 @@ pub(super) async fn recv(
     }
 
     // Decrypt the cookie with the cyper
-    let (cookie, mut ps_cookie) = Cookie::decrypt(encrypted, &manager.cipher)
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+    let mut reader = encrypted.reader();
+    let mut codec = Zenoh060Cookie {
+        prng: &mut *zasynclock!(manager.prng),
+        cipher: &manager.cipher,
+        codec: Zenoh060::default(),
+    };
+    let mut cookie: Cookie = codec.read(&mut reader).map_err(|_| {
+        (
+            zerror!("Decoding cookie failed").into(),
+            Some(tmsg::close_reason::INVALID),
+        )
+    })?;
 
     // Validate with the peer authenticators
     let mut open_syn_properties: EstablishmentProperties = match msg.attachment.take() {
-        Some(att) => {
-            properties_from_attachment(att).map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?
-        }
+        Some(att) => EstablishmentProperties::try_from(&att)
+            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
 
     let mut is_shm = false;
     let mut ps_attachment = EstablishmentProperties::new();
     for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
-        let mut att = pa
-            .handle_open_syn(
-                auth_link,
-                &cookie,
-                (
-                    open_syn_properties.remove(pa.id().into()).map(|x| x.value),
-                    ps_cookie.remove(pa.id().into()).map(|x| x.value),
-                ),
-            )
-            .await;
+        let po = open_syn_properties.remove(pa.id().into()).map(|x| x.value);
+        let pc = cookie.properties.remove(pa.id().into()).map(|x| x.value);
+        let mut att = pa.handle_open_syn(auth_link, &cookie, (po, pc)).await;
 
         #[cfg(feature = "shared-memory")]
-        if pa.id() == super::super::authenticator::PeerAuthenticatorId::Shm {
-            // Check if SHM has been validated from the other side
-            att = match att {
-                Ok(att) => {
-                    is_shm = true;
-                    Ok(att)
-                }
-                Err(e) => {
-                    if e.is::<zenoh_core::zresult::ShmError>() {
-                        is_shm = false;
-                        Ok(None)
-                    } else {
-                        Err(e)
+        {
+            if pa.id() == super::super::authenticator::PeerAuthenticatorId::Shm {
+                // Check if SHM has been validated from the other side
+                att = match att {
+                    Ok(att) => {
+                        is_shm = true;
+                        Ok(att)
                     }
-                }
-            };
+                    Err(e) => {
+                        if e.is::<zenoh_core::zresult::ShmError>() {
+                            is_shm = false;
+                            Ok(None)
+                        } else {
+                            Err(e)
+                        }
+                    }
+                };
+            }
         }
 
         let mut att = att.map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
@@ -145,12 +155,20 @@ pub(super) async fn recv(
         }
     }
 
+    let open_ack_attachment = if ps_attachment.is_empty() {
+        None
+    } else {
+        let att = Attachment::try_from(&ps_attachment)
+            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        Some(att)
+    };
+
     let output = Output {
         cookie,
         initial_sn: open_syn.initial_sn,
         lease: open_syn.lease,
         is_shm,
-        open_ack_attachment: attachment_from_properties(&ps_attachment).ok(),
+        open_ack_attachment,
     };
     Ok(output)
 }

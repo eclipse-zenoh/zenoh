@@ -11,23 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::protocol::core::{Reliability, ZInt};
-use super::protocol::io::{ZBuf, ZSlice};
-use super::protocol::proto::ZenohMessage;
 use super::seq_num::SeqNum;
-
-use zenoh_buffers::buffer::InsertBuffer;
-use zenoh_buffers::reader::HasReader;
-use zenoh_buffers::SplitBuffer;
+use zenoh_buffers::{reader::HasReader, SplitBuffer, ZBuf, ZSlice};
+use zenoh_codec::{RCodec, Zenoh060Reliability};
 use zenoh_core::{bail, Result as ZResult};
-use zenoh_protocol::proto::MessageReader;
+use zenoh_protocol::{
+    core::{Reliability, ZInt},
+    zenoh::ZenohMessage,
+};
 
 #[derive(Debug)]
 pub(crate) struct DefragBuffer {
     reliability: Reliability,
     pub(crate) sn: SeqNum,
-    capacity: usize,
     buffer: ZBuf,
+    capacity: usize,
+    len: usize,
 }
 
 impl DefragBuffer {
@@ -39,8 +38,9 @@ impl DefragBuffer {
         let db = DefragBuffer {
             reliability,
             sn: SeqNum::make(0, sn_resolution)?,
-            capacity,
             buffer: ZBuf::default(),
+            capacity,
+            len: 0,
         };
         Ok(db)
     }
@@ -52,7 +52,8 @@ impl DefragBuffer {
 
     #[inline(always)]
     pub(crate) fn clear(&mut self) {
-        self.buffer.clear()
+        self.buffer.clear();
+        self.len = 0;
     }
 
     #[inline(always)]
@@ -66,7 +67,7 @@ impl DefragBuffer {
             bail!("Expected SN {}, received {}", self.sn.get(), sn)
         }
 
-        let new_len = zslice.len() + self.buffer.len();
+        let new_len = self.len + zslice.len();
         if new_len > self.capacity {
             self.clear();
             bail!(
@@ -76,16 +77,19 @@ impl DefragBuffer {
             )
         }
 
-        self.buffer.append(zslice);
         self.sn.increment();
+        self.buffer.push_zslice(zslice);
+        self.len = new_len;
 
         Ok(())
     }
 
     #[inline(always)]
     pub(crate) fn defragment(&mut self) -> Option<ZenohMessage> {
-        let res = self.buffer.reader().read_zenoh_message(self.reliability);
-        self.buffer.clear();
+        let mut reader = self.buffer.reader();
+        let rcodec = Zenoh060Reliability::new(self.reliability);
+        let res: Option<ZenohMessage> = rcodec.read(&mut reader).ok();
+        self.clear();
         res
     }
 }

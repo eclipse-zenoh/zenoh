@@ -17,22 +17,24 @@ use super::{
 use crate::unicast::establishment::Cookie;
 use async_trait::async_trait;
 use rand::{Rng, SeedableRng};
-use std::convert::TryInto;
-use std::sync::{Arc, RwLock};
-use zenoh_buffers::reader::HasReader;
-use zenoh_buffers::{SplitBuffer, ZBufReader};
-use zenoh_config::Config;
-use zenoh_core::zresult::ShmError;
-use zenoh_core::{bail, zcheck};
-use zenoh_core::{zerror, Result as ZResult};
-use zenoh_crypto::PseudoRng;
-use zenoh_protocol::io::{
-    SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader, WBuf, WBufCodec, ZBuf, ZBufCodec,
+use std::{
+    convert::TryInto,
+    sync::{Arc, RwLock},
+};
+use zenoh_buffers::{
+    reader::{DidntRead, HasReader, Reader},
+    writer::{DidntWrite, HasWriter, Writer},
     ZSlice,
 };
-use zenoh_protocol_core::{ZInt, ZenohId};
+use zenoh_codec::{RCodec, WCodec, Zenoh060};
+use zenoh_config::Config;
+use zenoh_core::{bail, zerror, zresult::ShmError, Result as ZResult};
+use zenoh_crypto::PseudoRng;
+use zenoh_protocol::core::{ZInt, ZenohId};
+use zenoh_shm::{
+    SharedMemoryBuf, SharedMemoryBufInfoSerialized, SharedMemoryManager, SharedMemoryReader,
+};
 
-const WBUF_SIZE: usize = 64;
 const SHM_VERSION: ZInt = 0;
 const SHM_NAME: &str = "shmauth";
 // Let's use a ZInt as a challenge
@@ -54,6 +56,34 @@ struct InitSynProperty {
     shm: ZSlice,
 }
 
+impl<W> WCodec<&InitSynProperty, &mut W> for Zenoh060
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &InitSynProperty) -> Self::Output {
+        self.write(&mut *writer, x.version)?;
+        self.write(&mut *writer, &x.shm)?;
+        Ok(())
+    }
+}
+
+impl<R> RCodec<InitSynProperty, &mut R> for Zenoh060
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<InitSynProperty, Self::Error> {
+        let version: ZInt = self.read(&mut *reader)?;
+        let bytes: Vec<u8> = self.read(&mut *reader)?;
+        let shm_info: SharedMemoryBufInfoSerialized = bytes.into();
+        let shm: ZSlice = shm_info.into();
+        Ok(InitSynProperty { version, shm })
+    }
+}
+
 /*************************************/
 /*             InitAck               */
 /*************************************/
@@ -70,6 +100,34 @@ struct InitAckProperty {
     shm: ZSlice,
 }
 
+impl<W> WCodec<&InitAckProperty, &mut W> for Zenoh060
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &InitAckProperty) -> Self::Output {
+        self.write(&mut *writer, x.challenge)?;
+        self.write(&mut *writer, &x.shm)?;
+        Ok(())
+    }
+}
+
+impl<R> RCodec<InitAckProperty, &mut R> for Zenoh060
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<InitAckProperty, Self::Error> {
+        let challenge: ZInt = self.read(&mut *reader)?;
+        let bytes: Vec<u8> = self.read(&mut *reader)?;
+        let shm_info: SharedMemoryBufInfoSerialized = bytes.into();
+        let shm: ZSlice = shm_info.into();
+        Ok(InitAckProperty { challenge, shm })
+    }
+}
+
 /*************************************/
 /*             OpenSyn               */
 /*************************************/
@@ -83,44 +141,27 @@ struct OpenSynProperty {
     challenge: ZInt,
 }
 
-trait WShm {
-    fn write_init_syn_property_shm(&mut self, init_syn_property: &InitSynProperty) -> bool;
-    fn write_init_ack_property_shm(&mut self, init_ack_property: &InitAckProperty) -> bool;
-    fn write_open_syn_property_shm(&mut self, open_syn_property: &OpenSynProperty) -> bool;
-}
-impl WShm for WBuf {
-    fn write_init_syn_property_shm(&mut self, init_syn_property: &InitSynProperty) -> bool {
-        zcheck!(self.write_zint(init_syn_property.version));
-        self.write_zslice_array(init_syn_property.shm.clone())
-    }
-    fn write_init_ack_property_shm(&mut self, init_ack_property: &InitAckProperty) -> bool {
-        zcheck!(self.write_zint(init_ack_property.challenge));
-        self.write_zslice_array(init_ack_property.shm.clone())
-    }
-    fn write_open_syn_property_shm(&mut self, open_syn_property: &OpenSynProperty) -> bool {
-        self.write_zint(open_syn_property.challenge)
+impl<W> WCodec<&OpenSynProperty, &mut W> for Zenoh060
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &OpenSynProperty) -> Self::Output {
+        self.write(&mut *writer, x.challenge)?;
+        Ok(())
     }
 }
 
-trait ZShm {
-    fn read_init_syn_property_shm(&mut self) -> Option<InitSynProperty>;
-    fn read_init_ack_property_shm(&mut self) -> Option<InitAckProperty>;
-    fn read_open_syn_property_shm(&mut self) -> Option<OpenSynProperty>;
-}
-impl ZShm for ZBufReader<'_> {
-    fn read_init_syn_property_shm(&mut self) -> Option<InitSynProperty> {
-        let version = self.read_zint()?;
-        let shm = self.read_shminfo()?;
-        Some(InitSynProperty { version, shm })
-    }
-    fn read_init_ack_property_shm(&mut self) -> Option<InitAckProperty> {
-        let challenge = self.read_zint()?;
-        let shm = self.read_shminfo()?;
-        Some(InitAckProperty { challenge, shm })
-    }
-    fn read_open_syn_property_shm(&mut self) -> Option<OpenSynProperty> {
-        let challenge = self.read_zint()?;
-        Some(OpenSynProperty { challenge })
+impl<R> RCodec<OpenSynProperty, &mut R> for Zenoh060
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<OpenSynProperty, Self::Error> {
+        let challenge: ZInt = self.read(&mut *reader)?;
+        Ok(OpenSynProperty { challenge })
     }
 }
 
@@ -197,43 +238,51 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
 
     async fn get_init_syn_properties(
         &self,
-        _link: &AuthenticatedPeerLink,
+        link: &AuthenticatedPeerLink,
         _peer_id: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>> {
         let init_syn_property = InitSynProperty {
             version: SHM_VERSION,
             shm: self.buffer.info.serialize().unwrap().into(),
         };
-        let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_init_syn_property_shm(&init_syn_property);
+        let mut buff = vec![];
+        let codec = Zenoh060::default();
 
-        Ok(Some(wbuf.contiguous().into_owned()))
+        let mut writer = buff.writer();
+        codec
+            .write(&mut writer, &init_syn_property)
+            .map_err(|_| zerror!("Error in encoding InitSyn for SHM on link: {}", link))?;
+
+        Ok(Some(buff))
     }
 
     async fn handle_init_syn(
         &self,
         link: &AuthenticatedPeerLink,
         cookie: &Cookie,
-        property: Option<Vec<u8>>,
+        mut property: Option<Vec<u8>>,
     ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)> {
-        let zbuf: ZBuf = match property {
-            Some(p) => p.into(),
+        let buffer = match property.take() {
+            Some(p) => p,
             None => {
                 log::debug!("Peer {} did not express interest in SHM", cookie.zid);
                 return Ok((None, None));
             }
         };
-        let mut init_syn_property = match zbuf.reader().read_init_syn_property_shm() {
-            Some(isa) => isa,
-            None => bail!("Received InitSyn with invalid attachment on link: {}", link),
-        };
+
+        let codec = Zenoh060::default();
+        let mut reader = buffer.reader();
+
+        let mut init_syn_property: InitSynProperty = codec
+            .read(&mut reader)
+            .map_err(|_| zerror!("Received InitSyn with invalid attachment on link: {}", link))?;
 
         if init_syn_property.version > SHM_VERSION {
             bail!("Rejected InitSyn with invalid attachment on link: {}", link)
         }
 
         // Try to read from the shared memory
-        match init_syn_property.shm.map_to_shmbuf(self.reader.clone()) {
+        match crate::shm::map_zslice_to_shmbuf(&mut init_syn_property.shm, &self.reader) {
             Ok(res) => {
                 if !res {
                     log::debug!("Peer {} can not operate over SHM: error", cookie.zid);
@@ -264,10 +313,13 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             shm: self.buffer.info.serialize().unwrap().into(),
         };
         // Encode the InitAck property
-        let mut wbuf = WBuf::new(WBUF_SIZE, false);
-        wbuf.write_init_ack_property_shm(&init_ack_property);
+        let mut buffer = vec![];
+        let mut writer = buffer.writer();
+        codec
+            .write(&mut writer, &init_ack_property)
+            .map_err(|_| zerror!("Error in encoding InitSyn for SHM on link: {}", link))?;
 
-        Ok((Some(wbuf.contiguous().into_owned()), None))
+        Ok((Some(buffer), None))
     }
 
     async fn handle_init_ack(
@@ -275,23 +327,25 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         link: &AuthenticatedPeerLink,
         peer_id: &ZenohId,
         _sn_resolution: ZInt,
-        property: Option<Vec<u8>>,
+        mut property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
-        let zbuf: ZBuf = match property {
-            Some(p) => p.into(),
+        let buffer = match property.take() {
+            Some(p) => p,
             None => {
-                log::debug!("Peer {} did not express interest in shared memory", peer_id);
+                log::debug!("Peer {} did not express interest in SHM", peer_id);
                 return Ok(None);
             }
         };
 
-        let mut init_ack_property = zbuf
-            .reader()
-            .read_init_ack_property_shm()
-            .ok_or_else(|| zerror!("Received InitAck with invalid attachment on link: {}", link))?;
+        let codec = Zenoh060::default();
+        let mut reader = buffer.reader();
+
+        let mut init_ack_property: InitAckProperty = codec
+            .read(&mut reader)
+            .map_err(|_| zerror!("Received InitAck with invalid attachment on link: {}", link))?;
 
         // Try to read from the shared memory
-        match init_ack_property.shm.map_to_shmbuf(self.reader.clone()) {
+        match crate::shm::map_zslice_to_shmbuf(&mut init_ack_property.shm, &self.reader) {
             Ok(res) => {
                 if !res {
                     return Err(ShmError(zerror!("No SHM on link: {}", link)).into());
@@ -313,10 +367,14 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             // Create the OpenSyn attachment
             let open_syn_property = OpenSynProperty { challenge };
             // Encode the OpenSyn property
-            let mut wbuf = WBuf::new(WBUF_SIZE, false);
-            wbuf.write_open_syn_property_shm(&open_syn_property);
+            let mut buffer = vec![];
+            let mut writer = buffer.writer();
 
-            Ok(Some(wbuf.contiguous().into_owned()))
+            codec
+                .write(&mut writer, &open_syn_property)
+                .map_err(|_| zerror!("Error in encoding OpenSyn for SHM on link: {}", link))?;
+
+            Ok(Some(buffer))
         } else {
             Err(ShmError(zerror!(
                 "Received OpenSyn with invalid attachment on link: {}",
@@ -332,18 +390,24 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
         _cookie: &Cookie,
         property: (Option<Vec<u8>>, Option<Vec<u8>>),
     ) -> ZResult<Option<Vec<u8>>> {
-        let (attachment, _cookie) = property;
-        let zbuf: ZBuf = match attachment {
-            Some(p) => p.into(),
+        let (mut attachment, _cookie) = property;
+        let buffer = match attachment.take() {
+            Some(p) => p,
             None => {
-                log::debug!("Received OpenSyn with no SHM attachment on link: {}", link);
-                return Ok(None);
+                return Err(ShmError(zerror!(
+                    "Received OpenSyn with no SHM attachment on link: {}",
+                    link
+                ))
+                .into());
             }
         };
-        let open_syn_property = zbuf
-            .reader()
-            .read_open_syn_property_shm()
-            .ok_or_else(|| zerror!("Received OpenSyn with invalid attachment on link: {}", link))?;
+
+        let codec = Zenoh060::default();
+        let mut reader = buffer.reader();
+
+        let open_syn_property: OpenSynProperty = codec
+            .read(&mut reader)
+            .map_err(|_| zerror!("Received OpenSyn with invalid attachment on link: {}", link))?;
 
         if open_syn_property.challenge == self.challenge {
             Ok(None)

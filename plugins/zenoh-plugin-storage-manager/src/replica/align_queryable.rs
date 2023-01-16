@@ -177,7 +177,7 @@ impl AlignQueryable {
 
     fn parse_selector(&self, selector: Selector) -> Option<AlignComponent> {
         let properties = selector.parameters_stringmap().unwrap(); // note: this is a hashmap
-        trace!("[ALIGN QUERYABLE] Properties are : {:?}", properties);
+        trace!("[ALIGN QUERYABLE] Properties are: {:?}", properties);
         if properties.get(super::ERA).is_some() {
             Some(AlignComponent::Era(
                 EraType::from_str(properties.get(super::ERA).unwrap()).unwrap(),

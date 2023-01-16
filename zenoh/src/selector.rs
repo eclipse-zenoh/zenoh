@@ -15,7 +15,7 @@
 //! [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
 
 use zenoh_core::Result as ZResult;
-use zenoh_protocol_core::key_expr::{keyexpr, OwnedKeyExpr};
+use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
 pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
 
 use crate::{prelude::KeyExpr, queryable::Query};

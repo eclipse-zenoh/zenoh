@@ -24,10 +24,10 @@ use zenoh_config::{
 use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
 
 /// Constants and helpers for zenoh `whatami` flags.
-pub use zenoh_protocol_core::WhatAmI;
+pub use zenoh_protocol::core::WhatAmI;
 
 /// A zenoh Hello message.
-pub use zenoh_protocol::proto::Hello;
+pub use zenoh_protocol::scouting::Hello;
 
 /// A builder for initializing a [`Scout`].
 ///

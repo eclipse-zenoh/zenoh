@@ -11,17 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task;
-use std::any::Any;
-use std::convert::TryFrom;
-use std::sync::Arc;
-use std::time::Duration;
-use zenoh_core::zasync_executor_init;
-use zenoh_core::Result as ZResult;
+use async_std::{prelude::FutureExt, task};
+use std::{any::Any, convert::TryFrom, sync::Arc, time::Duration};
+use zenoh_core::{zasync_executor_init, Result as ZResult};
 use zenoh_link::{EndPoint, Link};
-use zenoh_protocol::proto::ZenohMessage;
-use zenoh_protocol_core::{WhatAmI, ZenohId};
+use zenoh_protocol::{
+    core::{WhatAmI, ZenohId},
+    zenoh::ZenohMessage,
+};
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -105,103 +102,19 @@ async fn run(endpoints: &[EndPoint]) {
     }
 }
 
-#[test]
-fn endpoint_parsing() {
-    let s = "tcp/127.0.0.1:0";
-    println!("Endpoint parsing: {}", s);
-    let endpoint: EndPoint = s.parse().unwrap();
-    assert!(endpoint.config.is_none());
-    assert!(endpoint.locator.metadata.is_none());
-
-    let s = "tcp/127.0.0.1:0?one=1";
-    println!("Endpoint parsing: {}", s);
-    let endpoint: EndPoint = s.parse().unwrap();
-    assert!(endpoint.config.is_none());
-    let metadata = endpoint.locator.metadata.as_ref().unwrap();
-    assert_eq!(metadata.len(), 1);
-    assert_eq!(metadata.get("one").unwrap(), &"1");
-
-    let s = "tcp/127.0.0.1:0#a=A";
-    println!("Endpoint parsing: {}", s);
-    let endpoint: EndPoint = s.parse().unwrap();
-    assert!(endpoint.locator.metadata.is_none());
-    let config = endpoint.config.as_ref().unwrap();
-    assert_eq!(config.len(), 1);
-    assert_eq!(config.get("a").unwrap(), &"A");
-
-    let s = "tcp/127.0.0.1:0?one=1#a=A";
-    println!("Endpoint parsing: {}", s);
-    let endpoint: EndPoint = s.parse().unwrap();
-    let metadata = endpoint.locator.metadata.as_ref().unwrap();
-    assert_eq!(metadata.len(), 1);
-    assert_eq!(metadata.get("one").unwrap(), &"1");
-    let config = endpoint.config.as_ref().unwrap();
-    assert_eq!(config.len(), 1);
-    assert_eq!(config.get("a").unwrap(), &"A");
-
-    let s = "tcp/127.0.0.1:0#a=A?one=1";
-    println!("Endpoint parsing: {}", s);
-    assert!(s.parse::<EndPoint>().is_err());
-
-    let s = "tcp/127.0.0.1:0?one=1;two=2";
-    println!("Endpoint parsing: {}", s);
-    let endpoint: EndPoint = s.parse().unwrap();
-    assert!(endpoint.config.is_none());
-    let metadata = endpoint.locator.metadata.as_ref().unwrap();
-    assert_eq!(metadata.len(), 2);
-    assert_eq!(metadata.get("one").unwrap(), &"1");
-    assert_eq!(metadata.get("two").unwrap(), &"2");
-
-    let s = "tcp/127.0.0.1:0#a=A;b=B";
-    println!("Endpoint parsing: {}", s);
-    let endpoint: EndPoint = s.parse().unwrap();
-    assert!(endpoint.locator.metadata.is_none());
-    let config = endpoint.config.as_ref().unwrap();
-    assert_eq!(config.len(), 2);
-    assert_eq!(config.get("a").unwrap(), &"A");
-    assert_eq!(config.get("b").unwrap(), &"B");
-
-    let s = "tcp/127.0.0.1:0?one=1;two=2#a=A;b=B";
-    println!("Endpoint parsing: {}", s);
-    let endpoint: EndPoint = s.parse().unwrap();
-    let metadata = endpoint.locator.metadata.as_ref().unwrap();
-    assert_eq!(metadata.len(), 2);
-    assert_eq!(metadata.get("one").unwrap(), &"1");
-    assert_eq!(metadata.get("two").unwrap(), &"2");
-    let config = endpoint.config.as_ref().unwrap();
-    assert_eq!(config.len(), 2);
-    assert_eq!(config.get("a").unwrap(), &"A");
-    assert_eq!(config.get("b").unwrap(), &"B");
-
-    let s = "tcp/127.0.0.1:0?";
-    println!("Endpoint parsing: {}", s);
-    assert!(s.parse::<EndPoint>().unwrap().locator.metadata.is_none());
-
-    let s = "tcp/127.0.0.1:0#";
-    println!("Endpoint parsing: {}", s);
-    assert!(s.parse::<EndPoint>().unwrap().config.is_none());
-
-    let s = "tcp/127.0.0.1:0?#";
-    println!("Endpoint parsing: {}", s);
-    assert!(s.parse::<EndPoint>().unwrap().locator.metadata.is_none());
-
-    let s = "tcp/127.0.0.1:0#?";
-    println!("Endpoint parsing: {}", s);
-    assert!(s.parse::<EndPoint>().is_err())
-}
-
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn endpoint_tcp() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "tcp/127.0.0.1:9447".parse().unwrap(),
-        "tcp/[::1]:9447".parse().unwrap(),
-        "tcp/localhost:9448".parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 7000).parse().unwrap(),
+        format!("tcp/[::1]:{}", 7001).parse().unwrap(),
+        format!("tcp/localhost:{}", 7002).parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
 }
@@ -209,15 +122,16 @@ fn endpoint_tcp() {
 #[cfg(feature = "transport_udp")]
 #[test]
 fn endpoint_udp() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "udp/127.0.0.1:9447".parse().unwrap(),
-        "udp/[::1]:9447".parse().unwrap(),
-        "udp/localhost:9448".parse().unwrap(),
+        format!("udp/127.0.0.1:{}", 7010).parse().unwrap(),
+        format!("udp/[::1]:{}", 7011).parse().unwrap(),
+        format!("udp/localhost:{}", 7012).parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
 }
@@ -225,41 +139,41 @@ fn endpoint_udp() {
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn endpoint_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Remove the files if they still exists
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-0.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-1.sock");
+    let f1 = "zenoh-test-unix-socket-0.sock";
+    let f2 = "zenoh-test-unix-socket-1.sock";
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(f2);
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "unixsock-stream/zenoh-test-unix-socket-0.sock"
-            .parse()
-            .unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-1.sock"
-            .parse()
-            .unwrap(),
+        format!("unixsock-stream/{}", f1).parse().unwrap(),
+        format!("unixsock-stream/{}", f2).parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-0.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-1.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-0.sock.lock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-1.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(f2);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
+    let _ = std::fs::remove_file(format!("{}.lock", f2));
 }
 
 #[cfg(feature = "transport_ws")]
 #[test]
 fn endpoint_ws() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "ws/127.0.0.1:11447".parse().unwrap(),
-        "ws/[::1]:11447".parse().unwrap(),
-        "ws/localhost:11448".parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 7020).parse().unwrap(),
+        format!("ws/[::1]:{}", 7021).parse().unwrap(),
+        format!("ws/localhost:{}", 7022).parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
 }
@@ -267,16 +181,17 @@ fn endpoint_ws() {
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
 fn endpoint_tcp_udp() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "tcp/127.0.0.1:9449".parse().unwrap(),
-        "udp/127.0.0.1:9449".parse().unwrap(),
-        "tcp/[::1]:9449".parse().unwrap(),
-        "udp/[::1]:9449".parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 7030).parse().unwrap(),
+        format!("udp/127.0.0.1:{}", 7031).parse().unwrap(),
+        format!("tcp/[::1]:{}", 7032).parse().unwrap(),
+        format!("udp/[::1]:{}", 7033).parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
 }
@@ -289,25 +204,25 @@ fn endpoint_tcp_udp() {
 ))]
 #[test]
 fn endpoint_tcp_udp_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Remove the file if it still exists
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock");
+    let f1 = "zenoh-test-unix-socket-2.sock";
+    let _ = std::fs::remove_file(f1);
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "tcp/127.0.0.1:9450".parse().unwrap(),
-        "udp/127.0.0.1:9450".parse().unwrap(),
-        "tcp/[::1]:9450".parse().unwrap(),
-        "udp/[::1]:9450".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-2.sock"
-            .parse()
-            .unwrap(),
+        format!("tcp/127.0.0.1:{}", 7040).parse().unwrap(),
+        format!("udp/127.0.0.1:{}", 7041).parse().unwrap(),
+        format!("tcp/[::1]:{}", 7042).parse().unwrap(),
+        format!("udp/[::1]:{}", 7043).parse().unwrap(),
+        format!("unixsock-stream/{}", f1).parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-2.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(all(
@@ -317,23 +232,23 @@ fn endpoint_tcp_udp_unix() {
 ))]
 #[test]
 fn endpoint_tcp_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Remove the file if it still exists
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock");
+    let f1 = "zenoh-test-unix-socket-3.sock";
+    let _ = std::fs::remove_file(f1);
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "tcp/127.0.0.1:9451".parse().unwrap(),
-        "tcp/[::1]:9451".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-3.sock"
-            .parse()
-            .unwrap(),
+        format!("tcp/127.0.0.1:{}", 7050).parse().unwrap(),
+        format!("tcp/[::1]:{}", 7051).parse().unwrap(),
+        format!("unixsock-stream/{}", f1).parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-3.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(all(
@@ -343,23 +258,22 @@ fn endpoint_tcp_unix() {
 ))]
 #[test]
 fn endpoint_udp_unix() {
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Remove the file if it still exists
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock");
-    // Define the locators
+    let f1 = "zenoh-test-unix-socket-4.sock";
+    let _ = std::fs::remove_file(f1); // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "udp/127.0.0.1:9451".parse().unwrap(),
-        "udp/[::1]:9451".parse().unwrap(),
-        "unixsock-stream/zenoh-test-unix-socket-4.sock"
-            .parse()
-            .unwrap(),
+        format!("udp/127.0.0.1:{}", 7060).parse().unwrap(),
+        format!("udp/[::1]:{}", 7061).parse().unwrap(),
+        format!("unixsock-stream/{}", f1).parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock");
-    let _ = std::fs::remove_file("zenoh-test-unix-socket-4.sock.lock");
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{}.lock", f1));
 }
 
 #[cfg(feature = "transport_tls")]
@@ -367,6 +281,7 @@ fn endpoint_udp_unix() {
 fn endpoint_tls() {
     use zenoh_link::tls::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -426,15 +341,18 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 -----END CERTIFICATE-----";
 
     // Define the locators
-    let mut endpoint: EndPoint = "tls/localhost:9452".parse().unwrap();
-    endpoint.extend_configuration(
-        [
-            (TLS_SERVER_CERTIFICATE_RAW, cert),
-            (TLS_SERVER_PRIVATE_KEY_RAW, key),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    let mut endpoint: EndPoint = format!("tls/localhost:{}", 7070).parse().unwrap();
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
 
     let endpoints = vec![endpoint];
     task::block_on(run(&endpoints));
@@ -445,6 +363,7 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 fn endpoint_quic() {
     use zenoh_link::quic::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -504,15 +423,18 @@ AXVFFIgCSluyrolaD6CWD9MqOex4YOfJR2bNxI7lFvuK4AwjyUJzT1U1HXib17mM
 -----END CERTIFICATE-----";
 
     // Define the locators
-    let mut endpoint: EndPoint = "quic/localhost:9453".parse().unwrap();
-    endpoint.extend_configuration(
-        [
-            (TLS_SERVER_CERTIFICATE_RAW, cert),
-            (TLS_SERVER_PRIVATE_KEY_RAW, key),
-        ]
-        .iter()
-        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
-    );
+    let mut endpoint: EndPoint = format!("quic/localhost:{}", 7080).parse().unwrap();
+    endpoint
+        .config_mut()
+        .extend(
+            [
+                (TLS_SERVER_CERTIFICATE_RAW, cert),
+                (TLS_SERVER_PRIVATE_KEY_RAW, key),
+            ]
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned())),
+        )
+        .unwrap();
     let endpoints = vec![endpoint];
     task::block_on(run(&endpoints));
 }

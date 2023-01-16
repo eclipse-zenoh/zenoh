@@ -13,18 +13,18 @@
 //
 use std::collections::VecDeque;
 
-pub(crate) struct StackBuffer<T> {
+pub struct StackBuffer<T> {
     buffer: VecDeque<T>,
 }
 
 impl<T> StackBuffer<T> {
-    pub(crate) fn new(capacity: usize) -> StackBuffer<T> {
+    pub fn new(capacity: usize) -> StackBuffer<T> {
         let buffer = VecDeque::<T>::with_capacity(capacity);
         StackBuffer { buffer }
     }
 
     #[inline]
-    pub(crate) fn push(&mut self, elem: T) -> Option<T> {
+    pub fn push(&mut self, elem: T) -> Option<T> {
         if self.len() < self.capacity() {
             self.buffer.push_front(elem);
             None
@@ -34,28 +34,28 @@ impl<T> StackBuffer<T> {
     }
 
     #[inline]
-    pub(crate) fn pop(&mut self) -> Option<T> {
+    pub fn pop(&mut self) -> Option<T> {
         self.buffer.pop_front()
     }
 
     #[allow(dead_code)]
     #[inline]
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.buffer.is_empty()
     }
 
     #[inline]
-    pub(crate) fn is_full(&self) -> bool {
+    pub fn is_full(&self) -> bool {
         self.len() == self.capacity()
     }
 
     #[inline]
-    pub(crate) fn len(&self) -> usize {
+    pub fn len(&self) -> usize {
         self.buffer.len()
     }
 
     #[inline]
-    pub(crate) fn capacity(&self) -> usize {
+    pub fn capacity(&self) -> usize {
         self.buffer.capacity()
     }
 }

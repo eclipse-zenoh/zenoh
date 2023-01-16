@@ -16,11 +16,13 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
 use std::sync::RwLock;
-use zenoh_protocol::io::ZBuf;
-use zenoh_protocol::proto::{DataInfo, QueryBody, RoutingContext};
-use zenoh_protocol_core::{
-    Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, SubInfo, WhatAmI,
-    WireExpr, ZInt, ZenohId,
+use zenoh_buffers::ZBuf;
+use zenoh_protocol::{
+    core::{
+        Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, SubInfo,
+        WhatAmI, WireExpr, ZInt, ZenohId,
+    },
+    zenoh::{DataInfo, QueryBody, RoutingContext},
 };
 use zenoh_transport::Primitives;
 

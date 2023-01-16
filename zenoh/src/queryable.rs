@@ -29,7 +29,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
-use zenoh_protocol_core::WireExpr;
+use zenoh_protocol::core::WireExpr;
 
 /// Structs received by a [`Queryable`](Queryable).
 pub struct Query {

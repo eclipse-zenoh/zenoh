@@ -12,55 +12,46 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version = { workspace = true }
 name = "zenoh-protocol"
-version = "0.7.0-rc"
-repository = "https://github.com/eclipse-zenoh/zenoh"
-homepage = "http://zenoh.io"
-authors = [
-	"kydos <angelo@icorsaro.net>",
-	"Julien Enoch <julien@enoch.fr>",
-	"Olivier Hécart <olivier.hecart@zettascale.tech>",
-	"Luca Cominardi <luca.cominardi@zettascale.tech>",
-	"Pierre Avital <pierre.avital@zettascale.tech>",
-]
-edition = "2018"
-license = " EPL-2.0 OR Apache-2.0"
-categories = ["network-programming"]
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
 description = "Internal crate for zenoh."
 
 [features]
-shared-memory = ["zenoh-buffers/shared-memory"]
-complete_n = ["zenoh-protocol-core/complete_n"]
+default = ["std"]
+std = [
+    "hex/std",
+    "rand?/std",
+    "rand?/std_rng",
+    "serde/std",
+    "uhlc/std",
+    "uuid/std"
+]
+test = ["rand", "zenoh-buffers/test"]
+shared-memory = ["std"]
+complete_n = []
+defmt = [
+    "dep:defmt",
+    "uhlc/defmt",
+    "zenoh-buffers/defmt"
+]
 
 [dependencies]
-log = "0.4.17"
-uhlc = "0.5.1"
-zenoh-buffers = { version = "0.7.0-rc", path = "../zenoh-buffers/" }
-zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }
-zenoh-protocol-core = { version = "0.7.0-rc", path = "../zenoh-protocol-core/" }
+defmt = { workspace = true, optional = true }
+hex = { workspace = true, default-features = false, features = ["alloc"] }
+rand = { workspace = true, default-features = false, features = ["alloc", "getrandom"], optional = true }
+serde = { workspace = true, default-features = false, features = ["alloc"] }
+uhlc = { workspace = true, default-features = false }
+uuid = { workspace = true, default-features = false } # Needs a getrandom::getrandom() custom implementation on embedded (in root crate)
+zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
+zenoh-core = { path = "../zenoh-core/" }
 
 [dev-dependencies]
-criterion = "0.4.0"
-rand = "0.8.5"
-uuid = { version = "1.2.2", features = ["v4"] }
-
-[[bench]]
-name = "codec_bench"
-harness = false
-
-[[bench]]
-name = "rwbuf_bench"
-harness = false
-
-[[bench]]
-name = "data_creation"
-harness = false
-
-[[bench]]
-name = "frame_codec"
-harness = false
-
-[[bench]]
-name = "tables_bench"
-harness = false
+lazy_static = { workspace = true }
+zenoh-protocol = { path = ".", features = ["test"] }

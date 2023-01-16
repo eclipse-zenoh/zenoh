@@ -35,14 +35,13 @@ use std::time::Duration;
 use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
-use zenoh_core::bail;
-use zenoh_core::Result as ZResult;
+use zenoh_core::{bail, Result as ZResult};
 use zenoh_link::{EndPoint, Link};
-use zenoh_protocol;
-use zenoh_protocol::core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId};
-use zenoh_protocol::proto::{ZenohBody, ZenohMessage};
+use zenoh_protocol::{
+    core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId},
+    zenoh::{ZenohBody, ZenohMessage},
+};
 use zenoh_sync::get_mut_unchecked;
-use zenoh_transport;
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -167,7 +166,7 @@ impl Runtime {
                 while let Some(event) = stream.next().await {
                     if &*event == "connect/endpoints" {
                         if let Err(e) = runtime2.update_peers().await {
-                            log::error!("Error updating peers : {}", e);
+                            log::error!("Error updating peers: {}", e);
                         }
                     }
                 }

@@ -12,42 +12,32 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version = { workspace = true }
 name = "zenoh-link-quic"
-version = "0.7.0-rc"
-repository = "https://github.com/eclipse-zenoh/zenoh"
-homepage = "http://zenoh.io"
-authors = [
-	"kydos <angelo@icorsaro.net>",
-	"Julien Enoch <julien@enoch.fr>",
-	"Olivier Hécart <olivier.hecart@zettascale.tech>",
-	"Luca Cominardi <luca.cominardi@zettascale.tech>",
-	"Pierre Avital <pierre.avital@zettascale.tech>",
-]
-edition = "2018"
-license = " EPL-2.0 OR Apache-2.0"
-categories = ["network-programming"]
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-
-async-std = { version = "=1.12.0", default-features = false, features = [
-	"unstable",
-	"tokio1",
-] }
-async-trait = "0.1.59"
-futures = "0.3.25"
-log = "0.4.17"
-quinn = "0.9.3" 
-rustls = "0.20.6"
-rustls-native-certs = "0.6.2"
-rustls-pemfile = "1.0.1"
-webpki = { version = "0.22.0", features = ["std"] }
-zenoh-cfg-properties = { version = "0.7.0-rc", path = "../../../commons/zenoh-cfg-properties/" }
-zenoh-config = { version = "0.7.0-rc", path = "../../../commons/zenoh-config/" }
-zenoh-core = { version = "0.7.0-rc", path = "../../../commons/zenoh-core/" }
-zenoh-link-commons = { version = "0.7.0-rc", path = "../../zenoh-link-commons/" }
-zenoh-protocol-core = { version = "0.7.0-rc", path = "../../../commons/zenoh-protocol-core/" }
-zenoh-sync = { version = "0.7.0-rc", path = "../../../commons/zenoh-sync/" }
-zenoh-util = { version = "0.7.0-rc", path = "../../../commons/zenoh-util/" }
+async-std = { workspace = true, default-features = false, features = ["unstable", "tokio1"] }
+async-trait = { workspace = true }
+futures = { workspace = true }
+log = { workspace = true }
+quinn = { workspace = true }
+rustls = { workspace = true }
+rustls-native-certs = { workspace = true }
+rustls-pemfile = { workspace = true }
+webpki = { workspace = true }
+zenoh-cfg-properties = { path = "../../../commons/zenoh-cfg-properties/" }
+zenoh-config = { path = "../../../commons/zenoh-config/" }
+zenoh-core = { path = "../../../commons/zenoh-core/" }
+zenoh-link-commons = { path = "../../zenoh-link-commons/" }
+zenoh-protocol = { path = "../../../commons/zenoh-protocol/" }
+zenoh-sync = { path = "../../../commons/zenoh-sync/" }
+zenoh-util = { path = "../../../commons/zenoh-util/" }

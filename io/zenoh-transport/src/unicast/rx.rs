@@ -12,12 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::common::conduit::TransportChannelRx;
-use super::protocol::core::{Priority, Reliability, ZInt, ZenohId};
-#[cfg(feature = "stats")]
-use super::protocol::proto::ZenohBody;
-use super::protocol::proto::{
-    tmsg, Close, Frame, FramePayload, KeepAlive, TransportBody, TransportMessage, ZenohMessage,
-};
 use super::transport::TransportUnicastInner;
 use async_std::task;
 use std::sync::MutexGuard;
@@ -25,6 +19,13 @@ use std::sync::MutexGuard;
 use zenoh_buffers::SplitBuffer;
 use zenoh_core::{bail, zerror, zlock, zread, Result as ZResult};
 use zenoh_link::LinkUnicast;
+#[cfg(feature = "stats")]
+use zenoh_protocol::zenoh::ZenohBody;
+use zenoh_protocol::{
+    core::{Priority, Reliability, ZInt, ZenohId},
+    transport::{tmsg, Close, Frame, FramePayload, KeepAlive, TransportBody, TransportMessage},
+    zenoh::ZenohMessage,
+};
 
 /*************************************/
 /*            TRANSPORT RX           */
@@ -64,7 +65,9 @@ impl TransportUnicastInner {
         let callback = zread!(self.callback).clone();
         if let Some(callback) = callback.as_ref() {
             #[cfg(feature = "shared-memory")]
-            let _ = msg.map_to_shmbuf(self.config.manager.shmr.clone())?;
+            {
+                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.config.manager.shmr)?;
+            }
             callback.handle_message(msg)
         } else {
             log::debug!(

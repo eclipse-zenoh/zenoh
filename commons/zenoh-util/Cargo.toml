@@ -12,54 +12,57 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version = { workspace = true }
 name = "zenoh-util"
-version = "0.7.0-rc"
-repository = "https://github.com/eclipse-zenoh/zenoh"
-homepage = "http://zenoh.io"
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
 authors = [
     "kydos <angelo@icorsaro.net>",
     "Luca Cominardi <luca.cominardi@zettascale.tech>",
     "Pierre Avital <pierre.avital@zettascale.tech>",
 ]
-edition = "2018"
-license = " EPL-2.0 OR Apache-2.0"
-categories = ["network-programming"]
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[badges]
+maintenance = { status = "actively-developed" }
+
 [features]
+default = ["compat"]
 compat = [
     "zenoh-cfg-properties",
     "zenoh-crypto",
     "zenoh-sync",
-    "zenoh-collections",
+    "zenoh-collections"
 ]
-default = ["compat"]
-[badges]
-maintenance = { status = "actively-developed" }
 
 [dependencies]
-async-std = "=1.12.0"
-clap = "3.2.23"
-futures = "0.3.25"
-hex = "0.4.3"
-home = "0.5.3"
-humantime = "2.1.0"
-lazy_static = "1.4.0"
-libloading = "0.7.3"
-log = "0.4.17"
-shellexpand = "3.0.0"
-zenoh-cfg-properties = { version = "0.7.0-rc", path = "../zenoh-cfg-properties", optional = true }
-zenoh-collections = { version = "0.7.0-rc", path = "../zenoh-collections/", optional = true }
-zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core" }
-zenoh-crypto = { version = "0.7.0-rc", path = "../zenoh-crypto/", optional = true }
-zenoh-sync = { version = "0.7.0-rc", path = "../zenoh-sync/", optional = true }
+async-std = { workspace = true }
+async-trait = { workspace = true }
+clap = { workspace = true }
+flume = { workspace = true }
+futures = { workspace = true }
+hex = { workspace = true }
+home = { workspace = true }
+humantime = { workspace = true }
+lazy_static = { workspace = true }
+libloading = { workspace = true }
+log = { workspace = true }
+shellexpand = { workspace = true }
+zenoh-cfg-properties = { path = "../zenoh-cfg-properties/", optional = true }
+zenoh-collections = { path = "../zenoh-collections/", optional = true }
+zenoh-core = { path = "../zenoh-core/" }
+zenoh-crypto = { path = "../zenoh-crypto/", optional = true }
+zenoh-sync = { path = "../zenoh-sync/", optional = true }
 
 [target.'cfg(windows)'.dependencies]
-winapi = { version = "0.3.9", features = ["iphlpapi"] }
+winapi = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
-libc = "0.2.133"
-pnet = "0.31.0"
-pnet_datalink = "0.31.0"
+libc = { workspace = true }
+pnet = { workspace = true }
+pnet_datalink = { workspace = true }

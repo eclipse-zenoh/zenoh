@@ -17,9 +17,7 @@ use crate::config::Config;
 use crate::config::Notifier;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
-use crate::key_expr::keyexpr;
 use crate::key_expr::KeyExprInner;
-use crate::key_expr::OwnedKeyExpr;
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
@@ -49,22 +47,20 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
 use uhlc::HLC;
+use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{
     zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Result as ZResult, SyncResolve,
 };
-use zenoh_protocol::proto::QueryBody;
 use zenoh_protocol::{
     core::{
+        key_expr::{keyexpr, OwnedKeyExpr},
         AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo,
-        WireExpr, ZInt,
+        WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
     },
-    io::ZBuf,
-    proto::{DataInfo, RoutingContext},
+    zenoh::{DataInfo, QueryBody, RoutingContext},
 };
-use zenoh_protocol_core::ZenohId;
-use zenoh_protocol_core::EMPTY_EXPR_ID;
 use zenoh_util::core::AsyncResolve;
 
 zconfigurable! {
@@ -361,7 +357,7 @@ impl Session {
     ///     .unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
-    ///         println!("Received : {:?}", sample);
+    ///         println!("Received: {:?}", sample);
     ///     }
     /// }).await;
     /// # })
@@ -392,7 +388,7 @@ impl Session {
     /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
-    ///         println!("Received : {:?}", sample);
+    ///         println!("Received: {:?}", sample);
     ///     }
     /// }).await;
     /// # })
@@ -507,7 +503,7 @@ impl Session {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
     /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received : {:?}", sample);
+    ///     println!("Received: {:?}", sample);
     /// }
     /// # })
     /// ```
@@ -1363,8 +1359,10 @@ impl Session {
                 target,
                 consolidation,
                 value.as_ref().map(|v| {
-                    let mut data_info = DataInfo::new();
-                    data_info.encoding = Some(v.encoding.clone());
+                    let data_info = DataInfo {
+                        encoding: Some(v.encoding.clone()),
+                        ..Default::default()
+                    };
                     QueryBody {
                         data_info,
                         payload: v.payload.clone(),
@@ -1382,8 +1380,10 @@ impl Session {
                 target,
                 consolidation,
                 value.map(|v| {
-                    let mut data_info = DataInfo::new();
-                    data_info.encoding = Some(v.encoding);
+                    let data_info = DataInfo {
+                        encoding: Some(v.encoding),
+                        ..Default::default()
+                    };
                     QueryBody {
                         data_info,
                         payload: v.payload,
@@ -1518,7 +1518,7 @@ impl SessionDeclarations for Arc<Session> {
     ///     .unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
-    ///         println!("Received : {:?}", sample);
+    ///         println!("Received: {:?}", sample);
     ///     }
     /// }).await;
     /// # })
@@ -1928,7 +1928,7 @@ impl fmt::Debug for Session {
 ///     .unwrap();
 /// async_std::task::spawn(async move {
 ///     while let Ok(sample) = subscriber.recv_async().await {
-///         println!("Received : {:?}", sample);
+///         println!("Received: {:?}", sample);
 ///     }
 /// }).await;
 /// # })
@@ -1952,7 +1952,7 @@ pub trait SessionDeclarations {
     ///     .unwrap();
     /// async_std::task::spawn(async move {
     ///     while let Ok(sample) = subscriber.recv_async().await {
-    ///         println!("Received : {:?}", sample);
+    ///         println!("Received: {:?}", sample);
     ///     }
     /// }).await;
     /// # })

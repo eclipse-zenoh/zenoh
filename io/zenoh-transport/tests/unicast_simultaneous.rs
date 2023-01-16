@@ -21,12 +21,11 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
     use zenoh_buffers::ZBuf;
-    use zenoh_core::zasync_executor_init;
-    use zenoh_core::Result as ZResult;
-    use zenoh_link::{EndPoint, Link};
-    use zenoh_protocol::proto::ZenohMessage;
-    use zenoh_protocol_core::{
-        Channel, CongestionControl, Priority, Reliability, WhatAmI, ZenohId,
+    use zenoh_core::{zasync_executor_init, Result as ZResult};
+    use zenoh_link::Link;
+    use zenoh_protocol::{
+        core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
+        zenoh::ZenohMessage,
     };
     use zenoh_transport::{
         TransportEventHandler, TransportManager, TransportMulticast,
@@ -314,21 +313,22 @@ mod tests {
     #[cfg(feature = "transport_tcp")]
     #[test]
     fn transport_tcp_simultaneous() {
+        let _ = env_logger::try_init();
         task::block_on(async {
             zasync_executor_init!();
         });
 
         let endpoint01: Vec<EndPoint> = vec![
-            "tcp/127.0.0.1:15447".parse().unwrap(),
-            "tcp/127.0.0.1:15448".parse().unwrap(),
-            "tcp/127.0.0.1:15449".parse().unwrap(),
-            "tcp/127.0.0.1:15450".parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15000).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15001).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15002).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15003).parse().unwrap(),
         ];
         let endpoint02: Vec<EndPoint> = vec![
-            "tcp/127.0.0.1:15451".parse().unwrap(),
-            "tcp/127.0.0.1:15452".parse().unwrap(),
-            "tcp/127.0.0.1:15453".parse().unwrap(),
-            "tcp/127.0.0.1:15454".parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15010).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15011).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15012).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 15013).parse().unwrap(),
         ];
 
         task::block_on(async {
@@ -339,21 +339,22 @@ mod tests {
     #[cfg(feature = "transport_ws")]
     #[test]
     fn transport_ws_simultaneous() {
+        let _ = env_logger::try_init();
         task::block_on(async {
             zasync_executor_init!();
         });
 
         let endpoint01: Vec<EndPoint> = vec![
-            "ws/127.0.0.1:15547".parse().unwrap(),
-            "ws/127.0.0.1:15548".parse().unwrap(),
-            "ws/127.0.0.1:15549".parse().unwrap(),
-            "ws/127.0.0.1:15550".parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15020).parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15021).parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15022).parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15023).parse().unwrap(),
         ];
         let endpoint02: Vec<EndPoint> = vec![
-            "ws/127.0.0.1:15551".parse().unwrap(),
-            "ws/127.0.0.1:15552".parse().unwrap(),
-            "ws/127.0.0.1:15553".parse().unwrap(),
-            "ws/127.0.0.1:15554".parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15030).parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15031).parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15032).parse().unwrap(),
+            format!("ws/127.0.0.1:{}", 15033).parse().unwrap(),
         ];
 
         task::block_on(async {

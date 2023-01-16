@@ -12,26 +12,26 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
+rust-version = { workspace = true }
 name = "zenoh-crypto"
-version = "0.7.0-rc"
-repository = "https://github.com/eclipse-zenoh/zenoh"
-homepage = "http://zenoh.io"
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
 authors = [
 	"kydos <angelo@icorsaro.net>",
 	"Luca Cominardi <luca.cominardi@zettascale.tech>",
 	"Pierre Avital <pierre.avital@zettascale.tech>",
 ]
-edition = "2018"
-license = " EPL-2.0 OR Apache-2.0"
-categories = ["network-programming"]
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-aes = "0.8.2"
-hmac = { version = "0.12.1", features = ["std"] }
-rand = "0.8.5"
-rand_chacha = "0.3.1"
-sha3 = "0.10.6"
-zenoh-core = { version = "0.7.0-rc", path = "../zenoh-core/" }
+aes = { workspace = true }
+hmac = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+sha3 = { workspace = true }
+zenoh-core = { path = "../zenoh-core/" }

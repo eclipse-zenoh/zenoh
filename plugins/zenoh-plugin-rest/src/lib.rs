@@ -13,6 +13,7 @@
 //
 
 use async_std::prelude::FutureExt;
+use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
 use futures::StreamExt;
 use http_types::Method;
 use std::convert::TryFrom;
@@ -57,7 +58,7 @@ fn value_to_json(value: Value) -> String {
             value.to_string()
         }
         _ => {
-            format!(r#""{}""#, base64::encode(value.payload.contiguous()))
+            format!(r#""{}""#, b64_std_engine.encode(value.payload.contiguous()))
         }
     }
 }
@@ -454,7 +455,7 @@ pub async fn run(runtime: Runtime, conf: Config) {
     app.at("*").get(query).put(write).patch(write).delete(write);
 
     if let Err(e) = app.listen(conf.http_port).await {
-        log::error!("Unable to start http server for REST : {:?}", e);
+        log::error!("Unable to start http server for REST: {:?}", e);
     }
 }
 
