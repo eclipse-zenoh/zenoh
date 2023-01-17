@@ -4,40 +4,62 @@ use std::{
 };
 
 use rand::SeedableRng;
+use token_cell::prelude::*;
 use zenoh_protocol::core::key_expr::{fuzzer::KeyExprFuzzer, OwnedKeyExpr};
 use zenoh_util::keyexpr_tree::{
-    box_tree::KeTreePair,
+    arc_tree::KeArcTree,
     impls::{HashMapProvider, VecSetProvider},
-    IKeyExprTree, IKeyExprTreeExt, KeBoxTree,
+    IKeyExprTree, IKeyExprTreeExtMut, KeBoxTree,
 };
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Averager {
+    avg: f64,
+    count: usize,
+}
+impl Averager {
+    fn add(&mut self, value: f64) {
+        self.avg += value;
+        self.count += 1
+    }
+    fn avg(&self) -> f64 {
+        self.avg / self.count as f64
+    }
+}
+token_cell::token!(Token);
 
 fn main() {
     for total in [10, 100, 1000, 10000] {
-        for wildness in [0., 0.1] {
+        for (wildness, no_double_stars) in [(0., true), (0.1, true), (0.1, false)] {
+            let mut intersections = Averager::default();
             let results = Benchmarker::benchmark(|b| {
-                let keys = KeySet::generate(total, wildness);
-                let mut pair = KeTreePair::new();
-                let mut tree: KeBoxTree<_> = KeBoxTree::new();
+                let keys = KeySet::generate(total, wildness, no_double_stars);
+                let mut ketree: KeBoxTree<_> = KeBoxTree::new();
                 let mut vectree: KeBoxTree<_, bool, VecSetProvider> = KeBoxTree::new();
                 let mut hashtree: KeBoxTree<_, bool, HashMapProvider> = KeBoxTree::new();
+                let mut token = Token::new().unwrap();
+                // let kearctree: KeArcTree<_, _> = KeArcTree::new(&token);
                 let mut map = HashMap::new();
                 for key in keys.iter() {
-                    b.run_once("pair_insert", || pair.insert(key, 0));
-                    b.run_once("ketree_insert", || tree.insert(key, 0));
+                    b.run_once("ketree_insert", || ketree.insert(key, 0));
+                    b.run_once("kearctree_insert", || {
+                        // (&kearctree, &mut token).insert(key, 0)
+                    });
                     b.run_once("vectree_insert", || vectree.insert(key, 0));
                     b.run_once("hashtree_insert", || hashtree.insert(key, 0));
                     b.run_once("hashmap_insert", || map.insert(key.to_owned(), 0));
                 }
                 for key in keys.iter() {
-                    b.run_once("pair_fetch", || pair.node(key));
-                    b.run_once("ketree_fetch", || tree.node(key));
+                    b.run_once("ketree_fetch", || ketree.node(key));
                     b.run_once("vectree_fetch", || vectree.node(key));
                     b.run_once("hashtree_fetch", || hashtree.node(key));
                     b.run_once("hashmap_fetch", || map.get(key));
                 }
                 for key in keys.iter() {
-                    b.run_once("pair_intersect", || pair.intersecting_nodes(key).count());
-                    b.run_once("ketree_intersect", || tree.intersecting_nodes(key).count());
+                    intersections.add(ketree.intersecting_nodes(key).count() as f64);
+                    b.run_once("ketree_intersect", || {
+                        ketree.intersecting_nodes(key).count()
+                    });
                     b.run_once("vectree_intersect", || {
                         vectree.intersecting_nodes(key).count()
                     });
@@ -49,8 +71,7 @@ fn main() {
                     });
                 }
                 for key in keys.iter() {
-                    b.run_once("pair_include", || pair.included_nodes(key).count());
-                    b.run_once("ketree_include", || tree.included_nodes(key).count());
+                    b.run_once("ketree_include", || ketree.included_nodes(key).count());
                     b.run_once("vectree_include", || vectree.included_nodes(key).count());
                     b.run_once("hashtree_include", || hashtree.included_nodes(key).count());
                     b.run_once("hashmap_include", || {
@@ -59,22 +80,18 @@ fn main() {
                 }
             });
             for name in [
-                "pair_insert",
                 "ketree_insert",
                 "vectree_insert",
                 "hashtree_insert",
                 "hashmap_insert",
-                "pair_fetch",
                 "ketree_fetch",
                 "vectree_fetch",
                 "hashtree_fetch",
                 "hashmap_fetch",
-                "pair_intersect",
                 "ketree_intersect",
                 "vectree_intersect",
                 "hashtree_intersect",
                 "hashmap_intersect",
-                "pair_include",
                 "ketree_include",
                 "vectree_include",
                 "hashtree_include",
@@ -82,7 +99,11 @@ fn main() {
             ] {
                 let b = results.benches.get(name).unwrap();
                 let stats = b.full_stats();
-                println!("{name}_{total}keys_{wildness}wilds\n\t{:.2e}", stats)
+                let intersect = intersections.avg();
+                let stars = if no_double_stars { "" } else { "**" };
+                println!(
+                    "{name}_{total}keys_{wildness}{stars}wilds ({intersect:.1})\n\t{stats:.2e}"
+                )
             }
             println!();
         }
@@ -203,7 +224,7 @@ struct KeySet {
 }
 static SEED: AtomicU64 = AtomicU64::new(42);
 impl KeySet {
-    fn generate(total: usize, wildness: f64) -> Self {
+    fn generate(total: usize, wildness: f64, no_double_stars: bool) -> Self {
         let n_wilds = (total as f64 * wildness) as usize;
         let n_non_wilds = total - n_wilds;
         let mut wilds = HashSet::with_capacity(n_wilds);
@@ -214,7 +235,7 @@ impl KeySet {
         let keygen = KeyExprFuzzer(rng);
         for key in keygen {
             if key.is_wild() {
-                if wilds.len() < n_wilds {
+                if wilds.len() < n_wilds && !(no_double_stars && key.contains("**")) {
                     wilds.insert(key);
                 }
             } else if non_wilds.len() < n_non_wilds {

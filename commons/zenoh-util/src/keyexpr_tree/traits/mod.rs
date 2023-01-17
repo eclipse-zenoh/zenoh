@@ -2,58 +2,33 @@ use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
 
 mod default_impls;
 
-pub trait IKeyExprTree<Weight> {
+pub trait IKeyExprTree<'a, Weight> {
     type Node: IKeyExprTreeNodeMut<Weight>;
-    fn node(&self, at: &keyexpr) -> Option<&Self::Node>;
-    fn node_mut(&mut self, at: &keyexpr) -> Option<&mut Self::Node>;
+    fn node(&'a self, at: &keyexpr) -> Option<&Self::Node>;
+    type TreeIterItem;
+    type TreeIter: Iterator<Item = Self::TreeIterItem>;
+    fn tree_iter(&'a self) -> Self::TreeIter;
+    type IntersectionItem;
+    type Intersection: Iterator<Item = Self::IntersectionItem>;
+    fn intersecting_nodes(&'a self, key: &'a keyexpr) -> Self::Intersection;
+    type InclusionItem;
+    type Inclusion: Iterator<Item = Self::InclusionItem>;
+    fn included_nodes(&'a self, key: &'a keyexpr) -> Self::Inclusion;
+}
+
+pub trait IKeyExprTreeMut<'a, Weight>: IKeyExprTree<'a, Weight> {
+    fn node_mut<'b>(&'b mut self, at: &keyexpr) -> Option<&'b mut Self::Node>;
     fn remove(&mut self, at: &keyexpr) -> Option<Weight>;
-    fn node_mut_or_create(&mut self, at: &keyexpr) -> &mut Self::Node;
-    type TreeIterItem<'a>
-    where
-        Self: 'a;
-    type TreeIter<'a>: Iterator<Item = Self::TreeIterItem<'a>>
-    where
-        Self: 'a;
-    fn tree_iter(&self) -> Self::TreeIter<'_>;
-    type TreeIterItemMut<'a>
-    where
-        Self: 'a;
-    type TreeIterMut<'a>: Iterator<Item = Self::TreeIterItemMut<'a>>
-    where
-        Self: 'a;
-    fn tree_iter_mut(&mut self) -> Self::TreeIterMut<'_>;
-    type IntersectionItem<'a>
-    where
-        Self: 'a;
-    type Intersection<'a>: Iterator<Item = Self::IntersectionItem<'a>>
-    where
-        Self: 'a,
-        Self::Node: 'a;
-    fn intersecting_nodes<'a>(&'a self, key: &'a keyexpr) -> Self::Intersection<'a>;
-    type IntersectionItemMut<'a>
-    where
-        Self: 'a;
-    type IntersectionMut<'a>: Iterator<Item = Self::IntersectionItemMut<'a>>
-    where
-        Self: 'a,
-        Self::Node: 'a;
-    fn intersecting_nodes_mut<'a>(&'a mut self, key: &'a keyexpr) -> Self::IntersectionMut<'a>;
-    type InclusionItem<'a>
-    where
-        Self: 'a;
-    type Inclusion<'a>: Iterator<Item = Self::InclusionItem<'a>>
-    where
-        Self: 'a,
-        Self::Node: 'a;
-    fn included_nodes<'a>(&'a self, key: &'a keyexpr) -> Self::Inclusion<'a>;
-    type InclusionItemMut<'a>
-    where
-        Self: 'a;
-    type InclusionMut<'a>: Iterator<Item = Self::InclusionItemMut<'a>>
-    where
-        Self: 'a,
-        Self::Node: 'a;
-    fn included_nodes_mut<'a>(&'a mut self, key: &'a keyexpr) -> Self::InclusionMut<'a>;
+    fn node_mut_or_create<'b>(&'b mut self, at: &keyexpr) -> &'b mut Self::Node;
+    type TreeIterItemMut;
+    type TreeIterMut: Iterator<Item = Self::TreeIterItemMut>;
+    fn tree_iter_mut(&'a mut self) -> Self::TreeIterMut;
+    type IntersectionItemMut;
+    type IntersectionMut: Iterator<Item = Self::IntersectionItemMut>;
+    fn intersecting_nodes_mut(&'a mut self, key: &'a keyexpr) -> Self::IntersectionMut;
+    type InclusionItemMut;
+    type InclusionMut: Iterator<Item = Self::InclusionItemMut>;
+    fn included_nodes_mut(&'a mut self, key: &'a keyexpr) -> Self::InclusionMut;
     fn prune_where<F: FnMut(&mut Self::Node) -> bool>(&mut self, predicate: F);
 }
 pub trait ITokenKeyExprTree<'a, Weight, Token> {
@@ -136,6 +111,26 @@ pub trait IChildren<T: ?Sized> {
     fn children_mut<'a>(&'a mut self) -> Self::IterMut<'a>
     where
         Self: 'a;
+    type Intersection<'a>: Iterator<Item = &'a Self::Node>
+    where
+        Self: 'a,
+        Self::Node: 'a;
+    fn intersection<'a>(&'a self, key: &'a keyexpr) -> Self::Intersection<'a>;
+    type IntersectionMut<'a>: Iterator<Item = &'a mut Self::Node>
+    where
+        Self: 'a,
+        Self::Node: 'a;
+    fn intersection_mut<'a>(&'a mut self, key: &'a keyexpr) -> Self::IntersectionMut<'a>;
+    type Inclusion<'a>: Iterator<Item = &'a Self::Node>
+    where
+        Self: 'a,
+        Self::Node: 'a;
+    fn inclusion<'a>(&'a self, key: &'a keyexpr) -> Self::Inclusion<'a>;
+    type InclusionMut<'a>: Iterator<Item = &'a mut Self::Node>
+    where
+        Self: 'a,
+        Self::Node: 'a;
+    fn inclusion_mut<'a>(&'a mut self, key: &'a keyexpr) -> Self::InclusionMut<'a>;
     fn filter_out<F: FnMut(&mut T) -> bool>(&mut self, predicate: &mut F);
 }
 
@@ -155,59 +150,45 @@ pub trait AsNodeMut<T: ?Sized>: AsNode<T> {
 }
 
 type Keys<I, Item> = std::iter::FilterMap<I, fn(Item) -> Option<OwnedKeyExpr>>;
-impl<Weight, T: IKeyExprTree<Weight>> IKeyExprTreeExt<Weight> for T {}
 fn filter_map_weighted_node_to_key<N: IKeyExprTreeNodeMut<W>, I: AsNode<N>, W>(
     item: I,
 ) -> Option<OwnedKeyExpr> {
-    let node = item.as_node();
+    let node: &N = item.as_node();
     node.weight().is_some().then(|| node.keyexpr())
 }
-pub trait IKeyExprTreeExt<Weight>: IKeyExprTree<Weight> {
-    fn weight_at(&self, at: &keyexpr) -> Option<&Weight> {
+pub trait IKeyExprTreeExt<'a, Weight>: IKeyExprTree<'a, Weight> {
+    fn weight_at(&'a self, at: &keyexpr) -> Option<&'a Weight> {
         self.node(at)
             .and_then(<Self::Node as IKeyExprTreeNode<Weight>>::weight)
     }
-    fn weight_at_mut(&mut self, at: &keyexpr) -> Option<&mut Weight> {
-        self.node_mut(at)
-            .and_then(<Self::Node as IKeyExprTreeNodeMut<Weight>>::weight_mut)
-    }
-    fn insert(&mut self, at: &keyexpr, weight: Weight) -> Option<Weight> {
-        self.node_mut_or_create(at).insert_weight(weight)
-    }
-    fn intersecting_keys<'a>(
+    fn intersecting_keys(
         &'a self,
         key: &'a keyexpr,
-    ) -> Keys<Self::Intersection<'a>, Self::IntersectionItem<'a>>
+    ) -> Keys<Self::Intersection, Self::IntersectionItem>
     where
-        Self::IntersectionItem<'a>: AsNode<Self::Node>,
+        Self::IntersectionItem: AsNode<Self::Node>,
         Self::Node: IKeyExprTreeNode<Weight>,
     {
         self.intersecting_nodes(key)
             .filter_map(filter_map_weighted_node_to_key)
     }
-    fn included_keys<'a>(
-        &'a self,
-        key: &'a keyexpr,
-    ) -> Keys<Self::Inclusion<'a>, Self::InclusionItem<'a>>
+    fn included_keys(&'a self, key: &'a keyexpr) -> Keys<Self::Inclusion, Self::InclusionItem>
     where
-        Self::InclusionItem<'a>: AsNode<Self::Node>,
+        Self::InclusionItem: AsNode<Self::Node>,
         Self::Node: IKeyExprTreeNode<Weight>,
     {
         self.included_nodes(key)
             .filter_map(filter_map_weighted_node_to_key)
     }
-    fn prune(&mut self) {
-        self.prune_where(|node| node.weight().is_none())
-    }
     #[allow(clippy::type_complexity)]
-    fn key_value_pairs<'a>(
+    fn key_value_pairs(
         &'a self,
     ) -> std::iter::FilterMap<
-        Self::TreeIter<'a>,
-        fn(Self::TreeIterItem<'a>) -> Option<(OwnedKeyExpr, &'a Weight)>,
+        Self::TreeIter,
+        fn(Self::TreeIterItem) -> Option<(OwnedKeyExpr, &'a Weight)>,
     >
     where
-        Self::TreeIterItem<'a>: AsNode<Self::Node>,
+        Self::TreeIterItem: AsNode<Self::Node>,
     {
         self.tree_iter().filter_map(|node| {
             unsafe { std::mem::transmute::<_, Option<&Weight>>(node.as_node().weight()) }
@@ -215,3 +196,19 @@ pub trait IKeyExprTreeExt<Weight>: IKeyExprTree<Weight> {
         })
     }
 }
+
+pub trait IKeyExprTreeExtMut<'a, Weight>: IKeyExprTreeMut<'a, Weight> {
+    fn weight_at_mut(&'a mut self, at: &keyexpr) -> Option<&'a mut Weight> {
+        self.node_mut(at)
+            .and_then(<Self::Node as IKeyExprTreeNodeMut<Weight>>::weight_mut)
+    }
+    fn insert(&mut self, at: &keyexpr, weight: Weight) -> Option<Weight> {
+        self.node_mut_or_create(at).insert_weight(weight)
+    }
+    fn prune(&mut self) {
+        self.prune_where(|node| node.weight().is_none())
+    }
+}
+
+impl<'a, Weight, T: IKeyExprTree<'a, Weight>> IKeyExprTreeExt<'a, Weight> for T {}
+impl<'a, Weight, T: IKeyExprTreeMut<'a, Weight>> IKeyExprTreeExtMut<'a, Weight> for T {}

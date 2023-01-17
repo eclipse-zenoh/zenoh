@@ -21,13 +21,35 @@ pub struct KeArcTreeInner<
 }
 pub struct KeArcTree<
     Weight,
-    Wildness: IWildness,
+    Token: TokenTrait,
+    Wildness: IWildness = bool,
     Children: IChildrenProvider<
         Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
-    >,
-    Token: TokenTrait,
+    > = DefaultChildrenProvider,
 > {
     inner: TokenCell<KeArcTreeInner<Weight, Wildness, Children, Token>, Token>,
+}
+
+impl<
+        Weight,
+        Wildness: IWildness,
+        Children: IChildrenProvider<
+            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+        >,
+        Token: TokenTrait,
+    > KeArcTree<Weight, Token, Wildness, Children>
+{
+    pub fn new(token: &Token) -> Self {
+        Self {
+            inner: TokenCell::new(
+                KeArcTreeInner {
+                    children: Default::default(),
+                    wildness: Wildness::non_wild(),
+                },
+                token,
+            ),
+        }
+    }
 }
 
 impl<
@@ -38,7 +60,7 @@ impl<
                 Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
             > + 'a,
         Token: TokenTrait + 'a,
-    > ITokenKeyExprTree<'a, Weight, Token> for KeArcTree<Weight, Wildness, Children, Token>
+    > ITokenKeyExprTree<'a, Weight, Token> for KeArcTree<Weight, Token, Wildness, Children>
 where
     Children::Assoc: IChildren<
         Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
@@ -93,6 +115,22 @@ where
         node
     }
 }
+
+// impl<
+//         'a,
+//         Weight: 'a,
+//         Wildness: IWildness + 'a,
+//         Children: IChildrenProvider<
+//                 Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+//             > + 'a,
+//         Token: TokenTrait + 'a,
+//     > IKeyExprTree<'a, Weight> for KeArcTree<Weight, Token, Wildness, Children>
+// where
+//     Children::Assoc: IChildren<
+//         Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+//     >,
+// {
+// }
 
 pub trait IArcProvider {
     type Ptr<T>: IArc<T>;

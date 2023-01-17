@@ -54,6 +54,44 @@ impl<T> AsNodeMut<T> for &mut T {
         self
     }
 }
+impl<T: IKeyExprTreeNode<Weight>, Weight> IKeyExprTreeNode<Weight> for &T {
+    type Parent = T::Parent;
+    fn parent(&self) -> Option<&Self::Parent> {
+        T::parent(self)
+    }
+    fn keyexpr(&self) -> OwnedKeyExpr {
+        T::keyexpr(self)
+    }
+    fn weight(&self) -> Option<&Weight> {
+        T::weight(self)
+    }
+
+    type Child = T::Child;
+    type Children = T::Children;
+
+    fn children(&self) -> &Self::Children {
+        T::children(self)
+    }
+}
+impl<T: IKeyExprTreeNode<Weight>, Weight> IKeyExprTreeNode<Weight> for &mut T {
+    type Parent = T::Parent;
+    fn parent(&self) -> Option<&Self::Parent> {
+        T::parent(self)
+    }
+    fn keyexpr(&self) -> OwnedKeyExpr {
+        T::keyexpr(self)
+    }
+    fn weight(&self) -> Option<&Weight> {
+        T::weight(self)
+    }
+
+    type Child = T::Child;
+    type Children = T::Children;
+
+    fn children(&self) -> &Self::Children {
+        T::children(self)
+    }
+}
 impl<T: IKeyExprTreeNode<Weight>, Weight> IKeyExprTreeNode<Weight> for Box<T> {
     type Parent = T::Parent;
     fn parent(&self) -> Option<&Self::Parent> {
@@ -71,6 +109,25 @@ impl<T: IKeyExprTreeNode<Weight>, Weight> IKeyExprTreeNode<Weight> for Box<T> {
 
     fn children(&self) -> &Self::Children {
         T::children(self)
+    }
+}
+
+impl<T: IKeyExprTreeNodeMut<Weight>, Weight> IKeyExprTreeNodeMut<Weight> for &mut T {
+    fn parent_mut(&mut self) -> Option<&mut Self::Parent> {
+        T::parent_mut(self)
+    }
+    fn weight_mut(&mut self) -> Option<&mut Weight> {
+        T::weight_mut(self)
+    }
+    fn take_weight(&mut self) -> Option<Weight> {
+        T::take_weight(self)
+    }
+    fn insert_weight(&mut self, weight: Weight) -> Option<Weight> {
+        T::insert_weight(self, weight)
+    }
+
+    fn children_mut(&mut self) -> &mut Self::Children {
+        T::children_mut(self)
     }
 }
 

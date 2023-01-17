@@ -70,4 +70,33 @@ where
     fn filter_out<F: FnMut(&mut T) -> bool>(&mut self, predicate: &mut F) {
         self.drain_where(predicate);
     }
+
+    type Intersection<'a> = super::FilterMap<keyed_set::Iter<'a, T>, super::Intersection<'a>>
+    where
+        Self: 'a,
+        Self::Node: 'a;
+    fn intersection<'a>(&'a self, key: &'a keyexpr) -> Self::Intersection<'a> {
+        super::FilterMap::new(self.iter(), super::Intersection(key))
+    }
+    type IntersectionMut<'a> = super::FilterMap<keyed_set::IterMut<'a, T>, super::Intersection<'a>>
+    where
+        Self: 'a,
+        Self::Node: 'a;
+    fn intersection_mut<'a>(&'a mut self, key: &'a keyexpr) -> Self::IntersectionMut<'a> {
+        super::FilterMap::new(self.iter_mut(), super::Intersection(key))
+    }
+    type Inclusion<'a> = super::FilterMap<keyed_set::Iter<'a, T>, super::Inclusion<'a>>
+    where
+        Self: 'a,
+        Self::Node: 'a;
+    fn inclusion<'a>(&'a self, key: &'a keyexpr) -> Self::Inclusion<'a> {
+        super::FilterMap::new(self.iter(), super::Inclusion(key))
+    }
+    type InclusionMut<'a> = super::FilterMap<keyed_set::IterMut<'a, T>, super::Inclusion<'a>>
+    where
+        Self: 'a,
+        Self::Node: 'a;
+    fn inclusion_mut<'a>(&'a mut self, key: &'a keyexpr) -> Self::InclusionMut<'a> {
+        super::FilterMap::new(self.iter_mut(), super::Inclusion(key))
+    }
 }
