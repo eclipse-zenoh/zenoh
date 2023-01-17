@@ -236,7 +236,11 @@ impl StorageService {
                     || (self.capability.history.eq(&History::Latest)
                         && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
             {
-                trace!("Sample `{}` identified as neded processing for key {}", sample, k);
+                trace!(
+                    "Sample `{}` identified as neded processing for key {}",
+                    sample,
+                    k
+                );
                 // there might be the case that the actual update was outdated due to a wild card update, but not stored yet in the storage.
                 // get the relevant wild card entry and use that value and timestamp to update the storage
                 let sample_to_store = match self
