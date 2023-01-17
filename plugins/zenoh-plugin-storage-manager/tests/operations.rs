@@ -23,7 +23,7 @@ use async_std::task;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
 use zenoh::{prelude::Config, time::Timestamp};
-// use zenoh_core::zasync_executor_init;
+use zenoh_core::zasync_executor_init;
 use zenoh_plugin_trait::Plugin;
 
 async fn put_data(session: &zenoh::Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
@@ -58,17 +58,17 @@ async fn get_data(session: &zenoh::Session, key_expr: &str) -> Vec<Sample> {
 }
 
 async fn test_updates_in_order() {
-    // task::block_on(async {
-    //     zasync_executor_init!();
-    // });
+    task::block_on(async {
+        zasync_executor_init!();
+    });
     let mut config = Config::default();
     config
         .insert_json5(
             "plugins/storage-manager",
             r#"{
                     storages: {
-                        demo: {
-                            key_expr: "demo/example/**",
+                        operation_test: {
+                            key_expr: "operation/test/**",
                             volume: {
                                 id: "memory"
                             }
@@ -88,49 +88,55 @@ async fn test_updates_in_order() {
 
     put_data(
         &session,
-        "demo/example/a",
+        "operation/test/a",
         "1",
         Timestamp::from_str("2022-01-17T10:42:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
             .unwrap(),
     )
     .await;
 
+    sleep(std::time::Duration::from_millis(10));
+
     // expects exactly one sample
-    let data = get_data(&session, "demo/example/a").await;
+    let data = get_data(&session, "operation/test/a").await;
     assert_eq!(data.len(), 1);
     assert_eq!(format!("{}", data[0].value), "1");
 
     put_data(
         &session,
-        "demo/example/b",
+        "operation/test/b",
         "2",
         Timestamp::from_str("2022-01-17T10:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
             .unwrap(),
     )
     .await;
 
+    sleep(std::time::Duration::from_millis(10));
+
     // expects exactly one sample
-    let data = get_data(&session, "demo/example/b").await;
+    let data = get_data(&session, "operation/test/b").await;
     assert_eq!(data.len(), 1);
     assert_eq!(format!("{}", data[0].value), "2");
 
     delete_data(
         &session,
-        "demo/example/a",
+        "operation/test/a",
         Timestamp::from_str("2022-01-17T10:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
             .unwrap(),
     )
     .await;
 
+    sleep(std::time::Duration::from_millis(10));
+
     // expects zero sample
-    let data = get_data(&session, "demo/example/a").await;
+    let data = get_data(&session, "operation/test/a").await;
     assert_eq!(data.len(), 0);
 
     // expects exactly one sample
-    let data = get_data(&session, "demo/example/b").await;
+    let data = get_data(&session, "operation/test/b").await;
     assert_eq!(data.len(), 1);
     assert_eq!(format!("{}", data[0].value), "2");
-    assert_eq!(data[0].key_expr.as_str(), "demo/example/b");
+    assert_eq!(data[0].key_expr.as_str(), "operation/test/b");
 
     drop(storage);
 }

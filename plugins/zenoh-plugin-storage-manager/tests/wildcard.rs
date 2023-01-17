@@ -24,7 +24,7 @@ use async_std::task;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
 use zenoh::{prelude::Config, time::Timestamp};
-// use zenoh_core::zasync_executor_init;
+use zenoh_core::zasync_executor_init;
 use zenoh_plugin_trait::Plugin;
 
 async fn put_data(session: &zenoh::Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
@@ -59,17 +59,17 @@ async fn get_data(session: &zenoh::Session, key_expr: &str) -> Vec<Sample> {
 }
 
 async fn test_wild_card_in_order() {
-    // task::block_on(async {
-    //     zasync_executor_init!();
-    // });
+    task::block_on(async {
+        zasync_executor_init!();
+    });
     let mut config = Config::default();
     config
         .insert_json5(
             "plugins/storage-manager",
             r#"{
                     storages: {
-                        demo: {
-                            key_expr: "demo/example/**",
+                        wild_test: {
+                            key_expr: "wild/test/**",
                             volume: {
                                 id: "memory"
                             }
@@ -89,73 +89,86 @@ async fn test_wild_card_in_order() {
     // put *, ts: 1
     put_data(
         &session,
-        "demo/example/*",
+        "wild/test/*",
         "1",
         Timestamp::from_str("2022-01-17T10:42:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
             .unwrap(),
     )
     .await;
+
+    sleep(std::time::Duration::from_millis(10));
+
     // expected no data
-    let data = get_data(&session, "demo/example/*").await;
+    let data = get_data(&session, "wild/test/*").await;
     assert_eq!(data.len(), 0);
 
     put_data(
         &session,
-        "demo/example/a",
+        "wild/test/a",
         "2",
         Timestamp::from_str("2022-01-17T10:42:11.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
             .unwrap(),
     )
     .await;
+
+    sleep(std::time::Duration::from_millis(10));
+
     // expected single entry
-    let data = get_data(&session, "demo/example/*").await;
+    let data = get_data(&session, "wild/test/*").await;
     assert_eq!(data.len(), 1);
-    assert_eq!(data[0].key_expr.as_str(), "demo/example/a");
+    assert_eq!(data[0].key_expr.as_str(), "wild/test/a");
     assert_eq!(format!("{}", data[0].value), "2");
 
     put_data(
         &session,
-        "demo/example/b",
+        "wild/test/b",
         "3",
         Timestamp::from_str("2022-01-17T10:42:11.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
             .unwrap(),
     )
     .await;
+
+    sleep(std::time::Duration::from_millis(10));
+
     // expected two entries
-    let data = get_data(&session, "demo/example/*").await;
+    let data = get_data(&session, "wild/test/*").await;
     assert_eq!(data.len(), 2);
-    assert!(vec!["demo/example/a", "demo/example/b"].contains(&data[0].key_expr.as_str()));
-    assert!(vec!["demo/example/a", "demo/example/b"].contains(&data[1].key_expr.as_str()));
+    assert!(vec!["wild/test/a", "wild/test/b"].contains(&data[0].key_expr.as_str()));
+    assert!(vec!["wild/test/a", "wild/test/b"].contains(&data[1].key_expr.as_str()));
     assert!(vec!["2", "3"].contains(&format!("{}", data[0].value).as_str()));
     assert!(vec!["2", "3"].contains(&format!("{}", data[1].value).as_str()));
 
     put_data(
         &session,
-        "demo/example/*",
+        "wild/test/*",
         "4",
         Timestamp::from_str("2022-01-17T10:43:12.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
             .unwrap(),
     )
     .await;
 
+    sleep(std::time::Duration::from_millis(10));
+
     // expected two entries
-    let data = get_data(&session, "demo/example/*").await;
+    let data = get_data(&session, "wild/test/*").await;
     assert_eq!(data.len(), 2);
-    assert!(vec!["demo/example/a", "demo/example/b"].contains(&data[0].key_expr.as_str()));
-    assert!(vec!["demo/example/a", "demo/example/b"].contains(&data[1].key_expr.as_str()));
+    assert!(vec!["wild/test/a", "wild/test/b"].contains(&data[0].key_expr.as_str()));
+    assert!(vec!["wild/test/a", "wild/test/b"].contains(&data[1].key_expr.as_str()));
     assert_eq!(format!("{}", data[0].value).as_str(), "4");
     assert_eq!(format!("{}", data[1].value).as_str(), "4");
 
     delete_data(
         &session,
-        "demo/example/*",
+        "wild/test/*",
         Timestamp::from_str("2022-01-17T13:43:10.418555997Z/BC779A06D7E049BD88C3FF3DB0C17FCC")
             .unwrap(),
     )
     .await;
 
+    sleep(std::time::Duration::from_millis(10));
+
     //expected no entry
-    let data = get_data(&session, "demo/example/*").await;
+    let data = get_data(&session, "wild/test/*").await;
     assert_eq!(data.len(), 0);
 
     drop(storage);
