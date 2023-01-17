@@ -148,12 +148,41 @@ impl From<uuid::Uuid> for ZenohId {
     }
 }
 
+#[cfg(not(feature = "std"))]
+#[derive(Debug, Clone, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct UhlcSizeError(uhlc::SizeError);
+
+#[cfg(not(feature = "std"))]
+impl zenoh_result::IError for UhlcSizeError {}
+
+#[cfg(not(feature = "std"))]
+impl core::ops::Deref for UhlcSizeError {
+    type Target = uhlc::SizeError;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl fmt::Display for UhlcSizeError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
 macro_rules! derive_tryfrom {
     ($T: ty) => {
         impl TryFrom<$T> for ZenohId {
             type Error = zenoh_result::Error;
             fn try_from(val: $T) -> Result<Self, Self::Error> {
-                Ok(Self(val.try_into()?))
+                #[cfg(feature = "std")]
+                return Ok(Self(val.try_into()?));
+                #[cfg(not(feature = "std"))]
+                return match val.try_into() {
+                    Ok(ok) => Ok(Self(ok)),
+                    Err(err) => Err(Box::new(UhlcSizeError(err))),
+                };
             }
         }
     };
