@@ -1,7 +1,7 @@
 use std::num::NonZeroUsize;
 
 use crate::keyexpr_tree::*;
-pub struct TreeIter<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
+pub struct TreeIter<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
 where
     Children::Assoc: IChildren<Node> + 'a,
     <Children::Assoc as IChildren<Node>>::Node: 'a,
@@ -10,7 +10,7 @@ where
     _marker: std::marker::PhantomData<Weight>,
 }
 
-impl<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
+impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
     TreeIter<'a, Children, Node, Weight>
 where
     Children::Assoc: IChildren<Node> + 'a,
@@ -29,22 +29,20 @@ where
 impl<
         'a,
         Children: IChildrenProvider<Node>,
-        Node: IKeyExprTreeNode<Weight, Children = Children::Assoc> + 'a,
+        Node: UIKeyExprTreeNode<Weight, Children = Children::Assoc> + 'a,
         Weight,
     > Iterator for TreeIter<'a, Children, Node, Weight>
 where
     Children::Assoc: IChildren<Node> + 'a,
 {
-    type Item = &'a <Children::Assoc as IChildren<Node>>::Node;
+    type Item = &'a Node;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             match self.iterators.last_mut()?.next() {
                 Some(node) => {
-                    let iterator = unsafe { &*(node.as_node() as *const Node) }
-                        .children()
-                        .children();
+                    let iterator = unsafe { node.as_node().__children() }.children();
                     self.iterators.push(iterator);
-                    return Some(node);
+                    return Some(node.as_node());
                 }
                 None => {
                     self.iterators.pop();
@@ -123,9 +121,7 @@ where
             let depth = self.0.iterators.len();
             match self.0.iterators.last_mut()?.next() {
                 Some(node) => {
-                    let iterator = unsafe { &*(node.as_node() as *const Node) }
-                        .children()
-                        .children();
+                    let iterator = unsafe { node.as_node().__children() }.children();
                     self.0.iterators.push(iterator);
                     return Some((unsafe { NonZeroUsize::new_unchecked(depth) }, node));
                 }

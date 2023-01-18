@@ -32,19 +32,56 @@ pub trait IKeyExprTreeMut<'a, Weight>: IKeyExprTree<'a, Weight> {
     fn prune_where<F: FnMut(&mut Self::Node) -> bool>(&mut self, predicate: F);
 }
 pub trait ITokenKeyExprTree<'a, Weight, Token> {
-    type Node;
+    type Node: IKeyExprTreeNode<Weight>;
+    type NodeMut: IKeyExprTreeNodeMut<Weight>;
     fn node(&'a self, token: &'a Token, at: &keyexpr) -> Option<Self::Node>;
-    fn node_or_create(&'a self, token: &'a mut Token, at: &keyexpr) -> Self::Node;
+    fn node_or_create(&'a self, token: &'a mut Token, at: &keyexpr) -> Self::NodeMut;
+    type TreeIterItem;
+    type TreeIter: Iterator<Item = Self::TreeIterItem>;
+    fn tree_iter(&'a self, token: &'a Token) -> Self::TreeIter;
+    type TreeIterItemMut;
+    type TreeIterMut: Iterator<Item = Self::TreeIterItemMut>;
+    fn tree_iter_mut(&'a self, token: &'a mut Token) -> Self::TreeIterMut;
+    type IntersectionItem;
+    type Intersection: Iterator<Item = Self::IntersectionItem>;
+    fn intersecting_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Intersection;
+    type IntersectionItemMut;
+    type IntersectionMut: Iterator<Item = Self::IntersectionItemMut>;
+    fn intersecting_nodes_mut(
+        &'a self,
+        token: &'a mut Token,
+        key: &'a keyexpr,
+    ) -> Self::IntersectionMut;
+    type InclusionItem;
+    type Inclusion: Iterator<Item = Self::InclusionItem>;
+    fn included_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Inclusion;
+    type InclusionItemMut;
+    type InclusionMut: Iterator<Item = Self::InclusionItemMut>;
+    fn included_nodes_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::InclusionMut;
 }
 
-pub trait IKeyExprTreeNode<Weight> {
+pub trait IKeyExprTreeNode<Weight>: UIKeyExprTreeNode<Weight> {
+    fn parent(&self) -> Option<&Self::Parent> {
+        unsafe { self.__parent() }
+    }
+    fn keyexpr(&self) -> OwnedKeyExpr {
+        unsafe { self.__keyexpr() }
+    }
+    fn weight(&self) -> Option<&Weight> {
+        unsafe { self.__weight() }
+    }
+    fn children(&self) -> &Self::Children {
+        unsafe { self.__children() }
+    }
+}
+pub trait UIKeyExprTreeNode<Weight> {
     type Parent;
-    fn parent(&self) -> Option<&Self::Parent>;
-    fn keyexpr(&self) -> OwnedKeyExpr;
-    fn weight(&self) -> Option<&Weight>;
+    unsafe fn __parent(&self) -> Option<&Self::Parent>;
+    unsafe fn __keyexpr(&self) -> OwnedKeyExpr;
+    unsafe fn __weight(&self) -> Option<&Weight>;
     type Child;
     type Children: IChildren<Self::Child>;
-    fn children(&self) -> &Self::Children;
+    unsafe fn __children(&self) -> &Self::Children;
 }
 
 pub trait IKeyExprTreeNodeMut<Weight>: IKeyExprTreeNode<Weight> {
@@ -54,13 +91,13 @@ pub trait IKeyExprTreeNodeMut<Weight>: IKeyExprTreeNode<Weight> {
     fn insert_weight(&mut self, weight: Weight) -> Option<Weight>;
     fn children_mut(&mut self) -> &mut Self::Children;
 }
-pub trait IKeyExprTreeNodeToken<'a, Weight, Token> {
+pub trait ITokenKeyExprTreeNode<'a, Weight, Token> {
     type Tokenized: IKeyExprTreeNode<Weight>;
     fn tokenize(&'a self, token: &'a Token) -> Self::Tokenized;
     type TokenizedMut: IKeyExprTreeNodeMut<Weight>;
     fn tokenize_mut(&'a self, token: &'a mut Token) -> Self::TokenizedMut;
 }
-impl<'a, T: 'a, Weight, Token: 'a> IKeyExprTreeNodeToken<'a, Weight, Token> for T
+impl<'a, T: 'a, Weight, Token: 'a> ITokenKeyExprTreeNode<'a, Weight, Token> for T
 where
     (&'a T, &'a Token): IKeyExprTreeNode<Weight>,
     (&'a T, &'a mut Token): IKeyExprTreeNodeMut<Weight>,

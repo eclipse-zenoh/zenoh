@@ -19,9 +19,12 @@ pub struct KeArcTreeInner<
     children: Children::Assoc,
     wildness: Wildness,
 }
+
+token_cell::token!(pub DefaultToken);
+
 pub struct KeArcTree<
     Weight,
-    Token: TokenTrait,
+    Token: TokenTrait = DefaultToken,
     Wildness: IWildness = bool,
     Children: IChildrenProvider<
         Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
@@ -34,12 +37,31 @@ impl<
         Weight,
         Wildness: IWildness,
         Children: IChildrenProvider<
+            Arc<
+                TokenCell<
+                    KeArcTreeNode<Weight, Weak<()>, Wildness, Children, DefaultToken>,
+                    DefaultToken,
+                >,
+            >,
+        >,
+    > KeArcTree<Weight, DefaultToken, Wildness, Children>
+{
+    pub fn new() -> Result<(Self, DefaultToken), <DefaultToken as TokenTrait>::ConstructionError> {
+        let token = DefaultToken::new()?;
+        Ok((Self::with_token(&token), token))
+    }
+}
+
+impl<
+        Weight,
+        Wildness: IWildness,
+        Children: IChildrenProvider<
             Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
         >,
         Token: TokenTrait,
     > KeArcTree<Weight, Token, Wildness, Children>
 {
-    pub fn new(token: &Token) -> Self {
+    pub fn with_token(token: &Token) -> Self {
         Self {
             inner: TokenCell::new(
                 KeArcTreeInner {
@@ -66,19 +88,27 @@ where
         Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
     >,
 {
-    type Node =
-        &'a Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>;
+    type Node = (
+        &'a Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+        &'a Token,
+    );
+    type NodeMut = (
+        &'a Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+        &'a mut Token,
+    );
     fn node(&'a self, token: &'a Token, at: &keyexpr) -> Option<Self::Node> {
         let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
         let mut chunks = at.chunks();
         let mut node = inner.children.child_at(chunks.next().unwrap())?;
         for chunk in chunks {
-            let as_node: Self::Node = node.as_node();
+            let as_node: &Arc<
+                TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>,
+            > = node.as_node();
             node = unsafe { (&*as_node.get()).children.child_at(chunk)? };
         }
-        Some(node.as_node())
+        Some((node.as_node(), token))
     }
-    fn node_or_create(&'a self, token: &'a mut Token, at: &keyexpr) -> Self::Node {
+    fn node_or_create(&'a self, token: &'a mut Token, at: &keyexpr) -> Self::NodeMut {
         let Ok(inner) = self.inner.try_borrow_mut(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
         if at.is_wild() {
             inner.wildness.set(true);
@@ -102,9 +132,9 @@ where
             .entry(chunks.next().unwrap())
             .get_or_insert_with(|k| construct_node(k, None));
         for chunk in chunks {
-            let as_node: &mut Arc<
+            let as_node: &Arc<
                 TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>,
-            > = node.as_node_mut();
+            > = node.as_node();
             node = unsafe {
                 (&mut *as_node.get())
                     .children
@@ -112,26 +142,132 @@ where
                     .get_or_insert_with(|k| construct_node(k, Some(Arc::downgrade(as_node))))
             };
         }
-        node
+        (node, token)
+    }
+
+    type TreeIterItem = Self::Node;
+    type TreeIter = TokenPacker<
+        TreeIter<
+            'a,
+            Children,
+            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+            Weight,
+        >,
+        &'a Token,
+    >;
+    fn tree_iter(&'a self, token: &'a Token) -> Self::TreeIter {
+        let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        TokenPacker {
+            iter: TreeIter::new(&inner.children),
+            token,
+        }
+    }
+
+    type TreeIterItemMut = Self::NodeMut;
+    type TreeIterMut = TokenPacker<
+        TreeIter<
+            'a,
+            Children,
+            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+            Weight,
+        >,
+        &'a mut Token,
+    >;
+    fn tree_iter_mut(&'a self, token: &'a mut Token) -> Self::TreeIterMut {
+        let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        TokenPacker {
+            iter: TreeIter::new(unsafe { std::mem::transmute(&inner.children) }),
+            token,
+        }
+    }
+
+    type IntersectionItem = Self::Node;
+    type Intersection = TokenPacker<
+        Intersection<
+            'a,
+            Children,
+            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+            Weight,
+        >,
+        &'a Token,
+    >;
+    fn intersecting_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Intersection {
+        let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        TokenPacker {
+            iter: Intersection::new(&inner.children, key),
+            token,
+        }
+    }
+    type IntersectionItemMut = Self::NodeMut;
+    type IntersectionMut = TokenPacker<
+        Intersection<
+            'a,
+            Children,
+            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+            Weight,
+        >,
+        &'a mut Token,
+    >;
+    fn intersecting_nodes_mut(
+        &'a self,
+        token: &'a mut Token,
+        key: &'a keyexpr,
+    ) -> Self::IntersectionMut {
+        let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        TokenPacker {
+            iter: Intersection::new(unsafe { std::mem::transmute(&inner.children) }, key),
+            token,
+        }
+    }
+
+    type InclusionItem = Self::Node;
+    type Inclusion = TokenPacker<
+        Inclusion<
+            'a,
+            Children,
+            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+            Weight,
+        >,
+        &'a Token,
+    >;
+    fn included_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Inclusion {
+        let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        TokenPacker {
+            iter: Inclusion::new(&inner.children, key),
+            token,
+        }
+    }
+    type InclusionItemMut = Self::NodeMut;
+    type InclusionMut = TokenPacker<
+        Inclusion<
+            'a,
+            Children,
+            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+            Weight,
+        >,
+        &'a mut Token,
+    >;
+    fn included_nodes_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::InclusionMut {
+        let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        TokenPacker {
+            iter: Inclusion::new(unsafe { std::mem::transmute(&inner.children) }, key),
+            token,
+        }
     }
 }
+pub struct TokenPacker<I, T> {
+    iter: I,
+    token: T,
+}
 
-// impl<
-//         'a,
-//         Weight: 'a,
-//         Wildness: IWildness + 'a,
-//         Children: IChildrenProvider<
-//                 Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
-//             > + 'a,
-//         Token: TokenTrait + 'a,
-//     > IKeyExprTree<'a, Weight> for KeArcTree<Weight, Token, Wildness, Children>
-// where
-//     Children::Assoc: IChildren<
-//         Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
-//     >,
-// {
-// }
-
+impl<I: Iterator, T> Iterator for TokenPacker<I, T> {
+    type Item = (I::Item, T);
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter
+            .next()
+            .map(|i| (i, unsafe { std::mem::transmute_copy(&self.token) }))
+    }
+}
 pub trait IArcProvider {
     type Ptr<T>: IArc<T>;
 }
@@ -192,7 +328,81 @@ impl<
             Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
         >,
         Token: TokenTrait,
+    > UIKeyExprTreeNode<Weight>
+    for Arc<TokenCell<KeArcTreeNode<Weight, Parent, Wildness, Children, Token>, Token>>
+where
+    Children::Assoc: IChildren<
+        Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+    >,
+{
+    type Parent = <KeArcTreeNode<Weight, Parent, Wildness, Children, Token> as UIKeyExprTreeNode<
+        Weight,
+    >>::Parent;
+    unsafe fn __parent(&self) -> Option<&Self::Parent> {
+        (*self.get()).parent()
+    }
+
+    unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
+        (*self.get()).keyexpr()
+    }
+
+    unsafe fn __weight(&self) -> Option<&Weight> {
+        (*self.get()).weight()
+    }
+
+    type Child = <KeArcTreeNode<Weight, Parent, Wildness, Children, Token> as UIKeyExprTreeNode<
+        Weight,
+    >>::Child;
+
+    type Children= <KeArcTreeNode<Weight, Parent, Wildness, Children, Token> as UIKeyExprTreeNode<
+    Weight,
+>>::Children;
+
+    unsafe fn __children(&self) -> &Self::Children {
+        (*self.get()).children()
+    }
+}
+
+impl<
+        Weight,
+        Parent: IArcProvider,
+        Wildness: IWildness,
+        Children: IChildrenProvider<
+            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+        >,
+        Token: TokenTrait,
+    > HasChunk for KeArcTreeNode<Weight, Parent, Wildness, Children, Token>
+{
+    fn chunk(&self) -> &keyexpr {
+        &self.chunk
+    }
+}
+
+impl<
+        Weight,
+        Parent: IArcProvider,
+        Wildness: IWildness,
+        Children: IChildrenProvider<
+            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+        >,
+        Token: TokenTrait,
     > IKeyExprTreeNode<Weight> for KeArcTreeNode<Weight, Parent, Wildness, Children, Token>
+where
+    Children::Assoc: IChildren<
+        Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+    >,
+{
+}
+
+impl<
+        Weight,
+        Parent: IArcProvider,
+        Wildness: IWildness,
+        Children: IChildrenProvider<
+            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+        >,
+        Token: TokenTrait,
+    > UIKeyExprTreeNode<Weight> for KeArcTreeNode<Weight, Parent, Wildness, Children, Token>
 where
     Children::Assoc: IChildren<
         Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
@@ -200,23 +410,23 @@ where
 {
     type Parent =
         Parent::Ptr<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>;
-    fn parent(&self) -> Option<&Self::Parent> {
+    unsafe fn __parent(&self) -> Option<&Self::Parent> {
         self.parent.as_ref()
     }
     /// May panic if the node has been zombified (see [`Self::is_zombie`])
-    fn keyexpr(&self) -> OwnedKeyExpr {
+    unsafe fn __keyexpr(&self) -> OwnedKeyExpr {
         unsafe {
             // self._keyexpr is guaranteed to return a valid KE, so no checks are necessary
             OwnedKeyExpr::from_string_unchecked(self._keyexpr(0))
         }
     }
-    fn weight(&self) -> Option<&Weight> {
+    unsafe fn __weight(&self) -> Option<&Weight> {
         self.weight.as_ref()
     }
 
     type Child = Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>;
     type Children = Children::Assoc;
-    fn children(&self) -> &Self::Children {
+    unsafe fn __children(&self) -> &Self::Children {
         &self.children
     }
 }

@@ -1,7 +1,7 @@
 use crate::keyexpr_tree::*;
 use zenoh_core::unlikely;
 
-struct StackFrame<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
+struct StackFrame<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
 where
     Children::Assoc: IChildren<Node> + 'a,
     <Children::Assoc as IChildren<Node>>::Node: 'a,
@@ -14,7 +14,7 @@ where
 pub struct Intersection<
     'a,
     Children: IChildrenProvider<Node>,
-    Node: IKeyExprTreeNode<Weight>,
+    Node: UIKeyExprTreeNode<Weight>,
     Weight,
 > where
     Children::Assoc: IChildren<Node> + 'a,
@@ -24,7 +24,7 @@ pub struct Intersection<
     iterators: Vec<StackFrame<'a, Children, Node, Weight>>,
 }
 
-impl<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
+impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
     Intersection<'a, Children, Node, Weight>
 where
     Children::Assoc: IChildren<Node> + 'a,
@@ -46,13 +46,13 @@ where
 impl<
         'a,
         Children: IChildrenProvider<Node>,
-        Node: IKeyExprTreeNode<Weight, Children = Children::Assoc> + 'a,
+        Node: UIKeyExprTreeNode<Weight, Children = Children::Assoc> + 'a,
         Weight,
     > Iterator for Intersection<'a, Children, Node, Weight>
 where
     Children::Assoc: IChildren<Node> + 'a,
 {
-    type Item = &'a <Children::Assoc as IChildren<Node>>::Node;
+    type Item = &'a Node;
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let StackFrame {
@@ -149,9 +149,7 @@ where
                                 break;
                             }
                         }
-                        let iterator = unsafe { &*(node.as_node() as *const Node) }
-                            .children()
-                            .children();
+                        let iterator = unsafe { node.as_node().__children() }.children();
                         self.iterators.push(StackFrame {
                             iterator,
                             start: new_start,
@@ -160,7 +158,7 @@ where
                         })
                     }
                     if node_matches {
-                        return Some(node);
+                        return Some(node.as_node());
                     }
                 }
                 None => {

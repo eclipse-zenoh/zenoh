@@ -2,6 +2,7 @@ use rand::Rng;
 use zenoh_protocol::core::key_expr::fuzzer::KeyExprFuzzer;
 
 use super::{
+    arc_tree::{DefaultToken, KeArcTree},
     // box_tree::KeTreePair,
     impls::{KeyedSetProvider, VecSetProvider},
     *,
@@ -61,29 +62,31 @@ fn insert_vecset<'a, K: TryInto<&'a keyexpr>, V: Clone + PartialEq + Debug + 'st
     )
 }
 
-// fn insert_treepair<'a, K: TryInto<&'a keyexpr>, V: Clone + PartialEq + Debug + 'static>(
-//     ketree: &mut KeTreePair<V>,
-//     map: &mut HashMap<OwnedKeyExpr, Option<V>>,
-//     key: K,
-//     value: V,
-// ) where
-//     <K as TryInto<&'a keyexpr>>::Error: Debug,
-// {
-//     let key = dbg!(key.try_into().unwrap());
-//     for i in key
-//         .as_bytes()
-//         .iter()
-//         .enumerate()
-//         .filter_map(|(i, c)| (*c == b'/').then_some(i))
-//     {
-//         let subkey = OwnedKeyExpr::try_from(&key[..i]).unwrap();
-//         map.entry(subkey).or_default();
-//     }
-//     assert_eq!(
-//         ketree.insert(key, value.clone()),
-//         map.insert(key.into(), Some(value)).flatten()
-//     )
-// }
+fn insert_kearctree<'a, K: TryInto<&'a keyexpr>, V: Clone + PartialEq + Debug + 'static>(
+    (ketree, token): &mut (KeArcTree<V>, DefaultToken),
+    map: &mut HashMap<OwnedKeyExpr, Option<V>>,
+    key: K,
+    value: V,
+) where
+    <K as TryInto<&'a keyexpr>>::Error: Debug,
+{
+    let key = dbg!(key.try_into().unwrap());
+    for i in key
+        .as_bytes()
+        .iter()
+        .enumerate()
+        .filter_map(|(i, c)| (*c == b'/').then_some(i))
+    {
+        let subkey = OwnedKeyExpr::try_from(&key[..i]).unwrap();
+        map.entry(subkey).or_default();
+    }
+    assert_eq!(
+        ketree
+            .node_or_create(token, key)
+            .insert_weight(value.clone()),
+        map.insert(key.into(), Some(value)).flatten()
+    )
+}
 
 fn into_ke(s: &str) -> &keyexpr {
     keyexpr::new(s).unwrap()
@@ -231,93 +234,93 @@ fn test_keyset_vec<K: Deref<Target = keyexpr>>(keys: &[K]) {
     }
 }
 
-// fn test_keyset_pair<K: Deref<Target = keyexpr>>(keys: &[K]) {
-//     let mut tree = KeTreePair::new();
-//     let mut map = HashMap::new();
-//     for (v, k) in keys.iter().map(|k| k.deref()).enumerate() {
-//         insert_treepair(&mut tree, &mut map, k, v);
-//     }
-//     for (k, v) in tree.key_value_pairs() {
-//         assert_eq!(v, map.get(&k).unwrap().as_ref().unwrap());
-//     }
-//     for target in keys {
-//         let mut expected = HashMap::new();
-//         for (k, v) in &map {
-//             if target.intersects(k) {
-//                 assert!(expected.insert(k, v).is_none());
-//             }
-//         }
-//         let mut exclone = expected.clone();
-//         for node in tree.intersecting_nodes(target) {
-//             let ke = node.keyexpr();
-//             let weight = node.weight();
-//             assert_eq!(expected.remove(&ke).and_then(|v| v.as_ref()), weight)
-//         }
-//         for node in tree.intersecting_nodes_mut(target) {
-//             let ke = node.keyexpr();
-//             let weight = node.weight();
-//             assert_eq!(exclone.remove(&ke).and_then(|v| v.as_ref()), weight)
-//         }
-//         assert!(
-//             expected.is_empty(),
-//             "MISSING INTERSECTS FOR {}: {:?}",
-//             target.deref(),
-//             &expected
-//         );
-//         assert!(
-//             exclone.is_empty(),
-//             "MISSING MUTABLE INTERSECTS FOR {}: {:?}",
-//             target.deref(),
-//             &exclone
-//         );
-//         for (k, v) in &map {
-//             if target.includes(k) {
-//                 assert!(expected.insert(k, v).is_none());
-//             }
-//         }
-//         exclone = expected.clone();
-//         for node in tree.included_nodes(target) {
-//             let ke = node.keyexpr();
-//             let weight = node.weight();
-//             assert_eq!(expected.remove(&ke).and_then(|v| v.as_ref()), weight)
-//         }
-//         for node in tree.included_nodes_mut(target) {
-//             let ke = node.keyexpr();
-//             let weight = node.weight();
-//             assert_eq!(exclone.remove(&ke).and_then(|v| v.as_ref()), weight)
-//         }
-//         assert!(
-//             expected.is_empty(),
-//             "MISSING INCLUDES FOR {}: {:?}",
-//             target.deref(),
-//             &expected
-//         );
-//         assert!(
-//             exclone.is_empty(),
-//             "MISSING MUTABLE INTERSECTS FOR {}: {:?}",
-//             target.deref(),
-//             &exclone
-//         );
-//         println!("{} OK", target.deref());
-//     }
-// }
+fn test_keyarctree<K: Deref<Target = keyexpr>>(keys: &[K]) {
+    let mut tree = KeArcTree::new().unwrap();
+    let mut map = HashMap::new();
+    for (v, k) in keys.iter().map(|k| k.deref()).enumerate() {
+        insert_kearctree(&mut tree, &mut map, k, v);
+    }
+    for node in tree.0.tree_iter(&tree.1) {
+        assert_eq!(node.weight(), map.get(&node.keyexpr()).unwrap().as_ref());
+    }
+    for target in keys {
+        let mut expected = HashMap::new();
+        for (k, v) in &map {
+            if target.intersects(k) {
+                assert!(expected.insert(k, v).is_none());
+            }
+        }
+        let mut exclone = expected.clone();
+        for node in tree.0.intersecting_nodes(&tree.1, target) {
+            let ke = node.keyexpr();
+            let weight = node.weight();
+            assert_eq!(expected.remove(&ke).unwrap().as_ref(), weight)
+        }
+        for node in tree.0.intersecting_nodes_mut(&mut tree.1, target) {
+            let ke = node.keyexpr();
+            let weight = node.weight();
+            assert_eq!(exclone.remove(&ke).unwrap().as_ref(), weight)
+        }
+        assert!(
+            expected.is_empty(),
+            "MISSING INTERSECTS FOR {}: {:?}",
+            target.deref(),
+            &expected
+        );
+        assert!(
+            exclone.is_empty(),
+            "MISSING MUTABLE INTERSECTS FOR {}: {:?}",
+            target.deref(),
+            &exclone
+        );
+        for (k, v) in &map {
+            if target.includes(k) {
+                assert!(expected.insert(k, v).is_none());
+            }
+        }
+        exclone = expected.clone();
+        for node in tree.0.included_nodes(&tree.1, target) {
+            let ke = node.keyexpr();
+            let weight = node.weight();
+            assert_eq!(expected.remove(&ke).unwrap().as_ref(), weight)
+        }
+        for node in tree.0.included_nodes_mut(&mut tree.1, target) {
+            let ke = node.keyexpr();
+            let weight = node.weight();
+            assert_eq!(exclone.remove(&ke).unwrap().as_ref(), weight)
+        }
+        assert!(
+            expected.is_empty(),
+            "MISSING INCLUDES FOR {}: {:?}",
+            target.deref(),
+            &expected
+        );
+        assert!(
+            exclone.is_empty(),
+            "MISSING MUTABLE INTERSECTS FOR {}: {:?}",
+            target.deref(),
+            &exclone
+        );
+        println!("{} OK", target.deref());
+    }
+}
 
 #[test]
 fn keyed_set_tree() {
-    let keys: [&keyexpr; 4] = [
+    let keys: [&keyexpr; 8] = [
         "a/b/**/c/**",
         "a/b/c",
         "a/b/c",
         "a/*/c",
-        // "**/c",
-        // "**/d",
-        // "d/b/c",
-        // "**/b/c",
+        "**/c",
+        "**/d",
+        "d/b/c",
+        "**/b/c",
     ]
     .map(into_ke);
     test_keyset(&keys);
     test_keyset_vec(&keys);
-    // test_keyset_pair(&keys);
+    test_keyarctree(&keys)
 }
 
 #[test]
@@ -326,7 +329,7 @@ fn fuzz() {
     let keys = fuzzer.take(400).collect::<Vec<_>>();
     test_keyset(&keys);
     test_keyset_vec(&keys);
-    // test_keyset_pair(&keys)
+    test_keyarctree(&keys)
 }
 
 #[test]

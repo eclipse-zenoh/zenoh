@@ -4,12 +4,11 @@ use std::{
 };
 
 use rand::SeedableRng;
-use token_cell::prelude::*;
 use zenoh_protocol::core::key_expr::{fuzzer::KeyExprFuzzer, OwnedKeyExpr};
 use zenoh_util::keyexpr_tree::{
     arc_tree::KeArcTree,
     impls::{HashMapProvider, VecSetProvider},
-    IKeyExprTree, IKeyExprTreeExtMut, KeBoxTree,
+    IKeyExprTree, IKeyExprTreeExtMut, IKeyExprTreeNodeMut, ITokenKeyExprTree, KeBoxTree,
 };
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -26,7 +25,6 @@ impl Averager {
         self.avg / self.count as f64
     }
 }
-token_cell::token!(Token);
 
 fn main() {
     for total in [10, 100, 1000, 10000] {
@@ -37,13 +35,12 @@ fn main() {
                 let mut ketree: KeBoxTree<_> = KeBoxTree::new();
                 let mut vectree: KeBoxTree<_, bool, VecSetProvider> = KeBoxTree::new();
                 let mut hashtree: KeBoxTree<_, bool, HashMapProvider> = KeBoxTree::new();
-                let mut token = Token::new().unwrap();
-                // let kearctree: KeArcTree<_, _> = KeArcTree::new(&token);
+                let (kearctree, mut token): (KeArcTree<i32>, _) = KeArcTree::new().unwrap();
                 let mut map = HashMap::new();
                 for key in keys.iter() {
                     b.run_once("ketree_insert", || ketree.insert(key, 0));
                     b.run_once("kearctree_insert", || {
-                        // (&kearctree, &mut token).insert(key, 0)
+                        kearctree.node_or_create(&mut token, key).insert_weight(0);
                     });
                     b.run_once("vectree_insert", || vectree.insert(key, 0));
                     b.run_once("hashtree_insert", || hashtree.insert(key, 0));
@@ -51,6 +48,7 @@ fn main() {
                 }
                 for key in keys.iter() {
                     b.run_once("ketree_fetch", || ketree.node(key));
+                    b.run_once("kearctree_fetch", || kearctree.node(&mut token, key));
                     b.run_once("vectree_fetch", || vectree.node(key));
                     b.run_once("hashtree_fetch", || hashtree.node(key));
                     b.run_once("hashmap_fetch", || map.get(key));
@@ -59,6 +57,9 @@ fn main() {
                     intersections.add(ketree.intersecting_nodes(key).count() as f64);
                     b.run_once("ketree_intersect", || {
                         ketree.intersecting_nodes(key).count()
+                    });
+                    b.run_once("kearctree_intersect", || {
+                        kearctree.intersecting_nodes(&token, key).count()
                     });
                     b.run_once("vectree_intersect", || {
                         vectree.intersecting_nodes(key).count()
@@ -72,6 +73,9 @@ fn main() {
                 }
                 for key in keys.iter() {
                     b.run_once("ketree_include", || ketree.included_nodes(key).count());
+                    b.run_once("kearctree_include", || {
+                        kearctree.included_nodes(&token, key).count()
+                    });
                     b.run_once("vectree_include", || vectree.included_nodes(key).count());
                     b.run_once("hashtree_include", || hashtree.included_nodes(key).count());
                     b.run_once("hashmap_include", || {
@@ -81,18 +85,22 @@ fn main() {
             });
             for name in [
                 "ketree_insert",
+                "kearctree_insert",
                 "vectree_insert",
                 "hashtree_insert",
                 "hashmap_insert",
                 "ketree_fetch",
+                "kearctree_fetch",
                 "vectree_fetch",
                 "hashtree_fetch",
                 "hashmap_fetch",
                 "ketree_intersect",
+                "kearctree_intersect",
                 "vectree_intersect",
                 "hashtree_intersect",
                 "hashmap_intersect",
                 "ketree_include",
+                "kearctree_include",
                 "vectree_include",
                 "hashtree_include",
                 "hashmap_include",
