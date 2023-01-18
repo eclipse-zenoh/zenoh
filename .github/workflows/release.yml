@@ -401,7 +401,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v3
         with:
-          images: sreeja/zenoh
+          images: sreejas/zenoh
           labels: |
             org.opencontainers.image.licenses=EPL-2.0 OR Apache-2.0
       - name: Login to DockerHub
