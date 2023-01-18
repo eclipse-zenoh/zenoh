@@ -16,7 +16,10 @@ use super::seq_num::{SeqNum, SeqNumGenerator};
 use std::sync::{Arc, Mutex};
 use zenoh_core::zlock;
 use zenoh_core::zresult::ZResult;
-use zenoh_protocol::core::{ConduitSn, Reliability, ZInt};
+use zenoh_protocol::{
+    core::{Reliability, ZInt},
+    transport::ConduitSn,
+};
 
 #[derive(Debug)]
 pub(crate) struct TransportChannelTx {

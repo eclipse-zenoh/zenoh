@@ -22,8 +22,8 @@ use std::time::Duration;
 use zenoh_core::{bail, zasynclock, zerror, zread, zwrite, Result as ZResult};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::{
-    core::{ConduitSn, Priority, WhatAmI, ZInt, ZenohId},
-    transport::TransportMessage,
+    core::{Priority, WhatAmI, ZInt, ZenohId},
+    transport::{ConduitSn, TransportMessage},
     zenoh::ZenohMessage,
 };
 

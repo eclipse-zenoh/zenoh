@@ -22,16 +22,18 @@ use crate::common::pipeline::{
 use async_std::prelude::FutureExt;
 use async_std::task;
 use async_std::task::JoinHandle;
-use std::convert::TryInto;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::{
+    convert::TryInto,
+    sync::Arc,
+    time::{Duration, Instant},
+};
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_codec::{RCodec, Zenoh060};
 use zenoh_core::{bail, zerror, zlock, Result as ZResult};
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
-    core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId},
-    transport::TransportMessage,
+    core::{Priority, WhatAmI, ZInt, ZenohId},
+    transport::{ConduitSn, ConduitSnList, TransportMessage},
 };
 use zenoh_sync::RecyclingObjectPool;
 use zenoh_sync::Signal;

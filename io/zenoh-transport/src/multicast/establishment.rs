@@ -18,7 +18,10 @@ use std::sync::Arc;
 use zenoh_core::Result as ZResult;
 use zenoh_core::{zasynclock, zlock};
 use zenoh_link::LinkMulticast;
-use zenoh_protocol::core::{ConduitSn, ConduitSnList, Priority};
+use zenoh_protocol::{
+    core::Priority,
+    transport::{ConduitSn, ConduitSnList},
+};
 
 pub(crate) async fn open_link(
     manager: &TransportManager,
