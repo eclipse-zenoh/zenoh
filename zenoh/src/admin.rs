@@ -25,8 +25,8 @@ use crate::{
 };
 use zenoh_core::SyncResolve;
 use zenoh_protocol::{
-    core::{Encoding, KnownEncoding, SampleKind, WireExpr},
-    zenoh::{DataInfo, ZenohMessage},
+    core::{Encoding, KnownEncoding, WireExpr},
+    zenoh::{DataInfo, SampleKind, ZenohMessage},
 };
 use zenoh_transport::{TransportEventHandler, TransportPeerEventHandler};
 

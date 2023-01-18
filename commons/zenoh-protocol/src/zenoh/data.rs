@@ -11,8 +11,46 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{CongestionControl, Encoding, SampleKind, Timestamp, WireExpr, ZInt, ZenohId};
+use crate::core::{CongestionControl, Encoding, Timestamp, WireExpr, ZInt, ZenohId};
+use core::{convert::TryFrom, fmt};
 use zenoh_buffers::ZBuf;
+
+/// The kind of a `Sample`.
+#[repr(u8)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum SampleKind {
+    /// if the `Sample` was issued by a `put` operation.
+    Put = 0,
+    /// if the `Sample` was issued by a `delete` operation.
+    Delete = 1,
+}
+
+impl Default for SampleKind {
+    fn default() -> Self {
+        SampleKind::Put
+    }
+}
+
+impl fmt::Display for SampleKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SampleKind::Put => write!(f, "PUT"),
+            SampleKind::Delete => write!(f, "DELETE"),
+        }
+    }
+}
+
+impl TryFrom<ZInt> for SampleKind {
+    type Error = ZInt;
+    fn try_from(kind: ZInt) -> Result<Self, ZInt> {
+        match kind {
+            0 => Ok(SampleKind::Put),
+            1 => Ok(SampleKind::Delete),
+            _ => Err(kind),
+        }
+    }
+}
 
 /// # ReplyContext decorator
 ///
@@ -128,7 +166,6 @@ pub struct DataInfo {
 impl DataInfo {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use core::convert::TryFrom;
         use rand::Rng;
 
         let mut rng = rand::thread_rng();

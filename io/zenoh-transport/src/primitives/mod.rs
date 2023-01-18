@@ -18,11 +18,10 @@ pub use demux::*;
 pub use mux::*;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{
-        Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, SubInfo,
-        WireExpr, ZInt, ZenohId,
+    core::{Channel, CongestionControl, WireExpr, ZInt, ZenohId},
+    zenoh::{
+        ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext, SubInfo,
     },
-    zenoh::{DataInfo, QueryBody, RoutingContext},
 };
 
 pub trait Primitives: Send + Sync {

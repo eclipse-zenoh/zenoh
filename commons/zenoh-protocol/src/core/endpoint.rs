@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::locator::*;
-use crate::core::split_once;
 use core::{convert::TryFrom, fmt, str::FromStr};
 use zenoh_core::{zerror, Error as ZError, Result as ZResult};
 
@@ -22,6 +21,16 @@ pub const METADATA_SEPARATOR: char = '?';
 pub const LIST_SEPARATOR: char = ';';
 pub const FIELD_SEPARATOR: char = '=';
 pub const CONFIG_SEPARATOR: char = '#';
+
+fn split_once(s: &str, c: char) -> (&str, &str) {
+    match s.find(c) {
+        Some(index) => {
+            let (l, r) = s.split_at(index);
+            (l, &r[1..])
+        }
+        None => (s, ""),
+    }
+}
 
 // Parsing functions
 pub(super) fn protocol(s: &str) -> &str {

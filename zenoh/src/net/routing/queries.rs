@@ -30,9 +30,9 @@ use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
     core::{
         key_expr::include::{Includer, DEFAULT_INCLUDER},
-        ConsolidationMode, QueryTarget, QueryableInfo, WhatAmI, WireExpr, ZInt, ZenohId,
+        WhatAmI, WireExpr, ZInt, ZenohId,
     },
-    zenoh::{DataInfo, QueryBody, RoutingContext},
+    zenoh::{ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext},
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;

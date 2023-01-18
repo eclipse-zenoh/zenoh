@@ -20,10 +20,10 @@ mod open;
 
 use crate::{
     common::Attachment,
-    core::{Channel, ConduitSnList, WhatAmI, ZInt, ZenohId},
+    core::{Channel, Priority, WhatAmI, ZInt, ZenohId},
 };
 pub use close::*;
-use core::time::Duration;
+use core::{convert::TryInto, fmt, time::Duration};
 pub use frame::*;
 pub use init::*;
 pub use join::*;
@@ -31,9 +31,55 @@ pub use keepalive::*;
 pub use open::*;
 use zenoh_buffers::ZSlice;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum ConduitSnList {
+    Plain(ConduitSn),
+    QoS(Box<[ConduitSn; Priority::NUM]>),
+}
+
+impl fmt::Display for ConduitSnList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[ ")?;
+        match self {
+            ConduitSnList::Plain(sn) => {
+                write!(
+                    f,
+                    "{:?} {{ reliable: {}, best effort: {} }}",
+                    Priority::default(),
+                    sn.reliable,
+                    sn.best_effort
+                )?;
+            }
+            ConduitSnList::QoS(ref sns) => {
+                for (prio, sn) in sns.iter().enumerate() {
+                    let p: Priority = (prio as u8).try_into().unwrap();
+                    write!(
+                        f,
+                        "{:?} {{ reliable: {}, best effort: {} }}",
+                        p, sn.reliable, sn.best_effort
+                    )?;
+                    if p != Priority::Background {
+                        write!(f, ", ")?;
+                    }
+                }
+            }
+        }
+        write!(f, " ]")
+    }
+}
+
+/// The kind of reliability.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct ConduitSn {
+    pub reliable: ZInt,
+    pub best_effort: ZInt,
+}
+
 pub mod tmsg {
-    use crate::common::imsg;
-    use crate::core::{Priority, ZInt};
+    use super::Priority;
+    use crate::{common::imsg, core::ZInt};
 
     // Transport message IDs -- Re-export of some of the Inner Message IDs
     pub mod id {

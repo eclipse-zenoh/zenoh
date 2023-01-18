@@ -19,10 +19,11 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{QueryableInfo, Reliability, SubInfo, SubMode, WireExpr, ZInt},
+    core::{Reliability, WireExpr, ZInt},
     zenoh::{
         zmsg, Declaration, Declare, ForgetPublisher, ForgetQueryable, ForgetResource,
-        ForgetSubscriber, Publisher, Queryable, Resource, Subscriber,
+        ForgetSubscriber, Publisher, Queryable, QueryableInfo, Resource, SubInfo, SubMode,
+        Subscriber,
     },
 };
 

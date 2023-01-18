@@ -18,11 +18,10 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{
-        Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, SubInfo,
-        WhatAmI, WireExpr, ZInt, ZenohId,
+    core::{Channel, CongestionControl, WhatAmI, WireExpr, ZInt, ZenohId},
+    zenoh::{
+        ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext, SubInfo,
     },
-    zenoh::{DataInfo, QueryBody, RoutingContext},
 };
 use zenoh_transport::Primitives;
 

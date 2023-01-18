@@ -13,13 +13,17 @@
 //
 
 //! This module defines the wire representation of Key Expressions.
-use crate::core::ExprId;
+use crate::core::ZInt;
 use alloc::borrow::Cow;
 use core::{convert::TryInto, fmt};
 use zenoh_core::{bail, Result as ZResult};
 
+/// A numerical Id mapped to a key expression.
+pub type ExprId = ZInt;
+pub const EMPTY_EXPR_ID: ExprId = 0;
+
 /// A zenoh **resource** is represented by a pair composed by a **key** and a
-/// **value**, such as, ```(/car/telemetry/speed, 320)```.  A **resource key**
+/// **value**, such as, ```(car/telemetry/speed, 320)```.  A **resource key**
 /// is an arbitrary array of characters, with the exclusion of the symbols
 /// ```*```, ```**```, ```?```, ```[```, ```]```, and ```#```,
 /// which have special meaning in the context of zenoh.

@@ -47,10 +47,10 @@ pub(crate) mod common {
     pub(crate) use crate::sample::Locality;
     pub use crate::sample::Sample;
 
-    pub use zenoh_protocol::core::SampleKind;
+    pub use zenoh_protocol::zenoh::{ConsolidationMode, SampleKind};
 
     pub use crate::publication::Priority;
-    pub use zenoh_protocol::core::{CongestionControl, ConsolidationMode, Reliability};
+    pub use zenoh_protocol::core::{CongestionControl, Reliability};
 
     /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
     pub use zenoh_protocol::core::Locator;

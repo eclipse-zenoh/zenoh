@@ -23,8 +23,8 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{CongestionControl, Encoding, SampleKind, WireExpr, ZInt, ZenohId},
-    zenoh::{zmsg, Data, DataInfo, ReplierInfo, ReplyContext},
+    core::{CongestionControl, Encoding, WireExpr, ZInt, ZenohId},
+    zenoh::{zmsg, Data, DataInfo, ReplierInfo, ReplyContext, SampleKind},
 };
 
 // ReplyContext

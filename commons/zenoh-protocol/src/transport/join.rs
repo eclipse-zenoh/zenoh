@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{ConduitSnList, WhatAmI, ZInt, ZenohId};
+use crate::{
+    core::{WhatAmI, ZInt, ZenohId},
+    transport::ConduitSnList,
+};
 use core::time::Duration;
 
 /// # Join message
@@ -75,7 +78,7 @@ impl Join {
 impl Join {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::core::{ConduitSn, Priority};
+        use crate::{core::Priority, transport::ConduitSn};
         use rand::Rng;
 
         let mut rng = rand::thread_rng();

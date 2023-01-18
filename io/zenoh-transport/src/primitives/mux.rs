@@ -15,14 +15,12 @@ use super::super::TransportUnicast;
 use super::Primitives;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{
-        Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, SubInfo,
-        WireExpr, ZInt, ZenohId,
-    },
+    core::{Channel, CongestionControl, WireExpr, ZInt, ZenohId},
     zenoh::{
-        zmsg, DataInfo, Declaration, ForgetPublisher, ForgetQueryable, ForgetResource,
-        ForgetSubscriber, Publisher, QueryBody, Queryable, ReplierInfo, ReplyContext, Resource,
-        RoutingContext, Subscriber, ZenohMessage,
+        zmsg, ConsolidationMode, DataInfo, Declaration, ForgetPublisher, ForgetQueryable,
+        ForgetResource, ForgetSubscriber, Publisher, QueryBody, QueryTarget, Queryable,
+        QueryableInfo, ReplierInfo, ReplyContext, Resource, RoutingContext, SubInfo, Subscriber,
+        ZenohMessage,
     },
 };
 

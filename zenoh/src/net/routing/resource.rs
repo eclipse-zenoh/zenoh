@@ -20,8 +20,8 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId},
-    zenoh::{DataInfo, RoutingContext},
+    core::{key_expr::keyexpr, WireExpr, ZInt, ZenohId},
+    zenoh::{DataInfo, QueryableInfo, RoutingContext, SubInfo},
 };
 use zenoh_sync::get_mut_unchecked;
 

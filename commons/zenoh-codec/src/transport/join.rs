@@ -20,9 +20,9 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId},
+    core::{Priority, WhatAmI, ZInt, ZenohId},
     defaults::SEQ_NUM_RES,
-    transport::{tmsg, Join},
+    transport::{tmsg, ConduitSn, ConduitSnList, Join},
 };
 
 impl<W> WCodec<&Join, &mut W> for Zenoh060

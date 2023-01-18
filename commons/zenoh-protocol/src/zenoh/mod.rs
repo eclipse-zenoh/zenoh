@@ -21,9 +21,7 @@ mod unit;
 
 use crate::{
     common::Attachment,
-    core::{
-        Channel, CongestionControl, ConsolidationMode, QueryTarget, Reliability, WireExpr, ZInt,
-    },
+    core::{Channel, CongestionControl, Reliability, WireExpr, ZInt},
 };
 use core::fmt;
 pub use data::*;

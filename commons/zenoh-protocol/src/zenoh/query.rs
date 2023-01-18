@@ -12,10 +12,45 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    core::{ConsolidationMode, QueryTarget, WireExpr, ZInt},
+    core::{WireExpr, ZInt},
     zenoh::DataInfo,
 };
 use zenoh_buffers::ZBuf;
+
+/// The kind of consolidation.
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum ConsolidationMode {
+    /// No consolidation applied: multiple samples may be received for the same key-timestamp.
+    None,
+    /// Monotonic consolidation immediately forwards samples, except if one with an equal or more recent timestamp
+    /// has already been sent with the same key.
+    ///
+    /// This optimizes latency while potentially reducing bandwidth.
+    ///
+    /// Note that this doesn't cause re-ordering, but drops the samples for which a more recent timestamp has already
+    /// been observed with the same key.
+    Monotonic,
+    /// Holds back samples to only send the set of samples that had the highest timestamp for their key.
+    Latest,
+}
+
+/// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub enum QueryTarget {
+    BestMatching,
+    All,
+    AllComplete,
+    #[cfg(feature = "complete_n")]
+    Complete(ZInt),
+}
+
+impl Default for QueryTarget {
+    fn default() -> Self {
+        QueryTarget::BestMatching
+    }
+}
 
 /// # QueryBody
 ///

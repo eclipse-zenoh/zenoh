@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{QueryableInfo, SubInfo, WireExpr, ZInt};
+use crate::core::{Reliability, WireExpr, ZInt};
 
 /// ```text
 ///  7 6 5 4 3 2 1 0
@@ -183,6 +183,29 @@ impl ForgetPublisher {
     }
 }
 
+/// The subscription mode.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(u8)]
+pub enum SubMode {
+    Push,
+    Pull,
+}
+
+impl Default for SubMode {
+    #[inline]
+    fn default() -> Self {
+        SubMode::Push
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct SubInfo {
+    pub reliability: Reliability,
+    pub mode: SubMode,
+}
+
 /// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
@@ -203,7 +226,6 @@ pub struct Subscriber {
 impl Subscriber {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::core::{Reliability, SubMode};
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
@@ -246,6 +268,13 @@ impl ForgetSubscriber {
 
         Self { key }
     }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct QueryableInfo {
+    pub complete: ZInt, // Default 0: incomplete
+    pub distance: ZInt, // Default 0: no distance
 }
 
 /// ```text

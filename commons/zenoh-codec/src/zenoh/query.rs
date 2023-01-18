@@ -20,8 +20,8 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{ConsolidationMode, QueryTarget, WireExpr, ZInt},
-    zenoh::{zmsg, DataInfo, Query, QueryBody},
+    core::{WireExpr, ZInt},
+    zenoh::{zmsg, ConsolidationMode, DataInfo, Query, QueryBody, QueryTarget},
 };
 
 // QueryTarget

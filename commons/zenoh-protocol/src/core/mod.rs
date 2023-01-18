@@ -36,70 +36,27 @@ pub type AtomicZInt = AtomicU64;
 pub type NonZeroZInt = NonZeroU64;
 pub const ZINT_MAX_BYTES: usize = 10;
 
-// WhatAmI values
-pub type WhatAmI = whatami::WhatAmI;
-
 /// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami;
-
-/// A numerical Id mapped to a key expression.
-pub type ExprId = ZInt;
-
-pub const EMPTY_EXPR_ID: ExprId = 0;
+pub use whatami::*;
 
 pub mod wire_expr;
-pub use wire_expr::WireExpr;
+pub use wire_expr::*;
 
 mod encoding;
 pub use encoding::{Encoding, KnownEncoding};
 
 pub mod locator;
-pub use locator::Locator;
+pub use locator::*;
+
 pub mod endpoint;
-pub use endpoint::EndPoint;
+pub use endpoint::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Property {
     pub key: ZInt,
     pub value: Vec<u8>,
-}
-
-/// The kind of a `Sample`.
-#[repr(u8)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum SampleKind {
-    /// if the `Sample` was issued by a `put` operation.
-    Put = 0,
-    /// if the `Sample` was issued by a `delete` operation.
-    Delete = 1,
-}
-
-impl Default for SampleKind {
-    fn default() -> Self {
-        SampleKind::Put
-    }
-}
-
-impl fmt::Display for SampleKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SampleKind::Put => write!(f, "PUT"),
-            SampleKind::Delete => write!(f, "DELETE"),
-        }
-    }
-}
-
-impl TryFrom<ZInt> for SampleKind {
-    type Error = ZInt;
-    fn try_from(kind: ZInt) -> Result<Self, ZInt> {
-        match kind {
-            0 => Ok(SampleKind::Put),
-            1 => Ok(SampleKind::Delete),
-            _ => Err(kind),
-        }
-    }
 }
 
 /// The global unique id of a zenoh peer.
@@ -294,6 +251,42 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
     }
 }
 
+/// The kind of congestion control.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(u8)]
+pub enum CongestionControl {
+    Block,
+    Drop,
+}
+
+impl Default for CongestionControl {
+    fn default() -> CongestionControl {
+        CongestionControl::Drop
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+#[repr(u8)]
+pub enum Reliability {
+    BestEffort,
+    Reliable,
+}
+
+impl Default for Reliability {
+    fn default() -> Reliability {
+        Reliability::BestEffort
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct Channel {
+    pub priority: Priority,
+    pub reliability: Reliability,
+}
+
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
@@ -343,162 +336,5 @@ impl TryFrom<u8> for Priority {
                 Self::MIN as u8
             ),
         }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[repr(u8)]
-pub enum Reliability {
-    BestEffort,
-    Reliable,
-}
-
-impl Default for Reliability {
-    fn default() -> Reliability {
-        Reliability::BestEffort
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct Channel {
-    pub priority: Priority,
-    pub reliability: Reliability,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum ConduitSnList {
-    Plain(ConduitSn),
-    QoS(Box<[ConduitSn; Priority::NUM]>),
-}
-
-impl fmt::Display for ConduitSnList {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[ ")?;
-        match self {
-            ConduitSnList::Plain(sn) => {
-                write!(
-                    f,
-                    "{:?} {{ reliable: {}, best effort: {} }}",
-                    Priority::default(),
-                    sn.reliable,
-                    sn.best_effort
-                )?;
-            }
-            ConduitSnList::QoS(ref sns) => {
-                for (prio, sn) in sns.iter().enumerate() {
-                    let p: Priority = (prio as u8).try_into().unwrap();
-                    write!(
-                        f,
-                        "{:?} {{ reliable: {}, best effort: {} }}",
-                        p, sn.reliable, sn.best_effort
-                    )?;
-                    if p != Priority::Background {
-                        write!(f, ", ")?;
-                    }
-                }
-            }
-        }
-        write!(f, " ]")
-    }
-}
-
-/// The kind of reliability.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct ConduitSn {
-    pub reliable: ZInt,
-    pub best_effort: ZInt,
-}
-
-/// The kind of congestion control.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[repr(u8)]
-pub enum CongestionControl {
-    Block,
-    Drop,
-}
-
-impl Default for CongestionControl {
-    fn default() -> CongestionControl {
-        CongestionControl::Drop
-    }
-}
-
-/// The subscription mode.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[repr(u8)]
-pub enum SubMode {
-    Push,
-    Pull,
-}
-
-impl Default for SubMode {
-    #[inline]
-    fn default() -> Self {
-        SubMode::Push
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct SubInfo {
-    pub reliability: Reliability,
-    pub mode: SubMode,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct QueryableInfo {
-    pub complete: ZInt, // Default 0: incomplete
-    pub distance: ZInt, // Default 0: no distance
-}
-
-/// The kind of consolidation.
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum ConsolidationMode {
-    /// No consolidation applied: multiple samples may be received for the same key-timestamp.
-    None,
-    /// Monotonic consolidation immediately forwards samples, except if one with an equal or more recent timestamp
-    /// has already been sent with the same key.
-    ///
-    /// This optimizes latency while potentially reducing bandwidth.
-    ///
-    /// Note that this doesn't cause re-ordering, but drops the samples for which a more recent timestamp has already
-    /// been observed with the same key.
-    Monotonic,
-    /// Holds back samples to only send the set of samples that had the highest timestamp for their key.
-    Latest,
-}
-
-/// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum QueryTarget {
-    BestMatching,
-    All,
-    AllComplete,
-    #[cfg(feature = "complete_n")]
-    Complete(ZInt),
-}
-
-impl Default for QueryTarget {
-    fn default() -> Self {
-        QueryTarget::BestMatching
-    }
-}
-
-pub(crate) fn split_once(s: &str, c: char) -> (&str, &str) {
-    match s.find(c) {
-        Some(index) => {
-            let (l, r) = s.split_at(index);
-            (l, &r[1..])
-        }
-        None => (s, ""),
     }
 }

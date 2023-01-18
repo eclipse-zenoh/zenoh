@@ -56,10 +56,9 @@ use zenoh_core::{
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo,
-        WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+        AtomicZInt, Channel, CongestionControl, ExprId, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
     },
-    zenoh::{DataInfo, QueryBody, RoutingContext},
+    zenoh::{DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext, SubInfo},
 };
 use zenoh_util::core::AsyncResolve;
 

@@ -25,10 +25,10 @@ use zenoh_buffers::ZBuf;
 use zenoh_core::zread;
 use zenoh_protocol::{
     core::{
-        key_expr::OwnedKeyExpr, Channel, CongestionControl, Priority, Reliability, SubInfo,
-        SubMode, WhatAmI, WireExpr, ZInt, ZenohId,
+        key_expr::OwnedKeyExpr, Channel, CongestionControl, Priority, Reliability, WhatAmI,
+        WireExpr, ZInt, ZenohId,
     },
-    zenoh::{DataInfo, RoutingContext},
+    zenoh::{DataInfo, RoutingContext, SubInfo, SubMode},
 };
 use zenoh_sync::get_mut_unchecked;
 

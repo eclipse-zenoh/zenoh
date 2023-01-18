@@ -28,11 +28,13 @@ use zenoh_config::WhatAmI;
 use zenoh_core::Result as ZResult;
 use zenoh_protocol::{
     core::{
-        key_expr::OwnedKeyExpr, Channel, CongestionControl, ConsolidationMode, Encoding,
-        KnownEncoding, QueryTarget, QueryableInfo, SampleKind, SubInfo, WireExpr, ZInt, ZenohId,
-        EMPTY_EXPR_ID,
+        key_expr::OwnedKeyExpr, Channel, CongestionControl, Encoding, KnownEncoding, WireExpr,
+        ZInt, ZenohId, EMPTY_EXPR_ID,
     },
-    zenoh::{DataInfo, QueryBody, RoutingContext},
+    zenoh::{
+        ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext,
+        SampleKind, SubInfo,
+    },
 };
 use zenoh_transport::{Primitives, TransportUnicast};
 

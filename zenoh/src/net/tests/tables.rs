@@ -21,11 +21,13 @@ use zenoh_config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::{
-        key_expr::keyexpr, Channel, CongestionControl, ConsolidationMode, QueryTarget,
-        QueryableInfo, Reliability, SubInfo, SubMode, WhatAmI, WireExpr, ZInt, ZenohId,
-        EMPTY_EXPR_ID,
+        key_expr::keyexpr, Channel, CongestionControl, Reliability, WhatAmI, WireExpr, ZInt,
+        ZenohId, EMPTY_EXPR_ID,
     },
-    zenoh::{DataInfo, QueryBody, RoutingContext},
+    zenoh::{
+        ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext,
+        SubInfo, SubMode,
+    },
 };
 use zenoh_transport::{DummyPrimitives, Primitives};
 
