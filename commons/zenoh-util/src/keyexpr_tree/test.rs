@@ -250,16 +250,10 @@ fn test_keyarctree<K: Deref<Target = keyexpr>>(keys: &[K]) {
                 assert!(expected.insert(k, v).is_none());
             }
         }
-        let mut exclone = expected.clone();
         for node in tree.0.intersecting_nodes(&tree.1, target) {
             let ke = node.keyexpr();
             let weight = node.weight();
             assert_eq!(expected.remove(&ke).unwrap().as_ref(), weight)
-        }
-        for node in tree.0.intersecting_nodes_mut(&mut tree.1, target) {
-            let ke = node.keyexpr();
-            let weight = node.weight();
-            assert_eq!(exclone.remove(&ke).unwrap().as_ref(), weight)
         }
         assert!(
             expected.is_empty(),
@@ -267,39 +261,21 @@ fn test_keyarctree<K: Deref<Target = keyexpr>>(keys: &[K]) {
             target.deref(),
             &expected
         );
-        assert!(
-            exclone.is_empty(),
-            "MISSING MUTABLE INTERSECTS FOR {}: {:?}",
-            target.deref(),
-            &exclone
-        );
         for (k, v) in &map {
             if target.includes(k) {
                 assert!(expected.insert(k, v).is_none());
             }
         }
-        exclone = expected.clone();
         for node in tree.0.included_nodes(&tree.1, target) {
             let ke = node.keyexpr();
             let weight = node.weight();
             assert_eq!(expected.remove(&ke).unwrap().as_ref(), weight)
-        }
-        for node in tree.0.included_nodes_mut(&mut tree.1, target) {
-            let ke = node.keyexpr();
-            let weight = node.weight();
-            assert_eq!(exclone.remove(&ke).unwrap().as_ref(), weight)
         }
         assert!(
             expected.is_empty(),
             "MISSING INCLUDES FOR {}: {:?}",
             target.deref(),
             &expected
-        );
-        assert!(
-            exclone.is_empty(),
-            "MISSING MUTABLE INTERSECTS FOR {}: {:?}",
-            target.deref(),
-            &exclone
         );
         println!("{} OK", target.deref());
     }

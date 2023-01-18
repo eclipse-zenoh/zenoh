@@ -35,6 +35,7 @@ pub trait ITokenKeyExprTree<'a, Weight, Token> {
     type Node: IKeyExprTreeNode<Weight>;
     type NodeMut: IKeyExprTreeNodeMut<Weight>;
     fn node(&'a self, token: &'a Token, at: &keyexpr) -> Option<Self::Node>;
+    fn node_mut(&'a self, token: &'a mut Token, at: &keyexpr) -> Option<Self::NodeMut>;
     fn node_or_create(&'a self, token: &'a mut Token, at: &keyexpr) -> Self::NodeMut;
     type TreeIterItem;
     type TreeIter: Iterator<Item = Self::TreeIterItem>;

@@ -8,6 +8,8 @@ use token_cell::prelude::*;
 use crate::keyexpr_tree::*;
 use zenoh_protocol::core::key_expr::keyexpr;
 
+use super::box_tree::IterOrOption;
+
 pub struct KeArcTreeInner<
     Weight,
     Wildness: IWildness,
@@ -108,6 +110,10 @@ where
         }
         Some((node.as_node(), token))
     }
+    fn node_mut(&'a self, token: &'a mut Token, at: &keyexpr) -> Option<Self::NodeMut> {
+        self.node(unsafe { std::mem::transmute(&*token) }, at)
+            .map(|(node, _)| (node, token))
+    }
     fn node_or_create(&'a self, token: &'a mut Token, at: &keyexpr) -> Self::NodeMut {
         let Ok(inner) = self.inner.try_borrow_mut(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
         if at.is_wild() {
@@ -182,31 +188,41 @@ where
     }
 
     type IntersectionItem = Self::Node;
-    type Intersection = TokenPacker<
-        Intersection<
-            'a,
-            Children,
-            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
-            Weight,
+    type Intersection = IterOrOption<
+        TokenPacker<
+            Intersection<
+                'a,
+                Children,
+                Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+                Weight,
+            >,
+            &'a Token,
         >,
-        &'a Token,
+        Self::IntersectionItem,
     >;
     fn intersecting_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Intersection {
         let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
-        TokenPacker {
-            iter: Intersection::new(&inner.children, key),
-            token,
+        if inner.wildness.get() {
+            IterOrOption::Iter(TokenPacker {
+                iter: Intersection::new(&inner.children, key),
+                token,
+            })
+        } else {
+            IterOrOption::Opt(self.node(token, key))
         }
     }
     type IntersectionItemMut = Self::NodeMut;
-    type IntersectionMut = TokenPacker<
-        Intersection<
-            'a,
-            Children,
-            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
-            Weight,
+    type IntersectionMut = IterOrOption<
+        TokenPacker<
+            Intersection<
+                'a,
+                Children,
+                Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+                Weight,
+            >,
+            &'a mut Token,
         >,
-        &'a mut Token,
+        Self::IntersectionItemMut,
     >;
     fn intersecting_nodes_mut(
         &'a self,
@@ -214,44 +230,62 @@ where
         key: &'a keyexpr,
     ) -> Self::IntersectionMut {
         let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
-        TokenPacker {
-            iter: Intersection::new(unsafe { std::mem::transmute(&inner.children) }, key),
-            token,
+        if inner.wildness.get() {
+            IterOrOption::Iter(TokenPacker {
+                iter: Intersection::new(unsafe { std::mem::transmute(&inner.children) }, key),
+                token,
+            })
+        } else {
+            IterOrOption::Opt(self.node_mut(token, key))
         }
     }
 
     type InclusionItem = Self::Node;
-    type Inclusion = TokenPacker<
-        Inclusion<
-            'a,
-            Children,
-            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
-            Weight,
+    type Inclusion = IterOrOption<
+        TokenPacker<
+            Inclusion<
+                'a,
+                Children,
+                Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+                Weight,
+            >,
+            &'a Token,
         >,
-        &'a Token,
+        Self::InclusionItem,
     >;
     fn included_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Inclusion {
         let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
-        TokenPacker {
-            iter: Inclusion::new(&inner.children, key),
-            token,
+        if inner.wildness.get() {
+            IterOrOption::Iter(TokenPacker {
+                iter: Inclusion::new(&inner.children, key),
+                token,
+            })
+        } else {
+            IterOrOption::Opt(self.node(token, key))
         }
     }
     type InclusionItemMut = Self::NodeMut;
-    type InclusionMut = TokenPacker<
-        Inclusion<
-            'a,
-            Children,
-            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
-            Weight,
+    type InclusionMut = IterOrOption<
+        TokenPacker<
+            Inclusion<
+                'a,
+                Children,
+                Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+                Weight,
+            >,
+            &'a mut Token,
         >,
-        &'a mut Token,
+        Self::InclusionItemMut,
     >;
     fn included_nodes_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::InclusionMut {
         let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
-        TokenPacker {
-            iter: Inclusion::new(unsafe { std::mem::transmute(&inner.children) }, key),
-            token,
+        if inner.wildness.get() {
+            IterOrOption::Iter(TokenPacker {
+                iter: Inclusion::new(unsafe { std::mem::transmute(&inner.children) }, key),
+                token,
+            })
+        } else {
+            IterOrOption::Opt(self.node_mut(token, key))
         }
     }
 }

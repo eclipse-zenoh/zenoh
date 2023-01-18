@@ -257,6 +257,11 @@ where
 trait Coerce<Into> {
     fn coerce(self) -> Into;
 }
+impl<T> Coerce<T> for T {
+    fn coerce(self) -> T {
+        self
+    }
+}
 impl<'a, T> Coerce<&'a T> for &'a Box<T> {
     fn coerce(self) -> &'a T {
         self.deref()
