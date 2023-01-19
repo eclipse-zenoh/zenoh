@@ -13,6 +13,8 @@
 //
 pub mod attachment;
 pub use attachment::*;
+pub mod extension;
+pub use extension::*;
 
 /*************************************/
 /*               IDS                 */
@@ -54,19 +56,19 @@ pub mod imsg {
     pub const HEADER_BITS: u8 = 5;
     pub const HEADER_MASK: u8 = !(0xff << HEADER_BITS);
 
-    pub fn mid(header: u8) -> u8 {
+    pub const fn mid(header: u8) -> u8 {
         header & HEADER_MASK
     }
 
-    pub fn flags(header: u8) -> u8 {
+    pub const fn flags(header: u8) -> u8 {
         header & !HEADER_MASK
     }
 
-    pub fn has_flag(byte: u8, flag: u8) -> bool {
+    pub const fn has_flag(byte: u8, flag: u8) -> bool {
         byte & flag != 0
     }
 
-    pub fn has_option(options: ZInt, flag: ZInt) -> bool {
+    pub const fn has_option(options: ZInt, flag: ZInt) -> bool {
         options & flag != 0
     }
 }
