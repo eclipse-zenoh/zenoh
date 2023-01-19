@@ -69,20 +69,17 @@ where
                     macro_rules! push {
                         ($index: expr) => {
                             let index = $index;
-                            if new_end == new_start
-                                || self.ke_indices[new_start..new_end]
-                                    .iter()
-                                    .rev()
-                                    .all(|c| *c < index)
-                            {
+                            if new_end == new_start || self.ke_indices[new_end - 1] < index {
                                 self.ke_indices.push(index);
                                 new_end += 1;
                             }
                         };
                     }
                     let chunk = node.chunk();
-                    if unlikely(chunk == "**") {
+                    if unlikely(chunk.as_bytes() == b"**") {
+                        // If the current node is `**`, it is guaranteed to match
                         node_matches = true;
+                        // and may consume any number of chunks from the KE
                         push!(self.ke_indices[*start]);
                         for i in self.ke_indices[*start]..self.key.len() {
                             if self.key.as_bytes()[i] == b'/' {
@@ -90,19 +87,26 @@ where
                             }
                         }
                     } else {
+                        // The current node is not `**`
+                        // For all candidate chunks of the KE
                         for i in *start..*end {
+                            // construct that chunk, while checking whether or not it's the last one
                             let kec_start = self.ke_indices[i];
-                            if kec_start == self.key.len() {
+                            if unlikely(kec_start == self.key.len()) {
                                 break;
                             }
                             let key = &self.key.as_bytes()[kec_start..];
                             match key.iter().position(|&c| c == b'/') {
                                 Some(kec_end) => {
+                                    // If we aren't in the last chunk
                                     let subkey =
                                         unsafe { keyexpr::from_slice_unchecked(&key[..kec_end]) };
-                                    if unlikely(subkey == "**") {
+                                    if unlikely(subkey.as_bytes() == b"**") {
+                                        // If the chunk is `**`:
+                                        // children will have to process it again
                                         push!(kec_start);
-                                        push!(kec_start + kec_end + 1);
+                                        // and we need to process this chunk as if the `**` wasn't there,
+                                        // but with the knowledge that the next chunk won't be `**`.
                                         let post_key = &key[kec_end + 1..];
                                         match post_key.iter().position(|&c| c == b'/') {
                                             Some(sec_end) => {
@@ -130,11 +134,15 @@ where
                                     }
                                 }
                                 None => {
+                                    // If it's the last chunk of the query, check whether it's `**`
                                     let key = unsafe { keyexpr::from_slice_unchecked(key) };
-                                    if unlikely(key == "**") {
+                                    if unlikely(key.as_bytes() == b"**") {
+                                        // If yes, it automatically matches, and must be reused from now on for iteration.
                                         push!(kec_start);
                                         node_matches = true;
                                     } else if chunk.intersects(key) {
+                                        // else, if it intersects with the chunk, make sure the children of the node
+                                        // are searched for `**`
                                         push!(self.key.len());
                                         node_matches = true;
                                     }
@@ -142,13 +150,16 @@ where
                             }
                         }
                     }
+                    // If new progress points have been set
                     if new_end != new_start {
+                        // Check if any of them is `**`, as this would mean a match
                         for &i in &self.ke_indices[new_start..new_end] {
                             if &self.key.as_bytes()[i..] == b"**" {
                                 node_matches = true;
                                 break;
                             }
                         }
+                        // Prepare the next children
                         let iterator = unsafe { node.as_node().__children() }.children();
                         self.iterators.push(StackFrame {
                             iterator,
@@ -157,6 +168,7 @@ where
                             _marker: Default::default(),
                         })
                     }
+                    // yield the node if a match was found
                     if node_matches {
                         return Some(node.as_node());
                     }

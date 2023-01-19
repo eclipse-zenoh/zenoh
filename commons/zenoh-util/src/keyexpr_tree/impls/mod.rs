@@ -25,7 +25,7 @@ impl<I: Iterator, F: IFilter<<I as Iterator>::Item>> Iterator for FilterMap<I, F
     type Item = F::O;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while let Some(next) = self.iter.next() {
+        for next in self.iter.by_ref() {
             if let Some(output) = self.filter.filter_map(next) {
                 return Some(output);
             }
@@ -37,7 +37,7 @@ pub struct Intersection<'a>(pub &'a keyexpr);
 impl<K: std::ops::Deref<Target = keyexpr>, V> IFilter<(&K, V)> for Intersection<'_> {
     type O = V;
     fn filter_map(&self, (k, v): (&K, V)) -> Option<Self::O> {
-        self.0.intersects(&*k).then_some(v)
+        self.0.intersects(k).then_some(v)
     }
 }
 
@@ -59,7 +59,7 @@ pub struct Inclusion<'a>(pub &'a keyexpr);
 impl<K: std::ops::Deref<Target = keyexpr>, V> IFilter<(&K, V)> for Inclusion<'_> {
     type O = V;
     fn filter_map(&self, (k, v): (&K, V)) -> Option<Self::O> {
-        self.0.includes(&*k).then_some(v)
+        self.0.includes(k).then_some(v)
     }
 }
 

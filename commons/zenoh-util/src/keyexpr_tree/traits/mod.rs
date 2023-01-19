@@ -75,6 +75,8 @@ pub trait IKeyExprTreeNode<Weight>: UIKeyExprTreeNode<Weight> {
         unsafe { self.__children() }
     }
 }
+
+#[doc(hidden)]
 pub trait UIKeyExprTreeNode<Weight> {
     type Parent;
     unsafe fn __parent(&self) -> Option<&Self::Parent>;

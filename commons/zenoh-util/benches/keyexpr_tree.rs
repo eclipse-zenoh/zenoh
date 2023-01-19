@@ -27,7 +27,7 @@ impl Averager {
 }
 
 fn main() {
-    for total in [10, 100, 1000, 10000] {
+    for &total in &[10, 100, 1000, 10000][2..] {
         for (wildness, no_double_stars) in [(0., true), (0.1, true), (0.1, false)] {
             let mut intersections = Averager::default();
             let results = Benchmarker::benchmark(|b| {
@@ -48,7 +48,7 @@ fn main() {
                 }
                 for key in keys.iter() {
                     b.run_once("ketree_fetch", || ketree.node(key));
-                    b.run_once("kearctree_fetch", || kearctree.node(&mut token, key));
+                    b.run_once("kearctree_fetch", || kearctree.node(&token, key));
                     b.run_once("vectree_fetch", || vectree.node(key));
                     b.run_once("hashtree_fetch", || hashtree.node(key));
                     b.run_once("hashmap_fetch", || map.get(key));
@@ -86,24 +86,24 @@ fn main() {
             for name in [
                 "ketree_insert",
                 "kearctree_insert",
-                "vectree_insert",
-                "hashtree_insert",
-                "hashmap_insert",
+                // "vectree_insert",
+                // "hashtree_insert",
+                // "hashmap_insert",
                 "ketree_fetch",
                 "kearctree_fetch",
-                "vectree_fetch",
-                "hashtree_fetch",
-                "hashmap_fetch",
+                // "vectree_fetch",
+                // "hashtree_fetch",
+                // "hashmap_fetch",
                 "ketree_intersect",
                 "kearctree_intersect",
-                "vectree_intersect",
-                "hashtree_intersect",
-                "hashmap_intersect",
+                // "vectree_intersect",
+                // "hashtree_intersect",
+                // "hashmap_intersect",
                 "ketree_include",
                 "kearctree_include",
-                "vectree_include",
-                "hashtree_include",
-                "hashmap_include",
+                // "vectree_include",
+                // "hashtree_include",
+                // "hashmap_include",
             ] {
                 let b = results.benches.get(name).unwrap();
                 let stats = b.full_stats();

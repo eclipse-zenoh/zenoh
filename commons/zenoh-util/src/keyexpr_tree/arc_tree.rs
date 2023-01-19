@@ -76,6 +76,7 @@ impl<
     }
 }
 
+#[allow(clippy::type_complexity)]
 impl<
         'a,
         Weight: 'a,
@@ -106,7 +107,7 @@ where
             let as_node: &Arc<
                 TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>,
             > = node.as_node();
-            node = unsafe { (&*as_node.get()).children.child_at(chunk)? };
+            node = unsafe { (*as_node.get()).children.child_at(chunk)? };
         }
         Some((node.as_node(), token))
     }
@@ -142,7 +143,7 @@ where
                 TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>,
             > = node.as_node();
             node = unsafe {
-                (&mut *as_node.get())
+                (*as_node.get())
                     .children
                     .entry(chunk)
                     .get_or_insert_with(|k| construct_node(k, Some(Arc::downgrade(as_node))))
@@ -337,6 +338,7 @@ impl<T> IArc<T> for Weak<T> {
     }
 }
 
+#[allow(clippy::type_complexity)]
 pub struct KeArcTreeNode<
     Weight,
     Parent: IArcProvider,
