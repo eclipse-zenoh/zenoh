@@ -42,7 +42,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -54,13 +54,15 @@ use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, S
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo,
-        WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+        Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt,
+        ZenohId, EMPTY_EXPR_ID,
     },
     zenoh::{DataInfo, QueryBody, RoutingContext},
 };
 use zenoh_result::ZResult;
 use zenoh_util::core::AsyncResolve;
+
+pub type AtomicZInt = AtomicU64;
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;

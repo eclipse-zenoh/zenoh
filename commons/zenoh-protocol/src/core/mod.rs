@@ -25,7 +25,6 @@ use core::{
     hash::{Hash, Hasher},
     num::NonZeroU64,
     str::FromStr,
-    sync::atomic::AtomicU64,
 };
 use key_expr::OwnedKeyExpr;
 pub use uhlc::{Timestamp, NTP64};
@@ -38,7 +37,6 @@ pub type TimestampId = uhlc::ID;
 /// A zenoh integer.
 pub type ZInt = u64;
 pub type ZiInt = i64;
-pub type AtomicZInt = AtomicU64;
 pub type NonZeroZInt = NonZeroU64;
 pub const ZINT_MAX_BYTES: usize = 10;
 
@@ -148,26 +146,31 @@ impl From<uuid::Uuid> for ZenohId {
     }
 }
 
-#[cfg(not(feature = "std"))]
+// Mimics uhlc::SizeError,
 #[derive(Debug, Clone, Copy)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct UhlcSizeError(uhlc::SizeError);
+pub struct SizeError(usize);
 
+#[cfg(feature = "std")]
+impl std::error::Error for SizeError {}
 #[cfg(not(feature = "std"))]
-impl zenoh_result::IError for UhlcSizeError {}
+impl zenoh_result::IError for SizeError {}
 
-#[cfg(not(feature = "std"))]
-impl core::ops::Deref for UhlcSizeError {
-    type Target = uhlc::SizeError;
-    fn deref(&self) -> &Self::Target {
-        &self.0
+impl From<uhlc::SizeError> for SizeError {
+    fn from(val: uhlc::SizeError) -> Self {
+        Self(val.0)
     }
 }
 
-#[cfg(not(feature = "std"))]
-impl fmt::Display for UhlcSizeError {
+// Taken from uhlc::SizeError
+impl fmt::Display for SizeError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        self.0.fmt(f)
+        write!(
+            f,
+            "Maximum ID size ({} bytes) exceeded: {}",
+            uhlc::ID::MAX_SIZE,
+            self.0
+        )
     }
 }
 
@@ -176,12 +179,9 @@ macro_rules! derive_tryfrom {
         impl TryFrom<$T> for ZenohId {
             type Error = zenoh_result::Error;
             fn try_from(val: $T) -> Result<Self, Self::Error> {
-                #[cfg(feature = "std")]
-                return Ok(Self(val.try_into()?));
-                #[cfg(not(feature = "std"))]
                 return match val.try_into() {
                     Ok(ok) => Ok(Self(ok)),
-                    Err(err) => Err(Box::new(UhlcSizeError(err))),
+                    Err(err) => Err(Box::<SizeError>::new(err.into())),
                 };
             }
         }
