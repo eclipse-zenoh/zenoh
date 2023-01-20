@@ -192,7 +192,7 @@ fn codec_extension() {
                 assert!(!reader.can_read());
 
                 assert_eq!(x.0, &y.0);
-                assert_eq!(more, y.1);
+                assert_eq!(x.1, y.1);
             }
         };
     }
