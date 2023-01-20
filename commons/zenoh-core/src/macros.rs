@@ -113,17 +113,6 @@ macro_rules! zasyncrecv {
     };
 }
 
-// This macro checks the boolean results of an operation and returns in case
-// the result is false. Basically, it implements the ? operator for booleans
-// #[macro_export]
-// macro_rules! zcheck {
-//     ($op:expr) => {
-//         if !$op {
-//             return false;
-//         }
-//     };
-// }
-
 // This macro allows to define some compile time configurable static constants
 #[macro_export]
 macro_rules! zconfigurable {
