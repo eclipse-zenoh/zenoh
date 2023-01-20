@@ -32,3 +32,4 @@ description = "Internal crate for zenoh."
 async-std = { workspace = true, default-features = true }
 lazy_static = { workspace = true }
 zenoh-macros = { path = "../zenoh-macros/" }
+zenoh-result = { path = "../zenoh-result/" }
