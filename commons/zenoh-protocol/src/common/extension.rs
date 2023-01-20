@@ -62,12 +62,17 @@ pub mod iext {
     pub const FLAG_Z: u8 = 1 << 7;
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ZExtUnit<const ID: u8>;
 
 impl<const ID: u8> ZExtUnit<{ ID }> {
     pub fn new() -> Self {
         Self
+    }
+
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        Self::new()
     }
 }
 
@@ -80,6 +85,15 @@ impl<const ID: u8> ZExtZInt<{ ID }> {
     pub fn new(value: ZInt) -> Self {
         Self { value }
     }
+
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let value: ZInt = rng.gen();
+        Self { value }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -89,6 +103,15 @@ pub struct ZExtZBuf<const ID: u8> {
 
 impl<const ID: u8> ZExtZBuf<{ ID }> {
     pub fn new(value: ZBuf) -> Self {
+        Self { value }
+    }
+
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let value = ZBuf::rand(rng.gen_range(8..=64));
         Self { value }
     }
 }
@@ -104,4 +127,23 @@ pub enum ZExtensionBody {
     Unit,
     ZInt(ZInt),
     ZBuf(ZBuf),
+}
+
+impl ZExtUnknown {
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::{seq::SliceRandom, Rng};
+
+        let mut rng = rand::thread_rng();
+        let id: u8 = rng.gen_range(0x00..=iext::ID_MASK);
+        let body = [
+            ZExtensionBody::Unit,
+            ZExtensionBody::ZInt(rng.gen()),
+            ZExtensionBody::ZBuf(ZBuf::rand(rng.gen_range(8..=64))),
+        ]
+        .choose(&mut rng)
+        .unwrap()
+        .clone();
+        Self { id, body }
+    }
 }

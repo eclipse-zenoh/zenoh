@@ -173,6 +173,37 @@ fn codec_attachment() {
     run!(Attachment, Attachment::rand());
 }
 
+#[test]
+fn codec_extension() {
+    macro_rules! run_extension {
+        ($ext:ty) => {
+            let codec = Zenoh060::default();
+            let mut buff = ZBuf::default();
+            for _ in 0..NUM_ITER {
+                let more: bool = thread_rng().gen();
+
+                let x: (&$ext, bool) = (&<$ext>::rand(), more);
+
+                buff.clear();
+                let mut writer = buff.writer();
+                codec.write(&mut writer, x).unwrap();
+
+                let mut reader = buff.reader();
+                let y: ($ext, bool) = codec.read(&mut reader).unwrap();
+                assert!(!reader.can_read());
+
+                assert_eq!(x.0, &y.0);
+                assert_eq!(more, y.1);
+            }
+        };
+    }
+
+    run_extension!(ZExtUnit<0>);
+    run_extension!(ZExtZInt<1>);
+    run_extension!(ZExtZBuf<2>);
+    run_extension!(ZExtUnknown);
+}
+
 // Scouting
 #[test]
 fn codec_hello() {

@@ -11,74 +11,76 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Condition};
+use crate::{RCodec, WCodec, Zenoh060};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
     ZBuf,
 };
 use zenoh_protocol::{
-    common::{iext, ZExtUnit, ZExtUnknown, ZExtZBuf, ZExtZInt, ZExtensionBody},
+    common::{iext, imsg::has_flag, ZExtUnit, ZExtUnknown, ZExtZBuf, ZExtZInt, ZExtensionBody},
     core::ZInt,
 };
 
-impl<const ID: u8, W> WCodec<&ZExtUnit<{ ID }>, &mut W> for Zenoh060Condition
+impl<const ID: u8, W> WCodec<(&ZExtUnit<{ ID }>, bool), &mut W> for Zenoh060
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, _x: &ZExtUnit<{ ID }>) -> Self::Output {
+    fn write(self, writer: &mut W, x: (&ZExtUnit<{ ID }>, bool)) -> Self::Output {
+        let (_x, more) = x;
         let mut header: u8 = ID | iext::ENC_UNIT;
-        if self.condition {
+        if more {
             header |= iext::FLAG_Z;
         }
-        self.codec.write(&mut *writer, header)?;
+        self.write(&mut *writer, header)?;
         Ok(())
     }
 }
 
-impl<const ID: u8, R> RCodec<ZExtUnit<{ ID }>, &mut R> for Zenoh060
+impl<const ID: u8, R> RCodec<(ZExtUnit<{ ID }>, bool), &mut R> for Zenoh060
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<ZExtUnit<{ ID }>, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<(ZExtUnit<{ ID }>, bool), Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
 
         if (header & iext::ID_MASK != ID) || (header & iext::ENC_MASK != iext::ENC_UNIT) {
             return Err(DidntRead);
         }
 
-        Ok(ZExtUnit::new())
+        Ok((ZExtUnit::new(), has_flag(header, iext::FLAG_Z)))
     }
 }
 
-impl<const ID: u8, W> WCodec<&ZExtZInt<{ ID }>, &mut W> for Zenoh060Condition
+impl<const ID: u8, W> WCodec<(&ZExtZInt<{ ID }>, bool), &mut W> for Zenoh060
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &ZExtZInt<{ ID }>) -> Self::Output {
+    fn write(self, writer: &mut W, x: (&ZExtZInt<{ ID }>, bool)) -> Self::Output {
+        let (x, more) = x;
         let mut header: u8 = ID | iext::ENC_ZINT;
-        if self.condition {
+        if more {
             header |= iext::FLAG_Z;
         }
-        self.codec.write(&mut *writer, header)?;
-        self.codec.write(&mut *writer, x.value)?;
+        self.write(&mut *writer, header)?;
+        self.write(&mut *writer, x.value)?;
         Ok(())
     }
 }
 
-impl<const ID: u8, R> RCodec<ZExtZInt<{ ID }>, &mut R> for Zenoh060
+impl<const ID: u8, R> RCodec<(ZExtZInt<{ ID }>, bool), &mut R> for Zenoh060
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<ZExtZInt<{ ID }>, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<(ZExtZInt<{ ID }>, bool), Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
 
         if (header & iext::ID_MASK != ID) || (header & iext::ENC_MASK != iext::ENC_ZINT) {
@@ -87,34 +89,35 @@ where
 
         let value: ZInt = self.read(&mut *reader)?;
 
-        Ok(ZExtZInt::new(value))
+        Ok((ZExtZInt::new(value), has_flag(header, iext::FLAG_Z)))
     }
 }
 
-impl<const ID: u8, W> WCodec<&ZExtZBuf<{ ID }>, &mut W> for Zenoh060Condition
+impl<const ID: u8, W> WCodec<(&ZExtZBuf<{ ID }>, bool), &mut W> for Zenoh060
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &ZExtZBuf<{ ID }>) -> Self::Output {
+    fn write(self, writer: &mut W, x: (&ZExtZBuf<{ ID }>, bool)) -> Self::Output {
+        let (x, more) = x;
         let mut header: u8 = ID | iext::ENC_ZINT;
-        if self.condition {
+        if more {
             header |= iext::FLAG_Z;
         }
-        self.codec.write(&mut *writer, header)?;
-        self.codec.write(&mut *writer, &x.value)?;
+        self.write(&mut *writer, header)?;
+        self.write(&mut *writer, &x.value)?;
         Ok(())
     }
 }
 
-impl<const ID: u8, R> RCodec<ZExtZBuf<{ ID }>, &mut R> for Zenoh060
+impl<const ID: u8, R> RCodec<(ZExtZBuf<{ ID }>, bool), &mut R> for Zenoh060
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<ZExtZBuf<{ ID }>, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<(ZExtZBuf<{ ID }>, bool), Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
 
         if (header & iext::ID_MASK != ID) || (header & iext::ENC_MASK != iext::ENC_ZINT) {
@@ -123,48 +126,49 @@ where
 
         let value: ZBuf = self.read(&mut *reader)?;
 
-        Ok(ZExtZBuf::new(value))
+        Ok((ZExtZBuf::new(value), has_flag(header, iext::FLAG_Z)))
     }
 }
 
-impl<W> WCodec<&ZExtUnknown, &mut W> for Zenoh060Condition
+impl<W> WCodec<(&ZExtUnknown, bool), &mut W> for Zenoh060
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &ZExtUnknown) -> Self::Output {
+    fn write(self, writer: &mut W, x: (&ZExtUnknown, bool)) -> Self::Output {
+        let (x, more) = x;
         let mut header: u8 = x.id;
-        if self.condition {
+        if more {
             header |= iext::FLAG_Z;
         }
         match &x.body {
             ZExtensionBody::Unit => {
                 header |= iext::ENC_UNIT;
-                self.codec.write(&mut *writer, header)?
+                self.write(&mut *writer, header)?
             }
             ZExtensionBody::ZInt(zint) => {
                 header |= iext::ENC_ZINT;
-                self.codec.write(&mut *writer, header)?;
-                self.codec.write(&mut *writer, zint)?
+                self.write(&mut *writer, header)?;
+                self.write(&mut *writer, zint)?
             }
             ZExtensionBody::ZBuf(zbuf) => {
                 header |= iext::ENC_ZBUF;
-                self.codec.write(&mut *writer, header)?;
-                self.codec.write(&mut *writer, zbuf)?
+                self.write(&mut *writer, header)?;
+                self.write(&mut *writer, zbuf)?
             }
         }
         Ok(())
     }
 }
 
-impl<R> RCodec<ZExtUnknown, &mut R> for Zenoh060
+impl<R> RCodec<(ZExtUnknown, bool), &mut R> for Zenoh060
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<ZExtUnknown, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<(ZExtUnknown, bool), Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
 
         let body = match header & iext::ENC_MASK {
@@ -180,9 +184,12 @@ where
             _ => return Err(DidntRead),
         };
 
-        Ok(ZExtUnknown {
-            id: header & iext::ID_MASK,
-            body,
-        })
+        Ok((
+            ZExtUnknown {
+                id: header & iext::ID_MASK,
+                body,
+            },
+            has_flag(header, iext::FLAG_Z),
+        ))
     }
 }
