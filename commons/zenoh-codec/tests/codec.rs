@@ -175,26 +175,41 @@ fn codec_attachment() {
 
 #[test]
 fn codec_extension() {
-    macro_rules! run_extension {
-        ($ext:ty) => {
+    macro_rules! run_extension_single {
+        ($ext:ty, $buff:expr) => {
             let codec = Zenoh060::default();
-            let mut buff = ZBuf::default();
             for _ in 0..NUM_ITER {
                 let more: bool = thread_rng().gen();
 
                 let x: (&$ext, bool) = (&<$ext>::rand(), more);
 
-                buff.clear();
-                let mut writer = buff.writer();
+                $buff.clear();
+                let mut writer = $buff.writer();
                 codec.write(&mut writer, x).unwrap();
 
-                let mut reader = buff.reader();
+                let mut reader = $buff.reader();
                 let y: ($ext, bool) = codec.read(&mut reader).unwrap();
                 assert!(!reader.can_read());
 
                 assert_eq!(x.0, &y.0);
                 assert_eq!(more, y.1);
             }
+        };
+    }
+
+    macro_rules! run_extension {
+        ($type:ty) => {
+            println!("Vec<u8>: codec {}", std::any::type_name::<$type>());
+            let mut buff = vec![];
+            run_extension_single!($type, buff);
+
+            println!("BBuf: codec {}", std::any::type_name::<$type>());
+            let mut buff = BBuf::with_capacity(u16::MAX as usize);
+            run_extension_single!($type, buff);
+
+            println!("ZBuf: codec {}", std::any::type_name::<$type>());
+            let mut buff = ZBuf::default();
+            run_extension_single!($type, buff);
         };
     }
 
