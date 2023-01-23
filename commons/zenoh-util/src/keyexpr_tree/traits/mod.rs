@@ -59,7 +59,7 @@ pub trait ITokenKeyExprTree<'a, Weight, Token> {
     type InclusionItemMut;
     type InclusionMut: Iterator<Item = Self::InclusionItemMut>;
     fn included_nodes_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::InclusionMut;
-    type PruneNode;
+    type PruneNode: IKeyExprTreeNodeMut<Weight>;
     fn prune_where<F: FnMut(&mut Self::PruneNode) -> bool>(&self, token: &mut Token, predicate: F);
 }
 
@@ -254,3 +254,17 @@ pub trait IKeyExprTreeExtMut<'a, Weight>: IKeyExprTreeMut<'a, Weight> {
 
 impl<'a, Weight, T: IKeyExprTree<'a, Weight>> IKeyExprTreeExt<'a, Weight> for T {}
 impl<'a, Weight, T: IKeyExprTreeMut<'a, Weight>> IKeyExprTreeExtMut<'a, Weight> for T {}
+
+pub trait ITokenKeyExprTreeExt<'a, Weight, Token>: ITokenKeyExprTree<'a, Weight, Token> {
+    fn insert(&'a self, token: &'a mut Token, at: &keyexpr, weight: Weight) -> Option<Weight> {
+        self.node_or_create(token, at).insert_weight(weight)
+    }
+
+    fn prune(&self, token: &mut Token) {
+        self.prune_where(token, |node| node.weight().is_none())
+    }
+}
+impl<'a, Weight, Token, T: ITokenKeyExprTree<'a, Weight, Token>>
+    ITokenKeyExprTreeExt<'a, Weight, Token> for T
+{
+}

@@ -8,7 +8,7 @@ use zenoh_protocol::core::key_expr::{fuzzer::KeyExprFuzzer, OwnedKeyExpr};
 use zenoh_util::keyexpr_tree::{
     arc_tree::KeArcTree,
     impls::{HashMapProvider, VecSetProvider},
-    IKeyExprTree, IKeyExprTreeExtMut, IKeyExprTreeNodeMut, ITokenKeyExprTree, KeBoxTree,
+    IKeyExprTree, IKeyExprTreeExtMut, ITokenKeyExprTree, ITokenKeyExprTreeExt, KeBoxTree,
 };
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -40,7 +40,7 @@ fn main() {
                 for key in keys.iter() {
                     b.run_once("ketree_insert", || ketree.insert(key, 0));
                     b.run_once("kearctree_insert", || {
-                        kearctree.node_or_create(&mut token, key).insert_weight(0);
+                        kearctree.insert(&mut token, key, 0);
                     });
                     b.run_once("vectree_insert", || vectree.insert(key, 0));
                     b.run_once("hashtree_insert", || hashtree.insert(key, 0));

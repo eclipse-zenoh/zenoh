@@ -81,9 +81,7 @@ fn insert_kearctree<'a, K: TryInto<&'a keyexpr>, V: Clone + PartialEq + Debug + 
         map.entry(subkey).or_default();
     }
     assert_eq!(
-        ketree
-            .node_or_create(token, key)
-            .insert_weight(value.clone()),
+        ketree.insert(token, key, value.clone()),
         map.insert(key.into(), Some(value)).flatten()
     )
 }
