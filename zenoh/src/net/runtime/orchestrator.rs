@@ -194,7 +194,7 @@ impl Runtime {
                 let this = self.clone();
                 match (listen, autoconnect.is_empty()) {
                     (true, false) => {
-                        async_std::task::spawn(async move {
+                        self.spawn(async move {
                             async_std::prelude::FutureExt::race(
                                 this.responder(&mcast_socket, &sockets),
                                 this.connect_all(&sockets, autoconnect, &addr),
@@ -203,14 +203,14 @@ impl Runtime {
                         });
                     }
                     (true, true) => {
-                        async_std::task::spawn(async move {
+                        self.spawn(async move {
                             this.responder(&mcast_socket, &sockets).await;
                         });
                     }
                     (false, false) => {
-                        async_std::task::spawn(async move {
-                            this.connect_all(&sockets, autoconnect, &addr).await
-                        });
+                        self.spawn(
+                            async move { this.connect_all(&sockets, autoconnect, &addr).await },
+                        );
                     }
                     _ => {}
                 }
