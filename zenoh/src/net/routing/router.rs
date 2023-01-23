@@ -19,7 +19,9 @@ pub use super::resource::*;
 use super::runtime::Runtime;
 use async_std::task::JoinHandle;
 use std::any::Any;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
+use std::hash::Hasher;
 use std::sync::{Arc, Weak};
 use std::sync::{Mutex, RwLock};
 use std::time::Duration;
@@ -37,6 +39,31 @@ use zenoh_sync::get_mut_unchecked;
 
 zconfigurable! {
     static ref TREES_COMPUTATION_DELAY: u64 = 100;
+}
+
+pub(crate) struct RoutingExpr<'a> {
+    pub(crate) prefix: &'a Arc<Resource>,
+    pub(crate) suffix: &'a str,
+    full: Option<String>,
+}
+
+impl<'a> RoutingExpr<'a> {
+    #[inline]
+    pub(crate) fn new(prefix: &'a Arc<Resource>, suffix: &'a str) -> Self {
+        RoutingExpr {
+            prefix,
+            suffix,
+            full: None,
+        }
+    }
+
+    #[inline]
+    pub(crate) fn full_expr(&mut self) -> &str {
+        if self.full.is_none() {
+            self.full = Some(self.prefix.expr() + self.suffix);
+        }
+        self.full.as_ref().unwrap()
+    }
 }
 
 pub struct Tables {
@@ -150,6 +177,55 @@ impl Tables {
     }
 
     #[inline]
+    pub(crate) fn get_router_links(&self, peer: ZenohId) -> impl Iterator<Item = &ZenohId> + '_ {
+        self.peers_net
+            .as_ref()
+            .unwrap()
+            .get_links(peer)
+            .iter()
+            .filter(move |nid| {
+                if let Some(node) = self.routers_net.as_ref().unwrap().get_node(nid) {
+                    node.whatami.unwrap_or(WhatAmI::Router) == WhatAmI::Router
+                } else {
+                    false
+                }
+            })
+    }
+
+    #[inline]
+    pub(crate) fn elect_router<'a>(
+        &'a self,
+        key_expr: &str,
+        mut routers: impl Iterator<Item = &'a ZenohId>,
+    ) -> &'a ZenohId {
+        match routers.next() {
+            None => &self.zid,
+            Some(router) => {
+                let hash = |r: &ZenohId| {
+                    let mut hasher = DefaultHasher::new();
+                    for b in key_expr.as_bytes() {
+                        hasher.write_u8(*b);
+                    }
+                    for b in r.as_slice() {
+                        hasher.write_u8(*b);
+                    }
+                    hasher.finish()
+                };
+                let mut res = router;
+                let mut h = None;
+                for router2 in routers {
+                    let h2 = hash(router2);
+                    if h2 > *h.get_or_insert_with(|| hash(res)) {
+                        res = router2;
+                        h = Some(h2);
+                    }
+                }
+                res
+            }
+        }
+    }
+
+    #[inline]
     pub(crate) fn failover_brokering_to(source_links: &[ZenohId], dest: ZenohId) -> bool {
         // if source_links is empty then gossip is probably disabled in source peer
         !source_links.is_empty() && !source_links.contains(&dest)
@@ -161,7 +237,7 @@ impl Tables {
             && self
                 .peers_net
                 .as_ref()
-                .map(|net| Tables::failover_brokering_to(&net.get_links(peer1), peer2))
+                .map(|net| Tables::failover_brokering_to(net.get_links(peer1), peer2))
                 .unwrap_or(false)
     }
 
