@@ -23,6 +23,7 @@ pub use macros::*;
 use std::future::{Future, Ready};
 pub use zenoh_macros::*;
 pub use zenoh_result::*;
+pub use zenoh_result::ZResult as Result;
 
 pub trait Resolvable {
     type To: Sized + Send;
