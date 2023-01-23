@@ -133,8 +133,7 @@ tide = "0.16.0"
 tokio = { version = "1.23.1", default-features = false } # Default features are disabled due to some crates' requirements
 tokio-tungstenite = "0.18.0"
 typenum = "1.15.0"
-uhlc = { git = "https://github.com/atolab/uhlc-rs.git", default-features = false } # TODO: Using github source until the no_std update gets released on crates.io
-                                                                                   # Default features are disabled due to usage in no_std crates
+uhlc = { version = "0.5.2", default-features = false } # Default features are disabled due to usage in no_std crates
 unzip-n = "0.1.2"
 url = "2.3.1"
 urlencoding = "2.1.2"
