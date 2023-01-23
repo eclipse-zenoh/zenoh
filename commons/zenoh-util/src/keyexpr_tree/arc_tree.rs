@@ -8,7 +8,7 @@ use token_cell::prelude::*;
 use crate::keyexpr_tree::*;
 use zenoh_protocol::core::key_expr::keyexpr;
 
-use super::box_tree::IterOrOption;
+use super::box_tree::{IterOrOption, PruneResult};
 
 pub struct KeArcTreeInner<
     Weight,
@@ -289,6 +289,27 @@ where
             IterOrOption::Opt(self.node_mut(token, key))
         }
     }
+    type PruneNode = KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>;
+
+    fn prune_where<F: FnMut(&mut Self::PruneNode) -> bool>(
+        &self,
+        token: &mut Token,
+        mut predicate: F,
+    ) {
+        let mut wild = false;
+        let Ok(inner) = self.inner.try_borrow_mut(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        inner.children.filter_out(&mut |child| match unsafe {
+            (*child.get())._prune(&mut predicate)
+        } {
+            PruneResult::Delete => Arc::strong_count(child) <= 1,
+            PruneResult::NonWild => false,
+            PruneResult::Wild => {
+                wild = true;
+                false
+            }
+        });
+        inner.wildness.set(wild);
+    }
 }
 pub struct TokenPacker<I, T> {
     iter: I,
@@ -354,6 +375,41 @@ pub struct KeArcTreeNode<
     chunk: OwnedKeyExpr,
     children: Children::Assoc,
     weight: Option<Weight>,
+}
+
+impl<
+        Weight,
+        Wildness: IWildness,
+        Children: IChildrenProvider<
+            Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+        >,
+        Token: TokenTrait,
+    > KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>
+where
+    Children::Assoc: IChildren<
+        Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+    >,
+{
+    fn _prune<F: FnMut(&mut Self) -> bool>(&mut self, predicate: &mut F) -> PruneResult {
+        let mut result = PruneResult::NonWild;
+        self.children.filter_out(&mut |child| {
+            let c = unsafe { &mut *child.get() };
+            match c._prune(predicate) {
+                PruneResult::Delete => Arc::strong_count(child) <= 1,
+                PruneResult::NonWild => false,
+                PruneResult::Wild => {
+                    result = PruneResult::Wild;
+                    false
+                }
+            }
+        });
+        if predicate(self) && self.children.is_empty() {
+            result = PruneResult::Delete
+        } else if self.chunk.is_wild() {
+            result = PruneResult::Wild
+        }
+        result
+    }
 }
 
 impl<

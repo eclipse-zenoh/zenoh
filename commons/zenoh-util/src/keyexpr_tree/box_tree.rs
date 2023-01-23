@@ -381,7 +381,7 @@ where
         result
     }
 }
-enum PruneResult {
+pub(crate) enum PruneResult {
     Delete,
     NonWild,
     Wild,
