@@ -6,9 +6,9 @@ use std::{
 use rand::SeedableRng;
 use zenoh_protocol::core::key_expr::{fuzzer::KeyExprFuzzer, OwnedKeyExpr};
 use zenoh_util::keyexpr_tree::{
-    arc_tree::KeArcTree,
     impls::{HashMapProvider, VecSetProvider},
-    IKeyExprTree, IKeyExprTreeExtMut, ITokenKeyExprTree, ITokenKeyExprTreeExt, KeBoxTree,
+    traits::*,
+    KeArcTree, KeBoxTree,
 };
 
 #[derive(Clone, Copy, Debug, Default)]

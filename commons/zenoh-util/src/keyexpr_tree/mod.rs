@@ -1,10 +1,11 @@
-pub use box_tree::KeBoxTree;
 use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
 pub mod traits;
 pub use traits::*;
 
 pub mod arc_tree;
+pub use arc_tree::{DefaultToken, KeArcTree};
 pub mod box_tree;
+pub use box_tree::KeBoxTree;
 pub mod impls;
 pub use impls::DefaultChildrenProvider;
 mod iters;

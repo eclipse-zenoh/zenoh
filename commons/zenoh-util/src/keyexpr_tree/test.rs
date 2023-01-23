@@ -2,8 +2,6 @@ use rand::Rng;
 use zenoh_protocol::core::key_expr::fuzzer::KeyExprFuzzer;
 
 use super::{
-    arc_tree::{DefaultToken, KeArcTree},
-    // box_tree::KeTreePair,
     impls::{KeyedSetProvider, VecSetProvider},
     *,
 };
