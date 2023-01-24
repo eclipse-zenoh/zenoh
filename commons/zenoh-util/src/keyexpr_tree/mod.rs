@@ -56,6 +56,6 @@ impl IWildness for bool {
         *self
     }
     fn set(&mut self, wildness: bool) -> bool {
-        std::mem::replace(self, wildness)
+        core::mem::replace(self, wildness)
     }
 }

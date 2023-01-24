@@ -1,4 +1,5 @@
 use crate::keyexpr_tree::*;
+use alloc::vec::Vec;
 use zenoh_core::unlikely;
 
 struct StackFrame<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
@@ -9,7 +10,7 @@ where
     iterator: <Children::Assoc as IChildren<Node>>::Iter<'a>,
     start: usize,
     end: usize,
-    _marker: std::marker::PhantomData<Weight>,
+    _marker: core::marker::PhantomData<Weight>,
 }
 pub struct Inclusion<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
 where
@@ -26,15 +27,19 @@ where
     Children::Assoc: IChildren<Node> + 'a,
 {
     pub(crate) fn new(children: &'a Children::Assoc, key: &'a keyexpr) -> Self {
+        let mut ke_indices = Vec::with_capacity(32);
+        ke_indices.push(0);
+        let mut iterators = Vec::with_capacity(16);
+        iterators.push(StackFrame {
+            iterator: children.children(),
+            start: 0,
+            end: 1,
+            _marker: Default::default(),
+        });
         Self {
             key,
-            ke_indices: vec![0],
-            iterators: vec![StackFrame {
-                iterator: children.children(),
-                start: 0,
-                end: 1,
-                _marker: Default::default(),
-            }],
+            ke_indices,
+            iterators,
         }
     }
 }
@@ -160,7 +165,7 @@ where
     iterator: <Children::Assoc as IChildren<Node>>::IterMut<'a>,
     start: usize,
     end: usize,
-    _marker: std::marker::PhantomData<Weight>,
+    _marker: core::marker::PhantomData<Weight>,
 }
 
 pub struct InclusionMut<
@@ -182,15 +187,19 @@ where
     Children::Assoc: IChildren<Node> + 'a,
 {
     pub(crate) fn new(children: &'a mut Children::Assoc, key: &'a keyexpr) -> Self {
+        let mut ke_indices = Vec::with_capacity(32);
+        ke_indices.push(0);
+        let mut iterators = Vec::with_capacity(16);
+        iterators.push(StackFrameMut {
+            iterator: children.children_mut(),
+            start: 0,
+            end: 1,
+            _marker: Default::default(),
+        });
         Self {
             key,
-            ke_indices: vec![0],
-            iterators: vec![StackFrameMut {
-                iterator: children.children_mut(),
-                start: 0,
-                end: 1,
-                _marker: Default::default(),
-            }],
+            ke_indices,
+            iterators,
         }
     }
 }

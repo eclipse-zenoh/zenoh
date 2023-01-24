@@ -34,7 +34,7 @@ impl<I: Iterator, F: IFilter<<I as Iterator>::Item>> Iterator for FilterMap<I, F
     }
 }
 pub struct Intersection<'a>(pub &'a keyexpr);
-impl<K: std::ops::Deref<Target = keyexpr>, V> IFilter<(&K, V)> for Intersection<'_> {
+impl<K: core::ops::Deref<Target = keyexpr>, V> IFilter<(&K, V)> for Intersection<'_> {
     type O = V;
     fn filter_map(&self, (k, v): (&K, V)) -> Option<Self::O> {
         self.0.intersects(k).then_some(v)
@@ -56,7 +56,7 @@ impl<'a, T: super::HasChunk> IFilter<&'a mut T> for Intersection<'_> {
 }
 
 pub struct Inclusion<'a>(pub &'a keyexpr);
-impl<K: std::ops::Deref<Target = keyexpr>, V> IFilter<(&K, V)> for Inclusion<'_> {
+impl<K: core::ops::Deref<Target = keyexpr>, V> IFilter<(&K, V)> for Inclusion<'_> {
     type O = V;
     fn filter_map(&self, (k, v): (&K, V)) -> Option<Self::O> {
         self.0.includes(k).then_some(v)

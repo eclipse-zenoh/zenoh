@@ -1,4 +1,6 @@
-use std::num::NonZeroUsize;
+use core::num::NonZeroUsize;
+
+use alloc::vec::Vec;
 
 use crate::keyexpr_tree::*;
 pub struct TreeIter<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
@@ -7,7 +9,7 @@ where
     <Children::Assoc as IChildren<Node>>::Node: 'a,
 {
     iterators: Vec<<Children::Assoc as IChildren<Node>>::Iter<'a>>,
-    _marker: std::marker::PhantomData<Weight>,
+    _marker: core::marker::PhantomData<Weight>,
 }
 
 impl<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
@@ -16,8 +18,10 @@ where
     Children::Assoc: IChildren<Node> + 'a,
 {
     pub(crate) fn new(children: &'a Children::Assoc) -> Self {
+        let mut iterators = Vec::with_capacity(16);
+        iterators.push(children.children());
         Self {
-            iterators: vec![children.children()],
+            iterators,
             _marker: Default::default(),
         }
     }
@@ -61,7 +65,7 @@ pub struct TreeIterMut<
     <Children::Assoc as IChildren<Node>>::Node: 'a,
 {
     iterators: Vec<<Children::Assoc as IChildren<Node>>::IterMut<'a>>,
-    _marker: std::marker::PhantomData<Weight>,
+    _marker: core::marker::PhantomData<Weight>,
 }
 
 impl<'a, Children: IChildrenProvider<Node>, Node: IKeyExprTreeNode<Weight>, Weight>
@@ -70,8 +74,10 @@ where
     Children::Assoc: IChildren<Node> + 'a,
 {
     pub(crate) fn new(children: &'a mut Children::Assoc) -> Self {
+        let mut iterators = Vec::with_capacity(16);
+        iterators.push(children.children_mut());
         Self {
-            iterators: vec![children.children_mut()],
+            iterators,
             _marker: Default::default(),
         }
     }

@@ -1,4 +1,7 @@
-use std::{
+#[cfg(not(feature = "std"))]
+use alloc::boxed::Box;
+use alloc::string::String;
+use core::{
     ops::{Deref, DerefMut},
     ptr::NonNull,
 };
@@ -127,7 +130,7 @@ where
         if !node.children.is_empty() {
             node.weight.take()
         } else {
-            let chunk = unsafe { std::mem::transmute::<_, &keyexpr>(node.chunk()) };
+            let chunk = unsafe { core::mem::transmute::<_, &keyexpr>(node.chunk()) };
             match node.parent {
                 None => &mut self.children,
                 Some(parent) => unsafe { &mut (*parent.as_ptr()).children },
@@ -232,7 +235,7 @@ where
 }
 pub struct Coerced<Iter: Iterator, Item> {
     iter: Iter,
-    _item: std::marker::PhantomData<Item>,
+    _item: core::marker::PhantomData<Item>,
 }
 
 impl<Iter: Iterator, Item> Coerced<Iter, Item> {
@@ -417,7 +420,7 @@ impl<'a, Weight: 'static>
     for &'a mut KeyExprTreeNode<Weight, NonWild, KeyedSetProvider>
 {
     fn transmute_into(self) -> &'a mut KeyExprTreeNode<Weight, UnknownWildness, KeyedSetProvider> {
-        unsafe { std::mem::transmute(self) }
+        unsafe { core::mem::transmute(self) }
     }
 }
 impl<'a, Weight: 'static>
@@ -425,7 +428,7 @@ impl<'a, Weight: 'static>
     for &'a KeyExprTreeNode<Weight, NonWild, KeyedSetProvider>
 {
     fn transmute_into(self) -> &'a KeyExprTreeNode<Weight, UnknownWildness, KeyedSetProvider> {
-        unsafe { std::mem::transmute(self) }
+        unsafe { core::mem::transmute(self) }
     }
 }
 
@@ -435,7 +438,7 @@ impl<
         Weight,
         Wildness: IWildness,
         Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>>,
-    > std::iter::FromIterator<(K, Weight)> for KeBoxTree<Weight, Wildness, Children>
+    > core::iter::FromIterator<(K, Weight)> for KeBoxTree<Weight, Wildness, Children>
 where
     Self: IKeyExprTreeMut<'a, Weight>,
 {

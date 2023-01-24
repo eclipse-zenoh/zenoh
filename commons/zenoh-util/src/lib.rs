@@ -17,56 +17,29 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-#[macro_use]
+
+#![cfg_attr(not(feature = "std"), no_std)]
+extern crate alloc;
+#[cfg_attr(feature = "std", macro_use)]
 extern crate lazy_static;
-use std::path::{Path, PathBuf};
-#[cfg(features = "zenoh-collections")]
+#[cfg(feature = "zenoh-collections")]
 #[deprecated = "This module is now a separate crate. Use the `zenoh_collections` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_collections as collections;
 #[deprecated = "This module is now a separate crate. Use the `zenoh_core` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_core as core;
-#[cfg(features = "zenoh-crypto")]
+#[cfg(feature = "zenoh-crypto")]
 #[deprecated = "This module is now a separate crate. Use the `zenoh_crypto` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_crypto as crypto;
-
-pub mod ffi;
-
 pub mod keyexpr_tree;
+#[cfg(feature = "std")]
+mod std_only;
 
-mod lib_loader;
-pub mod net;
-pub mod time_range;
-pub use lib_loader::*;
-pub mod timer;
-pub use timer::*;
-#[cfg(features = "zenoh-cfg-properties")]
+#[cfg(feature = "std")]
+pub use std_only::*;
+
+#[cfg(feature = "zenoh-cfg-properties")]
 #[deprecated = "This module is now a separate crate. Use the `zenoh_cfg_properties` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_cfg_properties as properties;
-#[cfg(features = "zenoh-sync")]
+#[cfg(feature = "zenoh-sync")]
 #[deprecated = "This module is now a separate crate. Use the `zenoh_sync` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_sync as sync;
-
-/// The "ZENOH_HOME" environement variable name
-pub const ZENOH_HOME_ENV_VAR: &str = "ZENOH_HOME";
-
-const DEFAULT_ZENOH_HOME_DIRNAME: &str = ".zenoh";
-
-/// Return the path to the ${ZENOH_HOME} directory (~/.zenoh by default).
-pub fn zenoh_home() -> &'static Path {
-    lazy_static! {
-        static ref ROOT: PathBuf = {
-            if let Some(dir) = std::env::var_os(ZENOH_HOME_ENV_VAR) {
-                PathBuf::from(dir)
-            } else {
-                match home::home_dir() {
-                    Some(mut dir) => {
-                        dir.push(DEFAULT_ZENOH_HOME_DIRNAME);
-                        dir
-                    }
-                    None => PathBuf::from(DEFAULT_ZENOH_HOME_DIRNAME),
-                }
-            }
-        };
-    }
-    ROOT.as_path()
-}

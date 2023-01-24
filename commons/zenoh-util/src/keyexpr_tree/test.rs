@@ -1,3 +1,4 @@
+use alloc::vec::Vec;
 use rand::Rng;
 use zenoh_protocol::core::key_expr::fuzzer::KeyExprFuzzer;
 
@@ -5,12 +6,15 @@ use super::{
     impls::{KeyedSetProvider, VecSetProvider},
     *,
 };
-use std::{
-    collections::HashMap,
+use core::{
     convert::{TryFrom, TryInto},
     fmt::Debug,
     ops::Deref,
 };
+#[cfg(not(feature = "std"))]
+use hashbrown::HashMap;
+#[cfg(feature = "std")]
+use std::collections::HashMap;
 
 fn insert<'a, K: TryInto<&'a keyexpr>, V: Clone + PartialEq + Debug + 'static>(
     ketree: &mut KeBoxTree<V, bool, KeyedSetProvider>,
@@ -44,7 +48,7 @@ fn insert_vecset<'a, K: TryInto<&'a keyexpr>, V: Clone + PartialEq + Debug + 'st
 ) where
     <K as TryInto<&'a keyexpr>>::Error: Debug,
 {
-    let key = dbg!(key.try_into().unwrap());
+    let key = key.try_into().unwrap();
     for i in key
         .as_bytes()
         .iter()
@@ -68,7 +72,7 @@ fn insert_kearctree<'a, K: TryInto<&'a keyexpr>, V: Clone + PartialEq + Debug + 
 ) where
     <K as TryInto<&'a keyexpr>>::Error: Debug,
 {
-    let key = dbg!(key.try_into().unwrap());
+    let key = key.try_into().unwrap();
     for i in key
         .as_bytes()
         .iter()
@@ -155,7 +159,10 @@ fn test_keyset<K: Deref<Target = keyexpr>>(keys: &[K]) {
             target.deref(),
             &exclone
         );
-        println!("{} OK", target.deref());
+        #[cfg(feature = "std")]
+        {
+            println!("{} OK", target.deref());
+        }
     }
 }
 
@@ -226,7 +233,10 @@ fn test_keyset_vec<K: Deref<Target = keyexpr>>(keys: &[K]) {
             target.deref(),
             &exclone
         );
-        println!("{} OK", target.deref());
+        #[cfg(feature = "std")]
+        {
+            println!("{} OK", target.deref());
+        }
     }
 }
 
@@ -273,7 +283,10 @@ fn test_keyarctree<K: Deref<Target = keyexpr>>(keys: &[K]) {
             target.deref(),
             &expected
         );
-        println!("{} OK", target.deref());
+        #[cfg(feature = "std")]
+        {
+            println!("{} OK", target.deref());
+        }
     }
 }
 

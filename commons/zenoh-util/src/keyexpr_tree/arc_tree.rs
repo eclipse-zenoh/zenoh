@@ -1,7 +1,8 @@
-use std::{
-    fmt::Debug,
+use alloc::{
+    string::String,
     sync::{Arc, Weak},
 };
+use core::fmt::Debug;
 
 use token_cell::prelude::*;
 
@@ -112,7 +113,7 @@ where
         Some((node.as_node(), token))
     }
     fn node_mut(&'a self, token: &'a mut Token, at: &keyexpr) -> Option<Self::NodeMut> {
-        self.node(unsafe { std::mem::transmute(&*token) }, at)
+        self.node(unsafe { core::mem::transmute(&*token) }, at)
             .map(|(node, _)| (node, token))
     }
     fn node_or_create(&'a self, token: &'a mut Token, at: &keyexpr) -> Self::NodeMut {
@@ -121,7 +122,7 @@ where
             inner.wildness.set(true);
         }
         let inner: &mut KeArcTreeInner<Weight, Wildness, Children, Token> =
-            unsafe { std::mem::transmute(inner) };
+            unsafe { core::mem::transmute(inner) };
         let construct_node = |k: &keyexpr, parent| {
             Arc::new(TokenCell::new(
                 KeArcTreeNode {
@@ -183,7 +184,7 @@ where
     fn tree_iter_mut(&'a self, token: &'a mut Token) -> Self::TreeIterMut {
         let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
         TokenPacker {
-            iter: TreeIter::new(unsafe { std::mem::transmute(&inner.children) }),
+            iter: TreeIter::new(unsafe { core::mem::transmute(&inner.children) }),
             token,
         }
     }
@@ -233,7 +234,7 @@ where
         let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
         if inner.wildness.get() {
             IterOrOption::Iter(TokenPacker {
-                iter: Intersection::new(unsafe { std::mem::transmute(&inner.children) }, key),
+                iter: Intersection::new(unsafe { core::mem::transmute(&inner.children) }, key),
                 token,
             })
         } else {
@@ -282,7 +283,7 @@ where
         let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
         if inner.wildness.get() {
             IterOrOption::Iter(TokenPacker {
-                iter: Inclusion::new(unsafe { std::mem::transmute(&inner.children) }, key),
+                iter: Inclusion::new(unsafe { core::mem::transmute(&inner.children) }, key),
                 token,
             })
         } else {
@@ -321,7 +322,7 @@ impl<I: Iterator, T> Iterator for TokenPacker<I, T> {
     fn next(&mut self) -> Option<Self::Item> {
         self.iter
             .next()
-            .map(|i| (i, unsafe { std::mem::transmute_copy(&self.token) }))
+            .map(|i| (i, unsafe { core::mem::transmute_copy(&self.token) }))
     }
 }
 pub trait IArcProvider {
@@ -342,8 +343,8 @@ impl<T> IArc<T> for Arc<T> {
     fn weak(&self) -> Weak<T> {
         Arc::downgrade(self)
     }
-    type UpgradeErr = std::convert::Infallible;
-    fn upgrade(&self) -> Result<Arc<T>, std::convert::Infallible> {
+    type UpgradeErr = core::convert::Infallible;
+    fn upgrade(&self) -> Result<Arc<T>, core::convert::Infallible> {
         Ok(self.clone())
     }
 }

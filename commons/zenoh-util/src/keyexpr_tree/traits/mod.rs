@@ -191,7 +191,7 @@ pub trait AsNodeMut<T: ?Sized>: AsNode<T> {
     fn as_node_mut(&mut self) -> &mut T;
 }
 
-type Keys<I, Item> = std::iter::FilterMap<I, fn(Item) -> Option<OwnedKeyExpr>>;
+type Keys<I, Item> = core::iter::FilterMap<I, fn(Item) -> Option<OwnedKeyExpr>>;
 fn filter_map_weighted_node_to_key<N: IKeyExprTreeNodeMut<W>, I: AsNode<N>, W>(
     item: I,
 ) -> Option<OwnedKeyExpr> {
@@ -225,7 +225,7 @@ pub trait IKeyExprTreeExt<'a, Weight>: IKeyExprTree<'a, Weight> {
     #[allow(clippy::type_complexity)]
     fn key_value_pairs(
         &'a self,
-    ) -> std::iter::FilterMap<
+    ) -> core::iter::FilterMap<
         Self::TreeIter,
         fn(Self::TreeIterItem) -> Option<(OwnedKeyExpr, &'a Weight)>,
     >
@@ -233,7 +233,7 @@ pub trait IKeyExprTreeExt<'a, Weight>: IKeyExprTree<'a, Weight> {
         Self::TreeIterItem: AsNode<Self::Node>,
     {
         self.tree_iter().filter_map(|node| {
-            unsafe { std::mem::transmute::<_, Option<&Weight>>(node.as_node().weight()) }
+            unsafe { core::mem::transmute::<_, Option<&Weight>>(node.as_node().weight()) }
                 .map(|w| (node.as_node().keyexpr(), w))
         })
     }
