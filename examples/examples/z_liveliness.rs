@@ -30,6 +30,10 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Declaring LivelinessToken on '{}'...", &key_expr);
+    println!(
+        "The LivelinessToken can be queried or subscribed to on '@/liveliness/{}'...",
+        &key_expr
+    );
 
     let mut token = Some(session.declare_liveliness(&key_expr).res().await.unwrap());
 
