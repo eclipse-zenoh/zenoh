@@ -123,20 +123,20 @@ jobs:
       - name: Check zenoh-collections
         uses: actions-rs/cargo@v1
         with:
-          command: no-dev-deps
-          args: nono check --package zenoh-collections --no-default-features
+          command: nono
+          args: check --package zenoh-collections --no-default-features
       
       - name: Check zenoh-result
         uses: actions-rs/cargo@v1
         with:
-          command: no-dev-deps
-          args: nono check --package zenoh-result --no-default-features
+          command: nono
+          args: check --package zenoh-result --no-default-features
       
       - name: Check zenoh-buffers
         uses: actions-rs/cargo@v1
         with:
-          command: no-dev-deps
-          args: nono check --package zenoh-buffers --no-default-features
+          command: nono
+          args: check --package zenoh-buffers
       
       - name: Check zenoh-protocol
         uses: actions-rs/cargo@v1
