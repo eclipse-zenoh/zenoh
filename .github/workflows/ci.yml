@@ -55,6 +55,42 @@ jobs:
         with:
           command: clippy
           args: --all-targets --features unstable -- -D warnings
+      
+      - name: Install nono (no_std-ness check)
+        run: cargo install cargo-nono
+      
+      - name: Install no-dev-deps
+        run: cargo install cargo-no-dev-deps --locked
+      
+      - name: No_std-ness check (zenoh-collections)
+        uses: actions-rs/cargo@v1
+        with:
+          command: no-dev-deps
+          args: nono check --package zenoh-collections --no-default-features
+      
+      - name: No_std-ness check (zenoh-result)
+        uses: actions-rs/cargo@v1
+        with:
+          command: no-dev-deps
+          args: nono check --package zenoh-result --no-default-features
+      
+      - name: No_std-ness check (zenoh-buffers)
+        uses: actions-rs/cargo@v1
+        with:
+          command: no-dev-deps
+          args: nono check --package zenoh-buffers --no-default-features
+      
+      - name: No_std-ness check (zenoh-protocol)
+        uses: actions-rs/cargo@v1
+        with:
+          command: no-dev-deps
+          args: nono check --package zenoh-protocol --no-default-features
+      
+      - name: No_std-ness check (zenoh-codec)
+        uses: actions-rs/cargo@v1
+        with:
+          command: no-dev-deps
+          args: nono check --package zenoh-codec --no-default-features
 
   test:
     name: Run tests on ${{ matrix.os }}
