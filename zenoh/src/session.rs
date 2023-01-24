@@ -1700,6 +1700,21 @@ impl SessionDeclarations for Arc<Session> {
             destination: Locality::default(),
         }
     }
+
+    #[zenoh_core::unstable]
+    fn declare_liveliness<'b, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> LivelinessTokenBuilder<'static, 'b>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        LivelinessTokenBuilder {
+            session: SessionRef::Shared(self.clone()),
+            key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
+        }
+    }
 }
 
 impl Primitives for Session {
@@ -2139,6 +2154,15 @@ pub trait SessionDeclarations {
         &self,
         key_expr: TryIntoKeyExpr,
     ) -> PublisherBuilder<'static, 'a>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
+
+    #[zenoh_core::unstable]
+    fn declare_liveliness<'a, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> LivelinessTokenBuilder<'static, 'a>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
