@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! Liveliness primitives.
+
 #[zenoh_core::unstable]
 use {
     crate::prelude::*, crate::SessionRef, crate::Undeclarable, std::future::Ready, std::sync::Arc,
@@ -27,6 +29,21 @@ lazy_static::lazy_static!(
     pub(crate) static ref KE_PREFIX_LIVELINESS: &'static keyexpr = unsafe { keyexpr::from_str_unchecked(PREFIX_LIVELINESS) };
 );
 
+/// A builder for initializing a [`LivelinessToken`](LivelinessToken).
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let liveliness = session
+///     .declare_liveliness("key/expression")
+///     .res()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
 #[zenoh_core::unstable]
 #[derive(Debug)]
 pub struct LivelinessTokenBuilder<'a, 'b> {
@@ -71,6 +88,33 @@ pub(crate) struct LivelinessTokenState {
     pub(crate) key_expr: KeyExpr<'static>,
 }
 
+/// A token which liveliness is tied to the Zenoh [`Session`](Session)
+/// and can be monitored by remote applications.
+///
+/// A LivelinessToken with key `key/expression` can be queried or subscribed
+/// to on key `@/liveliness/key/expression`.
+///
+/// A declared liveliness token will be seen as alive by any other Zenoh
+/// application in the system that monitors it while the liveliness token
+/// is not undeclared or dropped, while the Zenoh application that declared
+/// it is alive (didn't stop or crashed) and while the Zenoh application
+/// that declared the token has Zenoh connectivity with the Zenoh application
+/// that monitors it.
+///
+/// LivelinessTokens are automatically undeclared when dropped.
+///
+/// # Examples
+/// ```no_run
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let liveliness = session.declare_liveliness("key/expression")
+///     .res()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
 #[zenoh_core::unstable]
 #[derive(Debug)]
 pub struct LivelinessToken<'a> {
@@ -79,6 +123,22 @@ pub struct LivelinessToken<'a> {
     pub(crate) alive: bool,
 }
 
+/// A [`Resolvable`] returned when undeclaring a [`LivelinessToken`](LivelinessToken).
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let liveliness = session.declare_liveliness("key/expression")
+///     .res()
+///     .await
+///     .unwrap();
+///
+/// liveliness.undeclare().res().await.unwrap();
+/// # })
+/// ```
 #[zenoh_core::unstable]
 pub struct LivelinessTokenUndeclaration<'a> {
     token: LivelinessToken<'a>,
@@ -108,6 +168,26 @@ impl<'a> AsyncResolve for LivelinessTokenUndeclaration<'a> {
 
 #[zenoh_core::unstable]
 impl<'a> LivelinessToken<'a> {
+    /// Undeclare a [`LivelinessToken`](LivelinessToken).
+    ///
+    /// LivelinessTokens are automatically closed when dropped,
+    /// but you may want to use this function to handle errors or
+    /// undeclare the LivelinessToken asynchronously.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let liveliness = session.declare_liveliness("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    ///
+    /// liveliness.undeclare().res().await.unwrap();
+    /// # })
+    /// ```
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
