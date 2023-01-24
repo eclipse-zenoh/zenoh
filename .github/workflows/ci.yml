@@ -104,8 +104,9 @@ jobs:
 
   nostd:
     name: Run no_std-ness checks
-    needs: check
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
 
     steps:
       - uses: actions/checkout@v2
