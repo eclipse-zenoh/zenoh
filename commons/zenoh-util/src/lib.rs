@@ -22,24 +22,12 @@
 extern crate alloc;
 #[cfg_attr(feature = "std", macro_use)]
 extern crate lazy_static;
-#[cfg(feature = "zenoh-collections")]
-#[deprecated = "This module is now a separate crate. Use the `zenoh_collections` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
-pub use zenoh_collections as collections;
+
 #[deprecated = "This module is now a separate crate. Use the `zenoh_core` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_core as core;
-#[cfg(feature = "zenoh-crypto")]
-#[deprecated = "This module is now a separate crate. Use the `zenoh_crypto` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
-pub use zenoh_crypto as crypto;
 pub mod keyexpr_tree;
 #[cfg(feature = "std")]
 mod std_only;
 
 #[cfg(feature = "std")]
 pub use std_only::*;
-
-#[cfg(feature = "zenoh-cfg-properties")]
-#[deprecated = "This module is now a separate crate. Use the `zenoh_cfg_properties` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
-pub use zenoh_cfg_properties as properties;
-#[cfg(feature = "zenoh-sync")]
-#[deprecated = "This module is now a separate crate. Use the `zenoh_sync` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
-pub use zenoh_sync as sync;

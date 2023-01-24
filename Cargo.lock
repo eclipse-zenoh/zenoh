@@ -4280,12 +4280,8 @@ dependencies = [
  "shellexpand",
  "token-cell",
  "winapi",
- "zenoh-cfg-properties",
- "zenoh-collections",
  "zenoh-core",
- "zenoh-crypto",
  "zenoh-protocol",
- "zenoh-sync",
 ]
 
 [[package]]
