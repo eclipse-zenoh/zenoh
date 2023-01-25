@@ -1401,7 +1401,7 @@ fn compute_final_route(
                         && (qabl.direction.0.whatami != WhatAmI::Peer
                             || (tables.router_peers_failover_brokering
                                 && Tables::failover_brokering_to(
-                                    &source_links,
+                                    source_links,
                                     qabl.direction.0.zid,
                                 )))
                     {
