@@ -32,9 +32,9 @@ use std::sync::Arc;
 #[cfg(feature = "auth_usrpwd")]
 pub use userpassword::*;
 use zenoh_config::Config;
-use zenoh_core::Result as ZResult;
 use zenoh_link::{Link, Locator};
 use zenoh_protocol::core::{ZInt, ZenohId};
+use zenoh_result::ZResult;
 
 /*************************************/
 /*              LINK                 */

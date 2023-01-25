@@ -16,7 +16,7 @@ use serde_json::{Map, Value};
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::{key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult};
-use zenoh_core::{bail, zerror, Error};
+use zenoh_result::{bail, zerror, Error};
 
 #[derive(Debug, Clone, AsMut, AsRef)]
 pub struct PluginConfig {

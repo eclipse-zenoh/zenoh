@@ -14,11 +14,11 @@
 use super::Primitives;
 use crate::TransportPeerEventHandler;
 use std::any::Any;
-use zenoh_core::{bail, Result as ZResult};
 use zenoh_link::Link;
 use zenoh_protocol::zenoh::{
     Data, Declaration, Declare, LinkStateList, Pull, Query, Unit, ZenohBody, ZenohMessage,
 };
+use zenoh_result::{bail, ZResult};
 
 pub struct DeMux<P: Primitives> {
     primitives: P,

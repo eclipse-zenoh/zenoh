@@ -88,8 +88,8 @@ fn intersections() {
 
 fn includes<
     'a,
-    A: TryInto<&'a keyexpr, Error = zenoh_core::Error>,
-    B: TryInto<&'a keyexpr, Error = zenoh_core::Error>,
+    A: TryInto<&'a keyexpr, Error = zenoh_result::Error>,
+    B: TryInto<&'a keyexpr, Error = zenoh_result::Error>,
 >(
     l: A,
     r: B,

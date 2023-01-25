@@ -963,9 +963,9 @@ impl Network {
     }
 
     #[inline]
-    pub(super) fn get_links(&self, node: ZenohId) -> Vec<ZenohId> {
+    pub(super) fn get_links(&self, node: ZenohId) -> &[ZenohId] {
         self.get_node(&node)
-            .map(|node| node.links.clone())
+            .map(|node| &node.links[..])
             .unwrap_or_default()
     }
 }

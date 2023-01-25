@@ -22,7 +22,7 @@ use rand::Rng;
 use std::convert::TryFrom;
 use zenoh_buffers::{writer::HasWriter, ZSlice};
 use zenoh_codec::{WCodec, Zenoh060};
-use zenoh_core::{zasynclock, zasyncread, zerror};
+use zenoh_core::{zasynclock, zasyncread};
 use zenoh_crypto::hmac;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
@@ -30,6 +30,7 @@ use zenoh_protocol::{
     core::Property,
     transport::{tmsg, TransportMessage},
 };
+use zenoh_result::zerror;
 
 // Send an InitAck
 pub(super) struct Output {

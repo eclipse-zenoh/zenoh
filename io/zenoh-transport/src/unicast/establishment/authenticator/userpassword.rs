@@ -28,8 +28,9 @@ use zenoh_buffers::{
 use zenoh_cfg_properties::Properties;
 use zenoh_codec::{RCodec, WCodec, Zenoh060};
 use zenoh_config::Config;
-use zenoh_core::{bail, zasynclock, zasyncread, zasyncwrite, zerror, Result as ZResult};
+use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_crypto::hmac;
+use zenoh_result::{bail, zerror, ZResult};
 
 const USRPWD_VERSION: ZInt = 1;
 

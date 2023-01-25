@@ -36,12 +36,12 @@ std = []
 default = ["std"]
 
 [dependencies]
-async-std = { workspace = true, features = ["unstable"] }
+async-std = { workspace = true, features = ["default", "unstable"] }
 async-trait = { workspace = true }
 clap = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
-hex = { workspace = true }
+hex = { workspace = true, features = ["default"] }
 home = { workspace = true }
 humantime = { workspace = true }
 keyed-set = { workspace = true }
@@ -52,19 +52,10 @@ token-cell = { workspace = true }
 shellexpand = { workspace = true }
 zenoh-core = { path = "../zenoh-core/" }
 zenoh-protocol = { path = "../zenoh-protocol/" }
+zenoh-result = { path = "../zenoh-result/" }
 
 [target.'cfg(not(features = "std"))'.dependencies]
 hashbrown = { workspace = true }
-
-[dev-dependencies]
-criterion = { workspace = true }
-rand = { workspace = true }
-zenoh-protocol = { path = "../zenoh-protocol/", features = ["test"] }
-
-[[bench]]
-name = "keyexpr_tree"
-harness = false
-
 
 [target.'cfg(windows)'.dependencies]
 winapi = { workspace = true }
@@ -73,3 +64,13 @@ winapi = { workspace = true }
 libc = { workspace = true }
 pnet = { workspace = true }
 pnet_datalink = { workspace = true }
+
+[dev-dependencies]
+criterion = { workspace = true }
+rand = { workspace = true }
+zenoh-protocol = { path = "../zenoh-protocol/", features = ["test"] }
+zenoh-util = { path = ".", features = ["std"] }
+
+[[bench]]
+name = "keyexpr_tree"
+harness = false

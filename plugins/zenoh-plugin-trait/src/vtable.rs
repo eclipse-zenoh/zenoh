@@ -13,7 +13,7 @@
 //
 use crate::*;
 pub use no_mangle::*;
-use zenoh_core::Result as ZResult;
+use zenoh_result::ZResult;
 
 pub type PluginVTableVersion = u16;
 type LoadPluginResultInner = Result<PluginVTableInner<(), ()>, PluginVTableVersion>;

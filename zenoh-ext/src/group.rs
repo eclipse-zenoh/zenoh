@@ -31,7 +31,7 @@ use zenoh::query::ConsolidationMode;
 use zenoh::Error as ZError;
 use zenoh::Result as ZResult;
 use zenoh::Session;
-use zenoh_core::bail;
+use zenoh_result::bail;
 use zenoh_sync::Condition;
 
 const GROUP_PREFIX: &str = "zenoh/ext/net/group";

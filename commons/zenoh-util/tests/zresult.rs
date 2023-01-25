@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh_core::{zerror, Result as ZResult};
+use zenoh_result::{zerror, ZResult};
 
 #[test]
 fn error_simple() {

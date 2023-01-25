@@ -16,7 +16,7 @@ use log::trace;
 use zenoh::prelude::r#async::*;
 use zenoh::Session;
 use zenoh_backend_traits::config::StorageConfig;
-use zenoh_core::Result as ZResult;
+use zenoh_result::ZResult;
 
 pub use super::replica::{Replica, StorageService};
 

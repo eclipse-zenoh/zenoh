@@ -26,9 +26,10 @@ use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 pub use multicast::*;
 pub use unicast::*;
-use zenoh_core::{zconfigurable, zerror, Result as ZResult};
+use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol::core::{endpoint::Address, Locator};
+use zenoh_result::{zerror, ZResult};
 
 // NOTE: In case of using UDP in high-throughput scenarios, it is recommended to set the
 //       UDP buffer size on the host to a reasonable size. Usually, default values for UDP buffers

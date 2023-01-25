@@ -17,7 +17,7 @@ use async_std::task;
 use std::sync::MutexGuard;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
-use zenoh_core::{bail, zerror, zlock, zread, Result as ZResult};
+use zenoh_core::{zlock, zread};
 use zenoh_link::LinkUnicast;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
@@ -26,6 +26,7 @@ use zenoh_protocol::{
     transport::{tmsg, Close, Frame, FramePayload, KeepAlive, TransportBody, TransportMessage},
     zenoh::ZenohMessage,
 };
+use zenoh_result::{bail, zerror, ZResult};
 
 /*************************************/
 /*            TRANSPORT RX           */

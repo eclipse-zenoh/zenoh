@@ -21,7 +21,7 @@ use std::{
     sync::atomic::{AtomicPtr, AtomicUsize, Ordering},
 };
 use zenoh_buffers::ZSliceBuffer;
-use zenoh_core::{bail, zerror, zresult::ShmError, Result as ZResult};
+use zenoh_result::{bail, zerror, ShmError, ZResult};
 
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
 const ACCOUNTED_OVERHEAD: usize = 4_096;

@@ -25,14 +25,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh_cfg_properties::config::*;
 use zenoh_config::Config;
-use zenoh_core::{
-    bail, zasynclock, zasyncread, zasyncwrite, zerror, zlock, zparse, Result as ZResult,
-};
+use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zlock, zparse};
 use zenoh_link::*;
 use zenoh_protocol::{
     core::{locator::LocatorProtocol, ZenohId},
     transport::tmsg,
 };
+use zenoh_result::{bail, zerror, ZResult};
 
 /*************************************/
 /*         TRANSPORT CONFIG          */

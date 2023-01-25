@@ -42,7 +42,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -50,18 +50,19 @@ use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
-use zenoh_core::{
-    zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, Result as ZResult, SyncResolve,
-};
+use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicZInt, Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo,
-        WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+        Channel, CongestionControl, ExprId, QueryTarget, QueryableInfo, SubInfo, WireExpr, ZInt,
+        ZenohId, EMPTY_EXPR_ID,
     },
     zenoh::{DataInfo, QueryBody, RoutingContext},
 };
+use zenoh_result::ZResult;
 use zenoh_util::core::AsyncResolve;
+
+pub type AtomicZInt = AtomicU64;
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
@@ -513,7 +514,7 @@ impl Session {
     ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         SubscriberBuilder {
             session: SessionRef::Borrow(self),
@@ -553,7 +554,7 @@ impl Session {
     ) -> QueryableBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         QueryableBuilder {
             session: SessionRef::Borrow(self),
@@ -589,7 +590,7 @@ impl Session {
     ) -> PublisherBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         PublisherBuilder {
             session: SessionRef::Borrow(self),
@@ -620,7 +621,7 @@ impl Session {
     ) -> impl Resolve<ZResult<KeyExpr<'b>>> + 'a
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let key_expr: ZResult<KeyExpr> = key_expr.try_into().map_err(Into::into);
         self._declare_keyexpr(key_expr)
@@ -686,7 +687,7 @@ impl Session {
     ) -> PutBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
         IntoValue: Into<Value>,
     {
         PutBuilder {
@@ -718,7 +719,7 @@ impl Session {
     ) -> DeleteBuilder<'a, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         PutBuilder {
             publisher: self.declare_publisher(key_expr),
@@ -753,7 +754,7 @@ impl Session {
     ) -> GetBuilder<'a, 'b, DefaultHandler>
     where
         IntoSelector: TryInto<Selector<'b>>,
-        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_core::Error>,
+        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let selector = selector.try_into().map_err(Into::into);
         let conf = self.runtime.config.lock();
@@ -1529,7 +1530,7 @@ impl SessionDeclarations for Arc<Session> {
     ) -> SubscriberBuilder<'static, 'b, PushMode, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         SubscriberBuilder {
             session: SessionRef::Shared(self.clone()),
@@ -1574,7 +1575,7 @@ impl SessionDeclarations for Arc<Session> {
     ) -> QueryableBuilder<'static, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         QueryableBuilder {
             session: SessionRef::Shared(self.clone()),
@@ -1610,7 +1611,7 @@ impl SessionDeclarations for Arc<Session> {
     ) -> PublisherBuilder<'static, 'b>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         PublisherBuilder {
             session: SessionRef::Shared(self.clone()),
@@ -1963,7 +1964,7 @@ pub trait SessionDeclarations {
     ) -> SubscriberBuilder<'static, 'a, PushMode, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
+        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_result::Error>;
 
     /// Create a [`Queryable`](crate::queryable::Queryable) for the given key expression.
     ///
@@ -1998,7 +1999,7 @@ pub trait SessionDeclarations {
     ) -> QueryableBuilder<'static, 'a, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
+        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_result::Error>;
 
     /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
     ///
@@ -2025,5 +2026,5 @@ pub trait SessionDeclarations {
     ) -> PublisherBuilder<'static, 'a>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_core::Error>;
+        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_result::Error>;
 }
