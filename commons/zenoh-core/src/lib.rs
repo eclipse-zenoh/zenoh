@@ -24,6 +24,7 @@ use std::future::{Future, Ready};
 pub use zenoh_macros::*;
 
 // Re-exports after moving ZError/ZResult to zenoh-result
+pub use zenoh_result::{bail, to_zerror, zerror};
 pub mod zresult {
     pub use zenoh_result::*;
 }
