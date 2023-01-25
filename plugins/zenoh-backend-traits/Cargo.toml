@@ -22,6 +22,7 @@ authors = [
     "Julien Enoch <julien@enoch.fr>",
     "Olivier Hécart <olivier.hecart@zettascale.tech>",
     "Luca Cominardi <luca.cominardi@zettascale.tech>",
+    "Sreeja Nair <sreeja.nair@zettascale.tech>",
 ]
 edition = { workspace = true }
 license = { workspace = true }
