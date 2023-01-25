@@ -22,8 +22,13 @@ pub mod macros;
 pub use macros::*;
 use std::future::{Future, Ready};
 pub use zenoh_macros::*;
-pub use zenoh_result::ZResult as Result;
-pub use zenoh_result::*;
+
+// Re-exports after moving ZError/ZResult to zenoh-result
+pub mod zresult {
+    pub use zenoh_result::*;
+}
+pub use zresult::Error;
+pub use zresult::ZResult as Result;
 
 pub trait Resolvable {
     type To: Sized + Send;
