@@ -27,7 +27,7 @@ description = "Internal crate for zenoh."
 flume = { workspace = true }
 json5 = { workspace = true }
 num_cpus = { workspace = true }
-serde = { workspace = true, default-features = true }
+serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 validated_struct = { workspace = true, features = ["json5", "json_get"] }

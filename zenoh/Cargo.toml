@@ -69,19 +69,19 @@ flume = { workspace = true }
 form_urlencoded = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
-hex = { workspace = true, default-features = true }
+hex = { workspace = true, features = ["default"] }
 lazy_static = { workspace = true }
 log = { workspace = true }
 ordered-float = { workspace = true }
 petgraph = { workspace = true }
-rand = { workspace = true, default-features = true }
+rand = { workspace = true, features = ["default"] }
 regex = { workspace = true }
-serde = { workspace = true, default-features = true }
+serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 socket2 = { workspace = true }
 stop-token = { workspace = true }
-uhlc = { workspace = true, default-features = true }
-uuid = { workspace = true, default-features = true }
+uhlc = { workspace = true, features = ["default"] }
+uuid = { workspace = true, features = ["default"] }
 vec_map = { workspace = true }
 zenoh-buffers = { path = "../commons/zenoh-buffers/" }
 zenoh-cfg-properties = { path = "../commons/zenoh-cfg-properties/" }

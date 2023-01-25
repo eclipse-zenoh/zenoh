@@ -37,7 +37,7 @@ async-trait = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
 nix = { workspace = true }
-uuid = { workspace = true, default-features = true }
+uuid = { workspace = true, features = ["default"] }
 zenoh-core = { path = "../../../commons/zenoh-core/" }
 zenoh-link-commons = { path = "../../zenoh-link-commons/" }
 zenoh-protocol = { path = "../../../commons/zenoh-protocol/" }

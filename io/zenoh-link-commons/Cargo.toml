@@ -28,7 +28,7 @@ description = "Internal crate for zenoh."
 async-std = { workspace = true }
 async-trait = { workspace = true }
 flume = { workspace = true }
-serde = { workspace = true, default-features = true }
+serde = { workspace = true, features = ["default"] }
 typenum = { workspace = true }
 zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
 zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }

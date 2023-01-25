@@ -49,10 +49,10 @@ async-trait = { workspace = true }
 flume = { workspace = true }
 log = { workspace = true }
 paste = { workspace = true }
-rand = { workspace = true, default-features = true }
+rand = { workspace = true, features = ["default"] }
 ringbuffer-spsc = { workspace = true }
 rsa = { workspace = true, optional = true }
-serde = { workspace = true, default-features = true }
+serde = { workspace = true, features = ["default"] }
 zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
 zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
 zenoh-codec = { path = "../../commons/zenoh-codec/" }

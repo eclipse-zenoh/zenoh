@@ -37,7 +37,7 @@ name = "zplugin_storage_manager"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-async-std = { workspace = true, default-features = true }
+async-std = { workspace = true, features = ["default"] }
 async-trait = { workspace = true }
 clap = { workspace = true }
 crc = { workspace = true }
@@ -49,7 +49,7 @@ git-version = { workspace = true }
 lazy_static = { workspace = true }
 libloading = { workspace = true }
 log = { workspace = true }
-serde = { workspace = true, default-features = true }
+serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
 zenoh = { path = "../../zenoh/", default-features = false, features = [ "unstable" ] }

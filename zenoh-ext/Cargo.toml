@@ -40,7 +40,7 @@ env_logger = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
-serde = { workspace = true, default-features = true }
+serde = { workspace = true, features = ["default"] }
 zenoh = { path = "../zenoh/", default-features = false, features = ["unstable"] }
 zenoh-core = { path = "../commons/zenoh-core/" }
 zenoh-result = { path = "../commons/zenoh-result/" }

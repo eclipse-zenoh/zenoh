@@ -29,7 +29,7 @@ name = "zplugin_example"
 crate-type = ["cdylib"]
 
 [dependencies]
-async-std = { workspace = true, default-features = true }
+async-std = { workspace = true, features = ["default"] }
 clap = { workspace = true }
 env_logger = { workspace = true }
 futures = { workspace = true }

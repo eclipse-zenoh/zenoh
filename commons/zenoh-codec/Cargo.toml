@@ -54,8 +54,8 @@ zenoh-shm = { path = "../zenoh-shm/", optional = true }
 # INFO: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0
 [dev-dependencies]
 criterion = { workspace = true }
-rand = { workspace = true, default-features = true }
-uuid = { workspace = true, default-features = true }
+rand = { workspace = true, features = ["default"] }
+uuid = { workspace = true, features = ["default"] }
 zenoh-protocol = { path = "../zenoh-protocol/", features = ["test"] }
 
 [[bench]]
