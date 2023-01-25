@@ -1,3 +1,17 @@
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+
 use alloc::{
     string::String,
     sync::{Arc, Weak},
@@ -171,7 +185,10 @@ where
         }
     }
 
-    type TreeIterItemMut = Self::NodeMut;
+    type TreeIterItemMut = Tokenized<
+        &'a Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+        &'a mut Token,
+    >;
     type TreeIterMut = TokenPacker<
         TreeIter<
             'a,
@@ -213,7 +230,7 @@ where
             IterOrOption::Opt(self.node(token, key))
         }
     }
-    type IntersectionItemMut = Self::NodeMut;
+    type IntersectionItemMut = Self::TreeIterItemMut;
     type IntersectionMut = IterOrOption<
         TokenPacker<
             Intersection<
@@ -238,7 +255,7 @@ where
                 token,
             })
         } else {
-            IterOrOption::Opt(self.node_mut(token, key))
+            IterOrOption::Opt(self.node_mut(token, key).map(Into::into))
         }
     }
 
@@ -266,7 +283,7 @@ where
             IterOrOption::Opt(self.node(token, key))
         }
     }
-    type InclusionItemMut = Self::NodeMut;
+    type InclusionItemMut = Self::TreeIterItemMut;
     type InclusionMut = IterOrOption<
         TokenPacker<
             Inclusion<
@@ -282,12 +299,14 @@ where
     fn included_nodes_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::InclusionMut {
         let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
         if inner.wildness.get() {
-            IterOrOption::Iter(TokenPacker {
-                iter: Inclusion::new(unsafe { core::mem::transmute(&inner.children) }, key),
-                token,
-            })
+            unsafe {
+                IterOrOption::Iter(TokenPacker {
+                    iter: Inclusion::new(core::mem::transmute(&inner.children), key),
+                    token,
+                })
+            }
         } else {
-            IterOrOption::Opt(self.node_mut(token, key))
+            IterOrOption::Opt(self.node_mut(token, key).map(Into::into))
         }
     }
     type PruneNode = KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>;
@@ -312,19 +331,80 @@ where
         inner.wildness.set(wild);
     }
 }
-pub struct TokenPacker<I, T> {
-    iter: I,
-    token: T,
-}
 
-impl<I: Iterator, T> Iterator for TokenPacker<I, T> {
-    type Item = (I::Item, T);
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter
-            .next()
-            .map(|i| (i, unsafe { core::mem::transmute_copy(&self.token) }))
+pub(crate) mod sealed {
+    use alloc::sync::Arc;
+    use core::ops::{Deref, DerefMut};
+    use token_cell::prelude::{TokenCell, TokenTrait};
+
+    pub struct Tokenized<A, B>(pub A, pub(crate) B);
+    impl<T, Token: TokenTrait> Deref for Tokenized<&TokenCell<T, Token>, &Token> {
+        type Target = T;
+        fn deref(&self) -> &Self::Target {
+            unsafe { &*self.0.get() }
+        }
+    }
+    impl<T, Token: TokenTrait> Deref for Tokenized<&TokenCell<T, Token>, &mut Token> {
+        type Target = T;
+        fn deref(&self) -> &Self::Target {
+            unsafe { &*self.0.get() }
+        }
+    }
+    impl<T, Token: TokenTrait> DerefMut for Tokenized<&TokenCell<T, Token>, &mut Token> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            unsafe { &mut *self.0.get() }
+        }
+    }
+    impl<T, Token: TokenTrait> Deref for Tokenized<&Arc<TokenCell<T, Token>>, &Token> {
+        type Target = T;
+        fn deref(&self) -> &Self::Target {
+            unsafe { &*self.0.get() }
+        }
+    }
+    impl<T, Token: TokenTrait> Deref for Tokenized<&Arc<TokenCell<T, Token>>, &mut Token> {
+        type Target = T;
+        fn deref(&self) -> &Self::Target {
+            unsafe { &*self.0.get() }
+        }
+    }
+    impl<T, Token: TokenTrait> DerefMut for Tokenized<&Arc<TokenCell<T, Token>>, &mut Token> {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            unsafe { &mut *self.0.get() }
+        }
+    }
+    impl<A, B> From<(A, B)> for Tokenized<A, B> {
+        fn from((a, b): (A, B)) -> Self {
+            Self(a, b)
+        }
+    }
+    pub struct TokenPacker<I, T> {
+        pub(crate) iter: I,
+        pub(crate) token: T,
+    }
+
+    impl<'a, I: Iterator, T> Iterator for TokenPacker<I, &'a T> {
+        type Item = (I::Item, &'a T);
+        fn next(&mut self) -> Option<Self::Item> {
+            self.iter.next().map(|i| (i, self.token))
+        }
+    }
+
+    impl<'a, I: Iterator, T> Iterator for TokenPacker<I, &'a mut T> {
+        type Item = Tokenized<I::Item, &'a mut T>;
+        fn next(&mut self) -> Option<Self::Item> {
+            self.iter.next().map(|i| {
+                Tokenized(i, unsafe {
+                    // Safety: while this makes it possible for multiple mutable references to the Token to exist,
+                    // it prevents them from being extracted and thus used to create multiple mutable references to
+                    // a same memory address.
+                    core::mem::transmute_copy(&self.token)
+                })
+            })
+        }
     }
 }
+pub use sealed::{TokenPacker, Tokenized};
+
 pub trait IArcProvider {
     type Ptr<T>: IArc<T>;
 }
