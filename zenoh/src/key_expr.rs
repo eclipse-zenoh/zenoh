@@ -19,9 +19,10 @@ use std::{
     future::Ready,
     str::FromStr,
 };
-use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 pub use zenoh_protocol::core::key_expr::*;
 use zenoh_protocol::core::{key_expr::canon::Canonizable, WireExpr};
+use zenoh_result::ZResult;
 use zenoh_transport::Primitives;
 
 use crate::{prelude::Selector, Session, Undeclarable};
@@ -270,7 +271,7 @@ impl<'a> KeyExpr<'a> {
 }
 
 impl FromStr for KeyExpr<'static> {
-    type Err = zenoh_core::Error;
+    type Err = zenoh_result::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(Self(KeyExprInner::Owned(s.parse()?)))
     }
@@ -351,31 +352,31 @@ impl<'a> From<KeyExpr<'a>> for String {
     }
 }
 impl<'a> TryFrom<String> for KeyExpr<'a> {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Ok(Self(KeyExprInner::Owned(value.try_into()?)))
     }
 }
 impl<'a> TryFrom<&'a String> for KeyExpr<'a> {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_from(value: &'a String) -> Result<Self, Self::Error> {
         Self::try_from(value.as_str())
     }
 }
 impl<'a> TryFrom<&'a mut String> for KeyExpr<'a> {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_from(value: &'a mut String) -> Result<Self, Self::Error> {
         Ok(Self::from(keyexpr::new(value)?))
     }
 }
 impl<'a> TryFrom<&'a str> for KeyExpr<'a> {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_from(value: &'a str) -> Result<Self, Self::Error> {
         Ok(Self(KeyExprInner::Borrowed(value.try_into()?)))
     }
 }
 impl<'a> TryFrom<&'a mut str> for KeyExpr<'a> {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_from(value: &'a mut str) -> Result<Self, Self::Error> {
         Ok(Self(KeyExprInner::Borrowed(value.try_into()?)))
     }

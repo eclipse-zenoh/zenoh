@@ -22,12 +22,12 @@ use zenoh_buffers::reader::DidntRead;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter};
 use zenoh_codec::{RCodec, WCodec, Zenoh060};
 use zenoh_config::{unwrap_or_default, EndPoint, ModeDependent};
-use zenoh_core::{bail, zerror, Result as ZResult};
 use zenoh_link::Locator;
 use zenoh_protocol::{
     core::{whatami::WhatAmIMatcher, WhatAmI, ZenohId},
     scouting::{Hello, Scout, ScoutingBody, ScoutingMessage},
 };
+use zenoh_result::{bail, zerror, ZResult};
 use zenoh_transport::TransportUnicast;
 
 const RCV_BUF_SIZE: usize = u16::MAX as usize;

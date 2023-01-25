@@ -28,9 +28,9 @@ use std::time::Duration;
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::ZSlice;
 use zenoh_codec::{RCodec, Zenoh060};
-use zenoh_core::{bail, zerror, Result as ZResult};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::transport::TransportMessage;
+use zenoh_result::{bail, zerror, ZResult};
 use zenoh_sync::{RecyclingObjectPool, Signal};
 
 #[derive(Clone)]

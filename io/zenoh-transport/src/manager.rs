@@ -29,13 +29,14 @@ use std::sync::RwLock;
 use std::time::Duration;
 use zenoh_cfg_properties::{config::*, Properties};
 use zenoh_config::{Config, QueueConf, QueueSizeConf};
-use zenoh_core::{bail, zparse, Result as ZResult};
+use zenoh_core::zparse;
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
 use zenoh_protocol::{
     core::{EndPoint, Locator, Priority, WhatAmI, ZInt, ZenohId},
     defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION},
 };
+use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::SharedMemoryReader;
 
@@ -45,7 +46,7 @@ use zenoh_shm::SharedMemoryReader;
 /// use std::time::Duration;
 /// use zenoh_protocol::core::{ZenohId, WhatAmI, whatami};
 /// use zenoh_transport::*;
-/// use zenoh_core::Result as ZResult;
+/// use zenoh_result::ZResult;
 ///
 /// // Create my transport handler to be notified when a new transport is initiated with me
 /// #[derive(Default)]

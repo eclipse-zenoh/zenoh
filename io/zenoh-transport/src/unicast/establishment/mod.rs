@@ -24,12 +24,13 @@ use cookie::*;
 use properties::*;
 use rand::Rng;
 use std::time::Duration;
-use zenoh_core::{zasynclock, zasyncread, Result as ZResult};
+use zenoh_core::{zasynclock, zasyncread};
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::{
     core::{WhatAmI, ZInt, ZenohId},
     transport::TransportMessage,
 };
+use zenoh_result::ZResult;
 
 pub(super) async fn close_link(
     link: &LinkUnicast,

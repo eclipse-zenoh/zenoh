@@ -25,7 +25,7 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-std = { workspace = true, default-features = false, features = ["unstable", "tokio1"] }
+async-std = { workspace = true, features = ["unstable", "tokio1"] }
 async-trait = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
@@ -39,5 +39,6 @@ zenoh-config = { path = "../../../commons/zenoh-config/" }
 zenoh-core = { path = "../../../commons/zenoh-core/" }
 zenoh-link-commons = { path = "../../zenoh-link-commons/" }
 zenoh-protocol = { path = "../../../commons/zenoh-protocol/" }
+zenoh-result = { path = "../../../commons/zenoh-result/" }
 zenoh-sync = { path = "../../../commons/zenoh-sync/" }
 zenoh-util = { path = "../../../commons/zenoh-util/" }

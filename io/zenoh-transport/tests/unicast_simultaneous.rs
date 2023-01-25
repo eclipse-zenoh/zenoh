@@ -21,12 +21,13 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
     use zenoh_buffers::ZBuf;
-    use zenoh_core::{zasync_executor_init, Result as ZResult};
+    use zenoh_core::zasync_executor_init;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
         zenoh::ZenohMessage,
     };
+    use zenoh_result::ZResult;
     use zenoh_transport::{
         TransportEventHandler, TransportManager, TransportMulticast,
         TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,

@@ -18,10 +18,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh_config::{Config, ZN_LINK_KEEP_ALIVE_DEFAULT, ZN_LINK_LEASE_DEFAULT};
-use zenoh_core::{bail, Result as ZResult};
-use zenoh_core::{zerror, zlock, zparse};
+use zenoh_core::{zlock, zparse};
 use zenoh_link::*;
 use zenoh_protocol::{core::locator::LocatorProtocol, transport::tmsg};
+use zenoh_result::{bail, zerror, ZResult};
 
 pub struct TransportManagerConfigMulticast {
     pub lease: Duration,

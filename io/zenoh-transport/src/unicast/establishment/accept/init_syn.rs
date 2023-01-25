@@ -16,12 +16,12 @@ use std::convert::TryFrom;
 use super::super::{AuthenticatedPeerLink, EstablishmentProperties};
 use super::AResult;
 use crate::TransportManager;
-use zenoh_core::zerror;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
     core::{WhatAmI, ZInt, ZenohId},
     transport::{tmsg, TransportBody},
 };
+use zenoh_result::zerror;
 
 /*************************************/
 /*             ACCEPT                */

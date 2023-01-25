@@ -32,12 +32,13 @@ use std::{
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_cfg_properties::config::*;
-use zenoh_core::{bail, zerror, zlock, Result as ZResult};
+use zenoh_core::zlock;
 use zenoh_protocol::core::{
     key_expr::OwnedKeyExpr,
     whatami::{WhatAmIMatcher, WhatAmIMatcherVisitor},
 };
 pub use zenoh_protocol::core::{whatami, EndPoint, Locator, Priority, WhatAmI, ZenohId};
+use zenoh_result::{bail, zerror, ZResult};
 use zenoh_util::LibLoader;
 
 pub type ValidationFunction = std::sync::Arc<
