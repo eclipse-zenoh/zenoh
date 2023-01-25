@@ -38,6 +38,20 @@ pub struct KeArcTreeInner<
 }
 
 token_cell::token!(pub DefaultToken);
+fn ketree_borrow<'a, T, Token: TokenTrait>(
+    cell: &'a TokenCell<T, Token>,
+    token: &'a Token,
+) -> &'a T {
+    cell.try_borrow(token)
+        .unwrap_or_else(|_| panic!("Attempted to use KeArcTree with the wrong Token"))
+}
+fn ketree_borrow_mut<'a, T, Token: TokenTrait>(
+    cell: &'a TokenCell<T, Token>,
+    token: &'a mut Token,
+) -> &'a mut T {
+    cell.try_borrow_mut(token)
+        .unwrap_or_else(|_| panic!("Attempted to mutably use KeArcTree with the wrong Token"))
+}
 
 pub struct KeArcTree<
     Weight,
@@ -115,7 +129,7 @@ where
         &'a mut Token,
     );
     fn node(&'a self, token: &'a Token, at: &keyexpr) -> Option<Self::Node> {
-        let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        let inner = ketree_borrow(&self.inner, token);
         let mut chunks = at.chunks();
         let mut node = inner.children.child_at(chunks.next().unwrap())?;
         for chunk in chunks {
@@ -131,7 +145,7 @@ where
             .map(|(node, _)| (node, token))
     }
     fn node_or_create(&'a self, token: &'a mut Token, at: &keyexpr) -> Self::NodeMut {
-        let Ok(inner) = self.inner.try_borrow_mut(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        let inner = ketree_borrow_mut(&self.inner, token);
         if at.is_wild() {
             inner.wildness.set(true);
         }
@@ -178,7 +192,7 @@ where
         &'a Token,
     >;
     fn tree_iter(&'a self, token: &'a Token) -> Self::TreeIter {
-        let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        let inner = ketree_borrow(&self.inner, token);
         TokenPacker {
             iter: TreeIter::new(&inner.children),
             token,
@@ -199,7 +213,7 @@ where
         &'a mut Token,
     >;
     fn tree_iter_mut(&'a self, token: &'a mut Token) -> Self::TreeIterMut {
-        let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        let inner = ketree_borrow(&self.inner, token);
         TokenPacker {
             iter: TreeIter::new(unsafe { core::mem::transmute(&inner.children) }),
             token,
@@ -220,7 +234,7 @@ where
         Self::IntersectionItem,
     >;
     fn intersecting_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Intersection {
-        let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        let inner = ketree_borrow(&self.inner, token);
         if inner.wildness.get() {
             IterOrOption::Iter(TokenPacker {
                 iter: Intersection::new(&inner.children, key),
@@ -248,7 +262,7 @@ where
         token: &'a mut Token,
         key: &'a keyexpr,
     ) -> Self::IntersectionMut {
-        let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        let inner = ketree_borrow(&self.inner, token);
         if inner.wildness.get() {
             IterOrOption::Iter(TokenPacker {
                 iter: Intersection::new(unsafe { core::mem::transmute(&inner.children) }, key),
@@ -273,7 +287,7 @@ where
         Self::InclusionItem,
     >;
     fn included_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Inclusion {
-        let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        let inner = ketree_borrow(&self.inner, token);
         if inner.wildness.get() {
             IterOrOption::Iter(TokenPacker {
                 iter: Inclusion::new(&inner.children, key),
@@ -297,7 +311,7 @@ where
         Self::InclusionItemMut,
     >;
     fn included_nodes_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::InclusionMut {
-        let Ok(inner) = self.inner.try_borrow(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
+        let inner = ketree_borrow(&self.inner, token);
         if inner.wildness.get() {
             unsafe {
                 IterOrOption::Iter(TokenPacker {
@@ -317,17 +331,17 @@ where
         mut predicate: F,
     ) {
         let mut wild = false;
-        let Ok(inner) = self.inner.try_borrow_mut(token) else {panic!("Attempted to use KeArcTree with the wrong Token")};
-        inner.children.filter_out(&mut |child| match unsafe {
-            (*child.get())._prune(&mut predicate)
-        } {
-            PruneResult::Delete => Arc::strong_count(child) <= 1,
-            PruneResult::NonWild => false,
-            PruneResult::Wild => {
-                wild = true;
-                false
-            }
-        });
+        let inner = ketree_borrow_mut(&self.inner, token);
+        inner.children.filter_out(
+            &mut |child| match unsafe { (*child.get()).prune(&mut predicate) } {
+                PruneResult::Delete => Arc::strong_count(child) <= 1,
+                PruneResult::NonWild => false,
+                PruneResult::Wild => {
+                    wild = true;
+                    false
+                }
+            },
+        );
         inner.wildness.set(wild);
     }
 }
@@ -471,11 +485,11 @@ where
         Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
     >,
 {
-    fn _prune<F: FnMut(&mut Self) -> bool>(&mut self, predicate: &mut F) -> PruneResult {
+    fn prune<F: FnMut(&mut Self) -> bool>(&mut self, predicate: &mut F) -> PruneResult {
         let mut result = PruneResult::NonWild;
         self.children.filter_out(&mut |child| {
             let c = unsafe { &mut *child.get() };
-            match c._prune(predicate) {
+            match c.prune(predicate) {
                 PruneResult::Delete => Arc::strong_count(child) <= 1,
                 PruneResult::NonWild => false,
                 PruneResult::Wild => {

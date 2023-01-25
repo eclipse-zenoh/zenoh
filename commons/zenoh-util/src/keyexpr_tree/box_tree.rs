@@ -220,7 +220,7 @@ where
     fn prune_where<F: FnMut(&mut Self::Node) -> bool>(&mut self, mut predicate: F) {
         let mut wild = false;
         self.children
-            .filter_out(&mut |child| match child.as_mut()._prune(&mut predicate) {
+            .filter_out(&mut |child| match child.as_mut().prune(&mut predicate) {
                 PruneResult::Delete => true,
                 PruneResult::NonWild => false,
                 PruneResult::Wild => {
@@ -379,10 +379,10 @@ where
         s.push_str(self.chunk.as_str());
         s
     }
-    fn _prune<F: FnMut(&mut Self) -> bool>(&mut self, predicate: &mut F) -> PruneResult {
+    fn prune<F: FnMut(&mut Self) -> bool>(&mut self, predicate: &mut F) -> PruneResult {
         let mut result = PruneResult::NonWild;
         self.children
-            .filter_out(&mut |child| match child.as_node_mut()._prune(predicate) {
+            .filter_out(&mut |child| match child.as_node_mut().prune(predicate) {
                 PruneResult::Delete => true,
                 PruneResult::NonWild => false,
                 PruneResult::Wild => {
