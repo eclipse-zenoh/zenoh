@@ -15,7 +15,7 @@ use super::PseudoRng;
 use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, KeyInit};
 use aes::Aes128;
 use rand::Rng;
-use zenoh_core::{bail, Result as ZResult};
+use zenoh_result::{bail, ZResult};
 
 pub struct BlockCipher {
     inner: Aes128,

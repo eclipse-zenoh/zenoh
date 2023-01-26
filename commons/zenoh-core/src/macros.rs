@@ -113,17 +113,6 @@ macro_rules! zasyncrecv {
     };
 }
 
-// This macro checks the boolean results of an operation and returns in case
-// the result is false. Basically, it implements the ? operator for booleans
-#[macro_export]
-macro_rules! zcheck {
-    ($op:expr) => {
-        if !$op {
-            return false;
-        }
-    };
-}
-
 // This macro allows to define some compile time configurable static constants
 #[macro_export]
 macro_rules! zconfigurable {
@@ -149,51 +138,6 @@ macro_rules! zconfigurable {
         $crate::zconfigurable!($($t)*);
     };
     () => ()
-}
-pub use anyhow::anyhow;
-#[macro_export]
-macro_rules! zerror {
-    (($errno:expr) $source: expr => $($t: tt)*) => {
-        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::zresult::NegativeI8::new($errno as i8)).set_source($source)
-    };
-    (($errno:expr) $t: literal) => {
-        $crate::zresult::ZError::new($crate::anyhow!($t), file!(), line!(), $crate::zresult::NegativeI8::new($errno as i8))
-    };
-    (($errno:expr) $t: expr) => {
-        $crate::zresult::ZError::new($t, file!(), line!(), $crate::zresult::NegativeI8::new($errno as i8))
-    };
-    (($errno:expr) $($t: tt)*) => {
-        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::zresult::NegativeI8::new($errno as i8))
-    };
-    ($source: expr => $($t: tt)*) => {
-        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::zresult::NegativeI8::MIN).set_source($source)
-    };
-    ($t: literal) => {
-        $crate::zresult::ZError::new($crate::anyhow!($t), file!(), line!(), $crate::zresult::NegativeI8::MIN)
-    };
-    ($t: expr) => {
-        $crate::zresult::ZError::new($t, file!(), line!(), $crate::zresult::NegativeI8::MIN)
-    };
-    ($($t: tt)*) => {
-        $crate::zresult::ZError::new($crate::anyhow!($($t)*), file!(), line!(), $crate::zresult::NegativeI8::MIN)
-    };
-}
-
-// @TODO: re-design ZError and macros
-// This macro is a shorthand for the creation of a ZError
-#[macro_export]
-macro_rules! bail{
-    ($($t: tt)*) => {
-        return Err($crate::zerror!($($t)*).into())
-    };
-}
-
-// This macro is a shorthand for the conversion of any Error into a ZError
-#[macro_export]
-macro_rules! to_zerror {
-    ($kind:ident, $descr:expr) => {
-        |e| Err(zerror!($kind, $descr, e))
-    };
 }
 
 // This macro is a shorthand for the conversion to ZInt
@@ -238,7 +182,7 @@ macro_rules! zasync_executor_init {
 macro_rules! zparse {
     ($str:expr) => {
         $str.parse().map_err(|_| {
-            let e = $crate::zerror!(
+            let e = zenoh_result::zerror!(
                 "Failed to read configuration: {} is not a valid value",
                 $str
             );

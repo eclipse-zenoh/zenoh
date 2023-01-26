@@ -28,9 +28,9 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh060};
 use zenoh_config::Config;
-use zenoh_core::{bail, zerror, zresult::ShmError, Result as ZResult};
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::core::{ZInt, ZenohId};
+use zenoh_result::{bail, zerror, ShmError, ZResult};
 use zenoh_shm::{
     SharedMemoryBuf, SharedMemoryBufInfoSerialized, SharedMemoryManager, SharedMemoryReader,
 };

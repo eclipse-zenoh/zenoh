@@ -23,7 +23,7 @@ use std::sync::Arc;
 
 use zenoh_cfg_properties::Properties;
 use zenoh_config::Config;
-use zenoh_core::{bail, Result as ZResult};
+use zenoh_result::{bail, ZResult};
 
 #[cfg(feature = "transport_quic")]
 pub use zenoh_link_quic as quic;
@@ -119,7 +119,7 @@ impl LinkConfigurator {
         config: &Config,
     ) -> (
         HashMap<String, Properties>,
-        HashMap<String, zenoh_core::Error>,
+        HashMap<String, zenoh_result::Error>,
     ) {
         let mut configs = HashMap::new();
         let mut errors = HashMap::new();

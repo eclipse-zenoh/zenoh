@@ -13,13 +13,19 @@
 //
 use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
 use crate::core::WireExpr;
-use alloc::borrow::{Borrow, Cow};
+use alloc::{
+    borrow::{Borrow, Cow, ToOwned},
+    format,
+    string::String,
+    vec,
+    vec::Vec,
+};
 use core::{
     convert::{TryFrom, TryInto},
     fmt,
     ops::{Deref, Div},
 };
-use zenoh_core::{bail, Error as ZError, Result as ZResult};
+use zenoh_result::{bail, Error as ZError, ZResult};
 
 /// A [`str`] newtype that is statically known to be a valid key expression.
 ///

@@ -138,10 +138,10 @@ impl Sample {
     pub fn try_from<TryIntoKeyExpr, IntoValue>(
         key_expr: TryIntoKeyExpr,
         value: IntoValue,
-    ) -> Result<Self, zenoh_core::Error>
+    ) -> Result<Self, zenoh_result::Error>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'static>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_core::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_result::Error>,
         IntoValue: Into<Value>,
     {
         Ok(Sample {

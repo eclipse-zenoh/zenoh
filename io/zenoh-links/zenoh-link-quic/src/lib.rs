@@ -26,9 +26,10 @@ use std::net::SocketAddr;
 use webpki::DnsNameRef;
 use zenoh_cfg_properties::Properties;
 use zenoh_config::{Config, Locator};
-use zenoh_core::{bail, zconfigurable, zerror, Result as ZResult};
+use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
 use zenoh_protocol::core::endpoint::Address;
+use zenoh_result::{bail, zerror, ZResult};
 
 mod unicast;
 pub use unicast::*;

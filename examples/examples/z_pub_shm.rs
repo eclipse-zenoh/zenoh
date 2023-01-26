@@ -22,7 +22,7 @@ const N: usize = 10;
 const K: u32 = 3;
 
 #[async_std::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+async fn main() -> Result<(), zenoh::Error> {
     // Initiate logging
     env_logger::init();
 

@@ -31,10 +31,10 @@ use zenoh_buffers::{
 use zenoh_cfg_properties::config::ZN_AUTH_RSA_KEY_SIZE_DEFAULT;
 use zenoh_codec::{RCodec, WCodec, Zenoh060};
 use zenoh_config::Config;
-use zenoh_core::{bail, zparse, Result as ZResult};
-use zenoh_core::{zasynclock, zerror};
+use zenoh_core::{zasynclock, zparse};
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::core::{ZInt, ZenohId};
+use zenoh_result::{bail, zerror, ZResult};
 
 const MULTILINK_VERSION: ZInt = 1;
 

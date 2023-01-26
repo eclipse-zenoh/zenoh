@@ -18,12 +18,13 @@ use crate::{
     TransportManager,
 };
 use std::{convert::TryFrom, time::Duration};
-use zenoh_core::{zasyncread, zerror};
+use zenoh_core::zasyncread;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
     core::ZInt,
     transport::{tmsg, Close, TransportBody},
 };
+use zenoh_result::zerror;
 
 pub(super) struct Output {
     pub(super) initial_sn: ZInt,

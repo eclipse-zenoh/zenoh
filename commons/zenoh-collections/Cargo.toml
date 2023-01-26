@@ -30,9 +30,8 @@ description = "Internal crate for zenoh."
 
 [features]
 default = ["std"]
-std = ["zenoh-core"]
+std = []
 defmt = ["dep:defmt"]
 
 [dependencies]
 defmt = { workspace = true, optional = true }
-zenoh-core = { path = "../zenoh-core/", optional = true }

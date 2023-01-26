@@ -22,9 +22,10 @@ mod unicast;
 use async_trait::async_trait;
 use std::str::FromStr;
 pub use unicast::*;
-use zenoh_core::{zconfigurable, Result as ZResult};
+use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol::core::{endpoint::Address, EndPoint, Locator};
+use zenoh_result::ZResult;
 
 // Maximum MTU (Serial PDU) in bytes.
 const SERIAL_MAX_MTU: u16 = z_serial::MAX_MTU as u16;
