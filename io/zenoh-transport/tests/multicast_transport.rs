@@ -159,14 +159,14 @@ mod tests {
 
         // Create an empty transport with the peer01
         // Open transport -> This should be accepted
-        println!("Opening transport with {}", endpoint);
+        println!("Opening transport with {endpoint}");
         let _ = ztimeout!(peer01_manager.open_transport_multicast(endpoint.clone())).unwrap();
         assert!(peer01_manager
             .get_transport_multicast(&endpoint.to_locator())
             .is_some());
         println!("\t{:?}", peer01_manager.get_transports_multicast());
 
-        println!("Opening transport with {}", endpoint);
+        println!("Opening transport with {endpoint}");
         let _ = ztimeout!(peer02_manager.open_transport_multicast(endpoint.clone())).unwrap();
         assert!(peer02_manager
             .get_transport_multicast(&endpoint.to_locator())
@@ -212,13 +212,13 @@ mod tests {
         endpoint: &EndPoint,
     ) {
         // Close the peer01 transport
-        println!("Closing transport with {}", endpoint);
+        println!("Closing transport with {endpoint}");
         ztimeout!(peer01.transport.close()).unwrap();
         assert!(peer01.manager.get_transports_multicast().is_empty());
         assert!(peer02.transport.get_peers().unwrap().is_empty());
 
         // Close the peer02 transport
-        println!("Closing transport with {}", endpoint);
+        println!("Closing transport with {endpoint}");
         ztimeout!(peer02.transport.close()).unwrap();
         assert!(peer02.manager.get_transports_multicast().is_empty());
 
@@ -250,10 +250,7 @@ mod tests {
             attachment,
         );
 
-        println!(
-            "Sending {} messages... {:?} {}",
-            MSG_COUNT, channel, msg_size
-        );
+        println!("Sending {MSG_COUNT} messages... {channel:?} {msg_size}");
         for _ in 0..MSG_COUNT {
             peer01.transport.schedule(message.clone()).unwrap();
         }
@@ -315,7 +312,7 @@ mod tests {
 
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
-            format!("udp/{}", ZN_MULTICAST_IPV4_ADDRESS_DEFAULT)
+            format!("udp/{ZN_MULTICAST_IPV4_ADDRESS_DEFAULT}")
                 .parse()
                 .unwrap(),
             // Disabling by default because of no IPv6 support

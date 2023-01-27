@@ -55,12 +55,12 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
         .unwrap();
 
     // Create the listener on the router
-    println!("Add locator: {}", endpoint);
+    println!("Add locator: {endpoint}");
     let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
 
     // Create an empty transport with the client
     // Open transport -> This should be accepted
-    println!("Opening transport with {}", endpoint);
+    println!("Opening transport with {endpoint}");
     let _ = ztimeout!(client_manager.open_transport(endpoint.clone())).unwrap();
 
     let client_transport = client_manager.get_transport(&router_id).unwrap();
@@ -84,8 +84,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     );
 
     println!(
-        "Sending message of {} bytes while defragmentation buffer size is {} bytes",
-        msg_size, MSG_DEFRAG_BUF
+        "Sending message of {msg_size} bytes while defragmentation buffer size is {MSG_DEFRAG_BUF} bytes"
     );
     client_transport.schedule(message.clone()).unwrap();
 
@@ -104,7 +103,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     });
 
     // Stop the locators on the manager
-    println!("Del locator: {}", endpoint);
+    println!("Del locator: {endpoint}");
     ztimeout!(router_manager.del_listener(endpoint)).unwrap();
 
     // Wait a little bit

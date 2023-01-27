@@ -45,7 +45,7 @@ fn main() {
     let mut samples = Vec::with_capacity(n);
 
     // -- warmup --
-    println!("Warming up for {:?}...", warmup);
+    println!("Warming up for {warmup:?}...");
     let now = Instant::now();
     while now.elapsed() < warmup {
         let data = data.clone();

@@ -224,7 +224,7 @@ async fn tx_task(
     }
 
     let keep_alive = config.join_interval / config.keep_alive as u32;
-    let mut last_join = Instant::now() - config.join_interval;
+    let mut last_join = Instant::now().checked_sub(config.join_interval).unwrap();
     loop {
         match pull(&mut pipeline, keep_alive)
             .race(join(last_join, config.join_interval))

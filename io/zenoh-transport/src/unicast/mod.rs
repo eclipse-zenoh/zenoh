@@ -231,7 +231,7 @@ impl fmt::Debug for TransportUnicast {
                 .field("links", &transport.get_links())
                 .finish(),
             Err(e) => {
-                write!(f, "{}", e)
+                write!(f, "{e}")
             }
         }
     }

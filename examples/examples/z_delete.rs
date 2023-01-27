@@ -25,7 +25,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Deleting resources matching '{}'...", key_expr);
+    println!("Deleting resources matching '{key_expr}'...");
     session.delete(&key_expr).res().await.unwrap();
 
     session.close().res().await.unwrap();

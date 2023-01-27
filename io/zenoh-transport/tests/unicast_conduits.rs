@@ -202,14 +202,14 @@ async fn open_transport(
 
     // Create the listener on the router
     for e in endpoints.iter() {
-        println!("Add locator: {}", e);
+        println!("Add locator: {e}");
         let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
     }
 
     // Create an empty transport with the client
     // Open transport -> This should be accepted
     for e in endpoints.iter() {
-        println!("Opening transport with {}", e);
+        println!("Opening transport with {e}");
         let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
     }
 
@@ -233,9 +233,9 @@ async fn close_transport(
     // Close the client transport
     let mut ee = String::new();
     for e in endpoints.iter() {
-        let _ = write!(ee, "{} ", e);
+        let _ = write!(ee, "{e} ");
     }
-    println!("Closing transport with {}", ee);
+    println!("Closing transport with {ee}");
     ztimeout!(client_transport.close()).unwrap();
 
     ztimeout!(async {
@@ -246,7 +246,7 @@ async fn close_transport(
 
     // Stop the locators on the manager
     for e in endpoints.iter() {
-        println!("Del locator: {}", e);
+        println!("Del locator: {e}");
         ztimeout!(router_manager.del_listener(e)).unwrap();
     }
 
@@ -284,10 +284,7 @@ async fn single_run(
         attachment,
     );
 
-    println!(
-        "Sending {} messages... {:?} {}",
-        MSG_COUNT, channel, msg_size
-    );
+    println!("Sending {MSG_COUNT} messages... {channel:?} {msg_size}");
     for _ in 0..MSG_COUNT {
         client_transport.schedule(message.clone()).unwrap();
     }

@@ -742,8 +742,7 @@ mod tests {
             );
 
             println!(
-                "Pipeline Flow [>>>]: Sending {} messages with payload size of {} bytes",
-                num_msg, payload_size
+                "Pipeline Flow [>>>]: Sending {num_msg} messages with payload size of {payload_size} bytes"
             );
             for i in 0..num_msg {
                 println!("Pipeline Flow [>>>]: Pushed {} msgs", i + 1);
@@ -798,8 +797,7 @@ mod tests {
             }
 
             println!(
-                "Pipeline Flow [<<<]: Received {} messages, {} bytes, {} batches, {} fragments",
-                msgs, bytes, batches, fragments
+                "Pipeline Flow [<<<]: Received {msgs} messages, {bytes} bytes, {batches} batches, {fragments} fragments"
             );
         }
 
@@ -879,9 +877,7 @@ mod tests {
             let num_msg = 1 + CONFIG.queue_size[0];
             for i in 0..num_msg {
                 println!(
-                    "Pipeline Blocking [>>>]: ({}) Scheduling message #{} with payload size of {} bytes",
-                    id, i,
-                    payload_size
+                    "Pipeline Blocking [>>>]: ({id}) Scheduling message #{i} with payload size of {payload_size} bytes"
                 );
                 queue.push_zenoh_message(message.clone());
                 let c = counter.fetch_add(1, Ordering::AcqRel);

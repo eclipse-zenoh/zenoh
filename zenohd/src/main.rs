@@ -99,7 +99,7 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
         let runtime = match Runtime::new(config).await {
             Ok(runtime) => runtime,
             Err(e) => {
-                println!("{}. Exiting...", e);
+                println!("{e}. Exiting...");
                 std::process::exit(-1);
             }
         };
@@ -155,7 +155,7 @@ fn config_from_args(args: &ArgMatches) -> Config {
         let value = args.value_of("rest-http-port").unwrap();
         if !value.eq_ignore_ascii_case("none") {
             config
-                .insert_json5("plugins/rest/http_port", &format!(r#""{}""#, value))
+                .insert_json5("plugins/rest/http_port", &format!(r#""{value}""#))
                 .unwrap();
         }
     }
@@ -169,17 +169,14 @@ fn config_from_args(args: &ArgMatches) -> Config {
             match plugin.split_once(':') {
                 Some((name, path)) => {
                     config
-                        .insert_json5(&format!("plugins/{}/__required__", name), "true")
+                        .insert_json5(&format!("plugins/{name}/__required__"), "true")
                         .unwrap();
                     config
-                        .insert_json5(
-                            &format!("plugins/{}/__path__", name),
-                            &format!("\"{}\"", path),
-                        )
+                        .insert_json5(&format!("plugins/{name}/__path__"), &format!("\"{path}\""))
                         .unwrap();
                 }
                 None => config
-                    .insert_json5(&format!("plugins/{}/__required__", plugin), "true")
+                    .insert_json5(&format!("plugins/{plugin}/__required__"), "true")
                     .unwrap(),
             }
         }

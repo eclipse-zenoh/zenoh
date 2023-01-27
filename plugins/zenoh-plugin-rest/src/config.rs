@@ -52,7 +52,7 @@ impl<'de> Visitor<'de> for HttpPortVisitor {
     where
         E: de::Error,
     {
-        Ok(format!("{}:{}", DEFAULT_HTTP_INTERFACE, value))
+        Ok(format!("{DEFAULT_HTTP_INTERFACE}:{value}"))
     }
 
     fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
@@ -71,6 +71,6 @@ impl<'de> Visitor<'de> for HttpPortVisitor {
         if port.parse::<u32>().is_err() {
             return Err(E::invalid_value(Unexpected::Str(port), &self));
         }
-        Ok(format!("{}:{}", interface, port))
+        Ok(format!("{interface}:{port}"))
     }
 }

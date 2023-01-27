@@ -85,10 +85,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session) {
         task::sleep(SLEEP).await;
 
         // Put data
-        println!(
-            "[PS][02b] Putting on peer02 session. {} msgs of {} bytes.",
-            MSG_COUNT, size
-        );
+        println!("[PS][02b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");
         for _ in 0..MSG_COUNT {
             ztimeout!(peer02
                 .put(key_expr, vec![0u8; size])
@@ -100,7 +97,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session) {
         ztimeout!(async {
             loop {
                 let cnt = msgs.load(Ordering::SeqCst);
-                println!("[PS][03b] Received {}/{}.", cnt, MSG_COUNT);
+                println!("[PS][03b] Received {cnt}/{MSG_COUNT}.");
                 if cnt < MSG_COUNT {
                     task::sleep(SLEEP).await;
                 } else {
@@ -142,7 +139,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session) {
         task::sleep(SLEEP).await;
 
         // Get data
-        println!("[QR][02c] Getting on peer02 session. {} msgs.", MSG_COUNT);
+        println!("[QR][02c] Getting on peer02 session. {MSG_COUNT} msgs.");
         let mut cnt = 0;
         for _ in 0..MSG_COUNT {
             let rs = ztimeout!(peer02.get(key_expr).res_async()).unwrap();
@@ -151,10 +148,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session) {
                 cnt += 1;
             }
         }
-        println!(
-            "[QR][02c] Got on peer02 session. {}/{} msgs.",
-            cnt, MSG_COUNT
-        );
+        println!("[QR][02c] Got on peer02 session. {cnt}/{MSG_COUNT} msgs.");
         assert_eq!(msgs.load(Ordering::SeqCst), MSG_COUNT);
         assert_eq!(cnt, MSG_COUNT);
 
