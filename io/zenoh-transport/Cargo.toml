@@ -25,8 +25,8 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-shared-memory = [    
-	"zenoh-protocol/shared-memory",
+shared-memory = [
+    "zenoh-protocol/shared-memory",
     "zenoh-shm",
     "zenoh-codec/shared-memory",
 ]
@@ -70,3 +70,4 @@ zenoh-util = { path = "../../commons/zenoh-util/" }
 [dev-dependencies]
 env_logger = { workspace = true }
 panic-message = { workspace = true }
+zenoh-protocol = { path = "../../commons/zenoh-protocol/", features = ["test"] }

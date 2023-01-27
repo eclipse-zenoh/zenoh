@@ -495,13 +495,13 @@ async fn run_single(
     #[cfg(feature = "stats")]
     {
         let c_stats = client_transport.get_stats().unwrap();
-        println!("\tClient: {:?}", c_stats,);
+        println!("\tClient: {c_stats:?}");
         let r_stats = router_manager
             .get_transport_unicast(&client_manager.config.zid)
             .unwrap()
             .get_stats()
             .unwrap();
-        println!("\tRouter: {:?}", r_stats);
+        println!("\tRouter: {r_stats:?}");
     }
 
     close_transport(

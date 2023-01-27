@@ -89,6 +89,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "ahash"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf6ccdb167abbf410dcb915cabd428929d7f6a04980b54a11f26a39f1c7f7107"
+dependencies = [
+ "cfg-if 1.0.0",
+ "once_cell",
+ "version_check",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "0.7.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1311,6 +1322,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
+name = "hashbrown"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
+dependencies = [
+ "ahash",
+]
+
+[[package]]
 name = "hermit-abi"
 version = "0.1.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1480,7 +1500,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1885e79c1fc4b10f0e172c475f458b7f7b93061064d98c3293e98c5ba0c8b399"
 dependencies = [
  "autocfg",
- "hashbrown",
+ "hashbrown 0.12.3",
 ]
 
 [[package]]
@@ -1580,6 +1600,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3afef3b6eff9ce9d8ff9b3601125eec7f0c8cbac7abd14f355d053fa56c98768"
 dependencies = [
  "cpufeatures",
+]
+
+[[package]]
+name = "keyed-set"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e4be799ab6c1006138054745f5043b726d8bbb526ebaa7f15d44ff4d399d71c"
+dependencies = [
+ "hashbrown 0.13.2",
 ]
 
 [[package]]
@@ -3151,6 +3180,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cda74da7e1a664f795bb1f8a87ec406fb89a02522cf6e50620d016add6dbbf5c"
 
 [[package]]
+name = "token-cell"
+version = "1.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59a3bf80fcc7b38f8fe4032a779e5bb31daff5edbab41d37954c2ef44d35f81b"
+dependencies = [
+ "paste",
+]
+
+[[package]]
 name = "tokio"
 version = "1.24.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4230,25 +4268,28 @@ dependencies = [
  "async-std",
  "async-trait",
  "clap",
+ "criterion",
  "flume",
  "futures",
+ "hashbrown 0.13.2",
  "hex",
  "home",
  "humantime",
+ "keyed-set",
  "lazy_static",
  "libc",
  "libloading",
  "log",
  "pnet",
  "pnet_datalink",
+ "rand 0.8.5",
  "shellexpand",
+ "token-cell",
  "winapi",
- "zenoh-cfg-properties",
- "zenoh-collections",
  "zenoh-core",
- "zenoh-crypto",
+ "zenoh-protocol",
  "zenoh-result",
- "zenoh-sync",
+ "zenoh-util",
 ]
 
 [[package]]

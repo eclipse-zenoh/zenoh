@@ -287,6 +287,12 @@ impl keyexpr {
     pub unsafe fn from_slice_unchecked(s: &[u8]) -> &Self {
         core::mem::transmute(s)
     }
+    pub fn chunks(&self) -> impl Iterator<Item = &Self> + DoubleEndedIterator {
+        self.split('/').map(|c| unsafe {
+            // Any chunk of a valid KE is itself a valid KE => we can safely call the unchecked constructor.
+            Self::from_str_unchecked(c)
+        })
+    }
 }
 
 impl Div for &keyexpr {
