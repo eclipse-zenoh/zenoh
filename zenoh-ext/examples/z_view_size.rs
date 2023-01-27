@@ -34,19 +34,18 @@ async fn main() {
         .await
         .unwrap();
     println!(
-        "Member {} waiting for {} members in group {} for {} seconds...",
-        member_id, size, group_name, timeout
+        "Member {member_id} waiting for {size} members in group {group_name} for {timeout} seconds..."
     );
     if group
         .wait_for_view_size(size, Duration::from_secs(timeout))
         .await
     {
-        println!("Established view size of {} with members:", size);
+        println!("Established view size of {size} with members:");
         for m in group.view().await {
             println!(" - {}", m.id());
         }
     } else {
-        println!("Failed to establish view size of {}", size);
+        println!("Failed to establish view size of {size}");
     }
 }
 

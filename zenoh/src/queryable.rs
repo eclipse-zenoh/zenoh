@@ -28,8 +28,9 @@ use std::ops::Deref;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use zenoh_core::{AsyncResolve, Resolvable, Result as ZResult, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::WireExpr;
+use zenoh_result::ZResult;
 
 /// Structs received by a [`Queryable`](Queryable).
 pub struct Query {
@@ -159,7 +160,9 @@ impl SyncResolve for ReplyBuilder<'_> {
 
 /// The future returned by a [`ReplyBuilder`] when using async.
 #[must_use = "futures do nothing unless you `.await` or poll them"]
-pub struct ReplyFuture<'a>(Result<flume::r#async::SendFut<'a, Sample>, Option<zenoh_core::Error>>);
+pub struct ReplyFuture<'a>(
+    Result<flume::r#async::SendFut<'a, Sample>, Option<zenoh_result::Error>>,
+);
 
 impl Future for ReplyFuture<'_> {
     type Output = ZResult<()>;

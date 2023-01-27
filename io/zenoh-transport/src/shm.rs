@@ -13,8 +13,9 @@
 //
 use std::{any::TypeId, sync::RwLock};
 use zenoh_buffers::{ZBuf, ZSlice};
-use zenoh_core::{zread, zwrite, Result as ZResult};
+use zenoh_core::{zread, zwrite};
 use zenoh_protocol::zenoh::*;
+use zenoh_result::ZResult;
 use zenoh_shm::{
     SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryBufInfoSerialized, SharedMemoryReader,
 };

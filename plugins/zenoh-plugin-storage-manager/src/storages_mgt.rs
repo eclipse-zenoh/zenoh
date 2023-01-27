@@ -15,7 +15,7 @@ use async_std::sync::Arc;
 use log::trace;
 use zenoh::Session;
 use zenoh_backend_traits::config::StorageConfig;
-use zenoh_core::Result as ZResult;
+use zenoh_result::ZResult;
 
 pub use super::replica::{Replica, StorageService};
 
@@ -34,7 +34,7 @@ pub(crate) async fn start_storage(
     let parts: Vec<&str> = admin_key.split('/').collect();
     let uuid = parts[2];
     let storage_name = parts[7];
-    let name = format!("{}/{}", uuid, storage_name);
+    let name = format!("{uuid}/{storage_name}");
 
     trace!("Start storage {} on {}", name, config.key_expr);
 

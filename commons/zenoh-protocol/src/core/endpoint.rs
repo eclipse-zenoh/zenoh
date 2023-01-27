@@ -13,8 +13,9 @@
 //
 use super::locator::*;
 use crate::core::split_once;
+use alloc::{borrow::ToOwned, format, string::String, vec::Vec};
 use core::{convert::TryFrom, fmt, str::FromStr};
-use zenoh_core::{zerror, Error as ZError, Result as ZResult};
+use zenoh_result::{zerror, Error as ZError, ZResult};
 
 // Parsing chars
 pub const PROTO_SEPARATOR: char = '/';
@@ -441,13 +442,12 @@ impl EndPoint {
         let c: &str = config.as_ref();
 
         let s = match (m.is_empty(), c.is_empty()) {
-            (true, true) => format!("{}{}{}", p, PROTO_SEPARATOR, a),
-            (false, true) => format!("{}{}{}{}{}", p, PROTO_SEPARATOR, a, METADATA_SEPARATOR, m),
-            (true, false) => format!("{}{}{}{}{}", p, PROTO_SEPARATOR, a, CONFIG_SEPARATOR, c),
-            (false, false) => format!(
-                "{}{}{}{}{}{}{}",
-                p, PROTO_SEPARATOR, a, METADATA_SEPARATOR, m, CONFIG_SEPARATOR, c
-            ),
+            (true, true) => format!("{p}{PROTO_SEPARATOR}{a}"),
+            (false, true) => format!("{p}{PROTO_SEPARATOR}{a}{METADATA_SEPARATOR}{m}"),
+            (true, false) => format!("{p}{PROTO_SEPARATOR}{a}{CONFIG_SEPARATOR}{c}"),
+            (false, false) => {
+                format!("{p}{PROTO_SEPARATOR}{a}{METADATA_SEPARATOR}{m}{CONFIG_SEPARATOR}{c}")
+            }
         };
 
         Self::try_from(s)

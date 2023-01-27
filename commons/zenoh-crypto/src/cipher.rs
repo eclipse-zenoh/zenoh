@@ -15,7 +15,7 @@ use super::PseudoRng;
 use aes::cipher::{generic_array::GenericArray, BlockDecrypt, BlockEncrypt, KeyInit};
 use aes::Aes128;
 use rand::Rng;
-use zenoh_core::{bail, Result as ZResult};
+use zenoh_result::{bail, ZResult};
 
 pub struct BlockCipher {
     inner: Aes128,
@@ -74,38 +74,38 @@ mod tests {
         fn encrypt_decrypt(cipher: &BlockCipher, prng: &mut PseudoRng) {
             println!("\n[1]");
             let t1 = "A".as_bytes().to_vec();
-            println!("Clear: {:?}", t1);
+            println!("Clear: {t1:?}");
             let encrypted = cipher.encrypt(t1.clone(), prng);
-            println!("Encrypted: {:?}", encrypted);
+            println!("Encrypted: {encrypted:?}");
             let decrypted = cipher.decrypt(encrypted).unwrap();
-            println!("Decrypted: {:?}", decrypted);
+            println!("Decrypted: {decrypted:?}");
             assert_eq!(&t1[..], &decrypted[..t1.len()]);
 
             println!("\n[2]");
             let t2 = "Short string".as_bytes().to_vec();
-            println!("Clear: {:?}", t2);
+            println!("Clear: {t2:?}");
             let encrypted = cipher.encrypt(t2.clone(), prng);
-            println!("Encrypted: {:?}", encrypted);
+            println!("Encrypted: {encrypted:?}");
             let decrypted = cipher.decrypt(encrypted).unwrap();
-            println!("Decrypted: {:?}", decrypted);
+            println!("Decrypted: {decrypted:?}");
             assert_eq!(&t2[..], &decrypted[..t2.len()]);
 
             println!("\n[3]");
             let t3 = "This is a medium string with some text".as_bytes().to_vec();
-            println!("Clear: {:?}", t3);
+            println!("Clear: {t3:?}");
             let encrypted = cipher.encrypt(t3.clone(), prng);
-            println!("Encrypted: {:?}", encrypted);
+            println!("Encrypted: {encrypted:?}");
             let decrypted = cipher.decrypt(encrypted).unwrap();
-            println!("Decrypted: {:?}", decrypted);
+            println!("Decrypted: {decrypted:?}");
             assert_eq!(&t3[..], &decrypted[..t3.len()]);
 
             println!("\n[4]");
             let t4 = "Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.".as_bytes().to_vec();
-            println!("Clear: {:?}", t4);
+            println!("Clear: {t4:?}");
             let encrypted = cipher.encrypt(t4.clone(), prng);
-            println!("Encrypted: {:?}", encrypted);
+            println!("Encrypted: {encrypted:?}");
             let decrypted = cipher.decrypt(encrypted).unwrap();
-            println!("Decrypted: {:?}", decrypted);
+            println!("Decrypted: {decrypted:?}");
             assert_eq!(&t4[..], &decrypted[..t4.len()]);
         }
 

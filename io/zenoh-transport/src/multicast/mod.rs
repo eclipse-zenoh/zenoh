@@ -28,10 +28,10 @@ use std::{
     sync::{Arc, Weak},
 };
 use transport::{TransportMulticastConfig, TransportMulticastInner};
-use zenoh_core::Result as ZResult;
-use zenoh_core::{zerror, zread};
+use zenoh_core::zread;
 use zenoh_link::Link;
 use zenoh_protocol::{core::ZInt, transport::tmsg, zenoh::ZenohMessage};
+use zenoh_result::{zerror, ZResult};
 
 /*************************************/
 /*              STATS                */
@@ -184,7 +184,7 @@ impl fmt::Debug for TransportMulticast {
                     .finish()
             }
             Err(e) => {
-                write!(f, "{}", e)
+                write!(f, "{e}")
             }
         }
     }

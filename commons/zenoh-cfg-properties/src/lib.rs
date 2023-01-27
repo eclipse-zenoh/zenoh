@@ -190,13 +190,13 @@ impl fmt::Display for Properties {
         let mut it = self.0.iter();
         if let Some((k, v)) = it.next() {
             if v.is_empty() {
-                write!(f, "{}", k)?
+                write!(f, "{k}")?
             } else {
                 write!(f, "{}{}{}", k, KV_SEP[0], v)?
             }
             for (k, v) in it {
                 if v.is_empty() {
-                    write!(f, "{}{}", DEFAULT_PROP_SEP, k)?
+                    write!(f, "{DEFAULT_PROP_SEP}{k}")?
                 } else {
                     write!(f, "{}{}{}{}", DEFAULT_PROP_SEP, k, KV_SEP[0], v)?
                 }
@@ -216,7 +216,7 @@ impl fmt::Debug for Properties {
         let mut it = self.0.iter();
         if let Some((k, v)) = it.next() {
             if v.is_empty() {
-                write!(f, "{}", k)?
+                write!(f, "{k}")?
             } else if k.contains("password") {
                 write!(f, "{}{}*****", k, KV_SEP[0])?
             } else {
@@ -224,7 +224,7 @@ impl fmt::Debug for Properties {
             }
             for (k, v) in it {
                 if v.is_empty() {
-                    write!(f, "{}{}", DEFAULT_PROP_SEP, k)?
+                    write!(f, "{DEFAULT_PROP_SEP}{k}")?
                 } else if k.contains("password") {
                     write!(f, "{}{}{}*****", DEFAULT_PROP_SEP, k, KV_SEP[0])?
                 } else {
@@ -301,7 +301,7 @@ impl From<&[(&str, &str)]> for Properties {
 }
 
 impl TryFrom<&std::path::Path> for Properties {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_from(p: &std::path::Path) -> Result<Self, Self::Error> {
         Ok(Self::from(std::fs::read_to_string(p)?))
     }

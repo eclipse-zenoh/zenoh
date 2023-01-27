@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::{QueryableInfo, SubInfo, WireExpr, ZInt};
+use alloc::vec::Vec;
 
 /// ```text
 ///  7 6 5 4 3 2 1 0

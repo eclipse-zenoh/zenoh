@@ -19,7 +19,7 @@ use zenoh::prelude::r#async::*;
 use zenoh::Session;
 use zenoh_backend_traits::config::StorageConfig;
 use zenoh_backend_traits::Capability;
-use zenoh_core::Result as ZResult;
+use zenoh_result::ZResult;
 
 pub struct StoreIntercept {
     pub storage: Box<dyn zenoh_backend_traits::Storage>,

@@ -13,12 +13,13 @@
 //
 use async_std::{prelude::FutureExt, task};
 use std::{any::Any, convert::TryFrom, sync::Arc, time::Duration};
-use zenoh_core::{zasync_executor_init, Result as ZResult};
+use zenoh_core::zasync_executor_init;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::{
     core::{WhatAmI, ZenohId},
     zenoh::ZenohMessage,
 };
+use zenoh_result::ZResult;
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -86,7 +87,7 @@ async fn run(endpoints: &[EndPoint]) {
     for _ in 0..RUNS {
         // Create the listeners
         for e in endpoints.iter() {
-            println!("Add {}", e);
+            println!("Add {e}");
             ztimeout!(sm.add_listener(e.clone())).unwrap();
         }
 
@@ -94,7 +95,7 @@ async fn run(endpoints: &[EndPoint]) {
 
         // Delete the listeners
         for e in endpoints.iter() {
-            println!("Del {}", e);
+            println!("Del {e}");
             ztimeout!(sm.del_listener(e)).unwrap();
         }
 
@@ -151,14 +152,14 @@ fn endpoint_unix() {
     let _ = std::fs::remove_file(f2);
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        format!("unixsock-stream/{}", f1).parse().unwrap(),
-        format!("unixsock-stream/{}", f2).parse().unwrap(),
+        format!("unixsock-stream/{f1}").parse().unwrap(),
+        format!("unixsock-stream/{f2}").parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(f2);
-    let _ = std::fs::remove_file(format!("{}.lock", f1));
-    let _ = std::fs::remove_file(format!("{}.lock", f2));
+    let _ = std::fs::remove_file(format!("{f1}.lock"));
+    let _ = std::fs::remove_file(format!("{f2}.lock"));
 }
 
 #[cfg(feature = "transport_ws")]
@@ -218,11 +219,11 @@ fn endpoint_tcp_udp_unix() {
         format!("udp/127.0.0.1:{}", 7041).parse().unwrap(),
         format!("tcp/[::1]:{}", 7042).parse().unwrap(),
         format!("udp/[::1]:{}", 7043).parse().unwrap(),
-        format!("unixsock-stream/{}", f1).parse().unwrap(),
+        format!("unixsock-stream/{f1}").parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
     let _ = std::fs::remove_file(f1);
-    let _ = std::fs::remove_file(format!("{}.lock", f1));
+    let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
 #[cfg(all(
@@ -244,11 +245,11 @@ fn endpoint_tcp_unix() {
     let endpoints: Vec<EndPoint> = vec![
         format!("tcp/127.0.0.1:{}", 7050).parse().unwrap(),
         format!("tcp/[::1]:{}", 7051).parse().unwrap(),
-        format!("unixsock-stream/{}", f1).parse().unwrap(),
+        format!("unixsock-stream/{f1}").parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
     let _ = std::fs::remove_file(f1);
-    let _ = std::fs::remove_file(format!("{}.lock", f1));
+    let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
 #[cfg(all(
@@ -269,11 +270,11 @@ fn endpoint_udp_unix() {
     let endpoints: Vec<EndPoint> = vec![
         format!("udp/127.0.0.1:{}", 7060).parse().unwrap(),
         format!("udp/[::1]:{}", 7061).parse().unwrap(),
-        format!("unixsock-stream/{}", f1).parse().unwrap(),
+        format!("unixsock-stream/{f1}").parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
     let _ = std::fs::remove_file(f1);
-    let _ = std::fs::remove_file(format!("{}.lock", f1));
+    let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
 #[cfg(feature = "transport_tls")]

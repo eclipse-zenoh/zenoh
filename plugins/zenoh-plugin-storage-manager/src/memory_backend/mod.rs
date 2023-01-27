@@ -20,7 +20,7 @@ use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::*;
-use zenoh_core::Result as ZResult;
+use zenoh_result::ZResult;
 
 pub fn create_memory_backend(config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
     Ok(Box::new(MemoryBackend { config }))

@@ -18,13 +18,14 @@ use crate::unicast::establishment::{
 use crate::TransportManager;
 use std::convert::TryFrom;
 use zenoh_buffers::ZSlice;
-use zenoh_core::{zasyncread, zerror};
+use zenoh_core::zasyncread;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
     common::Attachment,
     core::{Property, WhatAmI, ZInt, ZenohId},
     transport::{tmsg, Close, TransportBody},
 };
+use zenoh_result::zerror;
 
 #[cfg(feature = "shared-memory")]
 use crate::unicast::establishment::authenticator::PeerAuthenticatorId;
@@ -140,7 +141,7 @@ pub(super) async fn recv(
                     Ok(att)
                 }
                 Err(e) => {
-                    if e.is::<zenoh_core::zresult::ShmError>() {
+                    if e.is::<zenoh_result::ShmError>() {
                         is_shm = false;
                         Ok(None)
                     } else {

@@ -15,8 +15,8 @@ use super::defragmentation::DefragBuffer;
 use super::seq_num::{SeqNum, SeqNumGenerator};
 use std::sync::{Arc, Mutex};
 use zenoh_core::zlock;
-use zenoh_core::zresult::ZResult;
 use zenoh_protocol::core::{ConduitSn, Reliability, ZInt};
+use zenoh_result::ZResult;
 
 #[derive(Debug)]
 pub(crate) struct TransportChannelTx {

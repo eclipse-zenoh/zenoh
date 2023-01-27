@@ -12,8 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::ZInt;
+use alloc::string::String;
 use core::{convert::TryInto, fmt, num::NonZeroU8, ops::BitOr, str::FromStr};
-use zenoh_core::{bail, zresult::ZError};
+use zenoh_result::{bail, ZError};
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

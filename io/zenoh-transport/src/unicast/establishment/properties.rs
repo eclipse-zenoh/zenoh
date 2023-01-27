@@ -17,11 +17,11 @@ use std::{
 };
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf};
 use zenoh_codec::{RCodec, WCodec, Zenoh060};
-use zenoh_core::{bail, zerror, Error as ZError, Result as ZResult};
 use zenoh_protocol::{
     common::Attachment,
     core::{Property, ZInt},
 };
+use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EstablishmentProperties(Vec<Property>);

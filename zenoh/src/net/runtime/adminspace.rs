@@ -25,7 +25,6 @@ use std::sync::Mutex;
 use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_config::ValidatedMap;
 use zenoh_config::WhatAmI;
-use zenoh_core::Result as ZResult;
 use zenoh_protocol::{
     core::{
         key_expr::OwnedKeyExpr, Channel, CongestionControl, ConsolidationMode, Encoding,
@@ -34,6 +33,7 @@ use zenoh_protocol::{
     },
     zenoh::{DataInfo, QueryBody, RoutingContext},
 };
+use zenoh_result::ZResult;
 use zenoh_transport::{Primitives, TransportUnicast};
 
 pub struct AdminContext {
@@ -66,7 +66,7 @@ enum PluginDiff {
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: plugins::PluginsManager, version: String) {
         let zid_str = runtime.zid.to_string();
-        let root_key: OwnedKeyExpr = format!("@/router/{}", zid_str).try_into().unwrap();
+        let root_key: OwnedKeyExpr = format!("@/router/{zid_str}").try_into().unwrap();
 
         let mut handlers: HashMap<_, Arc<Handler>> = HashMap::new();
         handlers.insert(

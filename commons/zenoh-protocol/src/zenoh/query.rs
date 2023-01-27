@@ -15,6 +15,7 @@ use crate::{
     core::{ConsolidationMode, QueryTarget, WireExpr, ZInt},
     zenoh::DataInfo,
 };
+use alloc::string::String;
 use zenoh_buffers::ZBuf;
 
 /// # QueryBody

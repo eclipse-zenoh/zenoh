@@ -41,12 +41,12 @@ compat = [
 ]
 
 [dependencies]
-async-std = { workspace = true }
+async-std = { workspace = true, features = ["default"] }
 async-trait = { workspace = true }
 clap = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
-hex = { workspace = true }
+hex = { workspace = true, features = ["default"] }
 home = { workspace = true }
 humantime = { workspace = true }
 lazy_static = { workspace = true }
@@ -57,6 +57,7 @@ zenoh-cfg-properties = { path = "../zenoh-cfg-properties/", optional = true }
 zenoh-collections = { path = "../zenoh-collections/", optional = true }
 zenoh-core = { path = "../zenoh-core/" }
 zenoh-crypto = { path = "../zenoh-crypto/", optional = true }
+zenoh-result = { path = "../zenoh-result/" }
 zenoh-sync = { path = "../zenoh-sync/", optional = true }
 
 [target.'cfg(windows)'.dependencies]
