@@ -42,7 +42,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Declaring Queryable on '{}'...", key);
+    println!("Declaring Queryable on '{key}'...");
     let queryable = session.declare_queryable(key).res().await.unwrap();
 
     async_std::task::spawn({
@@ -60,7 +60,7 @@ async fn main() {
 
     let event_key = [key, "/event"].concat();
 
-    println!("Declaring Publisher on '{}'...", event_key);
+    println!("Declaring Publisher on '{event_key}'...");
     let publisher = session
         .declare_publisher(&event_key)
         .congestion_control(CongestionControl::Block)
@@ -73,10 +73,7 @@ async fn main() {
         &event_key, value
     );
 
-    println!(
-        "Data updates are accessible through HTML5 SSE at http://<hostname>:8000/{}",
-        key
-    );
+    println!("Data updates are accessible through HTML5 SSE at http://<hostname>:8000/{key}");
     loop {
         publisher
             .put(Value::from(value).encoding(KnownEncoding::TextPlain.into()))

@@ -34,10 +34,10 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Declaring Subscriber on '{}'...", key_expr);
+    println!("Declaring Subscriber on '{key_expr}'...");
     let subscriber = session.declare_subscriber(&key_expr).res().await.unwrap();
 
-    println!("Declaring Queryable on '{}'...", key_expr);
+    println!("Declaring Queryable on '{key_expr}'...");
     let queryable = session
         .declare_queryable(&key_expr)
         .complete(complete)

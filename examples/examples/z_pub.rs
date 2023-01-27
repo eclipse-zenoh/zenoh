@@ -27,12 +27,12 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Declaring Publisher on '{}'...", key_expr);
+    println!("Declaring Publisher on '{key_expr}'...");
     let publisher = session.declare_publisher(&key_expr).res().await.unwrap();
 
     for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;
-        let buf = format!("[{:4}] {}", idx, value);
+        let buf = format!("[{idx:4}] {value}");
         println!("Putting Data ('{}': '{}')...", &key_expr, buf);
         publisher.put(buf).res().await.unwrap();
     }
