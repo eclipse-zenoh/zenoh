@@ -230,7 +230,7 @@ impl<'a> KeyExpr<'a> {
         if self.ends_with('*') && s.starts_with('*') {
             bail!("Tried to concatenate {} (ends with *) and {} (starts with *), which would likely have caused bugs. If you're sure you want to do this, concatenate these into a string and then try to convert.", self, s)
         }
-        let r = OwnedKeyExpr::try_from(format!("{}{}", self, s))?;
+        let r = OwnedKeyExpr::try_from(format!("{self}{s}"))?;
         if let KeyExprInner::Wire {
             expr_id,
             prefix_len,

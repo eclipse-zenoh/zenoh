@@ -27,7 +27,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Sending Query '{}'...", selector);
+    println!("Sending Query '{selector}'...");
     let replies = match value {
         Some(value) => session.get(&selector).with_value(value),
         None => session.get(&selector),

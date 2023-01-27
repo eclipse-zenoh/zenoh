@@ -319,7 +319,7 @@ impl SharedMemoryManager {
     /// given size.
     pub fn make(id: String, size: usize) -> ZResult<SharedMemoryManager> {
         let mut temp_dir = std::env::temp_dir();
-        let file_name: String = format!("{}_{}", ZENOH_SHM_PREFIX, id);
+        let file_name: String = format!("{ZENOH_SHM_PREFIX}_{id}");
         temp_dir.push(file_name);
         let path: String = temp_dir
             .to_str()

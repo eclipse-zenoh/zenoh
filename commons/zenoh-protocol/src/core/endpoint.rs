@@ -442,13 +442,12 @@ impl EndPoint {
         let c: &str = config.as_ref();
 
         let s = match (m.is_empty(), c.is_empty()) {
-            (true, true) => format!("{}{}{}", p, PROTO_SEPARATOR, a),
-            (false, true) => format!("{}{}{}{}{}", p, PROTO_SEPARATOR, a, METADATA_SEPARATOR, m),
-            (true, false) => format!("{}{}{}{}{}", p, PROTO_SEPARATOR, a, CONFIG_SEPARATOR, c),
-            (false, false) => format!(
-                "{}{}{}{}{}{}{}",
-                p, PROTO_SEPARATOR, a, METADATA_SEPARATOR, m, CONFIG_SEPARATOR, c
-            ),
+            (true, true) => format!("{p}{PROTO_SEPARATOR}{a}"),
+            (false, true) => format!("{p}{PROTO_SEPARATOR}{a}{METADATA_SEPARATOR}{m}"),
+            (true, false) => format!("{p}{PROTO_SEPARATOR}{a}{CONFIG_SEPARATOR}{c}"),
+            (false, false) => {
+                format!("{p}{PROTO_SEPARATOR}{a}{METADATA_SEPARATOR}{m}{CONFIG_SEPARATOR}{c}")
+            }
         };
 
         Self::try_from(s)

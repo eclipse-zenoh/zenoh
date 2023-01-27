@@ -120,7 +120,7 @@ mod tests {
             let msg_count = u64::from_le_bytes(count_bytes) as usize;
             let sex_count = self.count.fetch_add(1, Ordering::SeqCst);
             assert_eq!(msg_count, sex_count);
-            print!("{} ", msg_count);
+            print!("{msg_count} ");
 
             Ok(())
         }
@@ -136,7 +136,7 @@ mod tests {
     }
 
     async fn run(endpoint: &EndPoint) {
-        println!("Transport SHM [0a]: {:?}", endpoint);
+        println!("Transport SHM [0a]: {endpoint:?}");
 
         // Define client and router IDs
         let peer_shm01 = ZenohId::try_from([1]).unwrap();

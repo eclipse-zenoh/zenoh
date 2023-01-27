@@ -488,8 +488,8 @@ pub enum ConfigOpenErr {
 impl std::fmt::Display for ConfigOpenErr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ConfigOpenErr::IoError(e) => write!(f, "Couldn't open file: {}", e),
-            ConfigOpenErr::JsonParseErr(e) => write!(f, "JSON5 parsing error {}", e),
+            ConfigOpenErr::IoError(e) => write!(f, "Couldn't open file: {e}"),
+            ConfigOpenErr::JsonParseErr(e) => write!(f, "JSON5 parsing error {e}"),
             ConfigOpenErr::InvalidConfiguration(c) => write!(
                 f,
                 "Invalid configuration {}",
@@ -947,8 +947,7 @@ impl PartialMerge for serde_json::Value {
         let mut key = path;
         let key_not_found = || {
             Err(validated_struct::InsertionError::String(format!(
-                "{} not found",
-                path
+                "{path} not found"
             )))
         };
         while !key.is_empty() {
@@ -1027,7 +1026,7 @@ impl validated_struct::ValidatedMap for PluginsConfig {
             ) {
                 Ok(Some(val)) => new_value = Value::Object(val),
                 Ok(None) => {}
-                Err(e) => return Err(format!("{}", e).into()),
+                Err(e) => return Err(format!("{e}").into()),
             }
         }
         *value = new_value;
