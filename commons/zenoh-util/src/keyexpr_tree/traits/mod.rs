@@ -141,8 +141,8 @@ pub trait IChildren<T: ?Sized> {
     fn is_empty(&self) -> bool {
         self.len() == 0
     }
-    fn child_at<'a, 'b>(&'a self, chunk: &'b keyexpr) -> Option<&'a Self::Node>;
-    fn child_at_mut<'a, 'b>(&'a mut self, chunk: &'b keyexpr) -> Option<&'a mut Self::Node>;
+    fn child_at<'a>(&'a self, chunk: &keyexpr) -> Option<&'a Self::Node>;
+    fn child_at_mut<'a>(&'a mut self, chunk: &keyexpr) -> Option<&'a mut Self::Node>;
     type Entry<'a, 'b>: IEntry<'a, 'b, T>
     where
         Self: 'a,

@@ -57,7 +57,7 @@ async fn main() -> Result<(), zenoh::Error> {
 
         // We reserve a small space at the beginning of the buffer to include the iteration index
         // of the write. This is simply to have the same format as zn_pub.
-        let prefix = format!("[{:4}] ", idx);
+        let prefix = format!("[{idx:4}] ");
         let prefix_len = prefix.as_bytes().len();
 
         // Retrive a mutable slice from the SharedMemoryBuf.
@@ -84,9 +84,9 @@ async fn main() -> Result<(), zenoh::Error> {
         publisher.put(sbuf.clone()).res().await?;
         if idx % K == 0 {
             let freed = shm.garbage_collect();
-            println!("The Gargabe collector freed {} bytes", freed);
+            println!("The Gargabe collector freed {freed} bytes");
             let defrag = shm.defragment();
-            println!("De-framented {} bytes", defrag);
+            println!("De-framented {defrag} bytes");
         }
         // sleep(Duration::from_millis(100)).await;
         // Dropping the SharedMemoryBuf means to free it.
