@@ -32,16 +32,12 @@ std = [
     "serde/std",
     "uhlc/std",
     "uuid/std",
-    "zenoh-result/std"
+    "zenoh-result/std",
 ]
 test = ["rand", "zenoh-buffers/test"]
 shared-memory = ["std"]
 complete_n = []
-defmt = [
-    "dep:defmt",
-    "uhlc/defmt",
-    "zenoh-buffers/defmt"
-]
+defmt = ["dep:defmt", "uhlc/defmt", "zenoh-buffers/defmt"]
 
 [dependencies]
 defmt = { workspace = true, optional = true }
@@ -49,7 +45,7 @@ hex = { workspace = true, features = ["alloc"] }
 rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
 serde = { workspace = true, features = ["alloc"] }
 uhlc = { workspace = true }
-uuid = { workspace = true } # Needs a getrandom::getrandom() custom implementation on embedded (in root crate)
+uuid = { workspace = true }                                                     # Needs a getrandom::getrandom() custom implementation on embedded (in root crate)
 zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
 zenoh-result = { path = "../zenoh-result/", default-features = false }
 
