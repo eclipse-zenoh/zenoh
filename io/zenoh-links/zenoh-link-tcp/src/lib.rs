@@ -20,9 +20,10 @@
 use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 use std::net::SocketAddr;
-use zenoh_core::{zconfigurable, zerror, Result as ZResult};
+use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol::core::{endpoint::Address, Locator};
+use zenoh_result::{zerror, ZResult};
 
 mod unicast;
 pub use unicast::*;

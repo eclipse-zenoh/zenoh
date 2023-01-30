@@ -29,7 +29,7 @@ use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
 use zenoh::Session;
 use zenoh_cfg_properties::Properties;
-use zenoh_core::{zerror, Result as ZResult};
+use zenoh_result::{bail, zerror, ZResult};
 
 mod config;
 pub use config::Config;
@@ -99,7 +99,7 @@ async fn to_json(results: flume::Receiver<Reply>) -> String {
         .collect::<Vec<String>>()
         .await
         .join(",\n");
-    format!("[\n{}\n]\n", values)
+    format!("[\n{values}\n]\n")
 }
 
 fn sample_to_html(sample: Sample) -> String {
@@ -129,7 +129,7 @@ async fn to_html(results: flume::Receiver<Reply>) -> String {
         .collect::<Vec<String>>()
         .await
         .join("\n");
-    format!("<dl>\n{}\n</dl>\n", values)
+    format!("<dl>\n{values}\n</dl>\n")
 }
 
 fn method_to_kind(method: Method) -> SampleKind {
@@ -202,7 +202,7 @@ struct RunningPlugin(Config);
 impl RunningPluginTrait for RunningPlugin {
     fn config_checker(&self) -> zenoh::plugins::ValidationFunction {
         Arc::new(|_, _, _| {
-            Err("zenoh-plugin-rest doesn't accept any runtime configuration changes".into())
+            bail!("zenoh-plugin-rest doesn't accept any runtime configuration changes")
         })
     }
 
@@ -462,9 +462,9 @@ pub async fn run(runtime: Runtime, conf: Config) {
 fn path_to_key_expr<'a>(path: &'a str, zid: &str) -> ZResult<KeyExpr<'a>> {
     let path = path.strip_prefix('/').unwrap_or(path);
     if path == "@/router/local" {
-        KeyExpr::try_from(format!("@/router/{}", zid))
+        KeyExpr::try_from(format!("@/router/{zid}"))
     } else if let Some(suffix) = path.strip_prefix("@/router/local/") {
-        KeyExpr::try_from(format!("@/router/{}/{}", zid, suffix))
+        KeyExpr::try_from(format!("@/router/{zid}/{suffix}"))
     } else {
         KeyExpr::try_from(path)
     }

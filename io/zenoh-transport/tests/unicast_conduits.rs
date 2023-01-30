@@ -20,12 +20,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::ZBuf;
-use zenoh_core::{zasync_executor_init, Result as ZResult};
+use zenoh_core::zasync_executor_init;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
     zenoh::ZenohMessage,
 };
+use zenoh_result::ZResult;
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -201,14 +202,14 @@ async fn open_transport(
 
     // Create the listener on the router
     for e in endpoints.iter() {
-        println!("Add locator: {}", e);
+        println!("Add locator: {e}");
         let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
     }
 
     // Create an empty transport with the client
     // Open transport -> This should be accepted
     for e in endpoints.iter() {
-        println!("Opening transport with {}", e);
+        println!("Opening transport with {e}");
         let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
     }
 
@@ -232,9 +233,9 @@ async fn close_transport(
     // Close the client transport
     let mut ee = String::new();
     for e in endpoints.iter() {
-        let _ = write!(ee, "{} ", e);
+        let _ = write!(ee, "{e} ");
     }
-    println!("Closing transport with {}", ee);
+    println!("Closing transport with {ee}");
     ztimeout!(client_transport.close()).unwrap();
 
     ztimeout!(async {
@@ -245,7 +246,7 @@ async fn close_transport(
 
     // Stop the locators on the manager
     for e in endpoints.iter() {
-        println!("Del locator: {}", e);
+        println!("Del locator: {e}");
         ztimeout!(router_manager.del_listener(e)).unwrap();
     }
 
@@ -283,10 +284,7 @@ async fn single_run(
         attachment,
     );
 
-    println!(
-        "Sending {} messages... {:?} {}",
-        MSG_COUNT, channel, msg_size
-    );
+    println!("Sending {MSG_COUNT} messages... {channel:?} {msg_size}");
     for _ in 0..MSG_COUNT {
         client_transport.schedule(message.clone()).unwrap();
     }

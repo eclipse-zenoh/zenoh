@@ -19,13 +19,14 @@ use super::TransportUnicastStatsAtomic;
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_core::{bail, zasynclock, zerror, zread, zwrite, Result as ZResult};
+use zenoh_core::{zasynclock, zread, zwrite};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::{
     core::{Priority, WhatAmI, ZInt, ZenohId},
     transport::{ConduitSn, TransportMessage},
     zenoh::ZenohMessage,
 };
+use zenoh_result::{bail, zerror, ZResult};
 
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {

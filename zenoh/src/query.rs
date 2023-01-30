@@ -20,8 +20,8 @@ use crate::Session;
 use std::collections::HashMap;
 use std::future::Ready;
 use std::time::Duration;
-use zenoh_core::zresult::ZResult;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_result::ZResult;
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
 pub use zenoh_protocol::zenoh::QueryTarget;

@@ -31,7 +31,7 @@ use zenoh::query::ConsolidationMode;
 use zenoh::Error as ZError;
 use zenoh::Result as ZResult;
 use zenoh::Session;
-use zenoh_core::bail;
+use zenoh_result::bail;
 use zenoh_sync::Condition;
 
 const GROUP_PREFIX: &str = "zenoh/ext/net/group";
@@ -163,6 +163,18 @@ struct GroupState {
 
 pub struct Group {
     state: Arc<GroupState>,
+    tasks: Vec<JoinHandle<()>>,
+}
+
+impl Drop for Group {
+    fn drop(&mut self) {
+        // cancel background tasks
+        async_std::task::block_on(async {
+            while let Some(handle) = self.tasks.pop() {
+                let _ = handle.cancel().await;
+            }
+        });
+    }
 }
 
 async fn keep_alive_task(state: Arc<GroupState>) {
@@ -360,7 +372,7 @@ impl Group {
             bail!("Group ID is not allowed to contain wildcards: {}", group);
         }
 
-        let event_expr = format!("{}/{}/{}", GROUP_PREFIX, group, EVENT_POSTFIX);
+        let event_expr = format!("{GROUP_PREFIX}/{group}/{EVENT_POSTFIX}");
         let publisher = z
             .declare_publisher(event_expr)
             .priority(with.priority)
@@ -387,10 +399,13 @@ impl Group {
         if is_auto_liveliness {
             async_std::task::spawn(keep_alive_task(state.clone()));
         }
-        let _ = async_std::task::spawn(net_event_handler(z.clone(), state.clone()));
-        let _ = async_std::task::spawn(query_handler(z.clone(), state.clone()));
-        let _ = spawn_watchdog(state.clone(), Duration::from_secs(1));
-        Ok(Group { state })
+        let events_task = async_std::task::spawn(net_event_handler(z.clone(), state.clone()));
+        let queries_task = async_std::task::spawn(query_handler(z.clone(), state.clone()));
+        let watchdog_task = spawn_watchdog(state.clone(), Duration::from_secs(1));
+        Ok(Group {
+            state,
+            tasks: Vec::from([events_task, queries_task, watchdog_task]),
+        })
     }
 
     /// Returns a receivers that will allow to receive notifications for group events.

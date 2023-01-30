@@ -46,7 +46,7 @@ fn main() {
                 count += 1;
             } else {
                 let thpt = count as f64 / start.elapsed().as_secs_f64();
-                println!("{} msg/s", thpt);
+                println!("{thpt} msg/s");
                 count = 0;
                 start = std::time::Instant::now();
             }

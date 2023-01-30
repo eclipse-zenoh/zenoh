@@ -14,9 +14,12 @@
 
 //! This module defines the wire representation of Key Expressions.
 use crate::core::ZInt;
-use alloc::borrow::Cow;
+use alloc::{
+    borrow::Cow,
+    string::{String, ToString},
+};
 use core::{convert::TryInto, fmt};
-use zenoh_core::{bail, Result as ZResult};
+use zenoh_result::{bail, ZResult};
 
 /// A numerical Id mapped to a key expression.
 pub type ExprId = ZInt;
@@ -109,7 +112,7 @@ impl<'a> WireExpr<'a> {
 }
 
 impl TryInto<String> for WireExpr<'_> {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_into(self) -> Result<String, Self::Error> {
         if self.scope == 0 {
             Ok(self.suffix.into_owned())
@@ -120,7 +123,7 @@ impl TryInto<String> for WireExpr<'_> {
 }
 
 impl TryInto<ExprId> for WireExpr<'_> {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_into(self) -> Result<ExprId, Self::Error> {
         self.try_as_id()
     }

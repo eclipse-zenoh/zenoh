@@ -15,6 +15,7 @@ use crate::{
     core::{WireExpr, ZInt},
     zenoh::DataInfo,
 };
+use alloc::string::String;
 use zenoh_buffers::ZBuf;
 
 /// The kind of consolidation.

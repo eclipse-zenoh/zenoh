@@ -58,6 +58,7 @@ pub struct SourceInfo {
 }
 
 #[test]
+#[cfg(feature = "unstable")]
 fn source_info_stack_size() {
     assert_eq!(std::mem::size_of::<SourceInfo>(), 16 * 2);
 }
@@ -138,10 +139,10 @@ impl Sample {
     pub fn try_from<TryIntoKeyExpr, IntoValue>(
         key_expr: TryIntoKeyExpr,
         value: IntoValue,
-    ) -> Result<Self, zenoh_core::Error>
+    ) -> Result<Self, zenoh_result::Error>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'static>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_core::Error>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'static>>>::Error: Into<zenoh_result::Error>,
         IntoValue: Into<Value>,
     {
         Ok(Sample {

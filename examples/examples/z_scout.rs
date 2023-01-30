@@ -29,7 +29,7 @@ async fn main() {
 
     let _ = async {
         while let Ok(hello) = receiver.recv_async().await {
-            println!("{}", hello);
+            println!("{hello}");
         }
     }
     .timeout(std::time::Duration::from_secs(1))

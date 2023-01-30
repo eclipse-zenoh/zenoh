@@ -22,7 +22,12 @@ pub mod macros;
 pub use macros::*;
 use std::future::{Future, Ready};
 pub use zenoh_macros::*;
-pub mod zresult;
+
+// Re-exports after moving ZError/ZResult to zenoh-result
+pub use zenoh_result::{bail, to_zerror, zerror};
+pub mod zresult {
+    pub use zenoh_result::*;
+}
 pub use zresult::Error;
 pub use zresult::ZResult as Result;
 
@@ -159,4 +164,19 @@ where
     fn res_sync(self) -> <Self as Resolvable>::To {
         async_std::task::block_on(self.0)
     }
+}
+
+#[cold]
+pub const fn cold() {}
+pub const fn likely(b: bool) -> bool {
+    if !b {
+        cold()
+    }
+    b
+}
+pub const fn unlikely(b: bool) -> bool {
+    if b {
+        cold()
+    }
+    b
 }

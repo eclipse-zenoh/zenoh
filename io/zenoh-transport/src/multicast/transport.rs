@@ -27,13 +27,14 @@ use std::{
     },
     time::Duration,
 };
-use zenoh_core::{bail, zread, zwrite, Result as ZResult};
+use zenoh_core::{zread, zwrite};
 use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{Priority, WhatAmI, ZInt, ZenohId},
     transport::{tmsg, ConduitSnList, Join, TransportMessage},
     zenoh::ZenohMessage,
 };
+use zenoh_result::{bail, ZResult};
 use zenoh_util::{Timed, TimedEvent, TimedHandle, Timer};
 
 /*************************************/

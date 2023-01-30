@@ -45,7 +45,7 @@ fn main() {
     let mut samples = Vec::with_capacity(n);
 
     // -- warmup --
-    println!("Warming up for {:?}...", warmup);
+    println!("Warming up for {warmup:?}...");
     let now = Instant::now();
     while now.elapsed() < warmup {
         let data = data.clone();
@@ -97,6 +97,9 @@ fn parse_args() -> (Config, Duration, usize, usize) {
         )
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
+        ))
+        .arg(Arg::from_usage(
+            "-c, --config=[FILE]      'A configuration file.'",
         ))
         .arg(Arg::from_usage(
             "<PAYLOAD_SIZE>          'Sets the size of the payload to publish'",

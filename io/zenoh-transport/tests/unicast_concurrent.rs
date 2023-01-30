@@ -20,12 +20,13 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::ZBuf;
-use zenoh_core::{zasync_executor_init, Result as ZResult};
+use zenoh_core::zasync_executor_init;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
     zenoh::ZenohMessage,
 };
+use zenoh_result::ZResult;
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -144,14 +145,11 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         // Add the endpoints on the first peer
         for e in c_end01.iter() {
             let res = ztimeout!(peer01_manager.add_listener(e.clone()));
-            println!("[Transport Peer 01a] => Adding endpoint {:?}: {:?}", e, res);
+            println!("[Transport Peer 01a] => Adding endpoint {e:?}: {res:?}");
             assert!(res.is_ok());
         }
         let locs = peer01_manager.get_listeners();
-        println!(
-            "[Transport Peer 01b] => Getting endpoints: {:?} {:?}",
-            c_end01, locs
-        );
+        println!("[Transport Peer 01b] => Getting endpoints: {c_end01:?} {locs:?}");
         assert_eq!(c_end01.len(), locs.len());
 
         // Open the transport with the second peer
@@ -165,10 +163,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
                 // Syncrhonize before opening the transports
                 ztimeout!(cc_barow.wait());
                 let res = ztimeout!(c_p01m.open_transport(c_end.clone()));
-                println!(
-                    "[Transport Peer 01d] => Opening transport with {:?}: {:?}",
-                    c_end, res
-                );
+                println!("[Transport Peer 01d] => Opening transport with {c_end:?}: {res:?}");
                 assert!(res.is_ok());
 
                 // Syncrhonize after opening the transports
@@ -217,7 +212,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         println!("[Transport Peer 01f] => Waiting... OK");
 
         for i in 0..MSG_COUNT {
-            println!("[Transport Peer 01g] Scheduling message {}", i);
+            println!("[Transport Peer 01g] Scheduling message {i}");
             s02.schedule(message.clone()).unwrap();
         }
         println!("[Transport Peer 01g] => Scheduling OK");
@@ -232,9 +227,9 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         // Synchronize wit the peer
         ztimeout!(c_barp.wait());
 
-        println!("[Transport Peer 01h] => Closing {:?}...", s02);
+        println!("[Transport Peer 01h] => Closing {s02:?}...");
         let res = ztimeout!(s02.close());
-        println!("[Transport Peer 01l] => Closing {:?}: {:?}", s02, res);
+        println!("[Transport Peer 01l] => Closing {s02:?}: {res:?}");
         assert!(res.is_ok());
 
         // Close the transport
@@ -252,14 +247,11 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         // Add the endpoints on the first peer
         for e in c_end02.iter() {
             let res = ztimeout!(peer02_manager.add_listener(e.clone()));
-            println!("[Transport Peer 02a] => Adding endpoint {:?}: {:?}", e, res);
+            println!("[Transport Peer 02a] => Adding endpoint {e:?}: {res:?}");
             assert!(res.is_ok());
         }
         let locs = peer02_manager.get_listeners();
-        println!(
-            "[Transport Peer 02b] => Getting endpoints: {:?} {:?}",
-            c_end02, locs
-        );
+        println!("[Transport Peer 02b] => Getting endpoints: {c_end02:?} {locs:?}");
         assert_eq!(c_end02.len(), locs.len());
 
         // Open the transport with the first peer
@@ -274,10 +266,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
                 ztimeout!(cc_barow.wait());
 
                 let res = ztimeout!(c_p02m.open_transport(c_end.clone()));
-                println!(
-                    "[Transport Peer 02d] => Opening transport with {:?}: {:?}",
-                    c_end, res
-                );
+                println!("[Transport Peer 02d] => Opening transport with {c_end:?}: {res:?}");
                 assert!(res.is_ok());
 
                 // Syncrhonize after opening the transports
@@ -329,7 +318,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         println!("[Transport Peer 02f] => Waiting... OK");
 
         for i in 0..MSG_COUNT {
-            println!("[Transport Peer 02g] Scheduling message {}", i);
+            println!("[Transport Peer 02g] Scheduling message {i}");
             s01.schedule(message.clone()).unwrap();
         }
         println!("[Transport Peer 02g] => Scheduling OK");
@@ -344,9 +333,9 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         // Synchronize wit the peer
         ztimeout!(c_barp.wait());
 
-        println!("[Transport Peer 02h] => Closing {:?}...", s01);
+        println!("[Transport Peer 02h] => Closing {s01:?}...");
         let res = ztimeout!(s01.close());
-        println!("[Transport Peer 02l] => Closing {:?}: {:?}", s01, res);
+        println!("[Transport Peer 02l] => Closing {s01:?}: {res:?}");
         assert!(res.is_ok());
 
         // Close the transport

@@ -36,7 +36,7 @@ async fn main() {
         println!(
             "{}",
             v.iter()
-                .fold(String::from("\n"), |a, b| format!("\t{} \n\t{:?}", a, b)),
+                .fold(String::from("\n"), |a, b| format!("\t{a} \n\t{b:?}")),
         );
         println!(">>>>>>><<<<<<<<<");
     }

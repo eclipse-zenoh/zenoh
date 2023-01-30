@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::{Locator, WhatAmI, ZInt, ZenohId};
+use alloc::vec::Vec;
 
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+

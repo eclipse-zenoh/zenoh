@@ -31,7 +31,7 @@ description = "Internal crate for zenoh."
 [dependencies]
 aes = { workspace = true }
 hmac = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["default"] }
 rand_chacha = { workspace = true }
 sha3 = { workspace = true }
-zenoh-core = { path = "../zenoh-core/" }
+zenoh-result = { path = "../zenoh-result/" }

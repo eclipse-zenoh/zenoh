@@ -11,7 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{Reliability, WireExpr, ZInt};
+use crate::{
+    core::{WireExpr, ZInt},
+    zenoh::Reliability,
+};
+use alloc::vec::Vec;
 
 /// ```text
 ///  7 6 5 4 3 2 1 0

@@ -25,8 +25,8 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-shared-memory = [    
-	"zenoh-protocol/shared-memory",
+shared-memory = [
+    "zenoh-protocol/shared-memory",
     "zenoh-shm",
     "zenoh-codec/shared-memory",
 ]
@@ -44,15 +44,15 @@ stats = []
 [dependencies]
 async-executor = { workspace = true }
 async-global-executor = { workspace = true }
-async-std = { workspace = true, default-features = false }
+async-std = { workspace = true }
 async-trait = { workspace = true }
 flume = { workspace = true }
 log = { workspace = true }
 paste = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["default"] }
 ringbuffer-spsc = { workspace = true }
 rsa = { workspace = true, optional = true }
-serde = { workspace = true }
+serde = { workspace = true, features = ["default"] }
 zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
 zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
 zenoh-codec = { path = "../../commons/zenoh-codec/" }
@@ -62,6 +62,7 @@ zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-crypto = { path = "../../commons/zenoh-crypto/" }
 zenoh-link = { path = "../zenoh-link/" }
 zenoh-protocol = { path = "../../commons/zenoh-protocol/" }
+zenoh-result = { path = "../../commons/zenoh-result/" }
 zenoh-shm = { path = "../../commons/zenoh-shm/", optional = true }
 zenoh-sync = { path = "../../commons/zenoh-sync/" }
 zenoh-util = { path = "../../commons/zenoh-util/" }
@@ -69,3 +70,4 @@ zenoh-util = { path = "../../commons/zenoh-util/" }
 [dev-dependencies]
 env_logger = { workspace = true }
 panic-message = { workspace = true }
+zenoh-protocol = { path = "../../commons/zenoh-protocol/", features = ["test"] }

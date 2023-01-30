@@ -76,6 +76,8 @@
 //! ```
 #[macro_use]
 extern crate zenoh_core;
+#[macro_use]
+extern crate zenoh_result;
 
 use git_version::git_version;
 use handlers::DefaultHandler;
@@ -85,13 +87,13 @@ use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
 use scouting::ScoutBuilder;
 use std::future::Ready;
-use zenoh_core::{zerror, AsyncResolve, Result as ZResult};
-use zenoh_core::{Resolvable, SyncResolve};
+use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_result::{zerror, ZResult};
 
 /// A zenoh error.
-pub use zenoh_core::Error;
+pub use zenoh_result::Error;
 /// A zenoh result.
-pub use zenoh_core::Result;
+pub use zenoh_result::ZResult as Result;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
@@ -192,7 +194,8 @@ pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
 ) -> ScoutBuilder<DefaultHandler>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
-    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: Into<zenoh_core::Error>,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error:
+        Into<zenoh_result::Error>,
 {
     ScoutBuilder {
         what: what.into(),

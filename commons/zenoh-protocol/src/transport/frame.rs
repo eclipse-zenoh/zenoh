@@ -15,6 +15,7 @@ use crate::{
     core::{Channel, ZInt},
     zenoh::ZenohMessage,
 };
+use alloc::vec::Vec;
 use zenoh_buffers::ZSlice;
 
 /// # Frame message

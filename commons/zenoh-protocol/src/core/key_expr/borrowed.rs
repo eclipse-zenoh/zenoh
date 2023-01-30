@@ -13,13 +13,19 @@
 //
 use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
 use crate::core::WireExpr;
-use alloc::borrow::{Borrow, Cow};
+use alloc::{
+    borrow::{Borrow, Cow, ToOwned},
+    format,
+    string::String,
+    vec,
+    vec::Vec,
+};
 use core::{
     convert::{TryFrom, TryInto},
     fmt,
     ops::{Deref, Div},
 };
-use zenoh_core::{bail, Error as ZError, Result as ZResult};
+use zenoh_result::{bail, Error as ZError, ZResult};
 
 /// A [`str`] newtype that is statically known to be a valid key expression.
 ///
@@ -280,6 +286,12 @@ impl keyexpr {
     /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
     pub unsafe fn from_slice_unchecked(s: &[u8]) -> &Self {
         core::mem::transmute(s)
+    }
+    pub fn chunks(&self) -> impl Iterator<Item = &Self> + DoubleEndedIterator {
+        self.split('/').map(|c| unsafe {
+            // Any chunk of a valid KE is itself a valid KE => we can safely call the unchecked constructor.
+            Self::from_str_unchecked(c)
+        })
     }
 }
 

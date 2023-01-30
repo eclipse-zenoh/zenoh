@@ -27,14 +27,13 @@ use std::net::IpAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 use std::time::Duration;
-use zenoh_core::{
-    bail, zasynclock, zerror, zlock, zread, zwrite, Error as ZError, Result as ZResult,
-};
+use zenoh_core::{zasynclock, zlock, zread, zwrite};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 use zenoh_sync::Mvar;
 use zenoh_sync::Signal;
 

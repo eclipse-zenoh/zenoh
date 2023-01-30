@@ -21,7 +21,7 @@ use std::{
     sync::atomic::{AtomicPtr, AtomicUsize, Ordering},
 };
 use zenoh_buffers::ZSliceBuffer;
-use zenoh_core::{bail, zerror, zresult::ShmError, Result as ZResult};
+use zenoh_result::{bail, zerror, ShmError, ZResult};
 
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
 const ACCOUNTED_OVERHEAD: usize = 4_096;
@@ -319,7 +319,7 @@ impl SharedMemoryManager {
     /// given size.
     pub fn make(id: String, size: usize) -> ZResult<SharedMemoryManager> {
         let mut temp_dir = std::env::temp_dir();
-        let file_name: String = format!("{}_{}", ZENOH_SHM_PREFIX, id);
+        let file_name: String = format!("{ZENOH_SHM_PREFIX}_{id}");
         temp_dir.push(file_name);
         let path: String = temp_dir
             .to_str()

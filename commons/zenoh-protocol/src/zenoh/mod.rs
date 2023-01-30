@@ -23,6 +23,7 @@ use crate::{
     common::Attachment,
     core::{Channel, CongestionControl, Reliability, WireExpr, ZInt},
 };
+use alloc::{string::String, vec::Vec};
 use core::fmt;
 pub use data::*;
 pub use declare::*;

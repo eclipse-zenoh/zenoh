@@ -20,7 +20,7 @@ use crate::{unicast::establishment::cookie::Zenoh060Cookie, TransportManager};
 use std::{convert::TryFrom, time::Duration};
 use zenoh_buffers::reader::HasReader;
 use zenoh_codec::{RCodec, Zenoh060};
-use zenoh_core::{zasynclock, zasyncread, zerror};
+use zenoh_core::{zasynclock, zasyncread};
 use zenoh_crypto::hmac;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
@@ -28,6 +28,7 @@ use zenoh_protocol::{
     core::{Property, ZInt},
     transport::{tmsg, Close, TransportBody},
 };
+use zenoh_result::zerror;
 
 /*************************************/
 /*             ACCEPT                */
@@ -133,7 +134,7 @@ pub(super) async fn recv(
                         Ok(att)
                     }
                     Err(e) => {
-                        if e.is::<zenoh_core::zresult::ShmError>() {
+                        if e.is::<zenoh_result::ShmError>() {
                             is_shm = false;
                             Ok(None)
                         } else {

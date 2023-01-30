@@ -32,10 +32,10 @@ description = "Zenoh: traits to be implemented by backends libraries"
 maintenance = { status = "actively-developed" }
 
 [dependencies]
-async-std = { workspace = true }
+async-std = { workspace = true, features = ["default"] }
 async-trait = { workspace = true }
 derive_more = { workspace = true }
 serde_json = { workspace = true }
 zenoh = { path = "../../zenoh/", default-features = false }
-zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh-result = { path = "../../commons/zenoh-result/" }
 zenoh-util = { path = "../../commons/zenoh-util/" }

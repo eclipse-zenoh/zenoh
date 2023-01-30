@@ -13,7 +13,7 @@
 //
 use hmac::{Hmac, Mac};
 use sha3::{Digest, Sha3_256};
-use zenoh_core::Result as ZResult;
+use zenoh_result::ZResult;
 
 pub fn sign(key: &[u8], data: &[u8]) -> ZResult<Vec<u8>> {
     let mut hmac = Hmac::<Sha3_256>::new_from_slice(key)?;
