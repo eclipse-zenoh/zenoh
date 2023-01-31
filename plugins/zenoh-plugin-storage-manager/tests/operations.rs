@@ -27,13 +27,13 @@ use zenoh_core::zasync_executor_init;
 use zenoh_plugin_trait::Plugin;
 
 async fn put_data(session: &zenoh::Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
-    println!("Putting Data ('{}': '{}')...", key_expr, value);
+    println!("Putting Data ('{key_expr}': '{value}')...");
     //  @TODO: how to add timestamp metadata with put, not manipulating sample...
     session.put(key_expr, value).res().await.unwrap();
 }
 
 async fn delete_data(session: &zenoh::Session, key_expr: &str, _timestamp: Timestamp) {
-    println!("Deleting Data '{}'...", key_expr);
+    println!("Deleting Data '{key_expr}'...");
     //  @TODO: how to add timestamp metadata with delete, not manipulating sample...
     session.delete(key_expr).res().await.unwrap();
 }
@@ -46,14 +46,14 @@ async fn get_data(session: &zenoh::Session, key_expr: &str) -> Vec<Sample> {
         .unwrap()
         .into_iter()
         .collect();
-    println!("Getting replies on '{}': '{:?}'...", key_expr, replies);
+    println!("Getting replies on '{key_expr}': '{replies:?}'...");
     let mut samples = Vec::new();
     for reply in replies {
         if let Ok(sample) = reply.sample {
             samples.push(sample);
         }
     }
-    println!("Getting Data on '{}': '{:?}'...", key_expr, samples);
+    println!("Getting Data on '{key_expr}': '{samples:?}'...");
     samples
 }
 
