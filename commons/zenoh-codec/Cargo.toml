@@ -46,6 +46,7 @@ defmt = [
 ]
 
 [dependencies]
+lz4_flex = "0.10.0"
 uhlc = { workspace = true, default-features = false }
 zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
 zenoh-protocol = { path = "../zenoh-protocol/", default-features = false }
