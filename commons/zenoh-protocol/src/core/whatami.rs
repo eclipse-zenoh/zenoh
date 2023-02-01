@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use alloc::string::String;
+use const_format::formatcp;
 use core::{convert::TryFrom, fmt, num::NonZeroU8, ops::BitOr, str::FromStr};
 use zenoh_result::{bail, ZError};
 
@@ -138,10 +139,10 @@ impl WhatAmIMatcher {
             Self::U8_R => WAI_STR_R,
             Self::U8_P => WAI_STR_P,
             Self::U8_C => WAI_STR_C,
-            Self::U8_R_P => const_str::concat!(WAI_STR_R, "|", WAI_STR_P),
-            Self::U8_R_C => const_str::concat!(WAI_STR_R, "|", WAI_STR_C),
-            Self::U8_P_C => const_str::concat!(WAI_STR_P, "|", WAI_STR_C),
-            Self::U8_R_P_C => const_str::concat!(WAI_STR_R, "|", WAI_STR_P, "|", WAI_STR_C),
+            Self::U8_R_P => formatcp!("{}|{}", WAI_STR_R, WAI_STR_P),
+            Self::U8_R_C => formatcp!("{}|{}", WAI_STR_R, WAI_STR_C),
+            Self::U8_P_C => formatcp!("{}|{}", WAI_STR_P, WAI_STR_C),
+            Self::U8_R_P_C => formatcp!("{}|{}|{}", WAI_STR_R, WAI_STR_P, WAI_STR_C),
             _ => unreachable!(),
         }
     }

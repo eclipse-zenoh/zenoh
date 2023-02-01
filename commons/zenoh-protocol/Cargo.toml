@@ -40,7 +40,7 @@ complete_n = []
 defmt = ["dep:defmt", "uhlc/defmt", "zenoh-buffers/defmt"]
 
 [dependencies]
-const-str = "0.5.3"
+const_format = { workspace = true }
 defmt = { workspace = true, optional = true }
 hex = { workspace = true, features = ["alloc"] }
 rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
