@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060};
+use crate::{RCodec, WCodec, Zenoh080};
 use alloc::{string::String, vec::Vec};
 use core::convert::TryFrom;
 use zenoh_buffers::{
@@ -20,7 +20,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::core::EndPoint;
 
-impl<W> WCodec<&EndPoint, &mut W> for Zenoh060
+impl<W> WCodec<&EndPoint, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -31,7 +31,7 @@ where
     }
 }
 
-impl<R> RCodec<EndPoint, &mut R> for Zenoh060
+impl<R> RCodec<EndPoint, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -43,7 +43,7 @@ where
     }
 }
 
-impl<W> WCodec<&[EndPoint], &mut W> for Zenoh060
+impl<W> WCodec<&[EndPoint], &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -58,7 +58,7 @@ where
     }
 }
 
-impl<R> RCodec<Vec<EndPoint>, &mut R> for Zenoh060
+impl<R> RCodec<Vec<EndPoint>, &mut R> for Zenoh080
 where
     R: Reader,
 {

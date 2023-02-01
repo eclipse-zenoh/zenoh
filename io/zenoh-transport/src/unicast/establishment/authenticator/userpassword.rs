@@ -26,7 +26,7 @@ use zenoh_buffers::{
     writer::{DidntWrite, HasWriter, Writer},
 };
 use zenoh_cfg_properties::Properties;
-use zenoh_codec::{RCodec, WCodec, Zenoh060};
+use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_config::Config;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_crypto::hmac;
@@ -66,7 +66,7 @@ struct InitSynProperty {
     version: ZInt,
 }
 
-impl<W> WCodec<&InitSynProperty, &mut W> for Zenoh060
+impl<W> WCodec<&InitSynProperty, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -78,7 +78,7 @@ where
     }
 }
 
-impl<R> RCodec<InitSynProperty, &mut R> for Zenoh060
+impl<R> RCodec<InitSynProperty, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -103,7 +103,7 @@ struct InitAckProperty {
     nonce: ZInt,
 }
 
-impl<W> WCodec<&InitAckProperty, &mut W> for Zenoh060
+impl<W> WCodec<&InitAckProperty, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -115,7 +115,7 @@ where
     }
 }
 
-impl<R> RCodec<InitAckProperty, &mut R> for Zenoh060
+impl<R> RCodec<InitAckProperty, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -143,7 +143,7 @@ struct OpenSynProperty {
     hmac: Vec<u8>,
 }
 
-impl<W> WCodec<&OpenSynProperty, &mut W> for Zenoh060
+impl<W> WCodec<&OpenSynProperty, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -156,7 +156,7 @@ where
     }
 }
 
-impl<R> RCodec<OpenSynProperty, &mut R> for Zenoh060
+impl<R> RCodec<OpenSynProperty, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -273,7 +273,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             version: USRPWD_VERSION,
         };
         let mut wbuf = vec![];
-        let codec = Zenoh060::default();
+        let codec = Zenoh080::default();
         let mut writer = wbuf.writer();
         codec
             .write(&mut writer, &init_syn_property)
@@ -296,7 +296,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             )
         })?;
 
-        let codec = Zenoh060::default();
+        let codec = Zenoh080::default();
 
         let mut reader = p.reader();
         let init_syn_property: InitSynProperty = codec.read(&mut reader).map_err(|_| {
@@ -343,7 +343,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             )
         })?;
 
-        let codec = Zenoh060::default();
+        let codec = Zenoh080::default();
 
         let mut reader = p.reader();
         let init_ack_property: InitAckProperty = codec.read(&mut reader).map_err(|_| {
@@ -386,7 +386,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             )
         })?;
 
-        let codec = Zenoh060::default();
+        let codec = Zenoh080::default();
 
         let mut reader = a.reader();
         let open_syn_property: OpenSynProperty = codec.read(&mut reader).map_err(|_| {

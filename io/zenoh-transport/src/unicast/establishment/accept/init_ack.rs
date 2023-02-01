@@ -14,14 +14,14 @@
 use super::{init_syn, AResult};
 use crate::{
     unicast::establishment::{
-        authenticator::AuthenticatedPeerLink, Cookie, EstablishmentProperties, Zenoh060Cookie,
+        authenticator::AuthenticatedPeerLink, Cookie, EstablishmentProperties, Zenoh080Cookie,
     },
     TransportManager,
 };
 use rand::Rng;
 use std::convert::TryFrom;
 use zenoh_buffers::{writer::HasWriter, ZSlice};
-use zenoh_codec::{WCodec, Zenoh060};
+use zenoh_codec::{WCodec, Zenoh080};
 use zenoh_core::{zasynclock, zasyncread};
 use zenoh_crypto::hmac;
 use zenoh_link::LinkUnicast;
@@ -111,10 +111,10 @@ pub(super) async fn send(
 
     let mut encrypted = vec![];
     let mut writer = encrypted.writer();
-    let mut codec = Zenoh060Cookie {
+    let mut codec = Zenoh080Cookie {
         prng: &mut *zasynclock!(manager.prng),
         cipher: &manager.cipher,
-        codec: Zenoh060::default(),
+        codec: Zenoh080::default(),
     };
     codec.write(&mut writer, &cookie).map_err(|_| {
         (

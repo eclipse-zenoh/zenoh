@@ -13,7 +13,7 @@
 //
 use super::seq_num::SeqNum;
 use zenoh_buffers::{reader::HasReader, SplitBuffer, ZBuf, ZSlice};
-use zenoh_codec::{RCodec, Zenoh060Reliability};
+use zenoh_codec::{RCodec, Zenoh080Reliability};
 use zenoh_protocol::{
     core::{Reliability, ZInt},
     zenoh::ZenohMessage,
@@ -87,7 +87,7 @@ impl DefragBuffer {
     #[inline(always)]
     pub(crate) fn defragment(&mut self) -> Option<ZenohMessage> {
         let mut reader = self.buffer.reader();
-        let rcodec = Zenoh060Reliability::new(self.reliability);
+        let rcodec = Zenoh080Reliability::new(self.reliability);
         let res: Option<ZenohMessage> = rcodec.read(&mut reader).ok();
         self.clear();
         res

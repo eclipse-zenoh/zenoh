@@ -14,7 +14,7 @@
 mod hello;
 mod scout;
 
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -24,7 +24,7 @@ use zenoh_protocol::{
     scouting::{ScoutingBody, ScoutingMessage},
 };
 
-impl<W> WCodec<&ScoutingMessage, &mut W> for Zenoh060
+impl<W> WCodec<&ScoutingMessage, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -42,14 +42,14 @@ where
     }
 }
 
-impl<R> RCodec<ScoutingMessage, &mut R> for Zenoh060
+impl<R> RCodec<ScoutingMessage, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ScoutingMessage, Self::Error> {
-        let mut codec = Zenoh060Header {
+        let mut codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };

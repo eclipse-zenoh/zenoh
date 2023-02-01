@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header, Zenoh060Reliability};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Reliability};
 use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
@@ -25,7 +25,7 @@ use zenoh_protocol::{
 };
 
 // FrameHeader
-impl<W> WCodec<&FrameHeader, &mut W> for Zenoh060
+impl<W> WCodec<&FrameHeader, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -61,14 +61,14 @@ where
     }
 }
 
-impl<R> RCodec<FrameHeader, &mut R> for Zenoh060
+impl<R> RCodec<FrameHeader, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<FrameHeader, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -76,7 +76,7 @@ where
     }
 }
 
-impl<R> RCodec<FrameHeader, &mut R> for Zenoh060Header
+impl<R> RCodec<FrameHeader, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -120,7 +120,7 @@ where
 }
 
 // Frame
-impl<W> WCodec<&Frame, &mut W> for Zenoh060
+impl<W> WCodec<&Frame, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -158,14 +158,14 @@ where
     }
 }
 
-impl<R> RCodec<Frame, &mut R> for Zenoh060
+impl<R> RCodec<Frame, &mut R> for Zenoh080
 where
     R: Reader + BacktrackableReader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Frame, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -173,7 +173,7 @@ where
     }
 }
 
-impl<R> RCodec<Frame, &mut R> for Zenoh060Header
+impl<R> RCodec<Frame, &mut R> for Zenoh080Header
 where
     R: Reader + BacktrackableReader,
 {
@@ -184,7 +184,7 @@ where
 
         let payload = match header.kind {
             FrameKind::Messages => {
-                let rcode = Zenoh060Reliability {
+                let rcode = Zenoh080Reliability {
                     reliability: header.channel.reliability,
                     ..Default::default()
                 };

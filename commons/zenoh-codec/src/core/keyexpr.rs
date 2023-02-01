@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Condition};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Condition};
 use alloc::string::String;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -19,7 +19,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::core::{WireExpr, ZInt};
 
-impl<W> WCodec<&WireExpr<'_>, &mut W> for Zenoh060
+impl<W> WCodec<&WireExpr<'_>, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -34,7 +34,7 @@ where
     }
 }
 
-impl<R> RCodec<WireExpr<'static>, &mut R> for Zenoh060Condition
+impl<R> RCodec<WireExpr<'static>, &mut R> for Zenoh080Condition
 where
     R: Reader,
 {

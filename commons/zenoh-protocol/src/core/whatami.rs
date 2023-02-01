@@ -11,34 +11,36 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::ZInt;
 use alloc::string::String;
-use core::{convert::TryInto, fmt, num::NonZeroU8, ops::BitOr, str::FromStr};
+use core::{convert::TryFrom, fmt, num::NonZeroU8, ops::BitOr, str::FromStr};
 use zenoh_result::{bail, ZError};
+
+const WAI_STR_R: &str = "router";
+const WAI_STR_P: &str = "peer";
+const WAI_STR_C: &str = "client";
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum WhatAmI {
-    Router = 1,
-    Peer = 1 << 1,
-    Client = 1 << 2,
-}
-
-impl FromStr for WhatAmI {
-    type Err = ZError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "router" => Ok(WhatAmI::Router),
-            "peer" => Ok(WhatAmI::Peer),
-            "client" => Ok(WhatAmI::Client),
-            _ => bail!("{} is not a valid WhatAmI value. Valid values are: [\"router\", \"peer\", \"client\"].", s),
-        }
-    }
+    Router = 0b001,
+    Peer = 0b010,
+    Client = 0b100,
 }
 
 impl WhatAmI {
+    const U8_R: u8 = WhatAmI::Router as u8;
+    const U8_P: u8 = WhatAmI::Peer as u8;
+    const U8_C: u8 = WhatAmI::Client as u8;
+
+    pub const fn to_str(self) -> &'static str {
+        match self {
+            WhatAmI::Router => WAI_STR_R,
+            WhatAmI::Peer => WAI_STR_P,
+            WhatAmI::Client => WAI_STR_C,
+        }
+    }
+
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::prelude::SliceRandom;
@@ -48,24 +50,32 @@ impl WhatAmI {
             .choose(&mut rng)
             .unwrap()
     }
+}
 
-    pub fn to_str(self) -> &'static str {
-        match self {
-            WhatAmI::Router => "router",
-            WhatAmI::Peer => "peer",
-            WhatAmI::Client => "client",
+impl TryFrom<u8> for WhatAmI {
+    type Error = ();
+
+    fn try_from(v: u8) -> Result<Self, Self::Error> {
+        match v {
+            Self::U8_R => Ok(WhatAmI::Router),
+            Self::U8_P => Ok(WhatAmI::Peer),
+            Self::U8_C => Ok(WhatAmI::Client),
+            _ => Err(()),
         }
     }
+}
 
-    pub fn try_from(value: ZInt) -> Option<Self> {
-        const CLIENT: ZInt = WhatAmI::Client as ZInt;
-        const ROUTER: ZInt = WhatAmI::Router as ZInt;
-        const PEER: ZInt = WhatAmI::Peer as ZInt;
-        match value {
-            CLIENT => Some(WhatAmI::Client),
-            ROUTER => Some(WhatAmI::Router),
-            PEER => Some(WhatAmI::Peer),
-            _ => None,
+impl FromStr for WhatAmI {
+    type Err = ZError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            WAI_STR_R => Ok(WhatAmI::Router),
+            WAI_STR_P => Ok(WhatAmI::Peer),
+            WAI_STR_C => Ok(WhatAmI::Client),
+            _ => bail!(
+                "{s} is not a valid WhatAmI value. Valid values are: {WAI_STR_R}, {WAI_STR_P}, {WAI_STR_C}."
+            ),
         }
     }
 }
@@ -76,6 +86,176 @@ impl fmt::Display for WhatAmI {
     }
 }
 
+impl From<WhatAmI> for u8 {
+    fn from(w: WhatAmI) -> Self {
+        w as u8
+    }
+}
+
+#[repr(transparent)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct WhatAmIMatcher(NonZeroU8);
+
+impl WhatAmIMatcher {
+    // We use the 7th bit for detecting whether the WhatAmIMatcher is non-zero
+    const U8_0: u8 = 1 << 7;
+    const U8_R: u8 = Self::U8_0 | WhatAmI::U8_R;
+    const U8_P: u8 = Self::U8_0 | WhatAmI::U8_P;
+    const U8_C: u8 = Self::U8_0 | WhatAmI::U8_C;
+    const U8_R_P: u8 = Self::U8_0 | WhatAmI::U8_R | WhatAmI::U8_P;
+    const U8_P_C: u8 = Self::U8_0 | WhatAmI::U8_P | WhatAmI::U8_C;
+    const U8_R_C: u8 = Self::U8_0 | WhatAmI::U8_R | WhatAmI::U8_C;
+    const U8_R_P_C: u8 = Self::U8_0 | WhatAmI::U8_R | WhatAmI::U8_P | WhatAmI::U8_C;
+
+    pub const fn empty() -> Self {
+        Self(unsafe { NonZeroU8::new_unchecked(Self::U8_0) })
+    }
+
+    pub const fn router(self) -> Self {
+        Self(unsafe { NonZeroU8::new_unchecked(self.0.get() | Self::U8_R) })
+    }
+
+    pub const fn peer(self) -> Self {
+        Self(unsafe { NonZeroU8::new_unchecked(self.0.get() | Self::U8_P) })
+    }
+
+    pub const fn client(self) -> Self {
+        Self(unsafe { NonZeroU8::new_unchecked(self.0.get() | Self::U8_C) })
+    }
+
+    pub const fn is_empty(&self) -> bool {
+        self.0.get() == Self::U8_0
+    }
+
+    pub const fn matches(&self, w: WhatAmI) -> bool {
+        (self.0.get() & w as u8) != 0
+    }
+
+    pub const fn to_str(self) -> &'static str {
+        match self.0.get() {
+            Self::U8_0 => "",
+            Self::U8_R => WAI_STR_R,
+            Self::U8_P => WAI_STR_P,
+            Self::U8_C => WAI_STR_C,
+            Self::U8_R_P => const_str::concat!(WAI_STR_R, "|", WAI_STR_P),
+            Self::U8_R_C => const_str::concat!(WAI_STR_R, "|", WAI_STR_C),
+            Self::U8_P_C => const_str::concat!(WAI_STR_P, "|", WAI_STR_C),
+            Self::U8_R_P_C => const_str::concat!(WAI_STR_R, "|", WAI_STR_P, "|", WAI_STR_C),
+            _ => unreachable!(),
+        }
+    }
+
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let mut waim = WhatAmIMatcher::empty();
+        if rng.gen_bool(0.5) {
+            waim = waim.router();
+        }
+        if rng.gen_bool(0.5) {
+            waim = waim.peer();
+        }
+        if rng.gen_bool(0.5) {
+            waim = waim.client();
+        }
+        waim
+    }
+}
+
+impl TryFrom<u8> for WhatAmIMatcher {
+    type Error = ();
+
+    fn try_from(v: u8) -> Result<Self, Self::Error> {
+        const MIN: u8 = 0;
+        const MAX: u8 = WhatAmI::U8_R | WhatAmI::U8_P | WhatAmI::U8_C;
+
+        if (MIN..=MAX).contains(&v) {
+            Ok(WhatAmIMatcher(unsafe {
+                NonZeroU8::new_unchecked(Self::U8_0 | v)
+            }))
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl FromStr for WhatAmIMatcher {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut inner = 0;
+        for s in s.split('|') {
+            match s.trim() {
+                "" => {}
+                WAI_STR_R => inner |= WhatAmI::U8_R,
+                WAI_STR_P => inner |= WhatAmI::U8_P,
+                WAI_STR_C => inner |= WhatAmI::U8_C,
+                _ => return Err(()),
+            }
+        }
+        Self::try_from(inner)
+    }
+}
+
+impl fmt::Display for WhatAmIMatcher {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.to_str())
+    }
+}
+
+impl From<WhatAmIMatcher> for u8 {
+    fn from(w: WhatAmIMatcher) -> u8 {
+        w.0.get()
+    }
+}
+
+impl<T> BitOr<T> for WhatAmIMatcher
+where
+    NonZeroU8: BitOr<T, Output = NonZeroU8>,
+{
+    type Output = Self;
+
+    fn bitor(self, rhs: T) -> Self::Output {
+        WhatAmIMatcher(self.0 | rhs)
+    }
+}
+
+impl BitOr<WhatAmI> for WhatAmIMatcher {
+    type Output = Self;
+
+    fn bitor(self, rhs: WhatAmI) -> Self::Output {
+        self | rhs as u8
+    }
+}
+
+impl BitOr for WhatAmIMatcher {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        self | rhs.0
+    }
+}
+
+impl BitOr for WhatAmI {
+    type Output = WhatAmIMatcher;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        WhatAmIMatcher(unsafe {
+            NonZeroU8::new_unchecked(self as u8 | rhs as u8 | WhatAmIMatcher::U8_0)
+        })
+    }
+}
+
+impl From<WhatAmI> for WhatAmIMatcher {
+    fn from(w: WhatAmI) -> Self {
+        WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(w as u8 | WhatAmIMatcher::U8_0) })
+    }
+}
+
+// Serde
 impl serde::Serialize for WhatAmI {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -120,80 +300,6 @@ impl<'de> serde::Deserialize<'de> for WhatAmI {
         D: serde::Deserializer<'de>,
     {
         deserializer.deserialize_str(WhatAmIVisitor)
-    }
-}
-
-impl From<WhatAmI> for ZInt {
-    fn from(w: WhatAmI) -> Self {
-        w as ZInt
-    }
-}
-
-#[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct WhatAmIMatcher(pub NonZeroU8);
-
-impl WhatAmIMatcher {
-    #[cfg(feature = "test")]
-    pub fn rand() -> Self {
-        use rand::Rng;
-
-        let mut rng = rand::thread_rng();
-        WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(rng.gen_range(128..136)) })
-    }
-
-    pub fn try_from<T: TryInto<u8>>(i: T) -> Option<Self> {
-        let i = i.try_into().ok()?;
-        if 127 < i && i < 136 {
-            Some(WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(i) }))
-        } else {
-            None
-        }
-    }
-
-    pub fn is_empty(self) -> bool {
-        self.0.get() == 128
-    }
-
-    pub fn empty() -> Self {
-        WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(128) })
-    }
-
-    pub fn matches(self, w: WhatAmI) -> bool {
-        (self.0.get() & w as u8) != 0
-    }
-
-    pub fn to_str(self) -> &'static str {
-        match self.0.get() {
-            128 => "",
-            129 => "router",
-            130 => "peer",
-            132 => "client",
-            131 => "router|peer",
-            134 => "client|peer",
-            133 => "client|router",
-            135 => "client|router|peer",
-            _ => "invalid_matcher",
-        }
-    }
-}
-
-impl FromStr for WhatAmIMatcher {
-    type Err = ();
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut inner = 128;
-        for s in s.split('|') {
-            match s.trim() {
-                "" => {}
-                "router" => inner |= WhatAmI::Router as u8,
-                "client" => inner |= WhatAmI::Client as u8,
-                "peer" => inner |= WhatAmI::Peer as u8,
-                _ => return Err(()),
-            }
-        }
-        Self::try_from(inner).ok_or(())
     }
 }
 
@@ -243,54 +349,5 @@ impl<'de> serde::Deserialize<'de> for WhatAmIMatcher {
         D: serde::Deserializer<'de>,
     {
         deserializer.deserialize_str(WhatAmIMatcherVisitor)
-    }
-}
-
-impl fmt::Display for WhatAmIMatcher {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.to_str())
-    }
-}
-
-impl From<WhatAmIMatcher> for ZInt {
-    fn from(w: WhatAmIMatcher) -> ZInt {
-        w.0.get() as ZInt
-    }
-}
-
-impl<T> BitOr<T> for WhatAmIMatcher
-where
-    NonZeroU8: BitOr<T, Output = NonZeroU8>,
-{
-    type Output = Self;
-    fn bitor(self, rhs: T) -> Self::Output {
-        WhatAmIMatcher(self.0 | rhs)
-    }
-}
-
-impl BitOr<WhatAmI> for WhatAmIMatcher {
-    type Output = Self;
-    fn bitor(self, rhs: WhatAmI) -> Self::Output {
-        self | rhs as u8
-    }
-}
-
-impl BitOr for WhatAmIMatcher {
-    type Output = Self;
-    fn bitor(self, rhs: Self) -> Self::Output {
-        self | rhs.0
-    }
-}
-
-impl BitOr for WhatAmI {
-    type Output = WhatAmIMatcher;
-    fn bitor(self, rhs: Self) -> Self::Output {
-        WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(self as u8 | rhs as u8 | 128) })
-    }
-}
-
-impl From<WhatAmI> for WhatAmIMatcher {
-    fn from(w: WhatAmI) -> Self {
-        WhatAmIMatcher(unsafe { NonZeroU8::new_unchecked(w as u8 | 128) })
     }
 }

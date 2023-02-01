@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -22,7 +22,7 @@ use zenoh_protocol::{
     zenoh::{zmsg, RoutingContext},
 };
 
-impl<W> WCodec<&RoutingContext, &mut W> for Zenoh060
+impl<W> WCodec<&RoutingContext, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -39,14 +39,14 @@ where
     }
 }
 
-impl<R> RCodec<RoutingContext, &mut R> for Zenoh060
+impl<R> RCodec<RoutingContext, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<RoutingContext, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -54,7 +54,7 @@ where
     }
 }
 
-impl<R> RCodec<RoutingContext, &mut R> for Zenoh060Header
+impl<R> RCodec<RoutingContext, &mut R> for Zenoh080Header
 where
     R: Reader,
 {

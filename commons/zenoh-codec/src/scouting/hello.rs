@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use alloc::{vec, vec::Vec};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -19,12 +19,12 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{Locator, WhatAmI, ZInt, ZenohId},
+    core::{Locator, WhatAmI, ZenohId},
     scouting::Hello,
     transport::tmsg,
 };
 
-impl<W> WCodec<&Hello, &mut W> for Zenoh060
+impl<W> WCodec<&Hello, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -33,40 +33,36 @@ where
     fn write(self, writer: &mut W, x: &Hello) -> Self::Output {
         // Header
         let mut header = tmsg::id::HELLO;
-        if x.zid.is_some() {
-            header |= tmsg::flag::I
-        }
-        if x.whatami != WhatAmI::Router {
-            header |= tmsg::flag::W;
-        }
         if !x.locators.is_empty() {
             header |= tmsg::flag::L;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        if let Some(zid) = x.zid.as_ref() {
-            self.write(&mut *writer, zid)?;
-        }
-        if x.whatami != WhatAmI::Router {
-            let wai: ZInt = x.whatami.into();
-            self.write(&mut *writer, wai)?;
-        }
+        self.write(&mut *writer, x.version)?;
+        let whatami: u8 = match x.whatami {
+            WhatAmI::Router => 0b00,
+            WhatAmI::Peer => 0b01,
+            WhatAmI::Client => 0b10,
+        };
+        self.write(&mut *writer, whatami)?;
+        self.write(&mut *writer, &x.zid)?;
         if !x.locators.is_empty() {
             self.write(&mut *writer, x.locators.as_slice())?;
         }
+
         Ok(())
     }
 }
 
-impl<R> RCodec<Hello, &mut R> for Zenoh060
+impl<R> RCodec<Hello, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Hello, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -74,7 +70,7 @@ where
     }
 }
 
-impl<R> RCodec<Hello, &mut R> for Zenoh060Header
+impl<R> RCodec<Hello, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -85,18 +81,16 @@ where
             return Err(DidntRead);
         }
 
-        let zid = if imsg::has_flag(self.header, tmsg::flag::I) {
-            let zid: ZenohId = self.codec.read(&mut *reader)?;
-            Some(zid)
-        } else {
-            None
+        let version: u8 = self.codec.read(&mut *reader)?;
+        let flags: u8 = self.codec.read(&mut *reader)?;
+        let whatami = match flags & 0b11 {
+            0b00 => WhatAmI::Router,
+            0b01 => WhatAmI::Peer,
+            0b10 => WhatAmI::Client,
+            _ => return Err(DidntRead),
         };
-        let whatami = if imsg::has_flag(self.header, tmsg::flag::W) {
-            let wai: ZInt = self.codec.read(&mut *reader)?;
-            WhatAmI::try_from(wai).ok_or(DidntRead)?
-        } else {
-            WhatAmI::Router
-        };
+
+        let zid: ZenohId = self.codec.read(&mut *reader)?;
         let locators = if imsg::has_flag(self.header, tmsg::flag::L) {
             let locs: Vec<Locator> = self.codec.read(&mut *reader)?;
             locs
@@ -105,6 +99,7 @@ where
         };
 
         Ok(Hello {
+            version,
             zid,
             whatami,
             locators,

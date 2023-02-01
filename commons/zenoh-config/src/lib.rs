@@ -19,6 +19,8 @@ use serde::{
     Deserialize, Serialize,
 };
 use serde_json::Value;
+#[allow(unused_imports)]
+use std::convert::TryFrom; // This is a false positive from the rust analyser
 use std::{
     any::Any,
     collections::HashMap,
@@ -387,15 +389,15 @@ fn config_deser() {
     assert_eq!(*config.scouting().multicast().enabled(), Some(false));
     assert_eq!(
         config.scouting().multicast().autoconnect().router(),
-        Some(&WhatAmIMatcher::try_from(131).unwrap())
+        Some(&WhatAmIMatcher::empty().router().peer())
     );
     assert_eq!(
         config.scouting().multicast().autoconnect().peer(),
-        Some(&WhatAmIMatcher::try_from(131).unwrap())
+        Some(&WhatAmIMatcher::empty().router().peer())
     );
     assert_eq!(
         config.scouting().multicast().autoconnect().client(),
-        Some(&WhatAmIMatcher::try_from(131).unwrap())
+        Some(&WhatAmIMatcher::empty().router().peer())
     );
     let config = Config::from_deserializer(
         &mut json5::Deserializer::from_str(
@@ -414,11 +416,11 @@ fn config_deser() {
     assert_eq!(*config.scouting().multicast().enabled(), Some(false));
     assert_eq!(
         config.scouting().multicast().autoconnect().router(),
-        Some(&WhatAmIMatcher::try_from(128).unwrap())
+        Some(&WhatAmIMatcher::empty())
     );
     assert_eq!(
         config.scouting().multicast().autoconnect().peer(),
-        Some(&WhatAmIMatcher::try_from(131).unwrap())
+        Some(&WhatAmIMatcher::empty().router().peer())
     );
     assert_eq!(config.scouting().multicast().autoconnect().client(), None);
     let config = Config::from_deserializer(

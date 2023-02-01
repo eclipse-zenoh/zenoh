@@ -41,11 +41,11 @@ pub mod scouting {
         pub const interface: &str = "auto";
         pub mod autoconnect {
             pub const router: &crate::WhatAmIMatcher = // ""
-                &crate::WhatAmIMatcher(unsafe { std::num::NonZeroU8::new_unchecked(128) });
+                &crate::WhatAmIMatcher::empty();
             pub const peer: &crate::WhatAmIMatcher = // "router|peer"
-                &crate::WhatAmIMatcher(unsafe { std::num::NonZeroU8::new_unchecked(131) });
+                &crate::WhatAmIMatcher::empty().router().peer();
             pub const client: &crate::WhatAmIMatcher = // "router|peer"
-                &crate::WhatAmIMatcher(unsafe { std::num::NonZeroU8::new_unchecked(131) });
+                &crate::WhatAmIMatcher::empty().router().peer();
             mode_accessor!(crate::WhatAmIMatcher);
         }
         pub mod listen {
@@ -60,11 +60,11 @@ pub mod scouting {
         pub const multihop: bool = false;
         pub mod autoconnect {
             pub const router: &crate::WhatAmIMatcher = // ""
-                &crate::WhatAmIMatcher(unsafe { std::num::NonZeroU8::new_unchecked(128) });
+                &crate::WhatAmIMatcher::empty();
             pub const peer: &crate::WhatAmIMatcher = // "router|peer"
-                &crate::WhatAmIMatcher(unsafe { std::num::NonZeroU8::new_unchecked(131) });
+                &crate::WhatAmIMatcher::empty().router().peer();
             pub const client: &crate::WhatAmIMatcher = // "router|peer"
-                &crate::WhatAmIMatcher(unsafe { std::num::NonZeroU8::new_unchecked(131) });
+                &crate::WhatAmIMatcher::empty().router().peer();
             mode_accessor!(crate::WhatAmIMatcher);
         }
     }

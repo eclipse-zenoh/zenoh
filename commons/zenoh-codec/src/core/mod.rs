@@ -22,7 +22,7 @@ mod zenohid;
 mod zint;
 mod zslice;
 
-use crate::{RCodec, WCodec, Zenoh060};
+use crate::{RCodec, WCodec, Zenoh080};
 use alloc::{string::String, vec::Vec};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -30,7 +30,7 @@ use zenoh_buffers::{
 };
 
 // u8
-impl<W> WCodec<u8, &mut W> for Zenoh060
+impl<W> WCodec<u8, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -41,7 +41,7 @@ where
     }
 }
 
-impl<W> WCodec<&u8, &mut W> for Zenoh060
+impl<W> WCodec<&u8, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -52,7 +52,7 @@ where
     }
 }
 
-impl<R> RCodec<u8, &mut R> for Zenoh060
+impl<R> RCodec<u8, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -64,7 +64,7 @@ where
 }
 
 // &[u8] / Vec<u8>
-impl<W> WCodec<&[u8], &mut W> for Zenoh060
+impl<W> WCodec<&[u8], &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -80,7 +80,7 @@ where
     }
 }
 
-impl<R> RCodec<Vec<u8>, &mut R> for Zenoh060
+impl<R> RCodec<Vec<u8>, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -98,7 +98,7 @@ where
 }
 
 // &str / String
-impl<W> WCodec<&str, &mut W> for Zenoh060
+impl<W> WCodec<&str, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -109,7 +109,7 @@ where
     }
 }
 
-impl<W> WCodec<&String, &mut W> for Zenoh060
+impl<W> WCodec<&String, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -120,7 +120,7 @@ where
     }
 }
 
-impl<R> RCodec<String, &mut R> for Zenoh060
+impl<R> RCodec<String, &mut R> for Zenoh080
 where
     R: Reader,
 {

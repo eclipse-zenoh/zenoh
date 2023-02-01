@@ -20,7 +20,7 @@ mod routing;
 mod unit;
 
 use crate::{
-    RCodec, WCodec, Zenoh060, Zenoh060Header, Zenoh060HeaderReplyContext, Zenoh060Reliability,
+    RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080HeaderReplyContext, Zenoh080Reliability,
 };
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -32,7 +32,7 @@ use zenoh_protocol::{
     zenoh::{zmsg, ReplyContext, RoutingContext, ZenohBody, ZenohMessage},
 };
 
-impl<W> WCodec<&ZenohMessage, &mut W> for Zenoh060
+impl<W> WCodec<&ZenohMessage, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -60,14 +60,14 @@ where
     }
 }
 
-impl<R> RCodec<ZenohMessage, &mut R> for Zenoh060
+impl<R> RCodec<ZenohMessage, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ZenohMessage, Self::Error> {
-        let codec = Zenoh060Reliability {
+        let codec = Zenoh080Reliability {
             reliability: Reliability::default(),
             ..Default::default()
         };
@@ -75,14 +75,14 @@ where
     }
 }
 
-impl<R> RCodec<ZenohMessage, &mut R> for Zenoh060Reliability
+impl<R> RCodec<ZenohMessage, &mut R> for Zenoh080Reliability
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ZenohMessage, Self::Error> {
-        let mut codec = Zenoh060Header {
+        let mut codec = Zenoh080Header {
             header: self.codec.read(&mut *reader)?,
             ..Default::default()
         };
@@ -112,7 +112,7 @@ where
         let body = match imsg::mid(codec.header) {
             zmsg::id::REPLY_CONTEXT => {
                 let rc: ReplyContext = codec.read(&mut *reader)?;
-                let rodec = Zenoh060HeaderReplyContext {
+                let rodec = Zenoh080HeaderReplyContext {
                     header: self.codec.read(&mut *reader)?,
                     reply_context: Some(rc),
                     ..Default::default()
@@ -124,14 +124,14 @@ where
                 }
             }
             zmsg::id::DATA => {
-                let rodec = Zenoh060HeaderReplyContext {
+                let rodec = Zenoh080HeaderReplyContext {
                     header: codec.header,
                     ..Default::default()
                 };
                 ZenohBody::Data(rodec.read(&mut *reader)?)
             }
             zmsg::id::UNIT => {
-                let rodec = Zenoh060HeaderReplyContext {
+                let rodec = Zenoh080HeaderReplyContext {
                     header: codec.header,
                     ..Default::default()
                 };

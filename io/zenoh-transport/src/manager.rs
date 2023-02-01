@@ -34,7 +34,8 @@ use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
 use zenoh_protocol::{
     core::{EndPoint, Locator, Priority, WhatAmI, ZInt, ZenohId},
-    defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION},
+    defaults::{BATCH_SIZE, SEQ_NUM_RES},
+    VERSION,
 };
 use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]

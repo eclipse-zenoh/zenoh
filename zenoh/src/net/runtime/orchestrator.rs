@@ -20,7 +20,7 @@ use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 use zenoh_buffers::reader::DidntRead;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter};
-use zenoh_codec::{RCodec, WCodec, Zenoh060};
+use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_config::{unwrap_or_default, EndPoint, ModeDependent};
 use zenoh_link::Locator;
 use zenoh_protocol::{
@@ -485,10 +485,10 @@ impl Runtime {
         let send = async {
             let mut delay = SCOUT_INITIAL_PERIOD;
 
-            let scout = ScoutingMessage::make_scout(Some(matcher), true, None);
+            let scout = ScoutingMessage::make_scout(matcher, None, None);
             let mut wbuf = vec![];
             let mut writer = wbuf.writer();
-            let codec = Zenoh060::default();
+            let codec = Zenoh080::default();
             codec.write(&mut writer, &scout).unwrap();
 
             loop {
@@ -530,7 +530,7 @@ impl Runtime {
                     match socket.recv_from(&mut buf).await {
                         Ok((n, peer)) => {
                             let mut reader = buf.as_slice()[..n].reader();
-                            let codec = Zenoh060::default();
+                            let codec = Zenoh080::default();
                             let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
                             if let Ok(msg) = res {
                                 log::trace!("Received {:?} from {}", msg.body, peer);
@@ -642,17 +642,10 @@ impl Runtime {
         addr: &SocketAddr,
     ) {
         Runtime::scout(ucast_sockets, what, addr, move |hello| async move {
-            match &hello.zid {
-                Some(zid) => {
-                    if !hello.locators.is_empty() {
-                        self.connect_peer(zid, &hello.locators).await
-                    } else {
-                        log::warn!("Received Hello with no locators: {:?}", hello);
-                    }
-                }
-                None => {
-                    log::warn!("Received Hello with no zid: {:?}", hello);
-                }
+            if !hello.locators.is_empty() {
+                self.connect_peer(&hello.zid, &hello.locators).await
+            } else {
+                log::warn!("Received Hello with no locators: {:?}", hello);
             }
             Loop::Continue
         })
@@ -697,29 +690,21 @@ impl Runtime {
             }
 
             let mut reader = buf.as_slice()[..n].reader();
-            let codec = Zenoh060::default();
+            let codec = Zenoh080::default();
             let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
             if let Ok(msg) = res {
                 log::trace!("Received {:?} from {}", msg.body, peer);
-                if let ScoutingBody::Scout(Scout {
-                    what, zid_request, ..
-                }) = &msg.body
-                {
-                    let what = what.or(Some(WhatAmI::Router.into())).unwrap();
+                if let ScoutingBody::Scout(Scout { what, .. }) = &msg.body {
                     if what.matches(self.whatami) {
                         let mut wbuf = vec![];
                         let mut writer = wbuf.writer();
-                        let codec = Zenoh060::default();
+                        let codec = Zenoh080::default();
 
-                        let zid = if *zid_request {
-                            Some(self.manager().zid())
-                        } else {
-                            None
-                        };
+                        let zid = self.manager().zid();
                         let hello = ScoutingMessage::make_hello(
+                            self.whatami,
                             zid,
-                            Some(self.whatami),
-                            Some(self.get_locators()),
+                            self.get_locators(),
                             None,
                         );
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();

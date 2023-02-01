@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Condition, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header};
 use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -28,7 +28,7 @@ use zenoh_protocol::{
 };
 
 // Declaration
-impl<W> WCodec<&Declaration, &mut W> for Zenoh060
+impl<W> WCodec<&Declaration, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -50,7 +50,7 @@ where
     }
 }
 
-impl<R> RCodec<Declaration, &mut R> for Zenoh060
+impl<R> RCodec<Declaration, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -59,7 +59,7 @@ where
     fn read(self, reader: &mut R) -> Result<Declaration, Self::Error> {
         use super::zmsg::declaration::id::*;
 
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -81,7 +81,7 @@ where
 }
 
 // Declare
-impl<W> WCodec<&Declare, &mut W> for Zenoh060
+impl<W> WCodec<&Declare, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -102,14 +102,14 @@ where
     }
 }
 
-impl<R> RCodec<Declare, &mut R> for Zenoh060
+impl<R> RCodec<Declare, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Declare, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -117,7 +117,7 @@ where
     }
 }
 
-impl<R> RCodec<Declare, &mut R> for Zenoh060Header
+impl<R> RCodec<Declare, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -140,7 +140,7 @@ where
 }
 
 // Resource
-impl<W> WCodec<&Resource, &mut W> for Zenoh060
+impl<W> WCodec<&Resource, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -162,14 +162,14 @@ where
     }
 }
 
-impl<R> RCodec<Resource, &mut R> for Zenoh060
+impl<R> RCodec<Resource, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Resource, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -177,7 +177,7 @@ where
     }
 }
 
-impl<R> RCodec<Resource, &mut R> for Zenoh060Header
+impl<R> RCodec<Resource, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -189,7 +189,7 @@ where
         }
 
         let expr_id: ZInt = self.codec.read(&mut *reader)?;
-        let ccond = Zenoh060Condition {
+        let ccond = Zenoh080Condition {
             condition: imsg::has_flag(self.header, zmsg::flag::K),
             codec: self.codec,
         };
@@ -200,7 +200,7 @@ where
 }
 
 // ForgetResource
-impl<W> WCodec<&ForgetResource, &mut W> for Zenoh060
+impl<W> WCodec<&ForgetResource, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -218,14 +218,14 @@ where
     }
 }
 
-impl<R> RCodec<ForgetResource, &mut R> for Zenoh060
+impl<R> RCodec<ForgetResource, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ForgetResource, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -233,7 +233,7 @@ where
     }
 }
 
-impl<R> RCodec<ForgetResource, &mut R> for Zenoh060Header
+impl<R> RCodec<ForgetResource, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -251,7 +251,7 @@ where
 }
 
 // Publisher
-impl<W> WCodec<&Publisher, &mut W> for Zenoh060
+impl<W> WCodec<&Publisher, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -272,14 +272,14 @@ where
     }
 }
 
-impl<R> RCodec<Publisher, &mut R> for Zenoh060
+impl<R> RCodec<Publisher, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Publisher, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -287,7 +287,7 @@ where
     }
 }
 
-impl<R> RCodec<Publisher, &mut R> for Zenoh060Header
+impl<R> RCodec<Publisher, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -298,7 +298,7 @@ where
             return Err(DidntRead);
         }
 
-        let ccond = Zenoh060Condition {
+        let ccond = Zenoh080Condition {
             condition: imsg::has_flag(self.header, zmsg::flag::K),
             codec: self.codec,
         };
@@ -309,7 +309,7 @@ where
 }
 
 // ForgetPublisher
-impl<W> WCodec<&ForgetPublisher, &mut W> for Zenoh060
+impl<W> WCodec<&ForgetPublisher, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -330,14 +330,14 @@ where
     }
 }
 
-impl<R> RCodec<ForgetPublisher, &mut R> for Zenoh060
+impl<R> RCodec<ForgetPublisher, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ForgetPublisher, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -345,7 +345,7 @@ where
     }
 }
 
-impl<R> RCodec<ForgetPublisher, &mut R> for Zenoh060Header
+impl<R> RCodec<ForgetPublisher, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -356,7 +356,7 @@ where
             return Err(DidntRead);
         }
 
-        let ccond = Zenoh060Condition {
+        let ccond = Zenoh080Condition {
             condition: imsg::has_flag(self.header, zmsg::flag::K),
             codec: self.codec,
         };
@@ -367,7 +367,7 @@ where
 }
 
 // SubMode
-impl<W> WCodec<&SubMode, &mut W> for Zenoh060
+impl<W> WCodec<&SubMode, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -387,7 +387,7 @@ where
     }
 }
 
-impl<R> RCodec<SubMode, &mut R> for Zenoh060
+impl<R> RCodec<SubMode, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -407,7 +407,7 @@ where
 }
 
 // Subscriber
-impl<W> WCodec<&Subscriber, &mut W> for Zenoh060
+impl<W> WCodec<&Subscriber, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -437,14 +437,14 @@ where
     }
 }
 
-impl<R> RCodec<Subscriber, &mut R> for Zenoh060
+impl<R> RCodec<Subscriber, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Subscriber, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -452,7 +452,7 @@ where
     }
 }
 
-impl<R> RCodec<Subscriber, &mut R> for Zenoh060Header
+impl<R> RCodec<Subscriber, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -469,7 +469,7 @@ where
             Reliability::BestEffort
         };
 
-        let ccond = Zenoh060Condition {
+        let ccond = Zenoh080Condition {
             condition: imsg::has_flag(self.header, zmsg::flag::K),
             codec: self.codec,
         };
@@ -489,7 +489,7 @@ where
 }
 
 // ForgetSubscriber
-impl<W> WCodec<&ForgetSubscriber, &mut W> for Zenoh060
+impl<W> WCodec<&ForgetSubscriber, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -510,14 +510,14 @@ where
     }
 }
 
-impl<R> RCodec<ForgetSubscriber, &mut R> for Zenoh060
+impl<R> RCodec<ForgetSubscriber, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ForgetSubscriber, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -525,7 +525,7 @@ where
     }
 }
 
-impl<R> RCodec<ForgetSubscriber, &mut R> for Zenoh060Header
+impl<R> RCodec<ForgetSubscriber, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -536,7 +536,7 @@ where
             return Err(DidntRead);
         }
 
-        let ccond = Zenoh060Condition {
+        let ccond = Zenoh080Condition {
             condition: imsg::has_flag(self.header, zmsg::flag::K),
             codec: self.codec,
         };
@@ -547,7 +547,7 @@ where
 }
 
 // QueryableInfo
-impl<W> WCodec<&QueryableInfo, &mut W> for Zenoh060
+impl<W> WCodec<&QueryableInfo, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -561,7 +561,7 @@ where
     }
 }
 
-impl<R> RCodec<QueryableInfo, &mut R> for Zenoh060
+impl<R> RCodec<QueryableInfo, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -576,7 +576,7 @@ where
 }
 
 // Queryable
-impl<W> WCodec<&Queryable, &mut W> for Zenoh060
+impl<W> WCodec<&Queryable, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -603,14 +603,14 @@ where
     }
 }
 
-impl<R> RCodec<Queryable, &mut R> for Zenoh060
+impl<R> RCodec<Queryable, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Queryable, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -618,7 +618,7 @@ where
     }
 }
 
-impl<R> RCodec<Queryable, &mut R> for Zenoh060Header
+impl<R> RCodec<Queryable, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -629,7 +629,7 @@ where
             return Err(DidntRead);
         }
 
-        let ccond = Zenoh060Condition {
+        let ccond = Zenoh080Condition {
             condition: imsg::has_flag(self.header, zmsg::flag::K),
             codec: self.codec,
         };
@@ -646,7 +646,7 @@ where
 }
 
 // ForgetQueryable
-impl<W> WCodec<&ForgetQueryable, &mut W> for Zenoh060
+impl<W> WCodec<&ForgetQueryable, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -667,14 +667,14 @@ where
     }
 }
 
-impl<R> RCodec<ForgetQueryable, &mut R> for Zenoh060
+impl<R> RCodec<ForgetQueryable, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ForgetQueryable, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -682,7 +682,7 @@ where
     }
 }
 
-impl<R> RCodec<ForgetQueryable, &mut R> for Zenoh060Header
+impl<R> RCodec<ForgetQueryable, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -693,7 +693,7 @@ where
             return Err(DidntRead);
         }
 
-        let ccond = Zenoh060Condition {
+        let ccond = Zenoh080Condition {
             condition: imsg::has_flag(self.header, zmsg::flag::K),
             codec: self.codec,
         };

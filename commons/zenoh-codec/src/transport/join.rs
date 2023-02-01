@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use alloc::boxed::Box;
-use core::time::Duration;
+use core::{convert::TryFrom, time::Duration};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -25,7 +25,7 @@ use zenoh_protocol::{
     transport::{tmsg, ConduitSn, ConduitSnList, Join},
 };
 
-impl<W> WCodec<&Join, &mut W> for Zenoh060
+impl<W> WCodec<&Join, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -59,7 +59,7 @@ where
 
         // Body
         self.write(&mut *writer, x.version)?;
-        let wai: ZInt = x.whatami.into();
+        let wai: u8 = x.whatami.into();
         self.write(&mut *writer, wai)?;
         self.write(&mut *writer, &x.zid)?;
         if imsg::has_flag(header, tmsg::flag::T1) {
@@ -87,14 +87,14 @@ where
     }
 }
 
-impl<R> RCodec<Join, &mut R> for Zenoh060
+impl<R> RCodec<Join, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Join, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -102,7 +102,7 @@ where
     }
 }
 
-impl<R> RCodec<Join, &mut R> for Zenoh060Header
+impl<R> RCodec<Join, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -119,8 +119,8 @@ where
             0
         };
         let version: u8 = self.codec.read(&mut *reader)?;
-        let wai: ZInt = self.codec.read(&mut *reader)?;
-        let whatami = WhatAmI::try_from(wai).ok_or(DidntRead)?;
+        let wai: u8 = self.codec.read(&mut *reader)?;
+        let whatami = WhatAmI::try_from(wai).map_err(|_| DidntRead)?;
         let zid: ZenohId = self.codec.read(&mut *reader)?;
         let lease: ZInt = self.codec.read(&mut *reader)?;
         let lease = if imsg::has_flag(self.header, tmsg::flag::T1) {

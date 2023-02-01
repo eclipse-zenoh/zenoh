@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    RCodec, WCodec, Zenoh060, Zenoh060Condition, Zenoh060Header, Zenoh060HeaderReplyContext,
+    RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header, Zenoh080HeaderReplyContext,
 };
 use core::convert::TryInto;
 use uhlc::Timestamp;
@@ -28,7 +28,7 @@ use zenoh_protocol::{
 };
 
 // ReplyContext
-impl<W> WCodec<&ReplyContext, &mut W> for Zenoh060
+impl<W> WCodec<&ReplyContext, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -51,14 +51,14 @@ where
     }
 }
 
-impl<R> RCodec<ReplyContext, &mut R> for Zenoh060
+impl<R> RCodec<ReplyContext, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ReplyContext, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -66,7 +66,7 @@ where
     }
 }
 
-impl<R> RCodec<ReplyContext, &mut R> for Zenoh060Header
+impl<R> RCodec<ReplyContext, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -89,7 +89,7 @@ where
 }
 
 // DataInfo
-impl<W> WCodec<&DataInfo, &mut W> for Zenoh060
+impl<W> WCodec<&DataInfo, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -139,7 +139,7 @@ where
     }
 }
 
-impl<R> RCodec<DataInfo, &mut R> for Zenoh060
+impl<R> RCodec<DataInfo, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -178,7 +178,7 @@ where
 }
 
 // Data
-impl<W> WCodec<&Data, &mut W> for Zenoh060
+impl<W> WCodec<&Data, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -218,7 +218,7 @@ where
 
         #[cfg(feature = "shared-memory")]
         {
-            let codec = Zenoh060Condition::new(sliced);
+            let codec = Zenoh080Condition::new(sliced);
             codec.write(&mut *writer, &x.payload)?;
         }
 
@@ -231,19 +231,19 @@ where
     }
 }
 
-impl<R> RCodec<Data, &mut R> for Zenoh060
+impl<R> RCodec<Data, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Data, Self::Error> {
-        let mut codec = Zenoh060HeaderReplyContext {
+        let mut codec = Zenoh080HeaderReplyContext {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
         if imsg::mid(codec.header) == zmsg::id::REPLY_CONTEXT {
-            let hodec = Zenoh060Header {
+            let hodec = Zenoh080Header {
                 header: codec.header,
                 ..Default::default()
             };
@@ -254,7 +254,7 @@ where
     }
 }
 
-impl<R> RCodec<Data, &mut R> for Zenoh060HeaderReplyContext
+impl<R> RCodec<Data, &mut R> for Zenoh080HeaderReplyContext
 where
     R: Reader,
 {
@@ -271,7 +271,7 @@ where
             CongestionControl::Block
         };
 
-        let ccond = Zenoh060Condition {
+        let ccond = Zenoh080Condition {
             condition: imsg::has_flag(self.header, zmsg::flag::K),
             codec: self.codec,
         };
@@ -294,7 +294,7 @@ where
         let payload: ZBuf = {
             #[cfg(feature = "shared-memory")]
             {
-                let codec = Zenoh060Condition::new(is_sliced);
+                let codec = Zenoh080Condition::new(is_sliced);
                 codec.read(&mut *reader)?
             }
             #[cfg(not(feature = "shared-memory"))]

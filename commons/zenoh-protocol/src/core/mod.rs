@@ -31,14 +31,14 @@ pub use uhlc::{Timestamp, NTP64};
 use uuid::Uuid;
 use zenoh_result::{bail, zerror};
 
-/// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
-pub type TimestampId = uhlc::ID;
-
 /// A zenoh integer.
 pub type ZInt = u64;
 pub type ZiInt = i64;
 pub type NonZeroZInt = NonZeroU64;
 pub const ZINT_MAX_BYTES: usize = 10;
+
+/// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
+pub type TimestampId = uhlc::ID;
 
 /// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami;

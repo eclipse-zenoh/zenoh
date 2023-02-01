@@ -27,6 +27,9 @@ pub mod scouting;
 pub mod transport;
 pub mod zenoh;
 
+// Zenoh version
+pub const VERSION: u8 = 0x08;
+
 // Zenoh protocol uses the following conventions for message definition and representation.
 //
 //

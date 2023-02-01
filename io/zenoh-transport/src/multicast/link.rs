@@ -28,7 +28,7 @@ use std::{
     time::{Duration, Instant},
 };
 use zenoh_buffers::reader::{HasReader, Reader};
-use zenoh_codec::{RCodec, Zenoh060};
+use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::zlock;
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
@@ -351,7 +351,7 @@ async fn rx_task(
     }
 
     // The codec
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::default();
 
     // The pool of buffers
     let mtu = link.get_mtu() as usize;

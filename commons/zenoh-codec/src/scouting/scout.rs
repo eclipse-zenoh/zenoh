@@ -11,19 +11,20 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
+use core::convert::TryFrom;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{whatami::WhatAmIMatcher, ZInt},
+    core::{whatami::WhatAmIMatcher, ZenohId},
     scouting::Scout,
     transport::tmsg,
 };
 
-impl<W> WCodec<&Scout, &mut W> for Zenoh060
+impl<W> WCodec<&Scout, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -32,33 +33,30 @@ where
     fn write(self, writer: &mut W, x: &Scout) -> Self::Output {
         // Header
         let mut header = tmsg::id::SCOUT;
-        if x.zid_request {
+        if x.zid.is_some() {
             header |= tmsg::flag::I;
-        }
-        if x.what.is_some() {
-            header |= tmsg::flag::W;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        match x.what {
-            Some(w) => {
-                let w: ZInt = w.into();
-                self.write(&mut *writer, w)
-            }
-            None => Ok(()),
+        self.write(&mut *writer, x.version)?;
+        let what: u8 = x.what.into();
+        self.write(&mut *writer, what & 0b111)?;
+        if let Some(zid) = x.zid.as_ref() {
+            self.write(&mut *writer, zid)?;
         }
+        Ok(())
     }
 }
 
-impl<R> RCodec<Scout, &mut R> for Zenoh060
+impl<R> RCodec<Scout, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Scout, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -66,7 +64,7 @@ where
     }
 }
 
-impl<R> RCodec<Scout, &mut R> for Zenoh060Header
+impl<R> RCodec<Scout, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -77,13 +75,16 @@ where
             return Err(DidntRead);
         }
 
-        let zid_request = imsg::has_flag(self.header, tmsg::flag::I);
-        let what = if imsg::has_flag(self.header, tmsg::flag::W) {
-            let wai: ZInt = self.codec.read(reader)?;
-            WhatAmIMatcher::try_from(wai)
+        let version: u8 = self.codec.read(&mut *reader)?;
+        let flags: u8 = self.codec.read(&mut *reader)?;
+        let what = WhatAmIMatcher::try_from(flags & 0b111).map_err(|_| DidntRead)?;
+        let zid = if imsg::has_flag(self.header, tmsg::flag::I) {
+            let zid: ZenohId = self.codec.read(&mut *reader)?;
+            Some(zid)
         } else {
             None
         };
-        Ok(Scout { what, zid_request })
+
+        Ok(Scout { version, what, zid })
     }
 }

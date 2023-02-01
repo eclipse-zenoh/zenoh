@@ -34,51 +34,51 @@ pub trait RCodec<Message, Buffer> {
 
 #[derive(Clone, Copy, Default)]
 #[non_exhaustive]
-pub struct Zenoh060;
+pub struct Zenoh080;
 
 #[derive(Clone, Copy, Default)]
 #[non_exhaustive]
-pub struct Zenoh060Header {
+pub struct Zenoh080Header {
     pub header: u8,
-    pub codec: Zenoh060,
+    pub codec: Zenoh080,
 }
 
 #[derive(Clone, Copy, Default)]
 #[non_exhaustive]
-pub struct Zenoh060Condition {
+pub struct Zenoh080Condition {
     pub condition: bool,
-    pub codec: Zenoh060,
+    pub codec: Zenoh080,
 }
 
-impl Zenoh060Condition {
+impl Zenoh080Condition {
     pub const fn new(condition: bool) -> Self {
         Self {
             condition,
-            codec: Zenoh060,
+            codec: Zenoh080,
         }
     }
 }
 
 #[derive(Clone, Copy, Default)]
 #[non_exhaustive]
-pub struct Zenoh060Reliability {
+pub struct Zenoh080Reliability {
     pub reliability: Reliability,
-    pub codec: Zenoh060,
+    pub codec: Zenoh080,
 }
 
-impl Zenoh060Reliability {
+impl Zenoh080Reliability {
     pub const fn new(reliability: Reliability) -> Self {
         Self {
             reliability,
-            codec: Zenoh060,
+            codec: Zenoh080,
         }
     }
 }
 
 #[derive(Clone, Default)]
 #[non_exhaustive]
-pub struct Zenoh060HeaderReplyContext {
+pub struct Zenoh080HeaderReplyContext {
     pub header: u8,
     pub reply_context: Option<ReplyContext>,
-    pub codec: Zenoh060,
+    pub codec: Zenoh080,
 }

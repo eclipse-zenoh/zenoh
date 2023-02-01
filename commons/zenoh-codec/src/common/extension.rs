@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060};
+use crate::{RCodec, WCodec, Zenoh080};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -22,7 +22,7 @@ use zenoh_protocol::{
     core::ZInt,
 };
 
-impl<const ID: u8, W> WCodec<(&ZExtUnit<{ ID }>, bool), &mut W> for Zenoh060
+impl<const ID: u8, W> WCodec<(&ZExtUnit<{ ID }>, bool), &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -39,7 +39,7 @@ where
     }
 }
 
-impl<const ID: u8, R> RCodec<(ZExtUnit<{ ID }>, bool), &mut R> for Zenoh060
+impl<const ID: u8, R> RCodec<(ZExtUnit<{ ID }>, bool), &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -56,7 +56,7 @@ where
     }
 }
 
-impl<const ID: u8, W> WCodec<(&ZExtZInt<{ ID }>, bool), &mut W> for Zenoh060
+impl<const ID: u8, W> WCodec<(&ZExtZInt<{ ID }>, bool), &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -74,7 +74,7 @@ where
     }
 }
 
-impl<const ID: u8, R> RCodec<(ZExtZInt<{ ID }>, bool), &mut R> for Zenoh060
+impl<const ID: u8, R> RCodec<(ZExtZInt<{ ID }>, bool), &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -93,7 +93,7 @@ where
     }
 }
 
-impl<const ID: u8, W> WCodec<(&ZExtZBuf<{ ID }>, bool), &mut W> for Zenoh060
+impl<const ID: u8, W> WCodec<(&ZExtZBuf<{ ID }>, bool), &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -111,7 +111,7 @@ where
     }
 }
 
-impl<const ID: u8, R> RCodec<(ZExtZBuf<{ ID }>, bool), &mut R> for Zenoh060
+impl<const ID: u8, R> RCodec<(ZExtZBuf<{ ID }>, bool), &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -130,7 +130,7 @@ where
     }
 }
 
-impl<W> WCodec<(&ZExtUnknown, bool), &mut W> for Zenoh060
+impl<W> WCodec<(&ZExtUnknown, bool), &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -162,7 +162,7 @@ where
     }
 }
 
-impl<R> RCodec<(ZExtUnknown, bool), &mut R> for Zenoh060
+impl<R> RCodec<(ZExtUnknown, bool), &mut R> for Zenoh080
 where
     R: Reader,
 {

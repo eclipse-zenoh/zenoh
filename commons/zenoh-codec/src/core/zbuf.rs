@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060};
+use crate::{RCodec, WCodec, Zenoh080};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -19,12 +19,12 @@ use zenoh_buffers::{
 };
 #[cfg(feature = "shared-memory")]
 use {
-    crate::Zenoh060Condition, core::any::TypeId, zenoh_buffers::ZSlice,
+    crate::Zenoh080Condition, core::any::TypeId, zenoh_buffers::ZSlice,
     zenoh_shm::SharedMemoryBufInfoSerialized,
 };
 
 // ZBuf flat
-impl<W> WCodec<&ZBuf, &mut W> for Zenoh060
+impl<W> WCodec<&ZBuf, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -39,7 +39,7 @@ where
     }
 }
 
-impl<R> RCodec<ZBuf, &mut R> for Zenoh060
+impl<R> RCodec<ZBuf, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -56,12 +56,12 @@ where
 // ZBuf sliced
 #[cfg(feature = "shared-memory")]
 #[derive(Default)]
-struct Zenoh060Sliced {
-    codec: Zenoh060,
+struct Zenoh080Sliced {
+    codec: Zenoh080,
 }
 
 #[cfg(feature = "shared-memory")]
-impl<W> WCodec<&ZBuf, &mut W> for Zenoh060Sliced
+impl<W> WCodec<&ZBuf, &mut W> for Zenoh080Sliced
 where
     W: Writer,
 {
@@ -86,7 +86,7 @@ where
 }
 
 #[cfg(feature = "shared-memory")]
-impl<R> RCodec<ZBuf, &mut R> for Zenoh060Sliced
+impl<R> RCodec<ZBuf, &mut R> for Zenoh080Sliced
 where
     R: Reader,
 {
@@ -116,7 +116,7 @@ where
 }
 
 #[cfg(feature = "shared-memory")]
-impl<W> WCodec<&ZBuf, &mut W> for Zenoh060Condition
+impl<W> WCodec<&ZBuf, &mut W> for Zenoh080Condition
 where
     W: Writer,
 {
@@ -126,7 +126,7 @@ where
         let is_sliced = self.condition;
 
         if is_sliced {
-            let codec = Zenoh060Sliced::default();
+            let codec = Zenoh080Sliced::default();
             codec.write(&mut *writer, x)
         } else {
             self.codec.write(&mut *writer, x)
@@ -135,7 +135,7 @@ where
 }
 
 #[cfg(feature = "shared-memory")]
-impl<R> RCodec<ZBuf, &mut R> for Zenoh060Condition
+impl<R> RCodec<ZBuf, &mut R> for Zenoh080Condition
 where
     R: Reader,
 {
@@ -145,7 +145,7 @@ where
         let is_sliced = self.condition;
 
         if is_sliced {
-            let codec = Zenoh060Sliced::default();
+            let codec = Zenoh080Sliced::default();
             codec.read(&mut *reader)
         } else {
             self.codec.read(&mut *reader)

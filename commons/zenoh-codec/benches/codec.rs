@@ -31,7 +31,7 @@ use zenoh_protocol::{
 fn criterion_benchmark(c: &mut Criterion) {
     // ZInt Vec<u8>
     let mut buff = vec![];
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::default();
     c.bench_function("ZInt Vec<u8>", |b| {
         b.iter(|| {
             buff.clear();
@@ -44,7 +44,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // ZInt BBuf
     let mut buff = BBuf::with_capacity(BATCH_SIZE as usize);
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::default();
     c.bench_function("ZInt BBuf", |b| {
         b.iter(|| {
             buff.clear();
@@ -57,7 +57,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // ZInt ZBuf
     let mut buff = ZBuf::default();
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::default();
     c.bench_function("ZInt ZBuf", |b| {
         b.iter(|| {
             buff.clear();
@@ -70,7 +70,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // Batch BBuf Write
     let mut buff = BBuf::with_capacity(u16::MAX as usize);
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::default();
 
     let frame = FrameHeader {
         channel: Channel::default(),
@@ -107,7 +107,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // Batch ZSlice Read NoAlloc
     let mut buff = BBuf::with_capacity(u16::MAX as usize);
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::default();
 
     let frame = FrameHeader {
         channel: Channel::default(),
@@ -139,7 +139,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // Batch ZSlice Read NoAlloc
     let mut buff = BBuf::with_capacity(u16::MAX as usize);
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::default();
 
     let frame = FrameHeader {
         channel: Channel::default(),
@@ -177,7 +177,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // Fragmentation ZBuf Write
     let mut buff = ZBuf::default();
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::default();
 
     let data = Data {
         key: 0.into(),
@@ -195,7 +195,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // Fragmentation ZBuf Read
     let mut buff = vec![];
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::default();
 
     let data = Data {
         key: 0.into(),
@@ -225,7 +225,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // Fragmentation ZSlice ZBuf Read
     let mut buff = vec![];
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::default();
 
     let data = Data {
         key: 0.into(),

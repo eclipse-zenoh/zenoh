@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060};
+use crate::{RCodec, WCodec, Zenoh080};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -24,7 +24,7 @@ pub(crate) mod kind {
     pub(crate) const SHM_INFO: u8 = 1;
 }
 
-impl<W> WCodec<&ZSlice, &mut W> for Zenoh060
+impl<W> WCodec<&ZSlice, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -37,7 +37,7 @@ where
     }
 }
 
-impl<R> RCodec<ZSlice, &mut R> for Zenoh060
+impl<R> RCodec<ZSlice, &mut R> for Zenoh080
 where
     R: Reader,
 {

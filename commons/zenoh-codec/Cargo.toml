@@ -31,6 +31,7 @@ description = "Internal crate for zenoh."
 [features]
 default = ["std"]
 std = [
+    "serde/std",
     "uhlc/std",
     "zenoh-protocol/std"
 ]
@@ -46,6 +47,7 @@ defmt = [
 ]
 
 [dependencies]
+serde = { workspace = true, features = ["alloc"] }
 uhlc = { workspace = true }
 zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
 zenoh-protocol = { path = "../zenoh-protocol/", default-features = false }

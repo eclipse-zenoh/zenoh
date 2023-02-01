@@ -16,10 +16,10 @@ use super::super::{
     {Cookie, EstablishmentProperties},
 };
 use super::AResult;
-use crate::{unicast::establishment::cookie::Zenoh060Cookie, TransportManager};
+use crate::{unicast::establishment::cookie::Zenoh080Cookie, TransportManager};
 use std::{convert::TryFrom, time::Duration};
 use zenoh_buffers::reader::HasReader;
-use zenoh_codec::{RCodec, Zenoh060};
+use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::{zasynclock, zasyncread};
 use zenoh_crypto::hmac;
 use zenoh_link::LinkUnicast;
@@ -98,10 +98,10 @@ pub(super) async fn recv(
 
     // Decrypt the cookie with the cyper
     let mut reader = encrypted.reader();
-    let mut codec = Zenoh060Cookie {
+    let mut codec = Zenoh080Cookie {
         prng: &mut *zasynclock!(manager.prng),
         cipher: &manager.cipher,
-        codec: Zenoh060::default(),
+        codec: Zenoh080::default(),
     };
     let mut cookie: Cookie = codec.read(&mut reader).map_err(|_| {
         (

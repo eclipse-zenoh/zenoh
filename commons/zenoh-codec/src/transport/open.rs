@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use core::time::Duration;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -25,7 +25,7 @@ use zenoh_protocol::{
 };
 
 // OpenSyn
-impl<W> WCodec<&OpenSyn, &mut W> for Zenoh060
+impl<W> WCodec<&OpenSyn, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -51,14 +51,14 @@ where
     }
 }
 
-impl<R> RCodec<OpenSyn, &mut R> for Zenoh060
+impl<R> RCodec<OpenSyn, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<OpenSyn, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -66,7 +66,7 @@ where
     }
 }
 
-impl<R> RCodec<OpenSyn, &mut R> for Zenoh060Header
+impl<R> RCodec<OpenSyn, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -95,7 +95,7 @@ where
 }
 
 // OpenAck
-impl<W> WCodec<&OpenAck, &mut W> for Zenoh060
+impl<W> WCodec<&OpenAck, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -122,14 +122,14 @@ where
     }
 }
 
-impl<R> RCodec<OpenAck, &mut R> for Zenoh060
+impl<R> RCodec<OpenAck, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<OpenAck, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -137,7 +137,7 @@ where
     }
 }
 
-impl<R> RCodec<OpenAck, &mut R> for Zenoh060Header
+impl<R> RCodec<OpenAck, &mut R> for Zenoh080Header
 where
     R: Reader,
 {

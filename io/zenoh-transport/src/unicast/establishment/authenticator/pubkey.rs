@@ -29,7 +29,7 @@ use zenoh_buffers::{
     writer::{DidntWrite, HasWriter, Writer},
 };
 use zenoh_cfg_properties::config::ZN_AUTH_RSA_KEY_SIZE_DEFAULT;
-use zenoh_codec::{RCodec, WCodec, Zenoh060};
+use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_config::Config;
 use zenoh_core::{zasynclock, zparse};
 use zenoh_crypto::PseudoRng;
@@ -92,7 +92,7 @@ impl From<RsaPrivateKey> for ZPrivateKey {
     }
 }
 
-impl<W> WCodec<&ZPublicKey, &mut W> for Zenoh060
+impl<W> WCodec<&ZPublicKey, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -105,7 +105,7 @@ where
     }
 }
 
-impl<R> RCodec<ZPublicKey, &mut R> for Zenoh060
+impl<R> RCodec<ZPublicKey, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -138,7 +138,7 @@ struct InitSynProperty {
     alice_pubkey: ZPublicKey,
 }
 
-impl<W> WCodec<&InitSynProperty, &mut W> for Zenoh060
+impl<W> WCodec<&InitSynProperty, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -151,7 +151,7 @@ where
     }
 }
 
-impl<R> RCodec<InitSynProperty, &mut R> for Zenoh060
+impl<R> RCodec<InitSynProperty, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -183,7 +183,7 @@ struct InitAckProperty {
     nonce_encrypted_with_alice_pubkey: Vec<u8>,
 }
 
-impl<W> WCodec<&InitAckProperty, &mut W> for Zenoh060
+impl<W> WCodec<&InitAckProperty, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -196,7 +196,7 @@ where
     }
 }
 
-impl<R> RCodec<InitAckProperty, &mut R> for Zenoh060
+impl<R> RCodec<InitAckProperty, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -225,7 +225,7 @@ struct OpenSynProperty {
     nonce_encrypted_with_bob_pubkey: Vec<u8>,
 }
 
-impl<W> WCodec<&OpenSynProperty, &mut W> for Zenoh060
+impl<W> WCodec<&OpenSynProperty, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -237,7 +237,7 @@ where
     }
 }
 
-impl<R> RCodec<OpenSynProperty, &mut R> for Zenoh060
+impl<R> RCodec<OpenSynProperty, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -395,7 +395,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         };
 
         let mut wbuf = vec![];
-        let codec = Zenoh060::default();
+        let codec = Zenoh080::default();
         let mut writer = wbuf.writer();
         codec
             .write(&mut writer, &init_syn_property)
@@ -415,7 +415,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             Some(pk) => {
                 // Decode the multilink attachment
                 let mut reader = pk.reader();
-                let codec = Zenoh060::default();
+                let codec = Zenoh080::default();
 
                 let init_syn_property: InitSynProperty = codec.read(&mut reader).map_err(|_| {
                     zerror!(
@@ -465,7 +465,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 }
 
                 // Create the InitAck attachment
-                let codec = Zenoh060::default();
+                let codec = Zenoh080::default();
 
                 let mut wbuf = vec![];
                 let mut writer = wbuf.writer();
@@ -532,7 +532,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             None => return Ok(None),
         };
 
-        let codec = Zenoh060::default();
+        let codec = Zenoh080::default();
 
         let mut reader = pk.reader();
         let init_ack_property: InitAckProperty = codec.read(&mut reader).map_err(|_| {
@@ -580,7 +580,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
     ) -> ZResult<Option<Vec<u8>>> {
         match property {
             (Some(att), Some(cke)) => {
-                let codec = Zenoh060::default();
+                let codec = Zenoh080::default();
 
                 let mut reader = att.reader();
                 let open_syn_property: OpenSynProperty = codec.read(&mut reader).map_err(|_| {

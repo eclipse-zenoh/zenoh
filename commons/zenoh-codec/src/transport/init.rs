@@ -11,7 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
+use core::convert::TryFrom;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -25,7 +26,7 @@ use zenoh_protocol::{
 };
 
 // InitSyn
-impl<W> WCodec<&InitSyn, &mut W> for Zenoh060
+impl<W> WCodec<&InitSyn, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -59,7 +60,7 @@ where
             self.write(&mut *writer, options(x))?;
         }
         self.write(&mut *writer, x.version)?;
-        let wai: ZInt = x.whatami.into();
+        let wai: u8 = x.whatami.into();
         self.write(&mut *writer, wai)?;
         self.write(&mut *writer, &x.zid)?;
         if imsg::has_flag(header, tmsg::flag::S) {
@@ -69,14 +70,14 @@ where
     }
 }
 
-impl<R> RCodec<InitSyn, &mut R> for Zenoh060
+impl<R> RCodec<InitSyn, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<InitSyn, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -84,7 +85,7 @@ where
     }
 }
 
-impl<R> RCodec<InitSyn, &mut R> for Zenoh060Header
+impl<R> RCodec<InitSyn, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -101,8 +102,8 @@ where
             0
         };
         let version: u8 = self.codec.read(&mut *reader)?;
-        let wai: ZInt = self.codec.read(&mut *reader)?;
-        let whatami = WhatAmI::try_from(wai).ok_or(DidntRead)?;
+        let wai: u8 = self.codec.read(&mut *reader)?;
+        let whatami = WhatAmI::try_from(wai).map_err(|_| DidntRead)?;
         let zid: ZenohId = self.codec.read(&mut *reader)?;
         let sn_resolution: ZInt = if imsg::has_flag(self.header, tmsg::flag::S) {
             self.codec.read(&mut *reader)?
@@ -122,7 +123,7 @@ where
 }
 
 // InitAck
-impl<W> WCodec<&InitAck, &mut W> for Zenoh060
+impl<W> WCodec<&InitAck, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -156,7 +157,7 @@ where
         if has_options(x) {
             self.write(&mut *writer, options(x))?;
         }
-        let wai: ZInt = x.whatami.into();
+        let wai: u8 = x.whatami.into();
         self.write(&mut *writer, wai)?;
         self.write(&mut *writer, &x.zid)?;
         if let Some(snr) = x.sn_resolution {
@@ -167,14 +168,14 @@ where
     }
 }
 
-impl<R> RCodec<InitAck, &mut R> for Zenoh060
+impl<R> RCodec<InitAck, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<InitAck, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -182,7 +183,7 @@ where
     }
 }
 
-impl<R> RCodec<InitAck, &mut R> for Zenoh060Header
+impl<R> RCodec<InitAck, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -198,8 +199,8 @@ where
         } else {
             0
         };
-        let wai: ZInt = self.codec.read(&mut *reader)?;
-        let whatami = WhatAmI::try_from(wai).ok_or(DidntRead)?;
+        let wai: u8 = self.codec.read(&mut *reader)?;
+        let whatami = WhatAmI::try_from(wai).map_err(|_| DidntRead)?;
         let zid: ZenohId = self.codec.read(&mut *reader)?;
         let sn_resolution = if imsg::has_flag(self.header, tmsg::flag::S) {
             let snr: ZInt = self.codec.read(&mut *reader)?;

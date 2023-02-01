@@ -11,31 +11,62 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::whatami::WhatAmIMatcher;
+use crate::core::{whatami::WhatAmIMatcher, ZenohId};
 
 /// # Scout message
 ///
-/// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
-///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
-///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the length of a message must not exceed 65_535 bytes.
+/// The [`Scout`] message MAY be sent at any point in time to discover the available zenoh nodes in the
+/// network. The [`Scout`] message SHOULD be sent in a multicast or broadcast fashion. Upon receiving a
+/// [`Scout`] message, a zenoh node MUST first verify whether the matching criteria are satisfied, then
+/// it SHOULD reply with a [`super::Hello`] message in a unicast fashion including all the requested
+/// information.
 ///
-/// The SCOUT message can be sent at any point in time to solicit HELLO messages from matching parties.
+/// The scouting message flow is the following:
+///
+/// ```text
+/// A                   B                   C
+/// |       SCOUT       |                   |
+/// |------------------>|                   |
+/// |         \---------------------------->|
+/// |                   |                   |
+/// |       HELLO       |                   |
+/// |<------------------|                   |
+/// |                   |      HELLO        |
+/// |<--------------------------------------|
+/// |                   |                   |
+/// ```
+///
+/// The SCOUT message structure is defined as follows:
+///
+/// ```text
+/// Header flags:
+/// - I: ZenohID        If I==1 then the ZenohID of the scouter is present.
+/// - X: Reserved
+/// - Z: Extensions     If Z==1 then zenoh extensions will follow.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |X|W|I|  SCOUT  |
-/// +-+-+-+-+-------+
-/// ~      what     ~ if W==1 -- Otherwise implicitly scouting for Routers
+/// |Z|X|I|  SCOUT  |
+/// +-+-+-+---------+
+/// |    version    |
 /// +---------------+
+/// |X|X|X|X|X| what| (*)
+/// +-+-+-+-+-+-+-+-+
+/// ~    <u8;z8>    ~ if Flag(I)==1 -- ZenohID
+/// +---------------+
+///
+/// (*) What. It indicates a bitmap of WhatAmI interests.
+///    The valid bitflags are:
+///    - 0b001: Router
+///    - 0b010: Peer
+///    - 0b100: Client
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Scout {
-    pub what: Option<WhatAmIMatcher>,
-    pub zid_request: bool,
+    pub version: u8,
+    pub what: WhatAmIMatcher,
+    pub zid: Option<ZenohId>,
 }
 
 impl Scout {
@@ -45,12 +76,9 @@ impl Scout {
 
         let mut rng = rand::thread_rng();
 
-        let what = if rng.gen_bool(0.5) {
-            Some(WhatAmIMatcher::rand())
-        } else {
-            None
-        };
-        let zid_request = rng.gen_bool(0.5);
-        Self { what, zid_request }
+        let version: u8 = rng.gen();
+        let what = WhatAmIMatcher::rand();
+        let zid = rng.gen_bool(0.5).then_some(ZenohId::rand());
+        Self { version, what, zid }
     }
 }

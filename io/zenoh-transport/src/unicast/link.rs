@@ -27,7 +27,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::ZSlice;
-use zenoh_codec::{RCodec, Zenoh060};
+use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::transport::TransportMessage;
 use zenoh_result::{bail, zerror, ZResult};
@@ -257,7 +257,7 @@ async fn rx_task_stream(
         Ok(Action::Stop)
     }
 
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::default();
 
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
@@ -326,7 +326,7 @@ async fn rx_task_dgram(
         Ok(Action::Stop)
     }
 
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::default();
 
     // The pool of buffers
     let mtu = link.get_mtu() as usize;

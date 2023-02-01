@@ -41,12 +41,13 @@ pub struct ScoutingMessage {
 
 impl ScoutingMessage {
     pub fn make_scout(
-        what: Option<WhatAmIMatcher>,
-        zid_request: bool,
+        what: WhatAmIMatcher,
+        zid: Option<ZenohId>,
         attachment: Option<Attachment>,
     ) -> ScoutingMessage {
+        let version = crate::VERSION;
         ScoutingMessage {
-            body: ScoutingBody::Scout(Scout { what, zid_request }),
+            body: ScoutingBody::Scout(Scout { version, what, zid }),
             attachment,
             #[cfg(feature = "stats")]
             size: None,
@@ -54,18 +55,17 @@ impl ScoutingMessage {
     }
 
     pub fn make_hello(
-        zid: Option<ZenohId>,
-        whatami: Option<WhatAmI>,
-        locators: Option<Vec<Locator>>,
+        whatami: WhatAmI,
+        zid: ZenohId,
+        locators: Vec<Locator>,
         attachment: Option<Attachment>,
     ) -> ScoutingMessage {
-        let whatami = whatami.unwrap_or(WhatAmI::Router);
-        let locators = locators.unwrap_or_default();
-
+        let version = crate::VERSION;
         ScoutingMessage {
             body: ScoutingBody::Hello(Hello {
-                zid,
+                version,
                 whatami,
+                zid,
                 locators,
             }),
             attachment,
@@ -80,15 +80,11 @@ impl ScoutingMessage {
 
         let mut rng = rand::thread_rng();
 
-        let attachment = if rng.gen_bool(0.5) {
-            Some(Attachment::rand())
-        } else {
-            None
-        };
+        let attachment = rng.gen_bool(0.5).then_some(Attachment::rand());
 
         let body = match rng.gen_range(0..2) {
-            0 => ScoutingBody::Hello(Hello::rand()),
-            1 => ScoutingBody::Scout(Scout::rand()),
+            0 => ScoutingBody::Scout(Scout::rand()),
+            1 => ScoutingBody::Hello(Hello::rand()),
             _ => unreachable!(),
         };
 

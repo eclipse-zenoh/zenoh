@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060};
+use crate::{RCodec, WCodec, Zenoh080};
 use core::convert::TryInto;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -21,7 +21,7 @@ use zenoh_buffers::{
 const VLE_LEN: usize = 10;
 
 // ZInt
-impl<W> WCodec<u64, &mut W> for Zenoh060
+impl<W> WCodec<u64, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -43,7 +43,7 @@ where
     }
 }
 
-impl<W> WCodec<&u64, &mut W> for Zenoh060
+impl<W> WCodec<&u64, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -54,7 +54,7 @@ where
     }
 }
 
-impl<R> RCodec<u64, &mut R> for Zenoh060
+impl<R> RCodec<u64, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -82,7 +82,7 @@ where
 }
 
 // usize
-impl<W> WCodec<usize, &mut W> for Zenoh060
+impl<W> WCodec<usize, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -94,7 +94,7 @@ where
     }
 }
 
-impl<R> RCodec<usize, &mut R> for Zenoh060
+impl<R> RCodec<usize, &mut R> for Zenoh080
 where
     R: Reader,
 {

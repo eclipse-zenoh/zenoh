@@ -107,7 +107,7 @@ macro_rules! run_buffers {
 
 macro_rules! run {
     ($type:ty, $rand:expr) => {
-        let codec = Zenoh060::default();
+        let codec = Zenoh080::default();
         run_buffers!($type, $rand, codec, codec);
     };
     ($type:ty, $rand:expr, $wcode:block, $rcode:block) => {
@@ -177,7 +177,7 @@ fn codec_attachment() {
 fn codec_extension() {
     macro_rules! run_extension_single {
         ($ext:ty, $buff:expr) => {
-            let codec = Zenoh060::default();
+            let codec = Zenoh080::default();
             for _ in 0..NUM_ITER {
                 let more: bool = thread_rng().gen();
 
@@ -221,14 +221,15 @@ fn codec_extension() {
 
 // Scouting
 #[test]
+fn codec_scout() {
+    run!(Scout, Scout::rand());
+}
+
+#[test]
 fn codec_hello() {
     run!(Hello, Hello::rand());
 }
 
-#[test]
-fn codec_scout() {
-    run!(Scout, Scout::rand());
-}
 
 #[test]
 fn codec_scouting() {
@@ -391,8 +392,8 @@ fn codec_zenoh() {
             x.channel.reliability = Reliability::Reliable;
             x
         },
-        { Zenoh060::default() },
-        { Zenoh060Reliability::new(Reliability::Reliable) }
+        { Zenoh080::default() },
+        { Zenoh080Reliability::new(Reliability::Reliable) }
     );
     run!(
         ZenohMessage,
@@ -401,7 +402,7 @@ fn codec_zenoh() {
             x.channel.reliability = Reliability::BestEffort;
             x
         },
-        { Zenoh060::default() },
-        { Zenoh060Reliability::new(Reliability::BestEffort) }
+        { Zenoh080::default() },
+        { Zenoh080Reliability::new(Reliability::BestEffort) }
     );
 }

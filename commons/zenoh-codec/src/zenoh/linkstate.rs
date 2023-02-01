@@ -11,8 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use alloc::vec::Vec;
+use core::convert::TryFrom;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -24,7 +25,7 @@ use zenoh_protocol::{
 };
 
 // LinkState
-impl<W> WCodec<&LinkState, &mut W> for Zenoh060
+impl<W> WCodec<&LinkState, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -51,7 +52,7 @@ where
             self.write(&mut *writer, zid)?;
         }
         if let Some(wai) = x.whatami {
-            let wai: ZInt = wai.into();
+            let wai: u8 = wai.into();
             self.write(&mut *writer, wai)?;
         }
         if let Some(locators) = x.locators.as_ref() {
@@ -66,7 +67,7 @@ where
     }
 }
 
-impl<R> RCodec<LinkState, &mut R> for Zenoh060
+impl<R> RCodec<LinkState, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -83,8 +84,8 @@ where
             None
         };
         let whatami = if imsg::has_option(options, zmsg::link_state::WAI) {
-            let wai: ZInt = self.read(&mut *reader)?;
-            Some(WhatAmI::try_from(wai).ok_or(DidntRead)?)
+            let wai: u8 = self.read(&mut *reader)?;
+            Some(WhatAmI::try_from(wai).map_err(|_| DidntRead)?)
         } else {
             None
         };
@@ -113,7 +114,7 @@ where
 }
 
 // LinkStateList
-impl<W> WCodec<&LinkStateList, &mut W> for Zenoh060
+impl<W> WCodec<&LinkStateList, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -134,14 +135,14 @@ where
     }
 }
 
-impl<R> RCodec<LinkStateList, &mut R> for Zenoh060
+impl<R> RCodec<LinkStateList, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<LinkStateList, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -149,7 +150,7 @@ where
     }
 }
 
-impl<R> RCodec<LinkStateList, &mut R> for Zenoh060Header
+impl<R> RCodec<LinkStateList, &mut R> for Zenoh080Header
 where
     R: Reader,
 {

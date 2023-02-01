@@ -28,7 +28,7 @@ use zenoh_buffers::{
     writer::HasWriter,
     ZBuf,
 };
-use zenoh_codec::{WCodec, Zenoh060};
+use zenoh_codec::{WCodec, Zenoh080};
 use zenoh_config::QueueSizeConf;
 use zenoh_core::zlock;
 use zenoh_protocol::{
@@ -211,7 +211,7 @@ impl StageIn {
         self.fragbuf.clear();
 
         let mut writer = self.fragbuf.writer();
-        let codec = Zenoh060::default();
+        let codec = Zenoh080::default();
         codec.write(&mut writer, &*msg).unwrap();
 
         // Fragment the whole message
@@ -696,7 +696,7 @@ mod tests {
         reader::{DidntRead, HasReader},
         ZBuf,
     };
-    use zenoh_codec::{RCodec, Zenoh060};
+    use zenoh_codec::{RCodec, Zenoh080};
     use zenoh_protocol::{
         core::{Channel, CongestionControl, Priority, Reliability, ZInt},
         defaults::{BATCH_SIZE, SEQ_NUM_RES},
@@ -764,7 +764,7 @@ mod tests {
                 let bytes = batch.as_bytes();
                 // Deserialize the messages
                 let mut reader = bytes.reader();
-                let codec = Zenoh060::default();
+                let codec = Zenoh080::default();
 
                 loop {
                     let res: Result<TransportMessage, DidntRead> = codec.read(&mut reader);

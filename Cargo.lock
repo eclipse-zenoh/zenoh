@@ -644,6 +644,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cec318a675afcb6a1ea1d4340e2d377e56e47c266f28043ceccbf4412ddfdd3b"
 
 [[package]]
+name = "const-str"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5bc011a04793b8ce7bca0efd59e3697c2061760df6efbb8c895e8a81548db67"
+
+[[package]]
 name = "const_fn"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3836,6 +3842,7 @@ version = "0.7.0-rc"
 dependencies = [
  "criterion",
  "rand 0.8.5",
+ "serde",
  "uhlc",
  "uuid",
  "zenoh-buffers",
@@ -4183,6 +4190,7 @@ dependencies = [
 name = "zenoh-protocol"
 version = "0.7.0-rc"
 dependencies = [
+ "const-str",
  "defmt",
  "hex",
  "lazy_static",

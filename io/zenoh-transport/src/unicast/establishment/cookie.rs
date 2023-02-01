@@ -12,11 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::properties::EstablishmentProperties;
+use std::convert::TryFrom;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, HasWriter, Writer},
 };
-use zenoh_codec::{RCodec, WCodec, Zenoh060};
+use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_protocol::core::{Property, WhatAmI, ZInt, ZenohId};
 
@@ -30,14 +31,14 @@ pub struct Cookie {
     pub properties: EstablishmentProperties,
 }
 
-impl<W> WCodec<&Cookie, &mut W> for Zenoh060
+impl<W> WCodec<&Cookie, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Cookie) -> Self::Output {
-        let wai: ZInt = x.whatami.into();
+        let wai: u8 = x.whatami.into();
         self.write(&mut *writer, wai)?;
         self.write(&mut *writer, &x.zid)?;
         self.write(&mut *writer, x.sn_resolution)?;
@@ -50,15 +51,15 @@ where
     }
 }
 
-impl<R> RCodec<Cookie, &mut R> for Zenoh060
+impl<R> RCodec<Cookie, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Cookie, Self::Error> {
-        let wai: ZInt = self.read(&mut *reader)?;
-        let whatami = WhatAmI::try_from(wai).ok_or(DidntRead)?;
+        let wai: u8 = self.read(&mut *reader)?;
+        let whatami = WhatAmI::try_from(wai).map_err(|_| DidntRead)?;
         let zid: ZenohId = self.read(&mut *reader)?;
         let sn_resolution: ZInt = self.read(&mut *reader)?;
         let is_qos: u8 = self.read(&mut *reader)?;
@@ -83,13 +84,13 @@ where
     }
 }
 
-pub(super) struct Zenoh060Cookie<'a> {
+pub(super) struct Zenoh080Cookie<'a> {
     pub(super) cipher: &'a BlockCipher,
     pub(super) prng: &'a mut PseudoRng,
-    pub(super) codec: Zenoh060,
+    pub(super) codec: Zenoh080,
 }
 
-impl<W> WCodec<&Cookie, &mut W> for &mut Zenoh060Cookie<'_>
+impl<W> WCodec<&Cookie, &mut W> for &mut Zenoh080Cookie<'_>
 where
     W: Writer,
 {
@@ -108,7 +109,7 @@ where
     }
 }
 
-impl<R> RCodec<Cookie, &mut R> for &mut Zenoh060Cookie<'_>
+impl<R> RCodec<Cookie, &mut R> for &mut Zenoh080Cookie<'_>
 where
     R: Reader,
 {
@@ -182,7 +183,7 @@ mod tests {
             };
         }
 
-        let codec = Zenoh060::default();
+        let codec = Zenoh080::default();
         run!(Cookie, Cookie::rand(), codec);
 
         let mut prng = PseudoRng::from_entropy();
@@ -190,10 +191,10 @@ mod tests {
         prng.fill(&mut key[..]);
 
         let cipher = BlockCipher::new(key);
-        let mut codec = Zenoh060Cookie {
+        let mut codec = Zenoh080Cookie {
             prng: &mut prng,
             cipher: &cipher,
-            codec: Zenoh060::default(),
+            codec: Zenoh080::default(),
         };
 
         run!(Cookie, Cookie::rand(), codec);

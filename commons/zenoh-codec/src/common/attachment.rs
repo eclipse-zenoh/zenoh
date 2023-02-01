@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -22,9 +22,9 @@ use zenoh_protocol::{
     transport::tmsg,
 };
 #[cfg(feature = "shared-memory")]
-use {crate::Zenoh060Condition, core::any::TypeId, zenoh_shm::SharedMemoryBufInfoSerialized};
+use {crate::Zenoh080Condition, core::any::TypeId, zenoh_shm::SharedMemoryBufInfoSerialized};
 
-impl<W> WCodec<&Attachment, &mut W> for Zenoh060
+impl<W> WCodec<&Attachment, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -51,7 +51,7 @@ where
         // Body
         #[cfg(feature = "shared-memory")]
         {
-            let codec = Zenoh060Condition::new(imsg::has_flag(header, tmsg::flag::Z));
+            let codec = Zenoh080Condition::new(imsg::has_flag(header, tmsg::flag::Z));
             codec.write(&mut *writer, &x.buffer)
         }
         #[cfg(not(feature = "shared-memory"))]
@@ -61,14 +61,14 @@ where
     }
 }
 
-impl<R> RCodec<Attachment, &mut R> for Zenoh060
+impl<R> RCodec<Attachment, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Attachment, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -76,7 +76,7 @@ where
     }
 }
 
-impl<R> RCodec<Attachment, &mut R> for Zenoh060Header
+impl<R> RCodec<Attachment, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -90,7 +90,7 @@ where
         let buffer: ZBuf = {
             #[cfg(feature = "shared-memory")]
             {
-                let codec = Zenoh060Condition::new(imsg::has_flag(self.header, tmsg::flag::Z));
+                let codec = Zenoh080Condition::new(imsg::has_flag(self.header, tmsg::flag::Z));
                 codec.read(&mut *reader)?
             }
             #[cfg(not(feature = "shared-memory"))]

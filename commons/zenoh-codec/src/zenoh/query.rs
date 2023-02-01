@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Condition, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header};
 use alloc::string::String;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -25,7 +25,7 @@ use zenoh_protocol::{
 };
 
 // QueryTarget
-impl<W> WCodec<&QueryTarget, &mut W> for Zenoh060
+impl<W> WCodec<&QueryTarget, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -47,7 +47,7 @@ where
     }
 }
 
-impl<R> RCodec<QueryTarget, &mut R> for Zenoh060
+impl<R> RCodec<QueryTarget, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -71,7 +71,7 @@ where
 }
 
 // ConsolidationMode
-impl<W> WCodec<&ConsolidationMode, &mut W> for Zenoh060
+impl<W> WCodec<&ConsolidationMode, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -88,7 +88,7 @@ where
     }
 }
 
-impl<R> RCodec<ConsolidationMode, &mut R> for Zenoh060
+impl<R> RCodec<ConsolidationMode, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -107,7 +107,7 @@ where
 }
 
 // QueryBody
-impl<W> WCodec<&QueryBody, &mut W> for Zenoh060
+impl<W> WCodec<&QueryBody, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -120,7 +120,7 @@ where
     }
 }
 
-impl<R> RCodec<QueryBody, &mut R> for Zenoh060
+impl<R> RCodec<QueryBody, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -134,7 +134,7 @@ where
 }
 
 // Query
-impl<W> WCodec<&Query, &mut W> for Zenoh060
+impl<W> WCodec<&Query, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -170,14 +170,14 @@ where
     }
 }
 
-impl<R> RCodec<Query, &mut R> for Zenoh060
+impl<R> RCodec<Query, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Query, Self::Error> {
-        let codec = Zenoh060Header {
+        let codec = Zenoh080Header {
             header: self.read(&mut *reader)?,
             ..Default::default()
         };
@@ -185,7 +185,7 @@ where
     }
 }
 
-impl<R> RCodec<Query, &mut R> for Zenoh060Header
+impl<R> RCodec<Query, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -196,7 +196,7 @@ where
             return Err(DidntRead);
         }
 
-        let ccond = Zenoh060Condition {
+        let ccond = Zenoh080Condition {
             condition: imsg::has_flag(self.header, zmsg::flag::K),
             codec: self.codec,
         };
