@@ -230,7 +230,6 @@ fn codec_hello() {
     run!(Hello, Hello::rand());
 }
 
-
 #[test]
 fn codec_scouting() {
     run!(ScoutingMessage, ScoutingMessage::rand());
