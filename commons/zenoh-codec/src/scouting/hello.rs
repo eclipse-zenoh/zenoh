@@ -18,10 +18,12 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::imsg,
+    common::{imsg, ZExtUnknown},
     core::{Locator, WhatAmI, ZenohId},
-    scouting::Hello,
-    transport::tmsg,
+    scouting::{
+        hello::{flag, Hello},
+        id,
+    },
 };
 
 impl<W> WCodec<&Hello, &mut W> for Zenoh080
@@ -32,9 +34,9 @@ where
 
     fn write(self, writer: &mut W, x: &Hello) -> Self::Output {
         // Header
-        let mut header = tmsg::id::HELLO;
+        let mut header = id::HELLO;
         if !x.locators.is_empty() {
-            header |= tmsg::flag::L;
+            header |= flag::L;
         }
         self.write(&mut *writer, header)?;
 
@@ -62,10 +64,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Hello, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
@@ -77,10 +78,11 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Hello, Self::Error> {
-        if imsg::mid(self.header) != imsg::id::HELLO {
+        if imsg::mid(self.header) != id::HELLO {
             return Err(DidntRead);
         }
 
+        // Body
         let version: u8 = self.codec.read(&mut *reader)?;
         let flags: u8 = self.codec.read(&mut *reader)?;
         let whatami = match flags & 0b11 {
@@ -91,12 +93,19 @@ where
         };
 
         let zid: ZenohId = self.codec.read(&mut *reader)?;
-        let locators = if imsg::has_flag(self.header, tmsg::flag::L) {
+        let locators = if imsg::has_flag(self.header, flag::L) {
             let locs: Vec<Locator> = self.codec.read(&mut *reader)?;
             locs
         } else {
             vec![]
         };
+
+        // Extensions
+        let mut has_extensions = imsg::has_flag(self.header, flag::Z);
+        while has_extensions {
+            let (_, more): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+            has_extensions = more;
+        }
 
         Ok(Hello {
             version,

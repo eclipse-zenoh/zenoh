@@ -11,12 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::core::ZInt;
+#[repr(u8)]
+// The value represents the 2-bit encoded value
+pub enum Bits {
+    U8 = 0b00,
+    U16 = 0b01,
+    U32 = 0b10,
+    U64 = 0b11,
+}
 
-// The default sequence number resolution takes 4 bytes on the wire.
-// Given the VLE encoding of ZInt, 4 bytes result in 28 useful bits.
-// 2^28 = 268_435_456 => Max Seq Num = 268_435_455
-pub const SEQ_NUM_RES: ZInt = 268_435_456;
+pub const FRAME_SN_RESOLUTION: Bits = Bits::U64;
+pub const REQUEST_ID_RESOLUTION: Bits = Bits::U64;
+pub const KEYEXPR_ID_RESOLUTION: Bits = Bits::U64;
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
 ///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.

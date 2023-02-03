@@ -32,32 +32,33 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &FrameHeader) -> Self::Output {
-        // Decorator
-        if x.channel.priority != Priority::default() {
-            self.write(&mut *writer, &x.channel.priority)?;
-        }
+        // // Decorator
+        // if x.channel.priority != Priority::default() {
+        //     self.write(&mut *writer, &x.channel.priority)?;
+        // }
 
-        // Header
-        let mut header = tmsg::id::FRAME;
-        if let Reliability::Reliable = x.channel.reliability {
-            header |= tmsg::flag::R;
-        }
-        match x.kind {
-            FrameKind::Messages => {}
-            FrameKind::SomeFragment => {
-                header |= tmsg::flag::F;
-            }
-            FrameKind::LastFragment => {
-                header |= tmsg::flag::F;
-                header |= tmsg::flag::E;
-            }
-        }
-        self.write(&mut *writer, header)?;
+        // // Header
+        // let mut header = tmsg::id::FRAME;
+        // if let Reliability::Reliable = x.channel.reliability {
+        //     header |= tmsg::flag::R;
+        // }
+        // match x.kind {
+        //     FrameKind::Messages => {}
+        //     FrameKind::SomeFragment => {
+        //         header |= tmsg::flag::F;
+        //     }
+        //     FrameKind::LastFragment => {
+        //         header |= tmsg::flag::F;
+        //         header |= tmsg::flag::E;
+        //     }
+        // }
+        // self.write(&mut *writer, header)?;
 
-        // Body
-        self.write(&mut *writer, x.sn)?;
+        // // Body
+        // self.write(&mut *writer, x.sn)?;
 
-        Ok(())
+        // Ok(())
+        Err(DidntWrite)
     }
 }
 
@@ -68,10 +69,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<FrameHeader, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
@@ -83,39 +83,40 @@ where
     type Error = DidntRead;
 
     fn read(mut self, reader: &mut R) -> Result<FrameHeader, Self::Error> {
-        let mut priority = Priority::default();
-        if imsg::mid(self.header) == tmsg::id::PRIORITY {
-            // Decode priority
-            priority = self.read(&mut *reader)?;
-            // Read next header
-            self.header = self.codec.read(&mut *reader)?;
-        }
+        // let mut priority = Priority::default();
+        // if imsg::mid(self.header) == tmsg::id::PRIORITY {
+        //     // Decode priority
+        //     priority = self.read(&mut *reader)?;
+        //     // Read next header
+        //     self.header = self.codec.read(&mut *reader)?;
+        // }
 
-        if imsg::mid(self.header) != tmsg::id::FRAME {
-            return Err(DidntRead);
-        }
+        // if imsg::mid(self.header) != tmsg::id::FRAME {
+        //     return Err(DidntRead);
+        // }
 
-        let reliability = match imsg::has_flag(self.header, tmsg::flag::R) {
-            true => Reliability::Reliable,
-            false => Reliability::BestEffort,
-        };
-        let channel = Channel {
-            priority,
-            reliability,
-        };
-        let sn: ZInt = self.codec.read(&mut *reader)?;
+        // let reliability = match imsg::has_flag(self.header, tmsg::flag::R) {
+        //     true => Reliability::Reliable,
+        //     false => Reliability::BestEffort,
+        // };
+        // let channel = Channel {
+        //     priority,
+        //     reliability,
+        // };
+        // let sn: ZInt = self.codec.read(&mut *reader)?;
 
-        let kind = if imsg::has_flag(self.header, tmsg::flag::F) {
-            if imsg::has_flag(self.header, tmsg::flag::E) {
-                FrameKind::LastFragment
-            } else {
-                FrameKind::SomeFragment
-            }
-        } else {
-            FrameKind::Messages
-        };
+        // let kind = if imsg::has_flag(self.header, tmsg::flag::F) {
+        //     if imsg::has_flag(self.header, tmsg::flag::E) {
+        //         FrameKind::LastFragment
+        //     } else {
+        //         FrameKind::SomeFragment
+        //     }
+        // } else {
+        //     FrameKind::Messages
+        // };
 
-        Ok(FrameHeader { channel, sn, kind })
+        // Ok(FrameHeader { channel, sn, kind })
+        Err(DidntRead)
     }
 }
 
@@ -127,34 +128,35 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Frame) -> Self::Output {
-        // Header
-        let kind = match &x.payload {
-            FramePayload::Fragment { is_final, .. } => {
-                if *is_final {
-                    FrameKind::LastFragment
-                } else {
-                    FrameKind::SomeFragment
-                }
-            }
-            FramePayload::Messages { .. } => FrameKind::Messages,
-        };
-        let header = FrameHeader {
-            channel: x.channel,
-            sn: x.sn,
-            kind,
-        };
-        self.write(&mut *writer, &header)?;
+        // // Header
+        // let kind = match &x.payload {
+        //     FramePayload::Fragment { is_final, .. } => {
+        //         if *is_final {
+        //             FrameKind::LastFragment
+        //         } else {
+        //             FrameKind::SomeFragment
+        //         }
+        //     }
+        //     FramePayload::Messages { .. } => FrameKind::Messages,
+        // };
+        // let header = FrameHeader {
+        //     channel: x.channel,
+        //     sn: x.sn,
+        //     kind,
+        // };
+        // self.write(&mut *writer, &header)?;
 
-        // Body
-        match &x.payload {
-            FramePayload::Fragment { buffer, .. } => writer.write_zslice(buffer)?,
-            FramePayload::Messages { messages } => {
-                for m in messages.iter() {
-                    self.write(&mut *writer, m)?;
-                }
-            }
-        }
-        Ok(())
+        // // Body
+        // match &x.payload {
+        //     FramePayload::Fragment { buffer, .. } => writer.write_zslice(buffer)?,
+        //     FramePayload::Messages { messages } => {
+        //         for m in messages.iter() {
+        //             self.write(&mut *writer, m)?;
+        //         }
+        //     }
+        // }
+        // Ok(())
+        Err(DidntWrite)
     }
 }
 
@@ -165,10 +167,8 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Frame, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
@@ -180,42 +180,43 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Frame, Self::Error> {
-        let header: FrameHeader = self.read(&mut *reader)?;
+        // let header: FrameHeader = self.read(&mut *reader)?;
 
-        let payload = match header.kind {
-            FrameKind::Messages => {
-                let rcode = Zenoh080Reliability {
-                    reliability: header.channel.reliability,
-                    ..Default::default()
-                };
+        // let payload = match header.kind {
+        //     FrameKind::Messages => {
+        //         let rcode = Zenoh080Reliability {
+        //             reliability: header.channel.reliability,
+        //             ..Default::default()
+        //         };
 
-                let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
-                while reader.can_read() {
-                    let mark = reader.mark();
-                    let res: Result<ZenohMessage, DidntRead> = rcode.read(&mut *reader);
-                    match res {
-                        Ok(m) => messages.push(m),
-                        Err(_) => {
-                            reader.rewind(mark);
-                            break;
-                        }
-                    }
-                }
-                FramePayload::Messages { messages }
-            }
-            FrameKind::SomeFragment | FrameKind::LastFragment => {
-                // A fragmented frame is not supposed to be followed by
-                // any other frame in the same batch. Read all the bytes.
-                let buffer = reader.read_zslice(reader.remaining())?;
-                let is_final = header.kind == FrameKind::LastFragment;
-                FramePayload::Fragment { buffer, is_final }
-            }
-        };
+        //         let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
+        //         while reader.can_read() {
+        //             let mark = reader.mark();
+        //             let res: Result<ZenohMessage, DidntRead> = rcode.read(&mut *reader);
+        //             match res {
+        //                 Ok(m) => messages.push(m),
+        //                 Err(_) => {
+        //                     reader.rewind(mark);
+        //                     break;
+        //                 }
+        //             }
+        //         }
+        //         FramePayload::Messages { messages }
+        //     }
+        //     FrameKind::SomeFragment | FrameKind::LastFragment => {
+        //         // A fragmented frame is not supposed to be followed by
+        //         // any other frame in the same batch. Read all the bytes.
+        //         let buffer = reader.read_zslice(reader.remaining())?;
+        //         let is_final = header.kind == FrameKind::LastFragment;
+        //         FramePayload::Fragment { buffer, is_final }
+        //     }
+        // };
 
-        Ok(Frame {
-            channel: header.channel,
-            sn: header.sn,
-            payload,
-        })
+        // Ok(Frame {
+        //     channel: header.channel,
+        //     sn: header.sn,
+        //     payload,
+        // })
+        Err(DidntRead)
     }
 }

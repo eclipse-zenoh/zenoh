@@ -35,29 +35,30 @@ where
         #[allow(unused_mut)] // mut required with #[cfg(feature = "shared-memory")]
         let mut header = tmsg::id::ATTACHMENT;
 
-        #[cfg(feature = "shared-memory")]
-        {
-            let has_shminfo = x
-                .buffer
-                .zslices()
-                .any(|s| s.buf.as_any().type_id() == TypeId::of::<SharedMemoryBufInfoSerialized>());
-            if has_shminfo {
-                header |= tmsg::flag::Z;
-            }
-        }
+        // #[cfg(feature = "shared-memory")]
+        // {
+        //     let has_shminfo = x
+        //         .buffer
+        //         .zslices()
+        //         .any(|s| s.buf.as_any().type_id() == TypeId::of::<SharedMemoryBufInfoSerialized>());
+        //     if has_shminfo {
+        //         header |= tmsg::flag::Z;
+        //     }
+        // }
 
-        self.write(&mut *writer, header)?;
+        // self.write(&mut *writer, header)?;
 
-        // Body
-        #[cfg(feature = "shared-memory")]
-        {
-            let codec = Zenoh080Condition::new(imsg::has_flag(header, tmsg::flag::Z));
-            codec.write(&mut *writer, &x.buffer)
-        }
-        #[cfg(not(feature = "shared-memory"))]
-        {
-            self.write(&mut *writer, &x.buffer)
-        }
+        // // Body
+        // #[cfg(feature = "shared-memory")]
+        // {
+        //     let codec = Zenoh080Condition::new(imsg::has_flag(header, tmsg::flag::Z));
+        //     codec.write(&mut *writer, &x.buffer)
+        // }
+        // #[cfg(not(feature = "shared-memory"))]
+        // {
+        //     self.write(&mut *writer, &x.buffer)
+        // }
+        Err(DidntWrite)
     }
 }
 
@@ -68,10 +69,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Attachment, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
@@ -83,22 +83,23 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Attachment, Self::Error> {
-        if imsg::mid(self.header) != imsg::id::ATTACHMENT {
-            return Err(DidntRead);
-        }
+        // if imsg::mid(self.header) != imsg::id::ATTACHMENT {
+        //     return Err(DidntRead);
+        // }
 
-        let buffer: ZBuf = {
-            #[cfg(feature = "shared-memory")]
-            {
-                let codec = Zenoh080Condition::new(imsg::has_flag(self.header, tmsg::flag::Z));
-                codec.read(&mut *reader)?
-            }
-            #[cfg(not(feature = "shared-memory"))]
-            {
-                self.codec.read(&mut *reader)?
-            }
-        };
+        // let buffer: ZBuf = {
+        //     #[cfg(feature = "shared-memory")]
+        //     {
+        //         let codec = Zenoh080Condition::new(imsg::has_flag(self.header, tmsg::flag::Z));
+        //         codec.read(&mut *reader)?
+        //     }
+        //     #[cfg(not(feature = "shared-memory"))]
+        //     {
+        //         self.codec.read(&mut *reader)?
+        //     }
+        // };
 
-        Ok(Attachment { buffer })
+        // Ok(Attachment { buffer })
+        Err(DidntRead)
     }
 }

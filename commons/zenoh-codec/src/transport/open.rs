@@ -32,22 +32,23 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &OpenSyn) -> Self::Output {
-        // Header
-        let mut header = tmsg::id::OPEN;
-        if x.lease.as_millis() % 1_000 == 0 {
-            header |= tmsg::flag::T2;
-        }
-        self.write(&mut *writer, header)?;
+        // // Header
+        // let mut header = tmsg::id::OPEN;
+        // if x.lease.as_millis() % 1_000 == 0 {
+        //     header |= tmsg::flag::T2;
+        // }
+        // self.write(&mut *writer, header)?;
 
-        // Body
-        if imsg::has_flag(header, tmsg::flag::T2) {
-            self.write(&mut *writer, x.lease.as_secs() as ZInt)?;
-        } else {
-            self.write(&mut *writer, x.lease.as_millis() as ZInt)?;
-        }
-        self.write(&mut *writer, x.initial_sn)?;
-        self.write(&mut *writer, &x.cookie)?;
-        Ok(())
+        // // Body
+        // if imsg::has_flag(header, tmsg::flag::T2) {
+        //     self.write(&mut *writer, x.lease.as_secs() as ZInt)?;
+        // } else {
+        //     self.write(&mut *writer, x.lease.as_millis() as ZInt)?;
+        // }
+        // self.write(&mut *writer, x.initial_sn)?;
+        // self.write(&mut *writer, &x.cookie)?;
+        // Ok(())
+        Err(DidntWrite)
     }
 }
 
@@ -58,10 +59,8 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<OpenSyn, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
@@ -73,24 +72,25 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<OpenSyn, Self::Error> {
-        if imsg::mid(self.header) != imsg::id::OPEN || imsg::has_flag(self.header, tmsg::flag::A) {
-            return Err(DidntRead);
-        }
+        // if imsg::mid(self.header) != imsg::id::OPEN || imsg::has_flag(self.header, tmsg::flag::A) {
+        //     return Err(DidntRead);
+        // }
 
-        let lease: ZInt = self.codec.read(&mut *reader)?;
-        let lease = if imsg::has_flag(self.header, tmsg::flag::T2) {
-            Duration::from_secs(lease)
-        } else {
-            Duration::from_millis(lease)
-        };
-        let initial_sn: ZInt = self.codec.read(&mut *reader)?;
-        let cookie: ZSlice = self.codec.read(&mut *reader)?;
+        // let lease: ZInt = self.codec.read(&mut *reader)?;
+        // let lease = if imsg::has_flag(self.header, tmsg::flag::T2) {
+        //     Duration::from_secs(lease)
+        // } else {
+        //     Duration::from_millis(lease)
+        // };
+        // let initial_sn: ZInt = self.codec.read(&mut *reader)?;
+        // let cookie: ZSlice = self.codec.read(&mut *reader)?;
 
-        Ok(OpenSyn {
-            lease,
-            initial_sn,
-            cookie,
-        })
+        // Ok(OpenSyn {
+        //     lease,
+        //     initial_sn,
+        //     cookie,
+        // })
+        Err(DidntRead)
     }
 }
 
@@ -102,23 +102,24 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &OpenAck) -> Self::Output {
-        // Header
-        let mut header = tmsg::id::OPEN;
-        header |= tmsg::flag::A;
-        // Verify that the timeout is expressed in seconds, i.e. subsec part is 0.
-        if x.lease.subsec_nanos() == 0 {
-            header |= tmsg::flag::T2;
-        }
-        self.write(&mut *writer, header)?;
+        // // Header
+        // let mut header = tmsg::id::OPEN;
+        // header |= tmsg::flag::A;
+        // // Verify that the timeout is expressed in seconds, i.e. subsec part is 0.
+        // if x.lease.subsec_nanos() == 0 {
+        //     header |= tmsg::flag::T2;
+        // }
+        // self.write(&mut *writer, header)?;
 
-        // Body
-        if imsg::has_flag(header, tmsg::flag::T2) {
-            self.write(&mut *writer, x.lease.as_secs() as ZInt)?;
-        } else {
-            self.write(&mut *writer, x.lease.as_millis() as ZInt)?;
-        }
-        self.write(&mut *writer, x.initial_sn)?;
-        Ok(())
+        // // Body
+        // if imsg::has_flag(header, tmsg::flag::T2) {
+        //     self.write(&mut *writer, x.lease.as_secs() as ZInt)?;
+        // } else {
+        //     self.write(&mut *writer, x.lease.as_millis() as ZInt)?;
+        // }
+        // self.write(&mut *writer, x.initial_sn)?;
+        // Ok(())
+        Err(DidntWrite)
     }
 }
 
@@ -129,10 +130,8 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<OpenAck, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
@@ -144,18 +143,19 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<OpenAck, Self::Error> {
-        if imsg::mid(self.header) != tmsg::id::OPEN || !imsg::has_flag(self.header, tmsg::flag::A) {
-            return Err(DidntRead);
-        }
+        // if imsg::mid(self.header) != tmsg::id::OPEN || !imsg::has_flag(self.header, tmsg::flag::A) {
+        //     return Err(DidntRead);
+        // }
 
-        let lease: ZInt = self.codec.read(&mut *reader)?;
-        let lease = if imsg::has_flag(self.header, tmsg::flag::T2) {
-            Duration::from_secs(lease)
-        } else {
-            Duration::from_millis(lease)
-        };
-        let initial_sn: ZInt = self.codec.read(&mut *reader)?;
+        // let lease: ZInt = self.codec.read(&mut *reader)?;
+        // let lease = if imsg::has_flag(self.header, tmsg::flag::T2) {
+        //     Duration::from_secs(lease)
+        // } else {
+        //     Duration::from_millis(lease)
+        // };
+        // let initial_sn: ZInt = self.codec.read(&mut *reader)?;
 
-        Ok(OpenAck { lease, initial_sn })
+        // Ok(OpenAck { lease, initial_sn })
+        Err(DidntRead)
     }
 }

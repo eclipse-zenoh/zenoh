@@ -23,10 +23,7 @@ use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::{
-    common::{imsg, Attachment},
-    transport::*,
-};
+use zenoh_protocol::{common::imsg, transport::*};
 
 // TransportMessage
 impl<W> WCodec<&TransportMessage, &mut W> for Zenoh080
@@ -36,9 +33,6 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &TransportMessage) -> Self::Output {
-        if let Some(a) = x.attachment.as_ref() {
-            self.write(&mut *writer, a)?;
-        }
         match &x.body {
             TransportBody::InitSyn(b) => self.write(&mut *writer, b),
             TransportBody::InitAck(b) => self.write(&mut *writer, b),
@@ -59,38 +53,31 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<TransportMessage, Self::Error> {
-        let mut codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
-        let mut attachment: Option<Attachment> = None;
-        if imsg::mid(codec.header) == tmsg::id::ATTACHMENT {
-            let a: Attachment = codec.read(&mut *reader)?;
-            attachment = Some(a);
-            codec.header = self.read(&mut *reader)?;
-        }
+        let header: u8 = self.read(&mut *reader)?;
+
+        let mut codec = Zenoh080Header::new(header);
         let body = match imsg::mid(codec.header) {
-            tmsg::id::INIT => {
-                if !imsg::has_flag(codec.header, tmsg::flag::A) {
+            id::INIT => {
+                if !imsg::has_flag(codec.header, zenoh_protocol::transport::init::flag::A) {
                     TransportBody::InitSyn(codec.read(&mut *reader)?)
                 } else {
                     TransportBody::InitAck(codec.read(&mut *reader)?)
                 }
             }
-            tmsg::id::OPEN => {
-                if !imsg::has_flag(codec.header, tmsg::flag::A) {
+            id::OPEN => {
+                if !imsg::has_flag(codec.header, zenoh_protocol::transport::open::flag::A) {
                     TransportBody::OpenSyn(codec.read(&mut *reader)?)
                 } else {
                     TransportBody::OpenAck(codec.read(&mut *reader)?)
                 }
             }
-            tmsg::id::JOIN => TransportBody::Join(codec.read(&mut *reader)?),
-            tmsg::id::CLOSE => TransportBody::Close(codec.read(&mut *reader)?),
-            tmsg::id::KEEP_ALIVE => TransportBody::KeepAlive(codec.read(&mut *reader)?),
-            tmsg::id::PRIORITY | tmsg::id::FRAME => TransportBody::Frame(codec.read(&mut *reader)?),
+            id::JOIN => TransportBody::Join(codec.read(&mut *reader)?),
+            id::CLOSE => TransportBody::Close(codec.read(&mut *reader)?),
+            id::KEEP_ALIVE => TransportBody::KeepAlive(codec.read(&mut *reader)?),
+            id::FRAME => TransportBody::Frame(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 
-        Ok(TransportMessage { body, attachment })
+        Ok(TransportMessage { body })
     }
 }

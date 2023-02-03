@@ -18,10 +18,12 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::imsg,
+    common::{imsg, ZExtUnknown},
     core::{whatami::WhatAmIMatcher, ZenohId},
-    scouting::Scout,
-    transport::tmsg,
+    scouting::{
+        id,
+        scout::{flag, Scout},
+    },
 };
 
 impl<W> WCodec<&Scout, &mut W> for Zenoh080
@@ -32,9 +34,9 @@ where
 
     fn write(self, writer: &mut W, x: &Scout) -> Self::Output {
         // Header
-        let mut header = tmsg::id::SCOUT;
+        let mut header = id::SCOUT;
         if x.zid.is_some() {
-            header |= tmsg::flag::I;
+            header |= flag::I;
         }
         self.write(&mut *writer, header)?;
 
@@ -45,6 +47,7 @@ where
         if let Some(zid) = x.zid.as_ref() {
             self.write(&mut *writer, zid)?;
         }
+
         Ok(())
     }
 }
@@ -56,10 +59,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Scout, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
@@ -71,19 +73,27 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Scout, Self::Error> {
-        if imsg::mid(self.header) != imsg::id::SCOUT {
+        if imsg::mid(self.header) != id::SCOUT {
             return Err(DidntRead);
         }
 
+        // Body
         let version: u8 = self.codec.read(&mut *reader)?;
         let flags: u8 = self.codec.read(&mut *reader)?;
         let what = WhatAmIMatcher::try_from(flags & 0b111).map_err(|_| DidntRead)?;
-        let zid = if imsg::has_flag(self.header, tmsg::flag::I) {
+        let zid = if imsg::has_flag(self.header, flag::I) {
             let zid: ZenohId = self.codec.read(&mut *reader)?;
             Some(zid)
         } else {
             None
         };
+
+        // Extensions
+        let mut has_extensions = imsg::has_flag(self.header, flag::Z);
+        while has_extensions {
+            let (_, more): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+            has_extensions = more;
+        }
 
         Ok(Scout { version, what, zid })
     }

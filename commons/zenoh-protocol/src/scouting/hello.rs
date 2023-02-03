@@ -92,6 +92,12 @@ use core::fmt;
 ///    - 0b11: Reserved
 /// ```
 ///
+pub mod flag {
+    pub const L: u8 = 1 << 5; // 0x20 Locators      if L==1 then the list of locators is present, else the src address is the locator
+                              // pub const X: u8 = 1 << 6; // 0x40       Reserved
+    pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 

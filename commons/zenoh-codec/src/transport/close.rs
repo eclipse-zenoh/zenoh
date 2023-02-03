@@ -17,9 +17,11 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::imsg,
-    core::ZenohId,
-    transport::{tmsg, Close},
+    common::{imsg, ZExtUnknown},
+    transport::{
+        close::{flag, Close},
+        id,
+    },
 };
 
 impl<W> WCodec<&Close, &mut W> for Zenoh080
@@ -30,20 +32,15 @@ where
 
     fn write(self, writer: &mut W, x: &Close) -> Self::Output {
         // Header
-        let mut header = tmsg::id::CLOSE;
-        if x.zid.is_some() {
-            header |= tmsg::flag::I;
-        }
-        if x.link_only {
-            header |= tmsg::flag::K;
+        let mut header = id::CLOSE;
+        if x.session {
+            header |= flag::S;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        if let Some(p) = x.zid.as_ref() {
-            self.write(&mut *writer, p)?;
-        }
         self.write(&mut *writer, x.reason)?;
+
         Ok(())
     }
 }
@@ -55,10 +52,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Close, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
@@ -70,23 +66,21 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Close, Self::Error> {
-        if imsg::mid(self.header) != tmsg::id::CLOSE {
+        if imsg::mid(self.header) != id::CLOSE {
             return Err(DidntRead);
         }
+        let session = imsg::has_flag(self.header, flag::S);
 
-        let link_only = imsg::has_flag(self.header, tmsg::flag::K);
-        let zid = if imsg::has_flag(self.header, tmsg::flag::I) {
-            let zid: ZenohId = self.codec.read(&mut *reader)?;
-            Some(zid)
-        } else {
-            None
-        };
+        // Body
         let reason: u8 = self.codec.read(&mut *reader)?;
 
-        Ok(Close {
-            zid,
-            reason,
-            link_only,
-        })
+        // Extensions
+        let mut has_extensions = imsg::has_flag(self.header, flag::Z);
+        while has_extensions {
+            let (_, more): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+            has_extensions = more;
+        }
+
+        Ok(Close { reason, session })
     }
 }

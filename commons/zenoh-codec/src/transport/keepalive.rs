@@ -29,18 +29,19 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &KeepAlive) -> Self::Output {
-        // Header
-        let mut header = tmsg::id::KEEP_ALIVE;
-        if x.zid.is_some() {
-            header |= tmsg::flag::I;
-        }
-        self.write(&mut *writer, header)?;
+        // // Header
+        // let mut header = tmsg::id::KEEP_ALIVE;
+        // if x.zid.is_some() {
+        //     header |= tmsg::flag::I;
+        // }
+        // self.write(&mut *writer, header)?;
 
-        // Body
-        if let Some(p) = x.zid.as_ref() {
-            self.write(&mut *writer, p)?;
-        }
-        Ok(())
+        // // Body
+        // if let Some(p) = x.zid.as_ref() {
+        //     self.write(&mut *writer, p)?;
+        // }
+        // Ok(())
+        Err(DidntWrite)
     }
 }
 
@@ -51,10 +52,8 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<KeepAlive, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
@@ -66,17 +65,18 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<KeepAlive, Self::Error> {
-        if imsg::mid(self.header) != tmsg::id::KEEP_ALIVE {
-            return Err(DidntRead);
-        }
+        // if imsg::mid(self.header) != tmsg::id::KEEP_ALIVE {
+        //     return Err(DidntRead);
+        // }
 
-        let zid = if imsg::has_flag(self.header, tmsg::flag::I) {
-            let zid: ZenohId = self.codec.read(&mut *reader)?;
-            Some(zid)
-        } else {
-            None
-        };
+        // let zid = if imsg::has_flag(self.header, tmsg::flag::I) {
+        //     let zid: ZenohId = self.codec.read(&mut *reader)?;
+        //     Some(zid)
+        // } else {
+        //     None
+        // };
 
-        Ok(KeepAlive { zid })
+        // Ok(KeepAlive { zid })
+        Err(DidntRead)
     }
 }

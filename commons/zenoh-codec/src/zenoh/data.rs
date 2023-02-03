@@ -58,10 +58,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ReplyContext, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
@@ -243,10 +242,9 @@ where
             ..Default::default()
         };
         if imsg::mid(codec.header) == zmsg::id::REPLY_CONTEXT {
-            let hodec = Zenoh080Header {
-                header: codec.header,
-                ..Default::default()
-            };
+            let header: u8 = self.read(&mut *reader)?;
+            let hodec = Zenoh080Header::new(header);
+
             codec.reply_context = Some(hodec.read(&mut *reader)?);
             codec.header = self.read(&mut *reader)?;
         }

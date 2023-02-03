@@ -59,10 +59,8 @@ where
     fn read(self, reader: &mut R) -> Result<Declaration, Self::Error> {
         use super::zmsg::declaration::id::*;
 
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
 
         let d = match imsg::mid(codec.header) {
             RESOURCE => Declaration::Resource(codec.read(&mut *reader)?),
@@ -109,10 +107,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Declare, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
@@ -169,10 +166,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Resource, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
@@ -225,10 +221,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ForgetResource, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
@@ -279,10 +274,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Publisher, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
@@ -337,10 +331,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ForgetPublisher, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
@@ -444,10 +437,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Subscriber, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
@@ -517,10 +509,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ForgetSubscriber, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
@@ -610,10 +601,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Queryable, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
@@ -674,10 +664,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ForgetQueryable, Self::Error> {
-        let codec = Zenoh080Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }

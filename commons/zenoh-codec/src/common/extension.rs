@@ -11,14 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
-    ZBuf,
+    ZBuf, ZSlice,
 };
 use zenoh_protocol::{
-    common::{iext, imsg::has_flag, ZExtUnit, ZExtUnknown, ZExtZBuf, ZExtZInt, ZExtensionBody},
+    common::{
+        iext, imsg::has_flag, ZExtUnit, ZExtUnknown, ZExtZBuf, ZExtZInt, ZExtZSlice, ZExtensionBody,
+    },
     core::ZInt,
 };
 
@@ -47,12 +49,23 @@ where
 
     fn read(self, reader: &mut R) -> Result<(ZExtUnit<{ ID }>, bool), Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+        codec.read(&mut *reader)
+    }
+}
 
-        if (header & iext::ID_MASK != ID) || (header & iext::ENC_MASK != iext::ENC_UNIT) {
+impl<const ID: u8, R> RCodec<(ZExtUnit<{ ID }>, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, _reader: &mut R) -> Result<(ZExtUnit<{ ID }>, bool), Self::Error> {
+        if (self.header & iext::ID_MASK != ID) || (self.header & iext::ENC_MASK != iext::ENC_UNIT) {
             return Err(DidntRead);
         }
 
-        Ok((ZExtUnit::new(), has_flag(header, iext::FLAG_Z)))
+        Ok((ZExtUnit::new(), has_flag(self.header, iext::FLAG_Z)))
     }
 }
 
@@ -82,14 +95,73 @@ where
 
     fn read(self, reader: &mut R) -> Result<(ZExtZInt<{ ID }>, bool), Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+        codec.read(&mut *reader)
+    }
+}
 
-        if (header & iext::ID_MASK != ID) || (header & iext::ENC_MASK != iext::ENC_ZINT) {
+impl<const ID: u8, R> RCodec<(ZExtZInt<{ ID }>, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ZExtZInt<{ ID }>, bool), Self::Error> {
+        if (self.header & iext::ID_MASK != ID) || (self.header & iext::ENC_MASK != iext::ENC_ZINT) {
             return Err(DidntRead);
         }
 
-        let value: ZInt = self.read(&mut *reader)?;
+        let value: ZInt = self.codec.read(&mut *reader)?;
 
-        Ok((ZExtZInt::new(value), has_flag(header, iext::FLAG_Z)))
+        Ok((ZExtZInt::new(value), has_flag(self.header, iext::FLAG_Z)))
+    }
+}
+
+impl<const ID: u8, W> WCodec<(&ZExtZSlice<{ ID }>, bool), &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: (&ZExtZSlice<{ ID }>, bool)) -> Self::Output {
+        let (x, more) = x;
+        let mut header: u8 = ID | iext::ENC_ZINT;
+        if more {
+            header |= iext::FLAG_Z;
+        }
+        self.write(&mut *writer, header)?;
+        self.write(&mut *writer, &x.value)?;
+        Ok(())
+    }
+}
+
+impl<const ID: u8, R> RCodec<(ZExtZSlice<{ ID }>, bool), &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ZExtZSlice<{ ID }>, bool), Self::Error> {
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+        codec.read(&mut *reader)
+    }
+}
+
+impl<const ID: u8, R> RCodec<(ZExtZSlice<{ ID }>, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ZExtZSlice<{ ID }>, bool), Self::Error> {
+        if (self.header & iext::ID_MASK != ID) || (self.header & iext::ENC_MASK != iext::ENC_ZINT) {
+            return Err(DidntRead);
+        }
+
+        let value: ZSlice = self.codec.read(&mut *reader)?;
+
+        Ok((ZExtZSlice::new(value), has_flag(self.header, iext::FLAG_Z)))
     }
 }
 
@@ -119,14 +191,25 @@ where
 
     fn read(self, reader: &mut R) -> Result<(ZExtZBuf<{ ID }>, bool), Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+        codec.read(&mut *reader)
+    }
+}
 
-        if (header & iext::ID_MASK != ID) || (header & iext::ENC_MASK != iext::ENC_ZINT) {
+impl<const ID: u8, R> RCodec<(ZExtZBuf<{ ID }>, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ZExtZBuf<{ ID }>, bool), Self::Error> {
+        if (self.header & iext::ID_MASK != ID) || (self.header & iext::ENC_MASK != iext::ENC_ZINT) {
             return Err(DidntRead);
         }
 
-        let value: ZBuf = self.read(&mut *reader)?;
+        let value: ZBuf = self.codec.read(&mut *reader)?;
 
-        Ok((ZExtZBuf::new(value), has_flag(header, iext::FLAG_Z)))
+        Ok((ZExtZBuf::new(value), has_flag(self.header, iext::FLAG_Z)))
     }
 }
 
@@ -170,15 +253,26 @@ where
 
     fn read(self, reader: &mut R) -> Result<(ZExtUnknown, bool), Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+        codec.read(&mut *reader)
+    }
+}
 
-        let body = match header & iext::ENC_MASK {
+impl<R> RCodec<(ZExtUnknown, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ZExtUnknown, bool), Self::Error> {
+        let body = match self.header & iext::ENC_MASK {
             iext::ENC_UNIT => ZExtensionBody::Unit,
             iext::ENC_ZINT => {
-                let zint: ZInt = self.read(&mut *reader)?;
+                let zint: ZInt = self.codec.read(&mut *reader)?;
                 ZExtensionBody::ZInt(zint)
             }
             iext::ENC_ZBUF => {
-                let zbuf: ZBuf = self.read(&mut *reader)?;
+                let zbuf: ZBuf = self.codec.read(&mut *reader)?;
                 ZExtensionBody::ZBuf(zbuf)
             }
             _ => return Err(DidntRead),
@@ -186,10 +280,10 @@ where
 
         Ok((
             ZExtUnknown {
-                id: header & iext::ID_MASK,
+                id: self.header & iext::ID_MASK,
                 body,
             },
-            has_flag(header, iext::FLAG_Z),
+            has_flag(self.header, iext::FLAG_Z),
         ))
     }
 }

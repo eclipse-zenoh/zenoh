@@ -36,11 +36,20 @@ pub trait RCodec<Message, Buffer> {
 #[non_exhaustive]
 pub struct Zenoh080;
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy)]
 #[non_exhaustive]
 pub struct Zenoh080Header {
     pub header: u8,
     pub codec: Zenoh080,
+}
+
+impl Zenoh080Header {
+    pub const fn new(header: u8) -> Self {
+        Self {
+            header,
+            codec: Zenoh080,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Default)]

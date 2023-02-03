@@ -11,16 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-mod hello;
-mod scout;
+pub mod hello;
+pub mod scout;
 
 use crate::{
     common::Attachment,
     core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId},
 };
 use alloc::vec::Vec;
-pub use hello::*;
-pub use scout::*;
+pub use hello::Hello;
+pub use scout::Scout;
+
+pub mod id {
+    // Scouting Messages
+    pub const SCOUT: u8 = 0x01;
+    pub const HELLO: u8 = 0x02;
+}
 
 // Zenoh messages at scouting level
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,7 +40,6 @@ pub enum ScoutingBody {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ScoutingMessage {
     pub body: ScoutingBody,
-    pub attachment: Option<Attachment>,
     #[cfg(feature = "stats")]
     pub size: Option<core::num::NonZeroUsize>,
 }
@@ -48,7 +53,6 @@ impl ScoutingMessage {
         let version = crate::VERSION;
         ScoutingMessage {
             body: ScoutingBody::Scout(Scout { version, what, zid }),
-            attachment,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -68,7 +72,6 @@ impl ScoutingMessage {
                 zid,
                 locators,
             }),
-            attachment,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -80,14 +83,12 @@ impl ScoutingMessage {
 
         let mut rng = rand::thread_rng();
 
-        let attachment = rng.gen_bool(0.5).then_some(Attachment::rand());
-
         let body = match rng.gen_range(0..2) {
             0 => ScoutingBody::Scout(Scout::rand()),
             1 => ScoutingBody::Hello(Hello::rand()),
             _ => unreachable!(),
         };
 
-        Self { body, attachment }
+        Self { body }
     }
 }

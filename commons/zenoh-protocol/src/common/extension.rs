@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::ZInt;
-use zenoh_buffers::ZBuf;
+use zenoh_buffers::{ZBuf, ZSlice};
 
 /// # Zenoh extensions
 ///
@@ -66,6 +66,8 @@ pub mod iext {
 pub struct ZExtUnit<const ID: u8>;
 
 impl<const ID: u8> ZExtUnit<{ ID }> {
+    pub const ID: u8 = ID;
+
     pub fn new() -> Self {
         Self
     }
@@ -82,6 +84,8 @@ pub struct ZExtZInt<const ID: u8> {
 }
 
 impl<const ID: u8> ZExtZInt<{ ID }> {
+    pub const ID: u8 = ID;
+
     pub fn new(value: ZInt) -> Self {
         Self { value }
     }
@@ -97,11 +101,35 @@ impl<const ID: u8> ZExtZInt<{ ID }> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ZExtZSlice<const ID: u8> {
+    pub value: ZSlice,
+}
+
+impl<const ID: u8> ZExtZSlice<{ ID }> {
+    pub const ID: u8 = ID;
+
+    pub fn new(value: ZSlice) -> Self {
+        Self { value }
+    }
+
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        let value = ZSlice::rand(rng.gen_range(8..=64));
+        Self { value }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZExtZBuf<const ID: u8> {
     pub value: ZBuf,
 }
 
 impl<const ID: u8> ZExtZBuf<{ ID }> {
+    pub const ID: u8 = ID;
+
     pub fn new(value: ZBuf) -> Self {
         Self { value }
     }

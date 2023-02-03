@@ -57,10 +57,7 @@ where
             ..Default::default()
         };
         if imsg::mid(codec.header) == zmsg::id::REPLY_CONTEXT {
-            let hodec = Zenoh080Header {
-                header: codec.header,
-                ..Default::default()
-            };
+            let hodec = Zenoh080Header::new(codec.header);
             codec.reply_context = Some(hodec.read(&mut *reader)?);
             codec.header = self.read(&mut *reader)?;
         }

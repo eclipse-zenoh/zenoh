@@ -82,10 +82,8 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ZenohMessage, Self::Error> {
-        let mut codec = Zenoh080Header {
-            header: self.codec.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.codec.read(&mut *reader)?;
+        let mut codec = Zenoh080Header::new(header);
 
         let attachment = if imsg::mid(codec.header) == imsg::id::ATTACHMENT {
             let a: Attachment = codec.read(&mut *reader)?;

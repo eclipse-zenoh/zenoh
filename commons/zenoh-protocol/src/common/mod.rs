@@ -24,19 +24,6 @@ pub mod imsg {
     use crate::core::ZInt;
 
     pub mod id {
-        // Transport Messages
-        pub const JOIN: u8 = 0x00; // For multicast communications only
-        pub const SCOUT: u8 = 0x01;
-        pub const HELLO: u8 = 0x02;
-        pub const INIT: u8 = 0x03; // For unicast communications only
-        pub const OPEN: u8 = 0x04; // For unicast communications only
-        pub const CLOSE: u8 = 0x05;
-        pub const SYNC: u8 = 0x06;
-        pub const ACK_NACK: u8 = 0x07;
-        pub const KEEP_ALIVE: u8 = 0x08;
-        pub const PING_PONG: u8 = 0x09;
-        pub const FRAME: u8 = 0x0a;
-
         // Zenoh Messages
         pub const DECLARE: u8 = 0x0b;
         pub const DATA: u8 = 0x0c;
