@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 use alloc::{vec, vec::Vec};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -42,13 +42,20 @@ where
 
         // Body
         self.write(&mut *writer, x.version)?;
+
+        let mut flags: u8 = 0;
         let whatami: u8 = match x.whatami {
             WhatAmI::Router => 0b00,
             WhatAmI::Peer => 0b01,
             WhatAmI::Client => 0b10,
         };
-        self.write(&mut *writer, whatami)?;
-        self.write(&mut *writer, &x.zid)?;
+        flags |= whatami & 0b11;
+        flags |= ((x.zid.size() - 1) as u8) << 4;
+        self.write(&mut *writer, flags)?;
+
+        let lodec = Zenoh080Length::new(x.zid.size());
+        lodec.write(&mut *writer, &x.zid)?;
+
         if !x.locators.is_empty() {
             self.write(&mut *writer, x.locators.as_slice())?;
         }
@@ -66,7 +73,6 @@ where
     fn read(self, reader: &mut R) -> Result<Hello, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
-
         codec.read(reader)
     }
 }
@@ -91,8 +97,10 @@ where
             0b10 => WhatAmI::Client,
             _ => return Err(DidntRead),
         };
+        let length = 1 + ((flags >> 4) as usize);
+        let lodec = Zenoh080Length::new(length);
+        let zid: ZenohId = lodec.read(&mut *reader)?;
 
-        let zid: ZenohId = self.codec.read(&mut *reader)?;
         let locators = if imsg::has_flag(self.header, flag::L) {
             let locs: Vec<Locator> = self.codec.read(&mut *reader)?;
             locs

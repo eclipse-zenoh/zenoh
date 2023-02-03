@@ -40,20 +40,24 @@ use crate::core::{whatami::WhatAmIMatcher, ZenohId};
 ///
 /// ```text
 /// Header flags:
-/// - I: ZenohID        If I==1 then the ZenohID of the scouter is present.
+/// - X: Reserved
 /// - X: Reserved
 /// - Z: Extensions     If Z==1 then zenoh extensions will follow.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |Z|X|I|  SCOUT  |
+/// |Z|X|X|  SCOUT  |
 /// +-+-+-+---------+
 /// |    version    |
 /// +---------------+
-/// |X|X|X|X|X| what| (*)
+/// |zid_len|I| what| (#)(*)
 /// +-+-+-+-+-+-+-+-+
-/// ~    <u8;z8>    ~ if Flag(I)==1 -- ZenohID
+/// ~      [u8]     ~ if Flag(I)==1 -- ZenohID
 /// +---------------+
+///
+/// (#) ZID length. If Flag(I)==1 it indicates how many bytes are used for the ZenohID bytes.
+///     A ZenohID is minimum 1 byte and maximum 16 bytes. Therefore, the actual lenght is computed as:
+///         real_zid_len := 1 + zid_len
 ///
 /// (*) What. It indicates a bitmap of WhatAmI interests.
 ///    The valid bitflags are:
@@ -62,7 +66,7 @@ use crate::core::{whatami::WhatAmIMatcher, ZenohId};
 ///    - 0b100: Client
 /// ```
 pub mod flag {
-    pub const I: u8 = 1 << 5; // 0x20 ZenohID       if I==1 then the PeerID is requested or present
+    pub const I: u8 = 1 << 3; // 0x04 ZenohID       if I==1 then the ZenohID is present
                               // pub const X: u8 = 1 << 6; // 0x40       Reserved
     pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
 }

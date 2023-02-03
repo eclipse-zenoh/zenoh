@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 use core::convert::TryFrom;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -34,18 +34,23 @@ where
 
     fn write(self, writer: &mut W, x: &Scout) -> Self::Output {
         // Header
-        let mut header = id::SCOUT;
-        if x.zid.is_some() {
-            header |= flag::I;
-        }
+        let header = id::SCOUT;
         self.write(&mut *writer, header)?;
 
         // Body
         self.write(&mut *writer, x.version)?;
+
+        let mut flags: u8 = 0;
         let what: u8 = x.what.into();
-        self.write(&mut *writer, what & 0b111)?;
+        flags |= what & 0b111;
         if let Some(zid) = x.zid.as_ref() {
-            self.write(&mut *writer, zid)?;
+            flags |= (((zid.size() - 1) as u8) << 4) | flag::I;
+        };
+        self.write(&mut *writer, flags)?;
+
+        if let Some(zid) = x.zid.as_ref() {
+            let lodec = Zenoh080Length::new(zid.size());
+            lodec.write(&mut *writer, zid)?;
         }
 
         Ok(())
@@ -81,8 +86,10 @@ where
         let version: u8 = self.codec.read(&mut *reader)?;
         let flags: u8 = self.codec.read(&mut *reader)?;
         let what = WhatAmIMatcher::try_from(flags & 0b111).map_err(|_| DidntRead)?;
-        let zid = if imsg::has_flag(self.header, flag::I) {
-            let zid: ZenohId = self.codec.read(&mut *reader)?;
+        let zid = if imsg::has_flag(flags, flag::I) {
+            let length = 1 + ((flags >> 4) as usize);
+            let lodec = Zenoh080Length::new(length);
+            let zid: ZenohId = lodec.read(&mut *reader)?;
             Some(zid)
         } else {
             None

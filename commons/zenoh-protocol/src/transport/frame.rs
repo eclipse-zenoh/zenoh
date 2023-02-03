@@ -12,80 +12,73 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    core::{Channel, ZInt},
+    core::{Channel, Reliability, ZInt},
     zenoh::ZenohMessage,
 };
 use alloc::vec::Vec;
 use zenoh_buffers::ZSlice;
+use zenoh_collections::SingleOrVec;
 
 /// # Frame message
 ///
+/// The [`Frame`] message is used to transmit one ore more complete serialized
+/// [`crate::net::protocol::message::ZenohMessage`]. I.e., the total length of the
+/// serialized [`crate::net::protocol::message::ZenohMessage`] (s) MUST be smaller
+/// than the maximum batch size (i.e. 2^16-1) and the link MTU.
+/// The [`Frame`] message is used as means to aggreate multiple
+/// [`crate::net::protocol::message::ZenohMessage`] in a single atomic message that
+/// goes on the wire. By doing so, many small messages can be batched together and
+/// share common information like the sequence number.
+///
+/// The [`Frame`] message flow is the following:
+///
 /// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
-///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
-///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the length of a message must not exceed 65_535 bytes.
+///     A                   B
+///     |      FRAME        |
+///     |------------------>|
+///     |                   |
+/// ```
+///
+/// The [`Frame`] message structure is defined as follows:
+///
+/// ```text
+/// Flags:
+/// - R: Reliable       If R==1 it concerns the reliable channel, else the best-effort channel
+/// - X: Reserved
+/// - Z: Extensions     If Z==1 then zenoh extensions will follow.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |E|F|R|  FRAME  |
-/// +-+-+-+-+-------+
-/// ~      SN       ~
+/// |Z|X|R|  FRAME  |
+/// +-+-+-+---------+
+/// %    seq num    %
 /// +---------------+
-/// ~  FramePayload ~ -- if F==1 then the payload is a fragment of a single Zenoh Message, a list of complete Zenoh Messages otherwise.
+/// ~  [FrameExts]  ~ if Flag(Z)==1
 /// +---------------+
-///
-/// - if R==1 then the FRAME is sent on the reliable channel, best-effort otherwise.
-/// - if F==1 then the FRAME is a fragment.
-/// - if E==1 then the FRAME is the last fragment. E==1 is valid iff F==1.
-///
-/// NOTE: Only one bit would be sufficient to signal fragmentation in a IP-like fashion as follows:
-///         - if F==1 then this FRAME is a fragment and more fragment will follow;
-///         - if F==0 then the message is the last fragment if SN-1 had F==1,
-///           otherwise it's a non-fragmented message.
-///       However, this would require to always perform a two-steps de-serialization: first
-///       de-serialize the FRAME and then the Payload. This is due to the fact the F==0 is ambigous
-///       w.r.t. detecting if the FRAME is a fragment or not before SN re-ordering has occured.
-///       By using the F bit to only signal whether the FRAME is fragmented or not, it allows to
-///       de-serialize the payload in one single pass when F==0 since no re-ordering needs to take
-///       place at this stage. Then, the F bit is used to detect the last fragment during re-ordering.
+/// ~  [NetworkMsg] ~
+/// +---------------+
 /// ```
+///
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65535 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the length of a message must not exceed 65535 bytes.
+///
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Frame {
-    pub channel: Channel,
+    pub reliability: Reliability,
     pub sn: ZInt,
-    pub payload: FramePayload,
+    pub qos: ext::QoS,
+    pub payload: SingleOrVec<()>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub enum FramePayload {
-    /// ```text
-    /// The Payload of a fragmented Frame.
-    ///    
-    ///  7 6 5 4 3 2 1 0
-    /// +-+-+-+-+-+-+-+-+
-    /// ~ payload bytes ~
-    /// +---------------+
-    /// ```
-    Fragment { buffer: ZSlice, is_final: bool },
-    /// ```text
-    /// The Payload of a batched Frame.
-    ///
-    ///  7 6 5 4 3 2 1 0
-    /// +-+-+-+-+-+-+-+-+
-    /// ~  ZenohMessage ~
-    /// +---------------+
-    /// ~      ...      ~ - Additional complete Zenoh messages.
-    /// +---------------+
-    ///
-    /// NOTE: A batched Frame must contain at least one complete Zenoh message.
-    ///       There is no upper limit to the number of Zenoh messages that can
-    ///       be batched together in the same frame.
-    /// ```
-    Messages { messages: Vec<ZenohMessage> },
+// Extensions
+pub mod ext {
+    use crate::common::ZExtZInt;
+
+    pub type QoS = ZExtZInt<0x01>;
 }
 
 impl Frame {
@@ -114,47 +107,40 @@ impl Frame {
             reliability,
         };
         let sn: ZInt = rng.gen();
-        let payload = if rng.gen_bool(0.5) {
-            FramePayload::Fragment {
-                buffer: ZSlice::rand(rng.gen_range(MIN..=MAX)),
-                is_final: rng.gen_bool(0.5),
-            }
-        } else {
-            let n = rng.gen_range(1..16);
-            let messages = (0..n)
-                .map(|_| {
-                    let mut m = ZenohMessage::rand();
-                    m.channel = channel;
-                    m
-                })
-                .collect::<Vec<ZenohMessage>>();
-            FramePayload::Messages { messages }
-        };
+        // let payload = if rng.gen_bool(0.5) {
+        //     FramePayload::Fragment {
+        //         buffer: ZSlice::rand(rng.gen_range(MIN..=MAX)),
+        //         is_final: rng.gen_bool(0.5),
+        //     }
+        // } else {
+        //     let n = rng.gen_range(1..16);
+        //     let messages = (0..n)
+        //         .map(|_| {
+        //             let mut m = ZenohMessage::rand();
+        //             m.channel = channel;
+        //             m
+        //         })
+        //         .collect::<Vec<ZenohMessage>>();
+        //     FramePayload::Messages { messages }
+        // };
 
-        Frame {
-            channel,
-            sn,
-            payload,
-        }
+        // Frame {
+        //     channel,
+        //     sn,
+        //     payload,
+        // }
+        panic!()
     }
 }
 
 // FrameHeader
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-#[repr(u8)]
-pub enum FrameKind {
-    Messages,
-    SomeFragment,
-    LastFragment,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct FrameHeader {
-    pub channel: Channel,
+    pub reliability: Reliability,
     pub sn: ZInt,
-    pub kind: FrameKind,
+    pub qos: ext::QoS,
 }
 
 impl FrameHeader {
@@ -180,14 +166,15 @@ impl FrameHeader {
             reliability,
         };
         let sn: ZInt = rng.gen();
-        let kind = *[
-            FrameKind::Messages,
-            FrameKind::SomeFragment,
-            FrameKind::LastFragment,
-        ]
-        .choose(&mut rng)
-        .unwrap();
+        // let kind = *[
+        //     FrameKind::Messages,
+        //     FrameKind::SomeFragment,
+        //     FrameKind::LastFragment,
+        // ]
+        // .choose(&mut rng)
+        // .unwrap();
 
-        FrameHeader { channel, sn, kind }
+        // FrameHeader { channel, sn, kind }
+        panic!();
     }
 }

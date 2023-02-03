@@ -18,8 +18,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::ZenohId,
-    transport::{tmsg, KeepAlive},
+    transport::{id, KeepAlive},
 };
 
 impl<W> WCodec<&KeepAlive, &mut W> for Zenoh080
@@ -28,20 +27,11 @@ where
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &KeepAlive) -> Self::Output {
-        // // Header
-        // let mut header = tmsg::id::KEEP_ALIVE;
-        // if x.zid.is_some() {
-        //     header |= tmsg::flag::I;
-        // }
-        // self.write(&mut *writer, header)?;
-
-        // // Body
-        // if let Some(p) = x.zid.as_ref() {
-        //     self.write(&mut *writer, p)?;
-        // }
-        // Ok(())
-        Err(DidntWrite)
+    fn write(self, writer: &mut W, _x: &KeepAlive) -> Self::Output {
+        // Header
+        let header = id::KEEP_ALIVE;
+        self.write(&mut *writer, header)?;
+        Ok(())
     }
 }
 
@@ -64,19 +54,11 @@ where
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<KeepAlive, Self::Error> {
-        // if imsg::mid(self.header) != tmsg::id::KEEP_ALIVE {
-        //     return Err(DidntRead);
-        // }
+    fn read(self, _reader: &mut R) -> Result<KeepAlive, Self::Error> {
+        if imsg::mid(self.header) != id::KEEP_ALIVE {
+            return Err(DidntRead);
+        }
 
-        // let zid = if imsg::has_flag(self.header, tmsg::flag::I) {
-        //     let zid: ZenohId = self.codec.read(&mut *reader)?;
-        //     Some(zid)
-        // } else {
-        //     None
-        // };
-
-        // Ok(KeepAlive { zid })
-        Err(DidntRead)
+        Ok(KeepAlive)
     }
 }

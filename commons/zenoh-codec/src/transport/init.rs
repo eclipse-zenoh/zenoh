@@ -11,8 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
-use core::convert::TryFrom;
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -54,14 +53,11 @@ where
             WhatAmI::Peer => 0b01,
             WhatAmI::Client => 0b10,
         };
-        let zid_len = match x.zid.size() {
-            s if (1..=ZenohId::MAX_SIZE).contains(&s) => s as u8,
-            _ => return Err(DidntWrite),
-        };
-        let flags = ((zid_len - 1) << 4) | whatami;
+        let flags = ((x.zid.size() as u8 - 1) << 4) | whatami;
         self.write(&mut *writer, flags)?;
 
-        writer.write_exact(x.zid.as_slice())?;
+        let lodec = Zenoh080Length::new(x.zid.size());
+        lodec.write(&mut *writer, &x.zid)?;
 
         if imsg::has_flag(header, flag::S) {
             self.write(&mut *writer, x.resolution.as_u8())?;
@@ -122,11 +118,9 @@ where
             0b10 => WhatAmI::Client,
             _ => return Err(DidntRead),
         };
-        let size = 1 + ((flags >> 4) as usize);
-
-        let mut id = [0; ZenohId::MAX_SIZE];
-        reader.read_exact(&mut id[..size])?;
-        let zid = ZenohId::try_from(&id[..size]).map_err(|_| DidntRead)?;
+        let length = 1 + ((flags >> 4) as usize);
+        let lodec = Zenoh080Length::new(length);
+        let zid: ZenohId = lodec.read(&mut *reader)?;
 
         let mut resolution = Resolution::default();
         let mut batch_size = u16::MAX;
@@ -208,14 +202,11 @@ where
             WhatAmI::Peer => 0b01,
             WhatAmI::Client => 0b10,
         };
-        let zid_len = match x.zid.size() {
-            s if (1..=ZenohId::MAX_SIZE).contains(&s) => s as u8,
-            _ => return Err(DidntWrite),
-        };
-        let flags = ((zid_len - 1) << 4) | whatami;
+        let flags = ((x.zid.size() as u8 - 1) << 4) | whatami;
         self.write(&mut *writer, flags)?;
 
-        writer.write_exact(x.zid.as_slice())?;
+        let lodec = Zenoh080Length::new(x.zid.size());
+        lodec.write(&mut *writer, &x.zid)?;
 
         if imsg::has_flag(header, flag::S) {
             self.write(&mut *writer, x.resolution.as_u8())?;
@@ -278,11 +269,9 @@ where
             0b10 => WhatAmI::Client,
             _ => return Err(DidntRead),
         };
-        let size = 1 + ((flags >> 4) as usize);
-
-        let mut id = [0; ZenohId::MAX_SIZE];
-        reader.read_exact(&mut id[..size])?;
-        let zid = ZenohId::try_from(&id[..size]).map_err(|_| DidntRead)?;
+        let length = 1 + ((flags >> 4) as usize);
+        let lodec = Zenoh080Length::new(length);
+        let zid: ZenohId = lodec.read(&mut *reader)?;
 
         let mut resolution = Resolution::default();
         let mut batch_size = u16::MAX;

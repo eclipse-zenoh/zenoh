@@ -237,7 +237,7 @@ impl TransportMessage {
         attachment: Option<Attachment>,
     ) -> TransportMessage {
         TransportMessage {
-            body: TransportBody::KeepAlive(KeepAlive { zid }),
+            body: TransportBody::KeepAlive(KeepAlive),
             #[cfg(feature = "stats")]
             size: None,
         }

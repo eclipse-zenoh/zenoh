@@ -23,6 +23,18 @@ use zenoh_buffers::ZSlice;
 /// For convenience, we call [`OpenSyn`] and [`OpenAck`] an OPEN message with the A flag
 /// is set to 0 and 1, respectively.
 ///
+/// The [`OpenSyn`]/[`OpenAck`] message flow is the following:
+///
+/// ```text
+///     A                   B
+///     |      OPEN SYN     |
+///     |------------------>|
+///     |                   |
+///     |      OPEN ACK     |
+///     |<------------------|
+///     |                   |
+/// ```
+///
 /// ```text
 /// Flags:
 /// - A: Ack            If A==0 then the message is an OpenSyn else it is an OpenAck
@@ -37,7 +49,7 @@ use zenoh_buffers::ZSlice;
 /// +---------------+
 /// %  initial_sn   % -- Initial SN proposed by the sender of the OPEN(*)
 /// +---------------+
-/// ~     <u8>      ~ if Flag(A)==0 (**) -- Cookie
+/// ~    <u8;z16>   ~ if Flag(A)==0 (**) -- Cookie
 /// +---------------+
 /// ~   [OpenExts]  ~ if Flag(Z)==1
 /// +---------------+
@@ -56,7 +68,7 @@ use zenoh_buffers::ZSlice;
 
 pub mod flag {
     pub const A: u8 = 1 << 5; // 0x20 Ack           if A==0 then the message is an InitSyn else it is an InitAck
-    pub const S: u8 = 1 << 6; // 0x40 Size params   if S==1 then size parameters are exchanged
+    pub const T: u8 = 1 << 6; // 0x40 Lease period  if T==1 then the lease period is in seconds else in milliseconds
     pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
 }
 

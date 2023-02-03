@@ -50,7 +50,7 @@ use zenoh_buffers::ZSlice;
 /// |    version    |
 /// +---------------+
 /// |zid_len|x|x|wai| (#)(*)
-/// +-----+-----+---+
+/// +-------+-+-+---+
 /// ~      [u8]     ~ -- ZenohID of the sender of the INIT message
 /// +---------------+
 /// |x|x|kid|rid|fsn| \                -- SN/ID resolution (+)

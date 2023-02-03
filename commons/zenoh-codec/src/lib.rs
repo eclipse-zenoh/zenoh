@@ -70,6 +70,22 @@ impl Zenoh080Condition {
 
 #[derive(Clone, Copy, Default)]
 #[non_exhaustive]
+pub struct Zenoh080Length {
+    pub length: usize,
+    pub codec: Zenoh080,
+}
+
+impl Zenoh080Length {
+    pub const fn new(length: usize) -> Self {
+        Self {
+            length,
+            codec: Zenoh080,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Default)]
+#[non_exhaustive]
 pub struct Zenoh080Reliability {
     pub reliability: Reliability,
     pub codec: Zenoh080,
