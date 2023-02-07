@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod close;
+pub mod fragment;
 pub mod frame;
 pub mod init;
 pub mod join;
@@ -21,11 +22,12 @@ pub mod open;
 use crate::core::{Priority, ZInt};
 pub use close::Close;
 use core::{convert::TryInto, fmt};
-pub use frame::*;
+pub use fragment::{Fragment, FragmentHeader};
+pub use frame::{Frame, FrameHeader};
 pub use init::{InitAck, InitSyn};
-pub use join::*;
-pub use keepalive::*;
-pub use open::*;
+pub use join::Join;
+pub use keepalive::KeepAlive;
+pub use open::{OpenAck, OpenSyn};
 
 pub mod id {
     pub const JOIN: u8 = 0x01; // For multicast communications only
@@ -95,6 +97,7 @@ pub enum TransportBody {
     Close(Close),
     KeepAlive(KeepAlive),
     Frame(Frame),
+    Fragment(Fragment),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -112,7 +115,7 @@ impl TransportMessage {
 
         let mut rng = rand::thread_rng();
 
-        let body = match rng.gen_range(0..8) {
+        let body = match rng.gen_range(0..9) {
             0 => TransportBody::InitSyn(InitSyn::rand()),
             1 => TransportBody::InitAck(InitAck::rand()),
             2 => TransportBody::OpenSyn(OpenSyn::rand()),
@@ -121,6 +124,7 @@ impl TransportMessage {
             5 => TransportBody::Close(Close::rand()),
             6 => TransportBody::KeepAlive(KeepAlive::rand()),
             7 => TransportBody::Frame(Frame::rand()),
+            8 => TransportBody::Fragment(Fragment::rand()),
             _ => unreachable!(),
         };
 
@@ -171,5 +175,17 @@ impl From<Close> for TransportMessage {
 impl From<KeepAlive> for TransportMessage {
     fn from(keep_alive: KeepAlive) -> Self {
         TransportBody::KeepAlive(keep_alive).into()
+    }
+}
+
+impl From<Frame> for TransportMessage {
+    fn from(frame: Frame) -> Self {
+        TransportBody::Frame(frame).into()
+    }
+}
+
+impl From<Fragment> for TransportMessage {
+    fn from(fragment: Fragment) -> Self {
+        TransportBody::Fragment(fragment).into()
     }
 }

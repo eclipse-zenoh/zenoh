@@ -17,10 +17,7 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
     ZBuf,
 };
-use zenoh_protocol::{
-    common::{imsg, Attachment},
-    transport::tmsg,
-};
+use zenoh_protocol::common::{imsg, Attachment};
 #[cfg(feature = "shared-memory")]
 use {crate::Zenoh080Condition, core::any::TypeId, zenoh_shm::SharedMemoryBufInfoSerialized};
 
@@ -32,8 +29,8 @@ where
 
     fn write(self, writer: &mut W, x: &Attachment) -> Self::Output {
         // Header
-        #[allow(unused_mut)] // mut required with #[cfg(feature = "shared-memory")]
-        let mut header = tmsg::id::ATTACHMENT;
+        // #[allow(unused_mut)] // mut required with #[cfg(feature = "shared-memory")]
+        // let mut header = tmsg::id::ATTACHMENT;
 
         // #[cfg(feature = "shared-memory")]
         // {

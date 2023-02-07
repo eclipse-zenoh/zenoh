@@ -282,6 +282,16 @@ fn codec_frame() {
 }
 
 #[test]
+fn codec_fragment_header() {
+    run!(FragmentHeader, FragmentHeader::rand());
+}
+
+#[test]
+fn codec_fragment() {
+    run!(Fragment, Fragment::rand());
+}
+
+#[test]
 fn codec_transport() {
     run!(TransportMessage, TransportMessage::rand());
 }

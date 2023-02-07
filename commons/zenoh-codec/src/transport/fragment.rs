@@ -11,75 +11,30 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Reliability};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_collections::SingleOrVec;
 use zenoh_protocol::{
-    common::{imsg, ZExtUnknown, ZExtZInt},
+    common::{imsg, ZExtUnknown},
     core::{Reliability, ZInt},
     transport::{
-        frame::{ext, flag, Frame, FrameHeader},
+        fragment::{ext, flag, Fragment, FragmentHeader},
         id,
     },
-    zenoh::ZenohMessage,
 };
 
-// Extensions: QoS
-impl<W> WCodec<(&ext::QoS, bool), &mut W> for Zenoh080
+// FragmentHeader
+impl<W> WCodec<&FragmentHeader, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: (&ext::QoS, bool)) -> Self::Output {
-        let (ext, more) = x;
-        self.write(&mut *writer, (&ext.inner, more))
-    }
-}
-
-impl<R> RCodec<(ext::QoS, bool), &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<(ext::QoS, bool), Self::Error> {
-        let header: u8 = self.read(&mut *reader)?;
-        let codec = Zenoh080Header::new(header);
-
-        codec.read(reader)
-    }
-}
-
-impl<R> RCodec<(ext::QoS, bool), &mut R> for Zenoh080Header
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<(ext::QoS, bool), Self::Error> {
-        if imsg::mid(self.header) != ext::QOS {
-            return Err(DidntRead);
-        }
-
-        let (inner, more): (ZExtZInt<{ ext::QOS }>, bool) = self.read(&mut *reader)?;
-        Ok((ext::QoS { inner }, more))
-    }
-}
-
-// FrameHeader
-impl<W> WCodec<&FrameHeader, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: &FrameHeader) -> Self::Output {
+    fn write(self, writer: &mut W, x: &FragmentHeader) -> Self::Output {
         // Header
-        let mut header = id::FRAME;
+        let mut header = id::FRAGMENT;
         if let Reliability::Reliable = x.reliability {
             header |= flag::R;
         }
@@ -100,27 +55,27 @@ where
     }
 }
 
-impl<R> RCodec<FrameHeader, &mut R> for Zenoh080
+impl<R> RCodec<FragmentHeader, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<FrameHeader, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<FragmentHeader, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<FrameHeader, &mut R> for Zenoh080Header
+impl<R> RCodec<FragmentHeader, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<FrameHeader, Self::Error> {
-        if imsg::mid(self.header) != id::FRAME {
+    fn read(self, reader: &mut R) -> Result<FragmentHeader, Self::Error> {
+        if imsg::mid(self.header) != id::FRAGMENT {
             return Err(DidntRead);
         }
 
@@ -150,7 +105,7 @@ where
             }
         }
 
-        Ok(FrameHeader {
+        Ok(FragmentHeader {
             reliability,
             sn,
             qos,
@@ -158,16 +113,16 @@ where
     }
 }
 
-// Frame
-impl<W> WCodec<&Frame, &mut W> for Zenoh080
+// Fragment
+impl<W> WCodec<&Fragment, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &Frame) -> Self::Output {
+    fn write(self, writer: &mut W, x: &Fragment) -> Self::Output {
         // Header
-        let header = FrameHeader {
+        let header = FragmentHeader {
             reliability: x.reliability,
             sn: x.sn,
             qos: x.qos,
@@ -183,43 +138,30 @@ where
     }
 }
 
-impl<R> RCodec<Frame, &mut R> for Zenoh080
+impl<R> RCodec<Fragment, &mut R> for Zenoh080
 where
     R: Reader + BacktrackableReader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<Frame, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<Fragment, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<Frame, &mut R> for Zenoh080Header
+impl<R> RCodec<Fragment, &mut R> for Zenoh080Header
 where
     R: Reader + BacktrackableReader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<Frame, Self::Error> {
-        let header: FrameHeader = self.read(&mut *reader)?;
+    fn read(self, reader: &mut R) -> Result<Fragment, Self::Error> {
+        let header: FragmentHeader = self.read(&mut *reader)?;
+        let payload = reader.read_zslice(reader.remaining())?;
 
-        let rcode = Zenoh080Reliability::new(header.reliability);
-        let mut payload = SingleOrVec::default();
-        while reader.can_read() {
-            let mark = reader.mark();
-            let res: Result<ZenohMessage, DidntRead> = rcode.read(&mut *reader);
-            match res {
-                Ok(m) => payload.push(m),
-                Err(_) => {
-                    reader.rewind(mark);
-                    break;
-                }
-            }
-        }
-
-        Ok(Frame {
+        Ok(Fragment {
             reliability: header.reliability,
             sn: header.sn,
             qos: header.qos,

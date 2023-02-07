@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod close;
+mod fragment;
 mod frame;
 mod init;
 mod join;
@@ -42,6 +43,7 @@ where
             TransportBody::Close(b) => self.write(&mut *writer, b),
             TransportBody::KeepAlive(b) => self.write(&mut *writer, b),
             TransportBody::Frame(b) => self.write(&mut *writer, b),
+            TransportBody::Fragment(b) => self.write(&mut *writer, b),
         }
     }
 }

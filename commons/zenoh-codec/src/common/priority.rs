@@ -17,7 +17,7 @@ use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::{common::imsg, core::Priority, transport::tmsg};
+use zenoh_protocol::{common::imsg, core::Priority};
 
 impl<W> WCodec<&Priority, &mut W> for Zenoh080
 where
@@ -27,7 +27,7 @@ where
 
     fn write(self, writer: &mut W, x: &Priority) -> Self::Output {
         // Header
-        let header = tmsg::id::PRIORITY | ((*x as u8) << imsg::HEADER_BITS);
+        let header = imsg::id::PRIORITY | ((*x as u8) << imsg::HEADER_BITS);
         self.write(&mut *writer, header)?;
         Ok(())
     }
