@@ -3866,6 +3866,7 @@ dependencies = [
  "uhlc",
  "uuid",
  "zenoh-buffers",
+ "zenoh-collections",
  "zenoh-protocol",
  "zenoh-shm",
 ]

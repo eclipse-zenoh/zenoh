@@ -55,7 +55,7 @@ where
     fn read(self, reader: &mut R) -> Result<TransportMessage, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
 
-        let mut codec = Zenoh080Header::new(header);
+        let codec = Zenoh080Header::new(header);
         let body = match imsg::mid(codec.header) {
             id::INIT => {
                 if !imsg::has_flag(codec.header, zenoh_protocol::transport::init::flag::A) {

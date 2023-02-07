@@ -62,7 +62,7 @@ pub mod iext {
     pub const FLAG_Z: u8 = 1 << 7;
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct ZExtUnit<const ID: u8>;
 
 impl<const ID: u8> ZExtUnit<{ ID }> {
@@ -78,7 +78,7 @@ impl<const ID: u8> ZExtUnit<{ ID }> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ZExtZInt<const ID: u8> {
     pub value: ZInt,
 }
@@ -100,7 +100,7 @@ impl<const ID: u8> ZExtZInt<{ ID }> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZExtZSlice<const ID: u8> {
     pub value: ZSlice,
 }
@@ -122,7 +122,7 @@ impl<const ID: u8> ZExtZSlice<{ ID }> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZExtZBuf<const ID: u8> {
     pub value: ZBuf,
 }
@@ -144,13 +144,13 @@ impl<const ID: u8> ZExtZBuf<{ ID }> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZExtUnknown {
     pub id: u8,
     pub body: ZExtensionBody,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ZExtensionBody {
     Unit,
     ZInt(ZInt),

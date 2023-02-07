@@ -293,17 +293,17 @@ where
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
             match imsg::mid(ext) {
-                ext::QoS::ID => {
+                ext::QOS => {
                     let (q, more): (ext::QoS, bool) = eodec.read(&mut *reader)?;
                     qos = Some(q);
                     has_more = more;
                 }
-                ext::Shm::ID => {
+                ext::SHM => {
                     let (s, more): (ext::Shm, bool) = eodec.read(&mut *reader)?;
                     shm = Some(s);
                     has_more = more;
                 }
-                ext::Auth::ID => {
+                ext::AUTH => {
                     let (a, more): (ext::Auth, bool) = eodec.read(&mut *reader)?;
                     auth = Some(a);
                     has_more = more;

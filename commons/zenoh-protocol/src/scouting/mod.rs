@@ -14,11 +14,6 @@
 pub mod hello;
 pub mod scout;
 
-use crate::{
-    common::Attachment,
-    core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId},
-};
-use alloc::vec::Vec;
 pub use hello::Hello;
 pub use scout::Scout;
 
@@ -45,50 +40,39 @@ pub struct ScoutingMessage {
 }
 
 impl ScoutingMessage {
-    pub fn make_scout(
-        what: WhatAmIMatcher,
-        zid: Option<ZenohId>,
-        attachment: Option<Attachment>,
-    ) -> ScoutingMessage {
-        let version = crate::VERSION;
-        ScoutingMessage {
-            body: ScoutingBody::Scout(Scout { version, what, zid }),
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
-    pub fn make_hello(
-        whatami: WhatAmI,
-        zid: ZenohId,
-        locators: Vec<Locator>,
-        attachment: Option<Attachment>,
-    ) -> ScoutingMessage {
-        let version = crate::VERSION;
-        ScoutingMessage {
-            body: ScoutingBody::Hello(Hello {
-                version,
-                whatami,
-                zid,
-                locators,
-            }),
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
 
-        let body = match rng.gen_range(0..2) {
+        match rng.gen_range(0..2) {
             0 => ScoutingBody::Scout(Scout::rand()),
             1 => ScoutingBody::Hello(Hello::rand()),
             _ => unreachable!(),
-        };
+        }
+        .into()
+    }
+}
 
-        Self { body }
+impl From<ScoutingBody> for ScoutingMessage {
+    fn from(body: ScoutingBody) -> Self {
+        Self {
+            body,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+}
+
+impl From<Scout> for ScoutingMessage {
+    fn from(scout: Scout) -> Self {
+        ScoutingBody::Scout(scout).into()
+    }
+}
+
+impl From<Hello> for ScoutingMessage {
+    fn from(hello: Hello) -> Self {
+        ScoutingBody::Hello(hello).into()
     }
 }

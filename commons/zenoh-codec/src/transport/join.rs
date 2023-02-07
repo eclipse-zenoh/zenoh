@@ -21,7 +21,7 @@ use zenoh_buffers::{
 use zenoh_protocol::{
     common::imsg,
     core::{Priority, WhatAmI, ZInt, ZenohId},
-    transport::{tmsg, ConduitSn, ConduitSnList, Join},
+    transport::{ConduitSn, ConduitSnList, Join},
 };
 
 impl<W> WCodec<&Join, &mut W> for Zenoh080

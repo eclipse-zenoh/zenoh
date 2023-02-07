@@ -12,11 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    core::{Channel, Reliability, ZInt},
+    core::{Reliability, ZInt},
     zenoh::ZenohMessage,
 };
-use alloc::vec::Vec;
-use zenoh_buffers::ZSlice;
 use zenoh_collections::SingleOrVec;
 
 /// # Frame message
@@ -65,31 +63,95 @@ use zenoh_collections::SingleOrVec;
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65535 bytes.
 ///
+pub mod flag {
+    pub const R: u8 = 1 << 5; // 0x20 Reliable      if R==1 then the frame is reliable
+                              // pub const X: u8 = 1 << 6; // 0x40       Reserved
+    pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Frame {
     pub reliability: Reliability,
     pub sn: ZInt,
     pub qos: ext::QoS,
-    pub payload: SingleOrVec<()>,
+    pub payload: SingleOrVec<ZenohMessage>,
 }
 
 // Extensions
 pub mod ext {
-    use crate::common::ZExtZInt;
+    use crate::core::ZInt;
+    use crate::{common::ZExtZInt, core::Priority};
 
-    pub type QoS = ZExtZInt<0x01>;
+    pub const QOS: u8 = 0x01;
+
+    ///      7 6 5 4 3 2 1 0
+    ///     +-+-+-+-+-+-+-+-+
+    ///     |Z|0_1|   QoS   |
+    ///     +-+-+-+---------+
+    ///     % reserved|prio %
+    ///     +---------------+
+    #[repr(transparent)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct QoS {
+        pub inner: ZExtZInt<QOS>,
+    }
+
+    impl QoS {
+        pub fn new(priority: Priority) -> Self {
+            Self {
+                inner: ZExtZInt::new(priority as ZInt),
+            }
+        }
+
+        pub fn priority(&self) -> Priority {
+            // Safety: a unit test below checks the validity of the following unsafe code
+            unsafe { core::mem::transmute((self.inner.value & 0b111) as u8) }
+        }
+
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            Self {
+                inner: ZExtZInt::rand(),
+            }
+        }
+    }
+
+    impl Default for QoS {
+        fn default() -> Self {
+            Self::new(Priority::default())
+        }
+    }
+
+    mod tests {
+        #[test]
+        fn priority() {
+            use crate::{core::Priority, transport::frame::ext::QoS};
+
+            let ps = [
+                Priority::Control,
+                Priority::RealTime,
+                Priority::InteractiveHigh,
+                Priority::InteractiveLow,
+                Priority::DataHigh,
+                Priority::Data,
+                Priority::DataLow,
+                Priority::Background,
+            ];
+            for p in ps.iter() {
+                let q = QoS::new(*p);
+                assert_eq!(q.priority(), *p);
+            }
+        }
+    }
 }
 
 impl Frame {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::core::{Priority, Reliability};
+        use crate::core::Priority;
         use core::convert::TryInto;
         use rand::Rng;
-
-        const MIN: usize = 1;
-        const MAX: usize = 1_024;
 
         let mut rng = rand::thread_rng();
 
@@ -102,39 +164,26 @@ impl Frame {
         } else {
             Reliability::BestEffort
         };
-        let channel = Channel {
-            priority,
-            reliability,
-        };
         let sn: ZInt = rng.gen();
-        // let payload = if rng.gen_bool(0.5) {
-        //     FramePayload::Fragment {
-        //         buffer: ZSlice::rand(rng.gen_range(MIN..=MAX)),
-        //         is_final: rng.gen_bool(0.5),
-        //     }
-        // } else {
-        //     let n = rng.gen_range(1..16);
-        //     let messages = (0..n)
-        //         .map(|_| {
-        //             let mut m = ZenohMessage::rand();
-        //             m.channel = channel;
-        //             m
-        //         })
-        //         .collect::<Vec<ZenohMessage>>();
-        //     FramePayload::Messages { messages }
-        // };
+        let qos = ext::QoS::rand();
+        let mut payload = SingleOrVec::default();
+        for _ in 0..rng.gen_range(1..4) {
+            let mut m = ZenohMessage::rand();
+            m.channel.reliability = reliability;
+            m.channel.priority = priority;
+            payload.push(m);
+        }
 
-        // Frame {
-        //     channel,
-        //     sn,
-        //     payload,
-        // }
-        panic!()
+        Frame {
+            reliability,
+            sn,
+            qos,
+            payload,
+        }
     }
 }
 
 // FrameHeader
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct FrameHeader {
@@ -146,35 +195,22 @@ pub struct FrameHeader {
 impl FrameHeader {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::core::{Priority, Reliability};
-        use core::convert::TryInto;
-        use rand::{seq::SliceRandom, Rng};
+        use rand::Rng;
 
         let mut rng = rand::thread_rng();
 
-        let priority: Priority = rng
-            .gen_range(Priority::MAX as u8..=Priority::MIN as u8)
-            .try_into()
-            .unwrap();
         let reliability = if rng.gen_bool(0.5) {
             Reliability::Reliable
         } else {
             Reliability::BestEffort
         };
-        let channel = Channel {
-            priority,
-            reliability,
-        };
         let sn: ZInt = rng.gen();
-        // let kind = *[
-        //     FrameKind::Messages,
-        //     FrameKind::SomeFragment,
-        //     FrameKind::LastFragment,
-        // ]
-        // .choose(&mut rng)
-        // .unwrap();
+        let qos = ext::QoS::rand();
 
-        // FrameHeader { channel, sn, kind }
-        panic!();
+        FrameHeader {
+            reliability,
+            sn,
+            qos,
+        }
     }
 }

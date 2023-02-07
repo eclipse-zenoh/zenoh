@@ -12,17 +12,63 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Reliability};
-use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
+use zenoh_collections::SingleOrVec;
 use zenoh_protocol::{
-    common::imsg,
-    core::{Channel, Priority, Reliability, ZInt},
-    transport::{tmsg, Frame, FrameHeader, FrameKind, FramePayload},
+    common::{imsg, ZExtUnknown, ZExtZInt},
+    core::{Reliability, ZInt},
+    transport::{
+        frame::{ext, flag, Frame, FrameHeader},
+        id,
+    },
     zenoh::ZenohMessage,
 };
+
+// Extensions: QoS
+impl<W> WCodec<(&ext::QoS, bool), &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: (&ext::QoS, bool)) -> Self::Output {
+        let (ext, more) = x;
+        self.write(&mut *writer, (&ext.inner, more))
+    }
+}
+
+impl<R> RCodec<(ext::QoS, bool), &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::QoS, bool), Self::Error> {
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
+        codec.read(reader)
+    }
+}
+
+impl<R> RCodec<(ext::QoS, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::QoS, bool), Self::Error> {
+        if imsg::mid(self.header) != ext::QOS {
+            return Err(DidntRead);
+        }
+
+        let (inner, more): (ZExtZInt<{ ext::QOS }>, bool) = self.read(&mut *reader)?;
+        Ok((ext::QoS { inner }, more))
+    }
+}
 
 // FrameHeader
 impl<W> WCodec<&FrameHeader, &mut W> for Zenoh080
@@ -32,33 +78,25 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &FrameHeader) -> Self::Output {
-        // // Decorator
-        // if x.channel.priority != Priority::default() {
-        //     self.write(&mut *writer, &x.channel.priority)?;
-        // }
+        // Header
+        let mut header = id::FRAME;
+        if let Reliability::Reliable = x.reliability {
+            header |= flag::R;
+        }
+        if x.qos != ext::QoS::default() {
+            header |= flag::Z;
+        }
+        self.write(&mut *writer, header)?;
 
-        // // Header
-        // let mut header = tmsg::id::FRAME;
-        // if let Reliability::Reliable = x.channel.reliability {
-        //     header |= tmsg::flag::R;
-        // }
-        // match x.kind {
-        //     FrameKind::Messages => {}
-        //     FrameKind::SomeFragment => {
-        //         header |= tmsg::flag::F;
-        //     }
-        //     FrameKind::LastFragment => {
-        //         header |= tmsg::flag::F;
-        //         header |= tmsg::flag::E;
-        //     }
-        // }
-        // self.write(&mut *writer, header)?;
+        // Body
+        self.write(&mut *writer, x.sn)?;
 
-        // // Body
-        // self.write(&mut *writer, x.sn)?;
+        // Extensions
+        if x.qos != ext::QoS::default() {
+            self.write(&mut *writer, (&x.qos.inner, false))?;
+        }
 
-        // Ok(())
-        Err(DidntWrite)
+        Ok(())
     }
 }
 
@@ -71,7 +109,6 @@ where
     fn read(self, reader: &mut R) -> Result<FrameHeader, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
-
         codec.read(reader)
     }
 }
@@ -82,41 +119,42 @@ where
 {
     type Error = DidntRead;
 
-    fn read(mut self, reader: &mut R) -> Result<FrameHeader, Self::Error> {
-        // let mut priority = Priority::default();
-        // if imsg::mid(self.header) == tmsg::id::PRIORITY {
-        //     // Decode priority
-        //     priority = self.read(&mut *reader)?;
-        //     // Read next header
-        //     self.header = self.codec.read(&mut *reader)?;
-        // }
+    fn read(self, reader: &mut R) -> Result<FrameHeader, Self::Error> {
+        if imsg::mid(self.header) != id::FRAME {
+            return Err(DidntRead);
+        }
 
-        // if imsg::mid(self.header) != tmsg::id::FRAME {
-        //     return Err(DidntRead);
-        // }
+        let reliability = match imsg::has_flag(self.header, flag::R) {
+            true => Reliability::Reliable,
+            false => Reliability::BestEffort,
+        };
+        let sn: ZInt = self.codec.read(&mut *reader)?;
 
-        // let reliability = match imsg::has_flag(self.header, tmsg::flag::R) {
-        //     true => Reliability::Reliable,
-        //     false => Reliability::BestEffort,
-        // };
-        // let channel = Channel {
-        //     priority,
-        //     reliability,
-        // };
-        // let sn: ZInt = self.codec.read(&mut *reader)?;
+        // Extensions
+        let mut qos = ext::QoS::default();
 
-        // let kind = if imsg::has_flag(self.header, tmsg::flag::F) {
-        //     if imsg::has_flag(self.header, tmsg::flag::E) {
-        //         FrameKind::LastFragment
-        //     } else {
-        //         FrameKind::SomeFragment
-        //     }
-        // } else {
-        //     FrameKind::Messages
-        // };
+        let mut has_more = imsg::has_flag(self.header, flag::Z);
+        while has_more {
+            let ext: u8 = self.codec.read(&mut *reader)?;
+            let eodec = Zenoh080Header::new(ext);
+            match imsg::mid(ext) {
+                ext::QOS => {
+                    let (q, more): (ext::QoS, bool) = eodec.read(&mut *reader)?;
+                    qos = q;
+                    has_more = more;
+                }
+                _ => {
+                    let (_, more): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    has_more = more;
+                }
+            }
+        }
 
-        // Ok(FrameHeader { channel, sn, kind })
-        Err(DidntRead)
+        Ok(FrameHeader {
+            reliability,
+            sn,
+            qos,
+        })
     }
 }
 
@@ -128,35 +166,22 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Frame) -> Self::Output {
-        // // Header
-        // let kind = match &x.payload {
-        //     FramePayload::Fragment { is_final, .. } => {
-        //         if *is_final {
-        //             FrameKind::LastFragment
-        //         } else {
-        //             FrameKind::SomeFragment
-        //         }
-        //     }
-        //     FramePayload::Messages { .. } => FrameKind::Messages,
-        // };
-        // let header = FrameHeader {
-        //     channel: x.channel,
-        //     sn: x.sn,
-        //     kind,
-        // };
-        // self.write(&mut *writer, &header)?;
+        // Header
+        let header = FrameHeader {
+            reliability: x.reliability,
+            sn: x.sn,
+            qos: x.qos,
+        };
+        self.write(&mut *writer, &header)?;
 
-        // // Body
-        // match &x.payload {
-        //     FramePayload::Fragment { buffer, .. } => writer.write_zslice(buffer)?,
-        //     FramePayload::Messages { messages } => {
-        //         for m in messages.iter() {
-        //             self.write(&mut *writer, m)?;
-        //         }
-        //     }
-        // }
-        // Ok(())
-        Err(DidntWrite)
+        dbg!("A");
+
+        // Body
+        for m in x.payload.as_ref() {
+            self.write(&mut *writer, m)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -180,43 +205,27 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Frame, Self::Error> {
-        // let header: FrameHeader = self.read(&mut *reader)?;
+        let header: FrameHeader = self.read(&mut *reader)?;
 
-        // let payload = match header.kind {
-        //     FrameKind::Messages => {
-        //         let rcode = Zenoh080Reliability {
-        //             reliability: header.channel.reliability,
-        //             ..Default::default()
-        //         };
+        let rcode = Zenoh080Reliability::new(header.reliability);
+        let mut payload = SingleOrVec::default();
+        while reader.can_read() {
+            let mark = reader.mark();
+            let res: Result<ZenohMessage, DidntRead> = rcode.read(&mut *reader);
+            match res {
+                Ok(m) => payload.push(m),
+                Err(_) => {
+                    reader.rewind(mark);
+                    break;
+                }
+            }
+        }
 
-        //         let mut messages: Vec<ZenohMessage> = Vec::with_capacity(1);
-        //         while reader.can_read() {
-        //             let mark = reader.mark();
-        //             let res: Result<ZenohMessage, DidntRead> = rcode.read(&mut *reader);
-        //             match res {
-        //                 Ok(m) => messages.push(m),
-        //                 Err(_) => {
-        //                     reader.rewind(mark);
-        //                     break;
-        //                 }
-        //             }
-        //         }
-        //         FramePayload::Messages { messages }
-        //     }
-        //     FrameKind::SomeFragment | FrameKind::LastFragment => {
-        //         // A fragmented frame is not supposed to be followed by
-        //         // any other frame in the same batch. Read all the bytes.
-        //         let buffer = reader.read_zslice(reader.remaining())?;
-        //         let is_final = header.kind == FrameKind::LastFragment;
-        //         FramePayload::Fragment { buffer, is_final }
-        //     }
-        // };
-
-        // Ok(Frame {
-        //     channel: header.channel,
-        //     sn: header.sn,
-        //     payload,
-        // })
-        Err(DidntRead)
+        Ok(Frame {
+            reliability: header.reliability,
+            sn: header.sn,
+            qos: header.qos,
+            payload,
+        })
     }
 }

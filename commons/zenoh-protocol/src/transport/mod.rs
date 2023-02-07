@@ -18,18 +18,14 @@ pub mod join;
 pub mod keepalive;
 pub mod open;
 
-use crate::{
-    common::Attachment,
-    core::{Channel, Priority, WhatAmI, ZInt, ZenohId},
-};
+use crate::core::{Priority, ZInt};
 pub use close::Close;
-use core::{convert::TryInto, fmt, time::Duration};
+use core::{convert::TryInto, fmt};
 pub use frame::*;
 pub use init::{InitAck, InitSyn};
 pub use join::*;
 pub use keepalive::*;
 pub use open::*;
-use zenoh_buffers::ZSlice;
 
 pub mod id {
     pub const JOIN: u8 = 0x01; // For multicast communications only
@@ -87,33 +83,6 @@ pub struct ConduitSn {
     pub best_effort: ZInt,
 }
 
-pub mod tmsg {
-    use super::Priority;
-    use crate::common::imsg;
-
-    // Transport message IDs -- Re-export of some of the Inner Message IDs
-    pub mod id {
-        use super::imsg;
-
-        // Message decorators
-        pub const PRIORITY: u8 = imsg::id::PRIORITY;
-        pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
-    }
-
-    pub mod conduit {
-        use super::{imsg, Priority};
-
-        pub const CONTROL: u8 = (Priority::Control as u8) << imsg::HEADER_BITS;
-        pub const REAL_TIME: u8 = (Priority::RealTime as u8) << imsg::HEADER_BITS;
-        pub const INTERACTIVE_HIGH: u8 = (Priority::InteractiveHigh as u8) << imsg::HEADER_BITS;
-        pub const INTERACTIVE_LOW: u8 = (Priority::InteractiveLow as u8) << imsg::HEADER_BITS;
-        pub const DATA_HIGH: u8 = (Priority::DataHigh as u8) << imsg::HEADER_BITS;
-        pub const DATA: u8 = (Priority::Data as u8) << imsg::HEADER_BITS;
-        pub const DATA_LOW: u8 = (Priority::DataLow as u8) << imsg::HEADER_BITS;
-        pub const BACKGROUND: u8 = (Priority::Background as u8) << imsg::HEADER_BITS;
-    }
-}
-
 // Zenoh messages at zenoh-transport level
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -137,129 +106,6 @@ pub struct TransportMessage {
 }
 
 impl TransportMessage {
-    pub fn make_init_syn(
-        version: u8,
-        whatami: WhatAmI,
-        zid: ZenohId,
-        sn_resolution: ZInt,
-        is_qos: bool,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::InitSyn(InitSyn::rand()), // @TODO
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
-    pub fn make_init_ack(
-        whatami: WhatAmI,
-        zid: ZenohId,
-        sn_resolution: Option<ZInt>,
-        is_qos: bool,
-        cookie: ZSlice,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::InitAck(InitAck::rand()), // @TODO
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
-    pub fn make_open_syn(
-        lease: Duration,
-        initial_sn: ZInt,
-        cookie: ZSlice,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::OpenSyn(OpenSyn {
-                lease,
-                initial_sn,
-                cookie,
-            }),
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
-    pub fn make_open_ack(
-        lease: Duration,
-        initial_sn: ZInt,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::OpenAck(OpenAck { lease, initial_sn }),
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
-    pub fn make_join(
-        version: u8,
-        whatami: WhatAmI,
-        zid: ZenohId,
-        lease: Duration,
-        sn_resolution: ZInt,
-        next_sns: ConduitSnList,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::Join(Join {
-                version,
-                whatami,
-                zid,
-                lease,
-                sn_resolution,
-                next_sns,
-            }),
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
-    pub fn make_close(
-        zid: Option<ZenohId>,
-        reason: u8,
-        session: bool,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::Close(Close { reason, session }),
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
-    pub fn make_keep_alive(
-        zid: Option<ZenohId>,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::KeepAlive(KeepAlive),
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
-    pub fn make_frame(
-        channel: Channel,
-        sn: ZInt,
-        payload: FramePayload,
-        attachment: Option<Attachment>,
-    ) -> TransportMessage {
-        TransportMessage {
-            body: TransportBody::Frame(Frame {
-                channel,
-                sn,
-                payload,
-            }),
-            #[cfg(feature = "stats")]
-            size: None,
-        }
-    }
-
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -279,5 +125,51 @@ impl TransportMessage {
         };
 
         Self { body }
+    }
+}
+
+impl From<TransportBody> for TransportMessage {
+    fn from(body: TransportBody) -> Self {
+        Self {
+            body,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+}
+
+impl From<InitSyn> for TransportMessage {
+    fn from(init_syn: InitSyn) -> Self {
+        TransportBody::InitSyn(init_syn).into()
+    }
+}
+
+impl From<InitAck> for TransportMessage {
+    fn from(init_ack: InitAck) -> Self {
+        TransportBody::InitAck(init_ack).into()
+    }
+}
+
+impl From<OpenSyn> for TransportMessage {
+    fn from(open_syn: OpenSyn) -> Self {
+        TransportBody::OpenSyn(open_syn).into()
+    }
+}
+
+impl From<OpenAck> for TransportMessage {
+    fn from(open_ack: OpenAck) -> Self {
+        TransportBody::OpenAck(open_ack).into()
+    }
+}
+
+impl From<Close> for TransportMessage {
+    fn from(close: Close) -> Self {
+        TransportBody::Close(close).into()
+    }
+}
+
+impl From<KeepAlive> for TransportMessage {
+    fn from(keep_alive: KeepAlive) -> Self {
+        TransportBody::KeepAlive(keep_alive).into()
     }
 }

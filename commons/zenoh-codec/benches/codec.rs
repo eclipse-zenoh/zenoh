@@ -22,9 +22,9 @@ use zenoh_buffers::{
 };
 use zenoh_codec::*;
 use zenoh_protocol::{
-    core::{Channel, CongestionControl, ZInt},
+    core::{CongestionControl, Reliability, ZInt},
     defaults::BATCH_SIZE,
-    transport::{Frame, FrameHeader, FrameKind},
+    transport::{Frame, FrameHeader},
     zenoh::Data,
 };
 
@@ -73,9 +73,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     let codec = Zenoh080::default();
 
     let frame = FrameHeader {
-        channel: Channel::default(),
+        reliability: Reliability::default(),
         sn: ZInt::MIN,
-        kind: FrameKind::Messages,
+        qos: zenoh_protocol::transport::frame::ext::QoS::default(),
     };
 
     let data = Data {
@@ -110,9 +110,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     let codec = Zenoh080::default();
 
     let frame = FrameHeader {
-        channel: Channel::default(),
+        reliability: Reliability::default(),
         sn: ZInt::MIN,
-        kind: FrameKind::Messages,
+        qos: zenoh_protocol::transport::frame::ext::QoS::default(),
     };
 
     let data = Data {
@@ -142,9 +142,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     let codec = Zenoh080::default();
 
     let frame = FrameHeader {
-        channel: Channel::default(),
+        reliability: Reliability::default(),
         sn: ZInt::MIN,
-        kind: FrameKind::Messages,
+        qos: zenoh_protocol::transport::frame::ext::QoS::default(),
     };
 
     let data = Data {

@@ -184,9 +184,13 @@ pub struct InitSyn {
 pub mod ext {
     use crate::common::{ZExtUnit, ZExtZSlice};
 
-    pub type QoS = ZExtUnit<0x01>;
-    pub type Shm = ZExtZSlice<0x02>;
-    pub type Auth = ZExtZSlice<0x03>;
+    pub const QOS: u8 = 0x01;
+    pub const SHM: u8 = 0x02;
+    pub const AUTH: u8 = 0x03;
+
+    pub type QoS = ZExtUnit<QOS>;
+    pub type Shm = ZExtZSlice<SHM>;
+    pub type Auth = ZExtZSlice<AUTH>;
 }
 
 impl InitSyn {
