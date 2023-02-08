@@ -1469,6 +1469,8 @@ fn compute_local_replies(
     face: &Arc<FaceState>,
 ) -> Vec<(WireExpr<'static>, ZBuf)> {
     let mut result = vec![];
+    // Only the first routing point in the query route
+    // should return the liveliness tokens
     if face.whatami == WhatAmI::Client {
         let key_expr = prefix.expr() + suffix;
         let key_expr = match OwnedKeyExpr::try_from(key_expr) {
