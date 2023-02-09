@@ -1339,7 +1339,16 @@ impl Session {
             }
         });
 
+        let selector = match scope {
+            Some(scope) => Selector {
+                key_expr: scope / &*selector.key_expr,
+                parameters: selector.parameters.clone(),
+            },
+            None => selector.clone(),
+        };
+
         log::trace!("Register query {} (nb_final = {})", qid, nb_final);
+        let wexpr = selector.key_expr.to_wire(self);
         state.queries.insert(
             qid,
             QueryState {
@@ -1352,11 +1361,6 @@ impl Session {
             },
         );
 
-        let kexpr = match scope {
-            Some(scope) => scope / &*selector.key_expr,
-            None => selector.key_expr.clone(),
-        };
-        let wexpr = kexpr.to_wire(self);
         let primitives = state.primitives.as_ref().unwrap().clone();
 
         drop(state);
@@ -1769,6 +1773,22 @@ impl Primitives for Session {
         };
         match state.queries.get_mut(&qid) {
             Some(query) => {
+                if !matches!(
+                    query
+                        .selector
+                        .parameters()
+                        .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
+                    Ok([true])
+                ) && !query.selector.key_expr.intersects(&key_expr)
+                {
+                    log::warn!(
+                        "Received ReplyData for `{}` from `{:?}, which didn't match query `{}`: dropping ReplyData.",
+                        key_expr,
+                        replier_id,
+                        query.selector
+                    );
+                    return;
+                }
                 let key_expr = match &query.scope {
                     Some(scope) => {
                         if !key_expr.starts_with(&***scope) {
@@ -1795,22 +1815,6 @@ impl Primitives for Session {
                     }
                     None => key_expr,
                 };
-                if !matches!(
-                    query
-                        .selector
-                        .parameters()
-                        .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
-                    Ok([true])
-                ) && !query.selector.key_expr.intersects(&key_expr)
-                {
-                    log::warn!(
-                        "Received ReplyData for `{}` from `{:?}, which didn't match query `{}`: dropping ReplyData.",
-                        key_expr,
-                        replier_id,
-                        query.selector
-                    );
-                    return;
-                }
                 let new_reply = Reply {
                     sample: Ok(Sample::with_info(key_expr.into_owned(), payload, data_info)),
                     replier_id,
