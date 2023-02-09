@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-mod compression;
 mod encoding;
 mod endpoint;
 mod keyexpr;

@@ -82,15 +82,3 @@ pub struct Zenoh060HeaderReplyContext {
     pub reply_context: Option<ReplyContext>,
     pub codec: Zenoh060,
 }
-
-pub struct ZenohCompress;
-
-pub trait Compress<Buffer> {
-    type Error;
-    fn compress(&self, buffer: &Buffer) -> Result<Buffer, Self::Error>;
-}
-
-pub trait Decompress<Buffer> {
-    type Error;
-    fn decompress(&self, buffer: &Buffer) -> Result<Buffer, Self::Error>;
-}

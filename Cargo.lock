@@ -3832,6 +3832,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-compression"
+version = "0.7.0-rc"
+dependencies = [
+ "criterion",
+ "log",
+ "lz4_flex",
+ "uhlc",
+ "zenoh-buffers",
+ "zenoh-codec",
+ "zenoh-protocol",
+]
+
+[[package]]
 name = "zenoh-config"
 version = "0.7.0-rc"
 dependencies = [
