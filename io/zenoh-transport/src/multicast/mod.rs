@@ -184,7 +184,7 @@ impl fmt::Debug for TransportMulticast {
                     .finish()
             }
             Err(e) => {
-                write!(f, "{}", e)
+                write!(f, "{e}")
             }
         }
     }

@@ -160,7 +160,7 @@ impl<'a> Selector<'a> {
             selector.push('&')
         }
         use std::fmt::Write;
-        write!(selector, "{}={}", TIME_RANGE_KEY, time_range).unwrap(); // This unwrap is safe because `String: Write` should be infallibe.
+        write!(selector, "{TIME_RANGE_KEY}={time_range}").unwrap(); // This unwrap is safe because `String: Write` should be infallibe.
     }
 
     pub fn remove_time_range(&mut self) {
@@ -437,7 +437,7 @@ impl<'a, K: Borrow<str> + Hash + Eq + 'a, V: Borrow<str> + 'a> Parameters<'a> fo
 
 impl std::fmt::Debug for Selector<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "sel\"{}\"", self)
+        write!(f, "sel\"{self}\"")
     }
 }
 

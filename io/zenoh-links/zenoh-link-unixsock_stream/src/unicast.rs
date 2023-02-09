@@ -232,10 +232,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let local_path = match src_addr.as_pathname() {
             Some(path) => PathBuf::from(path),
             None => {
-                let e = format!(
-                    "Can not create a new UnixSocketStream link bound to {:?}",
-                    path
-                );
+                let e = format!("Can not create a new UnixSocketStream link bound to {path:?}");
                 log::warn!("{}", e);
                 PathBuf::from(format!("{}", Uuid::new_v4()))
             }
@@ -278,7 +275,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
 
         // We generate the path for the lock file, by adding .lock
         // to the socket file
-        let lock_file_path = format!("{}.lock", path);
+        let lock_file_path = format!("{path}.lock");
 
         // We try to open the lock file, with O_RDONLY | O_CREAT
         // and mode S_IRUSR | S_IWUSR, user read-write permissions
@@ -409,7 +406,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let _ = remove_file(path.clone());
 
         // Remove the Unix Domain Socket file
-        let lock_file_path = format!("{}.lock", path);
+        let lock_file_path = format!("{path}.lock");
         let tmp = remove_file(lock_file_path);
         log::trace!("UnixSocketStream Domain Socket removal result: {:?}", tmp);
         res

@@ -66,7 +66,7 @@ enum PluginDiff {
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: plugins::PluginsManager, version: String) {
         let zid_str = runtime.zid.to_string();
-        let root_key: OwnedKeyExpr = format!("@/router/{}", zid_str).try_into().unwrap();
+        let root_key: OwnedKeyExpr = format!("@/router/{zid_str}").try_into().unwrap();
 
         let mut handlers: HashMap<_, Arc<Handler>> = HashMap::new();
         handlers.insert(

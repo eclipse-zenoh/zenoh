@@ -194,28 +194,28 @@ fn buffer_zslice() {
 fn buffer_siphon() {
     let capacity = 1 + u8::MAX as usize;
 
-    println!("Buffer Siphon BBuf({}) -> BBuf({})", capacity, capacity);
+    println!("Buffer Siphon BBuf({capacity}) -> BBuf({capacity})");
     let mut bbuf1 = BBuf::with_capacity(capacity);
     let mut bbuf2 = BBuf::with_capacity(capacity);
     run_siphon!(bbuf1, capacity, bbuf2, capacity);
 
-    println!("Buffer Siphon ZBuf({}) -> ZBuf({})", capacity, capacity);
+    println!("Buffer Siphon ZBuf({capacity}) -> ZBuf({capacity})");
     let mut zbuf1 = ZBuf::default();
     let mut zbuf2 = ZBuf::default();
     run_siphon!(zbuf1, capacity, zbuf2, capacity);
 
-    println!("Buffer Siphon ZBuf({}) -> BBuf({})", capacity, capacity);
+    println!("Buffer Siphon ZBuf({capacity}) -> BBuf({capacity})");
     let mut zbuf1 = ZBuf::default();
     let mut bbuf1 = BBuf::with_capacity(capacity);
     run_siphon!(zbuf1, capacity, bbuf1, capacity);
 
     let capacity2 = 1 + capacity / 2;
-    println!("Buffer Siphon BBuf({}) -> BBuf({})", capacity, capacity2);
+    println!("Buffer Siphon BBuf({capacity}) -> BBuf({capacity2})");
     let mut bbuf1 = BBuf::with_capacity(capacity);
     let mut bbuf2 = BBuf::with_capacity(capacity2);
     run_siphon!(bbuf1, capacity, bbuf2, capacity2);
 
-    println!("Buffer Siphon ZBuf({}) -> BBuf({})", capacity, capacity2);
+    println!("Buffer Siphon ZBuf({capacity}) -> BBuf({capacity2})");
     let mut zbuf1 = ZBuf::default();
     let mut bbuf1 = BBuf::with_capacity(capacity2);
     run_siphon!(zbuf1, capacity, bbuf1, capacity2);

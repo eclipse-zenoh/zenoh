@@ -969,27 +969,47 @@ pub(crate) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
             && src_face.whatami == WhatAmI::Peer
         {
             for res in &src_face.remote_qabls {
-                if !remote_router_qabls(tables, res) {
-                    for mut dst_face in tables
-                        .faces
-                        .values()
-                        .cloned()
-                        .collect::<Vec<Arc<FaceState>>>()
+                let client_qabls = res
+                    .session_ctxs
+                    .values()
+                    .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.qabl.is_some());
+                if !remote_router_qabls(tables, res) && !client_qabls {
+                    for ctx in get_mut_unchecked(&mut res.clone())
+                        .session_ctxs
+                        .values_mut()
                     {
+                        let dst_face = &mut get_mut_unchecked(ctx).face;
                         if dst_face.whatami == WhatAmI::Peer && src_face.zid != dst_face.zid {
-                            if !Tables::failover_brokering_to(links, dst_face.zid) {
-                                if dst_face.local_qabls.contains_key(res) {
+                            if dst_face.local_qabls.contains_key(res) {
+                                let forget = !Tables::failover_brokering_to(links, dst_face.zid)
+                                    && {
+                                        let ctx_links = tables
+                                            .peers_net
+                                            .as_ref()
+                                            .map(|net| net.get_links(dst_face.zid))
+                                            .unwrap_or_else(|| &[]);
+                                        res.session_ctxs.values().any(|ctx2| {
+                                            ctx2.face.whatami == WhatAmI::Peer
+                                                && ctx2.qabl.is_some()
+                                                && Tables::failover_brokering_to(
+                                                    ctx_links,
+                                                    ctx2.face.zid,
+                                                )
+                                        })
+                                    };
+                                if forget {
                                     let key_expr = Resource::get_best_key(res, "", dst_face.id);
                                     dst_face.primitives.forget_queryable(&key_expr, None);
 
-                                    get_mut_unchecked(&mut dst_face).local_qabls.remove(res);
+                                    get_mut_unchecked(dst_face).local_qabls.remove(res);
                                 }
-                            } else {
-                                get_mut_unchecked(&mut dst_face)
-                                    .local_subs
-                                    .insert(res.clone());
-                                let key_expr = Resource::decl_key(res, &mut dst_face);
-                                let info = local_qabl_info(tables, res, &dst_face);
+                            } else if Tables::failover_brokering_to(links, ctx.face.zid) {
+                                let dst_face = &mut get_mut_unchecked(ctx).face;
+                                let info = local_qabl_info(tables, res, dst_face);
+                                get_mut_unchecked(dst_face)
+                                    .local_qabls
+                                    .insert(res.clone(), info.clone());
+                                let key_expr = Resource::decl_key(res, dst_face);
                                 dst_face.primitives.decl_queryable(&key_expr, &info, None);
                             }
                         }
@@ -1401,7 +1421,7 @@ fn compute_final_route(
                         && (qabl.direction.0.whatami != WhatAmI::Peer
                             || (tables.router_peers_failover_brokering
                                 && Tables::failover_brokering_to(
-                                    &source_links,
+                                    source_links,
                                     qabl.direction.0.zid,
                                 )))
                     {

@@ -31,7 +31,7 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Declaring Queryable on '{}'...", key_expr);
+    println!("Declaring Queryable on '{key_expr}'...");
     let queryable = session
         .declare_queryable(&key_expr)
         .complete(complete)
@@ -54,7 +54,7 @@ async fn main() {
                     .reply(Ok(Sample::new(key_expr.clone(), value.clone())))
                     .res()
                     .await
-                    .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {}", e));
+                    .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {

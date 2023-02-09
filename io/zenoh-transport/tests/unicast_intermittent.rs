@@ -201,7 +201,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     println!("\nTransport Intermittent [1a1]");
     let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
     let locators = router_manager.get_listeners();
-    println!("Transport Intermittent [1a2]: {:?}", locators);
+    println!("Transport Intermittent [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
     /* [2] */
@@ -295,7 +295,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         let mut count = 0;
         while count < MSG_COUNT {
             if count == ticks[0] {
-                println!("\nScheduled {}", count);
+                println!("\nScheduled {count}");
                 ticks.remove(0);
             }
             let transports = c_router_manager.get_transports();
@@ -334,7 +334,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             if c == MSG_COUNT {
                 break;
             }
-            println!("Transport Intermittent [4b2]: Received {}/{}", c, MSG_COUNT);
+            println!("Transport Intermittent [4b2]: Received {c}/{MSG_COUNT}");
             task::sleep(SLEEP).await;
         }
     });

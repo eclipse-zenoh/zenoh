@@ -222,7 +222,7 @@ impl TransportManagerBuilder {
             use std::fmt::Write;
             let mut formatter = String::from("Some protocols reported configuration errors:\r\n");
             for (proto, err) in errors {
-                write!(&mut formatter, "\t{}: {}\r\n", proto, err)?;
+                write!(&mut formatter, "\t{proto}: {err}\r\n")?;
             }
             bail!("{}", formatter);
         }

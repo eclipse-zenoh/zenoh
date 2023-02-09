@@ -182,8 +182,7 @@ impl SharedMemoryAuthenticator {
         let mut prng = PseudoRng::from_entropy();
         let challenge = prng.gen::<ZInt>();
 
-        let mut _manager =
-            SharedMemoryManager::make(format!("{}.{}", SHM_NAME, challenge), SHM_SIZE)?;
+        let mut _manager = SharedMemoryManager::make(format!("{SHM_NAME}.{challenge}"), SHM_SIZE)?;
 
         let mut buffer = _manager.alloc(SHM_SIZE).unwrap();
         let slice = unsafe { buffer.as_mut_slice() };
@@ -204,7 +203,7 @@ impl SharedMemoryAuthenticator {
             let challenge = prng.gen::<ZInt>();
 
             let mut _manager =
-                SharedMemoryManager::make(format!("{}.{}", SHM_NAME, challenge), SHM_SIZE)?;
+                SharedMemoryManager::make(format!("{SHM_NAME}.{challenge}"), SHM_SIZE)?;
 
             let mut buffer = _manager.alloc(SHM_SIZE)?;
             let slice = unsafe { buffer.as_mut_slice() };
