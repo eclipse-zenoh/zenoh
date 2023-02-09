@@ -34,6 +34,7 @@ pub use zenoh_protocol::core::Reliability;
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) scope: Option<KeyExpr<'static>>,
     pub(crate) origin: Locality,
     pub(crate) callback: Callback<'static, Sample>,
 }
@@ -289,6 +290,7 @@ impl From<PushMode> for SubMode {
 pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
+    pub(crate) scope: ZResult<Option<KeyExpr<'b>>>,
     pub(crate) reliability: Reliability,
     pub(crate) mode: Mode,
     pub(crate) origin: Locality,
@@ -320,6 +322,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
         let SubscriberBuilder {
             session,
             key_expr,
+            scope,
             reliability,
             mode,
             origin,
@@ -328,6 +331,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
         SubscriberBuilder {
             session,
             key_expr,
+            scope,
             reliability,
             mode,
             origin,
@@ -393,6 +397,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
         let SubscriberBuilder {
             session,
             key_expr,
+            scope,
             reliability,
             mode,
             origin,
@@ -401,6 +406,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
         SubscriberBuilder {
             session,
             key_expr,
+            scope,
             reliability,
             mode,
             origin,
@@ -445,6 +451,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
         let SubscriberBuilder {
             session,
             key_expr,
+            scope,
             reliability,
             mode: _,
             origin,
@@ -453,6 +460,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
         SubscriberBuilder {
             session,
             key_expr,
+            scope,
             reliability,
             mode: PullMode,
             origin,
@@ -466,6 +474,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
         let SubscriberBuilder {
             session,
             key_expr,
+            scope,
             reliability,
             mode: _,
             origin,
@@ -474,11 +483,24 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
         SubscriberBuilder {
             session,
             key_expr,
+            scope,
             reliability,
             mode: PushMode,
             origin,
             handler,
         }
+    }
+
+    /// Change the scope of the Subscriber.
+    #[inline]
+    #[zenoh_core::unstable]
+    pub fn scope<TryIntoKeyExpr>(mut self, scope: TryIntoKeyExpr) -> Self
+    where
+        TryIntoKeyExpr: std::convert::TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as std::convert::TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+    {
+        self.scope = scope.try_into().map_err(Into::into).map(Some);
+        self
     }
 }
 
@@ -498,11 +520,13 @@ where
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
+        let scope = self.scope?;
         let session = self.session;
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
         session
             .declare_subscriber_inner(
                 &key_expr,
+                &scope,
                 self.origin,
                 callback,
                 &SubInfo {
@@ -549,11 +573,13 @@ where
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
+        let scope = self.scope?;
         let session = self.session;
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
         session
             .declare_subscriber_inner(
                 &key_expr,
+                &scope,
                 self.origin,
                 callback,
                 &SubInfo {
