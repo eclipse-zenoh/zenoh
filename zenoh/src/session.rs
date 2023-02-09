@@ -520,6 +520,7 @@ impl Session {
         SubscriberBuilder {
             session: SessionRef::Borrow(self),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
+            scope: Ok(None),
             reliability: Reliability::default(),
             mode: PushMode,
             origin: Locality::default(),
@@ -936,6 +937,7 @@ impl Session {
     pub(crate) fn declare_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
+        scope: &Option<KeyExpr>,
         origin: Locality,
         callback: Callback<'static, Sample>,
         info: &SubInfo,
@@ -943,9 +945,15 @@ impl Session {
         let mut state = zwrite!(self.state);
         log::trace!("subscribe({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let key_expr = match scope {
+            Some(scope) => scope / key_expr,
+            None => key_expr.clone(),
+        };
+
         let sub_state = Arc::new(SubscriberState {
             id,
             key_expr: key_expr.clone().into_owned(),
+            scope: scope.clone().map(|e| e.into_owned()),
             origin,
             callback,
         });
@@ -955,7 +963,7 @@ impl Session {
                 match state
                 .aggregated_subscribers // TODO: can this be an OwnedKeyExpr?
                 .iter()
-                .find(|s| s.includes( key_expr))
+                .find(|s| s.includes( &key_expr))
                 {
                     Some(join_sub) => {
                         let joined_sub = state.subscribers.values().any(|s| {
@@ -967,7 +975,7 @@ impl Session {
                         let twin_sub = state
                             .subscribers
                             .values()
-                            .any(|s| s.origin != Locality::SessionLocal && s.key_expr == *key_expr);
+                            .any(|s| s.origin != Locality::SessionLocal && s.key_expr == key_expr);
                         (!twin_sub).then(|| key_expr.clone())
                     }
                 }
@@ -1213,6 +1221,7 @@ impl Session {
             Err(zerror!("Unable to find queryable").into())
         }
     }
+
     pub(crate) fn handle_data(
         &self,
         local: bool,
@@ -1221,59 +1230,108 @@ impl Session {
         payload: ZBuf,
     ) {
         let mut callbacks = SingleOrVec::default();
-        let sample = {
-            let state = zread!(self.state);
-            let sample = if key_expr.suffix.is_empty() {
-                match state.get_res(&key_expr.scope, local) {
-                    Some(Resource::Node(res)) => {
-                        for sub in &res.subscribers {
-                            if sub.origin == Locality::Any
-                                || (local == (sub.origin == Locality::SessionLocal))
-                            {
-                                callbacks.push(sub.callback.clone());
-                            }
+        let state = zread!(self.state);
+        if key_expr.suffix.is_empty() {
+            match state.get_res(&key_expr.scope, local) {
+                Some(Resource::Node(res)) => {
+                    for sub in &res.subscribers {
+                        if sub.origin == Locality::Any
+                            || (local == (sub.origin == Locality::SessionLocal))
+                        {
+                            match &sub.scope {
+                                Some(scope) => {
+                                    if !res.key_expr.starts_with(&***scope) {
+                                        log::warn!(
+                                            "Received Data for `{}`, which didn't start with scope `{}`: don't deliver to scoped Subscriber.",
+                                            res.key_expr,
+                                            scope,
+                                        );
+                                    } else {
+                                        match KeyExpr::try_from(&res.key_expr[(scope.len() + 1)..])
+                                        {
+                                            Ok(key_expr) => callbacks.push((
+                                                sub.callback.clone(),
+                                                key_expr.into_owned(),
+                                            )),
+                                            Err(e) => {
+                                                log::warn!(
+                                                    "Error unscoping received Data for `{}`: {}",
+                                                    res.key_expr,
+                                                    e,
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                                None => callbacks
+                                    .push((sub.callback.clone(), res.key_expr.clone().into())),
+                            };
                         }
-                        Sample::with_info(res.key_expr.clone().into(), payload, info)
-                    }
-                    Some(Resource::Prefix { prefix }) => {
-                        log::error!(
-                            "Received Data for `{}`, which isn't a key expression",
-                            prefix
-                        );
-                        return;
-                    }
-                    None => {
-                        log::error!("Received Data for unknown expr_id: {}", key_expr.scope);
-                        return;
                     }
                 }
-            } else {
-                match state.wireexpr_to_keyexpr(key_expr, local) {
-                    Ok(key_expr) => {
-                        for sub in state.subscribers.values() {
-                            if (sub.origin == Locality::Any
-                                || (local == (sub.origin == Locality::SessionLocal)))
-                                && key_expr.intersects(&sub.key_expr)
-                            {
-                                callbacks.push(sub.callback.clone());
-                            }
+                Some(Resource::Prefix { prefix }) => {
+                    log::error!(
+                        "Received Data for `{}`, which isn't a key expression",
+                        prefix
+                    );
+                    return;
+                }
+                None => {
+                    log::error!("Received Data for unknown expr_id: {}", key_expr.scope);
+                    return;
+                }
+            }
+        } else {
+            match state.wireexpr_to_keyexpr(key_expr, local) {
+                Ok(key_expr) => {
+                    for sub in state.subscribers.values() {
+                        if (sub.origin == Locality::Any
+                            || (local == (sub.origin == Locality::SessionLocal)))
+                            && key_expr.intersects(&sub.key_expr)
+                        {
+                            match &sub.scope {
+                                Some(scope) => {
+                                    if !key_expr.starts_with(&***scope) {
+                                        log::warn!(
+                                            "Received Data for `{}`, which didn't start with scope `{}`: don't deliver to scoped Subscriber.",
+                                            key_expr,
+                                            scope,
+                                        );
+                                    } else {
+                                        match KeyExpr::try_from(&key_expr[(scope.len() + 1)..]) {
+                                            Ok(key_expr) => callbacks.push((
+                                                sub.callback.clone(),
+                                                key_expr.into_owned(),
+                                            )),
+                                            Err(e) => {
+                                                log::warn!(
+                                                    "Error unscoping received Data for `{}`: {}",
+                                                    key_expr,
+                                                    e,
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                                None => callbacks
+                                    .push((sub.callback.clone(), key_expr.clone().into_owned())),
+                            };
                         }
-                        Sample::with_info(key_expr.clone().into_owned(), payload, info)
-                    }
-                    Err(err) => {
-                        log::error!("Received Data for unkown key_expr: {}", err);
-                        return;
                     }
                 }
-            };
-            sample
+                Err(err) => {
+                    log::error!("Received Data for unkown key_expr: {}", err);
+                    return;
+                }
+            }
         };
+        drop(state);
         let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
-        for cb in drain {
-            cb(sample.clone());
+        for (cb, key_expr) in drain {
+            cb(Sample::with_info(key_expr, payload.clone(), info.clone()));
         }
-        if let Some(cb) = last {
-            cb(sample);
+        if let Some((cb, key_expr)) = last {
+            cb(Sample::with_info(key_expr, payload, info));
         }
     }
 
@@ -1547,6 +1605,7 @@ impl SessionDeclarations for Arc<Session> {
         SubscriberBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
+            scope: Ok(None),
             reliability: Reliability::default(),
             mode: PushMode,
             origin: Locality::default(),
