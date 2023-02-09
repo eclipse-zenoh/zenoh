@@ -27,6 +27,7 @@ readme = "README.md"
 
 [features]
 shared-memory = ["zenoh/shared-memory"]
+unstable = ["zenoh/unstable"]
 
 [dependencies]
 async-std = { workspace = true, features = ["attributes"] }
