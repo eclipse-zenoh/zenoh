@@ -14,6 +14,7 @@
 use async_std::task::sleep;
 use clap::{App, Arg};
 use futures::prelude::*;
+use futures::select;
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
@@ -29,30 +30,38 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Declaring LivelinessToken on '{}'...", &key_expr);
-    let mut token = Some(session.declare_liveliness(&key_expr).res().await.unwrap());
+    println!("Declaring Liveliness Subscriber on '{}'...", &key_expr);
 
-    println!("Enter 'd' to undeclare LivelinessToken, 'q' to quit...");
+    let subscriber = session
+        .declare_liveliness_subscriber(&key_expr)
+        .res()
+        .await
+        .unwrap();
+
+    println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
     let mut input = [0_u8];
     loop {
-        let _ = stdin.read_exact(&mut input).await;
-        match input[0] {
-            b'q' => break,
-            b'd' => {
-                if let Some(token) = token.take() {
-                    println!("Undeclaring LivelinessToken...");
-                    token.undeclare().res().await.unwrap();
+        select!(
+            sample = subscriber.recv_async() => {
+                let sample = sample.unwrap();
+                println!(">> [Subscriber] Received {} ('{}')",
+                    sample.kind, sample.key_expr.as_str());
+            },
+
+            _ = stdin.read_exact(&mut input).fuse() => {
+                match input[0] {
+                    b'q' => break,
+                    0 => sleep(Duration::from_secs(1)).await,
+                    _ => (),
                 }
             }
-            0 => sleep(Duration::from_secs(1)).await,
-            _ => (),
-        }
+        );
     }
 }
 
 fn parse_args() -> (Config, KeyExpr<'static>) {
-    let args = App::new("zenoh liveliness example")
+    let args = App::new("zenoh liveliness sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
                 .possible_values(["peer", "client"]),
@@ -64,8 +73,8 @@ fn parse_args() -> (Config, KeyExpr<'static>) {
             "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression of the liveliness token.'")
-                .default_value("group1/member1"),
+            Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression mathing liveliness changes to subscribe to.'")
+                .default_value("group1/**"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",

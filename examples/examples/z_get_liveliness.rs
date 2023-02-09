@@ -11,9 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::{App, Arg};
-use futures::prelude::*;
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
@@ -21,38 +19,31 @@ use zenoh::prelude::r#async::*;
 
 #[async_std::main]
 async fn main() {
-    // Initiate logging
+    // initiate logging
     env_logger::init();
 
-    let (config, key_expr) = parse_args();
+    let (config, key_expr, timeout) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Declaring LivelinessToken on '{}'...", &key_expr);
-    let mut token = Some(session.declare_liveliness(&key_expr).res().await.unwrap());
-
-    println!("Enter 'd' to undeclare LivelinessToken, 'q' to quit...");
-    let mut stdin = async_std::io::stdin();
-    let mut input = [0_u8];
-    loop {
-        let _ = stdin.read_exact(&mut input).await;
-        match input[0] {
-            b'q' => break,
-            b'd' => {
-                if let Some(token) = token.take() {
-                    println!("Undeclaring LivelinessToken...");
-                    token.undeclare().res().await.unwrap();
-                }
-            }
-            0 => sleep(Duration::from_secs(1)).await,
-            _ => (),
+    println!("Sending Liveliness Query '{key_expr}'...");
+    let replies = session
+        .get_liveliness(&key_expr)
+        .timeout(timeout)
+        .res()
+        .await
+        .unwrap();
+    while let Ok(reply) = replies.recv_async().await {
+        match reply.sample {
+            Ok(sample) => println!(">> Received ('{}')", sample.key_expr.as_str(),),
+            Err(err) => println!(">> Received (ERROR: '{}')", String::try_from(&err).unwrap()),
         }
     }
 }
 
-fn parse_args() -> (Config, KeyExpr<'static>) {
-    let args = App::new("zenoh liveliness example")
+fn parse_args() -> (Config, String, Duration) {
+    let args = App::new("zenoh liveliness query example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
                 .possible_values(["peer", "client"]),
@@ -64,8 +55,12 @@ fn parse_args() -> (Config, KeyExpr<'static>) {
             "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression of the liveliness token.'")
-                .default_value("group1/member1"),
+            Arg::from_usage("-k, --key_expr=[KEYEXPR] 'The key expression matching liveliness tokens to query.'")
+                .default_value("group1/**"),
+        )
+        .arg(
+            Arg::from_usage("-o, --timeout=[TIME] 'The query timeout in milliseconds'")
+                .default_value("10000"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
@@ -99,9 +94,9 @@ fn parse_args() -> (Config, KeyExpr<'static>) {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
-    let key_expr = KeyExpr::try_from(args.value_of("key").unwrap())
-        .unwrap()
-        .into_owned();
+    let key_expr = args.value_of("key_expr").unwrap().to_string();
 
-    (config, key_expr)
+    let timeout = Duration::from_millis(args.value_of("timeout").unwrap().parse::<u64>().unwrap());
+
+    (config, key_expr, timeout)
 }

@@ -19,7 +19,7 @@ use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
 use crate::key_expr::KeyExprInner;
 #[zenoh_core::unstable]
-use crate::liveliness::{LivelinessTokenBuilder, LivelinessTokenState};
+use crate::liveliness::{LivelinessTokenBuilder, LivelinessTokenState, KE_PREFIX_LIVELINESS};
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
@@ -699,6 +699,47 @@ impl Session {
         }
     }
 
+    /// Create a [`Subscriber`](Subscriber) for liveliness changes matching the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression to subscribe to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session.declare_liveliness_subscriber("key/expression").res().await.unwrap();
+    /// while let Ok(sample) = subscriber.recv_async().await {
+    ///     match sample.kind {
+    ///         SampleKind::Put => println!("New liveliness: {}", sample.key_expr),
+    ///         SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr),
+    ///     }
+    /// }
+    /// # })
+    /// ```
+    #[zenoh_core::unstable]
+    pub fn declare_liveliness_subscriber<'a, 'b, TryIntoKeyExpr>(
+        &'a self,
+        key_expr: TryIntoKeyExpr,
+    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+    {
+        SubscriberBuilder {
+            session: SessionRef::Borrow(self),
+            key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
+            scope: Ok(Some(KeyExpr::from(*KE_PREFIX_LIVELINESS))),
+            reliability: Reliability::default(),
+            mode: PushMode,
+            origin: Locality::default(),
+            handler: DefaultHandler,
+        }
+    }
+
     /// Put data.
     ///
     /// # Arguments
@@ -803,6 +844,50 @@ impl Session {
             session: self,
             selector,
             scope: Ok(None),
+            target: QueryTarget::default(),
+            consolidation: QueryConsolidation::default(),
+            destination: Locality::default(),
+            timeout: Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout())),
+            value: None,
+            handler: DefaultHandler,
+        }
+    }
+
+    /// Query liveliness tokens with matching key expressions.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching liveliness tokens to query
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let replies = session.get_liveliness("key/expression").res().await.unwrap();
+    /// while let Ok(reply) = replies.recv_async().await {
+    ///     if let Ok(sample) = reply.sample {
+    ///         println!(">> Liveliness token {}", sample.key_expr);
+    ///     }
+    /// }
+    /// # })
+    /// ```
+    #[zenoh_core::unstable]
+    pub fn get_liveliness<'a, 'b: 'a, TryIntoKeyExpr>(
+        &'a self,
+        key_expr: TryIntoKeyExpr,
+    ) -> GetBuilder<'a, 'b, DefaultHandler>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+    {
+        let selector = key_expr.try_into().map_err(Into::into).map(|k| k.into());
+        let conf = self.runtime.config.lock();
+        GetBuilder {
+            session: self,
+            selector,
+            scope: Ok(Some(KeyExpr::from(*KE_PREFIX_LIVELINESS))),
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
             destination: Locality::default(),
@@ -1822,6 +1907,47 @@ impl SessionDeclarations for Arc<Session> {
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
         }
     }
+
+    /// Create a [`Subscriber`](Subscriber) for liveliness changes matching the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression to subscribe to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();;
+    /// let subscriber = session.declare_liveliness_subscriber("key/expression").res().await.unwrap();
+    /// while let Ok(sample) = subscriber.recv_async().await {
+    ///     match sample.kind {
+    ///         SampleKind::Put => println!("New liveliness: {}", sample.key_expr),
+    ///         SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr),
+    ///     }
+    /// }
+    /// # })
+    /// ```
+    #[zenoh_core::unstable]
+    fn declare_liveliness_subscriber<'a, 'b, TryIntoKeyExpr>(
+        &'a self,
+        key_expr: TryIntoKeyExpr,
+    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+    {
+        SubscriberBuilder {
+            session: SessionRef::Shared(self.clone()),
+            key_expr: key_expr.try_into().map_err(Into::into),
+            scope: Ok(Some(KeyExpr::from(*KE_PREFIX_LIVELINESS))),
+            reliability: Reliability::default(),
+            mode: PushMode,
+            origin: Locality::default(),
+            handler: DefaultHandler,
+        }
+    }
 }
 
 impl Primitives for Session {
@@ -2317,4 +2443,34 @@ pub trait SessionDeclarations {
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_result::Error>;
+
+    /// Create a [`Subscriber`](Subscriber) for liveliness changes matching the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression to subscribe to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let subscriber = session.declare_liveliness_subscriber("key/expression").res().await.unwrap();
+    /// while let Ok(sample) = subscriber.recv_async().await {
+    ///     match sample.kind {
+    ///         SampleKind::Put => println!("New liveliness: {}", sample.key_expr),
+    ///         SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr),
+    ///     }
+    /// }
+    /// # })
+    /// ```
+    #[zenoh_core::unstable]
+    fn declare_liveliness_subscriber<'a, 'b, TryIntoKeyExpr>(
+        &'a self,
+        key_expr: TryIntoKeyExpr,
+    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
 }
