@@ -39,7 +39,7 @@ async fn main() {
 
     for idx in 0..u32::MAX {
         sleep(Duration::from_secs(1)).await;
-        let buf = format!("[{:4}] {}", idx, value);
+        let buf = format!("[{idx:4}] {value}");
         println!("Put Data ('{}': '{}')", &key_expr, buf);
         session.put(&key_expr, buf).res().await.unwrap();
     }

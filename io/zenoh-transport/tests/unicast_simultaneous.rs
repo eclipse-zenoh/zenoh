@@ -21,12 +21,13 @@ mod tests {
     use std::sync::Arc;
     use std::time::Duration;
     use zenoh_buffers::ZBuf;
-    use zenoh_core::{zasync_executor_init, Result as ZResult};
+    use zenoh_core::zasync_executor_init;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
         zenoh::ZenohMessage,
     };
+    use zenoh_result::ZResult;
     use zenoh_transport::{
         TransportEventHandler, TransportManager, TransportMulticast,
         TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -165,27 +166,21 @@ mod tests {
         // Add the endpoints on the peer01
         for e in endpoint01.iter() {
             let res = ztimeout!(peer01_manager.add_listener(e.clone()));
-            println!("[Simultaneous 01a] => Adding endpoint {:?}: {:?}", e, res);
+            println!("[Simultaneous 01a] => Adding endpoint {e:?}: {res:?}");
             assert!(res.is_ok());
         }
         let locs = peer01_manager.get_listeners();
-        println!(
-            "[Simultaneous 01b] => Getting endpoints: {:?} {:?}",
-            endpoint01, locs
-        );
+        println!("[Simultaneous 01b] => Getting endpoints: {endpoint01:?} {locs:?}");
         assert_eq!(endpoint01.len(), locs.len());
 
         // Add the endpoints on peer02
         for e in endpoint02.iter() {
             let res = ztimeout!(peer02_manager.add_listener(e.clone()));
-            println!("[Simultaneous 02a] => Adding endpoint {:?}: {:?}", e, res);
+            println!("[Simultaneous 02a] => Adding endpoint {e:?}: {res:?}");
             assert!(res.is_ok());
         }
         let locs = peer02_manager.get_listeners();
-        println!(
-            "[Simultaneous 02b] => Getting endpoints: {:?} {:?}",
-            endpoint02, locs
-        );
+        println!("[Simultaneous 02b] => Getting endpoints: {endpoint02:?} {locs:?}");
         assert_eq!(endpoint02.len(), locs.len());
 
         // Endpoints
@@ -198,13 +193,13 @@ mod tests {
             // Open the transport with the second peer
             // These open should succeed
             for e in c_ep02.iter() {
-                println!("[Simultaneous 01c] => Opening transport with {:?}...", e);
+                println!("[Simultaneous 01c] => Opening transport with {e:?}...");
                 let _ = ztimeout!(c_p01m.open_transport(e.clone())).unwrap();
             }
 
             // These open should fails
             for e in c_ep02.iter() {
-                println!("[Simultaneous 01d] => Exceeding transport with {:?}...", e);
+                println!("[Simultaneous 01d] => Exceeding transport with {e:?}...");
                 let res = ztimeout!(c_p01m.open_transport(e.clone()));
                 assert!(res.is_err());
             }
@@ -242,7 +237,7 @@ mod tests {
                 while check != MSG_COUNT {
                     task::sleep(SLEEP).await;
                     check = peer_sh01.get_count();
-                    println!("[Simultaneous 01g] => Received {:?}/{:?}", check, MSG_COUNT);
+                    println!("[Simultaneous 01g] => Received {check:?}/{MSG_COUNT:?}");
                 }
             });
         });
@@ -253,13 +248,13 @@ mod tests {
             // Open the transport with the first peer
             // These open should succeed
             for e in c_ep01.iter() {
-                println!("[Simultaneous 02c] => Opening transport with {:?}...", e);
+                println!("[Simultaneous 02c] => Opening transport with {e:?}...");
                 let _ = ztimeout!(c_p02m.open_transport(e.clone())).unwrap();
             }
 
             // These open should fails
             for e in c_ep01.iter() {
-                println!("[Simultaneous 02d] => Exceeding transport with {:?}...", e);
+                println!("[Simultaneous 02d] => Exceeding transport with {e:?}...");
                 let res = ztimeout!(c_p02m.open_transport(e.clone()));
                 assert!(res.is_err());
             }
@@ -297,7 +292,7 @@ mod tests {
                 while check != MSG_COUNT {
                     task::sleep(SLEEP).await;
                     check = peer_sh02.get_count();
-                    println!("[Simultaneous 02g] => Received {:?}/{:?}", check, MSG_COUNT);
+                    println!("[Simultaneous 02g] => Received {check:?}/{MSG_COUNT:?}");
                 }
             });
         });

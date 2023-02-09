@@ -20,7 +20,7 @@ use std::{
     str::FromStr,
     time::{Duration, SystemTime},
 };
-use zenoh_core::{bail, zerror, zresult::ZError};
+use zenoh_result::{bail, zerror, ZError};
 
 const U_TO_SECS: f64 = 0.000001;
 const MS_TO_SECS: f64 = 0.001;
@@ -110,13 +110,13 @@ impl TryFrom<TimeRange<TimeExpr>> for TimeRange<SystemTime> {
 impl Display for TimeRange<TimeExpr> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.0 {
-            TimeBound::Inclusive(t) => write!(f, "[{}..", t)?,
-            TimeBound::Exclusive(t) => write!(f, "]{}..", t)?,
+            TimeBound::Inclusive(t) => write!(f, "[{t}..")?,
+            TimeBound::Exclusive(t) => write!(f, "]{t}..")?,
             TimeBound::Unbounded => f.write_str("[..")?,
         }
         match &self.1 {
-            TimeBound::Inclusive(t) => write!(f, "{}]", t),
-            TimeBound::Exclusive(t) => write!(f, "{}[", t),
+            TimeBound::Inclusive(t) => write!(f, "{t}]"),
+            TimeBound::Exclusive(t) => write!(f, "{t}["),
             TimeBound::Unbounded => f.write_str("]"),
         }
     }
@@ -262,7 +262,7 @@ impl Display for TimeExpr {
                 if *offset_secs == 0.0 {
                     f.write_str("now()")
                 } else {
-                    write!(f, "now({}s)", offset_secs)
+                    write!(f, "now({offset_secs}s)")
                 }
             }
         }

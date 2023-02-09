@@ -21,7 +21,7 @@
 pub mod loading;
 pub mod vtable;
 
-use zenoh_core::Result as ZResult;
+use zenoh_result::ZResult;
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq, Clone)]

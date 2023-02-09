@@ -23,6 +23,7 @@ members = [
   "commons/zenoh-crypto",
   "commons/zenoh-macros",
   "commons/zenoh-protocol",
+  "commons/zenoh-result",
   "commons/zenoh-shm",
   "commons/zenoh-sync",
   "commons/zenoh-util",
@@ -53,24 +54,26 @@ version = "0.7.0-rc" # Zenoh version
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Julien Enoch <julien@enoch.fr>",
-    "Olivier Hécart <olivier.hecart@zettascale.tech>",
-    "Luca Cominardi <luca.cominardi@zettascale.tech>",
-    "Pierre Avital <pierre.avital@zettascale.tech>",
+  "kydos <angelo@icorsaro.net>",
+  "Julien Enoch <julien@enoch.fr>",
+  "Olivier Hécart <olivier.hecart@zettascale.tech>",
+  "Luca Cominardi <luca.cominardi@zettascale.tech>",
+  "Pierre Avital <pierre.avital@zettascale.tech>",
 ]
 edition = "2018"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
 description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
 
+# DEFAULT-FEATURES NOTE: Be careful with default-features and additivity!
+#                        (https://github.com/rust-lang/cargo/issues/11329)
 [workspace.dependencies]
 aes = "0.8.2"
-anyhow = "1.0.66"
+anyhow = { version = "1.0.66", default-features = false } # Default features are disabled due to usage in no_std crates
 async-executor = "1.5.0"
 async-global-executor = "2.3.1"
 async-rustls = "0.3.0"
-async-std = "=1.12.0"
+async-std = { version = "=1.12.0", default-features = false } # Default features are disabled due to some crates' requirements
 async-trait = "0.1.60"
 base64 = "0.21.0"
 bincode = "1.3.3"
@@ -86,14 +89,16 @@ event-listener = "2.5.3"
 flume = "0.10.14"
 form_urlencoded = "1.1.0"
 futures = "0.3.25"
-futures-util = "0.3.25"
+futures-util = { version = "0.3.25", default-features = false } # Default features are disabled due to some crates' requirements
 git-version = "0.3.5"
-hex = "0.4.3"
+hashbrown = "0.13.2"
+hex = { version = "0.4.3", default-features = false } # Default features are disabled due to usage in no_std crates
 hmac = { version = "0.12.1", features = ["std"] }
 home = "0.5.4"
 http-types = "2.12.0"
 humantime = "2.1.0"
 json5 = "0.4.1"
+keyed-set = "0.4.4"
 lazy_static = "1.4.0"
 libc = "0.2.138"
 libloading = "0.7.4"
@@ -107,9 +112,9 @@ petgraph = "0.6.2"
 pnet = "0.31.0"
 pnet_datalink = "0.31.0"
 proc-macro2 = "1.0.47"
-quinn = "0.9.3" 
+quinn = "0.9.3"
 quote = "1.0.21"
-rand = "0.8.5"
+rand = { version = "0.8.5", default-features = false } # Default features are disabled due to usage in no_std crates
 rand_chacha = "0.3.1"
 rcgen = "0.10.0"
 regex = "1.7.0"
@@ -119,7 +124,9 @@ rustc_version = "0.4.0"
 rustls = "0.20.6"
 rustls-native-certs = "0.6.2"
 rustls-pemfile = "1.0.1"
-serde = { version = "1.0.152", features = ["derive"] }
+serde = { version = "1.0.152", default-features = false, features = [
+  "derive",
+] } # Default features are disabled due to usage in no_std crates
 serde_json = "1.0.89"
 serde_yaml = "0.9.14"
 sha3 = "0.10.6"
@@ -129,14 +136,17 @@ socket2 = "0.4.7"
 stop-token = "0.7.0"
 syn = "1.0.105"
 tide = "0.16.0"
-tokio = "1.23.1"
+token-cell = "1.4.2"
+tokio = { version = "1.23.1", default-features = false } # Default features are disabled due to some crates' requirements
 tokio-tungstenite = "0.18.0"
 typenum = "1.15.0"
-uhlc = { git = "https://github.com/atolab/uhlc-rs.git" } # TODO: Using github source until the no_std update gets released on crates.io
+uhlc = { version = "0.5.2", default-features = false } # Default features are disabled due to usage in no_std crates
 unzip-n = "0.1.2"
 url = "2.3.1"
 urlencoding = "2.1.2"
-uuid = { version = "1.2.2", features = ["v4"] }
+uuid = { version = "1.2.2", default-features = false, features = [
+  "v4",
+] } # Default features are disabled due to usage in no_std crates
 validated_struct = "2.1.0"
 vec_map = "0.8.2"
 webpki = "0.22.0"

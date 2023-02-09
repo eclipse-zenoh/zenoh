@@ -21,8 +21,9 @@ use crate::Encoding;
 use crate::SessionRef;
 use crate::Undeclarable;
 use std::future::Ready;
-use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, Result as ZResult, SyncResolve};
+use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::{core::Channel, zenoh::DataInfo};
+use zenoh_result::ZResult;
 
 /// The kind of congestion control.
 pub use zenoh_protocol::core::CongestionControl;
@@ -183,7 +184,7 @@ use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use zenoh_core::zresult::Error;
+use zenoh_result::Error;
 
 /// A publisher that allows to send data through a stream.
 ///
@@ -644,7 +645,7 @@ impl Default for Priority {
 }
 
 impl TryFrom<u8> for Priority {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
 
     /// A Priority is identified by a numeric value.
     /// Lower the value, higher the priority.

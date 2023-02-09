@@ -27,12 +27,13 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_codec::{RCodec, Zenoh060};
-use zenoh_core::{bail, zerror, zlock, Result as ZResult};
+use zenoh_core::zlock;
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId},
     transport::TransportMessage,
 };
+use zenoh_result::{bail, zerror, ZResult};
 use zenoh_sync::RecyclingObjectPool;
 use zenoh_sync::Signal;
 
@@ -223,7 +224,7 @@ async fn tx_task(
     }
 
     let keep_alive = config.join_interval / config.keep_alive as u32;
-    let mut last_join = Instant::now() - config.join_interval;
+    let mut last_join = Instant::now().checked_sub(config.join_interval).unwrap();
     loop {
         match pull(&mut pipeline, keep_alive)
             .race(join(last_join, config.join_interval))

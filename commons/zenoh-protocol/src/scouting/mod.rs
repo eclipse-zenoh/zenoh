@@ -18,6 +18,7 @@ use crate::{
     common::Attachment,
     core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId},
 };
+use alloc::vec::Vec;
 pub use hello::*;
 pub use scout::*;
 

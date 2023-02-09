@@ -108,14 +108,14 @@ mod tests {
         let ch = task::spawn(async move {
             for _ in 0..count {
                 let n = c_mvar.take().await;
-                print!("-{} ", n);
+                print!("-{n} ");
             }
         });
 
         let ph = task::spawn(async move {
             for i in 0..count {
                 mvar.put(i).await;
-                print!("+{} ", i);
+                print!("+{i} ");
             }
         });
 

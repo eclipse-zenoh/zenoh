@@ -14,8 +14,8 @@
 
 //! [Selector](https://github.com/eclipse-zenoh/roadmap/tree/main/rfcs/ALL/Selectors) to issue queries
 
-use zenoh_core::Result as ZResult;
 use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
+use zenoh_result::ZResult;
 pub use zenoh_util::time_range::{TimeBound, TimeExpr, TimeRange};
 
 use crate::{prelude::KeyExpr, queryable::Query};
@@ -160,7 +160,7 @@ impl<'a> Selector<'a> {
             selector.push('&')
         }
         use std::fmt::Write;
-        write!(selector, "{}={}", TIME_RANGE_KEY, time_range).unwrap(); // This unwrap is safe because `String: Write` should be infallibe.
+        write!(selector, "{TIME_RANGE_KEY}={time_range}").unwrap(); // This unwrap is safe because `String: Write` should be infallibe.
     }
 
     pub fn remove_time_range(&mut self) {
@@ -437,7 +437,7 @@ impl<'a, K: Borrow<str> + Hash + Eq + 'a, V: Borrow<str> + 'a> Parameters<'a> fo
 
 impl std::fmt::Debug for Selector<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(f, "sel\"{}\"", self)
+        write!(f, "sel\"{self}\"")
     }
 }
 
@@ -458,7 +458,7 @@ impl<'a> From<&Selector<'a>> for Selector<'a> {
 }
 
 impl TryFrom<String> for Selector<'_> {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_from(mut s: String) -> Result<Self, Self::Error> {
         match s.find('?') {
             Some(qmark_position) => {
@@ -472,7 +472,7 @@ impl TryFrom<String> for Selector<'_> {
 }
 
 impl<'a> TryFrom<&'a str> for Selector<'a> {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
         match s.find('?') {
             Some(qmark_position) => {
@@ -485,7 +485,7 @@ impl<'a> TryFrom<&'a str> for Selector<'a> {
 }
 
 impl<'a> TryFrom<&'a String> for Selector<'a> {
-    type Error = zenoh_core::Error;
+    type Error = zenoh_result::Error;
     fn try_from(s: &'a String) -> Result<Self, Self::Error> {
         Self::try_from(s.as_str())
     }

@@ -11,15 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh_core::{zerror, Result as ZResult};
+use zenoh_result::{zerror, ZResult};
 
 #[test]
 fn error_simple() {
     let err: ZResult<()> = Err(zerror!("TEST").into());
     if let Err(e) = err {
         let s = e.to_string();
-        println!("{}", e);
-        println!("{:?}", e);
+        println!("{e}");
+        println!("{e:?}");
         assert!(s.contains("TEST"));
         assert!(s.contains(file!()));
     // assert!(e.source().is_none());
@@ -34,8 +34,8 @@ fn error_with_source() {
     if let Err(e) = err1 {
         let e = zerror!(e => "ERR2");
         let s = e.to_string();
-        println!("{}", e);
-        println!("{:?}", e);
+        println!("{e}");
+        println!("{e:?}");
 
         assert!(s.contains(file!()));
         // assert!(e.source().is_some());
@@ -48,8 +48,8 @@ fn error_with_source() {
     let ioerr = std::io::Error::new(std::io::ErrorKind::Other, "IOERR");
     let e = zerror!( ioerr =>"ERR2");
     let s = e.to_string();
-    println!("{}", e);
-    println!("{:?}", e);
+    println!("{e}");
+    println!("{e:?}");
 
     assert!(s.contains(file!()));
     // assert!(e.source().is_some());

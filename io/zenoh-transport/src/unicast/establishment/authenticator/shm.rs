@@ -28,9 +28,9 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh060};
 use zenoh_config::Config;
-use zenoh_core::{bail, zerror, zresult::ShmError, Result as ZResult};
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::core::{ZInt, ZenohId};
+use zenoh_result::{bail, zerror, ShmError, ZResult};
 use zenoh_shm::{
     SharedMemoryBuf, SharedMemoryBufInfoSerialized, SharedMemoryManager, SharedMemoryReader,
 };
@@ -182,8 +182,7 @@ impl SharedMemoryAuthenticator {
         let mut prng = PseudoRng::from_entropy();
         let challenge = prng.gen::<ZInt>();
 
-        let mut _manager =
-            SharedMemoryManager::make(format!("{}.{}", SHM_NAME, challenge), SHM_SIZE)?;
+        let mut _manager = SharedMemoryManager::make(format!("{SHM_NAME}.{challenge}"), SHM_SIZE)?;
 
         let mut buffer = _manager.alloc(SHM_SIZE).unwrap();
         let slice = unsafe { buffer.as_mut_slice() };
@@ -204,7 +203,7 @@ impl SharedMemoryAuthenticator {
             let challenge = prng.gen::<ZInt>();
 
             let mut _manager =
-                SharedMemoryManager::make(format!("{}.{}", SHM_NAME, challenge), SHM_SIZE)?;
+                SharedMemoryManager::make(format!("{SHM_NAME}.{challenge}"), SHM_SIZE)?;
 
             let mut buffer = _manager.alloc(SHM_SIZE)?;
             let slice = unsafe { buffer.as_mut_slice() };

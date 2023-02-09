@@ -17,12 +17,13 @@ use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
 #[cfg(feature = "auth_usrpwd")]
 use std::collections::HashMap;
 use std::{any::Any, collections::HashSet, iter::FromIterator, sync::Arc, time::Duration};
-use zenoh_core::{zasync_executor_init, Result as ZResult};
+use zenoh_core::zasync_executor_init;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{EndPoint, WhatAmI, ZenohId},
     zenoh::ZenohMessage,
 };
+use zenoh_result::ZResult;
 #[cfg(feature = "auth_pubkey")]
 use zenoh_transport::unicast::establishment::authenticator::PubKeyAuthenticator;
 #[cfg(feature = "shared-memory")]
@@ -334,7 +335,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
     println!("Transport Authenticator PubKey [1a2]");
     let locators = router_manager.get_listeners();
-    println!("Transport Authenticator PubKey [1a2]: {:?}", locators);
+    println!("Transport Authenticator PubKey [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
     /* [2a] */
@@ -357,7 +358,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // -> This should be rejected
     println!("Transport Authenticator PubKey [2c1]");
     let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator PubKey [2c2]: {:?}", res);
+    println!("Transport Authenticator PubKey [2c2]: {res:?}");
     assert!(res.is_err());
     assert_eq!(c_ses1.get_links().unwrap().len(), 2);
 
@@ -392,7 +393,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // -> This should be rejected
     println!("Transport Authenticator PubKey [3c1]");
     let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator PubKey [3c2]: {:?}", res);
+    println!("Transport Authenticator PubKey [3c2]: {res:?}");
     assert!(res.is_err());
     assert_eq!(c_ses2.get_links().unwrap().len(), 2);
 
@@ -400,7 +401,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // Close the session
     println!("Transport Authenticator PubKey [3d1]");
     let res = ztimeout!(c_ses2.close());
-    println!("Transport Authenticator PubKey [3d2]: {:?}", res);
+    println!("Transport Authenticator PubKey [3d2]: {res:?}");
     assert!(res.is_ok());
 
     ztimeout!(async {
@@ -414,7 +415,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // -> This should be accepted
     println!("Transport Authenticator PubKey [4a1]");
     let res = ztimeout!(client01_spoof_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator PubKey [4a2]: {:?}", res);
+    println!("Transport Authenticator PubKey [4a2]: {res:?}");
     assert!(res.is_ok());
     let c_ses1_spoof = res.unwrap();
     assert_eq!(c_ses1_spoof.get_links().unwrap().len(), 1);
@@ -424,7 +425,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // -> This should be accepted
     println!("Transport Authenticator PubKey [4b1]");
     let res = ztimeout!(client01_spoof_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator PubKey [4b2]: {:?}", res);
+    println!("Transport Authenticator PubKey [4b2]: {res:?}");
     assert!(res.is_ok());
     assert_eq!(c_ses1_spoof.get_links().unwrap().len(), 2);
 
@@ -433,7 +434,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // -> This should be rejected
     println!("Transport Authenticator PubKey [41]");
     let res = ztimeout!(client01_spoof_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator PubKey [4c2]: {:?}", res);
+    println!("Transport Authenticator PubKey [4c2]: {res:?}");
     assert!(res.is_err());
     assert_eq!(c_ses1_spoof.get_links().unwrap().len(), 2);
 
@@ -441,7 +442,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // Close the session
     println!("Transport Authenticator PubKey [4d1]");
     let res = ztimeout!(c_ses1_spoof.close());
-    println!("Transport Authenticator PubKey [4d2]: {:?}", res);
+    println!("Transport Authenticator PubKey [4d2]: {res:?}");
     assert!(res.is_ok());
 
     ztimeout!(async {
@@ -455,7 +456,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // -> This should be accepted
     println!("Transport Authenticator PubKey [5a1]");
     let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator PubKey [5a2]: {:?}", res);
+    println!("Transport Authenticator PubKey [5a2]: {res:?}");
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
     assert_eq!(c_ses1.get_links().unwrap().len(), 1);
@@ -465,7 +466,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // -> This should be rejected. Spoofing detected.
     println!("Transport Authenticator PubKey [5b1]");
     let res = ztimeout!(client01_spoof_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator PubKey [5b2]: {:?}", res);
+    println!("Transport Authenticator PubKey [5b2]: {res:?}");
     assert!(res.is_err());
 
     /* [5c] */
@@ -473,7 +474,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // -> This should be accepted
     println!("Transport Authenticator PubKey [5a1]");
     let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator PubKey [5a2]: {:?}", res);
+    println!("Transport Authenticator PubKey [5a2]: {res:?}");
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
     assert_eq!(c_ses1.get_links().unwrap().len(), 2);
@@ -482,7 +483,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // Close the session
     println!("Transport Authenticator PubKey [5d1]");
     let res = ztimeout!(c_ses1.close());
-    println!("Transport Authenticator PubKey [5d2]: {:?}", res);
+    println!("Transport Authenticator PubKey [5d2]: {res:?}");
     assert!(res.is_ok());
 
     ztimeout!(async {
@@ -495,7 +496,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
     // Perform clean up of the open locators
     println!("Transport Authenticator UserPassword [6a1]");
     let res = ztimeout!(router_manager.del_listener(endpoint));
-    println!("Transport Authenticator UserPassword [6a2]: {:?}", res);
+    println!("Transport Authenticator UserPassword [6a2]: {res:?}");
     assert!(res.is_ok());
 
     ztimeout!(async {
@@ -597,11 +598,11 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     println!("\nTransport Authenticator UserPassword [1a1]");
     // Add the locator on the router
     let res = ztimeout!(router_manager.add_listener(endpoint.clone()));
-    println!("Transport Authenticator UserPassword [1a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [1a1]: {res:?}");
     assert!(res.is_ok());
     println!("Transport Authenticator UserPassword [1a2]");
     let locators = router_manager.get_listeners();
-    println!("Transport Authenticator UserPassword [1a2]: {:?}", locators);
+    println!("Transport Authenticator UserPassword [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
     /* [2] */
@@ -609,14 +610,14 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     // -> This should be accepted
     println!("Transport Authenticator UserPassword [2a1]");
     let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator UserPassword [2a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [2a1]: {res:?}");
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
 
     /* [3] */
     println!("Transport Authenticator UserPassword [3a1]");
     let res = ztimeout!(c_ses1.close());
-    println!("Transport Authenticator UserPassword [3a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [3a1]: {res:?}");
     assert!(res.is_ok());
 
     ztimeout!(async {
@@ -630,7 +631,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     // -> This should be rejected
     println!("Transport Authenticator UserPassword [4a1]");
     let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator UserPassword [4a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [4a1]: {res:?}");
     assert!(res.is_err());
 
     /* [5] */
@@ -638,7 +639,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     // -> This should be accepted
     println!("Transport Authenticator UserPassword [5a1]");
     let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator UserPassword [5a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [5a1]: {res:?}");
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
 
@@ -650,7 +651,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     // -> This should be accepted
     println!("Transport Authenticator UserPassword [6a1]");
     let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator UserPassword [6a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [6a1]: {res:?}");
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
 
@@ -659,17 +660,17 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     // -> This should be rejected
     println!("Transport Authenticator UserPassword [7a1]");
     let res = ztimeout!(client03_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator UserPassword [7a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [7a1]: {res:?}");
     assert!(res.is_err());
 
     /* [8] */
     println!("Transport Authenticator UserPassword [8a1]");
     let res = ztimeout!(c_ses1.close());
-    println!("Transport Authenticator UserPassword [8a1]: {:?}", res);
+    println!("Transport Authenticator UserPassword [8a1]: {res:?}");
     assert!(res.is_ok());
     println!("Transport Authenticator UserPassword [8a2]");
     let res = ztimeout!(c_ses2.close());
-    println!("Transport Authenticator UserPassword [8a2]: {:?}", res);
+    println!("Transport Authenticator UserPassword [8a2]: {res:?}");
     assert!(res.is_ok());
 
     ztimeout!(async {
@@ -682,7 +683,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
     // Perform clean up of the open locators
     println!("Transport Authenticator UserPassword [9a1]");
     let res = ztimeout!(router_manager.del_listener(endpoint));
-    println!("Transport Authenticator UserPassword [9a2]: {:?}", res);
+    println!("Transport Authenticator UserPassword [9a2]: {res:?}");
     assert!(res.is_ok());
 
     ztimeout!(async {
@@ -732,11 +733,11 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
     println!("\nTransport Authenticator SharedMemory [1a1]");
     // Add the locator on the router
     let res = ztimeout!(router_manager.add_listener(endpoint.clone()));
-    println!("Transport Authenticator SharedMemory [1a1]: {:?}", res);
+    println!("Transport Authenticator SharedMemory [1a1]: {res:?}");
     assert!(res.is_ok());
     println!("Transport Authenticator SharedMemory [1a2]");
     let locators = router_manager.get_listeners();
-    println!("Transport Authenticator SharedMemory 1a2]: {:?}", locators);
+    println!("Transport Authenticator SharedMemory 1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
     /* [2] */
@@ -744,7 +745,7 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
     // -> This should be accepted
     println!("Transport Authenticator SharedMemory [2a1]");
     let res = ztimeout!(client_manager.open_transport(endpoint.clone()));
-    println!("Transport Authenticator SharedMemory [2a1]: {:?}", res);
+    println!("Transport Authenticator SharedMemory [2a1]: {res:?}");
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
     assert!(c_ses1.is_shm().unwrap());
@@ -752,7 +753,7 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
     /* [3] */
     println!("Transport Authenticator SharedMemory [3a1]");
     let res = ztimeout!(c_ses1.close());
-    println!("Transport Authenticator SharedMemory [3a1]: {:?}", res);
+    println!("Transport Authenticator SharedMemory [3a1]: {res:?}");
     assert!(res.is_ok());
 
     ztimeout!(async {
@@ -765,7 +766,7 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
     // Perform clean up of the open locators
     println!("Transport Authenticator SharedMemory [4a1]");
     let res = ztimeout!(router_manager.del_listener(endpoint));
-    println!("Transport Authenticator SharedMemory [4a2]: {:?}", res);
+    println!("Transport Authenticator SharedMemory [4a2]: {res:?}");
     assert!(res.is_ok());
 
     ztimeout!(async {
@@ -832,10 +833,10 @@ fn authenticator_unix() {
 
     let f1 = "zenoh-test-unix-socket-10.sock";
     let _ = std::fs::remove_file(f1);
-    let endpoint: EndPoint = format!("unixsock-stream/{}", f1).parse().unwrap();
+    let endpoint: EndPoint = format!("unixsock-stream/{f1}").parse().unwrap();
     task::block_on(run(&endpoint));
     let _ = std::fs::remove_file(f1);
-    let _ = std::fs::remove_file(format!("{}.lock", f1));
+    let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
 #[cfg(feature = "transport_tls")]

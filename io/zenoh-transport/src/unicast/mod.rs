@@ -26,13 +26,13 @@ pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};
 use transport::TransportUnicastInner;
-use zenoh_core::{zerror, Result as ZResult};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{WhatAmI, ZInt, ZenohId},
     transport::tmsg,
     zenoh::ZenohMessage,
 };
+use zenoh_result::{zerror, ZResult};
 
 /*************************************/
 /*              STATS                */
@@ -231,7 +231,7 @@ impl fmt::Debug for TransportUnicast {
                 .field("links", &transport.get_links())
                 .finish(),
             Err(e) => {
-                write!(f, "{}", e)
+                write!(f, "{e}")
             }
         }
     }

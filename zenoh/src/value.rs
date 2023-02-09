@@ -21,7 +21,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 
 use zenoh_cfg_properties::Properties;
-use zenoh_core::zresult::ZError;
+use zenoh_result::ZError;
 
 use crate::buffers::ZBuf;
 use crate::prelude::{Encoding, KnownEncoding, Sample, SplitBuffer};

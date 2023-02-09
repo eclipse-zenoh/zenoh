@@ -19,11 +19,11 @@ mod open_syn;
 use super::authenticator::AuthenticatedPeerLink;
 use crate::unicast::establishment::{close_link, transport_finalize, InputFinalize, InputInit};
 use crate::{TransportManager, TransportUnicast};
-use zenoh_core::Result as ZResult;
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::transport::tmsg;
+use zenoh_result::ZResult;
 
-type OError = (zenoh_core::Error, Option<u8>);
+type OError = (zenoh_result::Error, Option<u8>);
 type OResult<T> = Result<T, OError>;
 
 pub(crate) async fn open_link(

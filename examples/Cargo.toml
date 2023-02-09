@@ -29,7 +29,7 @@ readme = "README.md"
 shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
-async-std = { workspace = true, default-features = false, features = ["attributes"] }
+async-std = { workspace = true, features = ["attributes"] }
 clap = { workspace = true }
 env_logger = { workspace = true }
 flume = { workspace = true }
@@ -41,7 +41,7 @@ zenoh = { path = "../zenoh/", default-features = false }
 zenoh-ext = { path = "../zenoh-ext/" }
 
 [dev-dependencies]
-rand = { workspace = true }
+rand = { workspace = true, features = ["default"] }
 
 [build-dependencies]
 rustc_version = { workspace = true }

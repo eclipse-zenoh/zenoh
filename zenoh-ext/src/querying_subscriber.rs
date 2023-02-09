@@ -179,7 +179,7 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, Handler> {
     pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
     where
         IntoSelector: TryInto<Selector<'b>>,
-        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_core::Error>,
+        <IntoSelector as TryInto<Selector<'b>>>::Error: Into<zenoh_result::Error>,
     {
         self.query_selector = Some(query_selector.try_into().map_err(Into::into));
         self

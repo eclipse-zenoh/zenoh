@@ -52,7 +52,7 @@ impl Stats {
     fn print_round(&self) {
         let elapsed = self.round_start.elapsed().as_secs_f64();
         let throughtput = (self.round_size as f64) / elapsed;
-        println!("{} msg/s", throughtput);
+        println!("{throughtput} msg/s");
     }
 }
 impl Drop for Stats {
@@ -60,10 +60,7 @@ impl Drop for Stats {
         let elapsed = self.global_start.unwrap().elapsed().as_secs_f64();
         let total = self.round_size * self.finished_rounds + self.round_count;
         let throughtput = total as f64 / elapsed;
-        println!(
-            "Received {} messages over {:.2}s: {}msg/s",
-            total, elapsed, throughtput
-        );
+        println!("Received {total} messages over {elapsed:.2}s: {throughtput}msg/s");
     }
 }
 

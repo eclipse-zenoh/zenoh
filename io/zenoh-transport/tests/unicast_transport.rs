@@ -23,12 +23,13 @@ use std::{
     time::Duration,
 };
 use zenoh_buffers::ZBuf;
-use zenoh_core::{zasync_executor_init, Result as ZResult};
+use zenoh_core::zasync_executor_init;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
     zenoh::ZenohMessage,
 };
+use zenoh_result::ZResult;
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -350,7 +351,7 @@ async fn open_transport(
 
     // Create the listener on the router
     for e in server_endpoints.iter() {
-        println!("Add endpoint: {}\n", e);
+        println!("Add endpoint: {e}\n");
         let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
     }
 
@@ -366,7 +367,7 @@ async fn open_transport(
     // Create an empty transport with the client
     // Open transport -> This should be accepted
     for e in client_endpoints.iter() {
-        println!("Opening transport with {}", e);
+        println!("Opening transport with {e}");
         let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
     }
 
@@ -390,9 +391,9 @@ async fn close_transport(
     // Close the client transport
     let mut ee = String::new();
     for e in endpoints.iter() {
-        let _ = write!(ee, "{} ", e);
+        let _ = write!(ee, "{e} ");
     }
-    println!("Closing transport with {}", ee);
+    println!("Closing transport with {ee}");
     ztimeout!(client_transport.close()).unwrap();
 
     ztimeout!(async {
@@ -403,7 +404,7 @@ async fn close_transport(
 
     // Stop the locators on the manager
     for e in endpoints.iter() {
-        println!("Del locator: {}", e);
+        println!("Del locator: {e}");
         ztimeout!(router_manager.del_listener(e)).unwrap();
     }
 
@@ -447,10 +448,7 @@ async fn test_transport(
         attachment,
     );
 
-    println!(
-        "Sending {} messages... {:?} {}",
-        MSG_COUNT, channel, msg_size
-    );
+    println!("Sending {MSG_COUNT} messages... {channel:?} {msg_size}");
     for _ in 0..MSG_COUNT {
         client_transport.schedule(message.clone()).unwrap();
     }
@@ -497,13 +495,13 @@ async fn run_single(
     #[cfg(feature = "stats")]
     {
         let c_stats = client_transport.get_stats().unwrap();
-        println!("\tClient: {:?}", c_stats,);
+        println!("\tClient: {c_stats:?}");
         let r_stats = router_manager
             .get_transport_unicast(&client_manager.config.zid)
             .unwrap()
             .get_stats()
             .unwrap();
-        println!("\tRouter: {:?}", r_stats);
+        println!("\tRouter: {r_stats:?}");
     }
 
     close_transport(
@@ -603,7 +601,7 @@ fn transport_unicast_unix_only() {
     let f1 = "zenoh-test-unix-socket-5.sock";
     let _ = std::fs::remove_file(f1);
     // Define the locator
-    let endpoints: Vec<EndPoint> = vec![format!("unixsock-stream/{}", f1).parse().unwrap()];
+    let endpoints: Vec<EndPoint> = vec![format!("unixsock-stream/{f1}").parse().unwrap()];
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -618,7 +616,7 @@ fn transport_unicast_unix_only() {
     // Run
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
     let _ = std::fs::remove_file(f1);
-    let _ = std::fs::remove_file(format!("{}.lock", f1));
+    let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
 #[cfg(feature = "transport_ws")]
@@ -705,7 +703,7 @@ fn transport_unicast_tcp_unix() {
     let endpoints: Vec<EndPoint> = vec![
         format!("tcp/127.0.0.1:{}", 16040).parse().unwrap(),
         format!("tcp/[::1]:{}", 16041).parse().unwrap(),
-        format!("unixsock-stream/{}", f1).parse().unwrap(),
+        format!("unixsock-stream/{f1}").parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -721,7 +719,7 @@ fn transport_unicast_tcp_unix() {
     // Run
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
     let _ = std::fs::remove_file(f1);
-    let _ = std::fs::remove_file(format!("{}.lock", f1));
+    let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
 #[cfg(all(
@@ -742,7 +740,7 @@ fn transport_unicast_udp_unix() {
     let endpoints: Vec<EndPoint> = vec![
         format!("udp/127.0.0.1:{}", 16050).parse().unwrap(),
         format!("udp/[::1]:{}", 16051).parse().unwrap(),
-        format!("unixsock-stream/{}", f1).parse().unwrap(),
+        format!("unixsock-stream/{f1}").parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -758,7 +756,7 @@ fn transport_unicast_udp_unix() {
     // Run
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
     let _ = std::fs::remove_file(f1);
-    let _ = std::fs::remove_file(format!("{}.lock", f1));
+    let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
 #[cfg(all(
@@ -782,7 +780,7 @@ fn transport_unicast_tcp_udp_unix() {
         format!("udp/127.0.0.1:{}", 16061).parse().unwrap(),
         format!("tcp/[::1]:{}", 16062).parse().unwrap(),
         format!("udp/[::1]:{}", 16063).parse().unwrap(),
-        format!("unixsock-stream/{}", f1).parse().unwrap(),
+        format!("unixsock-stream/{f1}").parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -798,7 +796,7 @@ fn transport_unicast_tcp_udp_unix() {
     // Run
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
     let _ = std::fs::remove_file(f1);
-    let _ = std::fs::remove_file(format!("{}.lock", f1));
+    let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
