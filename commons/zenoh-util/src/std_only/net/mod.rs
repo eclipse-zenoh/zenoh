@@ -226,7 +226,7 @@ pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
             loop {
                 buffer = Vec::with_capacity(size as usize);
                 ret = winapi::um::iphlpapi::GetAdaptersAddresses(
-                    winapi::shared::ws2def::AF_INET.try_into().unwrap(),
+                    winapi::shared::ws2def::AF_UNSPEC.try_into().unwrap(),
                     0,
                     std::ptr::null_mut(),
                     buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
