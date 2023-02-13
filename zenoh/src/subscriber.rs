@@ -490,18 +490,6 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
             handler,
         }
     }
-
-    /// Change the scope of the Subscriber.
-    #[inline]
-    #[zenoh_core::unstable]
-    pub fn scope<TryIntoKeyExpr>(mut self, scope: TryIntoKeyExpr) -> Self
-    where
-        TryIntoKeyExpr: std::convert::TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as std::convert::TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-    {
-        self.scope = scope.try_into().map_err(Into::into).map(Some);
-        self
-    }
 }
 
 // Push mode

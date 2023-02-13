@@ -324,18 +324,6 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
             handler,
         }
     }
-
-    /// Change the scope of the query.
-    #[inline]
-    #[zenoh_core::unstable]
-    pub fn scope<TryIntoKeyExpr>(mut self, scope: TryIntoKeyExpr) -> Self
-    where
-        TryIntoKeyExpr: std::convert::TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as std::convert::TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-    {
-        self.scope = scope.try_into().map_err(Into::into).map(Some);
-        self
-    }
 }
 
 pub(crate) const _REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
