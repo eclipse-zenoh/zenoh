@@ -56,7 +56,7 @@ impl core::ops::Deref for CowStr<'_> {
 }
 impl<'a> Clone for CowStr<'a> {
     fn clone(&self) -> Self {
-        self.to_string().into()
+        self.as_str().to_owned().into()
     }
 }
 impl Debug for CowStr<'_> {
