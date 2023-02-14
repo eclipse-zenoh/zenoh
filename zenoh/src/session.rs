@@ -1930,10 +1930,10 @@ impl SessionDeclarations for Arc<Session> {
     /// # })
     /// ```
     #[zenoh_core::unstable]
-    fn declare_liveliness_subscriber<'a, 'b, TryIntoKeyExpr>(
-        &'a self,
+    fn declare_liveliness_subscriber<'b, TryIntoKeyExpr>(
+        &self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
+    ) -> SubscriberBuilder<'static, 'b, PushMode, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
@@ -2466,10 +2466,10 @@ pub trait SessionDeclarations {
     /// # })
     /// ```
     #[zenoh_core::unstable]
-    fn declare_liveliness_subscriber<'a, 'b, TryIntoKeyExpr>(
-        &'a self,
+    fn declare_liveliness_subscriber<'b, TryIntoKeyExpr>(
+        &self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
+    ) -> SubscriberBuilder<'static, 'b, PushMode, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
