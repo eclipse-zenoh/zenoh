@@ -70,8 +70,8 @@ impl dyn IError + Send + Sync {
 }
 
 #[cfg(feature = "std")]
-pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
-#[cfg(not(feature = "std"))]
+pub use std::error::Error as IError;
+
 pub type Error = Box<dyn IError + Send + Sync + 'static>;
 
 // +---------+
