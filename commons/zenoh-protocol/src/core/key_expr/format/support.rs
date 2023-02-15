@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use alloc::{boxed::Box, vec::Vec};
 use core::convert::{TryFrom, TryInto};
 
 use zenoh_result::{bail, zerror, Error};

@@ -16,7 +16,7 @@
 
 use crate::handlers::{locked, DefaultHandler};
 use crate::prelude::*;
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 use crate::query::ReplyKeyExpr;
 use crate::SessionRef;
 use crate::Undeclarable;
@@ -70,7 +70,7 @@ impl Query {
     }
 
     /// This Query's value.
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     #[inline(always)]
     pub fn value(&self) -> Option<&Value> {
         self.value.as_ref()
@@ -91,7 +91,7 @@ impl Query {
 
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This getter allows you to check whether or not a specific query does.
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     pub fn accepts_replies(&self) -> ZResult<ReplyKeyExpr> {
         self._accepts_any_replies().map(|any| {
             if any {
@@ -434,7 +434,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// Restrict the matching queries that will be receive by this [`Queryable`]
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[inline]
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;
         self

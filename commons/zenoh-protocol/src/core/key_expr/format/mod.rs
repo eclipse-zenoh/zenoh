@@ -12,13 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use alloc::{boxed::Box, string::String, vec::Vec};
 use core::{
     convert::{TryFrom, TryInto},
     fmt::Display,
     num::NonZeroU32,
 };
 
-use zenoh_result::{bail, Error, ZResult};
+use zenoh_result::{bail, zerror, Error, ZResult};
 
 use super::{keyexpr, OwnedKeyExpr};
 
@@ -58,10 +59,14 @@ impl<'s> KeFormat<'s, Vec<Segment<'s>>> {
     pub fn new<S: AsRef<str> + ?Sized>(value: &'s S) -> ZResult<Self> {
         value.as_ref().try_into()
     }
-    pub fn noalloc_new<const N: usize>(
-        value: &'s impl AsRef<str>,
-    ) -> ZResult<KeFormat<'s, [Segment<'s>; N]>> {
-        value.as_ref().try_into()
+    pub fn noalloc_new<const N: usize>(value: &'s str) -> ZResult<KeFormat<'s, [Segment<'s>; N]>> {
+        value.try_into()
+    }
+    pub fn specs(&self) -> impl Iterator<Item = (&str, &keyexpr)> + ExactSizeIterator + Clone {
+        self.storage
+            .segments()
+            .iter()
+            .map(|s| (s.spec.id(), s.spec.pattern()))
     }
 }
 impl<'s, Storage: IKeFormatStorage<'s> + 's> KeFormat<'s, Storage> {
@@ -168,7 +173,9 @@ impl<'s, Storage: IKeFormatStorage<'s> + 's> core::convert::TryFrom<&KeFormat<'s
 {
     type Error = Error;
     fn try_from(value: &KeFormat<'s, Storage>) -> Result<Self, Self::Error> {
-        let s: String = value.try_into()?;
+        let s: String = value
+            .try_into()
+            .map_err(|e| zerror!("failed to write into String: {e}"))?;
         OwnedKeyExpr::autocanonize(s)
     }
 }
@@ -338,7 +345,7 @@ pub struct OwnedKeFormat<Storage: IKeFormatStorage<'static> + 'static = Vec<Segm
     _owner: Box<str>,
     format: KeFormat<'static, Storage>,
 }
-impl<Storage: IKeFormatStorage<'static> + 'static> std::ops::Deref for OwnedKeFormat<Storage> {
+impl<Storage: IKeFormatStorage<'static> + 'static> core::ops::Deref for OwnedKeFormat<Storage> {
     type Target = KeFormat<'static, Storage>;
     fn deref(&self) -> &Self::Target {
         &self.format

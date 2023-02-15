@@ -97,7 +97,7 @@ impl PutBuilder<'_, '_> {
 
     /// Restrict the matching subscribers that will receive the published data
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.publisher = self.publisher.allowed_destination(destination);
@@ -245,7 +245,7 @@ impl<'a> Publisher<'a> {
 
     /// Restrict the matching subscribers that will receive the published data
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.destination = destination;
@@ -550,7 +550,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
 
     /// Restrict the matching subscribers that will receive the published data
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.destination = destination;

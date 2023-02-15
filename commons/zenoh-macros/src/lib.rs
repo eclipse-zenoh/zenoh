@@ -19,6 +19,7 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use proc_macro::TokenStream;
 use quote::quote;
+use zenoh_protocol::core::key_expr::format::KeFormat;
 
 const RUSTC_VERSION: &str = include_str!(concat!(env!("OUT_DIR"), "/version.rs"));
 
@@ -64,4 +65,22 @@ pub fn unstable(_attr: TokenStream, item: TokenStream) -> TokenStream {
         ///
         #item
     })
+}
+
+#[proc_macro]
+pub fn keformat(tokens: TokenStream) -> TokenStream {
+    let lit = syn::parse::<syn::LitStr>(tokens).unwrap();
+    let source = lit.value();
+    let format = match KeFormat::new(&source) {
+        Ok(format) => format,
+        Err(e) => panic!("{}", e),
+    };
+    let specs = format.specs().collect::<Vec<_>>();
+    let len = specs.len();
+    quote!{
+        {
+            const SOURCE: &'static str = #lit;
+            unsafe{::zenoh::key_expr::format::KeFormat::noalloc_new::<#len>(SOURCE).unwrap_unchecked()}
+        }
+    }.into()
 }

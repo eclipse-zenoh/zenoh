@@ -3804,6 +3804,7 @@ dependencies = [
  "zenoh-core",
  "zenoh-crypto",
  "zenoh-link",
+ "zenoh-macros",
  "zenoh-plugin-trait",
  "zenoh-protocol",
  "zenoh-result",
@@ -3826,7 +3827,6 @@ dependencies = [
 name = "zenoh-cfg-properties"
 version = "0.7.0-rc"
 dependencies = [
- "zenoh-macros",
  "zenoh-result",
 ]
 
@@ -3874,7 +3874,6 @@ version = "0.7.0-rc"
 dependencies = [
  "async-std",
  "lazy_static",
- "zenoh-macros",
  "zenoh-result",
 ]
 
@@ -3922,6 +3921,7 @@ dependencies = [
  "serde",
  "zenoh",
  "zenoh-core",
+ "zenoh-macros",
  "zenoh-result",
  "zenoh-sync",
  "zenoh-util",
@@ -4109,6 +4109,7 @@ dependencies = [
  "rustc_version 0.4.0",
  "syn",
  "unzip-n",
+ "zenoh-protocol",
 ]
 
 [[package]]
