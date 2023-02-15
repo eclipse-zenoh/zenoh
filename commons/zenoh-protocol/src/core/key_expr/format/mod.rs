@@ -18,7 +18,7 @@ use core::{
     num::NonZeroU32,
 };
 
-use zenoh_result::{bail, Error};
+use zenoh_result::{bail, Error, ZResult};
 
 use super::{keyexpr, OwnedKeyExpr};
 
@@ -53,6 +53,16 @@ use support::{IterativeConstructor, Spec};
 pub struct KeFormat<'s, Storage: IKeFormatStorage<'s> + 's = Vec<Segment<'s>>> {
     storage: Storage,
     suffix: &'s str,
+}
+impl<'s> KeFormat<'s, Vec<Segment<'s>>> {
+    pub fn new<S: AsRef<str> + ?Sized>(value: &'s S) -> ZResult<Self> {
+        value.as_ref().try_into()
+    }
+    pub fn noalloc_new<const N: usize>(
+        value: &'s impl AsRef<str>,
+    ) -> ZResult<KeFormat<'s, [Segment<'s>; N]>> {
+        value.as_ref().try_into()
+    }
 }
 impl<'s, Storage: IKeFormatStorage<'s> + 's> KeFormat<'s, Storage> {
     pub fn formatter(&'s self) -> KeFormatter<'s, Storage> {
@@ -136,36 +146,6 @@ impl<'s, Storage: IKeFormatStorage<'s> + 's> TryFrom<&'s str> for KeFormat<'s, S
             suffix: &value[segment_start..],
         })
     }
-}
-
-#[test]
-fn formatting() {
-    let format: KeFormat = KeFormat::try_from("a/${a:*}/b/$#{b:**}#/c").unwrap();
-    assert_eq!(format.storage[0].prefix, "a/");
-    assert_eq!(format.storage[0].spec.id(), "a");
-    assert_eq!(format.storage[0].spec.pattern(), "*");
-    assert_eq!(format.storage[1].prefix, "/b/");
-    assert_eq!(format.storage[1].spec.id(), "b");
-    assert_eq!(format.storage[1].spec.pattern(), "**");
-    assert_eq!(format.suffix, "/c");
-    let ke: OwnedKeyExpr = format
-        .formatter()
-        .set("a", 1)
-        .unwrap()
-        .set("b", "hi/there")
-        .unwrap()
-        .try_into()
-        .unwrap();
-    assert_eq!(ke.as_str(), "a/1/b/hi/there/c");
-    let ke: OwnedKeyExpr = format
-        .formatter()
-        .set("a", 1)
-        .unwrap()
-        .set("b", "")
-        .unwrap()
-        .try_into()
-        .unwrap();
-    assert_eq!(ke.as_str(), "a/1/b/c");
 }
 
 impl<'s, Storage: IKeFormatStorage<'s> + 's> core::convert::TryFrom<&KeFormat<'s, Storage>>
@@ -397,6 +377,36 @@ impl<'s, S1: IKeFormatStorage<'s> + 's, S2: IKeFormatStorage<'s> + 's> PartialEq
     fn eq(&self, other: &KeFormat<'s, S2>) -> bool {
         self.suffix == other.suffix && self.storage.segments() == other.storage.segments()
     }
+}
+
+#[test]
+fn formatting() {
+    let format = KeFormat::new("a/${a:*}/b/$#{b:**}#/c").unwrap();
+    assert_eq!(format.storage[0].prefix, "a/");
+    assert_eq!(format.storage[0].spec.id(), "a");
+    assert_eq!(format.storage[0].spec.pattern(), "*");
+    assert_eq!(format.storage[1].prefix, "/b/");
+    assert_eq!(format.storage[1].spec.id(), "b");
+    assert_eq!(format.storage[1].spec.pattern(), "**");
+    assert_eq!(format.suffix, "/c");
+    let ke: OwnedKeyExpr = format
+        .formatter()
+        .set("a", 1)
+        .unwrap()
+        .set("b", "hi/there")
+        .unwrap()
+        .try_into()
+        .unwrap();
+    assert_eq!(ke.as_str(), "a/1/b/hi/there/c");
+    let ke: OwnedKeyExpr = format
+        .formatter()
+        .set("a", 1)
+        .unwrap()
+        .set("b", "")
+        .unwrap()
+        .try_into()
+        .unwrap();
+    assert_eq!(ke.as_str(), "a/1/b/c");
 }
 
 mod parsing;

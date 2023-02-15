@@ -171,7 +171,7 @@ fn parsing() {
 			let specs = [a_spec, b_spec, "c"];
 			for spec in [2, 3] {
 				let spec = specs[..spec].join("/");
-				let format: KeFormat<[Segment; 2]> = KeFormat::try_from(&spec).unwrap();
+				let format: KeFormat<[Segment; 2]> = KeFormat::noalloc_new(&spec).unwrap();
 				let mut formatter = format.formatter();
 				for a_val in ["hi"] {
 					formatter.set("a", a_val).unwrap();
