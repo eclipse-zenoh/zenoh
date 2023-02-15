@@ -12,11 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-
 use zenoh_result::{bail, ZResult};
 
-use super::{IKeFormatStorage, KeFormat, Segment, support::trim_suffix_slash};
-use crate::core::key_expr::{keyexpr, format::support::trim_prefix_slash};
+use super::{support::trim_suffix_slash, IKeFormatStorage, KeFormat, Segment};
+use crate::core::key_expr::{format::support::trim_prefix_slash, keyexpr};
 
 pub struct Parsed<'s, Storage: IKeFormatStorage<'s>> {
     format: &'s KeFormat<'s, Storage>,
@@ -25,9 +24,9 @@ pub struct Parsed<'s, Storage: IKeFormatStorage<'s>> {
 
 impl<'s, Storage: IKeFormatStorage<'s>> Parsed<'s, Storage> {
     pub fn get(&self, id: &str) -> ZResult<Option<&'s keyexpr>> {
-		let Some(i) = self.format.storage.segments().iter().position(|s| s.spec.id() == id) else {bail!("{} has no {id} field", self.format)};
-		Ok(self.results.as_ref()[i])
-	}
+        let Some(i) = self.format.storage.segments().iter().position(|s| s.spec.id() == id) else {bail!("{} has no {id} field", self.format)};
+        Ok(self.results.as_ref()[i])
+    }
 }
 
 impl<'s, Storage: IKeFormatStorage<'s> + 's> KeFormat<'s, Storage> {
@@ -83,13 +82,13 @@ fn do_parse<'s>(
         .count();
     // Since input is /-stripped, we need to strip it from the prefix too.
     let prefix = trim_prefix_slash(segment.prefix);
-	// We handle double-wild segments that may branch in a different function, to keep this one tail-recursive
+    // We handle double-wild segments that may branch in a different function, to keep this one tail-recursive
     if has_double_wilds {
         return do_parse_doublewild(
             input, segments, results, result, pattern, prefix, min_chunks,
         );
     }
-	// Strip the prefix (including the end-/ if the prefix is non-empty)
+    // Strip the prefix (including the end-/ if the prefix is non-empty)
     let Some(input) = input.strip_prefix(prefix) else {return false};
     let mut chunks = 0;
     for i in (0..input.len()).filter(|i| input.as_bytes()[*i] == b'/') {
@@ -136,7 +135,7 @@ fn do_parse_doublewild<'s>(
         }
     }
     let Some(input) = input.strip_prefix(prefix) else {return false};
-	let input = trim_prefix_slash(input);
+    let input = trim_prefix_slash(input);
     let mut chunks = 0;
     for i in (0..input.len()).filter(|i| input.as_bytes()[*i] == b'/') {
         chunks += 1;
@@ -146,7 +145,9 @@ fn do_parse_doublewild<'s>(
         let r = keyexpr::new(&input[..i]).expect("any subsection of a keyexpr is a keyexpr");
         if pattern.includes(r) {
             *result = Some(r);
-            if do_parse(trim_prefix_slash(&input[(i + 1)..]), segments, results) {return true;}
+            if do_parse(trim_prefix_slash(&input[(i + 1)..]), segments, results) {
+                return true;
+            }
         }
     }
     chunks += 1;
@@ -164,26 +165,26 @@ fn do_parse_doublewild<'s>(
 
 #[test]
 fn parsing() {
-	use core::convert::{TryFrom};
-	use crate::core::key_expr::OwnedKeyExpr;
-	for a_spec in ["${a:*}", "a/${a:*}", "a/${a:*/**}"] {
-		for b_spec in ["b/${b:**}", "${b:**}"] {
-			let specs = [a_spec, b_spec, "c"];
-			for spec in [2, 3] {
-				let spec = specs[..spec].join("/");
-				let format: KeFormat<[Segment; 2]> = KeFormat::noalloc_new(&spec).unwrap();
-				let mut formatter = format.formatter();
-				for a_val in ["hi"] {
-					formatter.set("a", a_val).unwrap();
-					for b_val in ["hello", "hello/there", ""] {
-						formatter.set("b", b_val).unwrap();
-						let ke = OwnedKeyExpr::try_from(&formatter).unwrap();
-						let parsed = format.parse(&ke).unwrap();
-						assert_eq!(parsed.get("a").unwrap().unwrap().as_str(), a_val);
-						assert_eq!(parsed.get("b").unwrap().map_or("", |s| s.as_str()), b_val);
-					}
-				}
-			}
-		}
-	}
+    use crate::core::key_expr::OwnedKeyExpr;
+    use core::convert::TryFrom;
+    for a_spec in ["${a:*}", "a/${a:*}", "a/${a:*/**}"] {
+        for b_spec in ["b/${b:**}", "${b:**}"] {
+            let specs = [a_spec, b_spec, "c"];
+            for spec in [2, 3] {
+                let spec = specs[..spec].join("/");
+                let format: KeFormat<[Segment; 2]> = KeFormat::noalloc_new(&spec).unwrap();
+                let mut formatter = format.formatter();
+                for a_val in ["hi"] {
+                    formatter.set("a", a_val).unwrap();
+                    for b_val in ["hello", "hello/there", ""] {
+                        formatter.set("b", b_val).unwrap();
+                        let ke = OwnedKeyExpr::try_from(&formatter).unwrap();
+                        let parsed = format.parse(&ke).unwrap();
+                        assert_eq!(parsed.get("a").unwrap().unwrap().as_str(), a_val);
+                        assert_eq!(parsed.get("b").unwrap().map_or("", |s| s.as_str()), b_val);
+                    }
+                }
+            }
+        }
+    }
 }
