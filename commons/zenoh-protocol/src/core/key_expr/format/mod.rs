@@ -54,7 +54,6 @@ pub struct KeFormat<'s, Storage: IKeFormatStorage<'s> + 's = Vec<Segment<'s>>> {
     storage: Storage,
     suffix: &'s str,
 }
-
 impl<'s, Storage: IKeFormatStorage<'s> + 's> KeFormat<'s, Storage> {
     pub fn formatter(&'s self) -> KeFormatter<'s, Storage> {
         KeFormatter {
@@ -64,7 +63,12 @@ impl<'s, Storage: IKeFormatStorage<'s> + 's> KeFormat<'s, Storage> {
         }
     }
 }
-
+impl<'s, Storage: IKeFormatStorage<'s> + 's> TryFrom<&'s String> for KeFormat<'s, Storage> {
+    type Error = Error;
+    fn try_from(value: &'s String) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_str())
+    }
+}
 impl<'s, Storage: IKeFormatStorage<'s> + 's> TryFrom<&'s str> for KeFormat<'s, Storage> {
     type Error = Error;
     fn try_from(value: &'s str) -> Result<Self, Self::Error> {
@@ -101,10 +105,11 @@ impl<'s, Storage: IKeFormatStorage<'s> + 's> TryFrom<&'s str> for KeFormat<'s, S
                     bail!("Invalid KeFormat: a spec in {value} is followed by a non-`/` character")
                 }
                 keyexpr::new(spec.pattern().as_str())?; // Check that the pattern is indeed a keyexpr. We can make this more flexible in the future.
-                let segment = Segment {
-                    prefix: &value[segment_start..prefix_end],
-                    spec,
-                };
+                let prefix = &value[segment_start..prefix_end];
+                if prefix.contains('*') {
+                    bail!("Invalid KeFormat: wildcards are only allowed in specs when writing formats")
+                }
+                let segment = Segment { prefix, spec };
                 storage = match Storage::add_segment(storage, segment) {
                     IterativeConstructor::Error(e) => {
                         bail!("Couldn't construct KeFormat because its Storage's add_segment failed: {e}")
@@ -151,7 +156,16 @@ fn formatting() {
         .unwrap()
         .try_into()
         .unwrap();
-    assert_eq!(ke.as_str(), "a/1/b/hi/there/c")
+    assert_eq!(ke.as_str(), "a/1/b/hi/there/c");
+    let ke: OwnedKeyExpr = format
+        .formatter()
+        .set("a", 1)
+        .unwrap()
+        .set("b", "")
+        .unwrap()
+        .try_into()
+        .unwrap();
+    assert_eq!(ke.as_str(), "a/1/b/c");
 }
 
 impl<'s, Storage: IKeFormatStorage<'s> + 's> core::convert::TryFrom<&KeFormat<'s, Storage>>
@@ -200,9 +214,8 @@ impl<'s, Storage: IKeFormatStorage<'s>> core::fmt::Debug for KeFormatter<'s, Sto
         let segments = self.format.storage.segments();
         for i in 0..values.len() {
             let Segment { prefix, spec } = segments[i];
-            let value = values[i].map(|(start, end)| {
-                keyexpr::new(&self.buffer[start as usize..end.get() as usize]).unwrap()
-            });
+            let value =
+                values[i].map(|(start, end)| &self.buffer[start as usize..end.get() as usize]);
             let id = spec.id();
             let pattern = spec.pattern();
             let sharp = if id.contains('}')
@@ -245,17 +258,26 @@ impl<'s, Storage: IKeFormatStorage<'s>> TryFrom<&KeFormatter<'s, Storage>> for O
                 };
         }
         let mut ans = String::with_capacity(len);
+        let mut concatenate = |s: &str| {
+            let skip_slash = matches!(ans.as_bytes().last(), None | Some(b'/'))
+                && s.as_bytes().first() == Some(&b'/');
+            ans += &s[skip_slash as usize..];
+        };
         for i in 0..values.len() {
-            ans += segments[i].prefix;
+            concatenate(segments[i].prefix);
             if let Some((start, end)) = values[i] {
-                ans += &value.buffer[start as usize..end.get() as usize]
+                let end = end.get();
+                concatenate(&value.buffer[start as usize..end as usize])
             } else if let Some(default) = segments[i].spec.default() {
-                ans += default
+                concatenate(default)
             } else {
                 unsafe { core::hint::unreachable_unchecked() }
             };
         }
-        ans += value.format.suffix;
+        concatenate(value.format.suffix);
+        if ans.ends_with('/') {
+            ans.pop();
+        }
         OwnedKeyExpr::autocanonize(ans)
     }
 }
@@ -311,9 +333,11 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
         write!(&mut self.buffer, "{value}").unwrap(); // Writing on `&mut String` should be infallible.
         match (|| {
             let end = self.buffer.len();
-            let Ok(ke) = keyexpr::new(&self.buffer[start..end]) else {return Err(())};
-            if end > u32::MAX as usize || !pattern.includes(ke) {
-                return Err(());
+            if !(end == start && pattern.as_str() == "**") {
+                let Ok(ke) = keyexpr::new(&self.buffer[start..end]) else {return Err(())};
+                if end > u32::MAX as usize || !pattern.includes(ke) {
+                    return Err(());
+                }
             }
             self.values.as_mut()[i] = Some((start as u32, unsafe {
                 // `end` must be >0 for self.buffer[start..end] to be a keyexpr
@@ -375,21 +399,4 @@ impl<'s, S1: IKeFormatStorage<'s> + 's, S2: IKeFormatStorage<'s> + 's> PartialEq
     }
 }
 
-mod parsing {
-    use zenoh_result::{bail, ZResult};
-
-    use super::{IKeFormatStorage, KeFormat};
-    use crate::core::key_expr::keyexpr;
-
-    pub struct Parsed<'s, Storage: IKeFormatStorage<'s>> {
-        format: &'s KeFormat<'s, Storage>,
-        results: Storage::ValuesStorage<Option<&'s keyexpr>>,
-    }
-
-    impl<'s, Storage: IKeFormatStorage<'s> + 's> KeFormat<'s, Storage> {
-        pub fn parse(&'s self, target: &'s keyexpr) -> ZResult<Parsed<'s, Storage>> {
-            let Some(target) = target.strip_suffix(self.suffix) else {bail!("{target} doesn't match {self}")};
-            todo!()
-        }
-    }
-}
+mod parsing;

@@ -1,3 +1,17 @@
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+
 use core::convert::{TryFrom, TryInto};
 
 use zenoh_result::{bail, zerror, Error};
@@ -223,4 +237,11 @@ impl<'s> IKeFormatStorage<'s> for Vec<Segment<'s>> {
         }
         ans.into()
     }
+}
+
+pub(crate) fn trim_prefix_slash(target: &str) -> &str {
+    &target[matches!(target.as_bytes().first(), Some(b'/')) as usize..]
+}
+pub(crate) fn trim_suffix_slash(target: &str) -> &str {
+    &target[..(target.len() - matches!(target.as_bytes().last(), Some(b'/')) as usize)]
 }
