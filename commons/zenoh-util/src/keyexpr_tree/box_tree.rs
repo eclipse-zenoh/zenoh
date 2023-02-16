@@ -473,12 +473,3 @@ where
         tree
     }
 }
-
-unsafe impl<Weight: Send, Wildness: IWildness + Send, Children: IChildrenProvider<Box<Self>> + Send>
-    Send for KeyExprTreeNode<Weight, Wildness, Children>
-{
-}
-unsafe impl<Weight: Sync, Wildness: IWildness + Sync, Children: IChildrenProvider<Box<Self>> + Sync>
-    Sync for KeyExprTreeNode<Weight, Wildness, Children>
-{
-}
