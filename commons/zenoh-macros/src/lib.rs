@@ -155,6 +155,9 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
                     self._0
                 }
             }
+            pub fn formatter() -> Formatter<'static> {
+                Format::formatter()
+            }
             impl<'a> Formatter<'a> {
                 #(#setters)*
             }
