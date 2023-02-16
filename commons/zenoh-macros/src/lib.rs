@@ -19,7 +19,10 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use proc_macro::TokenStream;
 use quote::quote;
-use zenoh_protocol::core::key_expr::format::KeFormat;
+use zenoh_protocol::core::key_expr::format::{
+    macro_support::{self, SegmentBuilder},
+    KeFormat,
+};
 
 const RUSTC_VERSION: &str = include_str!(concat!(env!("OUT_DIR"), "/version.rs"));
 
@@ -72,9 +75,10 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
         Ok(format) => format,
         Err(e) => panic!("{}", e),
     };
-    let specs = format.specs().collect::<Vec<_>>();
+    let specs = unsafe { macro_support::specs(&format) };
     let len = specs.len();
-    let setters = specs.iter().map(|(id, _)| {
+    let setters = specs.iter().map(|spec| {
+        let id = &source[spec.spec_start..(spec.spec_start + spec.id_end as usize)];
         let set_id = quote::format_ident!("{}", id);
         quote! {
             pub fn #set_id <S: ::core::fmt::Display>(&mut self, value: S) -> Result<&mut Self, ::zenoh::key_expr::format::FormatSetError> {
@@ -85,9 +89,33 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
             }
         }
     });
+    let segments = specs.iter().map(|spec| {
+        let SegmentBuilder {
+            segment_start,
+            prefix_end,
+            spec_start,
+            id_end,
+            pattern_end,
+            spec_end,
+            segment_end,
+        } = spec;
+        quote! {
+            ::zenoh::key_expr::format::macro_support::SegmentBuilder {
+                segment_start: #segment_start,
+                prefix_end: #prefix_end,
+                spec_start: #spec_start,
+                id_end: #id_end,
+                pattern_end: #pattern_end,
+                spec_end: #spec_end,
+                segment_end: #segment_end,
+            },
+        }
+    });
 
     quote! {
-            const SOURCE: &'static str = #source;
+            pub const FORMAT: Format<'static> = unsafe {
+                Format {_0: ::zenoh::key_expr::format::macro_support::const_new(#source, [#(#segments)*])}
+            };
             /// The `#lit` format, as a structure.
             #[derive(Copy, Clone, Hash)]
             pub struct Format<'a>{_0: ::zenoh::key_expr::format::KeFormat<'a, [::zenoh::key_expr::format::Segment<'a>; #len]>}
@@ -120,11 +148,8 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
                 fn deref_mut(&mut self) -> &mut Self::Target {&mut self.0}
             }
             impl<'a> Format<'a> {
-                pub fn new() -> Self {
-                    Self{_0: unsafe{::zenoh::key_expr::format::KeFormat::noalloc_new::<#len>(SOURCE).unwrap_unchecked()}}
-                }
-                pub fn formatter(&'a self) -> Formatter<'a> {
-                    Formatter(self._0.formatter())
+                pub fn formatter() -> Formatter<'a> {
+                    Formatter(FORMAT.formatter())
                 }
                 pub fn into_inner(self) -> ::zenoh::key_expr::format::KeFormat<'a, [::zenoh::key_expr::format::Segment<'a>; #len]> {
                     self._0

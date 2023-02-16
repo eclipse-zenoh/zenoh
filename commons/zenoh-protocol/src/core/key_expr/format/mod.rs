@@ -49,11 +49,92 @@ impl<'s> KeFormat<'s, Vec<Segment<'s>>> {
     pub fn noalloc_new<const N: usize>(value: &'s str) -> ZResult<KeFormat<'s, [Segment<'s>; N]>> {
         value.try_into()
     }
-    pub fn specs(&self) -> impl Iterator<Item = (&str, &keyexpr)> + ExactSizeIterator + Clone {
-        self.storage
-            .segments()
+}
+
+pub mod macro_support {
+    use super::*;
+    /// DO NOT USE THIS
+    ///
+    /// This is a support structure for [`const_new`], which is only meant to be used through the `zenoh::keformat` macro
+    #[derive(Clone, Copy)]
+    pub struct SegmentBuilder {
+        pub segment_start: usize,
+        pub prefix_end: usize,
+        pub spec_start: usize,
+        pub id_end: u16,
+        pub pattern_end: u16,
+        pub spec_end: usize,
+        pub segment_end: usize,
+    }
+
+    /// # Safety
+    /// DO NOT USE THIS, EVER
+    ///
+    /// This is a support fonction which is only meant to be used through the `zenoh::keformat` macro
+    pub unsafe fn specs<'s>(this: &KeFormat<'s, Vec<Segment<'s>>>) -> Vec<SegmentBuilder> {
+        let segments = this.storage.segments();
+        if segments.is_empty() {
+            return Vec::new();
+        }
+        let source_start = segments[0].prefix.as_ptr() as usize;
+        segments
             .iter()
-            .map(|s| (s.spec.id(), s.spec.pattern()))
+            .map(|segment| {
+                let segment_start = segment.prefix.as_ptr() as usize - source_start;
+                let prefix_end = segment_start + segment.prefix.len();
+                let spec_start = segment.spec.spec.as_ptr() as usize - source_start;
+                let spec_end = spec_start + segment.spec.spec.len();
+                let segment_end = spec_end + spec_start - prefix_end - 1;
+                SegmentBuilder {
+                    segment_start,
+                    prefix_end,
+                    spec_start,
+                    id_end: segment.spec.id_end,
+                    pattern_end: segment.spec.pattern_end,
+                    spec_end,
+                    segment_end,
+                }
+            })
+            .collect()
+    }
+    /// # Safety
+    /// DO NOT USE THIS, EVER
+    ///
+    /// This is a support fonction which is only meant to be used through the `zenoh::keformat` macro
+    pub const unsafe fn const_new<const N: usize>(
+        source: &'static str,
+        segments: [SegmentBuilder; N],
+    ) -> KeFormat<'static, [Segment<'static>; N]> {
+        const unsafe fn substr(source: &'static str, start: usize, end: usize) -> &'static str {
+            core::str::from_utf8_unchecked(core::slice::from_raw_parts(
+                source.as_ptr().add(start),
+                end - start,
+            ))
+        }
+        let mut storage = [Segment {
+            prefix: "",
+            spec: Spec {
+                spec: "",
+                id_end: 0,
+                pattern_end: 0,
+            },
+        }; N];
+        let mut suffix_start = 0;
+        let mut i = 0;
+        while i < N {
+            let segment = segments[i];
+            let prefix = substr(source, segment.segment_start, segment.prefix_end);
+            let spec = Spec {
+                spec: substr(source, segment.spec_start, segment.spec_end),
+                id_end: segment.id_end,
+                pattern_end: segment.pattern_end,
+            };
+            storage[i] = Segment { prefix, spec };
+            suffix_start = segment.segment_end;
+            i += 1;
+        }
+        let suffix = substr(source, suffix_start, source.len());
+        KeFormat { storage, suffix }
     }
 }
 impl<'s, Storage: IKeFormatStorage<'s> + 's> KeFormat<'s, Storage> {
