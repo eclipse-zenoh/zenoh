@@ -19,7 +19,6 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use proc_macro::TokenStream;
 use quote::quote;
-use zenoh_protocol::core::key_expr::format::KeFormat;
 
 const RUSTC_VERSION: &str = include_str!(concat!(env!("OUT_DIR"), "/version.rs"));
 
@@ -71,16 +70,24 @@ pub fn unstable(_attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn keformat(tokens: TokenStream) -> TokenStream {
     let lit = syn::parse::<syn::LitStr>(tokens).unwrap();
     let source = lit.value();
-    let format = match KeFormat::new(&source) {
-        Ok(format) => format,
-        Err(e) => panic!("{}", e),
-    };
-    let specs = format.specs().collect::<Vec<_>>();
-    let len = specs.len();
+    let len = source.split("${").count() - 1;
+    // use zenoh_protocol::core::key_expr::format::KeFormat;
+    // let format = match KeFormat::new(&source) {
+    //     Ok(format) => format,
+    //     Err(e) => panic!("{}", e),
+    // };
+    // let specs = format.specs().collect::<Vec<_>>();
+    // let len = specs.len();
     quote!{
         {
             const SOURCE: &'static str = #lit;
-            unsafe{::zenoh::key_expr::format::KeFormat::noalloc_new::<#len>(SOURCE).unwrap_unchecked()}
+            /// The `#lit` format, as a structure.
+            pub struct Format<'a>(::zenoh::key_expr::format::KeFormat<'a, [::zenoh::key_expr::format::Segment<'a>; #len]>);
+            impl<'a> ::core::ops::Deref for Format<'a> {
+                type Target = ::zenoh::key_expr::format::KeFormat<'a, [::zenoh::key_expr::format::Segment<'a>; #len]>;
+                fn deref(&self) -> &Self::Target {&self.0}
+            }
+            Format(unsafe{::zenoh::key_expr::format::KeFormat::noalloc_new::<#len>(SOURCE).unwrap_unchecked()})
         }
     }.into()
 }

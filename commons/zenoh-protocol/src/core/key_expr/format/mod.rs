@@ -37,19 +37,6 @@ use support::{IterativeConstructor, Spec};
 /// Note that the spec is considered to end at the first encountered `}`; if you need your id, pattern or default to contain `}`, you may use `$#{spec}#.
 ///
 /// Specs may only be preceded and followed by `/`.
-///
-/// ```no_run
-/// let factories = ["a", "b"];
-/// let rooms = [0, 1, 2];
-/// let mut format = keformat!("${org:*#my-company}/factory/${factory:*}/$#{room:{$*}}#/${path:*/**}");
-/// for factory in factories {
-///     format.set("factory", factory).unwrap();
-///     for room in rooms {
-///         format.set("room", room).unwrap();
-///         session.put(&format)
-///     }
-/// }
-/// ```
 #[derive(Debug, Clone, Copy, Hash)]
 pub struct KeFormat<'s, Storage: IKeFormatStorage<'s> + 's = Vec<Segment<'s>>> {
     storage: Storage,

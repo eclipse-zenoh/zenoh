@@ -42,3 +42,6 @@ pub(crate) mod utils;
 pub mod fuzzer;
 
 pub mod format;
+
+#[cfg(all(test, feature = "test"))]
+mod tests;
