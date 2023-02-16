@@ -18,7 +18,8 @@ use async_std::sync::{Mutex, RwLock};
 use flume::{Receiver, Sender};
 use futures::select;
 use log::{error, trace, warn};
-use std::collections::HashMap;
+use zenoh_util::keyexpr_tree::impls::KeyedSetProvider;
+use zenoh_util::keyexpr_tree::{KeBoxTree, IKeyExprTreeExtMut, IKeyExprTreeExt};
 use std::str;
 use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::prelude::r#async::*;
@@ -39,8 +40,8 @@ pub struct StorageService {
     name: String,
     storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
     capability: Capability,
-    tombstones: RwLock<HashMap<OwnedKeyExpr, Timestamp>>,
-    wildcard_updates: RwLock<HashMap<OwnedKeyExpr, Sample>>,
+    tombstones: RwLock<KeBoxTree<Timestamp, bool, KeyedSetProvider>>,
+    wildcard_updates: RwLock<KeBoxTree<Sample, bool, KeyedSetProvider>>,
     // latest_timestamp_cache: Option<RwLock<HashMap<OwnedKeyExpr, Timestamp>>>,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
@@ -68,8 +69,8 @@ impl StorageService {
             name: name.to_string(),
             storage: Mutex::new(store_intercept.storage),
             capability: store_intercept.capability,
-            tombstones: RwLock::new(HashMap::new()),
-            wildcard_updates: RwLock::new(HashMap::new()),
+            tombstones: RwLock::new(KeBoxTree::new()),
+            wildcard_updates: RwLock::new(KeBoxTree::new()),
             // latest_timestamp_cache,
             in_interceptor: store_intercept.in_interceptor,
             out_interceptor: store_intercept.out_interceptor,
@@ -268,7 +269,7 @@ impl StorageService {
                     storage.put(k.clone(), sample_to_store.clone()).await
                 } else if sample.kind == SampleKind::Delete {
                     // register a tombstone
-                    self.mark_tombstone(k.clone(), sample_to_store.timestamp.unwrap())
+                    self.mark_tombstone(&k, sample_to_store.timestamp.unwrap())
                         .await;
                     storage
                         .delete(k.clone(), sample_to_store.timestamp.unwrap())
@@ -298,7 +299,7 @@ impl StorageService {
         }
     }
 
-    async fn mark_tombstone(&self, key_expr: OwnedKeyExpr, timestamp: Timestamp) {
+    async fn mark_tombstone(&self, key_expr: &OwnedKeyExpr, timestamp: Timestamp) {
         // @TODO:change into a better store
         let mut tombstones = self.tombstones.write().await;
         tombstones.insert(key_expr, timestamp);
@@ -312,8 +313,9 @@ impl StorageService {
 
     async fn register_wildcard_update(&self, sample: Sample) {
         // @TODO: change to a better store
+        let key = sample.clone().key_expr;
         let mut wildcards = self.wildcard_updates.write().await;
-        wildcards.insert(sample.key_expr.clone().into(), sample);
+        wildcards.insert(&key, sample);
         // @TODO: implement this
         // if self.capability.persistence.eq(&Persistence::Durable) {
         //     // flush to disk to makeit durable
@@ -325,7 +327,8 @@ impl StorageService {
     async fn is_deleted(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
         // check tombstones to see if it is deleted in the future
         let tombstones = self.tombstones.read().await;
-        tombstones.contains_key(key_expr) && tombstones.get(key_expr).unwrap() > timestamp
+        let weight = tombstones.weight_at(key_expr);
+        weight.is_some() && weight.unwrap() > timestamp
     }
 
     async fn ovderriding_wild_update(
@@ -335,8 +338,9 @@ impl StorageService {
     ) -> Option<Sample> {
         // check wild card store for any futuristic update
         let wildcards = self.wildcard_updates.read().await;
-        for (key, sample) in wildcards.iter() {
-            if key_expr.intersects(key) && sample.timestamp.unwrap() > *timestamp {
+        for node in wildcards.intersecting_keys(key_expr) {
+            let weight = wildcards.weight_at(&node);
+            if weight.is_some() && weight.unwrap().timestamp.unwrap() > *timestamp {
                 // if the key matches a wild card update, check whether it was saved in storage
                 // remember that wild card updates change only existing keys
                 let mut storage = self.storage.lock().await;
@@ -355,7 +359,7 @@ impl StorageService {
                             "Storage {} raised an error fetching a query on key {} : {}",
                             self.name, key_expr, e
                         );
-                        return Some(sample.clone());
+                        return Some(weight.unwrap().clone());
                     }
                 }
             }
