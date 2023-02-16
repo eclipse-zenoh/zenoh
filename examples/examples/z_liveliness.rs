@@ -30,7 +30,14 @@ async fn main() {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Declaring LivelinessToken on '{}'...", &key_expr);
-    let mut token = Some(session.declare_liveliness(&key_expr).res().await.unwrap());
+    let mut token = Some(
+        session
+            .liveliness()
+            .declare_token(&key_expr)
+            .res()
+            .await
+            .unwrap(),
+    );
 
     println!("Enter 'd' to undeclare LivelinessToken, 'q' to quit...");
     let mut stdin = async_std::io::stdin();

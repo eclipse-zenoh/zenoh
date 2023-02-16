@@ -13,11 +13,26 @@
 //
 
 //! Liveliness primitives.
+//!
+//! see [`Liveliness`](Liveliness)
 
 #[zenoh_core::unstable]
 use {
-    crate::prelude::*, crate::SessionRef, crate::Undeclarable, std::future::Ready, std::sync::Arc,
-    zenoh_core::AsyncResolve, zenoh_core::Resolvable, zenoh_core::Result as ZResult,
+    crate::{
+        handlers::DefaultHandler,
+        prelude::*,
+        query::GetBuilder,
+        subscriber::{PushMode, SubscriberBuilder},
+        SessionRef, Undeclarable,
+    },
+    std::convert::TryInto,
+    std::future::Ready,
+    std::sync::Arc,
+    std::time::Duration,
+    zenoh_config::unwrap_or_default,
+    zenoh_core::AsyncResolve,
+    zenoh_core::Resolvable,
+    zenoh_core::Result as ZResult,
     zenoh_core::SyncResolve,
 };
 
@@ -29,6 +44,162 @@ lazy_static::lazy_static!(
     pub(crate) static ref KE_PREFIX_LIVELINESS: &'static keyexpr = unsafe { keyexpr::from_str_unchecked(PREFIX_LIVELINESS) };
 );
 
+/// A structure with functions to declare a
+/// [`LivelinessToken`](LivelinessToken), query
+/// existing [`LivelinessTokens`](LivelinessToken)
+/// and subscribe to liveliness changes.
+///
+/// A [`LivelinessToken`](LivelinessToken) is a token which liveliness is tied
+/// to the Zenoh [`Session`](Session) and can be monitored by remote applications.
+///
+/// A [`LivelinessToken`](LivelinessToken) with key `key/expression` can be
+/// queried or subscribed to on key `@/liveliness/key/expression`.
+///
+/// The `Liveliness` structure can be obtained with the
+/// [`Session::liveliness()`](Session::liveliness) function
+/// of the [`Session`] struct.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let liveliness = session
+///     .liveliness()
+///     .declare_token("key/expression")
+///     .res()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[zenoh_core::unstable]
+pub struct Liveliness<'a> {
+    pub(crate) session: SessionRef<'a>,
+}
+
+impl<'a> Liveliness<'a> {
+    /// Create a [`LivelinessToken`](LivelinessToken) for the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression to create the lieliness token on
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let liveliness = session
+    ///     .liveliness()
+    ///     .declare_token("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
+    #[zenoh_core::unstable]
+    pub fn declare_token<'b, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> LivelinessTokenBuilder<'a, 'b>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
+    {
+        LivelinessTokenBuilder {
+            session: self.session.clone(),
+            key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
+        }
+    }
+
+    /// Create a [`Subscriber`](Subscriber) for liveliness changes matching the given key expression.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression to subscribe to
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session.liveliness().declare_subscriber("key/expression").res().await.unwrap();
+    /// while let Ok(sample) = subscriber.recv_async().await {
+    ///     match sample.kind {
+    ///         SampleKind::Put => println!("New liveliness: {}", sample.key_expr),
+    ///         SampleKind::Delete => println!("Lost liveliness: {}", sample.key_expr),
+    ///     }
+    /// }
+    /// # })
+    /// ```
+    #[zenoh_core::unstable]
+    pub fn declare_subscriber<'b, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+    {
+        SubscriberBuilder {
+            session: self.session.clone(),
+            key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
+            scope: Ok(Some(KeyExpr::from(*KE_PREFIX_LIVELINESS))),
+            reliability: Reliability::default(),
+            mode: PushMode,
+            origin: Locality::default(),
+            handler: DefaultHandler,
+        }
+    }
+
+    /// Query liveliness tokens with matching key expressions.
+    ///
+    /// # Arguments
+    ///
+    /// * `key_expr` - The key expression matching liveliness tokens to query
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let replies = session.liveliness().get("key/expression").res().await.unwrap();
+    /// while let Ok(reply) = replies.recv_async().await {
+    ///     if let Ok(sample) = reply.sample {
+    ///         println!(">> Liveliness token {}", sample.key_expr);
+    ///     }
+    /// }
+    /// # })
+    /// ```
+    #[zenoh_core::unstable]
+    pub fn get<'b: 'a, TryIntoKeyExpr>(
+        &'a self,
+        key_expr: TryIntoKeyExpr,
+    ) -> GetBuilder<'a, 'b, DefaultHandler>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+    {
+        let selector = key_expr.try_into().map_err(Into::into).map(|k| k.into());
+        let conf = self.session.runtime.config.lock();
+        GetBuilder {
+            session: &self.session,
+            selector,
+            scope: Ok(Some(KeyExpr::from(*KE_PREFIX_LIVELINESS))),
+            target: QueryTarget::default(),
+            consolidation: QueryConsolidation::default(),
+            destination: Locality::default(),
+            timeout: Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout())),
+            value: None,
+            handler: DefaultHandler,
+        }
+    }
+}
+
 /// A builder for initializing a [`LivelinessToken`](LivelinessToken).
 ///
 /// # Examples
@@ -38,7 +209,8 @@ lazy_static::lazy_static!(
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let liveliness = session
-///     .declare_liveliness("key/expression")
+///     .liveliness()
+///     .declare_token("key/expression")
 ///     .res()
 ///     .await
 ///     .unwrap();
@@ -91,7 +263,7 @@ pub(crate) struct LivelinessTokenState {
 /// A token which liveliness is tied to the Zenoh [`Session`](Session)
 /// and can be monitored by remote applications.
 ///
-/// A LivelinessToken with key `key/expression` can be queried or subscribed
+/// A `LivelinessToken` with key `key/expression` can be queried or subscribed
 /// to on key `@/liveliness/key/expression`.
 ///
 /// A declared liveliness token will be seen as alive by any other Zenoh
@@ -101,7 +273,7 @@ pub(crate) struct LivelinessTokenState {
 /// that declared the token has Zenoh connectivity with the Zenoh application
 /// that monitors it.
 ///
-/// LivelinessTokens are automatically undeclared when dropped.
+/// `LivelinessTokens` are automatically undeclared when dropped.
 ///
 /// # Examples
 /// ```no_run
@@ -109,7 +281,9 @@ pub(crate) struct LivelinessTokenState {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let liveliness = session.declare_liveliness("key/expression")
+/// let liveliness = session
+///     .liveliness()
+///     .declare_token("key/expression")
 ///     .res()
 ///     .await
 ///     .unwrap();
@@ -131,7 +305,9 @@ pub struct LivelinessToken<'a> {
 /// use zenoh::prelude::r#async::*;
 ///
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
-/// let liveliness = session.declare_liveliness("key/expression")
+/// let liveliness = session
+///     .liveliness()
+///     .declare_token("key/expression")
 ///     .res()
 ///     .await
 ///     .unwrap();
@@ -180,7 +356,9 @@ impl<'a> LivelinessToken<'a> {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let liveliness = session.declare_liveliness("key/expression")
+    /// let liveliness = session
+    ///     .liveliness()
+    ///     .declare_token("key/expression")
     ///     .res()
     ///     .await
     ///     .unwrap();

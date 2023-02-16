@@ -33,7 +33,8 @@ async fn main() {
     println!("Declaring Liveliness Subscriber on '{}'...", &key_expr);
 
     let subscriber = session
-        .declare_liveliness_subscriber(&key_expr)
+        .liveliness()
+        .declare_subscriber(&key_expr)
         .res()
         .await
         .unwrap();

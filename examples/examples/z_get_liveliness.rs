@@ -29,7 +29,8 @@ async fn main() {
 
     println!("Sending Liveliness Query '{key_expr}'...");
     let replies = session
-        .get_liveliness(&key_expr)
+        .liveliness()
+        .get(&key_expr)
         .timeout(timeout)
         .res()
         .await
