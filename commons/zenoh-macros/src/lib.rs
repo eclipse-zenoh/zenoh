@@ -71,7 +71,7 @@ pub fn keformat(tokens: TokenStream) -> TokenStream {
     let lit = syn::parse::<syn::LitStr>(tokens).unwrap();
     let source = lit.value();
     let len = source.split("${").count() - 1;
-    // use zenoh_protocol::core::key_expr::format::KeFormat;
+    use zenoh_protocol::core::key_expr::format::KeFormat;
     // let format = match KeFormat::new(&source) {
     //     Ok(format) => format,
     //     Err(e) => panic!("{}", e),

@@ -34,14 +34,13 @@ impl<'s, Storage: IKeFormatStorage<'s> + 's> KeFormat<'s, Storage> {
         let segments = self.storage.segments();
         let mut results = self.storage.values_storage(|_| None);
         let Some(target) = target.strip_suffix(self.suffix) else {
-            if !segments.is_empty() 
-            && segments.iter().all(|s| s.spec.pattern() == "**") 
-            && self.suffix.as_bytes()[0] == b'/' 
+            if !segments.is_empty()
+            && segments.iter().all(|s| s.spec.pattern() == "**")
+            && self.suffix.as_bytes()[0] == b'/'
             && target == &self.suffix[1..] {
                 return Ok(Parsed { format: self, results });
-            } 
+            }
             bail!("{target} is not included in {self}")
-            
         };
         assert_eq!(segments.len(), results.as_mut().len());
         if do_parse(target, segments, results.as_mut()) {
