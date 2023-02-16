@@ -11,9 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::ZInt;
-use alloc::{borrow::Cow, format, string::String};
-use core::{convert::TryFrom, fmt, mem};
+use crate::core::{CowStr, ZInt};
+use alloc::{borrow::Cow, string::String};
+use core::{
+    convert::TryFrom,
+    fmt::{self, Debug},
+    mem,
+};
 
 mod consts {
     pub(super) const MIMES: [&str; 21] = [
@@ -123,7 +127,7 @@ impl AsRef<str> for KnownEncoding {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Encoding {
     Exact(KnownEncoding),
-    WithSuffix(KnownEncoding, Cow<'static, str>),
+    WithSuffix(KnownEncoding, CowStr<'static>),
 }
 
 impl Encoding {
@@ -135,20 +139,18 @@ impl Encoding {
         if suffix.as_ref().is_empty() {
             Some(Encoding::Exact(prefix))
         } else {
-            Some(Encoding::WithSuffix(prefix, suffix.into()))
+            Some(Encoding::WithSuffix(prefix, suffix.into().into()))
         }
     }
 
     /// Sets the suffix of this encoding.
     pub fn with_suffix<IntoCowStr>(self, suffix: IntoCowStr) -> Self
     where
-        IntoCowStr: Into<Cow<'static, str>>,
+        IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
     {
         match self {
-            Encoding::Exact(e) => Encoding::WithSuffix(e, suffix.into()),
-            Encoding::WithSuffix(e, s) => {
-                Encoding::WithSuffix(e, Cow::Owned(format!("{}{}", s, suffix.into())))
-            }
+            Encoding::Exact(e) => Encoding::WithSuffix(e, suffix.into().into()),
+            Encoding::WithSuffix(e, s) => Encoding::WithSuffix(e, (s + suffix.as_ref()).into()),
         }
     }
 

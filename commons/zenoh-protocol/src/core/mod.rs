@@ -54,6 +54,8 @@ pub const EMPTY_EXPR_ID: ExprId = 0;
 pub mod wire_expr;
 pub use wire_expr::WireExpr;
 
+mod cowstr;
+pub use cowstr::CowStr;
 mod encoding;
 pub use encoding::{Encoding, KnownEncoding};
 
