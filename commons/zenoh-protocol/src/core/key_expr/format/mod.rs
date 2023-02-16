@@ -175,7 +175,7 @@ impl<'s, Storage: IKeFormatStorage<'s> + 's> core::fmt::Display for KeFormat<'s,
         write!(f, "{}", self.suffix)
     }
 }
-
+#[derive(Clone)]
 pub struct KeFormatter<'s, Storage: IKeFormatStorage<'s>> {
     format: &'s KeFormat<'s, Storage>,
     buffer: String,

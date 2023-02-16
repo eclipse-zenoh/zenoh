@@ -1,7 +1,9 @@
 use zenoh::keformat;
+
+keformat!("a/${a:*}/b/${b:**}", format);
 fn main() {
-    let format = keformat!("a/${a:*}/b/${b:**}");
+    let format = format::Format::new();
     let mut formatter = format.formatter();
-    formatter.set("a", "a").unwrap();
+    keformat!(formatter, a = 1, b = "hi/there").unwrap();
     println!("{formatter:?}");
 }
