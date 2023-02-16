@@ -18,14 +18,16 @@ use async_std::sync::{Mutex, RwLock};
 use flume::{Receiver, Sender};
 use futures::select;
 use log::{error, trace, warn};
-use zenoh_util::keyexpr_tree::impls::KeyedSetProvider;
-use zenoh_util::keyexpr_tree::{KeBoxTree, IKeyExprTreeExtMut, IKeyExprTreeExt};
 use std::str;
 use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
 use zenoh_backend_traits::{Capability, History, StorageInsertionResult};
+use zenoh_util::keyexpr_tree::impls::KeyedSetProvider;
+use zenoh_util::keyexpr_tree::{
+    IKeyExprTreeExt, IKeyExprTreeExtMut, KeBoxTree, NonWild, UnknownWildness,
+};
 
 pub struct ReplicationService {
     pub empty_start: bool,
@@ -40,8 +42,8 @@ pub struct StorageService {
     name: String,
     storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
     capability: Capability,
-    tombstones: RwLock<KeBoxTree<Timestamp, bool, KeyedSetProvider>>,
-    wildcard_updates: RwLock<KeBoxTree<Sample, bool, KeyedSetProvider>>,
+    tombstones: RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>,
+    wildcard_updates: RwLock<KeBoxTree<Sample, UnknownWildness, KeyedSetProvider>>,
     // latest_timestamp_cache: Option<RwLock<HashMap<OwnedKeyExpr, Timestamp>>>,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
