@@ -303,6 +303,15 @@ pub struct KeyExprTreeNode<Weight, Wildness: IWildness, Children: IChildrenProvi
     weight: Option<Weight>,
 }
 
+unsafe impl<Weight: Send, Wildness: IWildness + Send, Children: IChildrenProvider<Box<Self>> + Send>
+    Send for KeyExprTreeNode<Weight, Wildness, Children>
+{
+}
+unsafe impl<Weight: Sync, Wildness: IWildness + Sync, Children: IChildrenProvider<Box<Self>> + Sync>
+    Sync for KeyExprTreeNode<Weight, Wildness, Children>
+{
+}
+
 impl<Weight, Wildness: IWildness, Children: IChildrenProvider<Box<Self>>> IKeyExprTreeNode<Weight>
     for KeyExprTreeNode<Weight, Wildness, Children>
 where
