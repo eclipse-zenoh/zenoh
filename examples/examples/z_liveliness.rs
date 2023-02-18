@@ -72,7 +72,7 @@ fn parse_args() -> (Config, KeyExpr<'static>) {
         ))
         .arg(
             Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression of the liveliness token.'")
-                .default_value("group1/member1"),
+                .default_value("group1/zenoh-rs"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
