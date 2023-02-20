@@ -89,6 +89,15 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
             }
         }
     });
+    let getters = specs.iter().map(|spec| {
+        let id = &source[spec.spec_start..(spec.spec_start + spec.id_end as usize)];
+        let get_id = quote::format_ident!("{}", id);
+        quote! {
+            pub fn #get_id (&self) -> Option<& ::zenoh::key_expr::keyexpr> {
+                unsafe {self._0.get(#id).unwrap_unchecked()}
+            }
+        }
+    });
     let segments = specs.iter().map(|spec| {
         let SegmentBuilder {
             segment_start,
@@ -113,60 +122,75 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
     });
 
     quote! {
-            pub const FORMAT: Format<'static> = unsafe {
+            use ::zenoh::Result as ZResult;
+            pub const FORMAT: Format = unsafe {
                 Format {_0: ::zenoh::key_expr::format::macro_support::const_new(#source, [#(#segments)*])}
             };
             /// The `#lit` format, as a structure.
             #[derive(Copy, Clone, Hash)]
-            pub struct Format<'a>{_0: ::zenoh::key_expr::format::KeFormat<'a, [::zenoh::key_expr::format::Segment<'a>; #len]>}
+            pub struct Format{_0: ::zenoh::key_expr::format::KeFormat<'static, [::zenoh::key_expr::format::Segment<'static>; #len]>}
             #[derive(Clone)]
-            pub struct Formatter<'a>(::zenoh::key_expr::format::KeFormatter<'a, [::zenoh::key_expr::format::Segment<'a>; #len]>);
-            impl<'a> ::core::fmt::Debug for Format<'a> {
+            pub struct Formatter(::zenoh::key_expr::format::KeFormatter<'static, [::zenoh::key_expr::format::Segment<'static>; #len]>);
+            impl ::core::fmt::Debug for Format {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
                     ::core::fmt::Debug::fmt(&self._0, f)
                 }
             }
-            impl<'a> ::core::fmt::Debug for Formatter<'a> {
+            impl ::core::fmt::Debug for Formatter {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
                     ::core::fmt::Debug::fmt(&self.0, f)
                 }
             }
-            impl<'a> ::core::fmt::Display for Format<'a> {
+            impl ::core::fmt::Display for Format {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
                     ::core::fmt::Display::fmt(&self._0, f)
                 }
             }
-            impl<'a> ::core::ops::Deref for Format<'a> {
-                type Target = ::zenoh::key_expr::format::KeFormat<'a, [::zenoh::key_expr::format::Segment<'a>; #len]>;
+            impl ::core::ops::Deref for Format {
+                type Target = ::zenoh::key_expr::format::KeFormat<'static, [::zenoh::key_expr::format::Segment<'static>; #len]>;
                 fn deref(&self) -> &Self::Target {&self._0}
             }
-            impl<'a> ::core::ops::Deref for Formatter<'a> {
-                type Target = ::zenoh::key_expr::format::KeFormatter<'a, [::zenoh::key_expr::format::Segment<'a>; #len]>;
+            impl ::core::ops::Deref for Formatter {
+                type Target = ::zenoh::key_expr::format::KeFormatter<'static, [::zenoh::key_expr::format::Segment<'static>; #len]>;
                 fn deref(&self) -> &Self::Target {&self.0}
             }
-            impl<'a> ::core::ops::DerefMut for Formatter<'a> {
+            impl ::core::ops::DerefMut for Formatter {
                 fn deref_mut(&mut self) -> &mut Self::Target {&mut self.0}
             }
-            impl<'a> Format<'a> {
-                pub fn formatter() -> Formatter<'a> {
+            impl Formatter {
+                #(#setters)*
+            }
+            pub struct Parsed<'s>{_0: ::zenoh::key_expr::format::Parsed<'s, [::zenoh::key_expr::format::Segment<'s>; #len]>}
+            impl<'s> ::core::ops::Deref for Parsed<'s> {
+                type Target = ::zenoh::key_expr::format::Parsed<'s, [::zenoh::key_expr::format::Segment<'s>; #len]>;
+                fn deref(&self) -> &Self::Target {&self._0}
+            }
+            impl Parsed<'_> {
+                #(#getters)*
+            }
+            impl Format {
+                pub fn formatter() -> Formatter {
                     Formatter(FORMAT.formatter())
                 }
-                pub fn into_inner(self) -> ::zenoh::key_expr::format::KeFormat<'a, [::zenoh::key_expr::format::Segment<'a>; #len]> {
+                pub fn parse<'s>(target: &'s ::zenoh::key_expr::keyexpr) -> ZResult<Parsed<'s>> {
+                    Ok(Parsed{_0: FORMAT.parse(target)?})
+                }
+                pub fn into_inner(self) -> ::zenoh::key_expr::format::KeFormat<'static, [::zenoh::key_expr::format::Segment<'static>; #len]> {
                     self._0
                 }
             }
-            pub fn formatter() -> Formatter<'static> {
+            pub fn formatter() -> Formatter {
                 Format::formatter()
             }
-            impl<'a> Formatter<'a> {
-                #(#setters)*
+            pub fn parse<'s>(target: &'s ::zenoh::key_expr::keyexpr) -> ZResult<Parsed<'s>> {
+                Format::parse(target)
             }
     }
 }
 
 enum KeformatInput {
     Litteral(syn::LitStr, syn::Ident),
-    Format(syn::Ident, Vec<(Box<syn::Expr>, Box<syn::Expr>)>),
+    Format(syn::Ident, Vec<(syn::Expr, syn::Expr)>),
 }
 impl syn::parse::Parse for KeformatInput {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
@@ -183,9 +207,12 @@ impl syn::parse::Parse for KeformatInput {
             }
             formats.extend(
                 input
-                    .parse_terminated::<_, syn::Token!(,)>(syn::ExprAssign::parse)?
+                    .parse_terminated::<_, syn::Token!(,)>(syn::Expr::parse)?
                     .into_iter()
-                    .map(|a| (a.left, a.right)),
+                    .map(|a| match a {
+                        syn::Expr::Assign(a) => (*a.left, *a.right),
+                        a => (a.clone(), a),
+                    }),
             );
             Ok(KeformatInput::Format(id, formats))
         }

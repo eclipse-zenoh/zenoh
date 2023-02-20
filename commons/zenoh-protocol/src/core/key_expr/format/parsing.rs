@@ -27,6 +27,63 @@ impl<'s, Storage: IKeFormatStorage<'s>> Parsed<'s, Storage> {
         let Some(i) = self.format.storage.segments().iter().position(|s| s.spec.id() == id) else {bail!("{} has no {id} field", self.format)};
         Ok(self.results.as_ref()[i])
     }
+    pub fn values(&self) -> &[Option<&'s keyexpr>] {
+        self.results.as_ref()
+    }
+    pub fn iter(&'s self) -> Iter<'s, Storage> {
+        self.into_iter()
+    }
+}
+
+impl<'s, Storage: IKeFormatStorage<'s>> IntoIterator for &'s Parsed<'s, Storage> {
+    type Item = <Self::IntoIter as Iterator>::Item;
+    type IntoIter = Iter<'s, Storage>;
+    fn into_iter(self) -> Self::IntoIter {
+        todo!()
+    }
+}
+pub struct Iter<'s, Storage: IKeFormatStorage<'s>> {
+    parsed: &'s Parsed<'s, Storage>,
+    start: usize,
+    end: usize,
+}
+impl<'s, Storage: IKeFormatStorage<'s>> Iterator for Iter<'s, Storage> {
+    type Item = (&'s str, Option<&'s keyexpr>);
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.start < self.end {
+            let id = self.parsed.format.storage.segments()[self.start].spec.id();
+            let ke = self.parsed.results.as_ref()[self.start];
+            self.start += 1;
+            Some((id, ke))
+        } else {
+            None
+        }
+    }
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        self.start += n;
+        self.next()
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let result = self.end - self.start;
+        (result, Some(result))
+    }
+}
+impl<'s, Storage: IKeFormatStorage<'s>> ExactSizeIterator for Iter<'s, Storage> {
+    fn len(&self) -> usize {
+        self.end - self.start
+    }
+}
+impl<'s, Storage: IKeFormatStorage<'s>> DoubleEndedIterator for Iter<'s, Storage> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.start < self.end {
+            self.end -= 1;
+            let id = self.parsed.format.storage.segments()[self.end].spec.id();
+            let ke = self.parsed.results.as_ref()[self.end];
+            Some((id, ke))
+        } else {
+            None
+        }
+    }
 }
 
 impl<'s, Storage: IKeFormatStorage<'s> + 's> KeFormat<'s, Storage> {

@@ -360,6 +360,9 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
         }
         self
     }
+    pub fn build(&self) -> ZResult<OwnedKeyExpr> {
+        self.try_into()
+    }
     pub fn get(&self, id: &str) -> Option<&str> {
         let segments = self.format.storage.segments();
         segments
@@ -485,3 +488,4 @@ fn formatting() {
 }
 
 mod parsing;
+pub use parsing::{Iter, Parsed};
