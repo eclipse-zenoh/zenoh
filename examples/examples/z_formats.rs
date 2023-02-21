@@ -1,6 +1,6 @@
 use zenoh::{keformat, prelude::keyexpr};
 
-keformat!("user_id/${user_id:*}/file/${file:**}", format);
+keformat!("user_id/${user_id:*}/file/${file:**}" mod format);
 
 fn main() {
     let mut formatter = format::formatter();

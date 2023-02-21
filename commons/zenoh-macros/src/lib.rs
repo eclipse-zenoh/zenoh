@@ -123,17 +123,17 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
 
     quote! {
             use ::zenoh::Result as ZResult;
-            pub const FORMAT: Format = unsafe {
-                Format {_0: ::zenoh::key_expr::format::macro_support::const_new(#source, [#(#segments)*])}
+            const FORMAT_INNER: ::zenoh::key_expr::format::KeFormat<'static, [::zenoh::key_expr::format::Segment<'static>; #len]> = unsafe {
+                ::zenoh::key_expr::format::macro_support::const_new(#source, [#(#segments)*])
             };
             /// The `#lit` format, as a structure.
             #[derive(Copy, Clone, Hash)]
-            pub struct Format{_0: ::zenoh::key_expr::format::KeFormat<'static, [::zenoh::key_expr::format::Segment<'static>; #len]>}
+            pub struct Format;
             #[derive(Clone)]
             pub struct Formatter(::zenoh::key_expr::format::KeFormatter<'static, [::zenoh::key_expr::format::Segment<'static>; #len]>);
             impl ::core::fmt::Debug for Format {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-                    ::core::fmt::Debug::fmt(&self._0, f)
+                    ::core::fmt::Debug::fmt(&FORMAT_INNER, f)
                 }
             }
             impl ::core::fmt::Debug for Formatter {
@@ -143,12 +143,12 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
             }
             impl ::core::fmt::Display for Format {
                 fn fmt(&self, f: &mut ::core::fmt::Formatter) -> ::core::fmt::Result {
-                    ::core::fmt::Display::fmt(&self._0, f)
+                    ::core::fmt::Display::fmt(&FORMAT_INNER, f)
                 }
             }
             impl ::core::ops::Deref for Format {
                 type Target = ::zenoh::key_expr::format::KeFormat<'static, [::zenoh::key_expr::format::Segment<'static>; #len]>;
-                fn deref(&self) -> &Self::Target {&self._0}
+                fn deref(&self) -> &Self::Target {&FORMAT_INNER}
             }
             impl ::core::ops::Deref for Formatter {
                 type Target = ::zenoh::key_expr::format::KeFormatter<'static, [::zenoh::key_expr::format::Segment<'static>; #len]>;
@@ -170,13 +170,13 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
             }
             impl Format {
                 pub fn formatter() -> Formatter {
-                    Formatter(FORMAT.formatter())
+                    Formatter(Format.formatter())
                 }
                 pub fn parse<'s>(target: &'s ::zenoh::key_expr::keyexpr) -> ZResult<Parsed<'s>> {
-                    Ok(Parsed{_0: FORMAT.parse(target)?})
+                    Ok(Parsed{_0: Format.parse(target)?})
                 }
                 pub fn into_inner(self) -> ::zenoh::key_expr::format::KeFormat<'static, [::zenoh::key_expr::format::Segment<'static>; #len]> {
-                    self._0
+                    FORMAT_INNER
                 }
             }
             pub fn formatter() -> Formatter {
@@ -190,13 +190,13 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
 
 enum KeformatInput {
     Litteral(syn::LitStr, syn::Ident),
-    Format(syn::Ident, Vec<(syn::Expr, syn::Expr)>),
+    Format(syn::Expr, Vec<(syn::Expr, syn::Expr)>),
 }
 impl syn::parse::Parse for KeformatInput {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
         if input.fork().parse::<syn::LitStr>().is_ok() {
             let lit = input.parse().expect("Already inspected");
-            input.parse::<syn::Token!(,)>()?;
+            input.parse::<syn::Token!(mod)>()?;
             let id = input.parse()?;
             Ok(KeformatInput::Litteral(lit, id))
         } else {
@@ -219,6 +219,20 @@ impl syn::parse::Parse for KeformatInput {
     }
 }
 
+/// The best way to build Key Expression Formats into your applications.
+///
+/// This macro has two usages, letting you validate a few things at compile time in both cases. The `z_formats.rs` example file shows off both usages.
+///
+/// # Declaring formatting modules.
+/// `keformat!($format: lit mod $name: ident)` validates `$format` to be a string litteral for a valid KeFormat, and declares a public module named `$name` in its call-site. The module contains the following elements:
+/// - `Format`, a zero-sized type that represents your format.
+/// - `formatter()`, a function that constructs a `Formatter` specialized for your format:
+///     - for every spec in your format, `Formatter` will have a method named after the spec's `id` that lets you set a value for that field of your format. These methods will return `Result<&mut Formatter, FormatError>`.
+/// - `parse(target: &keyexpr) -> ZResult<Parsed<'_>>` will parse the provided key expression according to your format. Just like `KeFormat::parse`, parsing is lazy: each field will match the smallest subsection of your `target` that is included in its pattern.
+///     - like `Formatter`, `Parsed` will have a method named after each spec's `id` that returns `Option<&keyexpr>`. That `Option` will only be `None` if the spec's format was `**` and matched a sequence of 0 chunks.
+///
+/// # Using declared formatters
+/// `keformat!($formatter: expr, $($field: ident [= $value: expr]),*)`where `$formatter` dereferences to `&mut Formatter`, can be used to succintly use a format. Each `$field` will be set to `$value`. If `$value` is omitted, `$field` will be reused.
 #[proc_macro]
 pub fn keformat(tokens: TokenStream) -> TokenStream {
     match syn::parse::<KeformatInput>(tokens).expect("Failed to parse") {
