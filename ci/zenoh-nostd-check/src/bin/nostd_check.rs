@@ -14,16 +14,24 @@
 
 #![no_std]
 
-#[cfg(not(feature = "std"))]
+use core::panic::PanicInfo;
+use getrandom::{register_custom_getrandom, Error};
+use linked_list_allocator::LockedHeap;
+#[allow(unused_imports)]
+use {zenoh_buffers, zenoh_codec, zenoh_protocol};
+
 #[panic_handler]
-fn dummy_panic_handler(_: &core::panic::PanicInfo) -> ! {
+fn dummy_panic_handler(_: &PanicInfo) -> ! {
     loop {}
 }
 
-fn dummy_get_rand(_: &mut [u8]) -> Result<(), getrandom::Error> {
+#[global_allocator]
+static ALLOCATOR: LockedHeap = LockedHeap::empty();
+
+fn dummy_get_rand(_: &mut [u8]) -> Result<(), Error> {
     Ok(())
 }
 
 fn main() {
-    getrandom::register_custom_getrandom!(dummy_get_rand);
+    register_custom_getrandom!(dummy_get_rand);
 }

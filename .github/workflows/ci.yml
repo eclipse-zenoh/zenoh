@@ -114,39 +114,15 @@ jobs:
 
       - name: Install latest Rust toolchain
         uses: actions-rs/toolchain@v1
+      
+      - name: Move to crate folder (not in workspace)
+        run: cd ./ci/zenoh-nostd-check
 
       - name: Add generic no_std target to the toolchain
         run: rustup target add x86_64-unknown-none
       
-      - name: Install cargo-no-dev-deps
-        run: cargo install cargo-no-dev-deps --locked
-      
-      - name: Check zenoh-collections
+      - name: Perform no_std checks
         uses: actions-rs/cargo@v1
         with:
           command: check
-          args: --package zenoh-collections --no-default-features --target x86_64-unknown-none
-      
-      - name: Check zenoh-result
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --package zenoh-result --no-default-features --target x86_64-unknown-none
-      
-      - name: Check zenoh-buffers
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --package zenoh-buffers --target x86_64-unknown-none
-      
-      - name: Check zenoh-protocol
-        uses: actions-rs/cargo@v1
-        with:
-          command: no-dev-deps
-          args: check --package zenoh-protocol --bin no_std_ci_check --no-default-features --features no-std-ci-check --target x86_64-unknown-none
-      
-      - name: Check zenoh-codec
-        uses: actions-rs/cargo@v1
-        with:
-          command: no-dev-deps
-          args: check --package zenoh-codec --bin no_std_ci_check --no-default-features --features no-std-ci-check --target x86_64-unknown-none
+          args: --package zenoh-nostd-check --bin nostd_check --target x86_64-unknown-none
