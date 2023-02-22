@@ -288,29 +288,29 @@ where
         let mut shm = None;
         let mut auth = None;
 
-        let mut has_more = imsg::has_flag(self.header, flag::Z);
-        while has_more {
+        let mut has_ext = imsg::has_flag(self.header, flag::Z);
+        while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
             match imsg::mid(ext) {
                 ext::QOS => {
-                    let (q, more): (ext::QoS, bool) = eodec.read(&mut *reader)?;
+                    let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
                     qos = Some(q);
-                    has_more = more;
+                    has_ext = ext;
                 }
                 ext::SHM => {
-                    let (s, more): (ext::Shm, bool) = eodec.read(&mut *reader)?;
+                    let (s, ext): (ext::Shm, bool) = eodec.read(&mut *reader)?;
                     shm = Some(s);
-                    has_more = more;
+                    has_ext = ext;
                 }
                 ext::AUTH => {
-                    let (a, more): (ext::Auth, bool) = eodec.read(&mut *reader)?;
+                    let (a, ext): (ext::Auth, bool) = eodec.read(&mut *reader)?;
                     auth = Some(a);
-                    has_more = more;
+                    has_ext = ext;
                 }
                 _ => {
-                    let (_, more): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
-                    has_more = more;
+                    let (_, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    has_ext = ext;
                 }
             }
         }

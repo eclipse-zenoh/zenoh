@@ -11,18 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[repr(u8)]
-// The value represents the 2-bit encoded value
-pub enum Bits {
-    U8 = 0b00,
-    U16 = 0b01,
-    U32 = 0b10,
-    U64 = 0b11,
-}
+use crate::core::Bits;
 
-pub const FRAME_SN_RESOLUTION: Bits = Bits::U64;
-pub const REQUEST_ID_RESOLUTION: Bits = Bits::U64;
-pub const KEYEXPR_ID_RESOLUTION: Bits = Bits::U64;
+pub const FRAME_SN_RESOLUTION: Bits = Bits::U32;
+pub const REQUEST_ID_RESOLUTION: Bits = Bits::U32;
+pub const KEYEXPR_ID_RESOLUTION: Bits = Bits::U32;
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
 ///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.

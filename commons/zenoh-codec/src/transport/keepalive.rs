@@ -17,8 +17,11 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::imsg,
-    transport::{id, KeepAlive},
+    common::{imsg, ZExtUnknown},
+    transport::{
+        id,
+        keepalive::{flag, KeepAlive},
+    },
 };
 
 impl<W> WCodec<&KeepAlive, &mut W> for Zenoh080
@@ -54,9 +57,16 @@ where
 {
     type Error = DidntRead;
 
-    fn read(self, _reader: &mut R) -> Result<KeepAlive, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<KeepAlive, Self::Error> {
         if imsg::mid(self.header) != id::KEEP_ALIVE {
             return Err(DidntRead);
+        }
+
+        // Extensions
+        let mut has_ext = imsg::has_flag(self.header, flag::Z);
+        while has_ext {
+            let (_, ext): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+            has_ext = ext;
         }
 
         Ok(KeepAlive)

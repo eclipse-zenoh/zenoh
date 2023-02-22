@@ -27,8 +27,8 @@ use zenoh_buffers::{ZBuf, ZSlice};
 ///
 /// ```text
 /// Header flags:
-/// - X: Reserved
-/// - F: Forward        If F==1 then the extension needs to be forwarded. (*)
+/// - E |: Encoding     The encoding of the extension
+/// - E/
 /// - Z: More           If Z==1 then another extension will follow.
 ///
 ///  7 6 5 4 3 2 1 0

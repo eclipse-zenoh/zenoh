@@ -176,6 +176,7 @@ pub struct InitSyn {
     pub resolution: Resolution,
     pub batch_size: u16,
     pub qos: Option<ext::QoS>,
+    #[cfg(feature = "shared-memory")]
     pub shm: Option<ext::Shm>,
     pub auth: Option<ext::Auth>,
 }
@@ -185,11 +186,24 @@ pub mod ext {
     use crate::common::{ZExtUnit, ZExtZSlice};
 
     pub const QOS: u8 = 0x01;
+    #[cfg(feature = "shared-memory")]
     pub const SHM: u8 = 0x02;
     pub const AUTH: u8 = 0x03;
 
+    /// # QoS extension
+    ///
+    /// Indicates wether the Zenoh nodes support QoS or not
     pub type QoS = ZExtUnit<QOS>;
+
+    /// # Shm extension
+    ///
+    /// Used as challenge for probing shared memory capabilities
+    #[cfg(feature = "shared-memory")]
     pub type Shm = ZExtZSlice<SHM>;
+
+    /// # Auth extension
+    ///
+    /// Used as challenge for probing authentication rights
     pub type Auth = ZExtZSlice<AUTH>;
 }
 
@@ -207,6 +221,7 @@ impl InitSyn {
         let resolution = Resolution::rand();
         let batch_size: u16 = rng.gen();
         let qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        #[cfg(feature = "shared-memory")]
         let shm = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
         let auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
 
@@ -217,6 +232,7 @@ impl InitSyn {
             resolution,
             batch_size,
             qos,
+            #[cfg(feature = "shared-memory")]
             shm,
             auth,
         }
@@ -233,6 +249,7 @@ pub struct InitAck {
     pub batch_size: u16,
     pub cookie: ZSlice,
     pub qos: Option<ext::QoS>,
+    #[cfg(feature = "shared-memory")]
     pub shm: Option<ext::Shm>,
     pub auth: Option<ext::Auth>,
 }
@@ -256,6 +273,7 @@ impl InitAck {
         let batch_size: u16 = rng.gen();
         let cookie = ZSlice::rand(64);
         let qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        #[cfg(feature = "shared-memory")]
         let shm = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
         let auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
 
@@ -267,6 +285,7 @@ impl InitAck {
             batch_size,
             cookie,
             qos,
+            #[cfg(feature = "shared-memory")]
             shm,
             auth,
         }

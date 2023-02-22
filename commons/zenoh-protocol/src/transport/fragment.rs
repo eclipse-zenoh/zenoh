@@ -70,6 +70,7 @@ pub mod flag {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Fragment {
     pub reliability: Reliability,
+    pub more: bool,
     pub sn: ZInt,
     pub qos: ext::QoS,
     pub payload: ZSlice,
@@ -94,6 +95,7 @@ impl Fragment {
         } else {
             Reliability::BestEffort
         };
+        let more = rng.gen_bool(0.5);
         let sn: ZInt = rng.gen();
         let qos = ext::QoS::rand();
         let payload = ZSlice::rand(rng.gen_range(8..128));
@@ -101,6 +103,7 @@ impl Fragment {
         Fragment {
             reliability,
             sn,
+            more,
             qos,
             payload,
         }
@@ -112,6 +115,7 @@ impl Fragment {
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct FragmentHeader {
     pub reliability: Reliability,
+    pub more: bool,
     pub sn: ZInt,
     pub qos: ext::QoS,
 }
@@ -128,11 +132,13 @@ impl FragmentHeader {
         } else {
             Reliability::BestEffort
         };
+        let more = rng.gen_bool(0.5);
         let sn: ZInt = rng.gen();
         let qos = ext::QoS::rand();
 
         FragmentHeader {
             reliability,
+            more,
             sn,
             qos,
         }

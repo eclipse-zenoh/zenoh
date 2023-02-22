@@ -24,8 +24,6 @@ use async_std::sync::Mutex as AsyncMutex;
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
 use std::sync::Arc;
-#[cfg(feature = "shared-memory")]
-use std::sync::RwLock;
 use std::time::Duration;
 use zenoh_cfg_properties::{config::*, Properties};
 use zenoh_config::{Config, QueueConf, QueueSizeConf};
@@ -34,12 +32,10 @@ use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
 use zenoh_protocol::{
     core::{EndPoint, Locator, Priority, WhatAmI, ZInt, ZenohId},
-    defaults::{BATCH_SIZE, SEQ_NUM_RES},
+    defaults::{BATCH_SIZE, FRAME_SN_RESOLUTION},
     VERSION,
 };
 use zenoh_result::{bail, ZResult};
-#[cfg(feature = "shared-memory")]
-use zenoh_shm::SharedMemoryReader;
 
 /// # Examples
 /// ```
@@ -292,7 +288,7 @@ impl Default for TransportManagerBuilder {
             version: VERSION,
             zid: ZenohId::rand(),
             whatami: ZN_MODE_DEFAULT.parse().unwrap(),
-            sn_resolution: SEQ_NUM_RES,
+            sn_resolution: FRAME_SN_RESOLUTION as ZInt,
             batch_size: BATCH_SIZE,
             queue_size: queue.size,
             queue_backoff: Duration::from_nanos(backoff),
@@ -342,8 +338,6 @@ pub struct TransportManager {
     pub(crate) state: Arc<TransportManagerState>,
     pub(crate) prng: Arc<AsyncMutex<PseudoRng>>,
     pub(crate) cipher: Arc<BlockCipher>,
-    #[cfg(feature = "shared-memory")]
-    pub(crate) shmr: Arc<RwLock<SharedMemoryReader>>,
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
     pub(crate) tx_executor: TransportExecutor,
@@ -366,8 +360,6 @@ impl TransportManager {
             state: Arc::new(params.state),
             prng: Arc::new(AsyncMutex::new(prng)),
             cipher: Arc::new(cipher),
-            #[cfg(feature = "shared-memory")]
-            shmr: Arc::new(RwLock::new(SharedMemoryReader::new())),
             locator_inspector: Default::default(),
             new_unicast_link_sender,
             tx_executor: TransportExecutor::new(tx_threads),

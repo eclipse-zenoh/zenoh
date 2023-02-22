@@ -75,10 +75,10 @@ where
         let reason: u8 = self.codec.read(&mut *reader)?;
 
         // Extensions
-        let mut has_extensions = imsg::has_flag(self.header, flag::Z);
-        while has_extensions {
-            let (_, more): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
-            has_extensions = more;
+        let mut has_ext = imsg::has_flag(self.header, flag::Z);
+        while has_ext {
+            let (_, ext): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+            has_ext = ext;
         }
 
         Ok(Close { reason, session })

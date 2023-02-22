@@ -38,6 +38,9 @@ where
         if let Reliability::Reliable = x.reliability {
             header |= flag::R;
         }
+        if x.more {
+            header |= flag::M;
+        }
         if x.qos != ext::QoS::default() {
             header |= flag::Z;
         }
@@ -83,30 +86,32 @@ where
             true => Reliability::Reliable,
             false => Reliability::BestEffort,
         };
+        let more = imsg::has_flag(self.header, flag::M);
         let sn: ZInt = self.codec.read(&mut *reader)?;
 
         // Extensions
         let mut qos = ext::QoS::default();
 
-        let mut has_more = imsg::has_flag(self.header, flag::Z);
-        while has_more {
+        let mut has_ext = imsg::has_flag(self.header, flag::Z);
+        while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
             match imsg::mid(ext) {
                 ext::QOS => {
-                    let (q, more): (ext::QoS, bool) = eodec.read(&mut *reader)?;
+                    let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
                     qos = q;
-                    has_more = more;
+                    has_ext = ext;
                 }
                 _ => {
-                    let (_, more): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
-                    has_more = more;
+                    let (_, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    has_ext = ext;
                 }
             }
         }
 
         Ok(FragmentHeader {
             reliability,
+            more,
             sn,
             qos,
         })
@@ -124,6 +129,7 @@ where
         // Header
         let header = FragmentHeader {
             reliability: x.reliability,
+            more: x.more,
             sn: x.sn,
             qos: x.qos,
         };
@@ -163,6 +169,7 @@ where
 
         Ok(Fragment {
             reliability: header.reliability,
+            more: header.more,
             sn: header.sn,
             qos: header.qos,
             payload,

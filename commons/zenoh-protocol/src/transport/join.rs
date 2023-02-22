@@ -38,7 +38,7 @@ use core::time::Duration;
 /// +-------+-------+
 /// ~    whatami    ~ -- Router, Peer or a combination of them
 /// +---------------+
-/// ~    peer_id    ~ -- PID of the sender of the JOIN message
+/// ~    node_id    ~ -- PID of the sender of the JOIN message
 /// +---------------+
 /// ~     lease     ~ -- Lease period of the sender of the JOIN message(*)
 /// +---------------+

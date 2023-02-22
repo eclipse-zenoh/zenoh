@@ -56,6 +56,16 @@ pub use locator::*;
 pub mod endpoint;
 pub use endpoint::*;
 
+#[repr(u8)]
+// The value represents the 2-bit encoded value
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bits {
+    U8 = 0b00,
+    U16 = 0b01,
+    U32 = 0b10,
+    U64 = 0b11,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Property {

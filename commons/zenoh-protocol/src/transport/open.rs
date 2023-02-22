@@ -78,11 +78,35 @@ pub struct OpenSyn {
     pub lease: Duration,
     pub initial_sn: ZInt,
     pub cookie: ZSlice,
+    #[cfg(feature = "shared-memory")]
+    pub shm: Option<ext::Shm>,
+    pub auth: Option<ext::Auth>,
+}
+
+// Extensions
+pub mod ext {
+    use crate::common::ZExtZSlice;
+
+    #[cfg(feature = "shared-memory")]
+    pub const SHM: u8 = 0x02;
+    pub const AUTH: u8 = 0x03;
+
+    /// # Shm extension
+    ///
+    /// Used as challenge for probing shared memory capabilities
+    #[cfg(feature = "shared-memory")]
+    pub type Shm = ZExtZSlice<SHM>;
+
+    /// # Auth extension
+    ///
+    /// Used as challenge for probing authentication rights
+    pub type Auth = ZExtZSlice<AUTH>;
 }
 
 impl OpenSyn {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use crate::common::ZExtZSlice;
         use rand::Rng;
 
         const MIN: usize = 32;
@@ -98,10 +122,16 @@ impl OpenSyn {
 
         let initial_sn: ZInt = rng.gen();
         let cookie = ZSlice::rand(rng.gen_range(MIN..=MAX));
+        #[cfg(feature = "shared-memory")]
+        let shm = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
+        let auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
         Self {
             lease,
             initial_sn,
             cookie,
+            #[cfg(feature = "shared-memory")]
+            shm,
+            auth,
         }
     }
 }
@@ -111,11 +141,13 @@ impl OpenSyn {
 pub struct OpenAck {
     pub lease: Duration,
     pub initial_sn: ZInt,
+    pub auth: Option<ext::Auth>,
 }
 
 impl OpenAck {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use crate::common::ZExtZSlice;
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
@@ -127,6 +159,11 @@ impl OpenAck {
         };
 
         let initial_sn: ZInt = rng.gen();
-        Self { lease, initial_sn }
+        let auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
+        Self {
+            lease,
+            initial_sn,
+            auth,
+        }
     }
 }

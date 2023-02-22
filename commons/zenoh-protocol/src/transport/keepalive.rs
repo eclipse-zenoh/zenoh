@@ -75,6 +75,12 @@
 ///       the boundary of the serialized messages. The length is encoded as little-endian.
 ///       In any case, the length of a message must not exceed 65535 bytes.
 ///
+pub mod flag {
+    // pub const X: u8 = 1 << 5; // 0x20       Reserved
+    // pub const X: u8 = 1 << 6; // 0x40       Reserved
+    pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct KeepAlive;
