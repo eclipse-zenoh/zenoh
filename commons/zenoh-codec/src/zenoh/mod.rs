@@ -27,7 +27,7 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::{imsg, Attachment},
+    common::imsg,
     core::{Channel, Priority, Reliability},
     zenoh::{zmsg, ReplyContext, RoutingContext, ZenohBody, ZenohMessage},
 };
@@ -39,9 +39,6 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &ZenohMessage) -> Self::Output {
-        if let Some(a) = x.attachment.as_ref() {
-            self.write(&mut *writer, a)?;
-        }
         if let Some(r) = x.routing_context.as_ref() {
             self.write(&mut *writer, r)?;
         }
@@ -85,13 +82,6 @@ where
         let header: u8 = self.codec.read(&mut *reader)?;
         let mut codec = Zenoh080Header::new(header);
 
-        let attachment = if imsg::mid(codec.header) == imsg::id::ATTACHMENT {
-            let a: Attachment = codec.read(&mut *reader)?;
-            codec.header = self.codec.read(&mut *reader)?;
-            Some(a)
-        } else {
-            None
-        };
         let routing_context = if imsg::mid(codec.header) == zmsg::id::ROUTING_CONTEXT {
             let r: RoutingContext = codec.read(&mut *reader)?;
             codec.header = self.codec.read(&mut *reader)?;
@@ -144,7 +134,6 @@ where
 
         Ok(ZenohMessage {
             body,
-            attachment,
             channel: Channel {
                 priority,
                 reliability: self.reliability,

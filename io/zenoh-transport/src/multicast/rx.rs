@@ -205,20 +205,22 @@ impl TransportMulticastInner {
 
                 match msg.body {
                     TransportBody::Frame(Frame {
-                        channel,
+                        reliability,
                         sn,
                         payload,
+                        qos,
                     }) => {
+                        let priority = qos.priority();
                         let c = if self.is_qos() {
-                            &peer.conduit_rx[channel.priority as usize]
-                        } else if channel.priority == Priority::default() {
+                            &peer.conduit_rx[priority as usize]
+                        } else if priority == Priority::default() {
                             &peer.conduit_rx[0]
                         } else {
                             bail!(
                                 "Transport {}: {}. Unknown conduit {:?} from {}.",
                                 self.manager.config.zid,
                                 self.locator,
-                                channel.priority,
+                                priority,
                                 peer.locator
                             );
                         };

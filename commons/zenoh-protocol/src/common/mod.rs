@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub mod attachment;
-pub use attachment::*;
 pub mod extension;
 pub use extension::*;
 

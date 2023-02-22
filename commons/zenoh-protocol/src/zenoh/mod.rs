@@ -19,10 +19,7 @@ mod query;
 mod routing;
 mod unit;
 
-use crate::{
-    common::Attachment,
-    core::{Channel, CongestionControl, Reliability, WireExpr, ZInt},
-};
+use crate::core::{Channel, CongestionControl, Reliability, WireExpr, ZInt};
 use alloc::{string::String, vec::Vec};
 use core::fmt;
 pub use data::*;
@@ -55,7 +52,6 @@ pub mod zmsg {
         // Message decorators
         pub const PRIORITY: u8 = imsg::id::PRIORITY;
         pub const REPLY_CONTEXT: u8 = imsg::id::REPLY_CONTEXT;
-        pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
         pub const ROUTING_CONTEXT: u8 = imsg::id::ROUTING_CONTEXT;
     }
 
@@ -208,7 +204,6 @@ pub struct ZenohMessage {
     pub body: ZenohBody,
     pub channel: Channel,
     pub routing_context: Option<RoutingContext>,
-    pub attachment: Option<Attachment>,
     #[cfg(feature = "stats")]
     pub size: Option<core::num::NonZeroUsize>,
 }
@@ -217,13 +212,11 @@ impl ZenohMessage {
     pub fn make_declare(
         declarations: Vec<Declaration>,
         routing_context: Option<RoutingContext>,
-        attachment: Option<Attachment>,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Declare(Declare { declarations }),
             channel: zmsg::default_channel::DECLARE,
             routing_context,
-            attachment,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -239,7 +232,6 @@ impl ZenohMessage {
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
         reply_context: Option<ReplyContext>,
-        attachment: Option<Attachment>,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Data(Data {
@@ -251,7 +243,6 @@ impl ZenohMessage {
             }),
             channel,
             routing_context,
-            attachment,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -261,7 +252,6 @@ impl ZenohMessage {
         channel: Channel,
         congestion_control: CongestionControl,
         reply_context: Option<ReplyContext>,
-        attachment: Option<Attachment>,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Unit(Unit {
@@ -270,7 +260,6 @@ impl ZenohMessage {
             }),
             channel,
             routing_context: None,
-            attachment,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -281,7 +270,6 @@ impl ZenohMessage {
         key: WireExpr<'static>,
         pull_id: ZInt,
         max_samples: Option<ZInt>,
-        attachment: Option<Attachment>,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Pull(Pull {
@@ -292,7 +280,6 @@ impl ZenohMessage {
             }),
             channel: zmsg::default_channel::PULL,
             routing_context: None,
-            attachment,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -308,7 +295,6 @@ impl ZenohMessage {
         consolidation: ConsolidationMode,
         body: Option<QueryBody>,
         routing_context: Option<RoutingContext>,
-        attachment: Option<Attachment>,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Query(Query {
@@ -321,21 +307,17 @@ impl ZenohMessage {
             }),
             channel: zmsg::default_channel::QUERY,
             routing_context,
-            attachment,
             #[cfg(feature = "stats")]
             size: None,
         }
     }
 
-    pub fn make_link_state_list(
-        link_states: Vec<LinkState>,
-        attachment: Option<Attachment>,
-    ) -> ZenohMessage {
+    pub fn make_link_state_list(link_states: Vec<LinkState>) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::LinkStateList(LinkStateList { link_states }),
             channel: zmsg::default_channel::LINK_STATE_LIST,
             routing_context: None,
-            attachment,
+
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -370,8 +352,8 @@ impl fmt::Debug for ZenohMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:?} {:?} {:?} {:?}",
-            self.body, self.channel, self.routing_context, self.attachment
+            "{:?} {:?} {:?}",
+            self.body, self.channel, self.routing_context
         )?;
         #[cfg(feature = "stats")]
         write!(f, " {:?}", self.size)?;
@@ -393,8 +375,6 @@ impl ZenohMessage {
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
-
-        let attachment = None;
 
         let routing_context = if rng.gen_bool(0.5) {
             Some(RoutingContext::rand())
@@ -429,7 +409,6 @@ impl ZenohMessage {
             body,
             channel,
             routing_context,
-            attachment,
         }
     }
 }

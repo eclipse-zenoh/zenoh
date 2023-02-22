@@ -169,11 +169,6 @@ fn codec_encoding() {
 
 // Common
 #[test]
-fn codec_attachment() {
-    run!(Attachment, Attachment::rand());
-}
-
-#[test]
 fn codec_extension() {
     macro_rules! run_extension_single {
         ($ext:ty, $buff:expr) => {

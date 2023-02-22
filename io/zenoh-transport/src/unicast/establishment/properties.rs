@@ -17,10 +17,7 @@ use std::{
 };
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_protocol::{
-    common::Attachment,
-    core::{Property, ZInt},
-};
+use zenoh_protocol::core::{Property, ZInt};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -26,7 +26,6 @@ use zenoh_core::{zasynclock, zasyncread};
 use zenoh_crypto::hmac;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
-    common::Attachment,
     core::Property,
     transport::{tmsg, TransportMessage},
 };
