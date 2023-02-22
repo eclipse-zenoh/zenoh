@@ -75,12 +75,6 @@ impl PartialEq for CowStr<'_> {
     }
 }
 impl Eq for CowStr<'_> {}
-#[cfg(feature = "defmt")]
-impl defmt::Format for CowStr<'_> {
-    fn format(&self, fmt: defmt::Formatter) {
-        self.as_str().format(fmt)
-    }
-}
 impl core::ops::Add<&str> for CowStr<'_> {
     type Output = String;
     fn add(self, rhs: &str) -> Self::Output {

@@ -47,7 +47,6 @@ use zenoh_result::{bail, ZResult};
 // +---------------+
 //
 #[derive(PartialEq, Eq, Hash, Clone)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WireExpr<'a> {
     pub scope: ExprId, // 0 marks global scope
     pub suffix: Cow<'a, str>,

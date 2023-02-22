@@ -65,7 +65,6 @@ pub mod endpoint;
 pub use endpoint::EndPoint;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Property {
     pub key: ZInt,
     pub value: Vec<u8>,
@@ -74,7 +73,6 @@ pub struct Property {
 /// The kind of a `Sample`.
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SampleKind {
     /// if the `Sample` was issued by a `put` operation.
     Put = 0,
@@ -110,7 +108,6 @@ impl TryFrom<ZInt> for SampleKind {
 
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ZenohId(uhlc::ID);
 
 impl ZenohId {
@@ -150,7 +147,6 @@ impl From<uuid::Uuid> for ZenohId {
 
 // Mimics uhlc::SizeError,
 #[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SizeError(usize);
 
 #[cfg(feature = "std")]
@@ -332,7 +328,6 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
 }
 
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum Priority {
     Control = 0,
@@ -384,7 +379,6 @@ impl TryFrom<u8> for Priority {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum Reliability {
     BestEffort,
@@ -398,14 +392,12 @@ impl Default for Reliability {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Channel {
     pub priority: Priority,
     pub reliability: Reliability,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ConduitSnList {
     Plain(ConduitSn),
     QoS(Box<[ConduitSn; Priority::NUM]>),
@@ -444,7 +436,6 @@ impl fmt::Display for ConduitSnList {
 
 /// The kind of reliability.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ConduitSn {
     pub reliable: ZInt,
     pub best_effort: ZInt,
@@ -452,7 +443,6 @@ pub struct ConduitSn {
 
 /// The kind of congestion control.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum CongestionControl {
     Block,
@@ -467,7 +457,6 @@ impl Default for CongestionControl {
 
 /// The subscription mode.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum SubMode {
     Push,
@@ -482,14 +471,12 @@ impl Default for SubMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SubInfo {
     pub reliability: Reliability,
     pub mode: SubMode,
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct QueryableInfo {
     pub complete: ZInt, // Default 0: incomplete
     pub distance: ZInt, // Default 0: no distance
@@ -497,7 +484,6 @@ pub struct QueryableInfo {
 
 /// The kind of consolidation.
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ConsolidationMode {
     /// No consolidation applied: multiple samples may be received for the same key-timestamp.
     None,
@@ -515,7 +501,6 @@ pub enum ConsolidationMode {
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum QueryTarget {
     BestMatching,
     All,
