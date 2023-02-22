@@ -31,8 +31,8 @@ use zenoh_transport::unicast::establishment::authenticator::SharedMemoryAuthenti
 #[cfg(feature = "auth_usrpwd")]
 use zenoh_transport::unicast::establishment::authenticator::UserPasswordAuthenticator;
 use zenoh_transport::{
-    DummyTransportPeerEventHandler, TransportEventHandler, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportPeer,
+    TransportPeerEventHandler, TransportUnicast,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -60,13 +60,6 @@ impl TransportEventHandler for SHRouterAuthenticator {
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(MHRouterAuthenticator::new()))
-    }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        panic!();
     }
 }
 
@@ -103,13 +96,6 @@ impl TransportEventHandler for SHClientAuthenticator {
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
-    }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        panic!();
     }
 }
 

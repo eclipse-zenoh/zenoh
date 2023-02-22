@@ -81,7 +81,6 @@ mod tests {
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
-            let attachment = None;
 
             let message = ZenohMessage::make_data(
                 key,
@@ -91,7 +90,6 @@ mod tests {
                 data_info,
                 routing_context,
                 reply_context,
-                attachment,
             );
 
             println!("[Simultaneous {}] Sending {}...", self.zid, MSG_COUNT);
@@ -102,13 +100,6 @@ mod tests {
 
             let mh = Arc::new(MHPeer::new(self.count.clone()));
             Ok(mh)
-        }
-
-        fn new_multicast(
-            &self,
-            _transport: TransportMulticast,
-        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-            panic!();
         }
     }
 

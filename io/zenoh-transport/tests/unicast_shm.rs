@@ -36,8 +36,7 @@ mod tests {
     use zenoh_shm::SharedMemoryManager;
     use zenoh_transport::{
         unicast::establishment::authenticator::SharedMemoryAuthenticator, TransportEventHandler,
-        TransportManager, TransportMulticast, TransportMulticastEventHandler, TransportPeer,
-        TransportPeerEventHandler, TransportUnicast,
+        TransportManager, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -80,13 +79,6 @@ mod tests {
         ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
             let arc = Arc::new(SCPeer::new(self.count.clone(), self.is_shm));
             Ok(arc)
-        }
-
-        fn new_multicast(
-            &self,
-            _transport: TransportMulticast,
-        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-            panic!();
         }
     }
 
@@ -231,7 +223,6 @@ mod tests {
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
-            let attachment = None;
 
             let message = ZenohMessage::make_data(
                 key,
@@ -241,7 +232,6 @@ mod tests {
                 data_info,
                 routing_context,
                 reply_context,
-                attachment,
             );
 
             peer_shm02_transport.schedule(message.clone()).unwrap();
@@ -284,7 +274,6 @@ mod tests {
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
-            let attachment = None;
 
             let message = ZenohMessage::make_data(
                 key,
@@ -294,7 +283,6 @@ mod tests {
                 data_info,
                 routing_context,
                 reply_context,
-                attachment,
             );
 
             peer_net01_transport.schedule(message.clone()).unwrap();

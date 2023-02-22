@@ -28,8 +28,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
-    TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
+    TransportUnicast,
 };
 
 const MSG_COUNT: usize = 1_000;
@@ -68,13 +68,6 @@ impl TransportEventHandler for SHPeer {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         let mh = Arc::new(MHPeer::new(self.count.clone()));
         Ok(mh)
-    }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        panic!();
     }
 }
 
@@ -194,7 +187,6 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         let data_info = None;
         let routing_context = None;
         let reply_context = None;
-        let attachment = None;
 
         let message = ZenohMessage::make_data(
             key,
@@ -204,7 +196,6 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
             data_info,
             routing_context,
             reply_context,
-            attachment,
         );
 
         // Synchronize wit the peer
@@ -300,7 +291,6 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         let data_info = None;
         let routing_context = None;
         let reply_context = None;
-        let attachment = None;
 
         let message = ZenohMessage::make_data(
             key,
@@ -310,7 +300,6 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
             data_info,
             routing_context,
             reply_context,
-            attachment,
         );
 
         // Synchronize wit the peer

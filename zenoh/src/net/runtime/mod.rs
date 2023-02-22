@@ -242,14 +242,6 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
             None => bail!("Runtime not yet ready!"),
         }
     }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        // @TODO
-        unimplemented!();
-    }
 }
 
 pub(super) struct RuntimeSession {

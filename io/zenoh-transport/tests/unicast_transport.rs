@@ -249,13 +249,6 @@ impl TransportEventHandler for SHRouter {
         let arc = Arc::new(SCRouter::new(self.count.clone()));
         Ok(arc)
     }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        panic!();
-    }
 }
 
 // Transport Callback for the router
@@ -296,13 +289,6 @@ impl TransportEventHandler for SHClient {
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(SCClient::default()))
-    }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        panic!();
     }
 }
 
@@ -436,7 +422,6 @@ async fn test_transport(
     let data_info = None;
     let routing_context = None;
     let reply_context = None;
-    let attachment = None;
     let message = ZenohMessage::make_data(
         key,
         payload,
@@ -445,7 +430,6 @@ async fn test_transport(
         data_info,
         routing_context,
         reply_context,
-        attachment,
     );
 
     println!("Sending {MSG_COUNT} messages... {channel:?} {msg_size}");

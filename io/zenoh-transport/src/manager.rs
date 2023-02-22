@@ -11,10 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::multicast::manager::{
-    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
-    TransportManagerStateMulticast,
-};
 use super::unicast::manager::{
     TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
 };
@@ -56,12 +52,6 @@ use zenoh_result::{bail, ZResult};
 ///     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
 ///         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
 ///     }
-///
-///     fn new_multicast(&self,
-///         _transport: TransportMulticast
-///     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-///         Ok(Arc::new(DummyTransportMulticastEventHandler::default()))
-///     }
 /// }
 ///
 /// // Create the default TransportManager
@@ -99,7 +89,6 @@ pub struct TransportManagerConfig {
     pub defrag_buff_size: usize,
     pub link_rx_buffer_size: usize,
     pub unicast: TransportManagerConfigUnicast,
-    pub multicast: TransportManagerConfigMulticast,
     pub endpoint: HashMap<String, Properties>,
     pub handler: Arc<dyn TransportEventHandler>,
     pub tx_threads: usize,
@@ -107,7 +96,6 @@ pub struct TransportManagerConfig {
 
 pub struct TransportManagerState {
     pub unicast: TransportManagerStateUnicast,
-    pub multicast: TransportManagerStateMulticast,
 }
 
 pub struct TransportManagerParams {
@@ -126,7 +114,6 @@ pub struct TransportManagerBuilder {
     defrag_buff_size: usize,
     link_rx_buffer_size: usize,
     unicast: TransportManagerBuilderUnicast,
-    multicast: TransportManagerBuilderMulticast,
     endpoint: HashMap<String, Properties>,
     tx_threads: usize,
 }
@@ -182,11 +169,6 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn multicast(mut self, multicast: TransportManagerBuilderMulticast) -> Self {
-        self.multicast = multicast;
-        self
-    }
-
     pub fn tx_threads(mut self, num: usize) -> Self {
         self.tx_threads = num;
         self
@@ -229,18 +211,12 @@ impl TransportManagerBuilder {
                 .from_config(config)
                 .await?,
         );
-        self = self.multicast(
-            TransportManagerBuilderMulticast::default()
-                .from_config(config)
-                .await?,
-        );
 
         Ok(self)
     }
 
     pub fn build(self, handler: Arc<dyn TransportEventHandler>) -> ZResult<TransportManager> {
         let unicast = self.unicast.build()?;
-        let multicast = self.multicast.build()?;
 
         let mut queue_size = [0; Priority::NUM];
         queue_size[Priority::Control as usize] = *self.queue_size.control();
@@ -263,7 +239,6 @@ impl TransportManagerBuilder {
             defrag_buff_size: self.defrag_buff_size,
             link_rx_buffer_size: self.link_rx_buffer_size,
             unicast: unicast.config,
-            multicast: multicast.config,
             endpoint: self.endpoint,
             handler,
             tx_threads: self.tx_threads,
@@ -271,7 +246,6 @@ impl TransportManagerBuilder {
 
         let state = TransportManagerState {
             unicast: unicast.state,
-            multicast: multicast.state,
         };
 
         let params = TransportManagerParams { config, state };
@@ -296,7 +270,6 @@ impl Default for TransportManagerBuilder {
             link_rx_buffer_size: zparse!(ZN_LINK_RX_BUFF_SIZE_DEFAULT).unwrap(),
             endpoint: HashMap::new(),
             unicast: TransportManagerBuilderUnicast::default(),
-            multicast: TransportManagerBuilderMulticast::default(),
             tx_threads: 1,
         }
     }
@@ -389,7 +362,6 @@ impl TransportManager {
     pub async fn close(&self) {
         log::trace!("TransportManager::clear())");
         self.close_unicast().await;
-        self.close_multicast().await;
         self.tx_executor.stop().await;
     }
 
