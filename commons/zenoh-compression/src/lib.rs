@@ -13,60 +13,49 @@
 //
 
 use zenoh_buffers::{
-    reader::{DidntRead, HasReader},
+    reader::DidntRead,
     writer::{DidntWrite, Writer},
 };
 use zenoh_codec::{RCodec, WCodec};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct ZenohCompress;
 
 /// [WCodec] Implementation for ZenohCompress.
 ///
 /// Allows to compress a slice using lz4_flex. Can be used in conjunction with
 /// ZenohCompress::read(&mut [u8]).
-impl<W> WCodec<&[u8], &mut W> for ZenohCompress
+impl<W> WCodec<(&[u8], &mut [u8]), &mut W> for ZenohCompress
 where
     W: Writer,
 {
-    type Output = Result<(), DidntWrite>;
+    type Output = Result<usize, DidntWrite>;
 
-    fn write(self, output_writer: &mut W, input: &[u8]) -> Self::Output {
-        let reader = input.reader();
-        let compression = lz4_flex::block::compress_prepend_size(reader);
-        output_writer.write(&compression)?;
-        Ok(())
-    }
-}
-
-/// [WCodec] Implementation for ZenohCompress.
-///
-/// Allows to compress a slice using lz4_flex. Can be used in conjunction with
-/// ZenohCompress::read(&mut [u8]).
-impl<W> WCodec<&Vec<u8>, &mut W> for ZenohCompress
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, output_writer: &mut W, input: &Vec<u8>) -> Self::Output {
-        self.write(output_writer, input.as_slice())
+    fn write(self, output_writer: &mut W, input: (&[u8], &mut [u8])) -> Self::Output {
+        let (slice, buffer) = input;
+        let compressed_bytes = lz4_flex::block::compress_into(slice, buffer).map_err(|e| {
+            log::debug!("Compression error: {e}");
+            DidntWrite
+        })?;
+        output_writer.write(&buffer[0..compressed_bytes])?;
+        Ok(compressed_bytes)
     }
 }
 
 /// Implementation of [RCodec] for [ZenohCompress]. Allows to decompress the message previously
 /// compressed with [ZenohCompress]'s write function.
 ///
-impl RCodec<Vec<u8>, &mut [u8]> for ZenohCompress {
+impl RCodec<(), (&[u8], &mut [u8])> for ZenohCompress {
     type Error = DidntRead;
 
     /// Decompresses the payload from the [Reader] passed as a parameter, returning a result with
     /// the uncompressed buffer or a [DidntRead] error.
-    fn read(self, input: &mut [u8]) -> Result<Vec<u8>, DidntRead> {
-        let decompression = lz4_flex::block::decompress_size_prepended(input).map_err(|e| {
+    fn read(self, input: (&[u8], &mut [u8])) -> Result<(), DidntRead> {
+        let (compression, buffer) = input;
+        lz4_flex::block::decompress_into(compression, buffer).map_err(|e| {
             log::debug!("Decompression error: {}", e);
             DidntRead
         })?;
-        Ok(decompression)
+        Ok(())
     }
 }

@@ -3877,9 +3877,11 @@ dependencies = [
  "criterion",
  "log",
  "lz4_flex",
+ "rand 0.8.5",
  "uhlc",
  "zenoh-buffers",
  "zenoh-codec",
+ "zenoh-crypto",
  "zenoh-protocol",
 ]
 

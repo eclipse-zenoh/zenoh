@@ -24,22 +24,27 @@ fn compress() {
 
     // Encode with Zenoh060 codec
     let codec = Zenoh060::default();
-    let mut buf: Vec<u8> = vec![];
-    let mut writer = buf.writer();
+    let mut buff: Vec<u8> = vec![];
+    let mut writer = buff.writer();
     codec.write(&mut writer, &input).unwrap();
 
     // Compress with ZenohCompress
+    let mut compression_buff: Box<[u8]> = vec![0; usize::pow(2, 16)].into_boxed_slice();
     let zenoh_compress = ZenohCompress;
+
     let mut compression: Vec<u8> = vec![];
     zenoh_compress
-        .write(&mut compression.writer(), &buf)
+        .write(&mut compression.writer(), (&buff, &mut compression_buff))
         .unwrap();
 
     // Decompress with ZenohCompress
-    let decompression = zenoh_compress.read(&mut compression).unwrap();
+    let mut receiving_buff: Box<[u8]> = vec![0; usize::pow(2, 16)].into_boxed_slice();
+    zenoh_compress
+        .read((&compression, &mut receiving_buff))
+        .unwrap();
 
     // Decode with Zenoh060
-    let reconstitution: String = codec.read(&mut decompression.reader()).unwrap();
+    let reconstitution: String = codec.read(&mut receiving_buff.reader()).unwrap();
 
     assert_eq!(input, reconstitution);
 }
