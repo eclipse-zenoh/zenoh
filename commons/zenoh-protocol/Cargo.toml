@@ -37,10 +37,8 @@ std = [
 test = ["rand", "zenoh-buffers/test"]
 shared-memory = ["std"]
 complete_n = []
-defmt = ["dep:defmt", "uhlc/defmt", "zenoh-buffers/defmt"]
 
 [dependencies]
-defmt = { workspace = true, optional = true }
 hex = { workspace = true, features = ["alloc"] }
 rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
 serde = { workspace = true, features = ["alloc"] }

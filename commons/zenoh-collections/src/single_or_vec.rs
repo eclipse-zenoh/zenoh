@@ -20,7 +20,6 @@ use core::{
 };
 
 #[derive(Clone, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 enum SingleOrVecInner<T> {
     Single(T),
     Vec(Vec<T>),
@@ -82,7 +81,6 @@ where
 }
 
 #[derive(Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SingleOrVec<T>(SingleOrVecInner<T>);
 
 impl<T> SingleOrVec<T> {

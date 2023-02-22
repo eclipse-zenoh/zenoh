@@ -860,17 +860,42 @@ pub(crate) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
             && src_face.whatami == WhatAmI::Peer
         {
             for res in &src_face.remote_subs {
-                if !remote_router_subs(tables, res) {
-                    for dst_face in tables.faces.values_mut() {
+                let client_subs = res
+                    .session_ctxs
+                    .values()
+                    .any(|ctx| ctx.face.whatami == WhatAmI::Client && ctx.subs.is_some());
+                if !remote_router_subs(tables, res) && !client_subs {
+                    for ctx in get_mut_unchecked(&mut res.clone())
+                        .session_ctxs
+                        .values_mut()
+                    {
+                        let dst_face = &mut get_mut_unchecked(ctx).face;
                         if dst_face.whatami == WhatAmI::Peer && src_face.zid != dst_face.zid {
-                            if !Tables::failover_brokering_to(links, dst_face.zid) {
-                                if dst_face.local_subs.contains(res) {
+                            if dst_face.local_subs.contains(res) {
+                                let forget = !Tables::failover_brokering_to(links, dst_face.zid)
+                                    && {
+                                        let ctx_links = tables
+                                            .peers_net
+                                            .as_ref()
+                                            .map(|net| net.get_links(dst_face.zid))
+                                            .unwrap_or_else(|| &[]);
+                                        res.session_ctxs.values().any(|ctx2| {
+                                            ctx2.face.whatami == WhatAmI::Peer
+                                                && ctx2.subs.is_some()
+                                                && Tables::failover_brokering_to(
+                                                    ctx_links,
+                                                    ctx2.face.zid,
+                                                )
+                                        })
+                                    };
+                                if forget {
                                     let key_expr = Resource::get_best_key(res, "", dst_face.id);
                                     dst_face.primitives.forget_subscriber(&key_expr, None);
 
                                     get_mut_unchecked(dst_face).local_subs.remove(res);
                                 }
-                            } else {
+                            } else if Tables::failover_brokering_to(links, ctx.face.zid) {
+                                let dst_face = &mut get_mut_unchecked(ctx).face;
                                 get_mut_unchecked(dst_face).local_subs.insert(res.clone());
                                 let key_expr = Resource::decl_key(res, dst_face);
                                 let sub_info = SubInfo {

@@ -226,7 +226,7 @@ pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
             loop {
                 buffer = Vec::with_capacity(size as usize);
                 ret = winapi::um::iphlpapi::GetAdaptersAddresses(
-                    winapi::shared::ws2def::AF_INET.try_into().unwrap(),
+                    winapi::shared::ws2def::AF_UNSPEC.try_into().unwrap(),
                     0,
                     std::ptr::null_mut(),
                     buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
@@ -385,8 +385,9 @@ pub fn get_ipv6_ipaddrs() -> Vec<IpAddr> {
             IpAddr::V4(a) => Some(a),
             IpAddr::V6(_) => None,
         })
-        .filter(|x| !x.is_loopback() && !x.is_multicast())
-        .map(|x| IpAddr::V4(*x));
+        .filter(|x| {
+            !x.is_loopback() && !x.is_link_local() && !x.is_multicast() && !x.is_broadcast()
+        });
 
     // Get next all IPv6 addresses
     let ipv6_iter = ipaddrs.iter().filter_map(|x| match x {
@@ -395,16 +396,32 @@ pub fn get_ipv6_ipaddrs() -> Vec<IpAddr> {
     });
 
     // First match non-linklocal IPv6 addresses
-    let nll_addrs = ipv6_iter
+    let nll_ipv6_addrs = ipv6_iter
         .clone()
         .filter(|x| !x.is_loopback() && !x.is_multicast() && !is_unicast_link_local(x))
         .map(|x| IpAddr::V6(*x));
 
-    // Second match linklocal IPv6 addresses
-    let yll_addrs = ipv6_iter
+    // Second match public IPv4 addresses
+    let pub_ipv4_addrs = ipv4_iter
+        .clone()
+        .filter(|x| !x.is_private())
+        .map(|x| IpAddr::V4(*x));
+
+    // Third match linklocal IPv6 addresses
+    let yll_ipv6_addrs = ipv6_iter
         .filter(|x| !x.is_loopback() && !x.is_multicast() && is_unicast_link_local(x))
         .map(|x| IpAddr::V6(*x));
 
+    // Fourth match private IPv4 addresses
+    let priv_ipv4_addrs = ipv4_iter
+        .clone()
+        .filter(|x| x.is_private())
+        .map(|x| IpAddr::V4(*x));
+
     // Extend
-    ipv4_iter.chain(nll_addrs).chain(yll_addrs).collect()
+    nll_ipv6_addrs
+        .chain(pub_ipv4_addrs)
+        .chain(yll_ipv6_addrs)
+        .chain(priv_ipv4_addrs)
+        .collect()
 }
