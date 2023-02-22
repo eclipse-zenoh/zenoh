@@ -117,6 +117,9 @@ jobs:
       
       # - name: Install cargo-nono
       #   run: cargo install cargo-nono
+
+      - name: Add generic no_std target
+        run: rustup target add x86_64-unknown-none
       
       - name: Install cargo-no-dev-deps
         run: cargo install cargo-no-dev-deps --locked
