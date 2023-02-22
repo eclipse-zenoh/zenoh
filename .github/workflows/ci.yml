@@ -114,11 +114,8 @@ jobs:
 
       - name: Install latest Rust toolchain
         uses: actions-rs/toolchain@v1
-      
-      # - name: Install cargo-nono
-      #   run: cargo install cargo-nono
 
-      - name: Add generic no_std target
+      - name: Add generic no_std target to the toolchain
         run: rustup target add x86_64-unknown-none
       
       - name: Install cargo-no-dev-deps
@@ -142,14 +139,14 @@ jobs:
           command: check
           args: --package zenoh-buffers --target x86_64-unknown-none
       
-      # - name: Check zenoh-protocol
-      #   uses: actions-rs/cargo@v1
-      #   with:
-      #     command: no-dev-deps
-      #     args: nono check --package zenoh-protocol --no-default-features
+      - name: Check zenoh-protocol
+        uses: actions-rs/cargo@v1
+        with:
+          command: no-dev-deps
+          args: check --package zenoh-protocol --bin no_std_ci_check --no-default-features --features no-std-ci-check
       
-      # - name: Check zenoh-codec
-      #   uses: actions-rs/cargo@v1
-      #   with:
-      #     command: no-dev-deps
-      #     args: nono check --package zenoh-codec --no-default-features
+      - name: Check zenoh-codec
+        uses: actions-rs/cargo@v1
+        with:
+          command: no-dev-deps
+          args: check --package zenoh-codec --bin no_std_ci_check --no-default-features --features no-std-ci-check

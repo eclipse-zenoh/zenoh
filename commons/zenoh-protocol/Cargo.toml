@@ -37,8 +37,12 @@ std = [
 test = ["rand", "zenoh-buffers/test"]
 shared-memory = ["std"]
 complete_n = []
+no-std-ci-check = [ # Features that must only be used by the no_std_ci_check binary
+    "getrandom",
+]
 
 [dependencies]
+getrandom = { workspace = true, features = ["custom"], optional = true }
 hex = { workspace = true, features = ["alloc"] }
 rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
 serde = { workspace = true, features = ["alloc"] }
@@ -47,7 +51,15 @@ uuid = { workspace = true }                                                     
 zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
 zenoh-result = { path = "../zenoh-result/", default-features = false }
 
-# INFO: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0
+# NOTE: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0
 [dev-dependencies]
 lazy_static = { workspace = true }
 zenoh-protocol = { path = ".", features = ["test"] }
+
+# NOTE: Thin binary simulates a root/main crate in order to allow check/build for a no_std target in the CI
+[[bin]]
+name = "no_std_ci_check"
+test = false
+bench = false
+doc = false
+required-features = ["no-std-ci-check"]

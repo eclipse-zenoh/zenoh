@@ -40,8 +40,12 @@ shared-memory = [
     "zenoh-protocol/shared-memory"
 ]
 complete_n = ["zenoh-protocol/complete_n"]
+no-std-ci-check = [ # Features that must only be used by the no_std_ci_check binary
+    "getrandom",
+]
 
 [dependencies]
+getrandom = { workspace = true, features = ["custom"], optional = true }
 uhlc = { workspace = true }
 zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
 zenoh-protocol = { path = "../zenoh-protocol/", default-features = false }
@@ -57,3 +61,11 @@ zenoh-protocol = { path = "../zenoh-protocol/", features = ["test"] }
 [[bench]]
 name = "codec"
 harness = false
+
+# NOTE: Thin binary simulates a root/main crate in order to allow check/build for a no_std target in the CI
+[[bin]]
+name = "no_std_ci_check"
+test = false
+bench = false
+doc = false
+required-features = ["no-std-ci-check"]
