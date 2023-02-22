@@ -33,7 +33,7 @@ use zenoh_core::zlock;
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{Priority, WhatAmI, ZInt, ZenohId},
-    transport::{ConduitSn, ConduitSnList, TransportMessage},
+    transport::{ConduitSn, ConduitSnList, Join, KeepAlive, TransportMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_sync::RecyclingObjectPool;
@@ -252,7 +252,6 @@ async fn tx_task(
                 pipeline.refill(batch, priority);
             }
             Action::Join => {
-                let attachment = None;
                 let next_sns = last_sns
                     .iter()
                     .map(|c| ConduitSn {
@@ -267,15 +266,15 @@ async fn tx_task(
                     assert_eq!(next_sns.len(), 1);
                     ConduitSnList::Plain(next_sns[0])
                 };
-                let message = TransportMessage::make_join(
-                    config.version,
-                    config.whatami,
-                    config.zid,
-                    config.lease,
-                    config.sn_resolution,
+                let message: TransportMessage = Join {
+                    version: config.version,
+                    whatami: config.whatami,
+                    zid: config.zid,
+                    lease: config.lease,
+                    sn_resolution: config.sn_resolution,
                     next_sns,
-                    attachment,
-                );
+                }
+                .into();
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
                 let n = link.write_transport_message(&message).await?;
@@ -288,9 +287,7 @@ async fn tx_task(
                 last_join = Instant::now();
             }
             Action::KeepAlive => {
-                let zid = Some(config.zid);
-                let attachment = None;
-                let message = TransportMessage::make_keep_alive(zid, attachment);
+                let message: TransportMessage = KeepAlive.into();
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
                 let n = link.write_transport_message(&message).await?;

@@ -43,7 +43,7 @@ impl Primitives for Mux {
         let decls = vec![d];
         let _ = self
             .handler
-            .handle_message(ZenohMessage::make_declare(decls, None, None));
+            .handle_message(ZenohMessage::make_declare(decls, None));
     }
 
     fn forget_resource(&self, expr_id: ZInt) {
@@ -51,7 +51,7 @@ impl Primitives for Mux {
         let decls = vec![d];
         let _ = self
             .handler
-            .handle_message(ZenohMessage::make_declare(decls, None, None));
+            .handle_message(ZenohMessage::make_declare(decls, None));
     }
 
     fn decl_subscriber(
@@ -65,9 +65,9 @@ impl Primitives for Mux {
             info: sub_info.clone(),
         });
         let decls = vec![d];
-        let _ =
-            self.handler
-                .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
+        let _ = self
+            .handler
+            .handle_message(ZenohMessage::make_declare(decls, routing_context));
     }
 
     fn forget_subscriber(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
@@ -75,9 +75,9 @@ impl Primitives for Mux {
             key: key_expr.to_owned(),
         });
         let decls = vec![d];
-        let _ =
-            self.handler
-                .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
+        let _ = self
+            .handler
+            .handle_message(ZenohMessage::make_declare(decls, routing_context));
     }
 
     fn decl_publisher(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
@@ -85,9 +85,9 @@ impl Primitives for Mux {
             key: key_expr.to_owned(),
         });
         let decls = vec![d];
-        let _ =
-            self.handler
-                .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
+        let _ = self
+            .handler
+            .handle_message(ZenohMessage::make_declare(decls, routing_context));
     }
 
     fn forget_publisher(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
@@ -95,9 +95,9 @@ impl Primitives for Mux {
             key: key_expr.to_owned(),
         });
         let decls = vec![d];
-        let _ =
-            self.handler
-                .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
+        let _ = self
+            .handler
+            .handle_message(ZenohMessage::make_declare(decls, routing_context));
     }
 
     fn decl_queryable(
@@ -111,9 +111,9 @@ impl Primitives for Mux {
             info: qabl_info.clone(),
         });
         let decls = vec![d];
-        let _ =
-            self.handler
-                .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
+        let _ = self
+            .handler
+            .handle_message(ZenohMessage::make_declare(decls, routing_context));
     }
 
     fn forget_queryable(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
@@ -121,9 +121,9 @@ impl Primitives for Mux {
             key: key_expr.to_owned(),
         });
         let decls = vec![d];
-        let _ =
-            self.handler
-                .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
+        let _ = self
+            .handler
+            .handle_message(ZenohMessage::make_declare(decls, routing_context));
     }
 
     fn send_data(
@@ -142,7 +142,6 @@ impl Primitives for Mux {
             cogestion_control,
             data_info,
             routing_context,
-            None,
             None,
         ));
     }
@@ -170,7 +169,6 @@ impl Primitives for Mux {
             consolidation,
             body,
             routing_context,
-            None,
         ));
     }
 
@@ -190,7 +188,6 @@ impl Primitives for Mux {
             data_info,
             None,
             Some(ReplyContext::new(qid, Some(ReplierInfo { id: replier_id }))),
-            None,
         ));
     }
 
@@ -199,7 +196,6 @@ impl Primitives for Mux {
             zmsg::default_channel::REPLY,
             zmsg::default_congestion_control::REPLY,
             Some(ReplyContext::new(qid, None)),
-            None,
         ));
     }
 
@@ -215,7 +211,6 @@ impl Primitives for Mux {
             key_expr.to_owned(),
             pull_id,
             *max_samples,
-            None,
         ));
     }
 

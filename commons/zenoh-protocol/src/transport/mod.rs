@@ -166,6 +166,12 @@ impl From<OpenAck> for TransportMessage {
     }
 }
 
+impl From<Join> for TransportMessage {
+    fn from(join: Join) -> Self {
+        TransportBody::Join(join).into()
+    }
+}
+
 impl From<Close> for TransportMessage {
     fn from(close: Close) -> Self {
         TransportBody::Close(close).into()

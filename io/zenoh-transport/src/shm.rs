@@ -121,10 +121,6 @@ pub fn map_zmsg_to_shmbuf(
 ) -> ZResult<bool> {
     let mut res = false;
 
-    if let Some(attachment) = msg.attachment.as_mut() {
-        res = map_zbuf_to_shmbuf(&mut attachment.buffer, shmr)?;
-    }
-
     if let ZenohBody::Data(Data {
         payload, data_info, ..
     }) = &mut msg.body
@@ -144,10 +140,6 @@ pub fn map_zmsg_to_shmbuf(
 
 pub fn map_zmsg_to_shminfo(msg: &mut ZenohMessage) -> ZResult<bool> {
     let mut res = false;
-
-    if let Some(attachment) = msg.attachment.as_mut() {
-        res = map_zbuf_to_shminfo(&mut attachment.buffer)?;
-    }
 
     if let ZenohBody::Data(Data {
         payload, data_info, ..
@@ -171,22 +163,10 @@ pub fn map_zmsg_to_shminfo(msg: &mut ZenohMessage) -> ZResult<bool> {
 // #[cfg(feature = "shared-memory")]
 // impl TransportMessage {
 //     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
-//         let mut res = false;
-
-//         if let Some(attachment) = self.attachment.as_mut() {
-//             res = attachment.buffer.map_to_shmbuf(shmr)?;
-//         }
-
-//         Ok(res)
+//         Ok(false)
 //     }
-
+//
 //     pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
-//         let mut res = false;
-
-//         if let Some(attachment) = self.attachment.as_mut() {
-//             res = attachment.buffer.map_to_shminfo()?;
-//         }
-
-//         Ok(res)
+//         Ok(false)
 //     }
 // }
