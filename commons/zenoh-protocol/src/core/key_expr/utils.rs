@@ -31,7 +31,6 @@ impl Writer {
 }
 
 #[derive(Debug)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Splitter<'a, S: ?Sized, D: ?Sized> {
     s: Option<&'a S>,
     d: &'a D,

@@ -213,13 +213,6 @@ impl fmt::Debug for ZSlice {
     }
 }
 
-#[cfg(feature = "defmt")]
-impl defmt::Format for ZSlice {
-    fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{:02x}", self.as_slice());
-    }
-}
-
 // From impls
 impl<T> From<Arc<T>> for ZSlice
 where

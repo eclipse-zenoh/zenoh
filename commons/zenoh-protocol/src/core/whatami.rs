@@ -18,7 +18,6 @@ use zenoh_result::{bail, ZError};
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum WhatAmI {
     Router = 1,
     Peer = 1 << 1,
@@ -131,7 +130,6 @@ impl From<WhatAmI> for ZInt {
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WhatAmIMatcher(pub NonZeroU8);
 
 impl WhatAmIMatcher {
