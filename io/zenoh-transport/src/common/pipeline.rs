@@ -723,7 +723,6 @@ mod tests {
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
-            let attachment = None;
             let channel = Channel {
                 priority: Priority::Control,
                 reliability: Reliability::Reliable,
@@ -738,7 +737,6 @@ mod tests {
                 data_info,
                 routing_context,
                 reply_context,
-                attachment,
             );
 
             println!(
@@ -857,7 +855,6 @@ mod tests {
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
-            let attachment = None;
 
             let message = ZenohMessage::make_data(
                 key,
@@ -867,7 +864,6 @@ mod tests {
                 data_info,
                 routing_context,
                 reply_context,
-                attachment,
             );
 
             // The last push should block since there shouldn't any more batches
@@ -888,7 +884,7 @@ mod tests {
         }
 
         // Pipeline
-        let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
+        let tct = TransportConduitTx::make(FRAME_SN_RESOLUTION.mask()).unwrap();
         let conduits = vec![tct];
         let (producer, mut consumer) =
             TransmissionPipeline::make(TransmissionPipelineConf::default(), conduits.as_slice());
@@ -940,7 +936,7 @@ mod tests {
     #[ignore]
     fn tx_pipeline_thr() {
         // Queue
-        let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
+        let tct = TransportConduitTx::make(FRAME_SN_RESOLUTION.mask()).unwrap();
         let conduits = vec![tct];
         let (producer, mut consumer) = TransmissionPipeline::make(CONFIG, conduits.as_slice());
         let count = Arc::new(AtomicUsize::new(0));
@@ -967,7 +963,6 @@ mod tests {
                     let data_info = None;
                     let routing_context = None;
                     let reply_context = None;
-                    let attachment = None;
 
                     let message = ZenohMessage::make_data(
                         key,
@@ -977,7 +972,6 @@ mod tests {
                         data_info,
                         routing_context,
                         reply_context,
-                        attachment,
                     );
 
                     let duration = Duration::from_millis(5_500);

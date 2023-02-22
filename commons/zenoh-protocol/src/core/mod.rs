@@ -67,7 +67,7 @@ pub enum Bits {
 }
 
 impl Bits {
-    pub fn mask(&self) -> ZInt {
+    pub const fn mask(&self) -> ZInt {
         match self {
             Bits::U8 => u8::MAX as ZInt,
             Bits::U16 => u16::MAX as ZInt,
