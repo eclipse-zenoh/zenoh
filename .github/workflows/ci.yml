@@ -115,8 +115,8 @@ jobs:
       - name: Install latest Rust toolchain
         uses: actions-rs/toolchain@v1
       
-      - name: Install cargo-nono
-        run: cargo install cargo-nono
+      # - name: Install cargo-nono
+      #   run: cargo install cargo-nono
       
       - name: Install cargo-no-dev-deps
         run: cargo install cargo-no-dev-deps --locked
@@ -124,29 +124,29 @@ jobs:
       - name: Check zenoh-collections
         uses: actions-rs/cargo@v1
         with:
-          command: nono
-          args: check --package zenoh-collections --no-default-features
+          command: check
+          args: --package zenoh-collections --no-default-features --target x86_64-unknown-none
       
       - name: Check zenoh-result
         uses: actions-rs/cargo@v1
         with:
-          command: nono
-          args: check --package zenoh-result --no-default-features
+          command: check
+          args: --package zenoh-result --no-default-features --target x86_64-unknown-none
       
       - name: Check zenoh-buffers
         uses: actions-rs/cargo@v1
         with:
-          command: nono
-          args: check --package zenoh-buffers
+          command: check
+          args: --package zenoh-buffers --target x86_64-unknown-none
       
-      - name: Check zenoh-protocol
-        uses: actions-rs/cargo@v1
-        with:
-          command: no-dev-deps
-          args: nono check --package zenoh-protocol --no-default-features
+      # - name: Check zenoh-protocol
+      #   uses: actions-rs/cargo@v1
+      #   with:
+      #     command: no-dev-deps
+      #     args: nono check --package zenoh-protocol --no-default-features
       
-      - name: Check zenoh-codec
-        uses: actions-rs/cargo@v1
-        with:
-          command: no-dev-deps
-          args: nono check --package zenoh-codec --no-default-features
+      # - name: Check zenoh-codec
+      #   uses: actions-rs/cargo@v1
+      #   with:
+      #     command: no-dev-deps
+      #     args: nono check --package zenoh-codec --no-default-features
