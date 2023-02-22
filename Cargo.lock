@@ -897,35 +897,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "defmt"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d3a0ae7494d9bff013d7b89471f4c424356a71e9752e0c78abe7e6c608a16bb3"
-dependencies = [
- "bitflags",
- "defmt-macros",
-]
-
-[[package]]
-name = "defmt-macros"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8500cbe4cca056412efce4215a63d0bc20492942aeee695f23b624a53e0a6854"
-dependencies = [
- "defmt-parser",
- "proc-macro-error",
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "defmt-parser"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0db23d29972d99baa3de2ee2ae3f104c10564a6d05a346eb3f4c4f2c0525a06e"
-
-[[package]]
 name = "der"
 version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2218,30 +2189,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5b40af805b3121feab8a3c29f04d8ad262fa8e0561883e7653e024ae4479e6de"
 
 [[package]]
-name = "proc-macro-error"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
-dependencies = [
- "proc-macro-error-attr",
- "proc-macro2",
- "quote",
- "syn",
- "version_check",
-]
-
-[[package]]
-name = "proc-macro-error-attr"
-version = "1.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
-dependencies = [
- "proc-macro2",
- "quote",
- "version_check",
-]
-
-[[package]]
 name = "proc-macro-hack"
 version = "0.5.20+deprecated"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3330,7 +3277,6 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d291a7454d390b753ef68df8145da18367e32883ec2fa863959f0aefb915cdb"
 dependencies = [
- "defmt",
  "hex",
  "humantime",
  "lazy_static",
@@ -3836,7 +3782,6 @@ dependencies = [
 name = "zenoh-buffers"
 version = "0.7.0-rc"
 dependencies = [
- "defmt",
  "rand 0.8.5",
  "zenoh-collections",
 ]
@@ -3866,9 +3811,6 @@ dependencies = [
 [[package]]
 name = "zenoh-collections"
 version = "0.7.0-rc"
-dependencies = [
- "defmt",
-]
 
 [[package]]
 name = "zenoh-compression"
@@ -4218,7 +4160,6 @@ dependencies = [
 name = "zenoh-protocol"
 version = "0.7.0-rc"
 dependencies = [
- "defmt",
  "hex",
  "lazy_static",
  "rand 0.8.5",
@@ -4235,7 +4176,6 @@ name = "zenoh-result"
 version = "0.7.0-rc"
 dependencies = [
  "anyhow",
- "defmt",
 ]
 
 [[package]]

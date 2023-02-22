@@ -81,7 +81,6 @@ brotli = "3.3.4"
 clap = "3.2.23"
 crc = "3.0.0"
 criterion = "0.4.0"
-defmt = { version = "0.3.2", features = ["alloc"] }
 derive_more = "0.99.17"
 derive-new = "0.5.9"
 env_logger = "0.10.0"
