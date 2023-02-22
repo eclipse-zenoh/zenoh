@@ -35,9 +35,6 @@ std = [
 shared-memory = [
     "std",
 ]
-defmt = [
-    "zenoh-buffers/defmt",
-]
 
 [dependencies]
 lz4_flex = "0.10.0"
