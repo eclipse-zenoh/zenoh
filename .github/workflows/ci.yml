@@ -143,10 +143,10 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: no-dev-deps
-          args: check --package zenoh-protocol --bin no_std_ci_check --no-default-features --features no-std-ci-check
+          args: check --package zenoh-protocol --bin no_std_ci_check --no-default-features --features no-std-ci-check --target x86_64-unknown-none
       
       - name: Check zenoh-codec
         uses: actions-rs/cargo@v1
         with:
           command: no-dev-deps
-          args: check --package zenoh-codec --bin no_std_ci_check --no-default-features --features no-std-ci-check
+          args: check --package zenoh-codec --bin no_std_ci_check --no-default-features --features no-std-ci-check --target x86_64-unknown-none
