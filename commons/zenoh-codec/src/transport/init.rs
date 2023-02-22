@@ -19,10 +19,10 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{imsg, ZExtUnknown},
-    core::{WhatAmI, ZenohId},
+    core::{Resolution, WhatAmI, ZenohId},
     transport::{
         id,
-        init::{ext, flag, InitAck, InitSyn, Resolution},
+        init::{ext, flag, InitAck, InitSyn},
     },
 };
 

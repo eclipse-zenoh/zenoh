@@ -140,13 +140,6 @@ impl TransportEventHandler for Handler {
             bail!("Unable to build keyexpr from zid")
         }
     }
-
-    fn new_multicast(
-        &self,
-        _transport: zenoh_transport::TransportMulticast,
-    ) -> ZResult<Arc<dyn zenoh_transport::TransportMulticastEventHandler>> {
-        bail!("unimplemented")
-    }
 }
 
 pub(crate) struct PeerHandler {

@@ -47,18 +47,17 @@ pub(crate) async fn accept_link(
         };
     }
 
-    let output = step!(init_syn::recv(link, manager, auth_link).await);
-    let output = step!(init_ack::send(link, manager, auth_link, output).await);
-    let output = step!(open_syn::recv(link, manager, auth_link, output).await);
+    let output = step!(init_syn::recv(link, manager).await);
+    let output = step!(init_ack::send(link, manager, output).await);
+    let output = step!(open_syn::recv(link, manager, output).await);
 
     // Initialize the transport
     let zid = output.cookie.zid;
     let input = super::InputInit {
         zid: output.cookie.zid,
         whatami: output.cookie.whatami,
-        sn_resolution: output.cookie.sn_resolution,
-        is_shm: output.is_shm,
-        is_qos: output.cookie.is_qos,
+        resolution: output.cookie.resolution,
+        batch_size: output.cookie.batch_size,
     };
     let transport = step!(transport_init(manager, input)
         .await
@@ -107,10 +106,7 @@ pub(crate) async fn accept_link(
         .map_err(|e| (e, Some(close::reason::INVALID))))
     .config
     .initial_sn_tx;
-    let input = open_ack::Input {
-        initial_sn,
-        attachment: output.open_ack_attachment,
-    };
+    let input = open_ack::Input { initial_sn };
     let lease = output.lease;
     step!(open_ack::send(link, manager, auth_link, input).await);
 

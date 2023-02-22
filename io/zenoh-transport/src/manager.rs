@@ -27,8 +27,8 @@ use zenoh_core::zparse;
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
 use zenoh_protocol::{
-    core::{EndPoint, Locator, Priority, WhatAmI, ZInt, ZenohId},
-    defaults::{BATCH_SIZE, FRAME_SN_RESOLUTION},
+    core::{EndPoint, Locator, Priority, Resolution, WhatAmI, ZenohId},
+    defaults::BATCH_SIZE,
     VERSION,
 };
 use zenoh_result::{bail, ZResult};
@@ -82,7 +82,7 @@ pub struct TransportManagerConfig {
     pub version: u8,
     pub zid: ZenohId,
     pub whatami: WhatAmI,
-    pub sn_resolution: ZInt,
+    pub resolution: Resolution,
     pub batch_size: u16,
     pub queue_size: [usize; Priority::NUM],
     pub queue_backoff: Duration,
@@ -107,7 +107,7 @@ pub struct TransportManagerBuilder {
     version: u8,
     zid: ZenohId,
     whatami: WhatAmI,
-    sn_resolution: ZInt,
+    resolution: Resolution,
     batch_size: u16,
     queue_size: QueueSizeConf,
     queue_backoff: Duration,
@@ -129,8 +129,8 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn sn_resolution(mut self, sn_resolution: ZInt) -> Self {
-        self.sn_resolution = sn_resolution;
+    pub fn resolution(mut self, resolution: Resolution) -> Self {
+        self.resolution = resolution;
         self
     }
 
@@ -180,14 +180,14 @@ impl TransportManagerBuilder {
             self = self.whatami(*v);
         }
 
-        self = self.sn_resolution(
-            config
-                .transport()
-                .link()
-                .tx()
-                .sequence_number_resolution()
-                .unwrap(),
-        );
+        // self = self.resolution(
+        //     config
+        //         .transport()
+        //         .link()
+        //         .tx()
+        //         .sequence_number_resolution()
+        //         .unwrap(),
+        // ); // @TODO
         self = self.batch_size(config.transport().link().tx().batch_size().unwrap());
         self = self.defrag_buff_size(config.transport().link().rx().max_message_size().unwrap());
         self = self.link_rx_buffer_size(config.transport().link().rx().buffer_size().unwrap());
@@ -232,7 +232,7 @@ impl TransportManagerBuilder {
             version: self.version,
             zid: self.zid,
             whatami: self.whatami,
-            sn_resolution: self.sn_resolution,
+            resolution: self.resolution,
             batch_size: self.batch_size,
             queue_size,
             queue_backoff: self.queue_backoff,
@@ -262,7 +262,7 @@ impl Default for TransportManagerBuilder {
             version: VERSION,
             zid: ZenohId::rand(),
             whatami: ZN_MODE_DEFAULT.parse().unwrap(),
-            sn_resolution: FRAME_SN_RESOLUTION as ZInt,
+            resolution: Resolution::default(),
             batch_size: BATCH_SIZE,
             queue_size: queue.size,
             queue_backoff: Duration::from_nanos(backoff),

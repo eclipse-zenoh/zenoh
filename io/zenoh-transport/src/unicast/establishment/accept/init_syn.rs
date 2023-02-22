@@ -1,5 +1,3 @@
-use std::convert::TryFrom;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -13,13 +11,12 @@ use std::convert::TryFrom;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::{AuthenticatedPeerLink, EstablishmentProperties};
 use super::AResult;
 use crate::TransportManager;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
-    core::{WhatAmI, ZInt, ZenohId},
-    transport::{tmsg, TransportBody},
+    core::{Resolution, WhatAmI, ZenohId},
+    transport::{close, TransportBody},
 };
 use zenoh_result::zerror;
 
@@ -31,15 +28,10 @@ use zenoh_result::zerror;
 pub(super) struct Output {
     pub(super) whatami: WhatAmI,
     pub(super) zid: ZenohId,
-    pub(super) sn_resolution: ZInt,
-    pub(super) is_qos: bool,
-    pub(super) init_syn_properties: EstablishmentProperties,
+    pub(super) resolution: Resolution,
+    pub(super) batch_size: u16,
 }
-pub(super) async fn recv(
-    link: &LinkUnicast,
-    manager: &TransportManager,
-    auth_link: &mut AuthenticatedPeerLink,
-) -> AResult<Output> {
+pub(super) async fn recv(link: &LinkUnicast, manager: &TransportManager) -> AResult<Output> {
     // Wait to read an InitSyn
     let mut messages = link
         .read_transport_message()
@@ -54,7 +46,7 @@ pub(super) async fn recv(
         return Err((e.into(), Some(close::reason::INVALID)));
     }
 
-    let mut msg = messages.remove(0);
+    let msg = messages.remove(0);
     let init_syn = match msg.body {
         TransportBody::InitSyn(init_syn) => init_syn,
         _ => {
@@ -67,21 +59,21 @@ pub(super) async fn recv(
         }
     };
 
-    // Check the peer id associate to the authenticated link
-    match auth_link.peer_id {
-        Some(zid) => {
-            if zid != init_syn.zid {
-                let e = zerror!(
-                    "Inconsistent ZenohId in InitSyn on {}: {:?} {:?}",
-                    link,
-                    zid,
-                    init_syn.zid
-                );
-                return Err((e.into(), Some(close::reason::INVALID)));
-            }
-        }
-        None => auth_link.peer_id = Some(init_syn.zid),
-    }
+    // // Check the peer id associate to the authenticated link
+    // match auth_link.peer_id {
+    //     Some(zid) => {
+    //         if zid != init_syn.zid {
+    //             let e = zerror!(
+    //                 "Inconsistent ZenohId in InitSyn on {}: {:?} {:?}",
+    //                 link,
+    //                 zid,
+    //                 init_syn.zid
+    //             );
+    //             return Err((e.into(), Some(close::reason::INVALID)));
+    //         }
+    //     }
+    //     None => auth_link.peer_id = Some(init_syn.zid),
+    // }
 
     // Check if the version is supported
     if init_syn.version != manager.config.version {
@@ -93,19 +85,18 @@ pub(super) async fn recv(
         return Err((e.into(), Some(close::reason::INVALID)));
     }
 
-    // Validate the InitSyn with the peer authenticators
-    let init_syn_properties: EstablishmentProperties = match msg.attachment.take() {
-        Some(att) => EstablishmentProperties::try_from(&att)
-            .map_err(|e| (e, Some(close::reason::INVALID)))?,
-        None => EstablishmentProperties::new(),
-    };
+    // // Validate the InitSyn with the peer authenticators
+    // let init_syn_properties: EstablishmentProperties = match msg.attachment.take() {
+    //     Some(att) => EstablishmentProperties::try_from(&att)
+    //         .map_err(|e| (e, Some(close::reason::INVALID)))?,
+    //     None => EstablishmentProperties::new(),
+    // };
 
     let output = Output {
         whatami: init_syn.whatami,
         zid: init_syn.zid,
-        sn_resolution: init_syn.sn_resolution,
-        is_qos: init_syn.is_qos,
-        init_syn_properties,
+        resolution: init_syn.resolution,
+        batch_size: init_syn.batch_size,
     };
     Ok(output)
 }

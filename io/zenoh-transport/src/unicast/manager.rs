@@ -344,7 +344,7 @@ impl TransportManager {
                 // Ignore the non fundamental parameters like initial SN.
                 if transport.config.whatami != config.whatami {
                     let e = zerror!(
-                        "Transport with peer {} already exist. Invalid whatami: {}. Execpted: {}.",
+                        "Transport with peer {} already exist. Invalid whatami: {}. Expected: {}.",
                         config.peer,
                         config.whatami,
                         transport.config.whatami
@@ -355,7 +355,7 @@ impl TransportManager {
 
                 if transport.config.sn_resolution != config.sn_resolution {
                     let e = zerror!(
-                    "Transport with peer {} already exist. Invalid sn resolution: {}. Execpted: {}.",
+                    "Transport with peer {} already exist. Invalid sn resolution: {}. Expected: {}.",
                     config.peer, config.sn_resolution, transport.config.sn_resolution
                 );
                     log::trace!("{}", e);
@@ -365,7 +365,7 @@ impl TransportManager {
                 #[cfg(feature = "shared-memory")]
                 if transport.config.is_shm != config.is_shm {
                     let e = zerror!(
-                        "Transport with peer {} already exist. Invalid is_shm: {}. Execpted: {}.",
+                        "Transport with peer {} already exist. Invalid is_shm: {}. Expected: {}.",
                         config.peer,
                         config.is_shm,
                         transport.config.is_shm
@@ -376,7 +376,7 @@ impl TransportManager {
 
                 if transport.config.is_qos != config.is_qos {
                     let e = zerror!(
-                        "Transport with peer {} already exist. Invalid is_qos: {}. Execpted: {}.",
+                        "Transport with peer {} already exist. Invalid is_qos: {}. Expected: {}.",
                         config.peer,
                         config.is_qos,
                         transport.config.is_qos

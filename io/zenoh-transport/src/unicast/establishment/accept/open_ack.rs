@@ -16,9 +16,8 @@ use super::AResult;
 use crate::TransportManager;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
-    common::Attachment,
     core::ZInt,
-    transport::{tmsg, TransportMessage},
+    transport::{close, OpenAck, TransportMessage},
 };
 
 /*************************************/
@@ -27,7 +26,6 @@ use zenoh_protocol::{
 // Send an OpenAck
 pub(super) struct Input {
     pub(super) initial_sn: ZInt,
-    pub(super) attachment: Option<Attachment>,
 }
 
 pub(super) async fn send(
@@ -37,11 +35,12 @@ pub(super) async fn send(
     input: Input,
 ) -> AResult<()> {
     // Build OpenAck message
-    let message = TransportMessage::make_open_ack(
-        manager.config.unicast.lease,
-        input.initial_sn,
-        input.attachment,
-    );
+    let message: TransportMessage = OpenAck {
+        lease: manager.config.unicast.lease,
+        initial_sn: input.initial_sn,
+        auth: None, // @TODO
+    }
+    .into();
 
     // Send the message on the
     let _ = link

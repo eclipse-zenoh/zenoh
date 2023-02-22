@@ -56,26 +56,8 @@ pub use locator::*;
 pub mod endpoint;
 pub use endpoint::*;
 
-#[repr(u8)]
-// The value represents the 2-bit encoded value
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Bits {
-    U8 = 0b00,
-    U16 = 0b01,
-    U32 = 0b10,
-    U64 = 0b11,
-}
-
-impl Bits {
-    pub const fn mask(&self) -> ZInt {
-        match self {
-            Bits::U8 => u8::MAX as ZInt,
-            Bits::U16 => u16::MAX as ZInt,
-            Bits::U32 => u32::MAX as ZInt,
-            Bits::U64 => u64::MAX as ZInt,
-        }
-    }
-}
+pub mod resolution;
+pub use resolution::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]

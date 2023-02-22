@@ -12,23 +12,17 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::unicast::establishment::open::OResult;
-use crate::unicast::establishment::{
-    authenticator::AuthenticatedPeerLink, EstablishmentProperties,
-};
 use crate::TransportManager;
-use std::convert::TryFrom;
 use zenoh_buffers::ZSlice;
-use zenoh_core::zasyncread;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
-    common::Attachment,
-    core::{Property, WhatAmI, ZInt, ZenohId},
-    transport::{tmsg, Close, TransportBody},
+    core::{Field, Resolution, WhatAmI, ZenohId},
+    transport::{
+        close::{self, Close},
+        TransportBody,
+    },
 };
 use zenoh_result::zerror;
-
-#[cfg(feature = "shared-memory")]
-use crate::unicast::establishment::authenticator::PeerAuthenticatorId;
 
 /*************************************/
 /*              OPEN                 */
@@ -36,16 +30,14 @@ use crate::unicast::establishment::authenticator::PeerAuthenticatorId;
 pub(super) struct Output {
     pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
-    pub(super) sn_resolution: ZInt,
-    pub(super) is_qos: bool,
-    pub(super) is_shm: bool,
+    pub(super) resolution: Resolution,
+    pub(super) batch_size: u16,
     pub(super) cookie: ZSlice,
-    pub(super) open_syn_attachment: Option<Attachment>,
 }
+
 pub(super) async fn recv(
     link: &LinkUnicast,
     manager: &TransportManager,
-    auth_link: &mut AuthenticatedPeerLink,
     _input: super::init_syn::Output,
 ) -> OResult<Output> {
     // Wait to read an InitAck
@@ -65,7 +57,7 @@ pub(super) async fn recv(
         ));
     }
 
-    let mut msg = messages.remove(0);
+    let msg = messages.remove(0);
     let init_ack = match msg.body {
         TransportBody::InitAck(init_ack) => init_ack,
         TransportBody::Close(Close { reason, .. }) => {
@@ -91,93 +83,104 @@ pub(super) async fn recv(
         }
     };
 
-    let sn_resolution = match init_ack.sn_resolution {
-        Some(sn_resolution) => {
-            if sn_resolution > manager.config.sn_resolution {
-                return Err((
-                    zerror!(
-                        "Rejecting InitAck on {}. Invalid sn resolution: {}",
-                        link,
-                        sn_resolution
-                    )
-                    .into(),
-                    Some(close::reason::INVALID),
-                ));
-            }
-            sn_resolution
-        }
-        None => manager.config.sn_resolution,
-    };
+    // Compute the minimum SN resolution
+    let resolution = {
+        let i_fsn_res = init_ack.resolution.get(Field::FrameSN);
+        let m_fsn_res = manager.config.resolution.get(Field::FrameSN);
 
-    // Store the peer id associate do this link
-    auth_link.peer_id = Some(init_ack.zid);
-
-    let mut init_ack_properties = match msg.attachment.take() {
-        Some(att) => EstablishmentProperties::try_from(&att)
-            .map_err(|e| (e, Some(close::reason::INVALID)))?,
-        None => EstablishmentProperties::new(),
-    };
-
-    #[allow(unused_mut)]
-    let mut is_shm = false;
-    let mut ps_attachment = EstablishmentProperties::new();
-    for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
-        #[allow(unused_mut)]
-        let mut att = pa
-            .handle_init_ack(
-                auth_link,
-                &init_ack.zid,
-                sn_resolution,
-                init_ack_properties.remove(pa.id().into()).map(|x| x.value),
-            )
-            .await;
-
-        #[cfg(feature = "shared-memory")]
-        if pa.id() == PeerAuthenticatorId::Shm {
-            // Check if SHM has been validated from the other side
-            att = match att {
-                Ok(att) => {
-                    is_shm = att.is_some();
-                    Ok(att)
-                }
-                Err(e) => {
-                    if e.is::<zenoh_result::ShmError>() {
-                        is_shm = false;
-                        Ok(None)
-                    } else {
-                        Err(e)
-                    }
-                }
-            };
+        if i_fsn_res > m_fsn_res {
+            let e = zerror!("Invalid SN resolution on {}: {:?}", link, i_fsn_res);
+            log::error!("{}", e);
+            return Err((e.into(), Some(close::reason::INVALID)));
         }
 
-        let mut att = att.map_err(|e| (e, Some(close::reason::INVALID)))?;
-        if let Some(att) = att.take() {
-            ps_attachment
-                .insert(Property {
-                    key: pa.id().into(),
-                    value: att,
-                })
-                .map_err(|e| (e, Some(close::reason::UNSUPPORTED)))?;
-        }
-    }
-
-    let open_syn_attachment = if ps_attachment.is_empty() {
-        None
-    } else {
-        let att =
-            Attachment::try_from(&ps_attachment).map_err(|e| (e, Some(close::reason::INVALID)))?;
-        Some(att)
+        let mut res = Resolution::default();
+        res.set(Field::FrameSN, i_fsn_res);
+        res
     };
+
+    // Compute the minimum batch size
+    let batch_size = {
+        let i_bsize = init_ack.batch_size;
+        let m_bsize = manager.config.batch_size;
+
+        if i_bsize > m_bsize {
+            let e = zerror!("Invalid batch size on {}: {:?}", link, i_bsize);
+            log::error!("{}", e);
+            return Err((e.into(), Some(close::reason::INVALID)));
+        }
+
+        i_bsize
+    };
+
+    // // Store the peer id associate do this link
+    // auth_link.peer_id = Some(init_ack.zid);
+
+    // let mut init_ack_properties = match msg.attachment.take() {
+    //     Some(att) => EstablishmentProperties::try_from(&att)
+    //         .map_err(|e| (e, Some(close::reason::INVALID)))?,
+    //     None => EstablishmentProperties::new(),
+    // };
+
+    // #[allow(unused_mut)]
+    // let mut is_shm = false;
+    // let mut ps_attachment = EstablishmentProperties::new();
+    // for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
+    //     #[allow(unused_mut)]
+    //     let mut att = pa
+    //         .handle_init_ack(
+    //             auth_link,
+    //             &init_ack.zid,
+    //             sn_resolution,
+    //             init_ack_properties.remove(pa.id().into()).map(|x| x.value),
+    //         )
+    //         .await;
+
+    //     #[cfg(feature = "shared-memory")]
+    //     if pa.id() == PeerAuthenticatorId::Shm {
+    //         // Check if SHM has been validated from the other side
+    //         att = match att {
+    //             Ok(att) => {
+    //                 is_shm = att.is_some();
+    //                 Ok(att)
+    //             }
+    //             Err(e) => {
+    //                 if e.is::<zenoh_result::ShmError>() {
+    //                     is_shm = false;
+    //                     Ok(None)
+    //                 } else {
+    //                     Err(e)
+    //                 }
+    //             }
+    //         };
+    //     }
+
+    //     let mut att = att.map_err(|e| (e, Some(close::reason::INVALID)))?;
+    //     if let Some(att) = att.take() {
+    //         ps_attachment
+    //             .insert(Property {
+    //                 key: pa.id().into(),
+    //                 value: att,
+    //             })
+    //             .map_err(|e| (e, Some(close::reason::UNSUPPORTED)))?;
+    //     }
+    // }
+
+    // let open_syn_attachment = if ps_attachment.is_empty() {
+    //     None
+    // } else {
+    //     let att =
+    //         Attachment::try_from(&ps_attachment).map_err(|e| (e, Some(close::reason::INVALID)))?;
+    //     Some(att)
+    // }; @TODO
 
     let output = Output {
         zid: init_ack.zid,
         whatami: init_ack.whatami,
-        sn_resolution,
-        is_qos: init_ack.is_qos,
-        is_shm,
+        resolution,
+        batch_size,
         cookie: init_ack.cookie,
-        open_syn_attachment,
     };
+
     Ok(output)
 }

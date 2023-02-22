@@ -31,8 +31,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
-    TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
+    TransportUnicast,
 };
 
 // These keys and certificates below are purposedly generated to run TLS and mTLS tests.
@@ -337,7 +337,7 @@ async fn open_transport(
 
     // Create the listener on the router
     for e in server_endpoints.iter() {
-        println!("Add endpoint: {e}\n");
+        println!("Add endpoint: {e}");
         let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
     }
 
@@ -464,6 +464,11 @@ async fn run_single(
     channel: Channel,
     msg_size: usize,
 ) {
+    println!(
+        "\n>>> Running test for:  {:?}, {:?}, {:?}, {}",
+        client_endpoints, server_endpoints, channel, msg_size
+    );
+
     #[allow(unused_variables)] // Used when stats feature is enabled
     let (router_manager, router_handler, client_manager, client_transport) =
         open_transport(client_endpoints, server_endpoints).await;

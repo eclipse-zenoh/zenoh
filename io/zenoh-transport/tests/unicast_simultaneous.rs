@@ -29,8 +29,8 @@ mod tests {
     };
     use zenoh_result::ZResult;
     use zenoh_transport::{
-        TransportEventHandler, TransportManager, TransportMulticast,
-        TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+        TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
+        TransportUnicast,
     };
 
     const TIMEOUT: Duration = Duration::from_secs(60);

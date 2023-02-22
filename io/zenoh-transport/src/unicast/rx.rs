@@ -82,7 +82,7 @@ impl TransportUnicastInner {
         }
     }
 
-    fn handle_close(&self, link: &LinkUnicast, reason: u8, session: bool) -> ZResult<()> {
+    fn handle_close(&self, link: &LinkUnicast, _reason: u8, session: bool) -> ZResult<()> {
         // Stop now rx and tx tasks before doing the proper cleanup
         let _ = self.stop_rx(link);
         let _ = self.stop_tx(link);
@@ -103,11 +103,7 @@ impl TransportUnicastInner {
         Ok(())
     }
 
-    fn handle_frame(
-        &self,
-        payload: SingleOrVec<ZenohMessage>,
-        mut guard: MutexGuard<'_, TransportChannelRx>,
-    ) -> ZResult<()> {
+    fn handle_frame(&self, payload: SingleOrVec<ZenohMessage>) -> ZResult<()> {
         for msg in payload.into_iter() {
             self.trigger_callback(msg)?;
         }
@@ -190,7 +186,7 @@ impl TransportUnicastInner {
                 };
 
                 self.verify_sn(sn, &mut guard)?;
-                self.handle_frame(payload, guard)
+                self.handle_frame(payload)
             }
             TransportBody::Fragment(Fragment {
                 reliability,

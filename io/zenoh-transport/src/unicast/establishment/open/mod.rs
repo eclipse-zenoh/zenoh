@@ -44,8 +44,8 @@ pub(crate) async fn open_link(
         };
     }
 
-    let output = step!(init_syn::send(link, manager, auth_link).await);
-    let output = step!(init_ack::recv(link, manager, auth_link, output).await);
+    let output = step!(init_syn::send(link, manager).await);
+    let output = step!(init_ack::recv(link, manager, output).await);
 
     // Initialize the transport
     macro_rules! step {
@@ -64,9 +64,8 @@ pub(crate) async fn open_link(
     let input = InputInit {
         zid,
         whatami: output.whatami,
-        sn_resolution: output.sn_resolution,
-        is_shm: output.is_shm,
-        is_qos: output.is_qos,
+        resolution: output.resolution,
+        batch_size: output.batch_size,
     };
     let transport = step!(super::transport_init(manager, input).await);
 
@@ -93,13 +92,14 @@ pub(crate) async fn open_link(
         .map_err(|e| (e, Some(close::reason::INVALID))))
     .config
     .initial_sn_tx;
+
     let input = open_syn::Input {
         cookie: output.cookie,
+        resolution: output.resolution,
         initial_sn,
-        attachment: output.open_syn_attachment,
     };
-    let output = step!(open_syn::send(link, manager, auth_link, input).await);
-    let output = step!(open_ack::recv(link, manager, auth_link, output).await);
+    let output = step!(open_syn::send(link, manager, input).await);
+    let output = step!(open_ack::recv(link, manager, output).await);
 
     // Finalize the transport
     // Add the link to the transport

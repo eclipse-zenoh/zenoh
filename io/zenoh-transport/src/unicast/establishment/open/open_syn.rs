@@ -11,40 +11,48 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::authenticator::AuthenticatedPeerLink;
 use super::OResult;
 use crate::TransportManager;
 use zenoh_buffers::ZSlice;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
-    common::Attachment,
-    core::ZInt,
-    transport::{tmsg, TransportMessage},
+    core::{Resolution, ZInt},
+    transport::{close, OpenSyn, TransportMessage},
 };
 
 pub(super) struct Input {
     pub(super) cookie: ZSlice,
+    pub(super) resolution: Resolution,
     pub(super) initial_sn: ZInt,
-    pub(super) attachment: Option<Attachment>,
 }
 
-pub(super) struct Output;
+pub(super) struct Output {
+    pub(super) resolution: Resolution,
+}
 
 pub(super) async fn send(
     link: &LinkUnicast,
     manager: &TransportManager,
-    _auth_link: &AuthenticatedPeerLink,
     input: Input,
 ) -> OResult<Output> {
     // Build and send an OpenSyn message
     let lease = manager.config.unicast.lease;
-    let message =
-        TransportMessage::make_open_syn(lease, input.initial_sn, input.cookie, input.attachment);
+    let message: TransportMessage = OpenSyn {
+        lease,
+        initial_sn: input.initial_sn,
+        cookie: input.cookie,
+        shm: None,  // @TODO
+        auth: None, // @TODO
+    }
+    .into();
+
     let _ = link
         .write_transport_message(&message)
         .await
         .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
-    let output = Output;
+    let output = Output {
+        resolution: input.resolution,
+    };
     Ok(output)
 }

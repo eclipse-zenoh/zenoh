@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{Bits, WhatAmI, ZenohId};
+use crate::core::{Resolution, WhatAmI, ZenohId};
 use zenoh_buffers::ZSlice;
 
 /// # Init message
@@ -102,59 +102,6 @@ pub mod flag {
     pub const A: u8 = 1 << 5; // 0x20 Ack           if A==0 then the message is an InitSyn else it is an InitAck
     pub const S: u8 = 1 << 6; // 0x40 Size params   if S==1 then size parameters are exchanged
     pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
-}
-
-#[repr(u8)]
-// The value indicates the bit offest
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Field {
-    FrameSN = 0,
-    RequestID = 2,
-    KeyExprID = 4,
-}
-
-#[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Resolution(u8);
-
-impl Resolution {
-    pub const fn as_u8(&self) -> u8 {
-        self.0
-    }
-
-    pub const fn get(&self, field: Field) -> Bits {
-        let value = (self.0 >> (field as u8)) & 0b11;
-        unsafe { core::mem::transmute(value) }
-    }
-
-    pub fn set(&mut self, field: Field, bits: Bits) {
-        self.0 &= !(0b11 << field as u8); // Clear bits
-        self.0 |= (bits as u8) << (field as u8); // Set bits
-    }
-
-    #[cfg(feature = "test")]
-    pub fn rand() -> Self {
-        use rand::Rng;
-
-        let mut rng = rand::thread_rng();
-        let v: u8 = rng.gen();
-        Self(v & 0b00111111)
-    }
-}
-
-impl Default for Resolution {
-    fn default() -> Self {
-        let frame_sn = Bits::U64 as u8;
-        let request_id = (Bits::U64 as u8) << 2;
-        let keyexpr_id = (Bits::U64 as u8) << 4;
-        Self(frame_sn | request_id | keyexpr_id)
-    }
-}
-
-impl From<u8> for Resolution {
-    fn from(v: u8) -> Self {
-        Self(v)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

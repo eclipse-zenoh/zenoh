@@ -27,7 +27,7 @@ use std::time::Duration;
 use zenoh_core::{zasynclock, zasyncread};
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::{
-    core::{WhatAmI, ZInt, ZenohId},
+    core::{Field, Resolution, WhatAmI, ZenohId},
     transport::{Close, TransportMessage},
 };
 use zenoh_result::ZResult;
@@ -63,23 +63,23 @@ pub(super) async fn close_link(
 pub(super) struct InputInit {
     pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
-    pub(super) sn_resolution: ZInt,
-    pub(super) is_shm: bool,
-    pub(super) is_qos: bool,
+    pub(super) resolution: Resolution,
+    pub(super) batch_size: u16,
 }
 async fn transport_init(
     manager: &TransportManager,
     input: self::InputInit,
 ) -> ZResult<TransportUnicast> {
     // Initialize the transport if it is new
-    let initial_sn_tx = zasynclock!(manager.prng).gen_range(0..input.sn_resolution);
+    let initial_sn_tx =
+        zasynclock!(manager.prng).gen_range(0..=input.resolution.get(Field::FrameSN).mask());
 
     let config = TransportConfigUnicast {
         peer: input.zid,
         whatami: input.whatami,
-        sn_resolution: input.sn_resolution,
-        is_shm: input.is_shm,
-        is_qos: input.is_qos,
+        sn_resolution: input.resolution.get(Field::FrameSN).mask(),
+        is_shm: false, // @TODO
+        is_qos: false, // @TODO
         initial_sn_tx,
     };
 

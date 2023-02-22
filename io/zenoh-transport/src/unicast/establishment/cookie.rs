@@ -19,14 +19,15 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_crypto::{BlockCipher, PseudoRng};
-use zenoh_protocol::core::{WhatAmI, ZInt, ZenohId};
+use zenoh_protocol::core::{Resolution, WhatAmI, ZInt, ZenohId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Cookie {
     pub whatami: WhatAmI,
     pub zid: ZenohId,
-    pub sn_resolution: ZInt,
-    pub is_qos: bool,
+    pub resolution: Resolution,
+    pub batch_size: u16,
+    // pub is_qos: bool,
     pub nonce: ZInt,
     // pub properties: EstablishmentProperties, // @TODO
 }
@@ -41,10 +42,12 @@ where
         let wai: u8 = x.whatami.into();
         self.write(&mut *writer, wai)?;
         self.write(&mut *writer, &x.zid)?;
-        self.write(&mut *writer, x.sn_resolution)?;
-        let is_qos = u8::from(x.is_qos);
-        self.write(&mut *writer, is_qos)?;
+        self.write(&mut *writer, x.resolution.as_u8())?;
+        self.write(&mut *writer, x.batch_size)?;
         self.write(&mut *writer, x.nonce)?;
+
+        // let is_qos = u8::from(x.is_qos);
+        // self.write(&mut *writer, is_qos)?;
         // self.write(&mut *writer, x.properties.as_slice())?;
 
         Ok(())
@@ -61,10 +64,13 @@ where
         let wai: u8 = self.read(&mut *reader)?;
         let whatami = WhatAmI::try_from(wai).map_err(|_| DidntRead)?;
         let zid: ZenohId = self.read(&mut *reader)?;
-        let sn_resolution: ZInt = self.read(&mut *reader)?;
-        let is_qos: u8 = self.read(&mut *reader)?;
-        let is_qos = is_qos == 1;
+        let resolution: u8 = self.read(&mut *reader)?;
+        let resolution = Resolution::from(resolution);
+        let batch_size: u16 = self.read(&mut *reader)?;
         let nonce: ZInt = self.read(&mut *reader)?;
+
+        // let is_qos: u8 = self.read(&mut *reader)?;
+        // let is_qos = is_qos == 1;
         // let mut ps: Vec<Property> = self.read(&mut *reader)?;
         // let mut properties = EstablishmentProperties::new();
         // for p in ps.drain(..) {
@@ -74,9 +80,10 @@ where
         let cookie = Cookie {
             whatami,
             zid,
-            sn_resolution,
-            is_qos,
+            resolution,
+            batch_size,
             nonce,
+            // is_qos,
             // properties,
         };
 
@@ -136,9 +143,10 @@ impl Cookie {
         Self {
             whatami: WhatAmI::rand(),
             zid: ZenohId::default(),
-            sn_resolution: rng.gen(),
-            is_qos: rng.gen_bool(0.5),
+            resolution: Resolution::rand(),
+            batch_size: rng.gen(),
             nonce: rng.gen(),
+            // is_qos: rng.gen_bool(0.5),
             // properties: EstablishmentProperties::rand(),
         }
     }

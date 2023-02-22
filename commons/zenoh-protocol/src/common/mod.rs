@@ -34,7 +34,6 @@ pub mod imsg {
         pub const PRIORITY: u8 = 0x1c;
         pub const ROUTING_CONTEXT: u8 = 0x1d;
         pub const REPLY_CONTEXT: u8 = 0x1e;
-        pub const ATTACHMENT: u8 = 0x1f;
     }
 
     // Header mask

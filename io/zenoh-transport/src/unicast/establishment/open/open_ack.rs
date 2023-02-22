@@ -11,18 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    unicast::establishment::{
-        authenticator::AuthenticatedPeerLink, open::OResult, EstablishmentProperties,
-    },
-    TransportManager,
-};
-use std::{convert::TryFrom, time::Duration};
-use zenoh_core::zasyncread;
+use crate::{unicast::establishment::open::OResult, TransportManager};
+use std::time::Duration;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
-    core::ZInt,
-    transport::{tmsg, Close, TransportBody},
+    core::{Field, ZInt},
+    transport::{
+        close::{self, Close},
+        TransportBody,
+    },
 };
 use zenoh_result::zerror;
 
@@ -33,9 +30,8 @@ pub(super) struct Output {
 
 pub(super) async fn recv(
     link: &LinkUnicast,
-    manager: &TransportManager,
-    auth_link: &AuthenticatedPeerLink,
-    _input: super::open_syn::Output,
+    _manager: &TransportManager,
+    input: super::open_syn::Output,
 ) -> OResult<Output> {
     // Wait to read an OpenAck
     let mut messages = link
@@ -54,7 +50,7 @@ pub(super) async fn recv(
         ));
     }
 
-    let mut msg = messages.remove(0);
+    let msg = messages.remove(0);
     let open_ack = match msg.body {
         TransportBody::OpenAck(open_ack) => open_ack,
         TransportBody::Close(Close { reason, .. }) => {
@@ -80,20 +76,31 @@ pub(super) async fn recv(
         }
     };
 
-    let mut opean_ack_properties = match msg.attachment.take() {
-        Some(att) => EstablishmentProperties::try_from(&att)
-            .map_err(|e| (e, Some(close::reason::INVALID)))?,
-        None => EstablishmentProperties::new(),
-    };
-    for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
-        let _ = pa
-            .handle_open_ack(
-                auth_link,
-                opean_ack_properties.remove(pa.id().into()).map(|x| x.value),
-            )
-            .await
-            .map_err(|e| (e, Some(close::reason::INVALID)))?;
+    // Verify that initial_sn is within the agreed resolution
+    if open_ack.initial_sn > input.resolution.get(Field::FrameSN).mask() {
+        let e = zerror!(
+            "Received invalid initial SN {}: {:?}",
+            link,
+            open_ack.initial_sn
+        );
+        log::error!("{}", e);
+        return Err((e.into(), Some(close::reason::INVALID)));
     }
+
+    // let mut opean_ack_properties = match msg.attachment.take() {
+    //     Some(att) => EstablishmentProperties::try_from(&att)
+    //         .map_err(|e| (e, Some(close::reason::INVALID)))?,
+    //     None => EstablishmentProperties::new(),
+    // };
+    // for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
+    //     let _ = pa
+    //         .handle_open_ack(
+    //             auth_link,
+    //             opean_ack_properties.remove(pa.id().into()).map(|x| x.value),
+    //         )
+    //         .await
+    //         .map_err(|e| (e, Some(close::reason::INVALID)))?;
+    // } @TODO
 
     let output = Output {
         initial_sn: open_ack.initial_sn,

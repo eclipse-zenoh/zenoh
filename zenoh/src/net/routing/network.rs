@@ -265,7 +265,7 @@ impl Network {
         for (idx, details) in idxs {
             list.push(self.make_link_state(idx, details));
         }
-        ZenohMessage::make_link_state_list(list, None)
+        ZenohMessage::make_link_state_list(list)
     }
 
     fn send_on_link(&self, idxs: Vec<(NodeIndex, Details)>, transport: &TransportUnicast) {
