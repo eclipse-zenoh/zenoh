@@ -14,6 +14,7 @@
 
 #![no_std]
 
+#[cfg(not(feature = "std"))]
 #[panic_handler]
 fn dummy_panic_handler(_: &core::panic::PanicInfo) -> ! {
     loop {}
