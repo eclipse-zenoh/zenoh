@@ -61,8 +61,6 @@ fn generate_dummy_batch(entropy: EntropyLevel, size: usize) -> Vec<u8> {
 }
 
 fn bench_simple_encoding(buff: &mut Vec<u8>, codec: &Zenoh060, batch: &Vec<u8>) {
-    buff.clear();
-
     // Encoding with zenoh codec
     let mut writer = buff.writer();
     codec.write(&mut writer, batch.as_slice()).unwrap();
@@ -75,8 +73,6 @@ fn bench_compression(
     zenoh_compress: &ZenohCompress,
     batch: &Vec<u8>,
 ) {
-    buff.clear();
-
     // Encoding with zenoh codec
     let mut writer = buff.writer();
     codec.write(&mut writer, batch.as_slice()).unwrap();
@@ -94,43 +90,64 @@ fn bench_compression(
     codec.write(&mut writer, compression_buff.as_ref()).unwrap();
 }
 
-fn low_entropy_simple_encoding(c: &mut Criterion) {
-    let mut buff = vec![];
-
-    let codec = Zenoh060::default();
-    let entropy = EntropyLevel::LOW;
-    let mut group = c.benchmark_group("Low entropy simple encoding");
-    for batch_size in BATCH_SIZES.into_iter() {
-        let dummy_batch = generate_dummy_batch(entropy, *batch_size);
-        group.throughput(criterion::Throughput::Bytes(*batch_size as u64));
-        group.bench_with_input(
-            BenchmarkId::from_parameter(batch_size),
-            &batch_size,
-            |b, _| {
-                b.iter(|| bench_simple_encoding(&mut buff, &codec, &dummy_batch));
-            },
-        );
-    }
-    group.finish();
-}
-
-fn low_entropy_encoding_with_compression(c: &mut Criterion) {
-    let mut buff = vec![];
-    let mut compression_buff: Box<[u8]> = vec![0; usize::pow(2, 16)].into_boxed_slice();
-
+fn compression_bench(c: &mut Criterion) {
     let codec = Zenoh060::default();
     let zenoh_compress = ZenohCompress::default();
-    let entropy = EntropyLevel::LOW;
-    let mut group = c.benchmark_group("Low entropy encoding with compression.");
-
+    let mut group = c.benchmark_group("Compression");
     for batch_size in BATCH_SIZES.into_iter() {
-        let dummy_batch = generate_dummy_batch(entropy, *batch_size);
         group.throughput(criterion::Throughput::Bytes(*batch_size as u64));
         group.bench_with_input(
-            BenchmarkId::from_parameter(batch_size),
-            &batch_size,
-            |b, _| {
+            BenchmarkId::new("Simple encoding - Low Entropy", batch_size),
+            batch_size,
+            |b, size| {
+                let mut buff = vec![];
                 b.iter(|| {
+                    buff.clear();
+                    let dummy_batch = generate_dummy_batch(EntropyLevel::LOW, *size);
+                    bench_simple_encoding(&mut buff, &codec, &dummy_batch);
+                });
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("Compression - Low Entropy", batch_size),
+            batch_size,
+            |b, size| {
+                let mut buff = vec![];
+                let mut compression_buff: Box<[u8]> = vec![0; usize::pow(2, 16)].into_boxed_slice();
+                b.iter(|| {
+                    buff.clear();
+                    let dummy_batch = generate_dummy_batch(EntropyLevel::LOW, *size);
+                    bench_compression(
+                        &mut buff,
+                        &mut compression_buff,
+                        &codec,
+                        &zenoh_compress,
+                        &dummy_batch,
+                    )
+                });
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("Simple encoding - High Entropy", batch_size),
+            batch_size,
+            |b, size| {
+                let mut buff = vec![];
+                b.iter(|| {
+                    buff.clear();
+                    let dummy_batch = generate_dummy_batch(EntropyLevel::HIGH, *size);
+                    bench_simple_encoding(&mut buff, &codec, &dummy_batch);
+                });
+            },
+        );
+        group.bench_with_input(
+            BenchmarkId::new("Compression - High Entropy", batch_size),
+            batch_size,
+            |b, size| {
+                let mut buff = vec![];
+                let mut compression_buff: Box<[u8]> = vec![0; usize::pow(2, 16)].into_boxed_slice();
+                b.iter(|| {
+                    buff.clear();
+                    let dummy_batch = generate_dummy_batch(EntropyLevel::HIGH, *size);
                     bench_compression(
                         &mut buff,
                         &mut compression_buff,
@@ -144,66 +161,10 @@ fn low_entropy_encoding_with_compression(c: &mut Criterion) {
     }
     group.finish();
 }
-
-fn high_entropy_simple_encoding(c: &mut Criterion) {
-    let mut buff = vec![];
-    let codec = Zenoh060::default();
-    let entropy = EntropyLevel::HIGH;
-    let mut group = c.benchmark_group("High entropy simple encoding");
-
-    for batch_size in BATCH_SIZES.into_iter() {
-        let dummy_batch = generate_dummy_batch(entropy, *batch_size);
-        group.throughput(criterion::Throughput::Bytes(*batch_size as u64));
-        group.bench_with_input(
-            BenchmarkId::from_parameter(batch_size),
-            &batch_size,
-            |b, _| {
-                b.iter(|| bench_simple_encoding(&mut buff, &codec, &dummy_batch));
-            },
-        );
-    }
-    group.finish();
-}
-
-fn high_entropy_encoding_with_compression(c: &mut Criterion) {
-    let mut buff = vec![];
-    let mut compression_buff: Box<[u8]> = vec![0; usize::pow(2, 16)].into_boxed_slice();
-    let codec = Zenoh060::default();
-    let zenoh_compress = ZenohCompress::default();
-    let entropy = EntropyLevel::HIGH;
-    let mut group = c.benchmark_group("High entropy encoding with compression.");
-    for batch_size in BATCH_SIZES.into_iter() {
-        let dummy_batch = generate_dummy_batch(entropy, *batch_size);
-        group.throughput(criterion::Throughput::Bytes(*batch_size as u64));
-        group.bench_with_input(
-            BenchmarkId::from_parameter(batch_size),
-            &batch_size,
-            |b, _| {
-                b.iter(|| {
-                    bench_compression(
-                        &mut buff,
-                        &mut compression_buff,
-                        &codec,
-                        &zenoh_compress,
-                        &dummy_batch,
-                    )
-                });
-            },
-        );
-    }
-    group.finish();
-}
-
-// - Cuantos batches podemos comprimir por segundo
-// - Cuantos bytes enviados ganamos en comparacion con enviar sin comprimir
-// - Entropia (ver block cipher)
 
 // Run benches with cargo bench --bench compress -- --plotting-backend gnuplot
 criterion_group!(
     benches,
-    low_entropy_simple_encoding,
-    low_entropy_encoding_with_compression,
-    high_entropy_simple_encoding,
-    high_entropy_encoding_with_compression
+    compression_bench,
 );
 criterion_main!(benches);
