@@ -121,14 +121,19 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
         }
     });
 
+    let format_doc = format!("The `{source}` format, as a zero-sized-type.");
+    let formatter_doc = format!("And instance of a formatter for `{source}`.");
+
     quote! {
             use ::zenoh::Result as ZResult;
             const FORMAT_INNER: ::zenoh::key_expr::format::KeFormat<'static, [::zenoh::key_expr::format::Segment<'static>; #len]> = unsafe {
                 ::zenoh::key_expr::format::macro_support::const_new(#source, [#(#segments)*])
             };
-            /// The `#lit` format, as a structure.
+            #[doc = #format_doc]
             #[derive(Copy, Clone, Hash)]
             pub struct Format;
+
+            #[doc = #formatter_doc]
             #[derive(Clone)]
             pub struct Formatter(::zenoh::key_expr::format::KeFormatter<'static, [::zenoh::key_expr::format::Segment<'static>; #len]>);
             impl ::core::fmt::Debug for Format {

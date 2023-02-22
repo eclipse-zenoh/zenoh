@@ -3,7 +3,7 @@ use zenoh::{keformat, prelude::keyexpr};
 keformat!("user_id/${user_id:*}/file/${file:**}" mod format);
 
 fn main() {
-    let mut formatter = format::formatter();
+    let mut formatter: format::Formatter = format::formatter();
     let file = "hi/there";
     let ke = keformat!(formatter, user_id = 42, file)
         .unwrap()
