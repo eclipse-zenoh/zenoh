@@ -29,7 +29,7 @@ use transport::TransportUnicastInner;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{WhatAmI, ZInt, ZenohId},
-    transport::tmsg,
+    transport::close,
     zenoh::ZenohMessage,
 };
 use zenoh_result::{zerror, ZResult};
@@ -178,9 +178,7 @@ impl TransportUnicast {
             .into_iter()
             .find(|l| l.get_src() == &link.src && l.get_dst() == &link.dst)
             .ok_or_else(|| zerror!("Invalid link"))?;
-        transport
-            .close_link(&link, tmsg::close_reason::GENERIC)
-            .await?;
+        transport.close_link(&link, close::reason::GENERIC).await?;
         Ok(())
     }
 
@@ -188,7 +186,7 @@ impl TransportUnicast {
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the transport has already been closed
         match self.get_inner() {
-            Ok(transport) => transport.close(tmsg::close_reason::GENERIC).await,
+            Ok(transport) => transport.close(close::reason::GENERIC).await,
             Err(_) => Ok(()),
         }
     }

@@ -142,7 +142,7 @@ impl TransportManager {
             .map(|(_, v)| v)
             .collect::<Vec<Arc<TransportMulticastInner>>>();
         for tm in tm_guard.drain(..) {
-            let _ = tm.close(tmsg::close_reason::GENERIC).await;
+            let _ = tm.close(close::reason::GENERIC).await;
         }
     }
 

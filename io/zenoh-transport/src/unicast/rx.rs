@@ -94,7 +94,7 @@ impl TransportUnicastInner {
                     "Received an invalid Close on link {} from peer {} with reason: {}. Ignoring.",
                     link,
                     zid,
-                    tmsg::close_reason_to_str(reason),
+                    close::reason_to_str(reason),
                 );
                 return Ok(());
             }

@@ -44,14 +44,14 @@ pub(super) async fn recv(
     let mut messages = link
         .read_transport_message()
         .await
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        .map_err(|e| (e, Some(close::reason::INVALID)))?;
     if messages.len() != 1 {
         let e = zerror!(
             "Received multiple messages instead of a single InitSyn on {}: {:?}",
             link,
             messages,
         );
-        return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+        return Err((e.into(), Some(close::reason::INVALID)));
     }
 
     let mut msg = messages.remove(0);
@@ -63,7 +63,7 @@ pub(super) async fn recv(
                 link,
                 msg.body
             );
-            return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+            return Err((e.into(), Some(close::reason::INVALID)));
         }
     };
 
@@ -77,7 +77,7 @@ pub(super) async fn recv(
                     zid,
                     init_syn.zid
                 );
-                return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+                return Err((e.into(), Some(close::reason::INVALID)));
             }
         }
         None => auth_link.peer_id = Some(init_syn.zid),
@@ -90,13 +90,13 @@ pub(super) async fn recv(
             link,
             init_syn.zid
         );
-        return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+        return Err((e.into(), Some(close::reason::INVALID)));
     }
 
     // Validate the InitSyn with the peer authenticators
     let init_syn_properties: EstablishmentProperties = match msg.attachment.take() {
         Some(att) => EstablishmentProperties::try_from(&att)
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?,
+            .map_err(|e| (e, Some(close::reason::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
 

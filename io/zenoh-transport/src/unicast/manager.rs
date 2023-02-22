@@ -268,7 +268,7 @@ impl TransportManager {
             .map(|(_, v)| v)
             .collect::<Vec<Arc<TransportUnicastInner>>>();
         for tu in tu_guard.drain(..) {
-            let _ = tu.close(tmsg::close_reason::GENERIC).await;
+            let _ = tu.close(close::reason::GENERIC).await;
         }
     }
 

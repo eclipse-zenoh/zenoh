@@ -40,14 +40,14 @@ pub(super) async fn send(
         let mut att = pa
             .get_init_syn_properties(auth_link, &manager.config.zid)
             .await
-            .map_err(|e| (e, Some(tmsg::close_reason::UNSUPPORTED)))?;
+            .map_err(|e| (e, Some(close::reason::UNSUPPORTED)))?;
         if let Some(att) = att.take() {
             ps_attachment
                 .insert(Property {
                     key: pa.id().into(),
                     value: att,
                 })
-                .map_err(|e| (e, Some(tmsg::close_reason::UNSUPPORTED)))?;
+                .map_err(|e| (e, Some(close::reason::UNSUPPORTED)))?;
         }
     }
 
@@ -55,8 +55,8 @@ pub(super) async fn send(
     let init_syn_attachment = if ps_attachment.is_empty() {
         None
     } else {
-        let att = Attachment::try_from(&ps_attachment)
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        let att =
+            Attachment::try_from(&ps_attachment).map_err(|e| (e, Some(close::reason::INVALID)))?;
         Some(att)
     };
 
@@ -71,7 +71,7 @@ pub(super) async fn send(
     let _ = link
         .write_transport_message(&message)
         .await
-        .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
+        .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
     let output = Output;
     Ok(output)

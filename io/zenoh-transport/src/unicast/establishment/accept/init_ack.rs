@@ -79,7 +79,7 @@ pub(super) async fn send(
                     .map(|x| x.value),
             )
             .await
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+            .map_err(|e| (e, Some(close::reason::INVALID)))?;
         // Add attachment property if available
         if let Some(att) = att.take() {
             ps_attachment
@@ -87,7 +87,7 @@ pub(super) async fn send(
                     key: pa.id().into(),
                     value: att,
                 })
-                .map_err(|e| (e, Some(tmsg::close_reason::UNSUPPORTED)))?;
+                .map_err(|e| (e, Some(close::reason::UNSUPPORTED)))?;
         }
         // Add state in the cookie if avaiable
         if let Some(cke) = cke.take() {
@@ -96,7 +96,7 @@ pub(super) async fn send(
                     key: pa.id().into(),
                     value: cke,
                 })
-                .map_err(|e| (e, Some(tmsg::close_reason::UNSUPPORTED)))?;
+                .map_err(|e| (e, Some(close::reason::UNSUPPORTED)))?;
         }
     }
     cookie.properties = ps_cookie;
@@ -104,8 +104,8 @@ pub(super) async fn send(
     let attachment: Option<Attachment> = if ps_attachment.is_empty() {
         None
     } else {
-        let att = Attachment::try_from(&ps_attachment)
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        let att =
+            Attachment::try_from(&ps_attachment).map_err(|e| (e, Some(close::reason::INVALID)))?;
         Some(att)
     };
 
@@ -119,7 +119,7 @@ pub(super) async fn send(
     codec.write(&mut writer, &cookie).map_err(|_| {
         (
             zerror!("Encoding cookie failed").into(),
-            Some(tmsg::close_reason::INVALID),
+            Some(close::reason::INVALID),
         )
     })?;
 
@@ -141,7 +141,7 @@ pub(super) async fn send(
     let _ = link
         .write_transport_message(&message)
         .await
-        .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
+        .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
     let output = Output { cookie_hash };
     Ok(output)

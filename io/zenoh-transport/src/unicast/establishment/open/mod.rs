@@ -53,7 +53,7 @@ pub(crate) async fn open_link(
             match $s {
                 Ok(output) => output,
                 Err(e) => {
-                    close_link(link, manager, auth_link, Some(tmsg::close_reason::INVALID)).await;
+                    close_link(link, manager, auth_link, Some(close::reason::INVALID)).await;
                     return Err(e);
                 }
             }
@@ -90,7 +90,7 @@ pub(crate) async fn open_link(
 
     let initial_sn = step!(transport
         .get_inner()
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID))))
+        .map_err(|e| (e, Some(close::reason::INVALID))))
     .config
     .initial_sn_tx;
     let input = open_syn::Input {
@@ -105,14 +105,14 @@ pub(crate) async fn open_link(
     // Add the link to the transport
     step!(step!(transport
         .get_inner()
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID))))
+        .map_err(|e| (e, Some(close::reason::INVALID))))
     .add_link(link.clone(), LinkUnicastDirection::Outbound)
-    .map_err(|e| (e, Some(tmsg::close_reason::MAX_LINKS))));
+    .map_err(|e| (e, Some(close::reason::MAX_LINKS))));
 
     // Sync the RX sequence number
     let _ = step!(transport
         .get_inner()
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID))))
+        .map_err(|e| (e, Some(close::reason::INVALID))))
     .sync(output.initial_sn)
     .await;
 

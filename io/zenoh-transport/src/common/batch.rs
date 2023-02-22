@@ -20,7 +20,11 @@ use zenoh_buffers::{
 use zenoh_codec::{WCodec, Zenoh080};
 use zenoh_protocol::{
     core::{Channel, Reliability, ZInt},
-    transport::{FrameHeader, FrameKind, TransportMessage},
+    transport::{
+        fragment::{self, FragmentHeader},
+        frame::{self, FrameHeader},
+        TransportMessage,
+    },
     zenoh::ZenohMessage,
 };
 
@@ -266,9 +270,9 @@ impl Encode<(&ZenohMessage, Channel, ZInt)> for &mut WBatch {
         let codec = Zenoh080::default();
         // Write the frame header
         let frame = FrameHeader {
-            channel,
+            reliability: channel.reliability,
             sn,
-            kind: FrameKind::Messages,
+            qos: frame::ext::QoS::new(channel.priority),
         };
         codec.write(&mut writer, &frame).map_err(|e| {
             // Revert the write operation
@@ -282,7 +286,7 @@ impl Encode<(&ZenohMessage, Channel, ZInt)> for &mut WBatch {
             e
         })?;
         // Update the frame
-        self.current_frame = match frame.channel.reliability {
+        self.current_frame = match frame.reliability {
             Reliability::Reliable => {
                 self.latest_sn.reliable = Some(sn);
                 CurrentFrame::Reliable
@@ -314,10 +318,11 @@ impl Encode<(&mut ZBufReader<'_>, Channel, ZInt)> for &mut WBatch {
         let mark = writer.mark();
 
         // Serialize first assuming is some fragment
-        let mut frame = FrameHeader {
-            channel,
+        let mut frame = FragmentHeader {
+            reliability: channel.reliability,
+            more: true,
             sn,
-            kind: FrameKind::SomeFragment,
+            qos: fragment::ext::QoS::new(channel.priority),
         };
         // Write the frame header
         codec.write(&mut writer, &frame).map_err(|e| {
@@ -331,7 +336,7 @@ impl Encode<(&mut ZBufReader<'_>, Channel, ZInt)> for &mut WBatch {
             // Revert the buffer
             writer.rewind(mark);
             // It is really the finally fragment, reserialize the header
-            frame.kind = FrameKind::LastFragment;
+            frame.more = false;
             // Write the frame header
             codec.write(&mut writer, &frame).map_err(|e| {
                 // Revert the write operation
@@ -355,7 +360,7 @@ mod tests {
     use zenoh_buffers::ZBuf;
     use zenoh_protocol::{
         core::{Channel, CongestionControl, Priority, Reliability},
-        transport::TransportMessage,
+        transport::{KeepAlive, TransportMessage},
         zenoh::ZenohMessage,
     };
 
@@ -363,7 +368,7 @@ mod tests {
     fn serialization_batch() {
         let mut batch = WBatch::new(u16::MAX, true);
 
-        let tmsg = TransportMessage::make_keep_alive(None, None);
+        let tmsg: TransportMessage = KeepAlive.into();
         let mut zmsg = ZenohMessage::make_data(
             0.into(),
             ZBuf::from(vec![0u8; 8]),

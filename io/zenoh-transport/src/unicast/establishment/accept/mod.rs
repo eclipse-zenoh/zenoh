@@ -62,7 +62,7 @@ pub(crate) async fn accept_link(
     };
     let transport = step!(transport_init(manager, input)
         .await
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID))));
+        .map_err(|e| (e, Some(close::reason::INVALID))));
 
     // OPEN handshake
     macro_rules! step {
@@ -71,7 +71,7 @@ pub(crate) async fn accept_link(
                 Ok(output) => output,
                 Err((e, reason)) => {
                     match reason {
-                        Some(tmsg::close_reason::MAX_LINKS) => log::debug!("{}", e),
+                        Some(close::reason::MAX_LINKS) => log::debug!("{}", e),
                         _ => log::error!("{}", e),
                     }
                     if let Ok(ll) = transport.get_links() {
@@ -89,14 +89,14 @@ pub(crate) async fn accept_link(
     // Add the link to the transport
     step!(step!(transport
         .get_inner()
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID))))
+        .map_err(|e| (e, Some(close::reason::INVALID))))
     .add_link(link.clone(), LinkUnicastDirection::Inbound)
-    .map_err(|e| (e, Some(tmsg::close_reason::MAX_LINKS))));
+    .map_err(|e| (e, Some(close::reason::MAX_LINKS))));
 
     // Sync the RX sequence number
     let _ = step!(transport
         .get_inner()
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID))))
+        .map_err(|e| (e, Some(close::reason::INVALID))))
     .sync(output.initial_sn)
     .await;
 
@@ -104,7 +104,7 @@ pub(crate) async fn accept_link(
 
     let initial_sn = step!(transport
         .get_inner()
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID))))
+        .map_err(|e| (e, Some(close::reason::INVALID))))
     .config
     .initial_sn_tx;
     let input = open_ack::Input {
@@ -120,7 +120,7 @@ pub(crate) async fn accept_link(
     };
     step!(transport_finalize(link, manager, input)
         .await
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID))));
+        .map_err(|e| (e, Some(close::reason::INVALID))));
 
     Ok(())
 }

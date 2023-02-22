@@ -394,11 +394,7 @@ impl ZenohMessage {
 
         let mut rng = rand::thread_rng();
 
-        let attachment = if rng.gen_bool(0.5) {
-            Some(Attachment::rand())
-        } else {
-            None
-        };
+        let attachment = None;
 
         let routing_context = if rng.gen_bool(0.5) {
             Some(RoutingContext::rand())

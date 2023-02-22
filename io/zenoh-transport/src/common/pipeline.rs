@@ -699,8 +699,8 @@ mod tests {
     use zenoh_codec::{RCodec, Zenoh080};
     use zenoh_protocol::{
         core::{Channel, CongestionControl, Priority, Reliability, ZInt},
-        defaults::{BATCH_SIZE, SEQ_NUM_RES},
-        transport::{Frame, FramePayload, TransportBody},
+        defaults::{BATCH_SIZE, FRAME_SN_RESOLUTION},
+        transport::{Fragment, Frame, TransportBody},
         zenoh::ZenohMessage,
     };
 
@@ -771,17 +771,15 @@ mod tests {
                     match res {
                         Ok(msg) => {
                             match msg.body {
-                                TransportBody::Frame(Frame { payload, .. }) => match payload {
-                                    FramePayload::Messages { messages } => {
-                                        msgs += messages.len();
+                                TransportBody::Frame(Frame { payload, .. }) => {
+                                    msgs += payload.len()
+                                }
+                                TransportBody::Fragment(Fragment { more, .. }) => {
+                                    fragments += 1;
+                                    if !more {
+                                        msgs += 1;
                                     }
-                                    FramePayload::Fragment { is_final, .. } => {
-                                        fragments += 1;
-                                        if is_final {
-                                            msgs += 1;
-                                        }
-                                    }
-                                },
+                                }
                                 _ => {
                                     msgs += 1;
                                 }
@@ -802,7 +800,7 @@ mod tests {
         }
 
         // Pipeline conduits
-        let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
+        let tct = TransportConduitTx::make(FRAME_SN_RESOLUTION.mask()).unwrap();
         let conduits = vec![tct];
 
         // Total amount of bytes to send in each test

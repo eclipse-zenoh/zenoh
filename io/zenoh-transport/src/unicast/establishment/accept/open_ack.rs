@@ -47,7 +47,7 @@ pub(super) async fn send(
     let _ = link
         .write_transport_message(&message)
         .await
-        .map_err(|e| (e, Some(tmsg::close_reason::GENERIC)))?;
+        .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
     Ok(())
 }

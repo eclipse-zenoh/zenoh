@@ -128,7 +128,7 @@ impl TransportMulticast {
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the transport has already been closed
         match self.get_transport() {
-            Ok(transport) => transport.close(tmsg::close_reason::GENERIC).await,
+            Ok(transport) => transport.close(close::reason::GENERIC).await,
             Err(_) => Ok(()),
         }
     }

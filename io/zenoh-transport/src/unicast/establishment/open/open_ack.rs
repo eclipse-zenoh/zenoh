@@ -41,7 +41,7 @@ pub(super) async fn recv(
     let mut messages = link
         .read_transport_message()
         .await
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        .map_err(|e| (e, Some(close::reason::INVALID)))?;
     if messages.len() != 1 {
         return Err((
             zerror!(
@@ -50,7 +50,7 @@ pub(super) async fn recv(
                 messages,
             )
             .into(),
-            Some(tmsg::close_reason::INVALID),
+            Some(close::reason::INVALID),
         ));
     }
 
@@ -60,11 +60,11 @@ pub(super) async fn recv(
         TransportBody::Close(Close { reason, .. }) => {
             let e = zerror!(
                 "Received a close message (reason {}) in response to an OpenSyn on: {:?}",
-                tmsg::close_reason_to_str(reason),
+                close::reason_to_str(reason),
                 link,
             );
             match reason {
-                tmsg::close_reason::MAX_LINKS => log::debug!("{}", e),
+                close::reason::MAX_LINKS => log::debug!("{}", e),
                 _ => log::error!("{}", e),
             }
             return Err((e.into(), None));
@@ -76,13 +76,13 @@ pub(super) async fn recv(
                 msg.body
             );
             log::error!("{}", e);
-            return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+            return Err((e.into(), Some(close::reason::INVALID)));
         }
     };
 
     let mut opean_ack_properties = match msg.attachment.take() {
         Some(att) => EstablishmentProperties::try_from(&att)
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?,
+            .map_err(|e| (e, Some(close::reason::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
     for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
@@ -92,7 +92,7 @@ pub(super) async fn recv(
                 opean_ack_properties.remove(pa.id().into()).map(|x| x.value),
             )
             .await
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+            .map_err(|e| (e, Some(close::reason::INVALID)))?;
     }
 
     let output = Output {

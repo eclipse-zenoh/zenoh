@@ -78,7 +78,7 @@ impl Timed for TransportMulticastPeerLeaseTimer {
         if !is_active {
             let _ = self
                 .transport
-                .del_peer(&self.locator, tmsg::close_reason::EXPIRED);
+                .del_peer(&self.locator, close::reason::EXPIRED);
         }
     }
 }

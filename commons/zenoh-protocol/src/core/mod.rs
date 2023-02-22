@@ -66,6 +66,17 @@ pub enum Bits {
     U64 = 0b11,
 }
 
+impl Bits {
+    pub fn mask(&self) -> ZInt {
+        match self {
+            Bits::U8 => u8::MAX as ZInt,
+            Bits::U16 => u16::MAX as ZInt,
+            Bits::U32 => u32::MAX as ZInt,
+            Bits::U64 => u64::MAX as ZInt,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Property {

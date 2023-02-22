@@ -53,14 +53,14 @@ pub(super) async fn recv(
     let mut messages = link
         .read_transport_message()
         .await
-        .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        .map_err(|e| (e, Some(close::reason::INVALID)))?;
     if messages.len() != 1 {
         let e = zerror!(
             "Received multiple messages instead of a single OpenSyn on {}: {:?}",
             link,
             messages
         );
-        return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+        return Err((e.into(), Some(close::reason::INVALID)));
     }
 
     let mut msg = messages.remove(0);
@@ -69,11 +69,11 @@ pub(super) async fn recv(
         TransportBody::Close(Close { reason, .. }) => {
             let e = zerror!(
                 "Received a close message (reason {}) instead of an OpenSyn on: {:?}",
-                tmsg::close_reason_to_str(reason),
+                close::reason_to_str(reason),
                 link,
             );
             match reason {
-                tmsg::close_reason::MAX_LINKS => log::debug!("{}", e),
+                close::reason::MAX_LINKS => log::debug!("{}", e),
                 _ => log::error!("{}", e),
             }
             return Err((e.into(), None));
@@ -85,7 +85,7 @@ pub(super) async fn recv(
                 msg.body
             );
             log::error!("{}", e);
-            return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+            return Err((e.into(), Some(close::reason::INVALID)));
         }
     };
     let encrypted = open_syn.cookie.to_vec();
@@ -93,7 +93,7 @@ pub(super) async fn recv(
     // Verify that the cookie is the one we sent
     if input.cookie_hash != hmac::digest(&encrypted) {
         let e = zerror!("Rejecting OpenSyn on: {}. Unkwown cookie.", link);
-        return Err((e.into(), Some(tmsg::close_reason::INVALID)));
+        return Err((e.into(), Some(close::reason::INVALID)));
     }
 
     // Decrypt the cookie with the cyper
@@ -106,14 +106,14 @@ pub(super) async fn recv(
     let mut cookie: Cookie = codec.read(&mut reader).map_err(|_| {
         (
             zerror!("Decoding cookie failed").into(),
-            Some(tmsg::close_reason::INVALID),
+            Some(close::reason::INVALID),
         )
     })?;
 
     // Validate with the peer authenticators
     let mut open_syn_properties: EstablishmentProperties = match msg.attachment.take() {
         Some(att) => EstablishmentProperties::try_from(&att)
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?,
+            .map_err(|e| (e, Some(close::reason::INVALID)))?,
         None => EstablishmentProperties::new(),
     };
 
@@ -145,22 +145,22 @@ pub(super) async fn recv(
             }
         }
 
-        let mut att = att.map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        let mut att = att.map_err(|e| (e, Some(close::reason::INVALID)))?;
         if let Some(att) = att.take() {
             ps_attachment
                 .insert(Property {
                     key: pa.id().into(),
                     value: att,
                 })
-                .map_err(|e| (e, Some(tmsg::close_reason::UNSUPPORTED)))?;
+                .map_err(|e| (e, Some(close::reason::UNSUPPORTED)))?;
         }
     }
 
     let open_ack_attachment = if ps_attachment.is_empty() {
         None
     } else {
-        let att = Attachment::try_from(&ps_attachment)
-            .map_err(|e| (e, Some(tmsg::close_reason::INVALID)))?;
+        let att =
+            Attachment::try_from(&ps_attachment).map_err(|e| (e, Some(close::reason::INVALID)))?;
         Some(att)
     };
 
