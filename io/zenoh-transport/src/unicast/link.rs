@@ -29,7 +29,7 @@ use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::ZSlice;
 use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
-use zenoh_protocol::transport::TransportMessage;
+use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_sync::{RecyclingObjectPool, Signal};
 
@@ -198,9 +198,7 @@ async fn tx_task(
                 None => break,
             },
             Err(_) => {
-                let zid = None;
-                let attachment = None;
-                let message = TransportMessage::make_keep_alive(zid, attachment);
+                let message: TransportMessage = KeepAlive.into();
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
                 let n = link.write_transport_message(&message).await?;

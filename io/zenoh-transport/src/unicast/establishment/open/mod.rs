@@ -20,7 +20,7 @@ use super::authenticator::AuthenticatedPeerLink;
 use crate::unicast::establishment::{close_link, transport_finalize, InputFinalize, InputInit};
 use crate::{TransportManager, TransportUnicast};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
-use zenoh_protocol::transport::tmsg;
+use zenoh_protocol::transport::close;
 use zenoh_result::ZResult;
 
 type OError = (zenoh_result::Error, Option<u8>);

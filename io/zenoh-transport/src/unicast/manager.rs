@@ -29,7 +29,7 @@ use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zlock, zparse};
 use zenoh_link::*;
 use zenoh_protocol::{
     core::{locator::LocatorProtocol, ZenohId},
-    transport::tmsg,
+    transport::close,
 };
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -53,8 +53,6 @@ pub struct TransportManagerStateUnicast {
     pub(super) incoming: Arc<AsyncMutex<usize>>,
     // Active peer authenticators
     pub(super) peer_authenticator: Arc<AsyncRwLock<HashSet<PeerAuthenticator>>>,
-    // Active link authenticators
-    pub(super) link_authenticator: Arc<AsyncRwLock<HashSet<LinkAuthenticator>>>,
     // Established listeners
     pub(super) protocols: Arc<Mutex<HashMap<String, LinkManagerUnicast>>>,
     // Established transports
@@ -82,7 +80,6 @@ pub struct TransportManagerBuilderUnicast {
     #[cfg(feature = "shared-memory")]
     pub(super) is_shm: bool,
     pub(super) peer_authenticator: HashSet<PeerAuthenticator>,
-    pub(super) link_authenticator: HashSet<LinkAuthenticator>,
 }
 
 impl TransportManagerBuilderUnicast {
@@ -121,11 +118,6 @@ impl TransportManagerBuilderUnicast {
         self
     }
 
-    pub fn link_authenticator(mut self, link_authenticator: HashSet<LinkAuthenticator>) -> Self {
-        self.link_authenticator = link_authenticator;
-        self
-    }
-
     pub fn qos(mut self, is_qos: bool) -> Self {
         self.is_qos = is_qos;
         self
@@ -155,7 +147,6 @@ impl TransportManagerBuilderUnicast {
             self = self.shm(*config.transport().shared_memory().enabled());
         }
         self = self.peer_authenticator(PeerAuthenticator::from_config(config).await?);
-        self = self.link_authenticator(LinkAuthenticator::from_config(config).await?);
 
         Ok(self)
     }
@@ -202,7 +193,6 @@ impl TransportManagerBuilderUnicast {
             incoming: Arc::new(AsyncMutex::new(0)),
             protocols: Arc::new(Mutex::new(HashMap::new())),
             transports: Arc::new(Mutex::new(HashMap::new())),
-            link_authenticator: Arc::new(AsyncRwLock::new(self.link_authenticator)),
             peer_authenticator: Arc::new(AsyncRwLock::new(self.peer_authenticator)),
         };
 
@@ -225,7 +215,6 @@ impl Default for TransportManagerBuilderUnicast {
             #[cfg(feature = "shared-memory")]
             is_shm: zparse!(ZN_SHM_DEFAULT).unwrap(),
             peer_authenticator: HashSet::new(),
-            link_authenticator: HashSet::new(),
         }
     }
 }
@@ -241,12 +230,7 @@ impl TransportManager {
     pub async fn close_unicast(&self) {
         log::trace!("TransportManagerUnicast::clear())");
 
-        let mut la_guard = zasyncwrite!(self.state.unicast.link_authenticator);
         let mut pa_guard = zasyncwrite!(self.state.unicast.peer_authenticator);
-
-        for la in la_guard.drain() {
-            la.close().await;
-        }
 
         for pa in pa_guard.drain() {
             pa.close().await;
@@ -526,43 +510,13 @@ impl TransportManager {
         *guard += 1;
         drop(guard);
 
-        let mut peer_id: Option<ZenohId> = None;
-        let peer_link = Link::from(&link);
-        for la in zasyncread!(self.state.unicast.link_authenticator).iter() {
-            let res = la.handle_new_link(&peer_link).await;
-            match res {
-                Ok(zid) => {
-                    // Check that all the peer authenticators, eventually return the same ZenohId
-                    if let Some(zid1) = peer_id.as_ref() {
-                        if let Some(zid2) = zid.as_ref() {
-                            if zid1 != zid2 {
-                                log::debug!("Ambigous PeerID identification for link: {}", link);
-                                let _ = link.close().await;
-                                let mut guard = zasynclock!(self.state.unicast.incoming);
-                                *guard -= 1;
-                                return;
-                            }
-                        }
-                    } else {
-                        peer_id = zid;
-                    }
-                }
-                Err(e) => {
-                    log::debug!("{}", e);
-                    let mut guard = zasynclock!(self.state.unicast.incoming);
-                    *guard -= 1;
-                    return;
-                }
-            }
-        }
-
         // Spawn a task to accept the link
         let c_manager = self.clone();
         task::spawn(async move {
             let mut auth_link = AuthenticatedPeerLink {
                 src: link.get_src().to_owned(),
                 dst: link.get_dst().to_owned(),
-                peer_id,
+                peer_id: None,
             };
 
             if let Err(e) =

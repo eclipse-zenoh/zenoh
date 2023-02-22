@@ -23,7 +23,7 @@ use zenoh_core::{zasynclock, zread, zwrite};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::{
     core::{Priority, WhatAmI, ZInt, ZenohId},
-    transport::{ConduitSn, TransportMessage},
+    transport::{Close, ConduitSn, TransportMessage},
     zenoh::ZenohMessage,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -398,11 +398,11 @@ impl TransportUnicastInner {
 
         if let Some(p) = pipeline.take() {
             // Close message to be sent on the target link
-            let peer_id = Some(self.config.manager.zid());
-            let reason_id = reason;
-            let link_only = true; // This is should always be true when closing a link
-            let attachment = None; // No attachment here
-            let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
+            let msg: TransportMessage = Close {
+                reason,
+                session: false,
+            }
+            .into();
 
             p.push_transport_message(msg, Priority::Background);
         }
@@ -420,14 +420,14 @@ impl TransportUnicastInner {
             .collect::<Vec<_>>();
         for p in pipelines.drain(..) {
             // Close message to be sent on all the links
-            let peer_id = Some(self.config.manager.zid());
-            let reason_id = reason;
-            // link_only should always be false for user-triggered close. However, in case of
+            // session should always be true for user-triggered close. However, in case of
             // multiple links, it is safer to close all the links first. When no links are left,
             // the transport is then considered closed.
-            let link_only = true;
-            let attachment = None; // No attachment here
-            let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
+            let msg: TransportMessage = Close {
+                reason,
+                session: false,
+            }
+            .into();
 
             p.push_transport_message(msg, Priority::Background);
         }
@@ -440,18 +440,18 @@ impl TransportUnicastInner {
     /*************************************/
     /// Schedule a Zenoh message on the transmission queue    
     pub(crate) fn schedule(&self, #[allow(unused_mut)] mut message: ZenohMessage) -> bool {
-        #[cfg(feature = "shared-memory")]
-        {
-            let res = if self.config.is_shm {
-                crate::shm::map_zmsg_to_shminfo(&mut message)
-            } else {
-                crate::shm::map_zmsg_to_shmbuf(&mut message, &self.config.manager.shmr)
-            };
-            if let Err(e) = res {
-                log::trace!("Failed SHM conversion: {}", e);
-                return false;
-            }
-        }
+        // #[cfg(feature = "shared-memory")]
+        // {
+        //     let res = if self.config.is_shm {
+        //         crate::shm::map_zmsg_to_shminfo(&mut message)
+        //     } else {
+        //         crate::shm::map_zmsg_to_shmbuf(&mut message, &self.config.manager.shmr)
+        //     };
+        //     if let Err(e) = res {
+        //         log::trace!("Failed SHM conversion: {}", e);
+        //         return false;
+        //     }
+        // } // @TODO
 
         self.schedule_first_fit(message)
     }

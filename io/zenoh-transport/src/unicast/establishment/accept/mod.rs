@@ -22,7 +22,7 @@ use crate::unicast::establishment::{
 };
 use crate::TransportManager;
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
-use zenoh_protocol::transport::tmsg;
+use zenoh_protocol::transport::close;
 use zenoh_result::ZResult;
 
 pub(super) type AError = (zenoh_result::Error, Option<u8>);

@@ -15,20 +15,20 @@ pub(crate) mod accept;
 pub mod authenticator;
 pub(super) mod cookie;
 pub(crate) mod open;
-pub(super) mod properties;
+// pub(super) mod properties;
 
 use super::super::TransportManager;
 use super::{TransportConfigUnicast, TransportPeer, TransportUnicast};
 use authenticator::AuthenticatedPeerLink;
 use cookie::*;
-use properties::*;
+// use properties::*;
 use rand::Rng;
 use std::time::Duration;
 use zenoh_core::{zasynclock, zasyncread};
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::{
     core::{WhatAmI, ZInt, ZenohId},
-    transport::TransportMessage,
+    transport::{Close, TransportMessage},
 };
 use zenoh_result::ZResult;
 
@@ -40,10 +40,11 @@ pub(super) async fn close_link(
 ) {
     if let Some(reason) = reason.take() {
         // Build the close message
-        let peer_id = Some(manager.config.zid);
-        let link_only = true;
-        let attachment = None;
-        let message = TransportMessage::make_close(peer_id, reason, link_only, attachment);
+        let message: TransportMessage = Close {
+            reason,
+            session: false,
+        }
+        .into();
         // Send the close message on the link
         let _ = link.write_transport_message(&message).await;
     }

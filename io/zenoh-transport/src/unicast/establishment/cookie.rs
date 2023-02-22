@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::properties::EstablishmentProperties;
+// use super::properties::EstablishmentProperties;
 use std::convert::TryFrom;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
@@ -19,7 +19,7 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_crypto::{BlockCipher, PseudoRng};
-use zenoh_protocol::core::{Property, WhatAmI, ZInt, ZenohId};
+use zenoh_protocol::core::{WhatAmI, ZInt, ZenohId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Cookie {
@@ -28,7 +28,7 @@ pub struct Cookie {
     pub sn_resolution: ZInt,
     pub is_qos: bool,
     pub nonce: ZInt,
-    pub properties: EstablishmentProperties,
+    // pub properties: EstablishmentProperties, // @TODO
 }
 
 impl<W> WCodec<&Cookie, &mut W> for Zenoh080
@@ -45,7 +45,7 @@ where
         let is_qos = u8::from(x.is_qos);
         self.write(&mut *writer, is_qos)?;
         self.write(&mut *writer, x.nonce)?;
-        self.write(&mut *writer, x.properties.as_slice())?;
+        // self.write(&mut *writer, x.properties.as_slice())?;
 
         Ok(())
     }
@@ -65,11 +65,11 @@ where
         let is_qos: u8 = self.read(&mut *reader)?;
         let is_qos = is_qos == 1;
         let nonce: ZInt = self.read(&mut *reader)?;
-        let mut ps: Vec<Property> = self.read(&mut *reader)?;
-        let mut properties = EstablishmentProperties::new();
-        for p in ps.drain(..) {
-            properties.insert(p).map_err(|_| DidntRead)?;
-        }
+        // let mut ps: Vec<Property> = self.read(&mut *reader)?;
+        // let mut properties = EstablishmentProperties::new();
+        // for p in ps.drain(..) {
+        //     properties.insert(p).map_err(|_| DidntRead)?;
+        // }
 
         let cookie = Cookie {
             whatami,
@@ -77,7 +77,7 @@ where
             sn_resolution,
             is_qos,
             nonce,
-            properties,
+            // properties,
         };
 
         Ok(cookie)
@@ -139,7 +139,7 @@ impl Cookie {
             sn_resolution: rng.gen(),
             is_qos: rng.gen_bool(0.5),
             nonce: rng.gen(),
-            properties: EstablishmentProperties::rand(),
+            // properties: EstablishmentProperties::rand(),
         }
     }
 }
