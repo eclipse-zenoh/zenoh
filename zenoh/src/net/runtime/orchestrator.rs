@@ -485,7 +485,12 @@ impl Runtime {
         let send = async {
             let mut delay = SCOUT_INITIAL_PERIOD;
 
-            let scout = ScoutingMessage::make_scout(matcher, None, None);
+            let scout: ScoutingMessage = Scout {
+                version: zenoh_protocol::VERSION,
+                what: matcher,
+                zid: None,
+            }
+            .into();
             let mut wbuf = vec![];
             let mut writer = wbuf.writer();
             let codec = Zenoh080::default();
@@ -701,12 +706,13 @@ impl Runtime {
                         let codec = Zenoh080::default();
 
                         let zid = self.manager().zid();
-                        let hello = ScoutingMessage::make_hello(
-                            self.whatami,
+                        let hello: ScoutingMessage = Hello {
+                            version: zenoh_protocol::VERSION,
+                            whatami: self.whatami,
                             zid,
-                            self.get_locators(),
-                            None,
-                        );
+                            locators: self.get_locators(),
+                        }
+                        .into();
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
                         log::trace!(
                             "Send {:?} to {} on interface {}",
