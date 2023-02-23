@@ -15,7 +15,7 @@ use crate::{
     core::{Reliability, ZInt},
     zenoh::ZenohMessage,
 };
-use zenoh_collections::SingleOrVec;
+use alloc::vec::Vec;
 
 /// # Frame message
 ///
@@ -75,7 +75,7 @@ pub struct Frame {
     pub reliability: Reliability,
     pub sn: ZInt,
     pub qos: ext::QoS,
-    pub payload: SingleOrVec<ZenohMessage>,
+    pub payload: Vec<ZenohMessage>,
 }
 
 // Extensions
@@ -166,7 +166,7 @@ impl Frame {
         };
         let sn: ZInt = rng.gen();
         let qos = ext::QoS::rand();
-        let mut payload = SingleOrVec::default();
+        let mut payload = vec![];
         for _ in 0..rng.gen_range(1..4) {
             let mut m = ZenohMessage::rand();
             m.channel.reliability = reliability;

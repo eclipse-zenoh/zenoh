@@ -35,15 +35,15 @@ where
 
     fn write(self, writer: &mut W, x: &TransportMessage) -> Self::Output {
         match &x.body {
+            TransportBody::Frame(b) => self.write(&mut *writer, b),
+            TransportBody::Fragment(b) => self.write(&mut *writer, b),
+            TransportBody::KeepAlive(b) => self.write(&mut *writer, b),
             TransportBody::InitSyn(b) => self.write(&mut *writer, b),
             TransportBody::InitAck(b) => self.write(&mut *writer, b),
             TransportBody::OpenSyn(b) => self.write(&mut *writer, b),
             TransportBody::OpenAck(b) => self.write(&mut *writer, b),
             TransportBody::Join(b) => self.write(&mut *writer, b),
             TransportBody::Close(b) => self.write(&mut *writer, b),
-            TransportBody::KeepAlive(b) => self.write(&mut *writer, b),
-            TransportBody::Frame(b) => self.write(&mut *writer, b),
-            TransportBody::Fragment(b) => self.write(&mut *writer, b),
         }
     }
 }
@@ -59,6 +59,9 @@ where
 
         let codec = Zenoh080Header::new(header);
         let body = match imsg::mid(codec.header) {
+            id::FRAME => TransportBody::Frame(codec.read(&mut *reader)?),
+            id::FRAGMENT => TransportBody::Fragment(codec.read(&mut *reader)?),
+            id::KEEP_ALIVE => TransportBody::KeepAlive(codec.read(&mut *reader)?),
             id::INIT => {
                 if !imsg::has_flag(codec.header, zenoh_protocol::transport::init::flag::A) {
                     TransportBody::InitSyn(codec.read(&mut *reader)?)
@@ -75,9 +78,6 @@ where
             }
             id::JOIN => TransportBody::Join(codec.read(&mut *reader)?),
             id::CLOSE => TransportBody::Close(codec.read(&mut *reader)?),
-            id::KEEP_ALIVE => TransportBody::KeepAlive(codec.read(&mut *reader)?),
-            id::FRAME => TransportBody::Frame(codec.read(&mut *reader)?),
-            id::FRAGMENT => TransportBody::Fragment(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 

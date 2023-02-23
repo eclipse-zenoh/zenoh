@@ -16,7 +16,6 @@ use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_collections::SingleOrVec;
 use zenoh_protocol::{
     common::{imsg, ZExtUnknown, ZExtZInt},
     core::{Reliability, ZInt},
@@ -175,7 +174,7 @@ where
         self.write(&mut *writer, &header)?;
 
         // Body
-        for m in x.payload.as_ref() {
+        for m in x.payload.iter() {
             self.write(&mut *writer, m)?;
         }
 
@@ -206,7 +205,7 @@ where
         let header: FrameHeader = self.read(&mut *reader)?;
 
         let rcode = Zenoh080Reliability::new(header.reliability);
-        let mut payload = SingleOrVec::default();
+        let mut payload = vec![];
         while reader.can_read() {
             let mark = reader.mark();
             let res: Result<ZenohMessage, DidntRead> = rcode.read(&mut *reader);

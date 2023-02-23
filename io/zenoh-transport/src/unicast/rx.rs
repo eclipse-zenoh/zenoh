@@ -106,7 +106,7 @@ impl TransportUnicastInner {
             reliability,
             sn,
             qos,
-            payload,
+            mut payload,
         } = frame;
 
         let priority = qos.priority();
@@ -129,7 +129,7 @@ impl TransportUnicastInner {
 
         self.verify_sn(sn, &mut guard)?;
 
-        for msg in payload.into_iter() {
+        for msg in payload.drain(..) {
             self.trigger_callback(msg)?;
         }
         Ok(())

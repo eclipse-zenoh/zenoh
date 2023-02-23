@@ -50,7 +50,6 @@ defmt = [
 serde = { workspace = true, features = ["alloc"] }
 uhlc = { workspace = true }
 zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
-zenoh-collections = { path = "../zenoh-collections/", default-features = false }
 zenoh-protocol = { path = "../zenoh-protocol/", default-features = false }
 zenoh-shm = { path = "../zenoh-shm/", optional = true }
 

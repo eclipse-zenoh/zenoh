@@ -93,25 +93,19 @@ where
         } else {
             Priority::default()
         };
+        let reply_context = if imsg::mid(codec.header) == zmsg::id::REPLY_CONTEXT {
+            let rc: ReplyContext = codec.read(&mut *reader)?;
+            codec.header = self.codec.read(&mut *reader)?;
+            Some(rc)
+        } else {
+            None
+        };
 
         let body = match imsg::mid(codec.header) {
-            zmsg::id::REPLY_CONTEXT => {
-                let rc: ReplyContext = codec.read(&mut *reader)?;
-                let rodec = Zenoh080HeaderReplyContext {
-                    header: self.codec.read(&mut *reader)?,
-                    reply_context: Some(rc),
-                    codec: Zenoh080::new(),
-                };
-                match imsg::mid(rodec.header) {
-                    zmsg::id::DATA => ZenohBody::Data(rodec.read(&mut *reader)?),
-                    zmsg::id::UNIT => ZenohBody::Unit(rodec.read(&mut *reader)?),
-                    _ => return Err(DidntRead),
-                }
-            }
             zmsg::id::DATA => {
                 let rodec = Zenoh080HeaderReplyContext {
                     header: codec.header,
-                    reply_context: None,
+                    reply_context,
                     codec: Zenoh080::new(),
                 };
                 ZenohBody::Data(rodec.read(&mut *reader)?)
