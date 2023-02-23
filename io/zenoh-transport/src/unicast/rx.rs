@@ -17,8 +17,6 @@ use async_std::task;
 use std::sync::MutexGuard;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
-use zenoh_buffers::ZSlice;
-use zenoh_collections::SingleOrVec;
 use zenoh_core::{zlock, zread};
 use zenoh_link::LinkUnicast;
 #[cfg(feature = "stats")]
@@ -103,20 +101,69 @@ impl TransportUnicastInner {
         Ok(())
     }
 
-    fn handle_frame(&self, payload: SingleOrVec<ZenohMessage>) -> ZResult<()> {
+    fn handle_frame(&self, frame: Frame) -> ZResult<()> {
+        let Frame {
+            reliability,
+            sn,
+            qos,
+            payload,
+        } = frame;
+
+        let priority = qos.priority();
+        let c = if self.is_qos() {
+            &self.conduit_rx[priority as usize]
+        } else if priority == Priority::default() {
+            &self.conduit_rx[0]
+        } else {
+            bail!(
+                "Transport: {}. Unknown conduit: {:?}.",
+                self.config.zid,
+                priority
+            );
+        };
+
+        let mut guard = match reliability {
+            Reliability::Reliable => zlock!(c.reliable),
+            Reliability::BestEffort => zlock!(c.best_effort),
+        };
+
+        self.verify_sn(sn, &mut guard)?;
+
         for msg in payload.into_iter() {
             self.trigger_callback(msg)?;
         }
         Ok(())
     }
 
-    fn handle_fragment(
-        &self,
-        sn: ZInt,
-        more: bool,
-        payload: ZSlice,
-        mut guard: MutexGuard<'_, TransportChannelRx>,
-    ) -> ZResult<()> {
+    fn handle_fragment(&self, fragment: Fragment) -> ZResult<()> {
+        let Fragment {
+            reliability,
+            more,
+            sn,
+            qos,
+            payload,
+        } = fragment;
+
+        let priority = qos.priority();
+        let c = if self.is_qos() {
+            &self.conduit_rx[priority as usize]
+        } else if priority == Priority::default() {
+            &self.conduit_rx[0]
+        } else {
+            bail!(
+                "Transport: {}. Unknown conduit: {:?}.",
+                self.config.zid,
+                priority
+            );
+        };
+
+        let mut guard = match reliability {
+            Reliability::Reliable => zlock!(c.reliable),
+            Reliability::BestEffort => zlock!(c.best_effort),
+        };
+
+        self.verify_sn(sn, &mut guard)?;
+
         if guard.defrag.is_empty() {
             let _ = guard.defrag.sync(sn);
         }
@@ -161,61 +208,8 @@ impl TransportUnicastInner {
         log::trace!("Received: {:?}", msg);
         // Process the received message
         match msg.body {
-            TransportBody::Frame(Frame {
-                reliability,
-                sn,
-                payload,
-                qos,
-            }) => {
-                let priority = qos.priority();
-                let c = if self.is_qos() {
-                    &self.conduit_rx[priority as usize]
-                } else if priority == Priority::default() {
-                    &self.conduit_rx[0]
-                } else {
-                    bail!(
-                        "Transport: {}. Unknown conduit: {:?}.",
-                        self.config.zid,
-                        priority
-                    );
-                };
-
-                let mut guard = match reliability {
-                    Reliability::Reliable => zlock!(c.reliable),
-                    Reliability::BestEffort => zlock!(c.best_effort),
-                };
-
-                self.verify_sn(sn, &mut guard)?;
-                self.handle_frame(payload)
-            }
-            TransportBody::Fragment(Fragment {
-                reliability,
-                more,
-                sn,
-                payload,
-                qos,
-            }) => {
-                let priority = qos.priority();
-                let c = if self.is_qos() {
-                    &self.conduit_rx[priority as usize]
-                } else if priority == Priority::default() {
-                    &self.conduit_rx[0]
-                } else {
-                    bail!(
-                        "Transport: {}. Unknown conduit: {:?}.",
-                        self.config.zid,
-                        priority
-                    );
-                };
-
-                let mut guard = match reliability {
-                    Reliability::Reliable => zlock!(c.reliable),
-                    Reliability::BestEffort => zlock!(c.best_effort),
-                };
-
-                self.verify_sn(sn, &mut guard)?;
-                self.handle_fragment(sn, more, payload, guard)
-            }
+            TransportBody::Frame(msg) => self.handle_frame(msg),
+            TransportBody::Fragment(fragment) => self.handle_fragment(fragment),
             TransportBody::Close(Close { reason, session }) => {
                 self.handle_close(link, reason, session)
             }
