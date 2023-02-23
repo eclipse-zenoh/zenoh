@@ -13,7 +13,7 @@
 #
 [package]
 rust-version = "1.62.1"
-name = "zenoh-nostd-check"
+name = "nostd-check"
 version = "0.7.0-rc"
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
