@@ -128,7 +128,6 @@ where
 
     fn write(self, writer: &mut W, x: &ZBuf) -> Self::Output {
         let is_sliced = self.condition;
-
         if is_sliced {
             let codec = Zenoh080Sliced::default();
             codec.write(&mut *writer, x)
