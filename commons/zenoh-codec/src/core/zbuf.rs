@@ -46,13 +46,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ZBuf, Self::Error> {
-        dbg!("");
         let len: usize = self.read(&mut *reader)?;
-        dbg!("");
         let mut zbuf = ZBuf::default();
-        dbg!("");
         reader.read_zslices(len, |s| zbuf.push_zslice(s))?;
-        dbg!("");
         Ok(zbuf)
     }
 }
@@ -128,6 +124,7 @@ where
 
     fn write(self, writer: &mut W, x: &ZBuf) -> Self::Output {
         let is_sliced = self.condition;
+
         if is_sliced {
             let codec = Zenoh080Sliced::default();
             codec.write(&mut *writer, x)
