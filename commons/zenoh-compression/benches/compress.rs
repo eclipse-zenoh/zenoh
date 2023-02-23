@@ -43,10 +43,10 @@ static BATCH_SIZES: &'static [usize] = &[
 ];
 
 fn generate_test_batch(entropy: EntropyLevel, size: usize) -> Vec<u8> {
-    let mut segment_32: Vec<u8> = Vec::from("AAAAAAAABBBBBBBBCCCCCCCCDDDDDDDD");
+    let segment_32: Vec<u8> = Vec::from("AAAAAAAABBBBBBBBCCCCCCCCDDDDDDDD");
     let mut test_batch: Vec<u8> = vec![];
     for _i in 0..(size / segment_32.len()) {
-        test_batch.append(&mut segment_32);
+        test_batch.append(&mut segment_32.clone());
     }
     match entropy {
         EntropyLevel::LOW => test_batch,
