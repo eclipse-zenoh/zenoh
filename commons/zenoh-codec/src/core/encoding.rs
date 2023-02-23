@@ -26,7 +26,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Encoding) -> Self::Output {
-        self.write(&mut *writer, u8::from(*x.prefix()))?;
+        self.write(&mut *writer, ZInt::from(*x.prefix()))?;
         self.write(&mut *writer, x.suffix())?;
         Ok(())
     }

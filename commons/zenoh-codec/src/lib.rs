@@ -33,11 +33,9 @@ pub trait RCodec<Message, Buffer> {
 }
 
 #[derive(Clone, Copy, Default)]
-#[non_exhaustive]
 pub struct Zenoh080;
 
 #[derive(Clone, Copy)]
-#[non_exhaustive]
 pub struct Zenoh080Header {
     pub header: u8,
     pub codec: Zenoh080,
@@ -53,7 +51,6 @@ impl Zenoh080Header {
 }
 
 #[derive(Clone, Copy, Default)]
-#[non_exhaustive]
 pub struct Zenoh080Condition {
     pub condition: bool,
     pub codec: Zenoh080,
@@ -69,7 +66,6 @@ impl Zenoh080Condition {
 }
 
 #[derive(Clone, Copy, Default)]
-#[non_exhaustive]
 pub struct Zenoh080Length {
     pub length: usize,
     pub codec: Zenoh080,
@@ -85,7 +81,6 @@ impl Zenoh080Length {
 }
 
 #[derive(Clone, Copy, Default)]
-#[non_exhaustive]
 pub struct Zenoh080Reliability {
     pub reliability: Reliability,
     pub codec: Zenoh080,
@@ -101,7 +96,6 @@ impl Zenoh080Reliability {
 }
 
 #[derive(Clone, Default)]
-#[non_exhaustive]
 pub struct Zenoh080HeaderReplyContext {
     pub header: u8,
     pub reply_context: Option<ReplyContext>,
