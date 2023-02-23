@@ -77,6 +77,7 @@ where
             id::CLOSE => TransportBody::Close(codec.read(&mut *reader)?),
             id::KEEP_ALIVE => TransportBody::KeepAlive(codec.read(&mut *reader)?),
             id::FRAME => TransportBody::Frame(codec.read(&mut *reader)?),
+            id::FRAGMENT => TransportBody::Fragment(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 

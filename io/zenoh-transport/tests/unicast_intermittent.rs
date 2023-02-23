@@ -177,10 +177,10 @@ async fn transport_intermittent(endpoint: &EndPoint) {
 
     /* [1] */
     // Add a listener to the router
-    println!("\nTransport Intermittent [1a1]");
+    dbg!("\nTransport Intermittent [1a1]");
     let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
     let locators = router_manager.get_listeners();
-    println!("Transport Intermittent [1a2]: {locators:?}");
+    dbg!("Transport Intermittent [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
     /* [2] */
@@ -241,7 +241,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     });
 
     /* [4] */
-    println!("Transport Intermittent [4a1]");
+    dbg!("Transport Intermittent [4a1]");
     let c_router_manager = router_manager.clone();
     ztimeout!(task::spawn_blocking(move || {
         // Create the message to send
@@ -272,7 +272,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         let mut count = 0;
         while count < MSG_COUNT {
             if count == ticks[0] {
-                println!("\nScheduled {count}");
+                dbg!("\nScheduled {count}");
                 ticks.remove(0);
             }
             let transports = c_router_manager.get_transports();
@@ -304,36 +304,36 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     ztimeout!(c3_handle.cancel());
 
     // Check that client01 received all the messages
-    println!("Transport Intermittent [4b1]");
+    dbg!("Transport Intermittent [4b1]");
     ztimeout!(async {
         loop {
             let c = counter.load(Ordering::Acquire);
             if c == MSG_COUNT {
                 break;
             }
-            println!("Transport Intermittent [4b2]: Received {c}/{MSG_COUNT}");
+            dbg!("Transport Intermittent [4b2]: Received {c}/{MSG_COUNT}");
             task::sleep(SLEEP).await;
         }
     });
 
     /* [5] */
     // Close the open transport on the client
-    println!("Transport Intermittent [5a1]");
+    dbg!("Transport Intermittent [5a1]");
     for s in client01_manager.get_transports().iter() {
         ztimeout!(s.close()).unwrap();
     }
-    println!("Transport Intermittent [5a2]");
+    dbg!("Transport Intermittent [5a2]");
     for s in client02_manager.get_transports().iter() {
         ztimeout!(s.close()).unwrap();
     }
-    println!("Transport Intermittent [5a3]");
+    dbg!("Transport Intermittent [5a3]");
     for s in client03_manager.get_transports().iter() {
         ztimeout!(s.close()).unwrap();
     }
 
     /* [6] */
     // Verify that the transport has been closed also on the router
-    println!("Transport Intermittent [6a1]");
+    dbg!("Transport Intermittent [6a1]");
     ztimeout!(async {
         loop {
             let transports = router_manager.get_transports();
@@ -346,7 +346,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
 
     /* [7] */
     // Perform clean up of the open locators
-    println!("\nTransport Intermittent [7a1]");
+    dbg!("\nTransport Intermittent [7a1]");
     ztimeout!(router_manager.del_listener(endpoint)).unwrap();
 
     // Wait a little bit

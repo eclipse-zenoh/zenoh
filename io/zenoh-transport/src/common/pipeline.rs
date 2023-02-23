@@ -32,8 +32,12 @@ use zenoh_codec::{WCodec, Zenoh080};
 use zenoh_config::QueueSizeConf;
 use zenoh_core::zlock;
 use zenoh_protocol::{
-    core::{Channel, Priority},
-    transport::TransportMessage,
+    core::Priority,
+    transport::{
+        fragment::FragmentHeader,
+        frame::{self, FrameHeader},
+        TransportMessage,
+    },
     zenoh::ZenohMessage,
 };
 
@@ -175,18 +179,19 @@ impl StageIn {
         // Lock the channel. We are the only one that will be writing on it.
         let mut tch = self.mutex.channel(msg.is_reliable());
 
-        // Create the channel
-        let channel = Channel {
-            reliability: msg.channel.reliability,
-            priority,
-        };
-
         // Retrieve the next SN
-        let mut sn = tch.sn.get();
+        let sn = tch.sn.get();
+
+        // The Frame
+        let frame = FrameHeader {
+            reliability: msg.channel.reliability,
+            sn,
+            qos: frame::ext::QoS::new(priority),
+        };
 
         if let WError::NewFrame = e {
             // Attempt a serialization with a new frame
-            if batch.encode((&*msg, channel, sn)).is_ok() {
+            if batch.encode((&*msg, &frame)).is_ok() {
                 zretok!(batch);
             };
         }
@@ -198,7 +203,7 @@ impl StageIn {
         }
 
         // Attempt a second serialization on fully empty batch
-        if batch.encode((&*msg, channel, sn)).is_ok() {
+        if batch.encode((&*msg, &frame)).is_ok() {
             zretok!(batch);
         };
 
@@ -215,6 +220,12 @@ impl StageIn {
         codec.write(&mut writer, &*msg).unwrap();
 
         // Fragment the whole message
+        let mut fragment = FragmentHeader {
+            reliability: frame.reliability,
+            more: true,
+            sn,
+            qos: frame.qos,
+        };
         let mut reader = self.fragbuf.reader();
         while reader.can_read() {
             // Get the current serialization batch
@@ -222,10 +233,10 @@ impl StageIn {
             batch = zgetbatch_rets!(true);
 
             // Serialize the message fragmnet
-            match batch.encode((&mut reader, channel, sn)) {
+            match batch.encode((&mut reader, &mut fragment)) {
                 Ok(_) => {
                     // Update the SN
-                    sn = tch.sn.get();
+                    fragment.sn = tch.sn.get();
                     // Move the serialization batch into the OUT pipeline
                     self.s_out.move_batch(batch);
                 }
@@ -743,7 +754,10 @@ mod tests {
                 "Pipeline Flow [>>>]: Sending {num_msg} messages with payload size of {payload_size} bytes"
             );
             for i in 0..num_msg {
-                println!("Pipeline Flow [>>>]: Pushed {} msgs", i + 1);
+                println!(
+                    "Pipeline Flow [>>>]: Pushed {} msgs ({payload_size} bytes)",
+                    i + 1
+                );
                 queue.push_zenoh_message(message.clone());
             }
         }

@@ -19,12 +19,8 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{WCodec, Zenoh080};
 use zenoh_protocol::{
-    core::{Channel, Reliability, ZInt},
-    transport::{
-        fragment::{self, FragmentHeader},
-        frame::{self, FrameHeader},
-        TransportMessage,
-    },
+    core::{Reliability, ZInt},
+    transport::{fragment::FragmentHeader, frame::FrameHeader, TransportMessage},
     zenoh::ZenohMessage,
 };
 
@@ -252,7 +248,7 @@ impl Encode<&ZenohMessage> for &mut WBatch {
     }
 }
 
-impl Encode<(&ZenohMessage, Channel, ZInt)> for &mut WBatch {
+impl Encode<(&ZenohMessage, &FrameHeader)> for &mut WBatch {
     type Output = Result<(), DidntWrite>;
 
     /// Try to serialize a [`ZenohMessage`][ZenohMessage] on the [`SerializationBatch`][SerializationBatch].
@@ -260,8 +256,8 @@ impl Encode<(&ZenohMessage, Channel, ZInt)> for &mut WBatch {
     /// # Arguments
     /// * `message` - The [`ZenohMessage`][ZenohMessage] to serialize.
     ///
-    fn encode(self, message: (&ZenohMessage, Channel, ZInt)) -> Self::Output {
-        let (message, channel, sn) = message;
+    fn encode(self, message: (&ZenohMessage, &FrameHeader)) -> Self::Output {
+        let (message, frame) = message;
 
         // Mark the write operation
         let mut writer = self.buffer.writer();
@@ -269,12 +265,7 @@ impl Encode<(&ZenohMessage, Channel, ZInt)> for &mut WBatch {
 
         let codec = Zenoh080::default();
         // Write the frame header
-        let frame = FrameHeader {
-            reliability: channel.reliability,
-            sn,
-            qos: frame::ext::QoS::new(channel.priority),
-        };
-        codec.write(&mut writer, &frame).map_err(|e| {
+        codec.write(&mut writer, frame).map_err(|e| {
             // Revert the write operation
             writer.rewind(mark);
             e
@@ -288,11 +279,11 @@ impl Encode<(&ZenohMessage, Channel, ZInt)> for &mut WBatch {
         // Update the frame
         self.current_frame = match frame.reliability {
             Reliability::Reliable => {
-                self.latest_sn.reliable = Some(sn);
+                self.latest_sn.reliable = Some(frame.sn);
                 CurrentFrame::Reliable
             }
             Reliability::BestEffort => {
-                self.latest_sn.best_effort = Some(sn);
+                self.latest_sn.best_effort = Some(frame.sn);
                 CurrentFrame::BestEffort
             }
         };
@@ -300,7 +291,7 @@ impl Encode<(&ZenohMessage, Channel, ZInt)> for &mut WBatch {
     }
 }
 
-impl Encode<(&mut ZBufReader<'_>, Channel, ZInt)> for &mut WBatch {
+impl Encode<(&mut ZBufReader<'_>, &mut FragmentHeader)> for &mut WBatch {
     type Output = Result<NonZeroUsize, DidntWrite>;
 
     /// Try to serialize a [`ZenohMessage`][ZenohMessage] on the [`SerializationBatch`][SerializationBatch].
@@ -308,8 +299,8 @@ impl Encode<(&mut ZBufReader<'_>, Channel, ZInt)> for &mut WBatch {
     /// # Arguments
     /// * `message` - The [`ZenohMessage`][ZenohMessage] to serialize.
     ///
-    fn encode(self, message: (&mut ZBufReader<'_>, Channel, ZInt)) -> Self::Output {
-        let (reader, channel, sn) = message;
+    fn encode(self, message: (&mut ZBufReader<'_>, &mut FragmentHeader)) -> Self::Output {
+        let (reader, fragment) = message;
 
         let mut writer = self.buffer.writer();
         let codec = Zenoh080::default();
@@ -317,15 +308,8 @@ impl Encode<(&mut ZBufReader<'_>, Channel, ZInt)> for &mut WBatch {
         // Mark the buffer for the writing operation
         let mark = writer.mark();
 
-        // Serialize first assuming is some fragment
-        let mut frame = FragmentHeader {
-            reliability: channel.reliability,
-            more: true,
-            sn,
-            qos: fragment::ext::QoS::new(channel.priority),
-        };
         // Write the frame header
-        codec.write(&mut writer, &frame).map_err(|e| {
+        codec.write(&mut writer, &*fragment).map_err(|e| {
             // Revert the write operation
             writer.rewind(mark);
             e
@@ -336,9 +320,9 @@ impl Encode<(&mut ZBufReader<'_>, Channel, ZInt)> for &mut WBatch {
             // Revert the buffer
             writer.rewind(mark);
             // It is really the finally fragment, reserialize the header
-            frame.more = false;
+            fragment.more = false;
             // Write the frame header
-            codec.write(&mut writer, &frame).map_err(|e| {
+            codec.write(&mut writer, &*fragment).map_err(|e| {
                 // Revert the write operation
                 writer.rewind(mark);
                 e
@@ -360,7 +344,10 @@ mod tests {
     use zenoh_buffers::ZBuf;
     use zenoh_protocol::{
         core::{Channel, CongestionControl, Priority, Reliability},
-        transport::{KeepAlive, TransportMessage},
+        transport::{
+            frame::{self, FrameHeader},
+            KeepAlive, TransportMessage,
+        },
         zenoh::ZenohMessage,
     };
 
@@ -390,8 +377,14 @@ mod tests {
         assert!(batch.encode(&zmsg).is_err());
         assert_eq!(batch.len(), 0);
 
+        let mut frame = FrameHeader {
+            reliability: zmsg.channel.reliability,
+            sn: 0,
+            qos: frame::ext::QoS::default(),
+        };
+
         // Serialize with a frame
-        batch.encode((&zmsg, zmsg.channel, 0)).unwrap();
+        batch.encode((&zmsg, &frame)).unwrap();
         assert_ne!(batch.len(), 0);
         zmsgs_in.push(zmsg.clone());
 
@@ -400,7 +393,8 @@ mod tests {
         assert!(batch.encode(&zmsg).is_err());
         assert_ne!(batch.len(), 0);
 
-        batch.encode((&zmsg, zmsg.channel, 0)).unwrap();
+        frame.reliability = zmsg.channel.reliability;
+        batch.encode((&zmsg, &frame)).unwrap();
         assert_ne!(batch.len(), 0);
         zmsgs_in.push(zmsg.clone());
 
@@ -413,7 +407,8 @@ mod tests {
         assert_ne!(batch.len(), 0);
 
         // Serialize with a frame
-        batch.encode((&zmsg, zmsg.channel, 1)).unwrap();
+        frame.sn = 1;
+        batch.encode((&zmsg, &frame)).unwrap();
         assert_ne!(batch.len(), 0);
         zmsgs_in.push(zmsg.clone());
     }

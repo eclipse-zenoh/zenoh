@@ -128,7 +128,7 @@ mod tests {
     }
 
     async fn run(endpoint: &EndPoint) {
-        println!("Transport SHM [0a]: {endpoint:?}");
+        dbg!("Transport SHM [0a]: {endpoint:?}");
 
         // Define client and router IDs
         let peer_shm01 = ZenohId::try_from([1]).unwrap();
@@ -175,29 +175,29 @@ mod tests {
             .unwrap();
 
         // Create the listener on the peer
-        println!("Transport SHM [1a]");
+        dbg!("Transport SHM [1a]");
         let _ = ztimeout!(peer_shm01_manager
             .add_listener(endpoint.clone())
             .timeout(TIMEOUT))
         .unwrap();
 
         // Create a transport with the peer
-        println!("Transport SHM [1b]");
+        dbg!("Transport SHM [1b]");
         let _ = ztimeout!(peer_shm02_manager.open_transport(endpoint.clone())).unwrap();
 
         // Create a transport with the peer
-        println!("Transport SHM [1c]");
+        dbg!("Transport SHM [1c]");
         let _ = ztimeout!(peer_net01_manager.open_transport(endpoint.clone())).unwrap();
 
         // Retrieve the transports
-        println!("Transport SHM [2a]");
+        dbg!("Transport SHM [2a]");
         let peer_shm02_transport = peer_shm01_manager.get_transport(&peer_shm02).unwrap();
 
-        println!("Transport SHM [2b]");
+        dbg!("Transport SHM [2b]");
         let peer_net01_transport = peer_shm01_manager.get_transport(&peer_net01).unwrap();
 
         // Send the message
-        println!("Transport SHM [3a]");
+        dbg!("Transport SHM [3a]");
         // The msg count
         for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
@@ -241,7 +241,7 @@ mod tests {
         task::sleep(SLEEP).await;
 
         // Wait for the messages to arrive to the other side
-        println!("Transport SHM [3b]");
+        dbg!("Transport SHM [3b]");
         ztimeout!(async {
             while peer_shm02_handler.get_count() != MSG_COUNT {
                 task::sleep(SLEEP).await;
@@ -249,7 +249,7 @@ mod tests {
         });
 
         // Send the message
-        println!("Transport SHM [4a]");
+        dbg!("Transport SHM [4a]");
         // The msg count
         for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
@@ -292,7 +292,7 @@ mod tests {
         task::sleep(SLEEP).await;
 
         // Wait for the messages to arrive to the other side
-        println!("Transport SHM [4b]");
+        dbg!("Transport SHM [4b]");
         ztimeout!(async {
             while peer_net01_handler.get_count() != MSG_COUNT {
                 task::sleep(SLEEP).await;
@@ -303,10 +303,10 @@ mod tests {
         task::sleep(SLEEP).await;
 
         // Close the transports
-        println!("Transport SHM [5a]");
+        dbg!("Transport SHM [5a]");
         ztimeout!(peer_shm02_transport.close()).unwrap();
 
-        println!("Transport SHM [5b]");
+        dbg!("Transport SHM [5b]");
         ztimeout!(peer_net01_transport.close()).unwrap();
 
         ztimeout!(async {
@@ -316,7 +316,7 @@ mod tests {
         });
 
         // Delete the listener
-        println!("Transport SHM [6a]");
+        dbg!("Transport SHM [6a]");
         ztimeout!(peer_shm01_manager.del_listener(endpoint)).unwrap();
 
         // Wait a little bit
