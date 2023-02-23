@@ -46,9 +46,13 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ZBuf, Self::Error> {
+        dbg!("");
         let len: usize = self.read(&mut *reader)?;
+        dbg!("");
         let mut zbuf = ZBuf::default();
+        dbg!("");
         reader.read_zslices(len, |s| zbuf.push_zslice(s))?;
+        dbg!("");
         Ok(zbuf)
     }
 }

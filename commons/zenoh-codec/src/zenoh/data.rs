@@ -96,7 +96,7 @@ where
 
     fn write(self, writer: &mut W, x: &DataInfo) -> Self::Output {
         // Options
-        let mut options = 0;
+        let mut options: ZInt = 0;
         #[cfg(feature = "shared-memory")]
         if x.sliced {
             options |= zmsg::data::info::SLICED;
@@ -242,9 +242,7 @@ where
             ..Default::default()
         };
         if imsg::mid(codec.header) == zmsg::id::REPLY_CONTEXT {
-            let header: u8 = self.read(&mut *reader)?;
-            let hodec = Zenoh080Header::new(header);
-
+            let hodec = Zenoh080Header::new(codec.header);
             codec.reply_context = Some(hodec.read(&mut *reader)?);
             codec.header = self.read(&mut *reader)?;
         }
@@ -273,6 +271,7 @@ where
             condition: imsg::has_flag(self.header, zmsg::flag::K),
             codec: self.codec,
         };
+
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
 
         #[cfg(feature = "shared-memory")]

@@ -210,7 +210,8 @@ fn codec_extension() {
 
     run_extension!(ZExtUnit<0>);
     run_extension!(ZExtZInt<1>);
-    run_extension!(ZExtZBuf<2>);
+    run_extension!(ZExtZSlice<2>);
+    run_extension!(ZExtZBuf<3>);
     run_extension!(ZExtUnknown);
 }
 
