@@ -72,19 +72,19 @@ macro_rules! run_fragmented {
 
 macro_rules! run_buffers {
     ($type:ty, $rand:expr, $wcode:expr, $rcode:expr) => {
-        println!("Vec<u8>: codec {}", std::any::type_name::<$type>());
+        dbg!("Vec<u8>: codec {}", std::any::type_name::<$type>());
         let mut buffer = vec![];
         run_single!($type, $rand, $wcode, $rcode, buffer);
 
-        println!("BBuf: codec {}", std::any::type_name::<$type>());
+        dbg!("BBuf: codec {}", std::any::type_name::<$type>());
         let mut buffer = BBuf::with_capacity(u16::MAX as usize);
         run_single!($type, $rand, $wcode, $rcode, buffer);
 
-        println!("ZBuf: codec {}", std::any::type_name::<$type>());
+        dbg!("ZBuf: codec {}", std::any::type_name::<$type>());
         let mut buffer = ZBuf::default();
         run_single!($type, $rand, $wcode, $rcode, buffer);
 
-        println!("ZSlice: codec {}", std::any::type_name::<$type>());
+        dbg!("ZSlice: codec {}", std::any::type_name::<$type>());
         for _ in 0..NUM_ITER {
             let x: $type = $rand;
 
@@ -100,7 +100,7 @@ macro_rules! run_buffers {
             assert_eq!(x, y);
         }
 
-        println!("Fragmented: codec {}", std::any::type_name::<$type>());
+        dbg!("Fragmented: codec {}", std::any::type_name::<$type>());
         run_fragmented!($type, $rand, $wcode, $rcode)
     };
 }
@@ -194,15 +194,15 @@ fn codec_extension() {
 
     macro_rules! run_extension {
         ($type:ty) => {
-            println!("Vec<u8>: codec {}", std::any::type_name::<$type>());
+            dbg!("Vec<u8>: codec {}", std::any::type_name::<$type>());
             let mut buff = vec![];
             run_extension_single!($type, buff);
 
-            println!("BBuf: codec {}", std::any::type_name::<$type>());
+            dbg!("BBuf: codec {}", std::any::type_name::<$type>());
             let mut buff = BBuf::with_capacity(u16::MAX as usize);
             run_extension_single!($type, buff);
 
-            println!("ZBuf: codec {}", std::any::type_name::<$type>());
+            dbg!("ZBuf: codec {}", std::any::type_name::<$type>());
             let mut buff = ZBuf::default();
             run_extension_single!($type, buff);
         };
