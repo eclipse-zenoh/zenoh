@@ -108,9 +108,9 @@ jobs:
     needs: check
     strategy:
       fail-fast: false
-    defaults:
-      run:
-        working-directory: ./ci/zenoh-nostd-check
+    # defaults:
+    #   run:
+    #     working-directory: ./ci/zenoh-nostd-check
 
     steps:
       - uses: actions/checkout@v2
