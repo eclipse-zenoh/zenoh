@@ -216,7 +216,7 @@ impl StageIn {
         self.fragbuf.clear();
 
         let mut writer = self.fragbuf.writer();
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
         codec.write(&mut writer, &*msg).unwrap();
 
         // Fragment the whole message
@@ -776,7 +776,7 @@ mod tests {
                 let bytes = batch.as_bytes();
                 // Deserialize the messages
                 let mut reader = bytes.reader();
-                let codec = Zenoh080::default();
+                let codec = Zenoh080::new();
 
                 loop {
                     let res: Result<TransportMessage, DidntRead> = codec.read(&mut reader);

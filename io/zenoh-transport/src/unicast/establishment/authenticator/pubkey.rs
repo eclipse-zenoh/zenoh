@@ -395,7 +395,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
         };
 
         let mut wbuf = vec![];
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
         let mut writer = wbuf.writer();
         codec
             .write(&mut writer, &init_syn_property)
@@ -415,7 +415,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             Some(pk) => {
                 // Decode the multilink attachment
                 let mut reader = pk.reader();
-                let codec = Zenoh080::default();
+                let codec = Zenoh080::new();
 
                 let init_syn_property: InitSynProperty = codec.read(&mut reader).map_err(|_| {
                     zerror!(
@@ -465,7 +465,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 }
 
                 // Create the InitAck attachment
-                let codec = Zenoh080::default();
+                let codec = Zenoh080::new();
 
                 let mut wbuf = vec![];
                 let mut writer = wbuf.writer();
@@ -532,7 +532,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             None => return Ok(None),
         };
 
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
 
         let mut reader = pk.reader();
         let init_ack_property: InitAckProperty = codec.read(&mut reader).map_err(|_| {
@@ -580,7 +580,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
     ) -> ZResult<Option<Vec<u8>>> {
         match property {
             (Some(att), Some(cke)) => {
-                let codec = Zenoh080::default();
+                let codec = Zenoh080::new();
 
                 let mut reader = att.reader();
                 let open_syn_property: OpenSynProperty = codec.read(&mut reader).map_err(|_| {

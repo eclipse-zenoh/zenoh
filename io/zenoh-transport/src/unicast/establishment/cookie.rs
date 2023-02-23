@@ -191,7 +191,7 @@ mod tests {
             };
         }
 
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
         run!(Cookie, Cookie::rand(), codec);
 
         let mut prng = PseudoRng::from_entropy();
@@ -202,7 +202,7 @@ mod tests {
         let mut codec = Zenoh080Cookie {
             prng: &mut prng,
             cipher: &cipher,
-            codec: Zenoh080::default(),
+            codec: Zenoh080::new(),
         };
 
         run!(Cookie, Cookie::rand(), codec);

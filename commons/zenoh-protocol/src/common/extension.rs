@@ -62,13 +62,13 @@ pub mod iext {
     pub const FLAG_Z: u8 = 1 << 7;
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ZExtUnit<const ID: u8>;
 
 impl<const ID: u8> ZExtUnit<{ ID }> {
     pub const ID: u8 = ID;
 
-    pub fn new() -> Self {
+    pub const fn new() -> Self {
         Self
     }
 
@@ -86,7 +86,7 @@ pub struct ZExtZInt<const ID: u8> {
 impl<const ID: u8> ZExtZInt<{ ID }> {
     pub const ID: u8 = ID;
 
-    pub fn new(value: ZInt) -> Self {
+    pub const fn new(value: ZInt) -> Self {
         Self { value }
     }
 
@@ -108,7 +108,7 @@ pub struct ZExtZSlice<const ID: u8> {
 impl<const ID: u8> ZExtZSlice<{ ID }> {
     pub const ID: u8 = ID;
 
-    pub fn new(value: ZSlice) -> Self {
+    pub const fn new(value: ZSlice) -> Self {
         Self { value }
     }
 
@@ -130,7 +130,7 @@ pub struct ZExtZBuf<const ID: u8> {
 impl<const ID: u8> ZExtZBuf<{ ID }> {
     pub const ID: u8 = ID;
 
-    pub fn new(value: ZBuf) -> Self {
+    pub const fn new(value: ZBuf) -> Self {
         Self { value }
     }
 

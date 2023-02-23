@@ -55,7 +55,6 @@ where
 
 // ZBuf sliced
 #[cfg(feature = "shared-memory")]
-#[derive(Default)]
 struct Zenoh080Sliced {
     codec: Zenoh080,
 }
@@ -126,7 +125,9 @@ where
         let is_sliced = self.condition;
 
         if is_sliced {
-            let codec = Zenoh080Sliced::default();
+            let codec = Zenoh080Sliced {
+                codec: Zenoh080::new(),
+            };
             codec.write(&mut *writer, x)
         } else {
             self.codec.write(&mut *writer, x)
@@ -145,7 +146,9 @@ where
         let is_sliced = self.condition;
 
         if is_sliced {
-            let codec = Zenoh080Sliced::default();
+            let codec = Zenoh080Sliced {
+                codec: Zenoh080::new(),
+            };
             codec.read(&mut *reader)
         } else {
             self.codec.read(&mut *reader)

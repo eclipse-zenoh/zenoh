@@ -493,7 +493,7 @@ impl Runtime {
             .into();
             let mut wbuf = vec![];
             let mut writer = wbuf.writer();
-            let codec = Zenoh080::default();
+            let codec = Zenoh080::new();
             codec.write(&mut writer, &scout).unwrap();
 
             loop {
@@ -535,7 +535,7 @@ impl Runtime {
                     match socket.recv_from(&mut buf).await {
                         Ok((n, peer)) => {
                             let mut reader = buf.as_slice()[..n].reader();
-                            let codec = Zenoh080::default();
+                            let codec = Zenoh080::new();
                             let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
                             if let Ok(msg) = res {
                                 log::trace!("Received {:?} from {}", msg.body, peer);
@@ -695,7 +695,7 @@ impl Runtime {
             }
 
             let mut reader = buf.as_slice()[..n].reader();
-            let codec = Zenoh080::default();
+            let codec = Zenoh080::new();
             let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
             if let Ok(msg) = res {
                 log::trace!("Received {:?} from {}", msg.body, peer);
@@ -703,7 +703,7 @@ impl Runtime {
                     if what.matches(self.whatami) {
                         let mut wbuf = vec![];
                         let mut writer = wbuf.writer();
-                        let codec = Zenoh080::default();
+                        let codec = Zenoh080::new();
 
                         let zid = self.manager().zid();
                         let hello: ScoutingMessage = Hello {

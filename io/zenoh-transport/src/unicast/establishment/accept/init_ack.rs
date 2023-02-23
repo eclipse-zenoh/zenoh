@@ -110,7 +110,7 @@ pub(super) async fn send(
     let mut codec = Zenoh080Cookie {
         prng: &mut *zasynclock!(manager.prng),
         cipher: &manager.cipher,
-        codec: Zenoh080::default(),
+        codec: Zenoh080::new(),
     };
     codec.write(&mut writer, &cookie).map_err(|_| {
         (

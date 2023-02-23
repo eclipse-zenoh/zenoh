@@ -245,7 +245,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             shm: self.buffer.info.serialize().unwrap().into(),
         };
         let mut buff = vec![];
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
 
         let mut writer = buff.writer();
         codec
@@ -269,7 +269,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             }
         };
 
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
         let mut reader = buffer.reader();
 
         let mut init_syn_property: InitSynProperty = codec
@@ -336,7 +336,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             }
         };
 
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
         let mut reader = buffer.reader();
 
         let mut init_ack_property: InitAckProperty = codec
@@ -401,7 +401,7 @@ impl PeerAuthenticatorTrait for SharedMemoryAuthenticator {
             }
         };
 
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
         let mut reader = buffer.reader();
 
         let open_syn_property: OpenSynProperty = codec

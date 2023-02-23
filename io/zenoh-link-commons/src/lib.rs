@@ -155,7 +155,7 @@ impl LinkUnicast {
         // Create the buffer for serializing the message
         let mut buff = vec![];
         let mut writer = buff.writer();
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
 
         // Reserve 16 bits to write the length
         if self.is_streamed() {
@@ -201,7 +201,7 @@ impl LinkUnicast {
         };
 
         let mut reader = buffer.reader();
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
 
         let mut messages: Vec<TransportMessage> = Vec::with_capacity(1);
         while reader.can_read() {
@@ -293,7 +293,7 @@ impl LinkMulticast {
         // Create the buffer for serializing the message
         let mut buff = vec![];
         let mut writer = buff.writer();
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
         codec
             .write(&mut writer, msg)
             .map_err(|_| zerror!("Encoding error on link: {}", self))?;
@@ -311,7 +311,7 @@ impl LinkMulticast {
         buffer.truncate(n);
 
         let mut reader = buffer.reader();
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
 
         let mut messages: Vec<TransportMessage> = Vec::with_capacity(1);
         while reader.can_read() {

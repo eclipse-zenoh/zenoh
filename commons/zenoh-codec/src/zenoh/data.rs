@@ -239,7 +239,8 @@ where
     fn read(self, reader: &mut R) -> Result<Data, Self::Error> {
         let mut codec = Zenoh080HeaderReplyContext {
             header: self.read(&mut *reader)?,
-            ..Default::default()
+            reply_context: None,
+            codec: Zenoh080::new(),
         };
         if imsg::mid(codec.header) == zmsg::id::REPLY_CONTEXT {
             let hodec = Zenoh080Header::new(codec.header);

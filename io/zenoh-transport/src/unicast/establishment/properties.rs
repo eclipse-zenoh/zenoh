@@ -68,7 +68,7 @@ impl TryFrom<&EstablishmentProperties> for Attachment {
 
         let mut zbuf = ZBuf::default();
         let mut writer = zbuf.writer();
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
 
         codec
             .write(&mut writer, eps.0.as_slice())
@@ -97,7 +97,7 @@ impl TryFrom<&Attachment> for EstablishmentProperties {
 
     fn try_from(att: &Attachment) -> Result<Self, Self::Error> {
         let mut reader = att.buffer.reader();
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
 
         let ps: Vec<Property> = codec.read(&mut reader).map_err(|_| zerror!(""))?;
         EstablishmentProperties::try_from(ps)

@@ -273,7 +273,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             version: USRPWD_VERSION,
         };
         let mut wbuf = vec![];
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
         let mut writer = wbuf.writer();
         codec
             .write(&mut writer, &init_syn_property)
@@ -296,7 +296,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             )
         })?;
 
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
 
         let mut reader = p.reader();
         let init_syn_property: InitSynProperty = codec.read(&mut reader).map_err(|_| {
@@ -343,7 +343,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             )
         })?;
 
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
 
         let mut reader = p.reader();
         let init_ack_property: InitAckProperty = codec.read(&mut reader).map_err(|_| {
@@ -386,7 +386,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
             )
         })?;
 
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
 
         let mut reader = a.reader();
         let open_syn_property: OpenSynProperty = codec.read(&mut reader).map_err(|_| {

@@ -261,7 +261,7 @@ where
 //         const NUM: usize = 1_000;
 //         const LIMIT: [u64; 4] = [u8::MAX as u64, u16::MAX as u64, u32::MAX as u64, u64::MAX];
 
-//         let codec = Zenoh080::default();
+//         let codec = Zenoh080::new();
 //         let mut rng = rand::thread_rng();
 
 //         for l in LIMIT.iter() {

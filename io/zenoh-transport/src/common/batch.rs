@@ -194,7 +194,7 @@ impl Encode<&TransportMessage> for &mut WBatch {
         let mut writer = self.buffer.writer();
         let mark = writer.mark();
 
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
         codec.write(&mut writer, message).map_err(|e| {
             // Revert the write operation
             writer.rewind(mark);
@@ -239,7 +239,7 @@ impl Encode<&ZenohMessage> for &mut WBatch {
         let mut writer = self.buffer.writer();
         let mark = writer.mark();
 
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
         codec.write(&mut writer, message).map_err(|_| {
             // Revert the write operation
             writer.rewind(mark);
@@ -263,7 +263,7 @@ impl Encode<(&ZenohMessage, &FrameHeader)> for &mut WBatch {
         let mut writer = self.buffer.writer();
         let mark = writer.mark();
 
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
         // Write the frame header
         codec.write(&mut writer, frame).map_err(|e| {
             // Revert the write operation
@@ -303,7 +303,7 @@ impl Encode<(&mut ZBufReader<'_>, &mut FragmentHeader)> for &mut WBatch {
         let (reader, fragment) = message;
 
         let mut writer = self.buffer.writer();
-        let codec = Zenoh080::default();
+        let codec = Zenoh080::new();
 
         // Mark the buffer for the writing operation
         let mark = writer.mark();

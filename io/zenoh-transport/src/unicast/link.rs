@@ -255,7 +255,7 @@ async fn rx_task_stream(
         Ok(Action::Stop)
     }
 
-    let codec = Zenoh080::default();
+    let codec = Zenoh080::new();
 
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
@@ -324,7 +324,7 @@ async fn rx_task_dgram(
         Ok(Action::Stop)
     }
 
-    let codec = Zenoh080::default();
+    let codec = Zenoh080::new();
 
     // The pool of buffers
     let mtu = link.get_mtu() as usize;

@@ -92,7 +92,7 @@ pub(super) async fn recv(
     let mut codec = Zenoh080Cookie {
         prng: &mut *zasynclock!(manager.prng),
         cipher: &manager.cipher,
-        codec: Zenoh080::default(),
+        codec: Zenoh080::new(),
     };
     let mut cookie: Cookie = codec.read(&mut reader).map_err(|_| {
         (

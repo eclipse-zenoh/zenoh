@@ -64,10 +64,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ZenohMessage, Self::Error> {
-        let codec = Zenoh080Reliability {
-            reliability: Reliability::default(),
-            ..Default::default()
-        };
+        let codec = Zenoh080Reliability::new(Reliability::default());
         codec.read(reader)
     }
 }
@@ -103,7 +100,7 @@ where
                 let rodec = Zenoh080HeaderReplyContext {
                     header: self.codec.read(&mut *reader)?,
                     reply_context: Some(rc),
-                    ..Default::default()
+                    codec: Zenoh080::new(),
                 };
                 match imsg::mid(rodec.header) {
                     zmsg::id::DATA => ZenohBody::Data(rodec.read(&mut *reader)?),
@@ -114,14 +111,16 @@ where
             zmsg::id::DATA => {
                 let rodec = Zenoh080HeaderReplyContext {
                     header: codec.header,
-                    ..Default::default()
+                    reply_context: None,
+                    codec: Zenoh080::new(),
                 };
                 ZenohBody::Data(rodec.read(&mut *reader)?)
             }
             zmsg::id::UNIT => {
                 let rodec = Zenoh080HeaderReplyContext {
                     header: codec.header,
-                    ..Default::default()
+                    reply_context: None,
+                    codec: Zenoh080::new(),
                 };
                 ZenohBody::Unit(rodec.read(&mut *reader)?)
             }
