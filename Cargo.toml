@@ -47,7 +47,7 @@ members = [
   "zenohd",
 ]
 exclude = [
-  "ci/zenoh-nostd-check",
+  "ci/nostd-check",
 ]
 
 [workspace.package]
