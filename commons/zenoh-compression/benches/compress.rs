@@ -123,7 +123,7 @@ fn bench_simple_encoding(
     group: &mut BenchmarkGroup<WallTime>,
     batch_size: &usize,
     codec: &Zenoh060,
-    dummy_batch: &Vec<u8>,
+    batch: &Vec<u8>,
 ) {
     group.bench_with_input(
         BenchmarkId::new(function_name, batch_size),
@@ -132,7 +132,7 @@ fn bench_simple_encoding(
             let mut buff = vec![];
             b.iter(|| {
                 buff.clear();
-                encode_simple(&mut buff, codec, dummy_batch);
+                encode_simple(&mut buff, codec, batch);
             });
         },
     );
