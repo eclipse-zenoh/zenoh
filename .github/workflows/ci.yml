@@ -108,17 +108,15 @@ jobs:
     needs: check
     strategy:
       fail-fast: false
-    # defaults:
-    #   run:
-    #     working-directory: ./ci/zenoh-nostd-check
+    defaults:
+      run:
+        working-directory: ./ci/zenoh-nostd-check
 
     steps:
       - uses: actions/checkout@v2
 
       - name: Install latest Rust toolchain
         uses: actions-rs/tool
-        # with:
-        #   toolchain: nightly
 
       - name: Add generic no_std target to the toolchain
         run: rustup target add x86_64-unknown-none
