@@ -111,7 +111,7 @@ impl Fragment {
 }
 
 // FragmentHeader
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct FragmentHeader {
     pub reliability: Reliability,

@@ -15,7 +15,7 @@ pub mod close;
 pub mod fragment;
 pub mod frame;
 pub mod init;
-// pub mod join;
+pub mod join;
 pub mod keepalive;
 pub mod open;
 
@@ -25,12 +25,12 @@ use core::{convert::TryInto, fmt};
 pub use fragment::{Fragment, FragmentHeader};
 pub use frame::{Frame, FrameHeader};
 pub use init::{InitAck, InitSyn};
-// pub use join::Join;
+pub use join::Join;
 pub use keepalive::KeepAlive;
 pub use open::{OpenAck, OpenSyn};
 
 pub mod id {
-    // pub const JOIN: u8 = 0x01; // For multicast communications only
+    pub const JOIN: u8 = 0x01; // For multicast communications only
     pub const INIT: u8 = 0x02; // For unicast communications only
     pub const OPEN: u8 = 0x03; // For unicast communications only
     pub const CLOSE: u8 = 0x04;
@@ -93,7 +93,7 @@ pub enum TransportBody {
     InitAck(InitAck),
     OpenSyn(OpenSyn),
     OpenAck(OpenAck),
-    // Join(Join),
+    Join(Join),
     Close(Close),
     KeepAlive(KeepAlive),
     Frame(Frame),
@@ -120,7 +120,7 @@ impl TransportMessage {
             1 => TransportBody::InitAck(InitAck::rand()),
             2 => TransportBody::OpenSyn(OpenSyn::rand()),
             3 => TransportBody::OpenAck(OpenAck::rand()),
-            // 4 => TransportBody::Join(Join::rand()),
+            4 => TransportBody::Join(Join::rand()),
             5 => TransportBody::Close(Close::rand()),
             6 => TransportBody::KeepAlive(KeepAlive::rand()),
             7 => TransportBody::Frame(Frame::rand()),
@@ -166,11 +166,11 @@ impl From<OpenAck> for TransportMessage {
     }
 }
 
-// impl From<Join> for TransportMessage {
-//     fn from(join: Join) -> Self {
-//         TransportBody::Join(join).into()
-//     }
-// }
+impl From<Join> for TransportMessage {
+    fn from(join: Join) -> Self {
+        TransportBody::Join(join).into()
+    }
+}
 
 impl From<Close> for TransportMessage {
     fn from(close: Close) -> Self {

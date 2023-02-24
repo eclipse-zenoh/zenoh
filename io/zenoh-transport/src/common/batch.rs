@@ -248,7 +248,7 @@ impl Encode<&ZenohMessage> for &mut WBatch {
     }
 }
 
-impl Encode<(&ZenohMessage, &FrameHeader)> for &mut WBatch {
+impl Encode<(&ZenohMessage, FrameHeader)> for &mut WBatch {
     type Output = Result<(), DidntWrite>;
 
     /// Try to serialize a [`ZenohMessage`][ZenohMessage] on the [`SerializationBatch`][SerializationBatch].
@@ -256,7 +256,7 @@ impl Encode<(&ZenohMessage, &FrameHeader)> for &mut WBatch {
     /// # Arguments
     /// * `message` - The [`ZenohMessage`][ZenohMessage] to serialize.
     ///
-    fn encode(self, message: (&ZenohMessage, &FrameHeader)) -> Self::Output {
+    fn encode(self, message: (&ZenohMessage, FrameHeader)) -> Self::Output {
         let (message, frame) = message;
 
         // Mark the write operation
@@ -265,7 +265,7 @@ impl Encode<(&ZenohMessage, &FrameHeader)> for &mut WBatch {
 
         let codec = Zenoh080::new();
         // Write the frame header
-        codec.write(&mut writer, frame).map_err(|e| {
+        codec.write(&mut writer, &frame).map_err(|e| {
             // Revert the write operation
             writer.rewind(mark);
             e
@@ -291,7 +291,7 @@ impl Encode<(&ZenohMessage, &FrameHeader)> for &mut WBatch {
     }
 }
 
-impl Encode<(&mut ZBufReader<'_>, &mut FragmentHeader)> for &mut WBatch {
+impl Encode<(&mut ZBufReader<'_>, FragmentHeader)> for &mut WBatch {
     type Output = Result<NonZeroUsize, DidntWrite>;
 
     /// Try to serialize a [`ZenohMessage`][ZenohMessage] on the [`SerializationBatch`][SerializationBatch].
@@ -299,8 +299,8 @@ impl Encode<(&mut ZBufReader<'_>, &mut FragmentHeader)> for &mut WBatch {
     /// # Arguments
     /// * `message` - The [`ZenohMessage`][ZenohMessage] to serialize.
     ///
-    fn encode(self, message: (&mut ZBufReader<'_>, &mut FragmentHeader)) -> Self::Output {
-        let (reader, fragment) = message;
+    fn encode(self, message: (&mut ZBufReader<'_>, FragmentHeader)) -> Self::Output {
+        let (reader, mut fragment) = message;
 
         let mut writer = self.buffer.writer();
         let codec = Zenoh080::new();
@@ -309,7 +309,7 @@ impl Encode<(&mut ZBufReader<'_>, &mut FragmentHeader)> for &mut WBatch {
         let mark = writer.mark();
 
         // Write the frame header
-        codec.write(&mut writer, &*fragment).map_err(|e| {
+        codec.write(&mut writer, &fragment).map_err(|e| {
             // Revert the write operation
             writer.rewind(mark);
             e
@@ -322,7 +322,7 @@ impl Encode<(&mut ZBufReader<'_>, &mut FragmentHeader)> for &mut WBatch {
             // It is really the finally fragment, reserialize the header
             fragment.more = false;
             // Write the frame header
-            codec.write(&mut writer, &*fragment).map_err(|e| {
+            codec.write(&mut writer, &fragment).map_err(|e| {
                 // Revert the write operation
                 writer.rewind(mark);
                 e
@@ -384,7 +384,7 @@ mod tests {
         };
 
         // Serialize with a frame
-        batch.encode((&zmsg, &frame)).unwrap();
+        batch.encode((&zmsg, frame)).unwrap();
         assert_ne!(batch.len(), 0);
         zmsgs_in.push(zmsg.clone());
 
@@ -394,7 +394,7 @@ mod tests {
         assert_ne!(batch.len(), 0);
 
         frame.reliability = zmsg.channel.reliability;
-        batch.encode((&zmsg, &frame)).unwrap();
+        batch.encode((&zmsg, frame)).unwrap();
         assert_ne!(batch.len(), 0);
         zmsgs_in.push(zmsg.clone());
 
@@ -408,7 +408,7 @@ mod tests {
 
         // Serialize with a frame
         frame.sn = 1;
-        batch.encode((&zmsg, &frame)).unwrap();
+        batch.encode((&zmsg, frame)).unwrap();
         assert_ne!(batch.len(), 0);
         zmsgs_in.push(zmsg.clone());
     }

@@ -109,16 +109,15 @@ impl TransportUnicastInner {
             mut payload,
         } = frame;
 
-        let priority = qos.priority();
         let c = if self.is_qos() {
-            &self.conduit_rx[priority as usize]
-        } else if priority == Priority::default() {
+            &self.conduit_rx[qos.priority as usize]
+        } else if qos.priority == Priority::default() {
             &self.conduit_rx[0]
         } else {
             bail!(
                 "Transport: {}. Unknown conduit: {:?}.",
                 self.config.zid,
-                priority
+                qos.priority
             );
         };
 
@@ -144,16 +143,15 @@ impl TransportUnicastInner {
             payload,
         } = fragment;
 
-        let priority = qos.priority();
         let c = if self.is_qos() {
-            &self.conduit_rx[priority as usize]
-        } else if priority == Priority::default() {
+            &self.conduit_rx[qos.priority as usize]
+        } else if qos.priority == Priority::default() {
             &self.conduit_rx[0]
         } else {
             bail!(
                 "Transport: {}. Unknown conduit: {:?}.",
                 self.config.zid,
-                priority
+                qos.priority
             );
         };
 
@@ -209,7 +207,7 @@ impl TransportUnicastInner {
         // Process the received message
         match msg.body {
             TransportBody::Frame(msg) => self.handle_frame(msg),
-            TransportBody::Fragment(fragment) => self.handle_fragment(fragment),
+            // TransportBody::Fragment(fragment) => self.handle_fragment(fragment),
             TransportBody::Close(Close { reason, session }) => {
                 self.handle_close(link, reason, session)
             }

@@ -252,10 +252,10 @@ fn codec_open_ack() {
     run!(OpenAck, OpenAck::rand());
 }
 
-// #[test]
-// fn codec_join() {
-//     run!(Join, Join::rand());
-// }
+#[test]
+fn codec_join() {
+    run!(Join, Join::rand());
+}
 
 #[test]
 fn codec_close() {

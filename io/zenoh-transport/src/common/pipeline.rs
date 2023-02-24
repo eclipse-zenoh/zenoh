@@ -186,12 +186,12 @@ impl StageIn {
         let frame = FrameHeader {
             reliability: msg.channel.reliability,
             sn,
-            qos: frame::ext::QoS::new(priority),
+            qos: frame::ext::QoS { priority },
         };
 
         if let WError::NewFrame = e {
             // Attempt a serialization with a new frame
-            if batch.encode((&*msg, &frame)).is_ok() {
+            if batch.encode((&*msg, frame)).is_ok() {
                 zretok!(batch);
             };
         }
@@ -203,7 +203,7 @@ impl StageIn {
         }
 
         // Attempt a second serialization on fully empty batch
-        if batch.encode((&*msg, &frame)).is_ok() {
+        if batch.encode((&*msg, frame)).is_ok() {
             zretok!(batch);
         };
 
@@ -233,7 +233,7 @@ impl StageIn {
             batch = zgetbatch_rets!(true);
 
             // Serialize the message fragmnet
-            match batch.encode((&mut reader, &mut fragment)) {
+            match batch.encode((&mut reader, fragment)) {
                 Ok(_) => {
                     // Update the SN
                     fragment.sn = tch.sn.get();

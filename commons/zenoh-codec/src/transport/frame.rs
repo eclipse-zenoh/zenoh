@@ -1,3 +1,5 @@
+use core::convert::TryInto;
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -18,7 +20,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{imsg, ZExtUnknown, ZExtZInt},
-    core::{Reliability, ZInt},
+    core::{Priority, Reliability, ZInt},
     transport::{
         frame::{ext, flag, Frame, FrameHeader},
         id,
@@ -27,15 +29,16 @@ use zenoh_protocol::{
 };
 
 // Extensions: QoS
-impl<W> WCodec<(&ext::QoS, bool), &mut W> for Zenoh080
+impl<W> WCodec<(ext::QoS, bool), &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: (&ext::QoS, bool)) -> Self::Output {
-        let (ext, more) = x;
-        self.write(&mut *writer, (&ext.inner, more))
+    fn write(self, writer: &mut W, x: (ext::QoS, bool)) -> Self::Output {
+        let (qos, more) = x;
+        let ext: ZExtZInt<{ ext::QOS }> = ZExtZInt::new(qos.priority as ZInt);
+        self.write(&mut *writer, (&ext, more))
     }
 }
 
@@ -64,8 +67,11 @@ where
             return Err(DidntRead);
         }
 
-        let (inner, more): (ZExtZInt<{ ext::QOS }>, bool) = self.read(&mut *reader)?;
-        Ok((ext::QoS { inner }, more))
+        let (ext, more): (ZExtZInt<{ ext::QOS }>, bool) = self.read(&mut *reader)?;
+
+        let v: u8 = ext.value.try_into().map_err(|_| DidntRead)?;
+        let priority: Priority = v.try_into().map_err(|_| DidntRead)?;
+        Ok((ext::QoS { priority }, more))
     }
 }
 
@@ -92,7 +98,7 @@ where
 
         // Extensions
         if x.qos != ext::QoS::default() {
-            self.write(&mut *writer, (&x.qos.inner, false))?;
+            self.write(&mut *writer, (x.qos, false))?;
         }
 
         Ok(())

@@ -80,8 +80,7 @@ pub struct Frame {
 
 // Extensions
 pub mod ext {
-    use crate::core::ZInt;
-    use crate::{common::ZExtZInt, core::Priority};
+    use crate::core::Priority;
 
     pub const QOS: u8 = 0x01;
 
@@ -92,56 +91,23 @@ pub mod ext {
     ///     % reserved|prio %
     ///     +---------------+
     #[repr(transparent)]
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
     pub struct QoS {
-        pub inner: ZExtZInt<QOS>,
+        pub priority: Priority,
     }
 
     impl QoS {
-        pub fn new(priority: Priority) -> Self {
-            Self {
-                inner: ZExtZInt::new(priority as ZInt),
-            }
-        }
-
-        pub fn priority(&self) -> Priority {
-            // Safety: a unit test below checks the validity of the following unsafe code
-            unsafe { core::mem::transmute((self.inner.value & 0b111) as u8) }
-        }
-
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
-            Self {
-                inner: ZExtZInt::rand(),
-            }
-        }
-    }
+            use core::convert::TryInto;
+            use rand::Rng;
 
-    impl Default for QoS {
-        fn default() -> Self {
-            Self::new(Priority::default())
-        }
-    }
-
-    mod tests {
-        #[test]
-        fn priority() {
-            use crate::{core::Priority, transport::frame::ext::QoS};
-
-            let ps = [
-                Priority::Control,
-                Priority::RealTime,
-                Priority::InteractiveHigh,
-                Priority::InteractiveLow,
-                Priority::DataHigh,
-                Priority::Data,
-                Priority::DataLow,
-                Priority::Background,
-            ];
-            for p in ps.iter() {
-                let q = QoS::new(*p);
-                assert_eq!(q.priority(), *p);
-            }
+            let mut rng = rand::thread_rng();
+            let priority: Priority = rng
+                .gen_range(Priority::MAX as u8..=Priority::MIN as u8)
+                .try_into()
+                .unwrap();
+            Self { priority }
         }
     }
 }
@@ -149,16 +115,10 @@ pub mod ext {
 impl Frame {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::core::Priority;
-        use core::convert::TryInto;
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
 
-        let priority: Priority = rng
-            .gen_range(Priority::MAX as u8..=Priority::MIN as u8)
-            .try_into()
-            .unwrap();
         let reliability = if rng.gen_bool(0.5) {
             Reliability::Reliable
         } else {
@@ -170,7 +130,7 @@ impl Frame {
         for _ in 0..rng.gen_range(1..4) {
             let mut m = ZenohMessage::rand();
             m.channel.reliability = reliability;
-            m.channel.priority = priority;
+            m.channel.priority = qos.priority;
             payload.push(m);
         }
 
@@ -184,7 +144,7 @@ impl Frame {
 }
 
 // FrameHeader
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct FrameHeader {
     pub reliability: Reliability,

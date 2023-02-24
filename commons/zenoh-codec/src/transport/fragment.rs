@@ -51,7 +51,7 @@ where
 
         // Extensions
         if x.qos != ext::QoS::default() {
-            self.write(&mut *writer, (&x.qos.inner, false))?;
+            self.write(&mut *writer, (x.qos, false))?;
         }
 
         Ok(())
@@ -136,9 +136,7 @@ where
         self.write(&mut *writer, &header)?;
 
         // Body
-        for m in x.payload.as_ref() {
-            self.write(&mut *writer, m)?;
-        }
+        self.write(&mut *writer, &x.payload)?;
 
         Ok(())
     }
