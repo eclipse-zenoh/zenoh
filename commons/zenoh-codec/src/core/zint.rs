@@ -101,7 +101,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<usize, Self::Error> {
-        let x: u64 = <Self as RCodec<u64, &mut R>>::read(self, reader)?;
+        let x: u64 = self.read(reader)?;
         x.try_into().map_err(|_| DidntRead)
     }
 }
