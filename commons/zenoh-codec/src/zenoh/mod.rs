@@ -113,7 +113,7 @@ where
             zmsg::id::UNIT => {
                 let rodec = Zenoh080HeaderReplyContext {
                     header: codec.header,
-                    reply_context: None,
+                    reply_context,
                     codec: Zenoh080::new(),
                 };
                 ZenohBody::Unit(rodec.read(&mut *reader)?)
