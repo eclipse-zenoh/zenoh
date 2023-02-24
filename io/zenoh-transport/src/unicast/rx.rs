@@ -207,7 +207,7 @@ impl TransportUnicastInner {
         // Process the received message
         match msg.body {
             TransportBody::Frame(msg) => self.handle_frame(msg),
-            // TransportBody::Fragment(fragment) => self.handle_fragment(fragment),
+            TransportBody::Fragment(fragment) => self.handle_fragment(fragment),
             TransportBody::Close(Close { reason, session }) => {
                 self.handle_close(link, reason, session)
             }
