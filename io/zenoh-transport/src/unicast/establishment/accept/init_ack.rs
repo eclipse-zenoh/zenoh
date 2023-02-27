@@ -94,6 +94,9 @@ pub(super) async fn send(
     // Compute the minimum batch size
     let batch_size = input.batch_size.min(manager.config.batch_size);
 
+    // Compute the QoS capabilities
+    let is_qos = input.is_qos && manager.config.unicast.is_qos;
+
     // Create the cookie
     let nonce: ZInt = zasynclock!(manager.prng).gen();
     let cookie = Cookie {
@@ -102,6 +105,7 @@ pub(super) async fn send(
         resolution,
         batch_size,
         nonce,
+        is_qos,
         // properties: EstablishmentProperties::new(),
     };
 

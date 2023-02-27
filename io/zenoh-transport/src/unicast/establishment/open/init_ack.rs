@@ -33,12 +33,14 @@ pub(super) struct Output {
     pub(super) resolution: Resolution,
     pub(super) batch_size: u16,
     pub(super) cookie: ZSlice,
+    // Extensions
+    pub(super) is_qos: bool,
 }
 
 pub(super) async fn recv(
     link: &LinkUnicast,
     manager: &TransportManager,
-    _input: super::init_syn::Output,
+    input: super::init_syn::Output,
 ) -> OResult<Output> {
     // Wait to read an InitAck
     let mut messages = link
@@ -113,6 +115,9 @@ pub(super) async fn recv(
         i_bsize
     };
 
+    // Compute QoS
+    let is_qos = input.is_qos && init_ack.qos.is_some();
+
     // // Store the peer id associate do this link
     // auth_link.peer_id = Some(init_ack.zid);
 
@@ -180,6 +185,7 @@ pub(super) async fn recv(
         resolution,
         batch_size,
         cookie: init_ack.cookie,
+        is_qos,
     };
 
     Ok(output)

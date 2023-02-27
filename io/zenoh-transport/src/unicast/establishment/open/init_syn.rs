@@ -14,12 +14,18 @@
 use super::OResult;
 use crate::TransportManager;
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::transport::{close, init::InitSyn, TransportMessage};
+use zenoh_protocol::transport::{
+    close,
+    init::{ext, InitSyn},
+    TransportMessage,
+};
 
 /*************************************/
 /*              OPEN                 */
 /*************************************/
-pub(super) struct Output;
+pub(super) struct Output {
+    pub(super) is_qos: bool,
+}
 
 pub(super) async fn send(link: &LinkUnicast, manager: &TransportManager) -> OResult<Output> {
     // let mut ps_attachment = EstablishmentProperties::new();
@@ -38,32 +44,28 @@ pub(super) async fn send(link: &LinkUnicast, manager: &TransportManager) -> ORes
     //     }
     // }
 
-    // Build and send the InitSyn message
-    // let init_syn_attachment = if ps_attachment.is_empty() {
-    //     None
-    // } else {
-    //     let att =
-    //         Attachment::try_from(&ps_attachment).map_err(|e| (e, Some(close::reason::INVALID)))?;
-    //     Some(att)
-    // }; // @TODO
+    // Build QoS extension
+    let qos = manager.config.unicast.is_qos.then_some(ext::QoS::new());
 
-    let message: TransportMessage = InitSyn {
+    let msg: TransportMessage = InitSyn {
         version: manager.config.version,
         whatami: manager.config.whatami,
         zid: manager.config.zid,
         batch_size: manager.config.batch_size,
         resolution: manager.config.resolution,
-        qos: None,  // @TODO
+        qos,
         shm: None,  // @TODO
         auth: None, // @TODO
     }
     .into();
 
     let _ = link
-        .write_transport_message(&message)
+        .write_transport_message(&msg)
         .await
         .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
-    let output = Output;
+    let output = Output {
+        is_qos: qos.is_some(),
+    };
     Ok(output)
 }

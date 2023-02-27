@@ -27,8 +27,9 @@ pub struct Cookie {
     pub zid: ZenohId,
     pub resolution: Resolution,
     pub batch_size: u16,
-    // pub is_qos: bool,
     pub nonce: ZInt,
+    // Extensions
+    pub is_qos: bool,
     // pub properties: EstablishmentProperties, // @TODO
 }
 
@@ -45,9 +46,9 @@ where
         self.write(&mut *writer, x.resolution.as_u8())?;
         self.write(&mut *writer, x.batch_size)?;
         self.write(&mut *writer, x.nonce)?;
-
-        // let is_qos = u8::from(x.is_qos);
-        // self.write(&mut *writer, is_qos)?;
+        // Extensions
+        let is_qos = u8::from(x.is_qos);
+        self.write(&mut *writer, is_qos)?;
         // self.write(&mut *writer, x.properties.as_slice())?;
 
         Ok(())
@@ -68,9 +69,9 @@ where
         let resolution = Resolution::from(resolution);
         let batch_size: u16 = self.read(&mut *reader)?;
         let nonce: ZInt = self.read(&mut *reader)?;
-
-        // let is_qos: u8 = self.read(&mut *reader)?;
-        // let is_qos = is_qos == 1;
+        // Extensions
+        let is_qos: u8 = self.read(&mut *reader)?;
+        let is_qos = is_qos == 1;
         // let mut ps: Vec<Property> = self.read(&mut *reader)?;
         // let mut properties = EstablishmentProperties::new();
         // for p in ps.drain(..) {
@@ -83,7 +84,7 @@ where
             resolution,
             batch_size,
             nonce,
-            // is_qos,
+            is_qos,
             // properties,
         };
 
@@ -146,7 +147,7 @@ impl Cookie {
             resolution: Resolution::rand(),
             batch_size: rng.gen(),
             nonce: rng.gen(),
-            // is_qos: rng.gen_bool(0.5),
+            is_qos: rng.gen_bool(0.5),
             // properties: EstablishmentProperties::rand(),
         }
     }

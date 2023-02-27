@@ -58,6 +58,7 @@ pub(crate) async fn accept_link(
         whatami: output.cookie.whatami,
         resolution: output.cookie.resolution,
         batch_size: output.cookie.batch_size,
+        is_qos: output.cookie.is_qos,
     };
     let transport = step!(transport_init(manager, input)
         .await

@@ -66,6 +66,7 @@ pub(crate) async fn open_link(
         whatami: output.whatami,
         resolution: output.resolution,
         batch_size: output.batch_size,
+        is_qos: output.is_qos,
     };
     let transport = step!(super::transport_init(manager, input).await);
 

@@ -30,7 +30,9 @@ pub(super) struct Output {
     pub(super) zid: ZenohId,
     pub(super) resolution: Resolution,
     pub(super) batch_size: u16,
+    pub(super) is_qos: bool,
 }
+
 pub(super) async fn recv(link: &LinkUnicast, manager: &TransportManager) -> AResult<Output> {
     // Wait to read an InitSyn
     let mut messages = link
@@ -97,6 +99,7 @@ pub(super) async fn recv(link: &LinkUnicast, manager: &TransportManager) -> ARes
         zid: init_syn.zid,
         resolution: init_syn.resolution,
         batch_size: init_syn.batch_size,
+        is_qos: init_syn.qos.is_some(),
     };
     Ok(output)
 }

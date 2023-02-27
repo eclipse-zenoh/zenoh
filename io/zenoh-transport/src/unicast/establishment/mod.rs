@@ -65,6 +65,7 @@ pub(super) struct InputInit {
     pub(super) whatami: WhatAmI,
     pub(super) resolution: Resolution,
     pub(super) batch_size: u16,
+    pub(super) is_qos: bool,
 }
 async fn transport_init(
     manager: &TransportManager,
@@ -79,7 +80,7 @@ async fn transport_init(
         whatami: input.whatami,
         sn_resolution: input.resolution.get(Field::FrameSN).mask(),
         is_shm: false, // @TODO
-        is_qos: false, // @TODO
+        is_qos: input.is_qos,
         initial_sn_tx,
     };
 
