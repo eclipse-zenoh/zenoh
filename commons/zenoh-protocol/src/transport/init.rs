@@ -53,7 +53,7 @@ use zenoh_buffers::ZSlice;
 /// +-------+-+-+---+
 /// ~      [u8]     ~ -- ZenohID of the sender of the INIT message
 /// +---------------+
-/// |x|x|kid|rid|fsn| \                -- SN/ID resolution (+)
+/// |x|x|x|x|rid|fsn| \                -- SN/ID resolution (+)
 /// +---------------+  | if Flag(S)==1
 /// |      u16      |  |               -- Batch Size ($)
 /// |               | /
@@ -80,7 +80,6 @@ use zenoh_buffers::ZSlice;
 ///     of various SN and ID in Zenoh.
 ///     - fsn: frame/fragment sequence number resolution. Used in Frame/Fragment messages.
 ///     - rid: request ID resolution. Used in Request/Response messages.
-///     - kid: key expression ID resolution. Used in Push/Request/Response messages.
 ///     The valid SN/ID resolution values are:
 ///     - 0b00: 8 bits
 ///     - 0b01: 16 bits

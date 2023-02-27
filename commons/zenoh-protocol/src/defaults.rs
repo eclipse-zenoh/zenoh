@@ -15,7 +15,6 @@ use crate::core::Bits;
 
 pub const FRAME_SN_RESOLUTION: Bits = Bits::U32;
 pub const REQUEST_ID_RESOLUTION: Bits = Bits::U32;
-pub const KEYEXPR_ID_RESOLUTION: Bits = Bits::U32;
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
 ///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.

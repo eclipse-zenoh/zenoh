@@ -23,7 +23,11 @@ use zenoh_core::zasynclock;
 use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
     core::{Field, Resolution, ZInt},
-    transport::{close, InitAck, TransportMessage},
+    transport::{
+        close,
+        init::{ext, InitAck},
+        TransportMessage,
+    },
 };
 use zenoh_result::zerror;
 
@@ -83,19 +87,27 @@ pub(super) async fn send(
 
     // Compute the minimum SN resolution
     let resolution = {
+        let mut res = Resolution::default();
+
+        // Frame SN
         let i_fsn_res = input.resolution.get(Field::FrameSN);
         let m_fsn_res = manager.config.resolution.get(Field::FrameSN);
-
-        let mut res = Resolution::default();
         res.set(Field::FrameSN, i_fsn_res.min(m_fsn_res));
+
+        // Request ID
+        let i_rid_res = input.resolution.get(Field::RequestID);
+        let m_rid_res = manager.config.resolution.get(Field::RequestID);
+        res.set(Field::RequestID, i_rid_res.min(m_rid_res));
+
         res
     };
 
     // Compute the minimum batch size
     let batch_size = input.batch_size.min(manager.config.batch_size);
 
-    // Compute the QoS capabilities
+    // Extensions: compute the QoS capabilities
     let is_qos = input.is_qos && manager.config.unicast.is_qos;
+    let qos = is_qos.then_some(ext::QoS::new());
 
     // Create the cookie
     let nonce: ZInt = zasynclock!(manager.prng).gen();
@@ -132,7 +144,7 @@ pub(super) async fn send(
         resolution,
         batch_size: manager.config.batch_size,
         cookie,
-        qos: None,  // @TODO
+        qos,
         shm: None,  // @TODO
         auth: None, // @TODO
     }

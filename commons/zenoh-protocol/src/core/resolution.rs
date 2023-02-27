@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::ZInt;
-use crate::defaults::{FRAME_SN_RESOLUTION, KEYEXPR_ID_RESOLUTION, REQUEST_ID_RESOLUTION};
+use crate::defaults::{FRAME_SN_RESOLUTION, REQUEST_ID_RESOLUTION};
 
 #[repr(u8)]
 // The value represents the 2-bit encoded value
@@ -41,7 +41,6 @@ impl Bits {
 pub enum Field {
     FrameSN = 0,
     RequestID = 2,
-    KeyExprID = 4,
 }
 
 #[repr(transparent)]
@@ -69,7 +68,7 @@ impl Resolution {
 
         let mut rng = rand::thread_rng();
         let v: u8 = rng.gen();
-        Self(v & 0b00111111)
+        Self(v & 0b00001111)
     }
 }
 
@@ -77,8 +76,7 @@ impl Default for Resolution {
     fn default() -> Self {
         let frame_sn = FRAME_SN_RESOLUTION as u8;
         let request_id = (REQUEST_ID_RESOLUTION as u8) << 2;
-        let keyexpr_id = (KEYEXPR_ID_RESOLUTION as u8) << 4;
-        Self(frame_sn | request_id | keyexpr_id)
+        Self(frame_sn | request_id)
     }
 }
 

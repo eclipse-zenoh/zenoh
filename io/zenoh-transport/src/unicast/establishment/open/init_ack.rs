@@ -87,17 +87,40 @@ pub(super) async fn recv(
 
     // Compute the minimum SN resolution
     let resolution = {
+        let mut res = Resolution::default();
+
+        // Frame SN
         let i_fsn_res = init_ack.resolution.get(Field::FrameSN);
         let m_fsn_res = manager.config.resolution.get(Field::FrameSN);
 
         if i_fsn_res > m_fsn_res {
-            let e = zerror!("Invalid SN resolution on {}: {:?}", link, i_fsn_res);
+            let e = zerror!(
+                "Invalid FrameSN resolution on {}: {:?} > {:?}",
+                link,
+                i_fsn_res,
+                m_fsn_res
+            );
             log::error!("{}", e);
             return Err((e.into(), Some(close::reason::INVALID)));
         }
-
-        let mut res = Resolution::default();
         res.set(Field::FrameSN, i_fsn_res);
+
+        // Request ID
+        let i_rid_res = init_ack.resolution.get(Field::RequestID);
+        let m_rid_res = manager.config.resolution.get(Field::RequestID);
+
+        if i_rid_res > m_rid_res {
+            let e = zerror!(
+                "Invalid RequestID resolution on {}: {:?} > {:?}",
+                link,
+                i_rid_res,
+                m_rid_res
+            );
+            log::error!("{}", e);
+            return Err((e.into(), Some(close::reason::INVALID)));
+        }
+        res.set(Field::RequestID, i_rid_res);
+
         res
     };
 
