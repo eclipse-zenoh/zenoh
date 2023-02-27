@@ -85,7 +85,7 @@ pub(crate) struct TransportConfigUnicast {
     pub(crate) peer: ZenohId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
-    pub(crate) initial_sn_tx: ZInt,
+    pub(crate) tx_initial_sn: ZInt,
     pub(crate) is_shm: bool,
     pub(crate) is_qos: bool,
 }

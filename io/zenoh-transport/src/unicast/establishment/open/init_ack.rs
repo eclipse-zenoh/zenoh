@@ -102,18 +102,7 @@ pub(super) async fn recv(
     };
 
     // Compute the minimum batch size
-    let batch_size = {
-        let i_bsize = init_ack.batch_size;
-        let m_bsize = manager.config.batch_size;
-
-        if i_bsize > m_bsize {
-            let e = zerror!("Invalid batch size on {}: {:?}", link, i_bsize);
-            log::error!("{}", e);
-            return Err((e.into(), Some(close::reason::INVALID)));
-        }
-
-        i_bsize
-    };
+    let batch_size = manager.config.batch_size.min(init_ack.batch_size);
 
     // Compute QoS
     let is_qos = input.is_qos && init_ack.qos.is_some();

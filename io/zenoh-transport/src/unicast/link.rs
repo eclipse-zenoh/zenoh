@@ -115,7 +115,7 @@ impl TransportLinkUnicast {
         }
     }
 
-    pub(super) fn start_rx(&mut self, lease: Duration) {
+    pub(super) fn start_rx(&mut self, lease: Duration, batch_size: u16) {
         if self.handle_rx.is_none() {
             // Spawn the RX task
             let c_link = self.link.clone();
@@ -130,6 +130,7 @@ impl TransportLinkUnicast {
                     c_transport.clone(),
                     lease,
                     c_signal.clone(),
+                    batch_size,
                     c_rx_buffer_size,
                 )
                 .await;
@@ -234,6 +235,7 @@ async fn rx_task_stream(
     transport: TransportUnicastInner,
     lease: Duration,
     signal: Signal,
+    rx_batch_size: u16,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     enum Action {
@@ -258,7 +260,7 @@ async fn rx_task_stream(
     let codec = Zenoh080::new();
 
     // The pool of buffers
-    let mtu = link.get_mtu() as usize;
+    let mtu = link.get_mtu().min(rx_batch_size) as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -307,6 +309,7 @@ async fn rx_task_dgram(
     transport: TransportUnicastInner,
     lease: Duration,
     signal: Signal,
+    rx_batch_size: u16,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     enum Action {
@@ -327,7 +330,7 @@ async fn rx_task_dgram(
     let codec = Zenoh080::new();
 
     // The pool of buffers
-    let mtu = link.get_mtu() as usize;
+    let mtu = link.get_mtu().min(rx_batch_size) as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -381,11 +384,28 @@ async fn rx_task(
     transport: TransportUnicastInner,
     lease: Duration,
     signal: Signal,
+    rx_batch_size: u16,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     if link.is_streamed() {
-        rx_task_stream(link, transport, lease, signal, rx_buffer_size).await
+        rx_task_stream(
+            link,
+            transport,
+            lease,
+            signal,
+            rx_batch_size,
+            rx_buffer_size,
+        )
+        .await
     } else {
-        rx_task_dgram(link, transport, lease, signal, rx_buffer_size).await
+        rx_task_dgram(
+            link,
+            transport,
+            lease,
+            signal,
+            rx_batch_size,
+            rx_buffer_size,
+        )
+        .await
     }
 }

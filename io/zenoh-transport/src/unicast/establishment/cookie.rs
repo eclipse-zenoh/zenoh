@@ -26,7 +26,7 @@ pub struct Cookie {
     pub whatami: WhatAmI,
     pub zid: ZenohId,
     pub resolution: Resolution,
-    pub batch_size: u16,
+    pub tx_batch_size: u16,
     pub nonce: ZInt,
     // Extensions
     pub is_qos: bool,
@@ -44,7 +44,7 @@ where
         self.write(&mut *writer, wai)?;
         self.write(&mut *writer, &x.zid)?;
         self.write(&mut *writer, x.resolution.as_u8())?;
-        self.write(&mut *writer, x.batch_size)?;
+        self.write(&mut *writer, x.tx_batch_size)?;
         self.write(&mut *writer, x.nonce)?;
         // Extensions
         let is_qos = u8::from(x.is_qos);
@@ -82,7 +82,7 @@ where
             whatami,
             zid,
             resolution,
-            batch_size,
+            tx_batch_size: batch_size,
             nonce,
             is_qos,
             // properties,
@@ -145,7 +145,7 @@ impl Cookie {
             whatami: WhatAmI::rand(),
             zid: ZenohId::default(),
             resolution: Resolution::rand(),
-            batch_size: rng.gen(),
+            tx_batch_size: rng.gen(),
             nonce: rng.gen(),
             is_qos: rng.gen_bool(0.5),
             // properties: EstablishmentProperties::rand(),

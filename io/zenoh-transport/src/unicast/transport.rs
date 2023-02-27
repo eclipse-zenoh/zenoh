@@ -279,11 +279,16 @@ impl TransportUnicastInner {
         }
     }
 
-    pub(super) fn start_rx(&self, link: &LinkUnicast, lease: Duration) -> ZResult<()> {
+    pub(super) fn start_rx(
+        &self,
+        link: &LinkUnicast,
+        lease: Duration,
+        batch_size: u16,
+    ) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, link) {
             Some(l) => {
-                l.start_rx(lease);
+                l.start_rx(lease, batch_size);
                 Ok(())
             }
             None => {

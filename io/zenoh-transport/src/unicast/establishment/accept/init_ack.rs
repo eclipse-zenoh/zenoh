@@ -103,7 +103,7 @@ pub(super) async fn send(
         whatami: input.whatami,
         zid: input.zid,
         resolution,
-        batch_size,
+        tx_batch_size: batch_size,
         nonce,
         is_qos,
         // properties: EstablishmentProperties::new(),

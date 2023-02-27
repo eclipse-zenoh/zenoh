@@ -53,11 +53,11 @@ pub(crate) async fn accept_link(
 
     // Initialize the transport
     let zid = output.cookie.zid;
+    let tx_batch_size = output.cookie.tx_batch_size;
     let input = super::InputInit {
         zid: output.cookie.zid,
         whatami: output.cookie.whatami,
         resolution: output.cookie.resolution,
-        batch_size: output.cookie.batch_size,
         is_qos: output.cookie.is_qos,
     };
     let transport = step!(transport_init(manager, input)
@@ -114,6 +114,7 @@ pub(crate) async fn accept_link(
     let input = InputFinalize {
         transport: transport.clone(),
         lease,
+        tx_batch_size,
     };
     step!(transport_finalize(link, manager, input)
         .await

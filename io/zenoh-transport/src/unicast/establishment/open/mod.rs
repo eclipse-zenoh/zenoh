@@ -65,7 +65,6 @@ pub(crate) async fn open_link(
         zid,
         whatami: output.whatami,
         resolution: output.resolution,
-        batch_size: output.batch_size,
         is_qos: output.is_qos,
     };
     let transport = step!(super::transport_init(manager, input).await);
@@ -94,6 +93,7 @@ pub(crate) async fn open_link(
     .config
     .initial_sn_tx;
 
+    let tx_batch_size = output.batch_size;
     let input = open_syn::Input {
         cookie: output.cookie,
         resolution: output.resolution,
@@ -122,6 +122,7 @@ pub(crate) async fn open_link(
     let output = InputFinalize {
         transport,
         lease: output.lease,
+        tx_batch_size,
     };
     let transport = output.transport.clone();
     let res = transport_finalize(link, manager, output).await;

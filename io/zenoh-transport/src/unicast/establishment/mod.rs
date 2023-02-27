@@ -64,7 +64,6 @@ pub(super) struct InputInit {
     pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) resolution: Resolution,
-    pub(super) batch_size: u16,
     pub(super) is_qos: bool,
 }
 async fn transport_init(
@@ -72,16 +71,16 @@ async fn transport_init(
     input: self::InputInit,
 ) -> ZResult<TransportUnicast> {
     // Initialize the transport if it is new
-    let initial_sn_tx =
+    let tx_initial_sn =
         zasynclock!(manager.prng).gen_range(0..=input.resolution.get(Field::FrameSN).mask());
 
     let config = TransportConfigUnicast {
         peer: input.zid,
         whatami: input.whatami,
         sn_resolution: input.resolution.get(Field::FrameSN).mask(),
-        is_shm: false, // @TODO
+        tx_initial_sn,
         is_qos: input.is_qos,
-        initial_sn_tx,
+        is_shm: false, // @TODO
     };
 
     manager.init_transport_unicast(config)
@@ -90,6 +89,7 @@ async fn transport_init(
 pub(super) struct InputFinalize {
     pub(super) transport: TransportUnicast,
     pub(super) lease: Duration,
+    pub(super) tx_batch_size: u16,
 }
 // Finalize the transport, notify the callback and start the link tasks
 pub(super) async fn transport_finalize(
@@ -102,12 +102,8 @@ pub(super) async fn transport_finalize(
 
     // Start the TX loop
     let keep_alive = manager.config.unicast.lease / manager.config.unicast.keep_alive as u32;
-    transport.start_tx(
-        link,
-        &manager.tx_executor,
-        keep_alive,
-        manager.config.batch_size,
-    )?;
+    let batch_size = manager.config.batch_size.min(input.tx_batch_size);
+    transport.start_tx(link, &manager.tx_executor, keep_alive, batch_size)?;
 
     // Assign a callback if the transport is new
     // Keep the lock to avoid concurrent new_transport and closing/closed notifications
@@ -138,7 +134,7 @@ pub(super) async fn transport_finalize(
     drop(a_guard);
 
     // Start the RX loop
-    transport.start_rx(link, input.lease)?;
+    transport.start_rx(link, input.lease, batch_size)?;
 
     Ok(())
 }

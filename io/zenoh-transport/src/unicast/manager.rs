@@ -405,7 +405,7 @@ impl TransportManager {
                     zid: config.peer,
                     whatami: config.whatami,
                     sn_resolution: config.sn_resolution,
-                    initial_sn_tx: config.initial_sn_tx,
+                    initial_sn_tx: config.tx_initial_sn,
                     is_shm: config.is_shm,
                     is_qos: config.is_qos,
                 };
@@ -420,7 +420,7 @@ impl TransportManager {
                     config.peer,
                     config.whatami,
                     config.sn_resolution,
-                    config.initial_sn_tx,
+                    config.tx_initial_sn,
                     config.is_shm,
                     config.is_qos
                 );
