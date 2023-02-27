@@ -19,7 +19,7 @@ use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
 use crate::key_expr::KeyExprInner;
 #[zenoh_core::unstable]
-use crate::liveliness::{Liveliness, LivelinessTokenBuilder, LivelinessTokenState};
+use crate::liveliness::{Liveliness, LivelinessTokenState};
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
@@ -664,39 +664,6 @@ impl Session {
             };
             Ok(key_expr)
         })
-    }
-
-    /// Create a [`LivelinessToken`](crate::liveliness::LivelinessToken) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression to create the lieliness token on
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let liveliness = session.declare_liveliness("key/expression")
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[zenoh_core::unstable]
-    pub fn declare_liveliness<'a, 'b, TryIntoKeyExpr>(
-        &'a self,
-        key_expr: TryIntoKeyExpr,
-    ) -> LivelinessTokenBuilder<'a, 'b>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_core::Error>,
-    {
-        LivelinessTokenBuilder {
-            session: SessionRef::Borrow(self),
-            key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
-        }
     }
 
     /// Put data.
