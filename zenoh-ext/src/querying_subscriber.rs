@@ -23,48 +23,23 @@ use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::Timestamp;
 use zenoh::Result as ZResult;
+use zenoh::SessionRef;
 use zenoh_core::{zlock, AsyncResolve, Resolvable, SyncResolve};
-
-use crate::session_ext::SessionRef;
 
 /// The builder of QueryingSubscriber, allowing to configure it.
 pub struct QueryingSubscriberBuilder<'a, 'b, Handler> {
-    session: SessionRef<'a>,
-    key_expr: ZResult<KeyExpr<'b>>,
-    reliability: Reliability,
-    origin: Locality,
-    query_selector: Option<ZResult<Selector<'b>>>,
-    query_target: QueryTarget,
-    query_consolidation: QueryConsolidation,
-    query_timeout: Duration,
-    handler: Handler,
+    pub(crate) session: SessionRef<'a>,
+    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
+    pub(crate) reliability: Reliability,
+    pub(crate) origin: Locality,
+    pub(crate) query_selector: Option<ZResult<Selector<'b>>>,
+    pub(crate) query_target: QueryTarget,
+    pub(crate) query_consolidation: QueryConsolidation,
+    pub(crate) query_timeout: Duration,
+    pub(crate) handler: Handler,
 }
 
 impl<'a, 'b> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
-    pub(crate) fn new(
-        session: SessionRef<'a>,
-        key_expr: ZResult<KeyExpr<'b>>,
-    ) -> QueryingSubscriberBuilder<'a, 'b, DefaultHandler> {
-        // By default query all matching publication caches and storages
-        let query_target = QueryTarget::All;
-
-        // By default no query consolidation, to receive more than 1 sample per-resource
-        // (if history of publications is available)
-        let query_consolidation = QueryConsolidation::from(zenoh::query::ConsolidationMode::None);
-
-        QueryingSubscriberBuilder {
-            session,
-            key_expr,
-            reliability: Reliability::default(),
-            origin: Locality::default(),
-            query_selector: None,
-            query_target,
-            query_consolidation,
-            query_timeout: Duration::from_secs(10),
-            handler: DefaultHandler,
-        }
-    }
-
     /// Add callback to QueryingSubscriber.
     #[inline]
     pub fn callback<Callback>(

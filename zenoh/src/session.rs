@@ -259,7 +259,7 @@ impl Resource {
 }
 
 #[derive(Clone)]
-pub(crate) enum SessionRef<'a> {
+pub enum SessionRef<'a> {
     Borrow(&'a Session),
     Shared(Arc<Session>),
 }

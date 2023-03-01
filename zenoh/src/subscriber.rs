@@ -288,13 +288,13 @@ impl From<PushMode> for SubMode {
 #[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
-    pub(crate) session: SessionRef<'a>,
-    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
-    pub(crate) scope: ZResult<Option<KeyExpr<'b>>>,
-    pub(crate) reliability: Reliability,
-    pub(crate) mode: Mode,
-    pub(crate) origin: Locality,
-    pub(crate) handler: Handler,
+    pub session: SessionRef<'a>,
+    pub key_expr: ZResult<KeyExpr<'b>>,
+    pub scope: ZResult<Option<KeyExpr<'b>>>,
+    pub reliability: Reliability,
+    pub mode: Mode,
+    pub origin: Locality,
+    pub handler: Handler,
 }
 
 impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {

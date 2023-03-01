@@ -37,14 +37,16 @@ async fn main() {
     );
     let mut subscriber = if let Some(selector) = query {
         session
-            .declare_querying_subscriber(key_expr)
+            .declare_subscriber(key_expr)
+            .querying()
             .query_selector(&selector)
             .res()
             .await
             .unwrap()
     } else {
         session
-            .declare_querying_subscriber(key_expr)
+            .declare_subscriber(key_expr)
+            .querying()
             .res()
             .await
             .unwrap()
