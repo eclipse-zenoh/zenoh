@@ -78,6 +78,7 @@ pub struct Liveliness<'a> {
     pub(crate) session: SessionRef<'a>,
 }
 
+#[zenoh_core::unstable]
 impl<'a> Liveliness<'a> {
     /// Create a [`LivelinessToken`](LivelinessToken) for the given key expression.
     ///
