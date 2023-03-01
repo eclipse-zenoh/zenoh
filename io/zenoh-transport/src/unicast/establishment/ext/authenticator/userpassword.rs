@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::{
-    AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorTrait,
+    AuthenticatedLink, TransportAuthenticator, TransportAuthenticatorTrait, ZNodeAuthenticatorId,
 };
 use super::{Locator, ZInt, ZenohId};
 use crate::unicast::establishment::Cookie;
@@ -250,9 +250,9 @@ impl UserPasswordAuthenticator {
 }
 
 #[async_trait]
-impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
-    fn id(&self) -> PeerAuthenticatorId {
-        PeerAuthenticatorId::UserPassword
+impl TransportAuthenticatorTrait for UserPasswordAuthenticator {
+    fn id(&self) -> ZNodeAuthenticatorId {
+        ZNodeAuthenticatorId::UserPassword
     }
 
     async fn close(&self) {
@@ -261,8 +261,8 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
     async fn get_init_syn_properties(
         &self,
-        link: &AuthenticatedPeerLink,
-        _peer_id: &ZenohId,
+        link: &AuthenticatedLink,
+        _node_id: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>> {
         // If credentials are not configured, don't initiate the USRPWD authentication
         if self.credentials.is_none() {
@@ -285,7 +285,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
     async fn handle_init_syn(
         &self,
-        link: &AuthenticatedPeerLink,
+        link: &AuthenticatedLink,
         cookie: &Cookie,
         property: Option<Vec<u8>>,
     ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)> {
@@ -325,8 +325,8 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
     async fn handle_init_ack(
         &self,
-        link: &AuthenticatedPeerLink,
-        _peer_id: &ZenohId,
+        link: &AuthenticatedLink,
+        _node_id: &ZenohId,
         _sn_resolution: ZInt,
         property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
@@ -374,7 +374,7 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
     async fn handle_open_syn(
         &self,
-        link: &AuthenticatedPeerLink,
+        link: &AuthenticatedLink,
         cookie: &Cookie,
         property: (Option<Vec<u8>>, Option<Vec<u8>>),
     ) -> ZResult<Option<Vec<u8>>> {
@@ -435,42 +435,42 @@ impl PeerAuthenticatorTrait for UserPasswordAuthenticator {
 
     async fn handle_open_ack(
         &self,
-        _link: &AuthenticatedPeerLink,
+        _link: &AuthenticatedLink,
         _property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
         Ok(None)
     }
 
-    async fn handle_link_err(&self, link: &AuthenticatedPeerLink) {
+    async fn handle_link_err(&self, link: &AuthenticatedLink) {
         // Need to check if it authenticated and remove it if this is the last link
         let mut guard = zasynclock!(self.authenticated);
         let mut to_del: Option<ZenohId> = None;
-        for (peer_id, auth) in guard.iter_mut() {
+        for (node_id, auth) in guard.iter_mut() {
             auth.links.remove(&(link.src.clone(), link.dst.clone()));
             if auth.links.is_empty() {
-                to_del = Some(*peer_id);
+                to_del = Some(*node_id);
                 break;
             }
         }
-        if let Some(peer_id) = to_del.take() {
-            guard.remove(&peer_id);
+        if let Some(node_id) = to_del.take() {
+            guard.remove(&node_id);
         }
     }
 
-    async fn handle_close(&self, peer_id: &ZenohId) {
-        zasynclock!(self.authenticated).remove(peer_id);
+    async fn handle_close(&self, node_id: &ZenohId) {
+        zasynclock!(self.authenticated).remove(node_id);
     }
 }
 
 //noinspection ALL
-impl From<Arc<UserPasswordAuthenticator>> for PeerAuthenticator {
-    fn from(v: Arc<UserPasswordAuthenticator>) -> PeerAuthenticator {
-        PeerAuthenticator(v)
+impl From<Arc<UserPasswordAuthenticator>> for TransportAuthenticator {
+    fn from(v: Arc<UserPasswordAuthenticator>) -> TransportAuthenticator {
+        TransportAuthenticator(v)
     }
 }
 
-impl From<UserPasswordAuthenticator> for PeerAuthenticator {
-    fn from(v: UserPasswordAuthenticator) -> PeerAuthenticator {
+impl From<UserPasswordAuthenticator> for TransportAuthenticator {
+    fn from(v: UserPasswordAuthenticator) -> TransportAuthenticator {
         Self::from(Arc::new(v))
     }
 }

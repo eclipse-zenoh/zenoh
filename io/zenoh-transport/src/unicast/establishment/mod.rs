@@ -13,7 +13,7 @@
 //
 pub(crate) mod accept;
 pub(super) mod cookie;
-pub(super) mod extensions;
+pub(super) mod ext;
 pub(crate) mod open;
 
 use super::super::TransportManager;

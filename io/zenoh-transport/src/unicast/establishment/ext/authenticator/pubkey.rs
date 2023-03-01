@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::{
-    AuthenticatedPeerLink, PeerAuthenticator, PeerAuthenticatorId, PeerAuthenticatorTrait,
+    AuthenticatedLink, TransportAuthenticator, TransportAuthenticatorTrait, ZNodeAuthenticatorId,
 };
 use crate::unicast::establishment::Cookie;
 use async_std::sync::Mutex;
@@ -375,9 +375,9 @@ impl PubKeyAuthenticator {
 }
 
 #[async_trait]
-impl PeerAuthenticatorTrait for PubKeyAuthenticator {
-    fn id(&self) -> PeerAuthenticatorId {
-        PeerAuthenticatorId::PublicKey
+impl TransportAuthenticatorTrait for PubKeyAuthenticator {
+    fn id(&self) -> ZNodeAuthenticatorId {
+        ZNodeAuthenticatorId::PublicKey
     }
 
     async fn close(&self) {
@@ -386,8 +386,8 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
 
     async fn get_init_syn_properties(
         &self,
-        link: &AuthenticatedPeerLink,
-        _peer_id: &ZenohId,
+        link: &AuthenticatedLink,
+        _node_id: &ZenohId,
     ) -> ZResult<Option<Vec<u8>>> {
         let init_syn_property = InitSynProperty {
             version: MULTILINK_VERSION,
@@ -406,7 +406,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
 
     async fn handle_init_syn(
         &self,
-        link: &AuthenticatedPeerLink,
+        link: &AuthenticatedLink,
         cookie: &Cookie,
         property: Option<Vec<u8>>,
     ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)> {
@@ -522,8 +522,8 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
 
     async fn handle_init_ack(
         &self,
-        link: &AuthenticatedPeerLink,
-        _peer_id: &ZenohId,
+        link: &AuthenticatedLink,
+        _node_id: &ZenohId,
         _sn_resolution: ZInt,
         property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
@@ -574,7 +574,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
 
     async fn handle_open_syn(
         &self,
-        link: &AuthenticatedPeerLink,
+        link: &AuthenticatedLink,
         cookie: &Cookie,
         property: (Option<Vec<u8>>, Option<Vec<u8>>),
     ) -> ZResult<Option<Vec<u8>>> {
@@ -654,33 +654,33 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
 
     async fn handle_open_ack(
         &self,
-        _link: &AuthenticatedPeerLink,
+        _link: &AuthenticatedLink,
         _property: Option<Vec<u8>>,
     ) -> ZResult<Option<Vec<u8>>> {
         Ok(None)
     }
 
-    async fn handle_link_err(&self, link: &AuthenticatedPeerLink) {
+    async fn handle_link_err(&self, link: &AuthenticatedLink) {
         // Need to check if it authenticated and remove it if this is the last link
-        if let Some(zid) = link.peer_id.as_ref() {
+        if let Some(zid) = link.node_id.as_ref() {
             zasynclock!(self.state).authenticated.remove(zid);
         }
     }
 
-    async fn handle_close(&self, peer_id: &ZenohId) {
-        zasynclock!(self.state).authenticated.remove(peer_id);
+    async fn handle_close(&self, node_id: &ZenohId) {
+        zasynclock!(self.state).authenticated.remove(node_id);
     }
 }
 
 //noinspection ALL
-impl From<Arc<PubKeyAuthenticator>> for PeerAuthenticator {
-    fn from(v: Arc<PubKeyAuthenticator>) -> PeerAuthenticator {
-        PeerAuthenticator(v)
+impl From<Arc<PubKeyAuthenticator>> for TransportAuthenticator {
+    fn from(v: Arc<PubKeyAuthenticator>) -> TransportAuthenticator {
+        TransportAuthenticator(v)
     }
 }
 
-impl From<PubKeyAuthenticator> for PeerAuthenticator {
-    fn from(v: PubKeyAuthenticator) -> PeerAuthenticator {
+impl From<PubKeyAuthenticator> for TransportAuthenticator {
+    fn from(v: PubKeyAuthenticator) -> TransportAuthenticator {
         Self::from(Arc::new(v))
     }
 }
