@@ -80,7 +80,7 @@ async fn run(endpoints: &[EndPoint]) {
     for _ in 0..RUNS {
         // Create the listeners
         for e in endpoints.iter() {
-            dbg!("Add {e}");
+            println!("Add {e}");
             ztimeout!(sm.add_listener(e.clone())).unwrap();
         }
 
@@ -88,7 +88,7 @@ async fn run(endpoints: &[EndPoint]) {
 
         // Delete the listeners
         for e in endpoints.iter() {
-            dbg!("Del {e}");
+            println!("Del {e}");
             ztimeout!(sm.del_listener(e)).unwrap();
         }
 

@@ -11,9 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{any::TypeId, sync::RwLock};
+use std::any::TypeId;
 use zenoh_buffers::{ZBuf, ZSlice};
-use zenoh_core::{zread, zwrite};
 use zenoh_protocol::zenoh::*;
 use zenoh_result::ZResult;
 use zenoh_shm::{
@@ -53,10 +52,7 @@ macro_rules! set_sliced {
     };
 }
 
-pub fn map_zslice_to_shmbuf(
-    zslice: &mut ZSlice,
-    shmr: &RwLock<SharedMemoryReader>,
-) -> ZResult<bool> {
+pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &mut SharedMemoryReader) -> ZResult<bool> {
     let mut res = false;
 
     let ZSlice { buf, .. } = zslice;
@@ -65,13 +61,9 @@ pub fn map_zslice_to_shmbuf(
         let shmbinfo = SharedMemoryBufInfo::deserialize(buf.as_slice())?;
 
         // First, try in read mode allowing concurrenct lookups
-        let r_guard = zread!(shmr);
-        let smb = r_guard.try_read_shmbuf(&shmbinfo).or_else(|_| {
-            // Next, try in write mode to eventual link the remote shm
-            drop(r_guard);
-            let mut w_guard = zwrite!(shmr);
-            w_guard.read_shmbuf(&shmbinfo)
-        })?;
+        let smb = shmr
+            .try_read_shmbuf(&shmbinfo)
+            .or_else(|_| shmr.read_shmbuf(&shmbinfo))?;
 
         // Replace the content of the slice
         let zs: ZSlice = smb.into();
@@ -82,7 +74,7 @@ pub fn map_zslice_to_shmbuf(
     Ok(res)
 }
 
-pub fn map_zbuf_to_shmbuf(zbuf: &mut ZBuf, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
+pub fn map_zbuf_to_shmbuf(zbuf: &mut ZBuf, shmr: &mut SharedMemoryReader) -> ZResult<bool> {
     let mut res = false;
     for zs in zbuf.zslices_mut() {
         res |= map_zslice_to_shmbuf(zs, shmr)?;
@@ -115,10 +107,7 @@ pub fn map_zbuf_to_shminfo(zbuf: &mut ZBuf) -> ZResult<bool> {
     Ok(res)
 }
 
-pub fn map_zmsg_to_shmbuf(
-    msg: &mut ZenohMessage,
-    shmr: &RwLock<SharedMemoryReader>,
-) -> ZResult<bool> {
+pub fn map_zmsg_to_shmbuf(msg: &mut ZenohMessage, shmr: &mut SharedMemoryReader) -> ZResult<bool> {
     let mut res = false;
 
     if let ZenohBody::Data(Data {

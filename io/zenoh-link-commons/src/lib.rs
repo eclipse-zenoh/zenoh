@@ -149,7 +149,7 @@ pub trait LinkUnicastTrait: Send + Sync {
 }
 
 impl LinkUnicast {
-    pub async fn write_transport_message(&self, msg: &TransportMessage) -> ZResult<usize> {
+    pub async fn send(&self, msg: &TransportMessage) -> ZResult<usize> {
         const ERR: &str = "Write error on link: ";
 
         // Create the buffer for serializing the message
@@ -181,7 +181,7 @@ impl LinkUnicast {
         Ok(buff.len())
     }
 
-    pub async fn read_transport_message(&self) -> ZResult<Vec<TransportMessage>> {
+    pub async fn recv(&self) -> ZResult<TransportMessage> {
         // Read from the link
         let buffer = if self.is_streamed() {
             // Read and decode the message length
@@ -203,15 +203,11 @@ impl LinkUnicast {
         let mut reader = buffer.reader();
         let codec = Zenoh080::new();
 
-        let mut messages: Vec<TransportMessage> = Vec::with_capacity(1);
-        while reader.can_read() {
-            let msg: TransportMessage = codec
-                .read(&mut reader)
-                .map_err(|_| zerror!("Read error on link: {}", self))?;
-            messages.push(msg);
-        }
+        let msg: TransportMessage = codec
+            .read(&mut reader)
+            .map_err(|_| zerror!("Read error on link: {}", self))?;
 
-        Ok(messages)
+        Ok(msg)
     }
 }
 

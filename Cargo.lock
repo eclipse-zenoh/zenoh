@@ -4275,6 +4275,7 @@ dependencies = [
  "ringbuffer-spsc",
  "rsa",
  "serde",
+ "sha3",
  "zenoh-buffers",
  "zenoh-cfg-properties",
  "zenoh-codec",

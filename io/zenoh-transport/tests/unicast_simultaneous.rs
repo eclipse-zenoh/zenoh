@@ -92,11 +92,11 @@ mod tests {
                 reply_context,
             );
 
-            dbg!("[Simultaneous {}] Sending {}...", self.zid, MSG_COUNT);
+            println!("[Simultaneous {}] Sending {}...", self.zid, MSG_COUNT);
             for _ in 0..MSG_COUNT {
                 transport.handle_message(message.clone()).unwrap();
             }
-            dbg!("[Simultaneous {}] ... sent {}", self.zid, MSG_COUNT);
+            println!("[Simultaneous {}] ... sent {}", self.zid, MSG_COUNT);
 
             let mh = Arc::new(MHPeer::new(self.count.clone()));
             Ok(mh)
@@ -157,21 +157,21 @@ mod tests {
         // Add the endpoints on the peer01
         for e in endpoint01.iter() {
             let res = ztimeout!(peer01_manager.add_listener(e.clone()));
-            dbg!("[Simultaneous 01a] => Adding endpoint {e:?}: {res:?}");
+            println!("[Simultaneous 01a] => Adding endpoint {e:?}: {res:?}");
             assert!(res.is_ok());
         }
         let locs = peer01_manager.get_listeners();
-        dbg!("[Simultaneous 01b] => Getting endpoints: {endpoint01:?} {locs:?}");
+        println!("[Simultaneous 01b] => Getting endpoints: {endpoint01:?} {locs:?}");
         assert_eq!(endpoint01.len(), locs.len());
 
         // Add the endpoints on peer02
         for e in endpoint02.iter() {
             let res = ztimeout!(peer02_manager.add_listener(e.clone()));
-            dbg!("[Simultaneous 02a] => Adding endpoint {e:?}: {res:?}");
+            println!("[Simultaneous 02a] => Adding endpoint {e:?}: {res:?}");
             assert!(res.is_ok());
         }
         let locs = peer02_manager.get_listeners();
-        dbg!("[Simultaneous 02b] => Getting endpoints: {endpoint02:?} {locs:?}");
+        println!("[Simultaneous 02b] => Getting endpoints: {endpoint02:?} {locs:?}");
         assert_eq!(endpoint02.len(), locs.len());
 
         // Endpoints
@@ -184,13 +184,13 @@ mod tests {
             // Open the transport with the second peer
             // These open should succeed
             for e in c_ep02.iter() {
-                dbg!("[Simultaneous 01c] => Opening transport with {e:?}...");
+                println!("[Simultaneous 01c] => Opening transport with {e:?}...");
                 let _ = ztimeout!(c_p01m.open_transport(e.clone())).unwrap();
             }
 
             // These open should fails
             for e in c_ep02.iter() {
-                dbg!("[Simultaneous 01d] => Exceeding transport with {e:?}...");
+                println!("[Simultaneous 01d] => Exceeding transport with {e:?}...");
                 let res = ztimeout!(c_p01m.open_transport(e.clone()));
                 assert!(res.is_err());
             }
@@ -201,7 +201,7 @@ mod tests {
                 let mut tp02 = None;
                 while tp02.is_none() {
                     task::sleep(SLEEP).await;
-                    dbg!(
+                    println!(
                         "[Simultaneous 01e] => Transports: {:?}",
                         peer01_manager.get_transports()
                     );
@@ -218,7 +218,7 @@ mod tests {
                 while tl02.len() != expected {
                     task::sleep(SLEEP).await;
                     tl02 = tp02.get_links().unwrap();
-                    dbg!("[Simultaneous 01f] => Links {}/{}", tl02.len(), expected);
+                    println!("[Simultaneous 01f] => Links {}/{}", tl02.len(), expected);
                 }
             });
 
@@ -228,7 +228,7 @@ mod tests {
                 while check != MSG_COUNT {
                     task::sleep(SLEEP).await;
                     check = peer_sh01.get_count();
-                    dbg!("[Simultaneous 01g] => Received {check:?}/{MSG_COUNT:?}");
+                    println!("[Simultaneous 01g] => Received {check:?}/{MSG_COUNT:?}");
                 }
             });
         });
@@ -239,13 +239,13 @@ mod tests {
             // Open the transport with the first peer
             // These open should succeed
             for e in c_ep01.iter() {
-                dbg!("[Simultaneous 02c] => Opening transport with {e:?}...");
+                println!("[Simultaneous 02c] => Opening transport with {e:?}...");
                 let _ = ztimeout!(c_p02m.open_transport(e.clone())).unwrap();
             }
 
             // These open should fails
             for e in c_ep01.iter() {
-                dbg!("[Simultaneous 02d] => Exceeding transport with {e:?}...");
+                println!("[Simultaneous 02d] => Exceeding transport with {e:?}...");
                 let res = ztimeout!(c_p02m.open_transport(e.clone()));
                 assert!(res.is_err());
             }
@@ -257,7 +257,7 @@ mod tests {
                 let mut tp01 = None;
                 while tp01.is_none() {
                     task::sleep(SLEEP).await;
-                    dbg!(
+                    println!(
                         "[Simultaneous 02e] => Transports: {:?}",
                         peer02_manager.get_transports()
                     );
@@ -273,7 +273,7 @@ mod tests {
                 while tl01.len() != expected {
                     task::sleep(SLEEP).await;
                     tl01 = tp01.get_links().unwrap();
-                    dbg!("[Simultaneous 02f] => Links {}/{}", tl01.len(), expected);
+                    println!("[Simultaneous 02f] => Links {}/{}", tl01.len(), expected);
                 }
             });
 
@@ -283,14 +283,14 @@ mod tests {
                 while check != MSG_COUNT {
                     task::sleep(SLEEP).await;
                     check = peer_sh02.get_count();
-                    dbg!("[Simultaneous 02g] => Received {check:?}/{MSG_COUNT:?}");
+                    println!("[Simultaneous 02g] => Received {check:?}/{MSG_COUNT:?}");
                 }
             });
         });
 
-        dbg!("[Simultaneous] => Waiting for peer01 and peer02 tasks...");
+        println!("[Simultaneous] => Waiting for peer01 and peer02 tasks...");
         peer01_task.join(peer02_task).await;
-        dbg!("[Simultaneous] => Waiting for peer01 and peer02 tasks... DONE\n");
+        println!("[Simultaneous] => Waiting for peer01 and peer02 tasks... DONE\n");
 
         // Wait a little bit
         task::sleep(SLEEP).await;

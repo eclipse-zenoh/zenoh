@@ -16,7 +16,7 @@ use super::unicast::manager::{
 };
 use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
-use async_std::sync::Mutex as AsyncMutex;
+use async_std::{sync::Mutex as AsyncMutex, task};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -395,12 +395,12 @@ impl TransportManager {
     }
 
     pub fn get_listeners(&self) -> Vec<EndPoint> {
-        self.get_listeners_unicast()
+        task::block_on(self.get_listeners_unicast())
         // @TODO: multicast
     }
 
     pub fn get_locators(&self) -> Vec<Locator> {
-        self.get_locators_unicast()
+        task::block_on(self.get_locators_unicast())
         // @TODO: multicast
     }
 
@@ -408,12 +408,12 @@ impl TransportManager {
     /*             TRANSPORT             */
     /*************************************/
     pub fn get_transport(&self, peer: &ZenohId) -> Option<TransportUnicast> {
-        self.get_transport_unicast(peer)
+        task::block_on(self.get_transport_unicast(peer))
         // @TODO: multicast
     }
 
     pub fn get_transports(&self) -> Vec<TransportUnicast> {
-        self.get_transports_unicast()
+        task::block_on(self.get_transports_unicast())
         // @TODO: multicast
     }
 

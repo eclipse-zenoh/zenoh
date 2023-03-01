@@ -337,7 +337,7 @@ async fn open_transport(
 
     // Create the listener on the router
     for e in server_endpoints.iter() {
-        dbg!("Add endpoint: {e}");
+        println!("Add endpoint: {}", e);
         let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
     }
 
@@ -353,7 +353,7 @@ async fn open_transport(
     // Create an empty transport with the client
     // Open transport -> This should be accepted
     for e in client_endpoints.iter() {
-        dbg!("Opening transport with {e}");
+        println!("Opening transport with {}", e);
         let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
     }
 
@@ -379,7 +379,7 @@ async fn close_transport(
     for e in endpoints.iter() {
         let _ = write!(ee, "{e} ");
     }
-    dbg!("Closing transport with {ee}");
+    println!("Closing transport with {}", ee);
     ztimeout!(client_transport.close()).unwrap();
 
     ztimeout!(async {
@@ -390,7 +390,7 @@ async fn close_transport(
 
     // Stop the locators on the manager
     for e in endpoints.iter() {
-        dbg!("Del locator: {e}");
+        println!("Del locator: {}", e);
         ztimeout!(router_manager.del_listener(e)).unwrap();
     }
 
@@ -432,7 +432,10 @@ async fn test_transport(
         reply_context,
     );
 
-    dbg!("Sending {MSG_COUNT} messages... {channel:?} {msg_size}");
+    println!(
+        "Sending {} messages... {:?} {}",
+        MSG_COUNT, channel, msg_size
+    );
     for _ in 0..MSG_COUNT {
         client_transport.schedule(message.clone()).unwrap();
     }
@@ -464,12 +467,9 @@ async fn run_single(
     channel: Channel,
     msg_size: usize,
 ) {
-    dbg!(
+    println!(
         "\n>>> Running test for:  {:?}, {:?}, {:?}, {}",
-        client_endpoints,
-        server_endpoints,
-        channel,
-        msg_size
+        client_endpoints, server_endpoints, channel, msg_size
     );
 
     #[allow(unused_variables)] // Used when stats feature is enabled
@@ -487,13 +487,13 @@ async fn run_single(
     #[cfg(feature = "stats")]
     {
         let c_stats = client_transport.get_stats().unwrap();
-        dbg!("\tClient: {c_stats:?}");
+        println!("\tClient: {:?}", c_stats);
         let r_stats = router_manager
             .get_transport_unicast(&client_manager.config.zid)
             .unwrap()
             .get_stats()
             .unwrap();
-        dbg!("\tRouter: {r_stats:?}");
+        println!("\tRouter: {:?}", r_stats);
     }
 
     close_transport(

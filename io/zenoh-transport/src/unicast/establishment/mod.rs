@@ -12,33 +12,88 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub(crate) mod accept;
-pub mod authenticator;
 pub(super) mod cookie;
+pub(super) mod extensions;
 pub(crate) mod open;
-// pub(super) mod properties;
 
 use super::super::TransportManager;
-use super::{TransportConfigUnicast, TransportPeer, TransportUnicast};
-use authenticator::AuthenticatedPeerLink;
+use super::{TransportPeer, TransportUnicast};
+use async_trait::async_trait;
 use cookie::*;
-// use properties::*;
-use rand::Rng;
+use sha3::{
+    digest::{ExtendableOutput, Update, XofReader},
+    Shake128,
+};
 use std::time::Duration;
-use zenoh_core::{zasynclock, zasyncread};
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::{
-    core::{Field, Resolution, WhatAmI, ZenohId},
+    core::{Field, Resolution, ZInt, ZenohId},
     transport::{Close, TransportMessage},
 };
 use zenoh_result::ZResult;
 
-pub(super) async fn close_link(
-    link: &LinkUnicast,
-    manager: &TransportManager,
-    auth_link: &AuthenticatedPeerLink,
-    mut reason: Option<u8>,
-) {
-    if let Some(reason) = reason.take() {
+/*************************************/
+/*             TRAITS                */
+/*************************************/
+#[async_trait]
+pub(crate) trait OpenFsm {
+    type Error;
+
+    type InitSynIn;
+    type InitSynOut;
+    async fn send_init_syn(&self, input: Self::InitSynIn) -> Result<Self::InitSynOut, Self::Error>;
+
+    type InitAckIn;
+    type InitAckOut;
+    async fn recv_init_ack(&self, input: Self::InitAckIn) -> Result<Self::InitAckOut, Self::Error>;
+
+    type OpenSynIn;
+    type OpenSynOut;
+    async fn send_open_syn(&self, input: Self::OpenSynIn) -> Result<Self::OpenSynOut, Self::Error>;
+
+    type OpenAckIn;
+    type OpenAckOut;
+    async fn recv_open_ack(&self, input: Self::OpenAckIn) -> Result<Self::OpenAckOut, Self::Error>;
+}
+
+#[async_trait]
+pub(crate) trait AcceptFsm {
+    type Error;
+
+    type InitSynIn;
+    type InitSynOut;
+    async fn recv_init_syn(&self, input: Self::InitSynIn) -> Result<Self::InitSynOut, Self::Error>;
+
+    type InitAckIn;
+    type InitAckOut;
+    async fn send_init_ack(&self, input: Self::InitAckIn) -> Result<Self::InitAckOut, Self::Error>;
+
+    type OpenSynIn;
+    type OpenSynOut;
+    async fn recv_open_syn(&self, input: Self::OpenSynIn) -> Result<Self::OpenSynOut, Self::Error>;
+
+    type OpenAckIn;
+    type OpenAckOut;
+    async fn send_open_ack(&self, input: Self::OpenAckIn) -> Result<Self::OpenAckOut, Self::Error>;
+}
+
+/*************************************/
+/*           FUNCTIONS               */
+/*************************************/
+pub(super) fn compute_sn(zid1: ZenohId, zid2: ZenohId, resolution: Resolution) -> ZInt {
+    // Create a random yet deterministic initial_sn.
+    // In case of multilink it's important that the same initial_sn is used for every connection attempt.
+    // Instead of storing the state everywhere, we make sure that the we always compute the same initial_sn.
+    let mut hasher = Shake128::default();
+    hasher.update(zid1.as_slice());
+    hasher.update(zid2.as_slice());
+    let mut array = (0 as ZInt).to_le_bytes();
+    hasher.finalize_xof().read(&mut array);
+    ZInt::from_le_bytes(array) & resolution.get(Field::FrameSN).mask()
+}
+
+pub(super) async fn close_link(link: &LinkUnicast, reason: Option<u8>) {
+    if let Some(reason) = reason {
         // Build the close message
         let message: TransportMessage = Close {
             reason,
@@ -46,53 +101,20 @@ pub(super) async fn close_link(
         }
         .into();
         // Send the close message on the link
-        let _ = link.write_transport_message(&message).await;
+        let _ = link.send(&message).await;
     }
 
     // Close the link
     let _ = link.close().await;
-    // Notify the authenticators
-    for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
-        pa.handle_link_err(auth_link).await;
-    }
-}
-
-/*************************************/
-/*            TRANSPORT              */
-/*************************************/
-pub(super) struct InputInit {
-    pub(super) zid: ZenohId,
-    pub(super) whatami: WhatAmI,
-    pub(super) resolution: Resolution,
-    pub(super) is_qos: bool,
-}
-async fn transport_init(
-    manager: &TransportManager,
-    input: self::InputInit,
-) -> ZResult<TransportUnicast> {
-    // Initialize the transport if it is new
-    let tx_initial_sn =
-        zasynclock!(manager.prng).gen_range(0..=input.resolution.get(Field::FrameSN).mask());
-
-    let config = TransportConfigUnicast {
-        peer: input.zid,
-        whatami: input.whatami,
-        sn_resolution: input.resolution.get(Field::FrameSN).mask(),
-        tx_initial_sn,
-        is_qos: input.is_qos,
-        is_shm: false, // @TODO
-    };
-
-    manager.init_transport_unicast(config)
 }
 
 pub(super) struct InputFinalize {
     pub(super) transport: TransportUnicast,
-    pub(super) lease: Duration,
-    pub(super) tx_batch_size: u16,
+    pub(super) other_lease: Duration,
+    pub(super) agreed_batch_size: u16,
 }
 // Finalize the transport, notify the callback and start the link tasks
-pub(super) async fn transport_finalize(
+pub(super) async fn finalize_transport(
     link: &LinkUnicast,
     manager: &TransportManager,
     input: self::InputFinalize,
@@ -102,8 +124,12 @@ pub(super) async fn transport_finalize(
 
     // Start the TX loop
     let keep_alive = manager.config.unicast.lease / manager.config.unicast.keep_alive as u32;
-    let batch_size = manager.config.batch_size.min(input.tx_batch_size);
-    transport.start_tx(link, &manager.tx_executor, keep_alive, batch_size)?;
+    transport.start_tx(
+        link,
+        &manager.tx_executor,
+        keep_alive,
+        input.agreed_batch_size,
+    )?;
 
     // Assign a callback if the transport is new
     // Keep the lock to avoid concurrent new_transport and closing/closed notifications
@@ -134,7 +160,7 @@ pub(super) async fn transport_finalize(
     drop(a_guard);
 
     // Start the RX loop
-    transport.start_rx(link, input.lease, batch_size)?;
+    transport.start_rx(link, input.other_lease, input.agreed_batch_size)?;
 
     Ok(())
 }

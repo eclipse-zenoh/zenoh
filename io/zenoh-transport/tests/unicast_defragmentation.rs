@@ -55,12 +55,12 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
         .unwrap();
 
     // Create the listener on the router
-    dbg!("Add locator: {endpoint}");
+    println!("Add locator: {endpoint}");
     let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
 
     // Create an empty transport with the client
     // Open transport -> This should be accepted
-    dbg!("Opening transport with {endpoint}");
+    println!("Opening transport with {endpoint}");
     let _ = ztimeout!(client_manager.open_transport(endpoint.clone())).unwrap();
 
     let client_transport = client_manager.get_transport(&router_id).unwrap();
@@ -81,7 +81,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
         reply_context,
     );
 
-    dbg!(
+    println!(
         "Sending message of {msg_size} bytes while defragmentation buffer size is {MSG_DEFRAG_BUF} bytes"
     );
     client_transport.schedule(message.clone()).unwrap();
@@ -95,18 +95,18 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 
     // Wait on the router manager that the transport has been closed
     ztimeout!(async {
-        while !router_manager.get_transports_unicast().is_empty() {
+        while !router_manager.get_transports_unicast().await.is_empty() {
             task::sleep(SLEEP).await;
         }
     });
 
     // Stop the locators on the manager
-    dbg!("Del locator: {endpoint}");
+    println!("Del locator: {endpoint}");
     ztimeout!(router_manager.del_listener(endpoint)).unwrap();
 
     // Wait a little bit
     ztimeout!(async {
-        while !router_manager.get_listeners().is_empty() {
+        while !router_manager.get_listeners_unicast().await.is_empty() {
             task::sleep(SLEEP).await;
         }
     });
