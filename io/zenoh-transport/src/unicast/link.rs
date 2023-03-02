@@ -79,8 +79,8 @@ impl TransportLinkUnicast {
             let config = TransmissionPipelineConf {
                 is_streamed: self.link.is_streamed(),
                 batch_size: batch_size.min(self.link.get_mtu()),
-                queue_size: self.transport.config.manager.config.queue_size,
-                backoff: self.transport.config.manager.config.queue_backoff,
+                queue_size: self.transport.manager.config.queue_size,
+                backoff: self.transport.manager.config.queue_backoff,
             };
             // The pipeline
             let (producer, consumer) = TransmissionPipeline::make(config, conduit_tx);
@@ -121,7 +121,7 @@ impl TransportLinkUnicast {
             let c_link = self.link.clone();
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
-            let c_rx_buffer_size = self.transport.config.manager.config.link_rx_buffer_size;
+            let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
 
             let handle = task::spawn(async move {
                 // Start the consume task

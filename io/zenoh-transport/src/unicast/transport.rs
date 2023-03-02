@@ -1,3 +1,5 @@
+use crate::TransportConfigUnicast;
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -50,20 +52,11 @@ macro_rules! zlinkindex {
 /*             TRANSPORT             */
 /*************************************/
 #[derive(Clone)]
-pub(crate) struct TransportUnicastConfig {
-    pub(crate) manager: TransportManager,
-    pub(crate) zid: ZenohId,
-    pub(crate) whatami: WhatAmI,
-    pub(crate) sn_resolution: ZInt,
-    pub(crate) initial_sn_tx: ZInt,
-    pub(crate) is_shm: bool,
-    pub(crate) is_qos: bool,
-}
-
-#[derive(Clone)]
 pub(crate) struct TransportUnicastInner {
+    // Transport Manager
+    pub(crate) manager: TransportManager,
     // Transport config
-    pub(super) config: TransportUnicastConfig,
+    pub(super) config: TransportConfigUnicast,
     // Tx conduits
     pub(super) conduit_tx: Arc<[TransportConduitTx]>,
     // Rx conduits
@@ -80,7 +73,10 @@ pub(crate) struct TransportUnicastInner {
 }
 
 impl TransportUnicastInner {
-    pub(super) fn make(config: TransportUnicastConfig) -> ZResult<TransportUnicastInner> {
+    pub(super) fn make(
+        manager: TransportManager,
+        config: TransportConfigUnicast,
+    ) -> ZResult<TransportUnicastInner> {
         let mut conduit_tx = vec![];
         let mut conduit_rx = vec![];
 
@@ -92,19 +88,20 @@ impl TransportUnicastInner {
         for _ in 0..Priority::NUM {
             conduit_rx.push(TransportConduitRx::make(
                 config.sn_resolution,
-                config.manager.config.defrag_buff_size,
+                manager.config.defrag_buff_size,
             )?);
         }
 
         let initial_sn = ConduitSn {
-            reliable: config.initial_sn_tx,
-            best_effort: config.initial_sn_tx,
+            reliable: config.tx_initial_sn,
+            best_effort: config.tx_initial_sn,
         };
         for c in conduit_tx.iter() {
             c.sync(initial_sn)?;
         }
 
         let t = TransportUnicastInner {
+            manager,
             config,
             conduit_tx: conduit_tx.into_boxed_slice().into(),
             conduit_rx: conduit_rx.into_boxed_slice().into(),
@@ -159,7 +156,7 @@ impl TransportUnicastInner {
     pub(super) async fn delete(&self) -> ZResult<()> {
         log::debug!(
             "[{}] Closing transport with peer: {}",
-            self.config.manager.config.zid,
+            self.manager.config.zid,
             self.config.zid
         );
         // Mark the transport as no longer alive and keep the lock
@@ -174,11 +171,7 @@ impl TransportUnicastInner {
         }
 
         // Delete the transport on the manager
-        let _ = self
-            .config
-            .manager
-            .del_transport_unicast(&self.config.zid)
-            .await;
+        let _ = self.manager.del_transport_unicast(&self.config.zid).await;
 
         // Close all the links
         let mut links = {
@@ -213,7 +206,7 @@ impl TransportUnicastInner {
         // Check if we can add more inbound links
         if let LinkUnicastDirection::Inbound = direction {
             let count = guard.iter().filter(|l| l.direction == direction).count();
-            let limit = self.config.manager.config.unicast.max_links;
+            let limit = self.manager.config.unicast.max_links;
 
             if count >= limit {
                 let e = zerror!(

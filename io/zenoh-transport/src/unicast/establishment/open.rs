@@ -349,7 +349,7 @@ pub(crate) async fn open_link(
 
     // Initialize the transport
     let config = TransportConfigUnicast {
-        peer: iack_out.other_zid,
+        zid: iack_out.other_zid,
         whatami: iack_out.other_whatami,
         sn_resolution: state.zenoh.resolution.get(Field::FrameSN).mask(),
         tx_initial_sn: osyn_out.mine_initial_sn,

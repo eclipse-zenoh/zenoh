@@ -80,9 +80,9 @@ stats_struct! {
 /*************************************/
 /*        TRANSPORT UNICAST          */
 /*************************************/
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct TransportConfigUnicast {
-    pub(crate) peer: ZenohId,
+    pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
     pub(crate) tx_initial_sn: ZInt,

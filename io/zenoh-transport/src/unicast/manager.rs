@@ -14,10 +14,7 @@
 #[cfg(feature = "shared-memory")]
 use crate::unicast::shm::SharedMemoryUnicast;
 use crate::{
-    unicast::{
-        transport::{TransportUnicastConfig, TransportUnicastInner},
-        TransportConfigUnicast, TransportUnicast,
-    },
+    unicast::{transport::TransportUnicastInner, TransportConfigUnicast, TransportUnicast},
     TransportManager,
 };
 use async_std::prelude::FutureExt;
@@ -350,48 +347,16 @@ impl TransportManager {
         let mut guard = zasynclock!(self.state.unicast.transports);
 
         // First verify if the transport already exists
-        match guard.get(&config.peer) {
+        match guard.get(&config.zid) {
             Some(transport) => {
                 // If it exists, verify that fundamental parameters like are correct.
                 // Ignore the non fundamental parameters like initial SN.
-                if transport.config.whatami != config.whatami {
+                if transport.config != config {
                     let e = zerror!(
-                        "Transport with peer {} already exist. Invalid whatami: {}. Expected: {}.",
-                        config.peer,
-                        config.whatami,
-                        transport.config.whatami
-                    );
-                    log::trace!("{}", e);
-                    return Err(e.into());
-                }
-
-                if transport.config.sn_resolution != config.sn_resolution {
-                    let e = zerror!(
-                    "Transport with peer {} already exist. Invalid sn resolution: {}. Expected: {}.",
-                    config.peer, config.sn_resolution, transport.config.sn_resolution
-                );
-                    log::trace!("{}", e);
-                    return Err(e.into());
-                }
-
-                #[cfg(feature = "shared-memory")]
-                if transport.config.is_shm != config.is_shm {
-                    let e = zerror!(
-                        "Transport with peer {} already exist. Invalid is_shm: {}. Expected: {}.",
-                        config.peer,
-                        config.is_shm,
-                        transport.config.is_shm
-                    );
-                    log::trace!("{}", e);
-                    return Err(e.into());
-                }
-
-                if transport.config.is_qos != config.is_qos {
-                    let e = zerror!(
-                        "Transport with peer {} already exist. Invalid is_qos: {}. Expected: {}.",
-                        config.peer,
-                        config.is_qos,
-                        transport.config.is_qos
+                        "Transport with peer {} already exist. Invalid config: {:?}. Expected: {:?}.",
+                        config.zid,
+                        config,
+                        transport.config
                     );
                     log::trace!("{}", e);
                     return Err(e.into());
@@ -405,31 +370,30 @@ impl TransportManager {
                     let e = zerror!(
                         "Max transports reached ({}). Denying new transport with peer: {}",
                         self.config.unicast.max_sessions,
-                        config.peer
+                        config.zid
                     );
                     log::trace!("{}", e);
                     return Err(e.into());
                 }
 
                 // Create the transport
-                let stc = TransportUnicastConfig {
-                    manager: self.clone(),
-                    zid: config.peer,
+                let stc = TransportConfigUnicast {
+                    zid: config.zid,
                     whatami: config.whatami,
                     sn_resolution: config.sn_resolution,
-                    initial_sn_tx: config.tx_initial_sn,
+                    tx_initial_sn: config.tx_initial_sn,
                     is_shm: config.is_shm,
                     is_qos: config.is_qos,
                 };
-                let a_t = Arc::new(TransportUnicastInner::make(stc)?);
+                let a_t = Arc::new(TransportUnicastInner::make(self.clone(), stc)?);
 
                 // Add the transport transport to the list of active transports
                 let transport: TransportUnicast = (&a_t).into();
-                guard.insert(config.peer, a_t);
+                guard.insert(config.zid, a_t);
 
                 log::debug!(
                     "New transport opened with {}: whatami {}, sn resolution {}, initial sn {:?}, shm: {}, qos: {}",
-                    config.peer,
+                    config.zid,
                     config.whatami,
                     config.sn_resolution,
                     config.tx_initial_sn,

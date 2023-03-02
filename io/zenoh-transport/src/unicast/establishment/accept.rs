@@ -425,7 +425,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
 
     // Initialize the transport
     let config = TransportConfigUnicast {
-        peer: osyn_out.other_zid,
+        zid: osyn_out.other_zid,
         whatami: osyn_out.other_whatami,
         sn_resolution: state.zenoh.resolution.get(Field::FrameSN).mask(),
         tx_initial_sn: oack_out.mine_initial_sn,
