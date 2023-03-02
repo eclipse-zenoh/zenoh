@@ -27,36 +27,29 @@ use zenoh_result::ZResult;
 
 type OpenError = (zenoh_result::Error, Option<u8>);
 
+struct StateZenoh {
+    batch_size: u16,
+    resolution: Resolution,
+}
+
+struct State {
+    zenoh: StateZenoh,
+    ext_qos: ext::qos::State,
+}
+
 // InitSyn
 struct SendInitSynIn {
     mine_version: u8,
     mine_zid: ZenohId,
     mine_whatami: WhatAmI,
-    mine_resolution: Resolution,
-    mine_batch_size: u16,
-    ext_qos: ext::qos::State,
-}
-
-struct SendInitSynOut {
-    mine_batch_size: u16,
-    mine_resolution: Resolution,
-    ext_qos: ext::qos::State,
 }
 
 // InitAck
-struct RecvInitAckIn {
-    mine_batch_size: u16,
-    mine_resolution: Resolution,
-    ext_qos: ext::qos::State,
-}
 
 struct RecvInitAckOut {
     other_zid: ZenohId,
     other_whatami: WhatAmI,
     other_cookie: ZSlice,
-    agreed_resolution: Resolution,
-    agreed_batch_size: u16,
-    ext_qos: ext::qos::State,
 }
 
 // OpenSyn
@@ -65,24 +58,16 @@ struct SendOpenSynIn {
     mine_lease: Duration,
     other_zid: ZenohId,
     other_cookie: ZSlice,
-    agreed_resolution: Resolution,
-    ext_qos: ext::qos::State,
 }
 
 struct SendOpenSynOut {
     mine_initial_sn: ZInt,
-    ext_qos: ext::qos::State,
 }
 
 // OpenAck
-struct RecvOpenAckIn {
-    ext_qos: ext::qos::State,
-}
-
 struct RecvOpenAckOut {
     other_lease: Duration,
     other_initial_sn: ZInt,
-    ext_qos: ext::qos::State,
 }
 
 // FSM
@@ -92,16 +77,21 @@ struct OpenLink<'a> {
 }
 
 #[async_trait]
-impl<'a> OpenFsm for OpenLink<'a> {
+impl<'a> OpenFsm<'a> for OpenLink<'a> {
     type Error = OpenError;
 
-    type InitSynIn = SendInitSynIn;
-    type InitSynOut = SendInitSynOut;
-    async fn send_init_syn(&self, input: Self::InitSynIn) -> Result<Self::InitSynOut, Self::Error> {
+    type InitSynIn = (&'a mut State, SendInitSynIn);
+    type InitSynOut = ();
+    async fn send_init_syn(
+        &'a self,
+        input: Self::InitSynIn,
+    ) -> Result<Self::InitSynOut, Self::Error> {
+        let (state, input) = input;
+
         // Extension QoS
-        let (qos_state, qos_mine_ext) = self
+        let qos_mine_ext = self
             .ext_qos
-            .send_init_syn(input.ext_qos)
+            .send_init_syn(&state.ext_qos)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -109,8 +99,8 @@ impl<'a> OpenFsm for OpenLink<'a> {
             version: input.mine_version,
             whatami: input.mine_whatami,
             zid: input.mine_zid,
-            batch_size: input.mine_batch_size,
-            resolution: input.mine_resolution,
+            batch_size: state.zenoh.batch_size,
+            resolution: state.zenoh.resolution,
             qos: qos_mine_ext,
             shm: None,  // @TODO
             auth: None, // @TODO
@@ -123,18 +113,15 @@ impl<'a> OpenFsm for OpenLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
-        let output = SendInitSynOut {
-            mine_batch_size: input.mine_batch_size,
-            mine_resolution: input.mine_resolution,
-            ext_qos: qos_state,
-        };
-
-        Ok(output)
+        Ok(())
     }
 
-    type InitAckIn = RecvInitAckIn;
+    type InitAckIn = &'a mut State;
     type InitAckOut = RecvInitAckOut;
-    async fn recv_init_ack(&self, input: Self::InitAckIn) -> Result<Self::InitAckOut, Self::Error> {
+    async fn recv_init_ack(
+        &'a self,
+        state: Self::InitAckIn,
+    ) -> Result<Self::InitAckOut, Self::Error> {
         let msg = self
             .link
             .recv()
@@ -167,12 +154,12 @@ impl<'a> OpenFsm for OpenLink<'a> {
         };
 
         // Compute the minimum SN resolution
-        let agreed_resolution = {
+        state.zenoh.resolution = {
             let mut res = Resolution::default();
 
             // Frame SN
             let i_fsn_res = init_ack.resolution.get(Field::FrameSN);
-            let m_fsn_res = input.mine_resolution.get(Field::FrameSN);
+            let m_fsn_res = state.zenoh.resolution.get(Field::FrameSN);
 
             if i_fsn_res > m_fsn_res {
                 let e = zerror!(
@@ -188,7 +175,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
 
             // Request ID
             let i_rid_res = init_ack.resolution.get(Field::RequestID);
-            let m_rid_res = input.mine_resolution.get(Field::RequestID);
+            let m_rid_res = state.zenoh.resolution.get(Field::RequestID);
 
             if i_rid_res > m_rid_res {
                 let e = zerror!(
@@ -206,12 +193,11 @@ impl<'a> OpenFsm for OpenLink<'a> {
         };
 
         // Compute the minimum batch size
-        let agreed_batch_size = input.mine_batch_size.min(init_ack.batch_size);
+        state.zenoh.batch_size = state.zenoh.batch_size.min(init_ack.batch_size);
 
         // Extension QoS
-        let qos_state = self
-            .ext_qos
-            .recv_init_ack((input.ext_qos, init_ack.qos))
+        self.ext_qos
+            .recv_init_ack((&mut state.ext_qos, init_ack.qos))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -219,25 +205,26 @@ impl<'a> OpenFsm for OpenLink<'a> {
             other_zid: init_ack.zid,
             other_whatami: init_ack.whatami,
             other_cookie: init_ack.cookie,
-            agreed_resolution,
-            agreed_batch_size,
-            ext_qos: qos_state,
         };
         Ok(output)
     }
 
-    type OpenSynIn = SendOpenSynIn;
+    type OpenSynIn = (&'a mut State, SendOpenSynIn);
     type OpenSynOut = SendOpenSynOut;
-    async fn send_open_syn(&self, input: Self::OpenSynIn) -> Result<Self::OpenSynOut, Self::Error> {
+    async fn send_open_syn(
+        &'a self,
+        input: Self::OpenSynIn,
+    ) -> Result<Self::OpenSynOut, Self::Error> {
+        let (state, input) = input;
+
         // Extension QoS
-        let ext_qos = self
-            .ext_qos
-            .send_open_syn(input.ext_qos)
+        self.ext_qos
+            .send_open_syn(&state.ext_qos)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Build and send an OpenSyn message
-        let mine_initial_sn = compute_sn(input.mine_zid, input.other_zid, input.agreed_resolution);
+        let mine_initial_sn = compute_sn(input.mine_zid, input.other_zid, state.zenoh.resolution);
         let message: TransportMessage = OpenSyn {
             lease: input.mine_lease,
             initial_sn: mine_initial_sn,
@@ -253,16 +240,16 @@ impl<'a> OpenFsm for OpenLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
-        let output = SendOpenSynOut {
-            mine_initial_sn,
-            ext_qos,
-        };
+        let output = SendOpenSynOut { mine_initial_sn };
         Ok(output)
     }
 
-    type OpenAckIn = RecvOpenAckIn;
+    type OpenAckIn = &'a mut State;
     type OpenAckOut = RecvOpenAckOut;
-    async fn recv_open_ack(&self, input: Self::OpenAckIn) -> Result<Self::OpenAckOut, Self::Error> {
+    async fn recv_open_ack(
+        &'a self,
+        state: Self::OpenAckIn,
+    ) -> Result<Self::OpenAckOut, Self::Error> {
         let msg = self
             .link
             .recv()
@@ -295,16 +282,14 @@ impl<'a> OpenFsm for OpenLink<'a> {
         };
 
         // Extension QoS
-        let ext_qos = self
-            .ext_qos
-            .recv_open_ack(input.ext_qos)
+        self.ext_qos
+            .recv_open_ack(&mut state.ext_qos)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         let output = RecvOpenAckOut {
             other_initial_sn: open_ack.initial_sn,
             other_lease: open_ack.lease,
-            ext_qos,
         };
         Ok(output)
     }
@@ -332,48 +317,43 @@ pub(crate) async fn open_link(
         };
     }
 
-    let isyn_in = SendInitSynIn {
-        mine_version: manager.config.version,
-        mine_zid: manager.config.zid,
-        mine_whatami: manager.config.whatami,
-        mine_resolution: manager.config.resolution,
-        mine_batch_size: manager.config.batch_size,
+    let mut state = State {
+        zenoh: StateZenoh {
+            batch_size: manager.config.batch_size,
+            resolution: manager.config.resolution,
+        },
         ext_qos: ext::qos::State {
             is_qos: manager.config.unicast.is_qos,
         },
     };
-    let isyn_out = step!(fsm.send_init_syn(isyn_in).await);
 
-    let iack_in = RecvInitAckIn {
-        mine_resolution: isyn_out.mine_resolution,
-        mine_batch_size: isyn_out.mine_batch_size,
-        ext_qos: isyn_out.ext_qos,
+    let isyn_in = SendInitSynIn {
+        mine_version: manager.config.version,
+        mine_zid: manager.config.zid,
+        mine_whatami: manager.config.whatami,
     };
-    let iack_out = step!(fsm.recv_init_ack(iack_in).await);
+    step!(fsm.send_init_syn((&mut state, isyn_in)).await);
+
+    let iack_out = step!(fsm.recv_init_ack(&mut state).await);
 
     // Open handshake
     let osyn_in = SendOpenSynIn {
         mine_zid: manager.config.zid,
         other_zid: iack_out.other_zid,
         mine_lease: manager.config.unicast.lease,
-        agreed_resolution: iack_out.agreed_resolution,
         other_cookie: iack_out.other_cookie,
-        ext_qos: iack_out.ext_qos,
     };
-    let osyn_out = step!(fsm.send_open_syn(osyn_in).await);
+    let osyn_out = step!(fsm.send_open_syn((&mut state, osyn_in)).await);
 
-    let oack_in = RecvOpenAckIn {
-        ext_qos: osyn_out.ext_qos,
-    };
-    let oack_out = step!(fsm.recv_open_ack(oack_in).await);
+    let oack_out = step!(fsm.recv_open_ack(&mut state).await);
 
     // Initialize the transport
     let config = TransportConfigUnicast {
         peer: iack_out.other_zid,
         whatami: iack_out.other_whatami,
-        sn_resolution: iack_out.agreed_resolution.get(Field::FrameSN).mask(),
+        sn_resolution: state.zenoh.resolution.get(Field::FrameSN).mask(),
         tx_initial_sn: osyn_out.mine_initial_sn,
-        is_qos: oack_out.ext_qos.is_qos,
+        is_qos: state.ext_qos.is_qos,
         is_shm: false, // @TODO
     };
     let transport = step!(manager
@@ -399,7 +379,7 @@ pub(crate) async fn open_link(
     let output = InputFinalize {
         transport,
         other_lease: oack_out.other_lease,
-        agreed_batch_size: iack_out.agreed_batch_size,
+        agreed_batch_size: state.zenoh.batch_size,
     };
     let transport = output.transport.clone();
     let res = finalize_transport(link, manager, output).await;

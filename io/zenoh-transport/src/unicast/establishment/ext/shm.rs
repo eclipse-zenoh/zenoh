@@ -39,76 +39,76 @@ use zenoh_shm::{
 pub(crate) struct Shm<'a> {
     inner: &'a SharedMemoryUnicast,
 }
-/*************************************/
-/*             InitSyn               */
-/*************************************/
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |X 1 0|   EXT   |
-/// +-+-+-+---------+
-/// |    version    |
-/// +---------------+
-/// ~ ShmMemBufInfo ~
-/// +---------------+
-pub(crate) struct InitSyn {
-    pub(crate) version: u8,
-    pub(crate) info: ZSlice,
-}
+// /*************************************/
+// /*             InitSyn               */
+// /*************************************/
+// ///  7 6 5 4 3 2 1 0
+// /// +-+-+-+-+-+-+-+-+
+// /// |X 1 0|   EXT   |
+// /// +-+-+-+---------+
+// /// |    version    |
+// /// +---------------+
+// /// ~ ShmMemBufInfo ~
+// /// +---------------+
+// pub(crate) struct InitSyn {
+//     pub(crate) version: u8,
+//     pub(crate) info: ZSlice,
+// }
 
-// Codec
-impl<W> WCodec<&InitSyn, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
+// // Codec
+// impl<W> WCodec<&InitSyn, &mut W> for Zenoh080
+// where
+//     W: Writer,
+// {
+//     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &InitSyn) -> Self::Output {
-        self.write(&mut *writer, x.version)?;
-        self.write(&mut *writer, &x.shm)?;
-        Ok(())
-    }
-}
+//     fn write(self, writer: &mut W, x: &InitSyn) -> Self::Output {
+//         self.write(&mut *writer, x.version)?;
+//         self.write(&mut *writer, &x.info)?;
+//         Ok(())
+//     }
+// }
 
-impl<R> RCodec<InitSyn, &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
+// impl<R> RCodec<InitSyn, &mut R> for Zenoh080
+// where
+//     R: Reader,
+// {
+//     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<InitSyn, Self::Error> {
-        let version: ZInt = self.read(&mut *reader)?;
-        let info: ZSlice = self.read(&mut *reader)?;
-        Ok(InitSyn { version, info })
-    }
-}
+//     fn read(self, reader: &mut R) -> Result<InitSyn, Self::Error> {
+//         let version: ZInt = self.read(&mut *reader)?;
+//         let info: ZSlice = self.read(&mut *reader)?;
+//         Ok(InitSyn { version, info })
+//     }
+// }
 
 // Open
-pub(crate) struct InitSynOpenState {
-    buffer: SharedMemoryBuf,
-}
+// pub(crate) struct InitSynOpenState {
+//     buffer: SharedMemoryBuf,
+// }
 
-impl InitSyn {
-    pub(crate) fn send(shm: &SharedMemoryUnicast) -> ZResult<(init::ext::Shm, InitSynOpenState)> {
-        let init_syn_property = InitSyn {
-            version: shm::VERSION,
-            info: shm
-                .buffer
-                .info
-                .serialize()
-                .map_err(|e| zerror!("{e}"))?
-                .into(),
-        };
-        let mut buff = vec![];
-        let codec = Zenoh080::new();
+// impl InitSyn {
+//     pub(crate) fn send(shm: &SharedMemoryUnicast) -> ZResult<(init::ext::Shm, InitSynOpenState)> {
+//         let init_syn_property = InitSyn {
+//             version: shm::VERSION,
+//             info: shm
+//                 .buffer
+//                 .info
+//                 .serialize()
+//                 .map_err(|e| zerror!("{e}"))?
+//                 .into(),
+//         };
+//         let mut buff = vec![];
+//         let codec = Zenoh080::new();
 
-        let mut writer = buff.writer();
-        codec
-            .write(&mut writer, &init_syn_property)
-            .map_err(|_| zerror!("Error in encoding InitSyn SHM extension"))?;
+//         let mut writer = buff.writer();
+//         codec
+//             .write(&mut writer, &init_syn_property)
+//             .map_err(|_| zerror!("Error in encoding InitSyn SHM extension"))?;
 
-        Ok(Some(buff))
-    }
-}
+//         Ok(Some(buff))
+//     }
+// }
 
 // pub(crate) struct InitSynAcceptInput {
 //     link: &AuthenticatedLink,
@@ -185,114 +185,114 @@ impl InitSyn {
 /*************************************/
 /*             InitAck               */
 /*************************************/
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |0 0 0|  ATTCH  |
-/// +-+-+-+---------+
-/// ~   challenge   ~
-/// +---------------+
-/// ~ ShmMemBufInfo ~
-/// +---------------+
-struct InitAck {
-    challenge: ZInt,
-    info: ZSlice,
-}
+// ///  7 6 5 4 3 2 1 0
+// /// +-+-+-+-+-+-+-+-+
+// /// |0 0 0|  ATTCH  |
+// /// +-+-+-+---------+
+// /// ~   challenge   ~
+// /// +---------------+
+// /// ~ ShmMemBufInfo ~
+// /// +---------------+
+// struct InitAck {
+//     challenge: ZInt,
+//     info: ZSlice,
+// }
 
-impl<W> WCodec<&InitAck, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
+// impl<W> WCodec<&InitAck, &mut W> for Zenoh080
+// where
+//     W: Writer,
+// {
+//     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &InitAck) -> Self::Output {
-        self.write(&mut *writer, x.challenge)?;
-        self.write(&mut *writer, &x.shm)?;
-        Ok(())
-    }
-}
+//     fn write(self, writer: &mut W, x: &InitAck) -> Self::Output {
+//         self.write(&mut *writer, x.challenge)?;
+//         self.write(&mut *writer, &x.shm)?;
+//         Ok(())
+//     }
+// }
 
-impl<R> RCodec<InitAck, &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
+// impl<R> RCodec<InitAck, &mut R> for Zenoh080
+// where
+//     R: Reader,
+// {
+//     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<InitAck, Self::Error> {
-        let challenge: ZInt = self.read(&mut *reader)?;
-        let info: ZSlice = self.read(&mut *reader)?;
-        Ok(InitAck { challenge, info })
-    }
-}
+//     fn read(self, reader: &mut R) -> Result<InitAck, Self::Error> {
+//         let challenge: ZInt = self.read(&mut *reader)?;
+//         let info: ZSlice = self.read(&mut *reader)?;
+//         Ok(InitAck { challenge, info })
+//     }
+// }
 
-// Open
-pub(crate) struct InitAckOpenState {
-    buffer: SharedMemoryBuf,
-}
+// // Open
+// pub(crate) struct InitAckOpenState {
+//     buffer: SharedMemoryBuf,
+// }
 
-impl InitAck {
-    pub(crate) fn recv(
-        ext: &init::ext::Shm,
-        shm: &SharedMemoryUnicast,
-    ) -> ZResult<(init::ext::Shm, InitAckOpenState)> {
-        // let info = SharedMemoryBufInfo::deserialize(ext.value.as_slice())?;
+// impl InitAck {
+//     pub(crate) fn recv(
+//         ext: &init::ext::Shm,
+//         shm: &SharedMemoryUnicast,
+//     ) -> ZResult<(init::ext::Shm, InitAckOpenState)> {
+// let info = SharedMemoryBufInfo::deserialize(ext.value.as_slice())?;
 
-        // // Try to read from the shared memory
-        // let mut zslice = ext.value.clone();
-        // match crate::shm::map_zslice_to_shmbuf(&mut zslice, reader) {
-        //     Ok(false) => {
-        //         log::debug!("Zenoh node can not operate over SHM: not an SHM buffer");
-        //         return Ok((None, None));
-        //     }
-        //     Err(e) => {
-        //         log::debug!("Zenoh node can not operate over SHM: {}", e);
-        //         return Ok((None, None));
-        //     }
-        //     Ok(true) => {
-        //         // Payload is SHM: continue.
-        //     }
-        // }
+// // Try to read from the shared memory
+// let mut zslice = ext.value.clone();
+// match crate::shm::map_zslice_to_shmbuf(&mut zslice, reader) {
+//     Ok(false) => {
+//         log::debug!("Zenoh node can not operate over SHM: not an SHM buffer");
+//         return Ok((None, None));
+//     }
+//     Err(e) => {
+//         log::debug!("Zenoh node can not operate over SHM: {}", e);
+//         return Ok((None, None));
+//     }
+//     Ok(true) => {
+//         // Payload is SHM: continue.
+//     }
+// }
 
-        // match crate::shm::map_zslice_to_shmbuf(&mut ext, &shm.reader) {
-        //     Ok(res) => {
-        //         if !res {
-        //             return Err(ShmError(zerror!("No SHM on link: {}", link)).into());
-        //         }
-        //     }
-        //     Err(e) => return Err(ShmError(zerror!("No SHM on link {}: {}", link, e)).into()),
-        // }
+// match crate::shm::map_zslice_to_shmbuf(&mut ext, &shm.reader) {
+//     Ok(res) => {
+//         if !res {
+//             return Err(ShmError(zerror!("No SHM on link: {}", link)).into());
+//         }
+//     }
+//     Err(e) => return Err(ShmError(zerror!("No SHM on link {}: {}", link, e)).into()),
+// }
 
-        // let bytes: [u8; std::mem::size_of::<shm::Nonce>()] =
-        //     init_ack_property.shm.as_slice().try_into().map_err(|e| {
-        //         zerror!(
-        //             "Received InitAck with invalid attachment on link {}: {}",
-        //             link,
-        //             e
-        //         )
-        //     })?;
-        // let challenge = ZInt::from_le_bytes(bytes);
+// let bytes: [u8; std::mem::size_of::<shm::Nonce>()] =
+//     init_ack_property.shm.as_slice().try_into().map_err(|e| {
+//         zerror!(
+//             "Received InitAck with invalid attachment on link {}: {}",
+//             link,
+//             e
+//         )
+//     })?;
+// let challenge = ZInt::from_le_bytes(bytes);
 
-        // let challenge = ();
-        // let init_syn_property = InitAck {
-        //     version: shm::VERSION,
-        //     info: shm
-        //         .buffer
-        //         .info
-        //         .serialize()
-        //         .map_err(|e| zerror!("{e}"))?
-        //         .into(),
-        // };
-        // let mut buff = vec![];
-        // let codec = Zenoh080::new();
+// let challenge = ();
+// let init_syn_property = InitAck {
+//     version: shm::VERSION,
+//     info: shm
+//         .buffer
+//         .info
+//         .serialize()
+//         .map_err(|e| zerror!("{e}"))?
+//         .into(),
+// };
+// let mut buff = vec![];
+// let codec = Zenoh080::new();
 
-        // let mut writer = buff.writer();
-        // codec
-        //     .write(&mut writer, &init_syn_property)
-        //     .map_err(|_| zerror!("Error in encoding InitSyn SHM extension"))?;
+// let mut writer = buff.writer();
+// codec
+//     .write(&mut writer, &init_syn_property)
+//     .map_err(|_| zerror!("Error in encoding InitSyn SHM extension"))?;
 
-        // Ok(Some(buff))
-        panic!()
-    }
-}
+// Ok(Some(buff))
+//         panic!()
+//     }
+// }
 
 // /*************************************/
 // /*             OpenSyn               */

@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::unicast::{
+    shm::SharedMemoryUnicast,
     transport::{TransportUnicastConfig, TransportUnicastInner},
     TransportConfigUnicast, TransportUnicast,
 };
@@ -56,6 +57,9 @@ pub struct TransportManagerStateUnicast {
     pub(super) protocols: Arc<Mutex<HashMap<String, LinkManagerUnicast>>>,
     // Established transports
     pub(super) transports: Arc<Mutex<HashMap<ZenohId, Arc<TransportUnicastInner>>>>,
+    // Shared memory
+    #[cfg(feature = "shared-memory")]
+    pub(super) shm: Arc<SharedMemoryUnicast>,
 }
 
 pub struct TransportManagerParamsUnicast {
@@ -179,20 +183,18 @@ impl TransportManagerBuilderUnicast {
 
         // #[cfg(feature = "shared-memory")]
         // if self.is_shm
-        //     && !self
-        //         .peer_authenticator
-        //         .iter()
-        //         .any(|a| a.id() == PeerAuthenticatorId::Shm)
         // {
         //     self.peer_authenticator
         //         .insert(SharedMemoryAuthenticator::make()?.into());
-        // } @TODO
+        // }
 
         let state = TransportManagerStateUnicast {
             incoming: Arc::new(Mutex::new(0)),
             protocols: Arc::new(Mutex::new(HashMap::new())),
             transports: Arc::new(Mutex::new(HashMap::new())),
             // peer_authenticator: Arc::new(AsyncRwLock::new(self.peer_authenticator)),
+            #[cfg(feature = "shared-memory")]
+            shm: Arc::new(SharedMemoryUnicast::make()?),
         };
 
         let params = TransportManagerParamsUnicast { config, state };

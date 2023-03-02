@@ -14,5 +14,5 @@
 
 // pub(crate) mod authenticator;
 pub(crate) mod qos;
-// #[cfg(feature = "shared-memory")]
-// pub(crate) mod shm;
+#[cfg(feature = "shared-memory")]
+pub(crate) mod shm;

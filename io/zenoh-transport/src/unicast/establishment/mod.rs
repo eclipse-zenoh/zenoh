@@ -36,24 +36,36 @@ use zenoh_result::ZResult;
 /*             TRAITS                */
 /*************************************/
 #[async_trait]
-pub(crate) trait OpenFsm {
+pub(crate) trait OpenFsm<'a> {
     type Error;
 
     type InitSynIn;
     type InitSynOut;
-    async fn send_init_syn(&self, input: Self::InitSynIn) -> Result<Self::InitSynOut, Self::Error>;
+    async fn send_init_syn(
+        &'a self,
+        input: Self::InitSynIn,
+    ) -> Result<Self::InitSynOut, Self::Error>;
 
     type InitAckIn;
     type InitAckOut;
-    async fn recv_init_ack(&self, input: Self::InitAckIn) -> Result<Self::InitAckOut, Self::Error>;
+    async fn recv_init_ack(
+        &'a self,
+        input: Self::InitAckIn,
+    ) -> Result<Self::InitAckOut, Self::Error>;
 
     type OpenSynIn;
     type OpenSynOut;
-    async fn send_open_syn(&self, input: Self::OpenSynIn) -> Result<Self::OpenSynOut, Self::Error>;
+    async fn send_open_syn(
+        &'a self,
+        input: Self::OpenSynIn,
+    ) -> Result<Self::OpenSynOut, Self::Error>;
 
     type OpenAckIn;
     type OpenAckOut;
-    async fn recv_open_ack(&self, input: Self::OpenAckIn) -> Result<Self::OpenAckOut, Self::Error>;
+    async fn recv_open_ack(
+        &'a self,
+        input: Self::OpenAckIn,
+    ) -> Result<Self::OpenAckOut, Self::Error>;
 }
 
 #[async_trait]
