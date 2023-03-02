@@ -16,15 +16,16 @@
 //!
 //! see [`Liveliness`](Liveliness)
 
+use zenoh_protocol::core::SubInfo;
+
+use crate::{
+    handlers::locked,
+    subscriber::{Subscriber, SubscriberInner},
+};
+
 #[zenoh_core::unstable]
 use {
-    crate::{
-        handlers::DefaultHandler,
-        prelude::*,
-        query::GetBuilder,
-        subscriber::{PushMode, SubscriberBuilder},
-        SessionRef, Undeclarable,
-    },
+    crate::{handlers::DefaultHandler, prelude::*, query::GetBuilder, SessionRef, Undeclarable},
     std::convert::TryInto,
     std::future::Ready,
     std::sync::Arc,
@@ -140,18 +141,14 @@ impl<'a> Liveliness<'a> {
     pub fn declare_subscriber<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
+    ) -> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        SubscriberBuilder {
+        LivelinessSubscriberBuilder {
             session: self.session.clone(),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
-            scope: Ok(Some(KeyExpr::from(*KE_PREFIX_LIVELINESS))),
-            reliability: Reliability::default(),
-            mode: PushMode,
-            origin: Locality::default(),
             handler: DefaultHandler,
         }
     }
@@ -386,5 +383,183 @@ impl Drop for LivelinessToken<'_> {
         if self.alive {
             let _ = self.session.undeclare_liveliness(self.state.id);
         }
+    }
+}
+
+/// A builder for initializing a [`FlumeSubscriber`](FlumeSubscriber).
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let subscriber = session
+///     .declare_subscriber("key/expression")
+///     .best_effort()
+///     .pull_mode()
+///     .res()
+///     .await
+///     .unwrap();
+/// # })
+/// ```
+#[derive(Debug)]
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+pub struct LivelinessSubscriberBuilder<'a, 'b, Handler> {
+    pub session: SessionRef<'a>,
+    pub key_expr: ZResult<KeyExpr<'b>>,
+    pub handler: Handler,
+}
+
+impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
+    /// Receive the samples for this subscription with a callback.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session
+    ///     .declare_subscriber("key/expression")
+    ///     .callback(|sample| { println!("Received: {} {}", sample.key_expr, sample.value); })
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub fn callback<Callback>(
+        self,
+        callback: Callback,
+    ) -> LivelinessSubscriberBuilder<'a, 'b, Callback>
+    where
+        Callback: Fn(Sample) + Send + Sync + 'static,
+    {
+        let LivelinessSubscriberBuilder {
+            session,
+            key_expr,
+            handler: _,
+        } = self;
+        LivelinessSubscriberBuilder {
+            session,
+            key_expr,
+            handler: callback,
+        }
+    }
+
+    /// Receive the samples for this subscription with a mutable callback.
+    ///
+    /// Using this guarantees that your callback will never be called concurrently.
+    /// If your callback is also accepted by the [`callback`](SubscriberBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let mut n = 0;
+    /// let subscriber = session
+    ///     .declare_subscriber("key/expression")
+    ///     .callback_mut(move |_sample| { n += 1; })
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub fn callback_mut<CallbackMut>(
+        self,
+        callback: CallbackMut,
+    ) -> LivelinessSubscriberBuilder<'a, 'b, impl Fn(Sample) + Send + Sync + 'static>
+    where
+        CallbackMut: FnMut(Sample) + Send + Sync + 'static,
+    {
+        self.callback(locked(callback))
+    }
+
+    /// Receive the samples for this subscription with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session
+    ///     .declare_subscriber("key/expression")
+    ///     .with(flume::bounded(32))
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// while let Ok(sample) = subscriber.recv_async().await {
+    ///     println!("Received: {} {}", sample.key_expr, sample.value);
+    /// }
+    /// # })
+    /// ```
+    #[inline]
+    pub fn with<Handler>(self, handler: Handler) -> LivelinessSubscriberBuilder<'a, 'b, Handler>
+    where
+        Handler: crate::prelude::IntoCallbackReceiverPair<'static, Sample>,
+    {
+        let LivelinessSubscriberBuilder {
+            session,
+            key_expr,
+            handler: _,
+        } = self;
+        LivelinessSubscriberBuilder {
+            session,
+            key_expr,
+            handler,
+        }
+    }
+}
+
+impl<'a, Handler> Resolvable for LivelinessSubscriberBuilder<'a, '_, Handler>
+where
+    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
+    Handler::Receiver: Send,
+{
+    type To = ZResult<Subscriber<'a, Handler::Receiver>>;
+}
+
+impl<'a, Handler> SyncResolve for LivelinessSubscriberBuilder<'a, '_, Handler>
+where
+    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
+    Handler::Receiver: Send,
+{
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        let key_expr = self.key_expr?;
+        let session = self.session;
+        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+        session
+            .declare_subscriber_inner(
+                &key_expr,
+                &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
+                Locality::default(),
+                callback,
+                &SubInfo::default(),
+            )
+            .map(|sub_state| Subscriber {
+                subscriber: SubscriberInner {
+                    session,
+                    state: sub_state,
+                    alive: true,
+                },
+                receiver,
+            })
+    }
+}
+
+impl<'a, Handler> AsyncResolve for LivelinessSubscriberBuilder<'a, '_, Handler>
+where
+    Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
+    Handler::Receiver: Send,
+{
+    type Future = Ready<Self::To>;
+
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
     }
 }

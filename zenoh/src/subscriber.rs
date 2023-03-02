@@ -290,7 +290,6 @@ impl From<PushMode> for SubMode {
 pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
     pub session: SessionRef<'a>,
     pub key_expr: ZResult<KeyExpr<'b>>,
-    pub scope: ZResult<Option<KeyExpr<'b>>>,
     pub reliability: Reliability,
     pub mode: Mode,
     pub origin: Locality,
@@ -322,7 +321,6 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
         let SubscriberBuilder {
             session,
             key_expr,
-            scope,
             reliability,
             mode,
             origin,
@@ -331,7 +329,6 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
         SubscriberBuilder {
             session,
             key_expr,
-            scope,
             reliability,
             mode,
             origin,
@@ -397,7 +394,6 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
         let SubscriberBuilder {
             session,
             key_expr,
-            scope,
             reliability,
             mode,
             origin,
@@ -406,7 +402,6 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
         SubscriberBuilder {
             session,
             key_expr,
-            scope,
             reliability,
             mode,
             origin,
@@ -451,7 +446,6 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
         let SubscriberBuilder {
             session,
             key_expr,
-            scope,
             reliability,
             mode: _,
             origin,
@@ -460,7 +454,6 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
         SubscriberBuilder {
             session,
             key_expr,
-            scope,
             reliability,
             mode: PullMode,
             origin,
@@ -474,7 +467,6 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
         let SubscriberBuilder {
             session,
             key_expr,
-            scope,
             reliability,
             mode: _,
             origin,
@@ -483,7 +475,6 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
         SubscriberBuilder {
             session,
             key_expr,
-            scope,
             reliability,
             mode: PushMode,
             origin,
@@ -508,13 +499,12 @@ where
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
-        let scope = self.scope?;
         let session = self.session;
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
         session
             .declare_subscriber_inner(
                 &key_expr,
-                &scope,
+                &None,
                 self.origin,
                 callback,
                 &SubInfo {
@@ -561,13 +551,12 @@ where
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
-        let scope = self.scope?;
         let session = self.session;
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
         session
             .declare_subscriber_inner(
                 &key_expr,
-                &scope,
+                &None,
                 self.origin,
                 callback,
                 &SubInfo {

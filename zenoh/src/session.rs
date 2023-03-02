@@ -526,7 +526,6 @@ impl Session {
         SubscriberBuilder {
             session: SessionRef::Borrow(self),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
-            scope: Ok(None),
             reliability: Reliability::default(),
             mode: PushMode,
             origin: Locality::default(),
@@ -1692,7 +1691,6 @@ impl SessionDeclarations for Arc<Session> {
         SubscriberBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
-            scope: Ok(None),
             reliability: Reliability::default(),
             mode: PushMode,
             origin: Locality::default(),
