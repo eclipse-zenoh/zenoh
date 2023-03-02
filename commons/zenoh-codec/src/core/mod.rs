@@ -16,6 +16,8 @@ mod endpoint;
 mod keyexpr;
 mod locator;
 mod property;
+#[cfg(feature = "shared-memory")]
+mod shm;
 mod timestamp;
 mod zbuf;
 mod zenohid;

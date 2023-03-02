@@ -11,10 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::unicast::establishment::{
-    close_link, compute_sn, ext, finalize_transport, InputFinalize, OpenFsm,
+use crate::{
+    unicast::{
+        establishment::{close_link, compute_sn, ext, finalize_transport, InputFinalize, OpenFsm},
+        shm::Challenge,
+    },
+    TransportConfigUnicast, TransportManager, TransportUnicast,
 };
-use crate::{TransportConfigUnicast, TransportManager, TransportUnicast};
 use async_trait::async_trait;
 use std::time::Duration;
 use zenoh_buffers::ZSlice;
@@ -35,6 +38,7 @@ struct StateZenoh {
 struct State {
     zenoh: StateZenoh,
     ext_qos: ext::qos::State,
+    ext_shm: ext::shm::State,
 }
 
 // InitSyn
@@ -50,6 +54,7 @@ struct RecvInitAckOut {
     other_zid: ZenohId,
     other_whatami: WhatAmI,
     other_cookie: ZSlice,
+    ext_shm: Challenge,
 }
 
 // OpenSyn
@@ -58,6 +63,7 @@ struct SendOpenSynIn {
     mine_lease: Duration,
     other_zid: ZenohId,
     other_cookie: ZSlice,
+    ext_shm: Challenge,
 }
 
 struct SendOpenSynOut {
@@ -74,6 +80,7 @@ struct RecvOpenAckOut {
 struct OpenLink<'a> {
     link: &'a LinkUnicast,
     ext_qos: ext::qos::QoS,
+    ext_shm: ext::shm::Shm<'a>,
 }
 
 #[async_trait]
@@ -95,15 +102,22 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension Shm
+        let shm_mine_ext = self
+            .ext_shm
+            .send_init_syn(&state.ext_shm)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         let msg: TransportMessage = InitSyn {
             version: input.mine_version,
             whatami: input.mine_whatami,
             zid: input.mine_zid,
             batch_size: state.zenoh.batch_size,
             resolution: state.zenoh.resolution,
-            qos: qos_mine_ext,
-            shm: None,  // @TODO
-            auth: None, // @TODO
+            ext_qos: qos_mine_ext,
+            ext_shm: shm_mine_ext,
+            ext_auth: None, // @TODO
         }
         .into();
 
@@ -197,7 +211,14 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
 
         // Extension QoS
         self.ext_qos
-            .recv_init_ack((&mut state.ext_qos, init_ack.qos))
+            .recv_init_ack((&mut state.ext_qos, init_ack.ext_qos))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension Shm
+        let shm_challenge = self
+            .ext_shm
+            .recv_init_ack((&mut state.ext_shm, init_ack.ext_shm))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -205,6 +226,7 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
             other_zid: init_ack.zid,
             other_whatami: init_ack.whatami,
             other_cookie: init_ack.cookie,
+            ext_shm: shm_challenge,
         };
         Ok(output)
     }
@@ -218,8 +240,16 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
         let (state, input) = input;
 
         // Extension QoS
-        self.ext_qos
+        let ext_qos = self
+            .ext_qos
             .send_open_syn(&state.ext_qos)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension Shm
+        let ext_shm = self
+            .ext_shm
+            .send_open_syn((&state.ext_shm, input.ext_shm))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -229,8 +259,9 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
             lease: input.mine_lease,
             initial_sn: mine_initial_sn,
             cookie: input.other_cookie,
-            shm: None,  // @TODO
-            auth: None, // @TODO
+            ext_qos,
+            ext_shm,
+            ext_auth: None, // @TODO
         }
         .into();
 
@@ -283,7 +314,13 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
 
         // Extension QoS
         self.ext_qos
-            .recv_open_ack(&mut state.ext_qos)
+            .recv_open_ack((&mut state.ext_qos, open_ack.ext_qos))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension Shm
+        self.ext_shm
+            .recv_open_ack((&mut state.ext_shm, open_ack.ext_shm))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -299,10 +336,11 @@ pub(crate) async fn open_link(
     link: &LinkUnicast,
     manager: &TransportManager,
 ) -> ZResult<TransportUnicast> {
-    // Extension QoS
-    let ext_qos = ext::qos::QoS;
-
-    let fsm = OpenLink { link, ext_qos };
+    let fsm = OpenLink {
+        link,
+        ext_qos: ext::qos::QoS::new(),
+        ext_shm: ext::shm::Shm::new(&manager.state.unicast.shm),
+    };
 
     // Init handshake
     macro_rules! step {
@@ -322,9 +360,8 @@ pub(crate) async fn open_link(
             batch_size: manager.config.batch_size,
             resolution: manager.config.resolution,
         },
-        ext_qos: ext::qos::State {
-            is_qos: manager.config.unicast.is_qos,
-        },
+        ext_qos: ext::qos::State::new(manager.config.unicast.is_qos),
+        ext_shm: ext::shm::State::new(manager.config.unicast.is_shm),
     };
 
     let isyn_in = SendInitSynIn {
@@ -342,6 +379,7 @@ pub(crate) async fn open_link(
         other_zid: iack_out.other_zid,
         mine_lease: manager.config.unicast.lease,
         other_cookie: iack_out.other_cookie,
+        ext_shm: iack_out.ext_shm,
     };
     let osyn_out = step!(fsm.send_open_syn((&mut state, osyn_in)).await);
 
@@ -353,7 +391,7 @@ pub(crate) async fn open_link(
         whatami: iack_out.other_whatami,
         sn_resolution: state.zenoh.resolution.get(Field::FrameSN).mask(),
         tx_initial_sn: osyn_out.mine_initial_sn,
-        is_qos: state.ext_qos.is_qos,
+        is_qos: state.ext_qos.is_qos(),
         is_shm: false, // @TODO
     };
     let transport = step!(manager

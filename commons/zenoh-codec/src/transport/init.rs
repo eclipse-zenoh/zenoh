@@ -39,7 +39,7 @@ where
         if x.resolution != Resolution::default() || x.batch_size != u16::MAX {
             header |= flag::S;
         }
-        let has_extensions = x.qos.is_some() || x.shm.is_some() || x.auth.is_some();
+        let has_extensions = x.ext_qos.is_some() || x.ext_shm.is_some() || x.ext_auth.is_some();
         if has_extensions {
             header |= flag::Z;
         }
@@ -65,19 +65,19 @@ where
         }
 
         // Extensions
-        if let Some(qos) = x.qos.as_ref() {
-            let has_more = x.shm.is_some() || x.auth.is_some();
-            self.write(&mut *writer, (qos, has_more))?;
+        if let Some(qos) = x.ext_qos.as_ref() {
+            let has_ext = x.ext_shm.is_some() || x.ext_auth.is_some();
+            self.write(&mut *writer, (qos, has_ext))?;
         }
 
-        if let Some(shm) = x.shm.as_ref() {
-            let has_more = x.auth.is_some();
-            self.write(&mut *writer, (shm, has_more))?;
+        if let Some(shm) = x.ext_shm.as_ref() {
+            let has_ext = x.ext_auth.is_some();
+            self.write(&mut *writer, (shm, has_ext))?;
         }
 
-        if let Some(auth) = x.auth.as_ref() {
-            let has_more = false;
-            self.write(&mut *writer, (auth, has_more))?;
+        if let Some(auth) = x.ext_auth.as_ref() {
+            let has_ext = false;
+            self.write(&mut *writer, (auth, has_ext))?;
         }
 
         Ok(())
@@ -135,29 +135,29 @@ where
         let mut shm = None;
         let mut auth = None;
 
-        let mut has_more = imsg::has_flag(self.header, flag::Z);
-        while has_more {
+        let mut has_ext = imsg::has_flag(self.header, flag::Z);
+        while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
             match imsg::mid(ext) {
                 ext::QoS::ID => {
-                    let (q, more): (ext::QoS, bool) = eodec.read(&mut *reader)?;
+                    let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
                     qos = Some(q);
-                    has_more = more;
+                    has_ext = ext;
                 }
                 ext::Shm::ID => {
-                    let (s, more): (ext::Shm, bool) = eodec.read(&mut *reader)?;
+                    let (s, ext): (ext::Shm, bool) = eodec.read(&mut *reader)?;
                     shm = Some(s);
-                    has_more = more;
+                    has_ext = ext;
                 }
                 ext::Auth::ID => {
-                    let (a, more): (ext::Auth, bool) = eodec.read(&mut *reader)?;
+                    let (a, ext): (ext::Auth, bool) = eodec.read(&mut *reader)?;
                     auth = Some(a);
-                    has_more = more;
+                    has_ext = ext;
                 }
                 _ => {
-                    let (_, more): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
-                    has_more = more;
+                    let (_, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    has_ext = ext;
                 }
             }
         }
@@ -168,9 +168,9 @@ where
             zid,
             resolution,
             batch_size,
-            qos,
-            shm,
-            auth,
+            ext_qos: qos,
+            ext_shm: shm,
+            ext_auth: auth,
         })
     }
 }
@@ -188,7 +188,7 @@ where
         if x.resolution != Resolution::default() || x.batch_size != u16::MAX {
             header |= flag::S;
         }
-        let has_extensions = x.qos.is_some() || x.shm.is_some() || x.auth.is_some();
+        let has_extensions = x.ext_qos.is_some() || x.ext_shm.is_some() || x.ext_auth.is_some();
         if has_extensions {
             header |= flag::Z;
         }
@@ -216,19 +216,19 @@ where
         self.write(&mut *writer, &x.cookie)?;
 
         // Extensions
-        if let Some(qos) = x.qos.as_ref() {
-            let has_more = x.shm.is_some() || x.auth.is_some();
-            self.write(&mut *writer, (qos, has_more))?;
+        if let Some(qos) = x.ext_qos.as_ref() {
+            let has_ext = x.ext_shm.is_some() || x.ext_auth.is_some();
+            self.write(&mut *writer, (qos, has_ext))?;
         }
 
-        if let Some(shm) = x.shm.as_ref() {
-            let has_more = x.auth.is_some();
-            self.write(&mut *writer, (shm, has_more))?;
+        if let Some(shm) = x.ext_shm.as_ref() {
+            let has_ext = x.ext_auth.is_some();
+            self.write(&mut *writer, (shm, has_ext))?;
         }
 
-        if let Some(auth) = x.auth.as_ref() {
-            let has_more = false;
-            self.write(&mut *writer, (auth, has_more))?;
+        if let Some(auth) = x.ext_auth.as_ref() {
+            let has_ext = false;
+            self.write(&mut *writer, (auth, has_ext))?;
         }
 
         Ok(())
@@ -322,9 +322,9 @@ where
             resolution,
             batch_size,
             cookie,
-            qos,
-            shm,
-            auth,
+            ext_qos: qos,
+            ext_shm: shm,
+            ext_auth: auth,
         })
     }
 }

@@ -13,20 +13,68 @@
 //
 use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 use async_trait::async_trait;
-use zenoh_protocol::transport::init;
+use zenoh_buffers::{
+    reader::{DidntRead, Reader},
+    writer::{DidntWrite, Writer},
+};
+use zenoh_codec::{RCodec, WCodec, Zenoh080};
+use zenoh_protocol::transport::{init, open};
 use zenoh_result::Error as ZError;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct State {
+    is_qos: bool,
+}
+
+impl State {
+    pub(crate) const fn new(is_qos: bool) -> Self {
+        Self { is_qos }
+    }
+
+    pub(crate) const fn is_qos(&self) -> bool {
+        self.is_qos
+    }
+}
+
+// Codec
+impl<W> WCodec<&State, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &State) -> Self::Output {
+        let is_qos = u8::from(x.is_qos);
+        self.write(&mut *writer, is_qos)?;
+        Ok(())
+    }
+}
+
+impl<R> RCodec<State, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<State, Self::Error> {
+        let is_qos: u8 = self.read(&mut *reader)?;
+        let is_qos = is_qos == 1;
+        Ok(State { is_qos })
+    }
+}
+
+// Extension Fsm
 pub(crate) struct QoS;
 
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct State {
-    pub(crate) is_qos: bool,
+impl QoS {
+    pub(crate) const fn new() -> Self {
+        Self
+    }
 }
 
 /*************************************/
 /*              OPEN                 */
 /*************************************/
-
 #[async_trait]
 impl<'a> OpenFsm<'a> for QoS {
     type Error = ZError;
@@ -53,15 +101,15 @@ impl<'a> OpenFsm<'a> for QoS {
     }
 
     type OpenSynIn = &'a State;
-    type OpenSynOut = ();
+    type OpenSynOut = Option<open::ext::QoS>;
     async fn send_open_syn(
         &'a self,
         _state: Self::OpenSynIn,
     ) -> Result<Self::OpenSynOut, Self::Error> {
-        Ok(())
+        Ok(None)
     }
 
-    type OpenAckIn = &'a State;
+    type OpenAckIn = (&'a mut State, Option<open::ext::QoS>);
     type OpenAckOut = ();
     async fn recv_open_ack(
         &'a self,
@@ -99,7 +147,7 @@ impl<'a> AcceptFsm<'a> for QoS {
         Ok(output)
     }
 
-    type OpenSynIn = &'a State;
+    type OpenSynIn = (&'a mut State, Option<open::ext::QoS>);
     type OpenSynOut = ();
     async fn recv_open_syn(
         &'a self,
@@ -109,11 +157,11 @@ impl<'a> AcceptFsm<'a> for QoS {
     }
 
     type OpenAckIn = &'a State;
-    type OpenAckOut = ();
+    type OpenAckOut = Option<open::ext::QoS>;
     async fn send_open_ack(
         &'a self,
         _state: Self::OpenAckIn,
     ) -> Result<Self::OpenAckOut, Self::Error> {
-        Ok(())
+        Ok(None)
     }
 }

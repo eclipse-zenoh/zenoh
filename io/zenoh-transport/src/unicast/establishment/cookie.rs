@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 // use super::properties::EstablishmentProperties;
+use crate::unicast::establishment::ext;
 use std::convert::TryFrom;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
@@ -22,14 +23,15 @@ use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_protocol::core::{Resolution, WhatAmI, ZInt, ZenohId};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Cookie {
-    pub whatami: WhatAmI,
-    pub zid: ZenohId,
-    pub resolution: Resolution,
-    pub batch_size: u16,
-    pub nonce: ZInt,
+pub(crate) struct Cookie {
+    pub(crate) whatami: WhatAmI,
+    pub(crate) zid: ZenohId,
+    pub(crate) resolution: Resolution,
+    pub(crate) batch_size: u16,
+    pub(crate) nonce: ZInt,
     // Extensions
-    pub is_qos: bool,
+    pub(crate) ext_qos: ext::qos::State,
+    pub(crate) ext_shm: ext::shm::State,
     // pub properties: EstablishmentProperties, // @TODO
 }
 
@@ -47,8 +49,8 @@ where
         self.write(&mut *writer, x.batch_size)?;
         self.write(&mut *writer, x.nonce)?;
         // Extensions
-        let is_qos = u8::from(x.is_qos);
-        self.write(&mut *writer, is_qos)?;
+        self.write(&mut *writer, &x.ext_qos)?;
+        self.write(&mut *writer, &x.ext_shm)?;
         // self.write(&mut *writer, x.properties.as_slice())?;
 
         Ok(())
@@ -70,8 +72,8 @@ where
         let batch_size: u16 = self.read(&mut *reader)?;
         let nonce: ZInt = self.read(&mut *reader)?;
         // Extensions
-        let is_qos: u8 = self.read(&mut *reader)?;
-        let is_qos = is_qos == 1;
+        let ext_qos: ext::qos::State = self.read(&mut *reader)?;
+        let ext_shm: ext::shm::State = self.read(&mut *reader)?;
         // let mut ps: Vec<Property> = self.read(&mut *reader)?;
         // let mut properties = EstablishmentProperties::new();
         // for p in ps.drain(..) {
@@ -84,7 +86,8 @@ where
             resolution,
             batch_size,
             nonce,
-            is_qos,
+            ext_qos,
+            ext_shm,
             // properties,
         };
 
@@ -147,7 +150,8 @@ impl Cookie {
             resolution: Resolution::rand(),
             batch_size: rng.gen(),
             nonce: rng.gen(),
-            is_qos: rng.gen_bool(0.5),
+            ext_qos: ext::qos::State::new(rng.gen_bool(0.5)),
+            ext_shm: ext::shm::State::new(rng.gen_bool(0.5)),
             // properties: EstablishmentProperties::rand(),
         }
     }

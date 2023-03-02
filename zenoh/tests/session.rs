@@ -39,7 +39,7 @@ async fn open_session(endpoints: &[&str]) -> (Session, Session) {
         .map(|e| e.parse().unwrap())
         .collect::<Vec<_>>();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    dbg!("[  ][01a] Opening peer01 session");
+    println!("[  ][01a] Opening peer01 session");
     let peer01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
 
     let mut config = config::peer();
@@ -48,16 +48,16 @@ async fn open_session(endpoints: &[&str]) -> (Session, Session) {
         .map(|e| e.parse().unwrap())
         .collect::<Vec<_>>();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    dbg!("[  ][02a] Opening peer02 session");
+    println!("[  ][02a] Opening peer02 session");
     let peer02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
 
     (peer01, peer02)
 }
 
 async fn close_session(peer01: Session, peer02: Session) {
-    dbg!("[  ][01d] Closing peer02 session");
+    println!("[  ][01d] Closing peer02 session");
     ztimeout!(peer01.close().res_async()).unwrap();
-    dbg!("[  ][02d] Closing peer02 session");
+    println!("[  ][02d] Closing peer02 session");
     ztimeout!(peer02.close().res_async()).unwrap();
 }
 
@@ -70,7 +70,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session) {
         msgs.store(0, Ordering::SeqCst);
 
         // Subscribe to data
-        dbg!("[PS][01b] Subscribing on peer01 session");
+        println!("[PS][01b] Subscribing on peer01 session");
         let c_msgs = msgs.clone();
         let sub = ztimeout!(peer01
             .declare_subscriber(key_expr)
@@ -85,7 +85,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session) {
         task::sleep(SLEEP).await;
 
         // Put data
-        dbg!("[PS][02b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");
+        println!("[PS][02b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");
         for _ in 0..MSG_COUNT {
             ztimeout!(peer02
                 .put(key_expr, vec![0u8; size])
@@ -97,7 +97,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session) {
         ztimeout!(async {
             loop {
                 let cnt = msgs.load(Ordering::SeqCst);
-                dbg!("[PS][03b] Received {cnt}/{MSG_COUNT}.");
+                println!("[PS][03b] Received {cnt}/{MSG_COUNT}.");
                 if cnt < MSG_COUNT {
                     task::sleep(SLEEP).await;
                 } else {
@@ -106,7 +106,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session) {
             }
         });
 
-        dbg!("[PS][03b] Unsubscribing on peer01 session");
+        println!("[PS][03b] Unsubscribing on peer01 session");
         ztimeout!(sub.undeclare().res_async()).unwrap();
 
         // Wait for the declaration to propagate
@@ -123,7 +123,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session) {
         msgs.store(0, Ordering::SeqCst);
 
         // Queryable to data
-        dbg!("[QR][01c] Queryable on peer01 session");
+        println!("[QR][01c] Queryable on peer01 session");
         let c_msgs = msgs.clone();
         let qbl = ztimeout!(peer01
             .declare_queryable(key_expr)
@@ -139,7 +139,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session) {
         task::sleep(SLEEP).await;
 
         // Get data
-        dbg!("[QR][02c] Getting on peer02 session. {MSG_COUNT} msgs.");
+        println!("[QR][02c] Getting on peer02 session. {MSG_COUNT} msgs.");
         let mut cnt = 0;
         for _ in 0..MSG_COUNT {
             let rs = ztimeout!(peer02.get(key_expr).res_async()).unwrap();
@@ -148,11 +148,11 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session) {
                 cnt += 1;
             }
         }
-        dbg!("[QR][02c] Got on peer02 session. {cnt}/{MSG_COUNT} msgs.");
+        println!("[QR][02c] Got on peer02 session. {cnt}/{MSG_COUNT} msgs.");
         assert_eq!(msgs.load(Ordering::SeqCst), MSG_COUNT);
         assert_eq!(cnt, MSG_COUNT);
 
-        dbg!("[PS][03c] Unqueryable on peer01 session");
+        println!("[PS][03c] Unqueryable on peer01 session");
         ztimeout!(qbl.undeclare().res_async()).unwrap();
 
         // Wait for the declaration to propagate

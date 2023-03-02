@@ -78,24 +78,28 @@ pub struct OpenSyn {
     pub lease: Duration,
     pub initial_sn: ZInt,
     pub cookie: ZSlice,
-    pub shm: Option<ext::Shm>,
-    pub auth: Option<ext::Auth>,
+    pub ext_qos: Option<ext::QoS>,
+    pub ext_shm: Option<ext::Shm>,
+    pub ext_auth: Option<ext::Auth>,
 }
 
 // Extensions
 pub mod ext {
-    use crate::common::ZExtZSlice;
+    use crate::common::{ZExtUnit, ZExtZInt, ZExtZSlice};
 
+    pub const QOS: u8 = 0x01;
     pub const SHM: u8 = 0x02;
     pub const AUTH: u8 = 0x03;
 
+    /// # QoS extension
+    /// Used to negotiate the use of QoS
+    pub type QoS = ZExtUnit<QOS>;
+
     /// # Shm extension
-    ///
     /// Used as challenge for probing shared memory capabilities
-    pub type Shm = ZExtZSlice<SHM>;
+    pub type Shm = ZExtZInt<SHM>;
 
     /// # Auth extension
-    ///
     /// Used as challenge for probing authentication rights
     pub type Auth = ZExtZSlice<AUTH>;
 }
@@ -103,7 +107,7 @@ pub mod ext {
 impl OpenSyn {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::ZExtZSlice;
+        use crate::common::{ZExtUnit, ZExtZInt, ZExtZSlice};
         use rand::Rng;
 
         const MIN: usize = 32;
@@ -119,14 +123,16 @@ impl OpenSyn {
 
         let initial_sn: ZInt = rng.gen();
         let cookie = ZSlice::rand(rng.gen_range(MIN..=MAX));
-        let shm = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
-        let auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
+        let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_shm = rng.gen_bool(0.5).then_some(ZExtZInt::rand());
+        let ext_auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
         Self {
             lease,
             initial_sn,
             cookie,
-            shm,
-            auth,
+            ext_qos,
+            ext_shm,
+            ext_auth,
         }
     }
 }
@@ -136,13 +142,15 @@ impl OpenSyn {
 pub struct OpenAck {
     pub lease: Duration,
     pub initial_sn: ZInt,
-    pub auth: Option<ext::Auth>,
+    pub ext_qos: Option<ext::QoS>,
+    pub ext_shm: Option<ext::Shm>,
+    pub ext_auth: Option<ext::Auth>,
 }
 
 impl OpenAck {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::ZExtZSlice;
+        use crate::common::{ZExtUnit, ZExtZInt, ZExtZSlice};
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
@@ -154,11 +162,15 @@ impl OpenAck {
         };
 
         let initial_sn: ZInt = rng.gen();
-        let auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
+        let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_shm = rng.gen_bool(0.5).then_some(ZExtZInt::rand());
+        let ext_auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
         Self {
             lease,
             initial_sn,
-            auth,
+            ext_qos,
+            ext_shm,
+            ext_auth,
         }
     }
 }

@@ -111,9 +111,9 @@ pub struct InitSyn {
     pub zid: ZenohId,
     pub resolution: Resolution,
     pub batch_size: u16,
-    pub qos: Option<ext::QoS>,
-    pub shm: Option<ext::Shm>,
-    pub auth: Option<ext::Auth>,
+    pub ext_qos: Option<ext::QoS>,
+    pub ext_shm: Option<ext::Shm>,
+    pub ext_auth: Option<ext::Auth>,
 }
 
 // Extensions
@@ -125,17 +125,14 @@ pub mod ext {
     pub const AUTH: u8 = 0x03;
 
     /// # QoS extension
-    ///
-    /// Indicates wether the Zenoh nodes support QoS or not
+    /// Used to negotiate the use of QoS
     pub type QoS = ZExtUnit<QOS>;
 
     /// # Shm extension
-    ///
     /// Used as challenge for probing shared memory capabilities
     pub type Shm = ZExtZSlice<SHM>;
 
     /// # Auth extension
-    ///
     /// Used as challenge for probing authentication rights
     pub type Auth = ZExtZSlice<AUTH>;
 }
@@ -153,9 +150,9 @@ impl InitSyn {
         let zid = ZenohId::default();
         let resolution = Resolution::rand();
         let batch_size: u16 = rng.gen();
-        let qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
-        let shm = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
-        let auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
+        let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_shm = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
+        let ext_auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
 
         Self {
             version,
@@ -163,9 +160,9 @@ impl InitSyn {
             zid,
             resolution,
             batch_size,
-            qos,
-            shm,
-            auth,
+            ext_qos,
+            ext_shm,
+            ext_auth,
         }
     }
 }
@@ -179,9 +176,9 @@ pub struct InitAck {
     pub resolution: Resolution,
     pub batch_size: u16,
     pub cookie: ZSlice,
-    pub qos: Option<ext::QoS>,
-    pub shm: Option<ext::Shm>,
-    pub auth: Option<ext::Auth>,
+    pub ext_qos: Option<ext::QoS>,
+    pub ext_shm: Option<ext::Shm>,
+    pub ext_auth: Option<ext::Auth>,
 }
 
 impl InitAck {
@@ -202,9 +199,9 @@ impl InitAck {
         };
         let batch_size: u16 = rng.gen();
         let cookie = ZSlice::rand(64);
-        let qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
-        let shm = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
-        let auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
+        let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_shm = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
+        let ext_auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
 
         Self {
             version,
@@ -213,9 +210,9 @@ impl InitAck {
             resolution,
             batch_size,
             cookie,
-            qos,
-            shm,
-            auth,
+            ext_qos,
+            ext_shm,
+            ext_auth,
         }
     }
 }

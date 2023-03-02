@@ -72,19 +72,19 @@ macro_rules! run_fragmented {
 
 macro_rules! run_buffers {
     ($type:ty, $rand:expr, $wcode:expr, $rcode:expr) => {
-        dbg!("Vec<u8>: codec {}", std::any::type_name::<$type>());
+        println!("Vec<u8>: codec {}", std::any::type_name::<$type>());
         let mut buffer = vec![];
         run_single!($type, $rand, $wcode, $rcode, buffer);
 
-        dbg!("BBuf: codec {}", std::any::type_name::<$type>());
+        println!("BBuf: codec {}", std::any::type_name::<$type>());
         let mut buffer = BBuf::with_capacity(u16::MAX as usize);
         run_single!($type, $rand, $wcode, $rcode, buffer);
 
-        dbg!("ZBuf: codec {}", std::any::type_name::<$type>());
+        println!("ZBuf: codec {}", std::any::type_name::<$type>());
         let mut buffer = ZBuf::default();
         run_single!($type, $rand, $wcode, $rcode, buffer);
 
-        dbg!("ZSlice: codec {}", std::any::type_name::<$type>());
+        println!("ZSlice: codec {}", std::any::type_name::<$type>());
         for _ in 0..NUM_ITER {
             let x: $type = $rand;
 
@@ -100,7 +100,7 @@ macro_rules! run_buffers {
             assert_eq!(x, y);
         }
 
-        dbg!("Fragmented: codec {}", std::any::type_name::<$type>());
+        println!("Fragmented: codec {}", std::any::type_name::<$type>());
         run_fragmented!($type, $rand, $wcode, $rcode)
     };
 }
@@ -167,6 +167,23 @@ fn codec_encoding() {
     run!(Encoding, Encoding::rand());
 }
 
+#[cfg(feature = "shared-memory")]
+#[test]
+fn codec_shm_info() {
+    use zenoh_shm::SharedMemoryBufInfo;
+
+    run!(SharedMemoryBufInfo, {
+        let mut rng = rand::thread_rng();
+        let len = rng.gen_range(0..16);
+        SharedMemoryBufInfo::new(
+            rng.gen(),
+            rng.gen(),
+            Alphanumeric.sample_string(&mut rng, len),
+            rng.gen(),
+        )
+    });
+}
+
 // Common
 #[test]
 fn codec_extension() {
@@ -194,15 +211,15 @@ fn codec_extension() {
 
     macro_rules! run_extension {
         ($type:ty) => {
-            dbg!("Vec<u8>: codec {}", std::any::type_name::<$type>());
+            println!("Vec<u8>: codec {}", std::any::type_name::<$type>());
             let mut buff = vec![];
             run_extension_single!($type, buff);
 
-            dbg!("BBuf: codec {}", std::any::type_name::<$type>());
+            println!("BBuf: codec {}", std::any::type_name::<$type>());
             let mut buff = BBuf::with_capacity(u16::MAX as usize);
             run_extension_single!($type, buff);
 
-            dbg!("ZBuf: codec {}", std::any::type_name::<$type>());
+            println!("ZBuf: codec {}", std::any::type_name::<$type>());
             let mut buff = ZBuf::default();
             run_extension_single!($type, buff);
         };

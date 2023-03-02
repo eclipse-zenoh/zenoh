@@ -12,7 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::any::TypeId;
-use zenoh_buffers::{ZBuf, ZSlice};
+use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice};
+use zenoh_codec::{RCodec, WCodec, Zenoh080};
+use zenoh_core::zerror;
 use zenoh_protocol::zenoh::*;
 use zenoh_result::ZResult;
 use zenoh_shm::{
@@ -58,7 +60,10 @@ pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &mut SharedMemoryReader) 
     let ZSlice { buf, .. } = zslice;
     if buf.as_any().type_id() == TypeId::of::<SharedMemoryBufInfoSerialized>() {
         // Deserialize the shmb info into shm buff
-        let shmbinfo = SharedMemoryBufInfo::deserialize(buf.as_slice())?;
+        let codec = Zenoh080::new();
+        let mut reader = buf.as_slice().reader();
+        let shmbinfo: SharedMemoryBufInfo =
+            codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
 
         // First, try in read mode allowing concurrenct lookups
         let smb = shmr
@@ -87,7 +92,13 @@ pub fn map_zslice_to_shminfo(zslice: &mut ZSlice) -> ZResult<bool> {
     let ZSlice { buf, .. } = zslice;
     if let Some(shmb) = buf.as_any().downcast_ref::<SharedMemoryBuf>() {
         // Serialize the shmb info
-        let info: SharedMemoryBufInfoSerialized = shmb.info.serialize()?.into();
+        let codec = Zenoh080::new();
+        let mut bytes = vec![];
+        let mut writer = bytes.writer();
+        codec
+            .write(&mut writer, &shmb.info)
+            .map_err(|e| zerror!("{:?}", e))?;
+        let info: SharedMemoryBufInfoSerialized = bytes.into();
         // Increase the reference count so to keep the SharedMemoryBuf valid
         shmb.inc_ref_count();
         // Replace the content of the slice

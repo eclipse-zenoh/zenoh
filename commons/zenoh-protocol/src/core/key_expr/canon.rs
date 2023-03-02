@@ -120,6 +120,7 @@ impl Canonizable for String {
 #[test]
 fn canonizer() {
     use super::OwnedKeyExpr;
+
     dbg!(OwnedKeyExpr::autocanonize(String::from("/a/b/")).unwrap_err());
     dbg!(OwnedKeyExpr::autocanonize(String::from("/a/b")).unwrap_err());
     dbg!(OwnedKeyExpr::autocanonize(String::from("a/b/")).unwrap_err());
