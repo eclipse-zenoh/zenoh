@@ -69,24 +69,36 @@ pub(crate) trait OpenFsm<'a> {
 }
 
 #[async_trait]
-pub(crate) trait AcceptFsm {
+pub(crate) trait AcceptFsm<'a> {
     type Error;
 
     type InitSynIn;
     type InitSynOut;
-    async fn recv_init_syn(&self, input: Self::InitSynIn) -> Result<Self::InitSynOut, Self::Error>;
+    async fn recv_init_syn(
+        &'a self,
+        input: Self::InitSynIn,
+    ) -> Result<Self::InitSynOut, Self::Error>;
 
     type InitAckIn;
     type InitAckOut;
-    async fn send_init_ack(&self, input: Self::InitAckIn) -> Result<Self::InitAckOut, Self::Error>;
+    async fn send_init_ack(
+        &'a self,
+        input: Self::InitAckIn,
+    ) -> Result<Self::InitAckOut, Self::Error>;
 
     type OpenSynIn;
     type OpenSynOut;
-    async fn recv_open_syn(&self, input: Self::OpenSynIn) -> Result<Self::OpenSynOut, Self::Error>;
+    async fn recv_open_syn(
+        &'a self,
+        input: Self::OpenSynIn,
+    ) -> Result<Self::OpenSynOut, Self::Error>;
 
     type OpenAckIn;
     type OpenAckOut;
-    async fn send_open_ack(&self, input: Self::OpenAckIn) -> Result<Self::OpenAckOut, Self::Error>;
+    async fn send_open_ack(
+        &'a self,
+        input: Self::OpenAckIn,
+    ) -> Result<Self::OpenAckOut, Self::Error>;
 }
 
 /*************************************/

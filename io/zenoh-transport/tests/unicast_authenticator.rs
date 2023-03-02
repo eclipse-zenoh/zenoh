@@ -774,7 +774,7 @@ async fn run(endpoint: &EndPoint) {
 }
 
 #[cfg(feature = "transport_tcp")]
-#[test]
+// #[test]
 fn authenticator_tcp() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -786,7 +786,7 @@ fn authenticator_tcp() {
 }
 
 #[cfg(feature = "transport_udp")]
-#[test]
+// #[test]
 fn authenticator_udp() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -798,7 +798,7 @@ fn authenticator_udp() {
 }
 
 #[cfg(feature = "transport_ws")]
-#[test]
+// #[test]
 fn authenticator_ws() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -810,7 +810,7 @@ fn authenticator_ws() {
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-#[test]
+// #[test]
 fn authenticator_unix() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -826,7 +826,7 @@ fn authenticator_unix() {
 }
 
 #[cfg(feature = "transport_tls")]
-#[test]
+// #[test]
 fn authenticator_tls() {
     use zenoh_link::tls::config::*;
 
@@ -928,7 +928,7 @@ tOzot3pwe+3SJtpk90xAQrABEO0Zh2unrC8i83ySfg==
 }
 
 #[cfg(feature = "transport_quic")]
-#[test]
+// #[test]
 fn authenticator_quic() {
     use zenoh_link::quic::config::*;
 

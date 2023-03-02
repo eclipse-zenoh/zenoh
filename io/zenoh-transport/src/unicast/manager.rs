@@ -11,12 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::unicast::{
-    shm::SharedMemoryUnicast,
-    transport::{TransportUnicastConfig, TransportUnicastInner},
-    TransportConfigUnicast, TransportUnicast,
+#[cfg(feature = "shared-memory")]
+use crate::unicast::shm::SharedMemoryUnicast;
+use crate::{
+    unicast::{
+        transport::{TransportUnicastConfig, TransportUnicastInner},
+        TransportConfigUnicast, TransportUnicast,
+    },
+    TransportManager,
 };
-use crate::TransportManager;
 use async_std::prelude::FutureExt;
 use async_std::sync::Mutex;
 use async_std::task;

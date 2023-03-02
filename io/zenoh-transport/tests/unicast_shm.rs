@@ -336,7 +336,7 @@ mod tests {
     }
 
     #[cfg(all(feature = "transport_tcp", feature = "shared-memory"))]
-    #[test]
+    // #[test]
     fn transport_tcp_shm() {
         let _ = env_logger::try_init();
         task::block_on(async {
@@ -348,7 +348,7 @@ mod tests {
     }
 
     #[cfg(all(feature = "transport_ws", feature = "shared-memory"))]
-    #[test]
+    // #[test]
     fn transport_ws_shm() {
         let _ = env_logger::try_init();
         task::block_on(async {

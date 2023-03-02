@@ -38,19 +38,23 @@ use zenoh_result::ZResult;
 
 pub(super) type AcceptError = (zenoh_result::Error, Option<u8>);
 
+struct StateZenoh {
+    batch_size: u16,
+    resolution: Resolution,
+}
+
+struct State {
+    zenoh: StateZenoh,
+    ext_qos: ext::qos::State,
+}
+
 // InitSyn
 struct RecvInitSynIn {
     mine_version: u8,
-    mine_resolution: Resolution,
-    mine_batch_size: u16,
-    ext_qos: ext::qos::State,
 }
 struct RecvInitSynOut {
     other_zid: ZenohId,
     other_whatami: WhatAmI,
-    agreed_resolution: Resolution,
-    agreed_batch_size: u16,
-    ext_qos: ext::qos::State,
 }
 
 // InitAck
@@ -60,9 +64,6 @@ struct SendInitAckIn {
     mine_whatami: WhatAmI,
     other_zid: ZenohId,
     other_whatami: WhatAmI,
-    agreed_resolution: Resolution,
-    agreed_batch_size: u16,
-    ext_qos: ext::qos::State,
 }
 struct SendInitAckOut {
     cookie_nonce: ZInt,
@@ -77,9 +78,6 @@ struct RecvOpenSynOut {
     other_whatami: WhatAmI,
     other_lease: Duration,
     other_initial_sn: ZInt,
-    agreed_resolution: Resolution,
-    agreed_batch_size: u16,
-    ext_qos: ext::qos::State,
 }
 
 // OpenAck
@@ -87,12 +85,9 @@ struct SendOpenAckIn {
     mine_zid: ZenohId,
     mine_lease: Duration,
     other_zid: ZenohId,
-    agreed_resolution: Resolution,
-    ext_qos: ext::qos::State,
 }
 struct SendOpenAckOut {
     mine_initial_sn: ZInt,
-    ext_qos: ext::qos::State,
 }
 
 // Fsm
@@ -104,12 +99,17 @@ struct AcceptLink<'a> {
 }
 
 #[async_trait]
-impl<'a> AcceptFsm for AcceptLink<'a> {
+impl<'a> AcceptFsm<'a> for AcceptLink<'a> {
     type Error = AcceptError;
 
-    type InitSynIn = RecvInitSynIn;
+    type InitSynIn = (&'a mut State, RecvInitSynIn);
     type InitSynOut = RecvInitSynOut;
-    async fn recv_init_syn(&self, input: Self::InitSynIn) -> Result<Self::InitSynOut, Self::Error> {
+    async fn recv_init_syn(
+        &'a self,
+        input: Self::InitSynIn,
+    ) -> Result<Self::InitSynOut, Self::Error> {
+        let (state, input) = input;
+
         let msg = self
             .link
             .recv()
@@ -139,49 +139,50 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         }
 
         // Compute the minimum SN resolution
-        let agreed_resolution = {
+        state.zenoh.resolution = {
             let mut res = Resolution::default();
 
             // Frame SN
             let i_fsn_res = init_syn.resolution.get(Field::FrameSN);
-            let m_fsn_res = input.mine_resolution.get(Field::FrameSN);
+            let m_fsn_res = state.zenoh.resolution.get(Field::FrameSN);
             res.set(Field::FrameSN, i_fsn_res.min(m_fsn_res));
 
             // Request ID
-            let i_rid_res = input.mine_resolution.get(Field::RequestID);
-            let m_rid_res = input.mine_resolution.get(Field::RequestID);
+            let i_rid_res = init_syn.resolution.get(Field::RequestID);
+            let m_rid_res = state.zenoh.resolution.get(Field::RequestID);
             res.set(Field::RequestID, i_rid_res.min(m_rid_res));
 
             res
         };
 
         // Compute the minimum batch size
-        let agreed_batch_size = input.mine_batch_size.min(input.mine_batch_size);
+        state.zenoh.batch_size = state.zenoh.batch_size.min(init_syn.batch_size);
 
         // Extension QoS
-        let qos_state = self
-            .ext_qos
-            .recv_init_syn((input.ext_qos, init_syn.qos))
+        self.ext_qos
+            .recv_init_syn((&mut state.ext_qos, init_syn.qos))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         let output = RecvInitSynOut {
             other_whatami: init_syn.whatami,
             other_zid: init_syn.zid,
-            agreed_resolution,
-            agreed_batch_size,
-            ext_qos: qos_state,
         };
         Ok(output)
     }
 
-    type InitAckIn = SendInitAckIn;
+    type InitAckIn = (&'a State, SendInitAckIn);
     type InitAckOut = SendInitAckOut;
-    async fn send_init_ack(&self, input: Self::InitAckIn) -> Result<Self::InitAckOut, Self::Error> {
+    async fn send_init_ack(
+        &'a self,
+        input: Self::InitAckIn,
+    ) -> Result<Self::InitAckOut, Self::Error> {
+        let (state, input) = input;
+
         // Extension QoS
-        let (qos_state, qos_mine_ext) = self
+        let qos_mine_ext = self
             .ext_qos
-            .send_init_ack(input.ext_qos)
+            .send_init_ack(&state.ext_qos)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -190,10 +191,10 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         let cookie = Cookie {
             whatami: input.other_whatami,
             zid: input.other_zid,
-            resolution: input.agreed_resolution,
-            batch_size: input.agreed_batch_size,
+            resolution: state.zenoh.resolution,
+            batch_size: state.zenoh.batch_size,
             nonce: cookie_nonce,
-            is_qos: qos_state.is_qos,
+            is_qos: state.ext_qos.is_qos,
             // properties: EstablishmentProperties::new(),
         };
 
@@ -217,8 +218,8 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             version: input.mine_version,
             whatami: input.mine_whatami,
             zid: input.mine_zid,
-            resolution: input.agreed_resolution,
-            batch_size: input.agreed_batch_size,
+            resolution: state.zenoh.resolution,
+            batch_size: state.zenoh.batch_size,
             cookie,
             qos: qos_mine_ext,
             shm: None,  // @TODO
@@ -237,8 +238,11 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
     }
 
     type OpenSynIn = RecvOpenSynIn;
-    type OpenSynOut = RecvOpenSynOut;
-    async fn recv_open_syn(&self, input: Self::OpenSynIn) -> Result<Self::OpenSynOut, Self::Error> {
+    type OpenSynOut = (State, RecvOpenSynOut);
+    async fn recv_open_syn(
+        &'a self,
+        input: Self::OpenSynIn,
+    ) -> Result<Self::OpenSynOut, Self::Error> {
         let msg = self
             .link
             .recv()
@@ -291,12 +295,20 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             return Err((e.into(), Some(close::reason::INVALID)));
         }
 
-        // Extension QoS
-        let qos_state = self
-            .ext_qos
-            .recv_open_syn(ext::qos::State {
+        // Rebuild the state from the cookie
+        let mut state = State {
+            zenoh: StateZenoh {
+                batch_size: cookie.batch_size,
+                resolution: cookie.resolution,
+            },
+            ext_qos: ext::qos::State {
                 is_qos: cookie.is_qos,
-            })
+            },
+        };
+
+        // Extension QoS
+        self.ext_qos
+            .recv_open_syn(&mut state.ext_qos)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -305,25 +317,26 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             other_whatami: cookie.whatami,
             other_lease: open_syn.lease,
             other_initial_sn: open_syn.initial_sn,
-            agreed_resolution: cookie.resolution,
-            agreed_batch_size: cookie.batch_size,
-            ext_qos: qos_state,
         };
-        Ok(output)
+        Ok((state, output))
     }
 
-    type OpenAckIn = SendOpenAckIn;
+    type OpenAckIn = (&'a State, SendOpenAckIn);
     type OpenAckOut = SendOpenAckOut;
-    async fn send_open_ack(&self, input: Self::OpenAckIn) -> Result<Self::OpenAckOut, Self::Error> {
+    async fn send_open_ack(
+        &'a self,
+        input: Self::OpenAckIn,
+    ) -> Result<Self::OpenAckOut, Self::Error> {
+        let (state, input) = input;
+
         // Extension QoS
-        let qos_state = self
-            .ext_qos
-            .send_open_ack(input.ext_qos)
+        self.ext_qos
+            .send_open_ack(&state.ext_qos)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Build OpenAck message
-        let mine_initial_sn = compute_sn(input.mine_zid, input.other_zid, input.agreed_resolution);
+        let mine_initial_sn = compute_sn(input.mine_zid, input.other_zid, state.zenoh.resolution);
         let message: TransportMessage = OpenAck {
             lease: input.mine_lease,
             initial_sn: mine_initial_sn,
@@ -338,10 +351,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
-        let output = SendOpenAckOut {
-            mine_initial_sn,
-            ext_qos: qos_state,
-        };
+        let output = SendOpenAckOut { mine_initial_sn };
         Ok(output)
     }
 }
@@ -372,18 +382,23 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
     }
 
     let iack_out = {
+        let mut state = State {
+            zenoh: StateZenoh {
+                batch_size: manager.config.batch_size,
+                resolution: manager.config.resolution,
+            },
+            ext_qos: ext::qos::State {
+                is_qos: manager.config.unicast.is_qos,
+            },
+        };
+
         // Let's scope the Init phase in such a way memory is freed by Rust
         // after having sent the InitAck. The state will be recovered
         // from the Cookie received in the OpenSyn.
         let isyn_in = RecvInitSynIn {
             mine_version: manager.config.version,
-            mine_resolution: manager.config.resolution,
-            mine_batch_size: manager.config.batch_size,
-            ext_qos: ext::qos::State {
-                is_qos: manager.config.unicast.is_qos,
-            },
         };
-        let isyn_out = step!(fsm.recv_init_syn(isyn_in).await);
+        let isyn_out = step!(fsm.recv_init_syn((&mut state, isyn_in)).await);
 
         let iack_in = SendInitAckIn {
             mine_version: manager.config.version,
@@ -391,35 +406,30 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
             mine_whatami: manager.config.whatami,
             other_zid: isyn_out.other_zid,
             other_whatami: isyn_out.other_whatami,
-            agreed_resolution: isyn_out.agreed_resolution,
-            agreed_batch_size: isyn_out.agreed_batch_size,
-            ext_qos: isyn_out.ext_qos,
         };
-        step!(fsm.send_init_ack(iack_in).await)
+        step!(fsm.send_init_ack((&state, iack_in)).await)
     };
 
     // Open handshake
     let osyn_in = RecvOpenSynIn {
         cookie_nonce: iack_out.cookie_nonce,
     };
-    let osyn_out = step!(fsm.recv_open_syn(osyn_in).await);
+    let (state, osyn_out) = step!(fsm.recv_open_syn(osyn_in).await);
 
     let oack_in = SendOpenAckIn {
         mine_zid: manager.config.zid,
         mine_lease: manager.config.unicast.lease,
         other_zid: osyn_out.other_zid,
-        agreed_resolution: osyn_out.agreed_resolution,
-        ext_qos: osyn_out.ext_qos,
     };
-    let oack_out = step!(fsm.send_open_ack(oack_in).await);
+    let oack_out = step!(fsm.send_open_ack((&state, oack_in)).await);
 
     // Initialize the transport
     let config = TransportConfigUnicast {
         peer: osyn_out.other_zid,
         whatami: osyn_out.other_whatami,
-        sn_resolution: osyn_out.agreed_resolution.get(Field::FrameSN).mask(),
+        sn_resolution: state.zenoh.resolution.get(Field::FrameSN).mask(),
         tx_initial_sn: oack_out.mine_initial_sn,
-        is_qos: oack_out.ext_qos.is_qos,
+        is_qos: state.ext_qos.is_qos,
         is_shm: false, // @TODO
     };
     let transport = step!(manager
@@ -466,7 +476,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
     let input = InputFinalize {
         transport: transport.clone(),
         other_lease: osyn_out.other_lease,
-        agreed_batch_size: osyn_out.agreed_batch_size,
+        agreed_batch_size: state.zenoh.batch_size,
     };
     step!(finalize_transport(link, manager, input)
         .await
