@@ -188,7 +188,6 @@ pub mod zmsg {
 // Zenoh messages at zenoh level
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ZenohBody {
     Data(Data),
     Unit(Unit),
@@ -199,7 +198,6 @@ pub enum ZenohBody {
 }
 
 #[derive(Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ZenohMessage {
     pub body: ZenohBody,
     pub channel: Channel,

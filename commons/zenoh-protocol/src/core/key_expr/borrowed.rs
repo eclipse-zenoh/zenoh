@@ -45,7 +45,6 @@ use zenoh_result::{bail, Error as ZError, ZResult};
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
 #[derive(PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct keyexpr(str);
 
 impl keyexpr {
@@ -308,7 +307,6 @@ impl Div for &keyexpr {
 ///
 /// You can check for intersection with `level >= SetIntersecionLevel::Intersection` and for inclusion with `level >= SetIntersectionLevel::Includes`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SetIntersectionLevel {
     Disjoint,
     Intersects,

@@ -60,7 +60,6 @@ pub mod resolution;
 pub use resolution::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Property {
     pub key: ZInt,
     pub value: Vec<u8>,
@@ -68,7 +67,6 @@ pub struct Property {
 
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ZenohId(uhlc::ID);
 
 impl ZenohId {
@@ -108,7 +106,6 @@ impl From<uuid::Uuid> for ZenohId {
 
 // Mimics uhlc::SizeError,
 #[derive(Debug, Clone, Copy)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SizeError(usize);
 
 #[cfg(feature = "std")]
@@ -291,7 +288,6 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
 
 /// The kind of congestion control.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum CongestionControl {
     Block,
@@ -305,7 +301,6 @@ impl Default for CongestionControl {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum Reliability {
     BestEffort,
@@ -319,14 +314,12 @@ impl Default for Reliability {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Channel {
     pub priority: Priority,
     pub reliability: Reliability,
 }
 
 #[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum Priority {
     Control = 0,

@@ -79,7 +79,6 @@ clap = "3.2.23"
 const_format = { version = "0.2.30", default-features = false }
 crc = "3.0.0"
 criterion = "0.4.0"
-defmt = { version = "0.3.2", features = ["alloc"] }
 derive_more = "0.99.17"
 derive-new = "0.5.9"
 env_logger = "0.10.0"

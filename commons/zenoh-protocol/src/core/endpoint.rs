@@ -126,7 +126,6 @@ impl Parameters {
 // Protocol
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Protocol<'a>(pub(super) &'a str);
 
 impl<'a> Protocol<'a> {
@@ -149,7 +148,6 @@ impl fmt::Display for Protocol<'_> {
 
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ProtocolMut<'a>(&'a mut EndPoint);
 
 impl<'a> ProtocolMut<'a> {
@@ -180,7 +178,6 @@ impl fmt::Display for ProtocolMut<'_> {
 // Address
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Address<'a>(pub(super) &'a str);
 
 impl<'a> Address<'a> {
@@ -203,7 +200,6 @@ impl fmt::Display for Address<'_> {
 
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct AddressMut<'a>(&'a mut EndPoint);
 
 impl<'a> AddressMut<'a> {
@@ -234,7 +230,6 @@ impl fmt::Display for AddressMut<'_> {
 // Metadata
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Metadata<'a>(pub(super) &'a str);
 
 impl<'a> Metadata<'a> {
@@ -269,7 +264,6 @@ impl fmt::Display for Metadata<'_> {
 
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct MetadataMut<'a>(&'a mut EndPoint);
 
 impl<'a> MetadataMut<'a> {
@@ -337,7 +331,6 @@ impl fmt::Display for MetadataMut<'_> {
 // Config
 #[repr(transparent)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Config<'a>(pub(super) &'a str);
 
 impl<'a> Config<'a> {
@@ -372,7 +365,6 @@ impl fmt::Display for Config<'_> {
 
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ConfigMut<'a>(&'a mut EndPoint);
 
 impl<'a> ConfigMut<'a> {
@@ -438,7 +430,6 @@ impl fmt::Display for ConfigMut<'_> {
 }
 /// A `String` that respects the [`EndPoint`] canon form: `<locator>#<config>`, such that `<locator>` is a valid [`Locator`] `<config>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[serde(into = "String")]
 #[serde(try_from = "String")]
 pub struct EndPoint {

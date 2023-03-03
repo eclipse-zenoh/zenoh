@@ -28,7 +28,6 @@ use alloc::vec::Vec;
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Declare {
     pub declarations: Vec<Declaration>,
 }
@@ -50,7 +49,6 @@ impl Declare {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Declaration {
     Resource(Resource),
     ForgetResource(ForgetResource),
@@ -94,7 +92,6 @@ impl Declaration {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Resource {
     pub expr_id: ZInt,
     pub key: WireExpr<'static>,
@@ -123,7 +120,6 @@ impl Resource {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ForgetResource {
     pub expr_id: ZInt,
 }
@@ -150,7 +146,6 @@ impl ForgetResource {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Publisher {
     pub key: WireExpr<'static>,
 }
@@ -173,7 +168,6 @@ impl Publisher {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ForgetPublisher {
     pub key: WireExpr<'static>,
 }
@@ -189,7 +183,6 @@ impl ForgetPublisher {
 
 /// The subscription mode.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 #[repr(u8)]
 pub enum SubMode {
     Push,
@@ -204,7 +197,6 @@ impl Default for SubMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct SubInfo {
     pub reliability: Reliability,
     pub mode: SubMode,
@@ -221,7 +213,6 @@ pub struct SubInfo {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Subscriber {
     pub key: WireExpr<'static>,
     pub info: SubInfo,
@@ -260,7 +251,6 @@ impl Subscriber {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ForgetSubscriber {
     pub key: WireExpr<'static>,
 }
@@ -275,7 +265,6 @@ impl ForgetSubscriber {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct QueryableInfo {
     pub complete: ZInt, // Default 0: incomplete
     pub distance: ZInt, // Default 0: no distance
@@ -292,7 +281,6 @@ pub struct QueryableInfo {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Queryable {
     pub key: WireExpr<'static>,
     pub info: QueryableInfo,
@@ -323,7 +311,6 @@ impl Queryable {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ForgetQueryable {
     pub key: WireExpr<'static>,
 }

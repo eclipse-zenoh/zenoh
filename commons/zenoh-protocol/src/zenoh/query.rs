@@ -20,7 +20,6 @@ use zenoh_buffers::ZBuf;
 
 /// The kind of consolidation.
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ConsolidationMode {
     /// No consolidation applied: multiple samples may be received for the same key-timestamp.
     None,
@@ -38,7 +37,6 @@ pub enum ConsolidationMode {
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum QueryTarget {
     BestMatching,
     All,
@@ -66,7 +64,6 @@ impl Default for QueryTarget {
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct QueryBody {
     pub data_info: DataInfo,
     pub payload: ZBuf,
@@ -109,7 +106,6 @@ impl QueryBody {
 /// ~   QueryBody   ~ if B==1
 /// +---------------+
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Query {
     pub key: WireExpr<'static>,
     pub parameters: String,

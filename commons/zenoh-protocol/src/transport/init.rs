@@ -104,7 +104,6 @@ pub mod flag {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct InitSyn {
     pub version: u8,
     pub whatami: WhatAmI,
@@ -168,7 +167,6 @@ impl InitSyn {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct InitAck {
     pub version: u8,
     pub whatami: WhatAmI,

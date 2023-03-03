@@ -72,7 +72,6 @@ pub mod flag {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Scout {
     pub version: u8,
     pub what: WhatAmIMatcher,

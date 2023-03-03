@@ -22,7 +22,6 @@ const WAI_STR_C: &str = "client";
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum WhatAmI {
     Router = 0b001,
     Peer = 0b010,
@@ -95,7 +94,6 @@ impl From<WhatAmI> for u8 {
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct WhatAmIMatcher(NonZeroU8);
 
 impl WhatAmIMatcher {

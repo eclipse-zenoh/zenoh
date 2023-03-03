@@ -99,8 +99,6 @@ pub mod flag {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-
 pub struct Hello {
     pub version: u8,
     pub whatami: WhatAmI,

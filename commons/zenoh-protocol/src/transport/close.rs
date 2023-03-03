@@ -80,7 +80,6 @@ pub fn reason_to_str(reason: u8) -> &'static str {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Close {
     pub reason: u8,
     pub session: bool,

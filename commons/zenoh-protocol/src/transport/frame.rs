@@ -70,7 +70,6 @@ pub mod flag {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Frame {
     pub reliability: Reliability,
     pub sn: ZInt,
@@ -145,7 +144,6 @@ impl Frame {
 
 // FrameHeader
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct FrameHeader {
     pub reliability: Reliability,
     pub sn: ZInt,

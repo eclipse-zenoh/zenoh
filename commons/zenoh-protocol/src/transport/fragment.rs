@@ -67,7 +67,6 @@ pub mod flag {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Fragment {
     pub reliability: Reliability,
     pub more: bool,
@@ -112,7 +111,6 @@ impl Fragment {
 
 // FragmentHeader
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct FragmentHeader {
     pub reliability: Reliability,
     pub more: bool,

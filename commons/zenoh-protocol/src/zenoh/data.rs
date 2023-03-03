@@ -18,7 +18,6 @@ use zenoh_buffers::ZBuf;
 /// The kind of a `Sample`.
 #[repr(u8)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SampleKind {
     /// if the `Sample` was issued by a `put` operation.
     Put = 0,
@@ -73,12 +72,10 @@ impl TryFrom<ZInt> for SampleKind {
 /// - if F==1 then the message is a REPLY_FINAL
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReplierInfo {
     pub id: ZenohId,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ReplyContext {
     pub qid: ZInt,
     pub replier: Option<ReplierInfo>,
@@ -152,7 +149,6 @@ impl ReplyContext {
 ///
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct DataInfo {
     #[cfg(feature = "shared-memory")]
     pub sliced: bool,
@@ -210,7 +206,6 @@ impl DataInfo {
 ///
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Data {
     pub key: WireExpr<'static>,
     pub data_info: Option<DataInfo>,

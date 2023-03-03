@@ -40,7 +40,6 @@ pub mod id {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum ConduitSnList {
     Plain(ConduitSn),
     QoS(Box<[ConduitSn; Priority::NUM]>),
@@ -79,7 +78,6 @@ impl fmt::Display for ConduitSnList {
 
 /// The kind of reliability.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ConduitSn {
     pub reliable: ZInt,
     pub best_effort: ZInt,
@@ -87,7 +85,6 @@ pub struct ConduitSn {
 
 // Zenoh messages at zenoh-transport level
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum TransportBody {
     InitSyn(InitSyn),
     InitAck(InitAck),
@@ -101,7 +98,6 @@ pub enum TransportBody {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct TransportMessage {
     pub body: TransportBody,
     #[cfg(feature = "stats")]
