@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use alloc::sync::Arc;
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use core::{
     convert::TryFrom,
@@ -72,7 +72,7 @@ impl LinkUnicast {
         const ERR: &str = "Write error on link: ";
 
         // Create the buffer for serializing the message
-        let mut buff = vec![];
+        let mut buff = Vec::new();
         let mut writer = buff.writer();
         let codec = Zenoh080::new();
 

@@ -17,20 +17,27 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+#![no_std]
 extern crate alloc;
 
+mod multicast;
 mod unicast;
 
+use alloc::{
+    borrow::{Cow, ToOwned},
+    boxed::Box,
+    string::String,
+    sync::Arc,
+    vec::Vec,
+};
 use async_trait::async_trait;
-use serde::Serialize;
-use std::{
-    borrow::Cow,
+use core::{
     cmp::PartialEq,
     fmt,
     hash::{Hash, Hasher},
     ops::Deref,
-    sync::Arc,
 };
+use serde::Serialize;
 pub use unicast::*;
 use zenoh_buffers::{
     reader::{HasReader, Reader},
@@ -139,7 +146,7 @@ pub trait LinkMulticastTrait: Send + Sync {
 impl LinkMulticast {
     pub async fn write_transport_message(&self, msg: &TransportMessage) -> ZResult<usize> {
         // Create the buffer for serializing the message
-        let mut buff = vec![];
+        let mut buff = Vec::new();
         let mut writer = buff.writer();
         let codec = Zenoh080::new();
         codec
