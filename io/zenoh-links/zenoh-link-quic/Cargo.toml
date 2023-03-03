@@ -34,7 +34,6 @@ rustls = { workspace = true }
 rustls-native-certs = { workspace = true }
 rustls-pemfile = { workspace = true }
 webpki = { workspace = true }
-zenoh-cfg-properties = { path = "../../../commons/zenoh-cfg-properties/" }
 zenoh-config = { path = "../../../commons/zenoh-config/" }
 zenoh-core = { path = "../../../commons/zenoh-core/" }
 zenoh-link-commons = { path = "../../zenoh-link-commons/" }

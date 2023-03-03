@@ -21,9 +21,7 @@ use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use zenoh_cfg_properties::{config::*, Properties};
-use zenoh_config::{Config, QueueConf, QueueSizeConf};
-use zenoh_core::zparse;
+use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
 use zenoh_protocol::{
@@ -89,7 +87,7 @@ pub struct TransportManagerConfig {
     pub defrag_buff_size: usize,
     pub link_rx_buffer_size: usize,
     pub unicast: TransportManagerConfigUnicast,
-    pub endpoint: HashMap<String, Properties>,
+    pub endpoints: HashMap<String, String>, // (protocol, config)
     pub handler: Arc<dyn TransportEventHandler>,
     pub tx_threads: usize,
 }
@@ -114,7 +112,7 @@ pub struct TransportManagerBuilder {
     defrag_buff_size: usize,
     link_rx_buffer_size: usize,
     unicast: TransportManagerBuilderUnicast,
-    endpoint: HashMap<String, Properties>,
+    endpoints: HashMap<String, String>, // (protocol, config)
     tx_threads: usize,
 }
 
@@ -159,8 +157,8 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn endpoint(mut self, endpoint: HashMap<String, Properties>) -> Self {
-        self.endpoint = endpoint;
+    pub fn endpoints(mut self, endpoints: HashMap<String, String>) -> Self {
+        self.endpoints = endpoints;
         self
     }
 
@@ -205,7 +203,7 @@ impl TransportManagerBuilder {
             }
             bail!("{}", formatter);
         }
-        self = self.endpoint(c);
+        self = self.endpoints(c);
         self = self.unicast(
             TransportManagerBuilderUnicast::default()
                 .from_config(config)
@@ -239,7 +237,7 @@ impl TransportManagerBuilder {
             defrag_buff_size: self.defrag_buff_size,
             link_rx_buffer_size: self.link_rx_buffer_size,
             unicast: unicast.config,
-            endpoint: self.endpoint,
+            endpoints: self.endpoints,
             handler,
             tx_threads: self.tx_threads,
         };
@@ -256,19 +254,20 @@ impl TransportManagerBuilder {
 
 impl Default for TransportManagerBuilder {
     fn default() -> Self {
+        let link_rx = LinkRxConf::default();
         let queue = QueueConf::default();
         let backoff = queue.backoff().unwrap();
         Self {
             version: VERSION,
             zid: ZenohId::rand(),
-            whatami: ZN_MODE_DEFAULT.parse().unwrap(),
+            whatami: zenoh_config::defaults::mode,
             resolution: Resolution::default(),
             batch_size: BATCH_SIZE,
             queue_size: queue.size,
             queue_backoff: Duration::from_nanos(backoff),
-            defrag_buff_size: zparse!(ZN_DEFRAG_BUFF_SIZE_DEFAULT).unwrap(),
-            link_rx_buffer_size: zparse!(ZN_LINK_RX_BUFF_SIZE_DEFAULT).unwrap(),
-            endpoint: HashMap::new(),
+            defrag_buff_size: link_rx.max_message_size().unwrap(),
+            link_rx_buffer_size: link_rx.buffer_size().unwrap(),
+            endpoints: HashMap::new(),
             unicast: TransportManagerBuilderUnicast::default(),
             tx_threads: 1,
         }

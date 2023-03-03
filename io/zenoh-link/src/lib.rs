@@ -18,10 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use std::collections::HashMap;
-#[allow(unused_imports)]
 use std::sync::Arc;
-
-use zenoh_cfg_properties::Properties;
 use zenoh_config::Config;
 use zenoh_result::{bail, ZResult};
 
@@ -112,18 +109,19 @@ pub struct LinkConfigurator {
     #[cfg(feature = "transport_tls")]
     tls_inspector: TlsConfigurator,
 }
+
 impl LinkConfigurator {
     #[allow(unused_variables, unused_mut)]
     pub async fn configurations(
         &self,
         config: &Config,
     ) -> (
-        HashMap<String, Properties>,
+        HashMap<String, String>,
         HashMap<String, zenoh_result::Error>,
     ) {
         let mut configs = HashMap::new();
         let mut errors = HashMap::new();
-        let mut insert_config = |proto: String, cfg: ZResult<Properties>| match cfg {
+        let mut insert_config = |proto: String, cfg: ZResult<String>| match cfg {
             Ok(v) => {
                 configs.insert(proto, v);
             }

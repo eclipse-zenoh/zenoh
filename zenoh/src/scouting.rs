@@ -16,11 +16,8 @@ use crate::net::runtime::{orchestrator::Loop, Runtime};
 
 use async_std::net::UdpSocket;
 use futures::StreamExt;
-use std::future::Ready;
-use std::{fmt, ops::Deref};
-use zenoh_config::{
-    whatami::WhatAmIMatcher, ZN_MULTICAST_INTERFACE_DEFAULT, ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
-};
+use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};
+use zenoh_config::whatami::WhatAmIMatcher;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_result::ZResult;
 
@@ -295,23 +292,12 @@ fn scout(
     callback: Callback<'static, Hello>,
 ) -> ZResult<ScoutInner> {
     log::trace!("scout({}, {})", what, &config);
-    let default_addr = match ZN_MULTICAST_IPV4_ADDRESS_DEFAULT.parse() {
-        Ok(addr) => addr,
-        Err(e) => {
-            bail!(
-                "invalid default addr {}: {:?}",
-                ZN_MULTICAST_IPV4_ADDRESS_DEFAULT,
-                &e
-            )
-        }
-    };
+    let default_addr = SocketAddr::from(zenoh_config::defaults::scouting::multicast::address);
     let addr = config.scouting.multicast.address().unwrap_or(default_addr);
-    let ifaces = config
-        .scouting
-        .multicast
-        .interface()
-        .as_ref()
-        .map_or(ZN_MULTICAST_INTERFACE_DEFAULT, |s| s.as_ref());
+    let ifaces = config.scouting.multicast.interface().as_ref().map_or(
+        zenoh_config::defaults::scouting::multicast::interface,
+        |s| s.as_ref(),
+    );
     let (stop_sender, stop_receiver) = flume::bounded::<()>(1);
     let ifaces = Runtime::get_interfaces(ifaces);
     if !ifaces.is_empty() {

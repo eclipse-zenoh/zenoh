@@ -3823,7 +3823,6 @@ dependencies = [
  "uuid",
  "vec_map",
  "zenoh-buffers",
- "zenoh-cfg-properties",
  "zenoh-codec",
  "zenoh-collections",
  "zenoh-config",
@@ -3846,14 +3845,6 @@ dependencies = [
  "defmt",
  "rand 0.8.5",
  "zenoh-collections",
-]
-
-[[package]]
-name = "zenoh-cfg-properties"
-version = "0.7.0-rc"
-dependencies = [
- "zenoh-macros",
- "zenoh-result",
 ]
 
 [[package]]
@@ -3888,7 +3879,6 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "validated_struct",
- "zenoh-cfg-properties",
  "zenoh-core",
  "zenoh-protocol",
  "zenoh-result",
@@ -3961,7 +3951,6 @@ dependencies = [
  "async-std",
  "async-trait",
  "rcgen",
- "zenoh-cfg-properties",
  "zenoh-config",
  "zenoh-link-commons",
  "zenoh-link-quic",
@@ -3985,7 +3974,6 @@ dependencies = [
  "serde",
  "typenum",
  "zenoh-buffers",
- "zenoh-cfg-properties",
  "zenoh-codec",
  "zenoh-protocol",
  "zenoh-result",
@@ -4004,7 +3992,6 @@ dependencies = [
  "rustls-native-certs",
  "rustls-pemfile",
  "webpki",
- "zenoh-cfg-properties",
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
@@ -4025,7 +4012,6 @@ dependencies = [
  "tokio",
  "uuid",
  "z-serial",
- "zenoh-cfg-properties",
  "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
@@ -4063,7 +4049,6 @@ dependencies = [
  "rustls-pemfile",
  "webpki",
  "webpki-roots",
- "zenoh-cfg-properties",
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
@@ -4158,7 +4143,6 @@ dependencies = [
  "serde_json",
  "tide",
  "zenoh",
- "zenoh-cfg-properties",
  "zenoh-plugin-trait",
  "zenoh-result",
  "zenoh-util",
@@ -4277,7 +4261,6 @@ dependencies = [
  "serde",
  "sha3",
  "zenoh-buffers",
- "zenoh-cfg-properties",
  "zenoh-codec",
  "zenoh-collections",
  "zenoh-config",

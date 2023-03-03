@@ -513,7 +513,12 @@ struct TlsServerConfig {
 
 impl TlsServerConfig {
     pub async fn new(config: &Config<'_>) -> ZResult<TlsServerConfig> {
-        let mut client_auth: bool = TLS_CLIENT_AUTH_DEFAULT.parse().unwrap();
+        let tls_server_client_auth: bool = match config.get(TLS_CLIENT_AUTH) {
+            Some(s) => s
+                .parse()
+                .map_err(|_| zerror!("Unknown client auth argument: {}", s))?,
+            None => false,
+        };
         let tls_server_private_key = TlsServerConfig::load_tls_private_key(config).await?;
         let tls_server_certificate = TlsServerConfig::load_tls_certificate(config).await?;
 
@@ -537,11 +542,7 @@ impl TlsServerConfig {
                 .map_err(|e| zerror!(e))
                 .map(|mut certs| certs.drain(..).map(Certificate).collect())?;
 
-        if let Some(value) = config.get(TLS_CLIENT_AUTH) {
-            client_auth = value.parse()?
-        }
-
-        let sc = if client_auth {
+        let sc = if tls_server_client_auth {
             let root_cert_store = load_trust_anchors(config)?.map_or_else(
                 || {
                     Err(zerror!(
@@ -593,17 +594,19 @@ struct TlsClientConfig {
 
 impl TlsClientConfig {
     pub async fn new(config: &Config<'_>) -> ZResult<TlsClientConfig> {
-        let mut client_auth: bool = TLS_CLIENT_AUTH_DEFAULT.parse().unwrap();
-        if let Some(value) = config.get(TLS_CLIENT_AUTH) {
-            client_auth = value.parse()?
-        }
+        let tls_client_server_auth: bool = match config.get(TLS_CLIENT_AUTH) {
+            Some(s) => s
+                .parse()
+                .map_err(|_| zerror!("Unknown client auth argument: {}", s))?,
+            None => false,
+        };
 
         let root_cert_store =
             load_trust_anchors(config)?.map_or_else(|| {
                 log::debug!("Field 'root_ca_certificate' not specified. Loading default Web PKI certificates instead.");
                 load_default_webpki_certs()
             }, |certs| certs);
-        let cc = if client_auth {
+        let cc = if tls_client_server_auth {
             log::debug!("Loading client authentication key and certificate...");
             let tls_client_private_key = TlsClientConfig::load_tls_private_key(config).await?;
             let tls_client_certificate = TlsClientConfig::load_tls_certificate(config).await?;

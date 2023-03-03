@@ -37,7 +37,6 @@ transport_serial = ["zenoh-link-serial"]
 async-std = { workspace = true }
 async-trait = { workspace = true }
 rcgen = { workspace = true, optional = true }
-zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
 zenoh-config = { path = "../../commons/zenoh-config/" }
 zenoh-result = { path = "../../commons/zenoh-result/" }
 zenoh-link-commons = { path = "../zenoh-link-commons/" }

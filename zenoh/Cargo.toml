@@ -84,7 +84,6 @@ uhlc = { workspace = true, features = ["default"] }
 uuid = { workspace = true, features = ["default"] }
 vec_map = { workspace = true }
 zenoh-buffers = { path = "../commons/zenoh-buffers/" }
-zenoh-cfg-properties = { path = "../commons/zenoh-cfg-properties/" }
 zenoh-codec = { path = "../commons/zenoh-codec/" }
 zenoh-collections = { path = "../commons/zenoh-collections/" }
 zenoh-config = { path = "../commons/zenoh-config/" }

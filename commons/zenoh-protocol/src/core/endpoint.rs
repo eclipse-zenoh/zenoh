@@ -63,56 +63,64 @@ pub(super) fn config(s: &str) -> &str {
     }
 }
 
-pub(super) fn read_properties(s: &str) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
-    s.split(LIST_SEPARATOR).filter_map(|prop| {
-        if prop.is_empty() {
-            None
-        } else {
-            Some(split_once(prop, FIELD_SEPARATOR))
-        }
-    })
-}
+pub struct Parameters;
 
-pub(super) fn write_properties<'s, I>(iter: I, into: &mut String)
-where
-    I: Iterator<Item = (&'s str, &'s str)>,
-{
-    let mut first = true;
-    for (k, v) in iter {
-        if !first {
-            into.push(LIST_SEPARATOR);
+impl Parameters {
+    pub fn extend<'s, I>(iter: I, into: &mut String)
+    where
+        I: Iterator<Item = (&'s str, &'s str)>,
+    {
+        let mut first = into.is_empty();
+        for (k, v) in iter {
+            if !first {
+                into.push(LIST_SEPARATOR);
+            }
+            into.push_str(k);
+            if !v.is_empty() {
+                into.push(FIELD_SEPARATOR);
+                into.push_str(v);
+            }
+            first = false;
         }
-        into.push_str(k);
-        if !v.is_empty() {
-            into.push(FIELD_SEPARATOR);
-            into.push_str(v);
-        }
-        first = false;
     }
-}
 
-pub(super) fn extend_properties<'s, I>(iter: I, k: &'s str, v: &'s str) -> String
-where
-    I: Iterator<Item = (&'s str, &'s str)>,
-{
-    let current = iter.filter(|x| x.0 != k);
-    let new = Some((k, v)).into_iter();
-    let iter = current.chain(new);
+    pub fn iter(s: &str) -> impl Iterator<Item = (&str, &str)> + DoubleEndedIterator {
+        s.split(LIST_SEPARATOR).filter_map(|prop| {
+            if prop.is_empty() {
+                None
+            } else {
+                Some(split_once(prop, FIELD_SEPARATOR))
+            }
+        })
+    }
 
-    let mut into = String::new();
-    write_properties(iter, &mut into);
-    into
-}
+    pub fn get<'s>(s: &'s str, k: &str) -> Option<&'s str> {
+        Self::iter(s).find(|x| x.0 == k).map(|x| x.1)
+    }
 
-pub(super) fn remove_properties<'s, I>(iter: I, k: &'s str) -> String
-where
-    I: Iterator<Item = (&'s str, &'s str)>,
-{
-    let iter = iter.filter(|x| x.0 != k);
+    pub(super) fn insert<'s, I>(iter: I, k: &'s str, v: &'s str) -> String
+    where
+        I: Iterator<Item = (&'s str, &'s str)>,
+    {
+        let current = iter.filter(|x| x.0 != k);
+        let new = Some((k, v)).into_iter();
+        let iter = current.chain(new);
 
-    let mut into = String::new();
-    write_properties(iter, &mut into);
-    into
+        let mut into = String::new();
+        Parameters::extend(iter, &mut into);
+        into
+    }
+
+    pub(super) fn remove<'s, I>(iter: I, k: &'s str) -> String
+    where
+        I: Iterator<Item = (&'s str, &'s str)>,
+    {
+        let iter = iter.filter(|x| x.0 != k);
+
+        let mut into = String::new();
+        Parameters::extend(iter, &mut into);
+        into
+    }
 }
 
 // Protocol
@@ -239,11 +247,11 @@ impl<'a> Metadata<'a> {
     }
 
     pub fn iter(&'a self) -> impl Iterator<Item = (&'a str, &'a str)> + DoubleEndedIterator {
-        read_properties(self.0)
+        Parameters::iter(self.0)
     }
 
     pub fn get(&'a self, k: &str) -> Option<&'a str> {
-        self.iter().find(|x| x.0 == k).map(|x| x.1)
+        Parameters::get(self.0, k)
     }
 }
 
@@ -293,7 +301,7 @@ impl MetadataMut<'_> {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
-            extend_properties(self.0.metadata().iter(), k, v),
+            Parameters::insert(self.0.metadata().iter(), k, v),
             self.0.config(),
         )?;
 
@@ -305,7 +313,7 @@ impl MetadataMut<'_> {
         let ep = EndPoint::new(
             self.0.protocol(),
             self.0.address(),
-            remove_properties(self.0.metadata().iter(), k),
+            Parameters::remove(self.0.metadata().iter(), k),
             self.0.config(),
         )?;
 
@@ -342,11 +350,11 @@ impl<'a> Config<'a> {
     }
 
     pub fn iter(&'a self) -> impl Iterator<Item = (&'a str, &'a str)> + DoubleEndedIterator {
-        read_properties(self.0)
+        Parameters::iter(self.0)
     }
 
     pub fn get(&'a self, k: &str) -> Option<&'a str> {
-        self.iter().find(|x| x.0 == k).map(|x| x.1)
+        Parameters::get(self.0, k)
     }
 }
 
@@ -397,7 +405,7 @@ impl ConfigMut<'_> {
             self.0.protocol(),
             self.0.address(),
             self.0.metadata(),
-            extend_properties(self.0.config().iter(), k, v),
+            Parameters::insert(self.0.config().iter(), k, v),
         )?;
 
         self.0.inner = ep.inner;
@@ -409,7 +417,7 @@ impl ConfigMut<'_> {
             self.0.protocol(),
             self.0.address(),
             self.0.metadata(),
-            remove_properties(self.0.config().iter(), k),
+            Parameters::remove(self.0.config().iter(), k),
         )?;
 
         self.0.inner = ep.inner;

@@ -123,6 +123,13 @@ impl Default for QoSConf {
     }
 }
 
+#[allow(clippy::derivable_impls)]
+impl Default for SharedMemoryConf {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
+}
+
 impl Default for LinkTxConf {
     #[allow(clippy::unnecessary_cast)]
     fn default() -> Self {
@@ -161,8 +168,8 @@ impl Default for QueueSizeConf {
             interactive_high: 1,
             data_high: 2,
             data: 4,
-            data_low: 4,
-            background: 4,
+            data_low: 2,
+            background: 1,
         }
     }
 }

@@ -33,7 +33,6 @@ use std::{
 };
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
-pub use zenoh_cfg_properties::config::*;
 use zenoh_core::zlock;
 use zenoh_protocol::core::{
     key_expr::OwnedKeyExpr,
@@ -283,7 +282,7 @@ validated_struct::validator! {
                     client_certificate: Option<String>,
                 },
             },
-            pub shared_memory: #[derive(Default)]
+            pub shared_memory:
             SharedMemoryConf {
                 /// Whether shared memory is enabled or not.
                 /// If set to `false`, the shared-memory transport will be disabled. (default `false`).

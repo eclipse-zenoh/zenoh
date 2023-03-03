@@ -14,7 +14,6 @@
 [workspace]
 members = [
   "commons/zenoh-buffers",
-  "commons/zenoh-cfg-properties",
   "commons/zenoh-codec",
   "commons/zenoh-collections",
   "commons/zenoh-config",

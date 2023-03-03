@@ -17,7 +17,6 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
-use zenoh_config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::{
@@ -39,7 +38,7 @@ fn base_test() {
         Some(Arc::new(HLC::default())),
         false,
         true,
-        Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+        Duration::from_millis(zenoh_config::defaults::queries_default_timeout),
     );
     let primitives = Arc::new(DummyPrimitives::new());
     let face = tables.open_face(ZenohId::try_from([1]).unwrap(), WhatAmI::Client, primitives);
@@ -130,7 +129,7 @@ fn match_test() {
         Some(Arc::new(HLC::default())),
         false,
         true,
-        Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+        Duration::from_millis(zenoh_config::defaults::queries_default_timeout),
     );
     let primitives = Arc::new(DummyPrimitives::new());
     let face = tables.open_face(ZenohId::try_from([1]).unwrap(), WhatAmI::Client, primitives);
@@ -168,7 +167,7 @@ fn clean_test() {
         Some(Arc::new(HLC::default())),
         false,
         true,
-        Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+        Duration::from_millis(zenoh_config::defaults::queries_default_timeout),
     );
 
     let primitives = Arc::new(DummyPrimitives::new());
@@ -502,7 +501,7 @@ fn client_test() {
         Some(Arc::new(HLC::default())),
         false,
         true,
-        Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+        Duration::from_millis(zenoh_config::defaults::queries_default_timeout),
     ));
 
     let sub_info = SubInfo {

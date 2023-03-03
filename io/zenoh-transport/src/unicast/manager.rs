@@ -17,18 +17,13 @@ use crate::{
     unicast::{transport::TransportUnicastInner, TransportConfigUnicast, TransportUnicast},
     TransportManager,
 };
-use async_std::prelude::FutureExt;
-use async_std::sync::Mutex;
-use async_std::task;
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
-use zenoh_cfg_properties::config::*;
-use zenoh_config::Config;
-use zenoh_core::{zasynclock, zparse};
+use async_std::{prelude::FutureExt, sync::Mutex, task};
+use std::{collections::HashMap, sync::Arc, time::Duration};
+use zenoh_config::{Config, LinkTxConf, QoSConf, SharedMemoryConf, TransportUnicastConf};
+use zenoh_core::zasynclock;
 use zenoh_link::*;
 use zenoh_protocol::{
-    core::{locator::LocatorProtocol, ZenohId},
+    core::{endpoint, locator::LocatorProtocol, ZenohId},
     transport::close,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -198,16 +193,21 @@ impl TransportManagerBuilderUnicast {
 
 impl Default for TransportManagerBuilderUnicast {
     fn default() -> Self {
+        let link_tx = LinkTxConf::default();
+        let transport = TransportUnicastConf::default();
+        let qos = QoSConf::default();
+        let shm = SharedMemoryConf::default();
+
         Self {
-            lease: Duration::from_millis(zparse!(ZN_LINK_LEASE_DEFAULT).unwrap()),
-            keep_alive: zparse!(ZN_LINK_KEEP_ALIVE_DEFAULT).unwrap(),
-            accept_timeout: Duration::from_millis(zparse!(ZN_OPEN_TIMEOUT_DEFAULT).unwrap()),
-            accept_pending: zparse!(ZN_OPEN_INCOMING_PENDING_DEFAULT).unwrap(),
-            max_sessions: zparse!(ZN_MAX_SESSIONS_UNICAST_DEFAULT).unwrap(),
-            max_links: zparse!(ZN_MAX_LINKS_DEFAULT).unwrap(),
-            is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
+            lease: Duration::from_millis(link_tx.lease().unwrap()),
+            keep_alive: link_tx.keep_alive().unwrap(),
+            accept_timeout: Duration::from_millis(transport.accept_timeout().unwrap()),
+            accept_pending: transport.accept_pending().unwrap(),
+            max_sessions: transport.max_sessions().unwrap(),
+            max_links: transport.max_links().unwrap(),
+            is_qos: *qos.enabled(),
             #[cfg(feature = "shared-memory")]
-            is_shm: zparse!(ZN_SHM_DEFAULT).unwrap(),
+            is_shm: *shm.enabled(),
             // peer_authenticator: HashSet::new(),
         }
     }
@@ -296,8 +296,10 @@ impl TransportManager {
             .new_link_manager_unicast(endpoint.protocol().as_str())
             .await?;
         // Fill and merge the endpoint configuration
-        if let Some(config) = self.config.endpoint.get(endpoint.protocol().as_str()) {
-            endpoint.config_mut().extend(config.iter())?;
+        if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
+            endpoint
+                .config_mut()
+                .extend(endpoint::Parameters::iter(config))?;
         };
         manager.new_listener(endpoint).await
     }
@@ -420,8 +422,10 @@ impl TransportManager {
             .new_link_manager_unicast(endpoint.protocol().as_str())
             .await?;
         // Fill and merge the endpoint configuration
-        if let Some(config) = self.config.endpoint.get(endpoint.protocol().as_str()) {
-            endpoint.config_mut().extend(config.iter())?;
+        if let Some(config) = self.config.endpoints.get(endpoint.protocol().as_str()) {
+            endpoint
+                .config_mut()
+                .extend(endpoint::Parameters::iter(config))?;
         };
 
         // Create a new link associated by calling the Link Manager

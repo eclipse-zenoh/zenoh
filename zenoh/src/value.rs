@@ -20,7 +20,7 @@ use std::convert::TryFrom;
 #[cfg(feature = "shared-memory")]
 use std::sync::Arc;
 
-use zenoh_cfg_properties::Properties;
+use zenoh_collections::Properties;
 use zenoh_result::ZError;
 
 use crate::buffers::ZBuf;

@@ -339,7 +339,6 @@ jobs:
           cargo login ${{ secrets.CRATES_IO_TOKEN }}
           cd commons/zenoh-macros && cargo publish && cd -
           cd commons/zenoh-core && cargo publish && cd -
-          cd commons/zenoh-cfg-properties && cargo publish && cd -
           cd commons/zenoh-sync && cargo publish && cd -
           cd commons/zenoh-collections && cargo publish && cd -
           cd commons/zenoh-crypto && cargo publish && cd -
