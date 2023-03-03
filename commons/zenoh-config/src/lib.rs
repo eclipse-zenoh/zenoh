@@ -283,9 +283,10 @@ validated_struct::validator! {
                     client_certificate: Option<String>,
                 },
             },
-            pub shared_memory: SharedMemoryConf {
+            pub shared_memory: #[derive(Default)]
+            SharedMemoryConf {
                 /// Whether shared memory is enabled or not.
-                /// If set to `false`, the shared-memory transport will be disabled. (default `true`).
+                /// If set to `false`, the shared-memory transport will be disabled. (default `false`).
                 enabled: bool,
             },
             pub auth: #[derive(Default)]

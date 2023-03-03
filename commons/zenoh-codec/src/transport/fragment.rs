@@ -136,7 +136,7 @@ where
         self.write(&mut *writer, &header)?;
 
         // Body
-        self.write(&mut *writer, &x.payload)?;
+        writer.write_zslice(&x.payload)?;
 
         Ok(())
     }

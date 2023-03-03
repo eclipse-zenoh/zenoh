@@ -26,7 +26,6 @@ use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::{
     core::{Priority, WhatAmI, ZInt, ZenohId},
     transport::{Close, ConduitSn, TransportMessage},
-    zenoh::ZenohMessage,
 };
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -431,27 +430,6 @@ impl TransportUnicastInner {
         }
         // Terminate and clean up the transport
         self.delete().await
-    }
-
-    /*************************************/
-    /*        SCHEDULE AND SEND TX       */
-    /*************************************/
-    /// Schedule a Zenoh message on the transmission queue    
-    pub(crate) fn schedule(&self, #[allow(unused_mut)] mut message: ZenohMessage) -> bool {
-        // #[cfg(feature = "shared-memory")]
-        // {
-        //     let res = if self.config.is_shm {
-        //         crate::shm::map_zmsg_to_shminfo(&mut message)
-        //     } else {
-        //         crate::shm::map_zmsg_to_shmbuf(&mut message, &self.config.manager.shmr)
-        //     };
-        //     if let Err(e) = res {
-        //         log::trace!("Failed SHM conversion: {}", e);
-        //         return false;
-        //     }
-        // } // @TODO
-
-        self.schedule_first_fit(message)
     }
 
     pub(crate) fn get_links(&self) -> Vec<LinkUnicast> {

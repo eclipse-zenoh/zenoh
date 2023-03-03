@@ -74,7 +74,7 @@ pub mod flag {
 pub struct Frame {
     pub reliability: Reliability,
     pub sn: ZInt,
-    pub qos: ext::QoS,
+    pub ext_qos: ext::QoS,
     pub payload: Vec<ZenohMessage>,
 }
 
@@ -137,7 +137,7 @@ impl Frame {
         Frame {
             reliability,
             sn,
-            qos,
+            ext_qos: qos,
             payload,
         }
     }
@@ -149,7 +149,7 @@ impl Frame {
 pub struct FrameHeader {
     pub reliability: Reliability,
     pub sn: ZInt,
-    pub qos: ext::QoS,
+    pub ext_qos: ext::QoS,
 }
 
 impl FrameHeader {
@@ -170,7 +170,7 @@ impl FrameHeader {
         FrameHeader {
             reliability,
             sn,
-            qos,
+            ext_qos: qos,
         }
     }
 }

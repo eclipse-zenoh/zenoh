@@ -40,8 +40,8 @@ where
         if x.lease.as_millis() % 1_000 == 0 {
             header |= flag::T;
         }
-        let has_extensions = x.ext_shm.is_some() || x.ext_auth.is_some();
-        if has_extensions {
+        let has_ext = x.ext_qos.is_some() || x.ext_shm.is_some() || x.ext_auth.is_some();
+        if has_ext {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
@@ -56,14 +56,17 @@ where
         self.write(&mut *writer, &x.cookie)?;
 
         // Extensions
-        if let Some(shm) = x.ext_shm.as_ref() {
-            let has_more = x.ext_auth.is_some();
-            self.write(&mut *writer, (shm, has_more))?;
+        if let Some(qos) = x.ext_qos.as_ref() {
+            let has_ext = x.ext_shm.is_some() || x.ext_auth.is_some();
+            self.write(&mut *writer, (qos, has_ext))?;
         }
-
+        if let Some(shm) = x.ext_shm.as_ref() {
+            let has_ext = x.ext_auth.is_some();
+            self.write(&mut *writer, (shm, has_ext))?;
+        }
         if let Some(auth) = x.ext_auth.as_ref() {
-            let has_more = false;
-            self.write(&mut *writer, (auth, has_more))?;
+            let has_ext = false;
+            self.write(&mut *writer, (auth, has_ext))?;
         }
 
         Ok(())
@@ -114,7 +117,7 @@ where
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
             match imsg::mid(ext) {
-                ext::QoS::ID => {
+                ext::QOS => {
                     let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
                     qos = Some(q);
                     has_ext = ext;
@@ -162,7 +165,7 @@ where
         if x.lease.subsec_nanos() == 0 {
             header |= flag::T;
         }
-        let has_extensions = x.ext_auth.is_some();
+        let has_extensions = x.ext_qos.is_some() || x.ext_shm.is_some() || x.ext_auth.is_some();
         if has_extensions {
             header |= flag::Z;
         }
@@ -177,9 +180,17 @@ where
         self.write(&mut *writer, x.initial_sn)?;
 
         // Extensions
+        if let Some(qos) = x.ext_qos.as_ref() {
+            let has_ext = x.ext_shm.is_some() || x.ext_auth.is_some();
+            self.write(&mut *writer, (qos, has_ext))?;
+        }
+        if let Some(shm) = x.ext_shm.as_ref() {
+            let has_ext = x.ext_auth.is_some();
+            self.write(&mut *writer, (shm, has_ext))?;
+        }
         if let Some(auth) = x.ext_auth.as_ref() {
-            let has_more = false;
-            self.write(&mut *writer, (auth, has_more))?;
+            let has_ext = false;
+            self.write(&mut *writer, (auth, has_ext))?;
         }
 
         Ok(())
@@ -229,7 +240,7 @@ where
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
             match imsg::mid(ext) {
-                ext::QoS::ID => {
+                ext::QOS => {
                     let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
                     ext_qos = Some(q);
                     has_ext = ext;

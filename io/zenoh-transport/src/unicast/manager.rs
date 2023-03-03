@@ -181,13 +181,6 @@ impl TransportManagerBuilderUnicast {
         //         .insert(PubKeyAuthenticator::make()?.into());
         // } @TODO
 
-        // #[cfg(feature = "shared-memory")]
-        // if self.is_shm
-        // {
-        //     self.peer_authenticator
-        //         .insert(SharedMemoryAuthenticator::make()?.into());
-        // }
-
         let state = TransportManagerStateUnicast {
             incoming: Arc::new(Mutex::new(0)),
             protocols: Arc::new(Mutex::new(HashMap::new())),
@@ -392,7 +385,8 @@ impl TransportManager {
                 guard.insert(config.zid, a_t);
 
                 log::debug!(
-                    "New transport opened with {}: whatami {}, sn resolution {}, initial sn {:?}, shm: {}, qos: {}",
+                    "New transport opened between {} and {}: whatami {}, sn resolution {}, initial sn {:?}, shm: {}, qos: {}",
+                    self.config.zid,
                     config.zid,
                     config.whatami,
                     config.sn_resolution,

@@ -17,7 +17,7 @@ use async_std::task;
 use std::sync::MutexGuard;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
-use zenoh_core::{zlock, zread};
+use zenoh_core::{zasyncwrite, zlock, zread};
 use zenoh_link::LinkUnicast;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
@@ -65,10 +65,15 @@ impl TransportUnicastInner {
 
         let callback = zread!(self.callback).clone();
         if let Some(callback) = callback.as_ref() {
-            // #[cfg(feature = "shared-memory")]
-            // {
-            //     crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.config.manager.shmr)?;
-            // } @TODO
+            #[cfg(feature = "shared-memory")]
+            {
+                if self.config.is_shm {
+                    task::block_on(async {
+                        let mut w_guard = zasyncwrite!(self.manager.state.unicast.shm.reader);
+                        crate::shm::map_zmsg_to_shmbuf(&mut msg, &mut w_guard)
+                    })?;
+                }
+            }
             callback.handle_message(msg)
         } else {
             log::debug!(
@@ -105,7 +110,7 @@ impl TransportUnicastInner {
         let Frame {
             reliability,
             sn,
-            qos,
+            ext_qos: qos,
             mut payload,
         } = frame;
 

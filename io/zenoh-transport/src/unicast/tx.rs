@@ -12,9 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::TransportUnicastInner;
+use async_std::task;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
-use zenoh_core::zread;
+use zenoh_core::{zasyncwrite, zread};
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
 use zenoh_protocol::zenoh::ZenohMessage;
@@ -65,7 +66,23 @@ impl TransportUnicastInner {
 
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(super) fn schedule_first_fit(&self, msg: ZenohMessage) -> bool {
+    pub(crate) fn schedule(&self, mut msg: ZenohMessage) -> bool {
+        #[cfg(feature = "shared-memory")]
+        {
+            let res = if self.config.is_shm {
+                crate::shm::map_zmsg_to_shminfo(&mut msg)
+            } else {
+                task::block_on(async {
+                    let mut w_guard = zasyncwrite!(self.manager.state.unicast.shm.reader);
+                    crate::shm::map_zmsg_to_shmbuf(&mut msg, &mut w_guard)
+                })
+            };
+            if let Err(e) = res {
+                log::trace!("Failed SHM conversion: {}", e);
+                return false;
+            }
+        }
+
         #[cfg(feature = "stats")]
         match &msg.body {
             ZenohBody::Data(data) => match data.reply_context {

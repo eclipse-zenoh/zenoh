@@ -186,7 +186,7 @@ impl StageIn {
         let frame = FrameHeader {
             reliability: msg.channel.reliability,
             sn,
-            qos: frame::ext::QoS { priority },
+            ext_qos: frame::ext::QoS { priority },
         };
 
         if let WError::NewFrame = e {
@@ -224,7 +224,7 @@ impl StageIn {
             reliability: frame.reliability,
             more: true,
             sn,
-            qos: frame.qos,
+            qos: frame.ext_qos,
         };
         let mut reader = self.fragbuf.reader();
         while reader.can_read() {

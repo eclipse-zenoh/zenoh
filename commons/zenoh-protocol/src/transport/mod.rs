@@ -93,7 +93,7 @@ pub enum TransportBody {
     InitAck(InitAck),
     OpenSyn(OpenSyn),
     OpenAck(OpenAck),
-    Join(Join),
+    // Join(Join),
     Close(Close),
     KeepAlive(KeepAlive),
     Frame(Frame),
@@ -115,16 +115,16 @@ impl TransportMessage {
 
         let mut rng = rand::thread_rng();
 
-        let body = match rng.gen_range(0..9) {
+        let body = match rng.gen_range(0..8) {
             0 => TransportBody::InitSyn(InitSyn::rand()),
             1 => TransportBody::InitAck(InitAck::rand()),
             2 => TransportBody::OpenSyn(OpenSyn::rand()),
             3 => TransportBody::OpenAck(OpenAck::rand()),
-            4 => TransportBody::Join(Join::rand()),
-            5 => TransportBody::Close(Close::rand()),
-            6 => TransportBody::KeepAlive(KeepAlive::rand()),
-            7 => TransportBody::Frame(Frame::rand()),
-            8 => TransportBody::Fragment(Fragment::rand()),
+            // 4 => TransportBody::Join(Join::rand()),
+            4 => TransportBody::Close(Close::rand()),
+            5 => TransportBody::KeepAlive(KeepAlive::rand()),
+            6 => TransportBody::Frame(Frame::rand()),
+            7 => TransportBody::Fragment(Fragment::rand()),
             _ => unreachable!(),
         };
 
@@ -166,11 +166,11 @@ impl From<OpenAck> for TransportMessage {
     }
 }
 
-impl From<Join> for TransportMessage {
-    fn from(join: Join) -> Self {
-        TransportBody::Join(join).into()
-    }
-}
+// impl From<Join> for TransportMessage {
+//     fn from(join: Join) -> Self {
+//         TransportBody::Join(join).into()
+//     }
+// }
 
 impl From<Close> for TransportMessage {
     fn from(close: Close) -> Self {

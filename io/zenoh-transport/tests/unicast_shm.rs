@@ -16,9 +16,7 @@ mod tests {
     use async_std::{prelude::FutureExt, task};
     use std::{
         any::Any,
-        collections::HashSet,
         convert::TryFrom,
-        iter::FromIterator,
         sync::{
             atomic::{AtomicUsize, Ordering},
             Arc,
@@ -141,28 +139,20 @@ mod tests {
                 .unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
-        let peer_shm01_handler = Arc::new(SHPeer::new(false));
-        let unicast =
-            TransportManager::config_unicast().peer_authenticator(HashSet::from_iter(vec![
-                SharedMemoryAuthenticator::make().unwrap().into(),
-            ]));
+        let peer_shm01_handler = Arc::new(SHPeer::new(true));
         let peer_shm01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_shm01)
-            .unicast(unicast)
+            .unicast(TransportManager::config_unicast().shm(true))
             .build(peer_shm01_handler.clone())
             .unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
-        let unicast =
-            TransportManager::config_unicast().peer_authenticator(HashSet::from_iter(vec![
-                SharedMemoryAuthenticator::make().unwrap().into(),
-            ]));
         let peer_shm02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_shm02)
-            .unicast(unicast)
+            .unicast(TransportManager::config_unicast().shm(true))
             .build(peer_shm02_handler.clone())
             .unwrap();
 
@@ -171,6 +161,7 @@ mod tests {
         let peer_net01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_net01)
+            .unicast(TransportManager::config_unicast().shm(false))
             .build(peer_net01_handler.clone())
             .unwrap();
 
@@ -336,7 +327,7 @@ mod tests {
     }
 
     #[cfg(all(feature = "transport_tcp", feature = "shared-memory"))]
-    // #[test]
+    #[test]
     fn transport_tcp_shm() {
         let _ = env_logger::try_init();
         task::block_on(async {
@@ -348,7 +339,7 @@ mod tests {
     }
 
     #[cfg(all(feature = "transport_ws", feature = "shared-memory"))]
-    // #[test]
+    #[test]
     fn transport_ws_shm() {
         let _ = env_logger::try_init();
         task::block_on(async {

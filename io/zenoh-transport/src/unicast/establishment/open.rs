@@ -392,7 +392,7 @@ pub(crate) async fn open_link(
         sn_resolution: state.zenoh.resolution.get(Field::FrameSN).mask(),
         tx_initial_sn: osyn_out.mine_initial_sn,
         is_qos: state.ext_qos.is_qos(),
-        is_shm: false, // @TODO
+        is_shm: state.ext_shm.is_shm(),
     };
     let transport = step!(manager
         .init_transport_unicast(config)
@@ -427,7 +427,8 @@ pub(crate) async fn open_link(
     }
 
     log::debug!(
-        "New transport link established with {}: {}",
+        "New transport link opened from {} to {}: {}",
+        manager.config.zid,
         iack_out.other_zid,
         link
     );

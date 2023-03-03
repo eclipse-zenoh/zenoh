@@ -88,7 +88,7 @@ where
         if let Reliability::Reliable = x.reliability {
             header |= flag::R;
         }
-        if x.qos != ext::QoS::default() {
+        if x.ext_qos != ext::QoS::default() {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
@@ -97,8 +97,8 @@ where
         self.write(&mut *writer, x.sn)?;
 
         // Extensions
-        if x.qos != ext::QoS::default() {
-            self.write(&mut *writer, (x.qos, false))?;
+        if x.ext_qos != ext::QoS::default() {
+            self.write(&mut *writer, (x.ext_qos, false))?;
         }
 
         Ok(())
@@ -158,7 +158,7 @@ where
         Ok(FrameHeader {
             reliability,
             sn,
-            qos,
+            ext_qos: qos,
         })
     }
 }
@@ -175,7 +175,7 @@ where
         let header = FrameHeader {
             reliability: x.reliability,
             sn: x.sn,
-            qos: x.qos,
+            ext_qos: x.ext_qos,
         };
         self.write(&mut *writer, &header)?;
 
@@ -227,7 +227,7 @@ where
         Ok(Frame {
             reliability: header.reliability,
             sn: header.sn,
-            qos: header.qos,
+            ext_qos: header.ext_qos,
             payload,
         })
     }

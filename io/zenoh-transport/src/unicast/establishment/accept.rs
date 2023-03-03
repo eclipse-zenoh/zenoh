@@ -93,7 +93,7 @@ struct SendOpenAckIn {
     other_zid: ZenohId,
 }
 struct SendOpenAckOut {
-    mine_initial_sn: ZInt,
+    open_ack: OpenAck,
 }
 
 // Fsm
@@ -367,23 +367,17 @@ impl<'a> AcceptFsm<'a> for AcceptLink<'a> {
 
         // Build OpenAck message
         let mine_initial_sn = compute_sn(input.mine_zid, input.other_zid, state.zenoh.resolution);
-        let message: TransportMessage = OpenAck {
+        let open_ack = OpenAck {
             lease: input.mine_lease,
             initial_sn: mine_initial_sn,
             ext_qos,
             ext_shm,
             ext_auth: None, // @TODO
-        }
-        .into();
+        };
 
-        // Send the message on the link
-        let _ = self
-            .link
-            .send(&message)
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        // Do not send the OpenAck right now since we might still incur in MAX_LINKS error
 
-        let output = SendOpenAckOut { mine_initial_sn };
+        let output = SendOpenAckOut { open_ack };
         Ok(output)
     }
 }
@@ -446,6 +440,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
     };
     let (mut state, osyn_out) = step!(fsm.recv_open_syn(osyn_in).await);
 
+    // Create the OpenAck but not send it yet
     let oack_in = SendOpenAckIn {
         mine_zid: manager.config.zid,
         mine_lease: manager.config.unicast.lease,
@@ -458,35 +453,14 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         zid: osyn_out.other_zid,
         whatami: osyn_out.other_whatami,
         sn_resolution: state.zenoh.resolution.get(Field::FrameSN).mask(),
-        tx_initial_sn: oack_out.mine_initial_sn,
+        tx_initial_sn: oack_out.open_ack.initial_sn,
         is_qos: state.ext_qos.is_qos(),
-        is_shm: false, // @TODO
+        is_shm: state.ext_shm.is_shm(),
     };
     let transport = step!(manager
         .init_transport_unicast(config)
         .await
         .map_err(|e| (e, Some(close::reason::INVALID))));
-
-    macro_rules! step {
-        ($s: expr) => {
-            match $s {
-                Ok(output) => output,
-                Err((e, reason)) => {
-                    match reason {
-                        Some(close::reason::MAX_LINKS) => log::debug!("{}", e),
-                        _ => log::error!("{}", e),
-                    }
-                    if let Ok(ll) = transport.get_links() {
-                        if ll.is_empty() {
-                            let _ = manager.del_transport_unicast(&osyn_out.other_zid).await;
-                        }
-                    }
-                    close_link(link, reason).await;
-                    return Err(e);
-                }
-            }
-        };
-    }
 
     // Add the link to the transport
     step!(step!(transport
@@ -494,6 +468,12 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         .map_err(|e| (e, Some(close::reason::INVALID))))
     .add_link(link.clone(), LinkUnicastDirection::Inbound)
     .map_err(|e| (e, Some(close::reason::MAX_LINKS))));
+
+    // Send the open_ack on the link
+    step!(link
+        .send(&oack_out.open_ack.into())
+        .await
+        .map_err(|e| (e, Some(close::reason::GENERIC))));
 
     // Sync the RX sequence number
     let _ = step!(transport
@@ -513,8 +493,9 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         .map_err(|e| (e, Some(close::reason::INVALID))));
 
     log::debug!(
-        "New transport link established from {}: {}",
+        "New transport link accepted from {} to {}: {}",
         osyn_out.other_zid,
+        manager.config.zid,
         link
     );
 

@@ -175,9 +175,3 @@ impl Default for LinkRxConf {
         }
     }
 }
-
-impl Default for SharedMemoryConf {
-    fn default() -> Self {
-        Self { enabled: true }
-    }
-}
