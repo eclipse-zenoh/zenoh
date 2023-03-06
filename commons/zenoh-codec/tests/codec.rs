@@ -118,7 +118,25 @@ macro_rules! run {
 // Core
 #[test]
 fn codec_zint() {
-    run!(ZInt, thread_rng().gen::<ZInt>());
+    run!(ZInt, { thread_rng().gen::<u8>() as ZInt });
+    run!(ZInt, u8::MIN as ZInt);
+    run!(ZInt, u8::MAX as ZInt);
+
+    run!(ZInt, { thread_rng().gen::<u16>() as ZInt });
+    run!(ZInt, u16::MIN as ZInt);
+    run!(ZInt, u16::MAX as ZInt);
+
+    run!(ZInt, { thread_rng().gen::<u32>() as ZInt });
+    run!(ZInt, u32::MIN as ZInt);
+    run!(ZInt, u32::MAX as ZInt);
+
+    run!(ZInt, { thread_rng().gen::<u64>() as ZInt });
+    run!(ZInt, u64::MIN as ZInt);
+    run!(ZInt, u64::MAX as ZInt);
+
+    run!(ZInt, thread_rng().gen::<usize>() as ZInt);
+    run!(ZInt, usize::MIN as ZInt);
+    run!(ZInt, usize::MAX as ZInt);
 }
 
 #[test]

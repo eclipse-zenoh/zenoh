@@ -106,6 +106,97 @@ where
     }
 }
 
+// const MAX_LEN: usize = 9;
+// const VLE_THR: u64 = 0xf8; // 248
+// impl<W> WCodec<u64, &mut W> for Zenoh080
+// where
+//     W: Writer,
+// {
+//     type Output = Result<(), DidntWrite>;
+//     fn write(self, writer: &mut W, mut x: u64) -> Self::Output {
+//         writer.with_slot(MAX_LEN, move |into| {
+//             if x < VLE_THR {
+//                 into[0] = x as u8;
+//                 return 1;
+//             }
+//             x -= VLE_THR - 1;
+//             // Safety:
+//             // The `if x < VLE_THR` check at the beginning followed by `x -= VLE_THR - 1`
+//             // guarantees at this point that `x` is never `0`. Since `x` is 64bit,
+//             // then `n` is guaranteed to have a value between 1 and 8, both inclusives.
+//             // `into` is guaranteed to be exactly 9 bytes long. Therefore, copying at most
+//             // 8 bytes with a pointer offest of 1 is actually safe.
+//             let n = 8 - (x.leading_zeros() / 8) as usize;
+//             unsafe {
+//                 core::ptr::copy_nonoverlapping(
+//                     x.to_le_bytes().as_ptr(),
+//                     into.as_mut_ptr().offset(1),
+//                     n,
+//                 )
+//             }
+//             into[0] = VLE_THR as u8 | (n - 1) as u8;
+//             1 + n
+//         })
+//     }
+// }
+
+// impl<R> RCodec<u64, &mut R> for Zenoh080
+// where
+//     R: Reader,
+// {
+//     type Error = DidntRead;
+//     fn read(self, reader: &mut R) -> Result<u64, Self::Error> {
+//         let b = reader.read_u8()?;
+//         if b < (VLE_THR as u8) {
+//             return Ok(b as u64);
+//         }
+//         let n = (1 + (b & !VLE_THR as u8)) as usize;
+//         let mut zint: [u8; 8] = 0u64.to_le_bytes();
+//         reader.read_exact(&mut zint[0..n])?;
+//         let zint = u64::from_le_bytes(zint);
+//         Ok(zint.saturating_add(VLE_THR - 1))
+//     }
+// }
+
+// mod tests {
+//     #[test]
+//     fn zint_overhead() {
+//         use crate::{WCodec, Zenoh080};
+//         use zenoh_buffers::{
+//             reader::{HasReader, Reader},
+//             writer::HasWriter,
+//         };
+
+//         fn overhead(x: u64) -> usize {
+//             let codec = Zenoh080::new();
+//             let mut b = vec![];
+//             let mut w = b.writer();
+//             codec.write(&mut w, x).unwrap();
+//             let r = b.reader().remaining();
+//             println!("{} {}", x, r);
+//             r
+//         }
+
+//         assert_eq!(overhead(247), 1);
+//         assert_eq!(overhead(248), 2);
+//         assert_eq!(overhead(502), 2);
+//         assert_eq!(overhead(503), 3);
+//         assert_eq!(overhead(65_782), 3);
+//         assert_eq!(overhead(65_783), 4);
+//         assert_eq!(overhead(16_777_462), 4);
+//         assert_eq!(overhead(16_777_463), 5);
+//         assert_eq!(overhead(4_294_967_542), 5);
+//         assert_eq!(overhead(4_294_967_543), 6);
+//         assert_eq!(overhead(1_099_511_628_022), 6);
+//         assert_eq!(overhead(1_099_511_628_023), 7);
+//         assert_eq!(overhead(281_474_976_710_902), 7);
+//         assert_eq!(overhead(281_474_976_710_903), 8);
+//         assert_eq!(overhead(72_057_594_037_928_182), 8);
+//         assert_eq!(overhead(72_057_594_037_928_183), 9);
+//         assert_eq!(overhead(u64::MAX), 9);
+//     }
+// }
+
 // macro_rules! non_zero_array {
 //     ($($i: expr,)*) => {
 //         [$(match NonZeroU8::new($i) {Some(x) => x, None => panic!("Attempted to place 0 in an array of non-zeros litteral")}),*]
