@@ -12,10 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::TransportUnicastInner;
+#[cfg(feature = "shared-memory")]
 use async_std::task;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
-use zenoh_core::{zasyncwrite, zread};
+#[cfg(feature = "shared-memory")]
+use zenoh_core::zasyncwrite;
+use zenoh_core::zread;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
 use zenoh_protocol::zenoh::ZenohMessage;
@@ -64,6 +67,7 @@ impl TransportUnicastInner {
         false
     }
 
+    #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
     pub(crate) fn schedule(&self, mut msg: ZenohMessage) -> bool {

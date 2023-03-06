@@ -31,6 +31,7 @@ pub(crate) struct Cookie {
     pub(crate) nonce: ZInt,
     // Extensions
     pub(crate) ext_qos: ext::qos::State,
+    #[cfg(feature = "shared-memory")]
     pub(crate) ext_shm: ext::shm::State,
     // pub properties: EstablishmentProperties, // @TODO
 }
@@ -50,6 +51,7 @@ where
         self.write(&mut *writer, x.nonce)?;
         // Extensions
         self.write(&mut *writer, &x.ext_qos)?;
+        #[cfg(feature = "shared-memory")]
         self.write(&mut *writer, &x.ext_shm)?;
         // self.write(&mut *writer, x.properties.as_slice())?;
 
@@ -73,6 +75,7 @@ where
         let nonce: ZInt = self.read(&mut *reader)?;
         // Extensions
         let ext_qos: ext::qos::State = self.read(&mut *reader)?;
+        #[cfg(feature = "shared-memory")]
         let ext_shm: ext::shm::State = self.read(&mut *reader)?;
         // let mut ps: Vec<Property> = self.read(&mut *reader)?;
         // let mut properties = EstablishmentProperties::new();
@@ -87,6 +90,7 @@ where
             batch_size,
             nonce,
             ext_qos,
+            #[cfg(feature = "shared-memory")]
             ext_shm,
             // properties,
         };
@@ -151,6 +155,7 @@ impl Cookie {
             batch_size: rng.gen(),
             nonce: rng.gen(),
             ext_qos: ext::qos::State::new(rng.gen_bool(0.5)),
+            #[cfg(feature = "shared-memory")]
             ext_shm: ext::shm::State::new(rng.gen_bool(0.5)),
             // properties: EstablishmentProperties::rand(),
         }

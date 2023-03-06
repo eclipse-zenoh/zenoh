@@ -11,10 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "shared-memory")]
+use crate::unicast::shm::Challenge;
 use crate::{
-    unicast::{
-        establishment::{close_link, compute_sn, ext, finalize_transport, InputFinalize, OpenFsm},
-        shm::Challenge,
+    unicast::establishment::{
+        close_link, compute_sn, ext, finalize_transport, InputFinalize, OpenFsm,
     },
     TransportConfigUnicast, TransportManager, TransportUnicast,
 };
@@ -38,6 +39,7 @@ struct StateZenoh {
 struct State {
     zenoh: StateZenoh,
     ext_qos: ext::qos::State,
+    #[cfg(feature = "shared-memory")]
     ext_shm: ext::shm::State,
 }
 
@@ -54,6 +56,7 @@ struct RecvInitAckOut {
     other_zid: ZenohId,
     other_whatami: WhatAmI,
     other_cookie: ZSlice,
+    #[cfg(feature = "shared-memory")]
     ext_shm: Challenge,
 }
 
@@ -63,6 +66,7 @@ struct SendOpenSynIn {
     mine_lease: Duration,
     other_zid: ZenohId,
     other_cookie: ZSlice,
+    #[cfg(feature = "shared-memory")]
     ext_shm: Challenge,
 }
 
@@ -80,6 +84,7 @@ struct RecvOpenAckOut {
 struct OpenLink<'a> {
     link: &'a LinkUnicast,
     ext_qos: ext::qos::QoS,
+    #[cfg(feature = "shared-memory")]
     ext_shm: ext::shm::Shm<'a>,
 }
 
@@ -96,18 +101,21 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
         let (state, input) = input;
 
         // Extension QoS
-        let qos_mine_ext = self
+        let ext_qos = self
             .ext_qos
             .send_init_syn(&state.ext_qos)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension Shm
-        let shm_mine_ext = self
+        #[cfg(feature = "shared-memory")]
+        let ext_shm = self
             .ext_shm
             .send_init_syn(&state.ext_shm)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        #[cfg(not(feature = "shared-memory"))]
+        let ext_shm = None;
 
         let msg: TransportMessage = InitSyn {
             version: input.mine_version,
@@ -115,8 +123,8 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
             zid: input.mine_zid,
             batch_size: state.zenoh.batch_size,
             resolution: state.zenoh.resolution,
-            ext_qos: qos_mine_ext,
-            ext_shm: shm_mine_ext,
+            ext_qos,
+            ext_shm,
             ext_auth: None, // @TODO
         }
         .into();
@@ -216,6 +224,7 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension Shm
+        #[cfg(feature = "shared-memory")]
         let shm_challenge = self
             .ext_shm
             .recv_init_ack((&mut state.ext_shm, init_ack.ext_shm))
@@ -226,6 +235,7 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
             other_zid: init_ack.zid,
             other_whatami: init_ack.whatami,
             other_cookie: init_ack.cookie,
+            #[cfg(feature = "shared-memory")]
             ext_shm: shm_challenge,
         };
         Ok(output)
@@ -247,11 +257,14 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension Shm
+        #[cfg(feature = "shared-memory")]
         let ext_shm = self
             .ext_shm
             .send_open_syn((&state.ext_shm, input.ext_shm))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        #[cfg(not(feature = "shared-memory"))]
+        let ext_shm = None;
 
         // Build and send an OpenSyn message
         let mine_initial_sn = compute_sn(input.mine_zid, input.other_zid, state.zenoh.resolution);
@@ -319,6 +332,7 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension Shm
+        #[cfg(feature = "shared-memory")]
         self.ext_shm
             .recv_open_ack((&mut state.ext_shm, open_ack.ext_shm))
             .await
@@ -339,6 +353,7 @@ pub(crate) async fn open_link(
     let fsm = OpenLink {
         link,
         ext_qos: ext::qos::QoS::new(),
+        #[cfg(feature = "shared-memory")]
         ext_shm: ext::shm::Shm::new(&manager.state.unicast.shm),
     };
 
@@ -361,6 +376,7 @@ pub(crate) async fn open_link(
             resolution: manager.config.resolution,
         },
         ext_qos: ext::qos::State::new(manager.config.unicast.is_qos),
+        #[cfg(feature = "shared-memory")]
         ext_shm: ext::shm::State::new(manager.config.unicast.is_shm),
     };
 
@@ -379,6 +395,7 @@ pub(crate) async fn open_link(
         other_zid: iack_out.other_zid,
         mine_lease: manager.config.unicast.lease,
         other_cookie: iack_out.other_cookie,
+        #[cfg(feature = "shared-memory")]
         ext_shm: iack_out.ext_shm,
     };
     let osyn_out = step!(fsm.send_open_syn((&mut state, osyn_in)).await);
@@ -392,7 +409,10 @@ pub(crate) async fn open_link(
         sn_resolution: state.zenoh.resolution.get(Field::FrameSN).mask(),
         tx_initial_sn: osyn_out.mine_initial_sn,
         is_qos: state.ext_qos.is_qos(),
+        #[cfg(feature = "shared-memory")]
         is_shm: state.ext_shm.is_shm(),
+        #[cfg(not(feature = "shared-memory"))]
+        is_shm: false,
     };
     let transport = step!(manager
         .init_transport_unicast(config)

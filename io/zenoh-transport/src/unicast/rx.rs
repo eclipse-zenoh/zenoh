@@ -17,7 +17,9 @@ use async_std::task;
 use std::sync::MutexGuard;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
-use zenoh_core::{zasyncwrite, zlock, zread};
+#[cfg(feature = "shared-memory")]
+use zenoh_core::zasyncwrite;
+use zenoh_core::{zlock, zread};
 use zenoh_link::LinkUnicast;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;

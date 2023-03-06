@@ -19,7 +19,9 @@ use crate::{
 };
 use async_std::{prelude::FutureExt, sync::Mutex, task};
 use std::{collections::HashMap, sync::Arc, time::Duration};
-use zenoh_config::{Config, LinkTxConf, QoSConf, SharedMemoryConf, TransportUnicastConf};
+#[cfg(feature = "shared-memory")]
+use zenoh_config::SharedMemoryConf;
+use zenoh_config::{Config, LinkTxConf, QoSConf, TransportUnicastConf};
 use zenoh_core::zasynclock;
 use zenoh_link::*;
 use zenoh_protocol::{
@@ -196,6 +198,7 @@ impl Default for TransportManagerBuilderUnicast {
         let link_tx = LinkTxConf::default();
         let transport = TransportUnicastConf::default();
         let qos = QoSConf::default();
+        #[cfg(feature = "shared-memory")]
         let shm = SharedMemoryConf::default();
 
         Self {
