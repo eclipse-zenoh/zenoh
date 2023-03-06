@@ -35,7 +35,7 @@ use zenoh_result::{bail, ZResult};
 /// ```
 /// use std::sync::Arc;
 /// use std::time::Duration;
-/// use zenoh_protocol::core::{ZenohId, WhatAmI, whatami};
+/// use zenoh_protocol::core::{ZenohId, Resolution, Field, Bits, WhatAmI, whatami};
 /// use zenoh_transport::*;
 /// use zenoh_result::ZResult;
 ///
@@ -66,11 +66,13 @@ use zenoh_result::{bail, ZResult};
 ///         .accept_pending(10) // Set to 10 the number of simultanous pending incoming transports        
 ///         .max_links(1)       // Allow max 1 inbound link per transport
 ///         .max_sessions(5);   // Allow max 5 transports open
+/// let mut resolution = Resolution::default();
+/// resolution.set(Field::FrameSN, Bits::U8);
 /// let manager = TransportManager::builder()
 ///         .zid(ZenohId::rand())
 ///         .whatami(WhatAmI::Peer)
 ///         .batch_size(1_024)              // Use a batch size of 1024 bytes
-///         .sn_resolution(128)             // Use a sequence number resolution of 128
+///         .resolution(resolution)         // Use a sequence number resolution of 128
 ///         .unicast(unicast)               // Configure unicast parameters
 ///         .build(Arc::new(MySH::default()))
 ///         .unwrap();
