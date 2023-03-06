@@ -15,7 +15,7 @@ pub mod close;
 pub mod fragment;
 pub mod frame;
 pub mod init;
-pub mod join;
+// pub mod join;
 pub mod keepalive;
 pub mod open;
 
@@ -25,12 +25,12 @@ use core::{convert::TryInto, fmt};
 pub use fragment::{Fragment, FragmentHeader};
 pub use frame::{Frame, FrameHeader};
 pub use init::{InitAck, InitSyn};
-pub use join::Join;
+// pub use join::Join;
 pub use keepalive::KeepAlive;
 pub use open::{OpenAck, OpenSyn};
 
 pub mod id {
-    pub const JOIN: u8 = 0x01; // For multicast communications only
+    // pub const JOIN: u8 = 0x01; // For multicast communications only
     pub const INIT: u8 = 0x02; // For unicast communications only
     pub const OPEN: u8 = 0x03; // For unicast communications only
     pub const CLOSE: u8 = 0x04;

@@ -15,7 +15,7 @@ mod close;
 mod fragment;
 mod frame;
 mod init;
-mod join;
+// mod join;
 mod keepalive;
 mod open;
 

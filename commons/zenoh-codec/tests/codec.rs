@@ -270,9 +270,9 @@ fn codec_open_ack() {
 }
 
 // #[test]
-fn codec_join() {
-    run!(Join, Join::rand());
-}
+// fn codec_join() {
+//     run!(Join, Join::rand());
+// }
 
 #[test]
 fn codec_close() {
