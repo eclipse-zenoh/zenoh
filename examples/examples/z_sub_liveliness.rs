@@ -46,8 +46,14 @@ async fn main() {
         select!(
             sample = subscriber.recv_async() => {
                 let sample = sample.unwrap();
-                println!(">> [Subscriber] Received {} ('{}')",
-                    sample.kind, sample.key_expr.as_str());
+                match sample.kind {
+                    SampleKind::PUT => println!(
+                        ">> [LivelinessSubscriber] New alive token ('{}')",
+                        sample.key_expr.as_str()),
+                    SampleKind::DELETE => println!(
+                        ">> [LivelinessSubscriber] Dropped token ('{}')",
+                        sample.key_expr.as_str()),
+                }
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
