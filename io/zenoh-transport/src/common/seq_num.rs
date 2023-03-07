@@ -14,6 +14,20 @@
 use zenoh_protocol::core::{Bits, ZInt};
 use zenoh_result::{bail, ZResult};
 
+const RES_U8: ZInt = (u8::MAX >> 1) as ZInt; // 1 byte max when encoded
+const RES_U16: ZInt = (u16::MAX >> 2) as ZInt; // 2 bytes max when encoded
+const RES_U32: ZInt = (u32::MAX >> 4) as ZInt; // 4 bytes max when encoded
+const RES_U64: ZInt = (u64::MAX >> 1) as ZInt; // 9 bytes max when encoded
+
+pub(crate) fn get_mask(resolution: Bits) -> ZInt {
+    match resolution {
+        Bits::U8 => RES_U8,
+        Bits::U16 => RES_U16,
+        Bits::U32 => RES_U32,
+        Bits::U64 => RES_U64,
+    }
+}
+
 /// Sequence Number
 ///
 /// Zenoh sequence numbers have a negotiable resolution. Each session can
@@ -47,12 +61,7 @@ impl SeqNum {
     /// `value` is greater or equal than `resolution`.
     ///
     pub(crate) fn make(value: ZInt, resolution: Bits) -> ZResult<SeqNum> {
-        let mask = match resolution {
-            Bits::U8 => (u8::MAX >> 1) as ZInt,   // 1 byte max when encoded
-            Bits::U16 => (u16::MAX >> 2) as ZInt, // 2 bytes max when encoded
-            Bits::U32 => (u32::MAX >> 4) as ZInt, // 4 bytes max when encoded
-            Bits::U64 => (u64::MAX >> 8) as ZInt, // 8 bytes max when encoded
-        };
+        let mask = get_mask(resolution);
         let mut sn = SeqNum { value: 0, mask };
         sn.set(value)?;
         Ok(sn)

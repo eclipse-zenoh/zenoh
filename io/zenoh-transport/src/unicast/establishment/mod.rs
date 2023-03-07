@@ -16,8 +16,8 @@ pub(super) mod cookie;
 pub(super) mod ext;
 pub(crate) mod open;
 
-use super::super::TransportManager;
 use super::{TransportPeer, TransportUnicast};
+use crate::{common::seq_num, TransportManager};
 use async_trait::async_trait;
 use cookie::*;
 use sha3::{
@@ -113,7 +113,7 @@ pub(super) fn compute_sn(zid1: ZenohId, zid2: ZenohId, resolution: Resolution) -
     hasher.update(zid2.as_slice());
     let mut array = (0 as ZInt).to_le_bytes();
     hasher.finalize_xof().read(&mut array);
-    ZInt::from_le_bytes(array) & resolution.get(Field::FrameSN).mask()
+    ZInt::from_le_bytes(array) & seq_num::get_mask(resolution.get(Field::FrameSN))
 }
 
 pub(super) async fn close_link(link: &LinkUnicast, reason: Option<u8>) {
