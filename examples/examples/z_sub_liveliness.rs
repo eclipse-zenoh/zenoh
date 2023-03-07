@@ -47,10 +47,10 @@ async fn main() {
             sample = subscriber.recv_async() => {
                 let sample = sample.unwrap();
                 match sample.kind {
-                    SampleKind::PUT => println!(
+                    SampleKind::Put => println!(
                         ">> [LivelinessSubscriber] New alive token ('{}')",
                         sample.key_expr.as_str()),
-                    SampleKind::DELETE => println!(
+                    SampleKind::Delete => println!(
                         ">> [LivelinessSubscriber] Dropped token ('{}')",
                         sample.key_expr.as_str()),
                 }
