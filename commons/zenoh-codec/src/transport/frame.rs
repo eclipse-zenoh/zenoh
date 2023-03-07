@@ -14,6 +14,7 @@ use core::convert::TryInto;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Reliability};
+use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -211,7 +212,7 @@ where
         let header: FrameHeader = self.read(&mut *reader)?;
 
         let rcode = Zenoh080Reliability::new(header.reliability);
-        let mut payload = vec![];
+        let mut payload = Vec::new();
         while reader.can_read() {
             let mark = reader.mark();
             let res: Result<ZenohMessage, DidntRead> = rcode.read(&mut *reader);

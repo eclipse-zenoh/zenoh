@@ -20,6 +20,7 @@ pub mod keepalive;
 pub mod open;
 
 use crate::core::{Priority, ZInt};
+use alloc::boxed::Box;
 pub use close::Close;
 use core::{convert::TryInto, fmt};
 pub use fragment::{Fragment, FragmentHeader};
