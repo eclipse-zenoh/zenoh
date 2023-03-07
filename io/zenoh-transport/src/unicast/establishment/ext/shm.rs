@@ -180,15 +180,15 @@ impl<'a> Shm<'a> {
 }
 
 #[async_trait]
-impl<'a> OpenFsm<'a> for Shm<'a> {
+impl<'a> OpenFsm for Shm<'a> {
     type Error = ZError;
 
-    type InitSynIn = &'a State;
-    type InitSynOut = Option<init::ext::Shm>;
+    type SendInitSynIn = &'a State;
+    type SendInitSynOut = Option<init::ext::Shm>;
     async fn send_init_syn(
-        &'a self,
-        state: Self::InitSynIn,
-    ) -> Result<Self::InitSynOut, Self::Error> {
+        &self,
+        state: Self::SendInitSynIn,
+    ) -> Result<Self::SendInitSynOut, Self::Error> {
         const S: &str = "Shm extension - Send InitSyn.";
 
         if !state.is_shm() {
@@ -209,12 +209,12 @@ impl<'a> OpenFsm<'a> for Shm<'a> {
         Ok(Some(init::ext::Shm::new(buff.into())))
     }
 
-    type InitAckIn = (&'a mut State, Option<init::ext::Shm>);
-    type InitAckOut = Challenge;
+    type RecvInitAckIn = (&'a mut State, Option<init::ext::Shm>);
+    type RecvInitAckOut = Challenge;
     async fn recv_init_ack(
-        &'a self,
-        input: Self::InitAckIn,
-    ) -> Result<Self::InitAckOut, Self::Error> {
+        &self,
+        input: Self::RecvInitAckIn,
+    ) -> Result<Self::RecvInitAckOut, Self::Error> {
         const S: &str = "Shm extension - Recv InitAck.";
 
         let (state, mut ext) = input;
@@ -281,12 +281,12 @@ impl<'a> OpenFsm<'a> for Shm<'a> {
         Ok(bob_challenge)
     }
 
-    type OpenSynIn = (&'a State, Self::InitAckOut);
-    type OpenSynOut = Option<open::ext::Shm>;
+    type SendOpenSynIn = (&'a State, Self::RecvInitAckOut);
+    type SendOpenSynOut = Option<open::ext::Shm>;
     async fn send_open_syn(
-        &'a self,
-        input: Self::OpenSynIn,
-    ) -> Result<Self::OpenSynOut, Self::Error> {
+        &self,
+        input: Self::SendOpenSynIn,
+    ) -> Result<Self::SendOpenSynOut, Self::Error> {
         const S: &str = "Shm extension - Send OpenSyn.";
 
         let (state, bob_challenge) = input;
@@ -297,12 +297,12 @@ impl<'a> OpenFsm<'a> for Shm<'a> {
         Ok(Some(open::ext::Shm::new(bob_challenge)))
     }
 
-    type OpenAckIn = (&'a mut State, Option<open::ext::Shm>);
-    type OpenAckOut = ();
+    type RecvOpenAckIn = (&'a mut State, Option<open::ext::Shm>);
+    type RecvOpenAckOut = ();
     async fn recv_open_ack(
-        &'a self,
-        input: Self::OpenAckIn,
-    ) -> Result<Self::OpenAckOut, Self::Error> {
+        &self,
+        input: Self::RecvOpenAckIn,
+    ) -> Result<Self::RecvOpenAckOut, Self::Error> {
         const S: &str = "Shm extension - Recv OpenAck.";
 
         let (state, mut ext) = input;
@@ -330,15 +330,15 @@ impl<'a> OpenFsm<'a> for Shm<'a> {
 /*            ACCEPT                 */
 /*************************************/
 #[async_trait]
-impl<'a> AcceptFsm<'a> for Shm<'a> {
+impl<'a> AcceptFsm for Shm<'a> {
     type Error = ZError;
 
-    type InitSynIn = (&'a mut State, Option<init::ext::Shm>);
-    type InitSynOut = Challenge;
+    type RecvInitSynIn = (&'a mut State, Option<init::ext::Shm>);
+    type RecvInitSynOut = Challenge;
     async fn recv_init_syn(
-        &'a self,
-        input: Self::InitSynIn,
-    ) -> Result<Self::InitSynOut, Self::Error> {
+        &self,
+        input: Self::RecvInitSynIn,
+    ) -> Result<Self::RecvInitSynOut, Self::Error> {
         const S: &str = "Shm extension - Recv InitSyn.";
 
         let (state, mut ext) = input;
@@ -384,12 +384,12 @@ impl<'a> AcceptFsm<'a> for Shm<'a> {
         Ok(alice_challenge)
     }
 
-    type InitAckIn = (&'a State, Self::InitSynOut);
-    type InitAckOut = Option<init::ext::Shm>;
+    type SendInitAckIn = (&'a State, Self::RecvInitSynOut);
+    type SendInitAckOut = Option<init::ext::Shm>;
     async fn send_init_ack(
-        &'a self,
-        input: Self::InitAckIn,
-    ) -> Result<Self::InitAckOut, Self::Error> {
+        &self,
+        input: Self::SendInitAckIn,
+    ) -> Result<Self::SendInitAckOut, Self::Error> {
         const S: &str = "Shm extension - Send InitAck.";
 
         let (state, alice_challenge) = input;
@@ -412,12 +412,12 @@ impl<'a> AcceptFsm<'a> for Shm<'a> {
         Ok(Some(init::ext::Shm::new(buff.into())))
     }
 
-    type OpenSynIn = (&'a mut State, Option<open::ext::Shm>);
-    type OpenSynOut = ();
+    type RecvOpenSynIn = (&'a mut State, Option<open::ext::Shm>);
+    type RecvOpenSynOut = ();
     async fn recv_open_syn(
-        &'a self,
-        input: Self::OpenSynIn,
-    ) -> Result<Self::OpenSynOut, Self::Error> {
+        &self,
+        input: Self::RecvOpenSynIn,
+    ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         const S: &str = "Shm extension - Recv OpenSyn.";
 
         let (state, mut ext) = input;
@@ -455,12 +455,12 @@ impl<'a> AcceptFsm<'a> for Shm<'a> {
         Ok(())
     }
 
-    type OpenAckIn = &'a mut State;
-    type OpenAckOut = Option<open::ext::Shm>;
+    type SendOpenAckIn = &'a mut State;
+    type SendOpenAckOut = Option<open::ext::Shm>;
     async fn send_open_ack(
-        &'a self,
-        state: Self::OpenAckIn,
-    ) -> Result<Self::OpenAckOut, Self::Error> {
+        &self,
+        state: Self::SendOpenAckIn,
+    ) -> Result<Self::SendOpenAckOut, Self::Error> {
         const S: &str = "Shm extension - Recv OpenSyn.";
 
         if !state.is_shm() {

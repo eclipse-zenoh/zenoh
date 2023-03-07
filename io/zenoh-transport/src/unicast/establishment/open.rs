@@ -83,21 +83,21 @@ struct RecvOpenAckOut {
 // FSM
 struct OpenLink<'a> {
     link: &'a LinkUnicast,
-    ext_qos: ext::qos::QoS,
+    ext_qos: ext::qos::QoS<'a>,
     #[cfg(feature = "shared-memory")]
     ext_shm: ext::shm::Shm<'a>,
 }
 
 #[async_trait]
-impl<'a> OpenFsm<'a> for OpenLink<'a> {
+impl<'a> OpenFsm for OpenLink<'a> {
     type Error = OpenError;
 
-    type InitSynIn = (&'a mut State, SendInitSynIn);
-    type InitSynOut = ();
+    type SendInitSynIn = (&'a mut State, SendInitSynIn);
+    type SendInitSynOut = ();
     async fn send_init_syn(
-        &'a self,
-        input: Self::InitSynIn,
-    ) -> Result<Self::InitSynOut, Self::Error> {
+        &self,
+        input: Self::SendInitSynIn,
+    ) -> Result<Self::SendInitSynOut, Self::Error> {
         let (state, input) = input;
 
         // Extension QoS
@@ -138,12 +138,12 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
         Ok(())
     }
 
-    type InitAckIn = &'a mut State;
-    type InitAckOut = RecvInitAckOut;
+    type RecvInitAckIn = &'a mut State;
+    type RecvInitAckOut = RecvInitAckOut;
     async fn recv_init_ack(
-        &'a self,
-        state: Self::InitAckIn,
-    ) -> Result<Self::InitAckOut, Self::Error> {
+        &self,
+        state: Self::RecvInitAckIn,
+    ) -> Result<Self::RecvInitAckOut, Self::Error> {
         let msg = self
             .link
             .recv()
@@ -241,12 +241,12 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
         Ok(output)
     }
 
-    type OpenSynIn = (&'a mut State, SendOpenSynIn);
-    type OpenSynOut = SendOpenSynOut;
+    type SendOpenSynIn = (&'a mut State, SendOpenSynIn);
+    type SendOpenSynOut = SendOpenSynOut;
     async fn send_open_syn(
-        &'a self,
-        input: Self::OpenSynIn,
-    ) -> Result<Self::OpenSynOut, Self::Error> {
+        &self,
+        input: Self::SendOpenSynIn,
+    ) -> Result<Self::SendOpenSynOut, Self::Error> {
         let (state, input) = input;
 
         // Extension QoS
@@ -288,12 +288,12 @@ impl<'a> OpenFsm<'a> for OpenLink<'a> {
         Ok(output)
     }
 
-    type OpenAckIn = &'a mut State;
-    type OpenAckOut = RecvOpenAckOut;
+    type RecvOpenAckIn = &'a mut State;
+    type RecvOpenAckOut = RecvOpenAckOut;
     async fn recv_open_ack(
-        &'a self,
-        state: Self::OpenAckIn,
-    ) -> Result<Self::OpenAckOut, Self::Error> {
+        &self,
+        state: Self::RecvOpenAckIn,
+    ) -> Result<Self::RecvOpenAckOut, Self::Error> {
         let msg = self
             .link
             .recv()

@@ -49,7 +49,7 @@ pub struct TransportManagerStateUnicast {
     // Incoming uninitialized transports
     pub(super) incoming: Arc<Mutex<usize>>,
     // Active peer authenticators
-    // pub(super) peer_authenticator: Arc<AsyncRwLock<HashSet<PeerAuthenticator>>>, @TODO
+    // pub(super) peer_authenticator: Arc<AsyncRwLock<HashMap<&'static str, TransportAuthenticator>>>, @TODO
     // Established listeners
     pub(super) protocols: Arc<Mutex<HashMap<String, LinkManagerUnicast>>>,
     // Established transports

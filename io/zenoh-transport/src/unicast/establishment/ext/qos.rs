@@ -13,6 +13,7 @@
 //
 use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 use async_trait::async_trait;
+use core::marker::PhantomData;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -64,11 +65,13 @@ where
 }
 
 // Extension Fsm
-pub(crate) struct QoS;
+pub(crate) struct QoS<'a> {
+    _a: PhantomData<&'a ()>,
+}
 
-impl QoS {
+impl<'a> QoS<'a> {
     pub(crate) const fn new() -> Self {
-        Self
+        Self { _a: PhantomData }
     }
 }
 
@@ -76,45 +79,45 @@ impl QoS {
 /*              OPEN                 */
 /*************************************/
 #[async_trait]
-impl<'a> OpenFsm<'a> for QoS {
+impl<'a> OpenFsm for QoS<'a> {
     type Error = ZError;
 
-    type InitSynIn = &'a State;
-    type InitSynOut = Option<init::ext::QoS>;
+    type SendInitSynIn = &'a State;
+    type SendInitSynOut = Option<init::ext::QoS>;
     async fn send_init_syn(
-        &'a self,
-        state: Self::InitSynIn,
-    ) -> Result<Self::InitSynOut, Self::Error> {
+        &self,
+        state: Self::SendInitSynIn,
+    ) -> Result<Self::SendInitSynOut, Self::Error> {
         let output = state.is_qos.then_some(init::ext::QoS::new());
         Ok(output)
     }
 
-    type InitAckIn = (&'a mut State, Option<init::ext::QoS>);
-    type InitAckOut = ();
+    type RecvInitAckIn = (&'a mut State, Option<init::ext::QoS>);
+    type RecvInitAckOut = ();
     async fn recv_init_ack(
-        &'a self,
-        input: Self::InitAckIn,
-    ) -> Result<Self::InitAckOut, Self::Error> {
+        &self,
+        input: Self::RecvInitAckIn,
+    ) -> Result<Self::RecvInitAckOut, Self::Error> {
         let (state, other_ext) = input;
         state.is_qos &= other_ext.is_some();
         Ok(())
     }
 
-    type OpenSynIn = &'a State;
-    type OpenSynOut = Option<open::ext::QoS>;
+    type SendOpenSynIn = &'a State;
+    type SendOpenSynOut = Option<open::ext::QoS>;
     async fn send_open_syn(
-        &'a self,
-        _state: Self::OpenSynIn,
-    ) -> Result<Self::OpenSynOut, Self::Error> {
+        &self,
+        _state: Self::SendOpenSynIn,
+    ) -> Result<Self::SendOpenSynOut, Self::Error> {
         Ok(None)
     }
 
-    type OpenAckIn = (&'a mut State, Option<open::ext::QoS>);
-    type OpenAckOut = ();
+    type RecvOpenAckIn = (&'a mut State, Option<open::ext::QoS>);
+    type RecvOpenAckOut = ();
     async fn recv_open_ack(
-        &'a self,
-        _state: Self::OpenAckIn,
-    ) -> Result<Self::OpenAckOut, Self::Error> {
+        &self,
+        _state: Self::RecvOpenAckIn,
+    ) -> Result<Self::RecvOpenAckOut, Self::Error> {
         Ok(())
     }
 }
@@ -123,45 +126,45 @@ impl<'a> OpenFsm<'a> for QoS {
 /*            ACCEPT                 */
 /*************************************/
 #[async_trait]
-impl<'a> AcceptFsm<'a> for QoS {
+impl<'a> AcceptFsm for QoS<'a> {
     type Error = ZError;
 
-    type InitSynIn = (&'a mut State, Option<init::ext::QoS>);
-    type InitSynOut = ();
+    type RecvInitSynIn = (&'a mut State, Option<init::ext::QoS>);
+    type RecvInitSynOut = ();
     async fn recv_init_syn(
-        &'a self,
-        input: Self::InitSynIn,
-    ) -> Result<Self::InitSynOut, Self::Error> {
+        &self,
+        input: Self::RecvInitSynIn,
+    ) -> Result<Self::RecvInitSynOut, Self::Error> {
         let (state, other_ext) = input;
         state.is_qos &= other_ext.is_some();
         Ok(())
     }
 
-    type InitAckIn = &'a State;
-    type InitAckOut = Option<init::ext::QoS>;
+    type SendInitAckIn = &'a State;
+    type SendInitAckOut = Option<init::ext::QoS>;
     async fn send_init_ack(
-        &'a self,
-        state: Self::InitAckIn,
-    ) -> Result<Self::InitAckOut, Self::Error> {
+        &self,
+        state: Self::SendInitAckIn,
+    ) -> Result<Self::SendInitAckOut, Self::Error> {
         let output = state.is_qos.then_some(init::ext::QoS::new());
         Ok(output)
     }
 
-    type OpenSynIn = (&'a mut State, Option<open::ext::QoS>);
-    type OpenSynOut = ();
+    type RecvOpenSynIn = (&'a mut State, Option<open::ext::QoS>);
+    type RecvOpenSynOut = ();
     async fn recv_open_syn(
-        &'a self,
-        _state: Self::OpenSynIn,
-    ) -> Result<Self::OpenSynOut, Self::Error> {
+        &self,
+        _state: Self::RecvOpenSynIn,
+    ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         Ok(())
     }
 
-    type OpenAckIn = &'a State;
-    type OpenAckOut = Option<open::ext::QoS>;
+    type SendOpenAckIn = &'a State;
+    type SendOpenAckOut = Option<open::ext::QoS>;
     async fn send_open_ack(
-        &'a self,
-        _state: Self::OpenAckIn,
-    ) -> Result<Self::OpenAckOut, Self::Error> {
+        &self,
+        _state: Self::SendOpenAckIn,
+    ) -> Result<Self::SendOpenAckOut, Self::Error> {
         Ok(None)
     }
 }

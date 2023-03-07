@@ -36,69 +36,69 @@ use zenoh_result::ZResult;
 /*             TRAITS                */
 /*************************************/
 #[async_trait]
-pub(crate) trait OpenFsm<'a> {
+pub trait OpenFsm {
     type Error;
 
-    type InitSynIn;
-    type InitSynOut;
+    type SendInitSynIn;
+    type SendInitSynOut;
     async fn send_init_syn(
-        &'a self,
-        input: Self::InitSynIn,
-    ) -> Result<Self::InitSynOut, Self::Error>;
+        &self,
+        input: Self::SendInitSynIn,
+    ) -> Result<Self::SendInitSynOut, Self::Error>;
 
-    type InitAckIn;
-    type InitAckOut;
+    type RecvInitAckIn;
+    type RecvInitAckOut;
     async fn recv_init_ack(
-        &'a self,
-        input: Self::InitAckIn,
-    ) -> Result<Self::InitAckOut, Self::Error>;
+        &self,
+        input: Self::RecvInitAckIn,
+    ) -> Result<Self::RecvInitAckOut, Self::Error>;
 
-    type OpenSynIn;
-    type OpenSynOut;
+    type SendOpenSynIn;
+    type SendOpenSynOut;
     async fn send_open_syn(
-        &'a self,
-        input: Self::OpenSynIn,
-    ) -> Result<Self::OpenSynOut, Self::Error>;
+        &self,
+        input: Self::SendOpenSynIn,
+    ) -> Result<Self::SendOpenSynOut, Self::Error>;
 
-    type OpenAckIn;
-    type OpenAckOut;
+    type RecvOpenAckIn;
+    type RecvOpenAckOut;
     async fn recv_open_ack(
-        &'a self,
-        input: Self::OpenAckIn,
-    ) -> Result<Self::OpenAckOut, Self::Error>;
+        &self,
+        input: Self::RecvOpenAckIn,
+    ) -> Result<Self::RecvOpenAckOut, Self::Error>;
 }
 
 #[async_trait]
-pub(crate) trait AcceptFsm<'a> {
+pub trait AcceptFsm {
     type Error;
 
-    type InitSynIn;
-    type InitSynOut;
+    type RecvInitSynIn;
+    type RecvInitSynOut;
     async fn recv_init_syn(
-        &'a self,
-        input: Self::InitSynIn,
-    ) -> Result<Self::InitSynOut, Self::Error>;
+        &self,
+        input: Self::RecvInitSynIn,
+    ) -> Result<Self::RecvInitSynOut, Self::Error>;
 
-    type InitAckIn;
-    type InitAckOut;
+    type SendInitAckIn;
+    type SendInitAckOut;
     async fn send_init_ack(
-        &'a self,
-        input: Self::InitAckIn,
-    ) -> Result<Self::InitAckOut, Self::Error>;
+        &self,
+        input: Self::SendInitAckIn,
+    ) -> Result<Self::SendInitAckOut, Self::Error>;
 
-    type OpenSynIn;
-    type OpenSynOut;
+    type RecvOpenSynIn;
+    type RecvOpenSynOut;
     async fn recv_open_syn(
-        &'a self,
-        input: Self::OpenSynIn,
-    ) -> Result<Self::OpenSynOut, Self::Error>;
+        &self,
+        input: Self::RecvOpenSynIn,
+    ) -> Result<Self::RecvOpenSynOut, Self::Error>;
 
-    type OpenAckIn;
-    type OpenAckOut;
+    type SendOpenAckIn;
+    type SendOpenAckOut;
     async fn send_open_ack(
-        &'a self,
-        input: Self::OpenAckIn,
-    ) -> Result<Self::OpenAckOut, Self::Error>;
+        &self,
+        input: Self::SendOpenAckIn,
+    ) -> Result<Self::SendOpenAckOut, Self::Error>;
 }
 
 /*************************************/

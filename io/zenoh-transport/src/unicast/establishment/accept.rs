@@ -103,21 +103,21 @@ struct AcceptLink<'a> {
     link: &'a LinkUnicast,
     prng: &'a Mutex<PseudoRng>,
     cipher: &'a BlockCipher,
-    ext_qos: ext::qos::QoS,
+    ext_qos: ext::qos::QoS<'a>,
     #[cfg(feature = "shared-memory")]
     ext_shm: ext::shm::Shm<'a>,
 }
 
 #[async_trait]
-impl<'a> AcceptFsm<'a> for AcceptLink<'a> {
+impl<'a> AcceptFsm for AcceptLink<'a> {
     type Error = AcceptError;
 
-    type InitSynIn = (&'a mut State, RecvInitSynIn);
-    type InitSynOut = RecvInitSynOut;
+    type RecvInitSynIn = (&'a mut State, RecvInitSynIn);
+    type RecvInitSynOut = RecvInitSynOut;
     async fn recv_init_syn(
-        &'a self,
-        input: Self::InitSynIn,
-    ) -> Result<Self::InitSynOut, Self::Error> {
+        &self,
+        input: Self::RecvInitSynIn,
+    ) -> Result<Self::RecvInitSynOut, Self::Error> {
         let (state, input) = input;
 
         let msg = self
@@ -191,12 +191,12 @@ impl<'a> AcceptFsm<'a> for AcceptLink<'a> {
         Ok(output)
     }
 
-    type InitAckIn = (&'a mut State, SendInitAckIn);
-    type InitAckOut = SendInitAckOut;
+    type SendInitAckIn = (&'a mut State, SendInitAckIn);
+    type SendInitAckOut = SendInitAckOut;
     async fn send_init_ack(
-        &'a self,
-        input: Self::InitAckIn,
-    ) -> Result<Self::InitAckOut, Self::Error> {
+        &self,
+        input: Self::SendInitAckIn,
+    ) -> Result<Self::SendInitAckOut, Self::Error> {
         let (state, input) = input;
 
         // Extension QoS
@@ -269,12 +269,12 @@ impl<'a> AcceptFsm<'a> for AcceptLink<'a> {
         Ok(output)
     }
 
-    type OpenSynIn = RecvOpenSynIn;
-    type OpenSynOut = (State, RecvOpenSynOut);
+    type RecvOpenSynIn = RecvOpenSynIn;
+    type RecvOpenSynOut = (State, RecvOpenSynOut);
     async fn recv_open_syn(
-        &'a self,
-        input: Self::OpenSynIn,
-    ) -> Result<Self::OpenSynOut, Self::Error> {
+        &self,
+        input: Self::RecvOpenSynIn,
+    ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         let msg = self
             .link
             .recv()
@@ -353,12 +353,12 @@ impl<'a> AcceptFsm<'a> for AcceptLink<'a> {
         Ok((state, output))
     }
 
-    type OpenAckIn = (&'a mut State, SendOpenAckIn);
-    type OpenAckOut = SendOpenAckOut;
+    type SendOpenAckIn = (&'a mut State, SendOpenAckIn);
+    type SendOpenAckOut = SendOpenAckOut;
     async fn send_open_ack(
-        &'a self,
-        input: Self::OpenAckIn,
-    ) -> Result<Self::OpenAckOut, Self::Error> {
+        &self,
+        input: Self::SendOpenAckIn,
+    ) -> Result<Self::SendOpenAckOut, Self::Error> {
         let (state, input) = input;
 
         // Extension QoS
