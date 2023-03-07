@@ -288,12 +288,35 @@ impl From<PushMode> for SubMode {
 #[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
+    #[cfg(feature = "unstable")]
     pub session: SessionRef<'a>,
+    #[cfg(not(feature = "unstable"))]
+    pub(crate) session: SessionRef<'a>,
+
+    #[cfg(feature = "unstable")]
     pub key_expr: ZResult<KeyExpr<'b>>,
+    #[cfg(not(feature = "unstable"))]
+    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
+
+    #[cfg(feature = "unstable")]
     pub reliability: Reliability,
+    #[cfg(not(feature = "unstable"))]
+    pub(crate) reliability: Reliability,
+
+    #[cfg(feature = "unstable")]
     pub mode: Mode,
+    #[cfg(not(feature = "unstable"))]
+    pub(crate) mode: Mode,
+
+    #[cfg(feature = "unstable")]
     pub origin: Locality,
+    #[cfg(not(feature = "unstable"))]
+    pub(crate) origin: Locality,
+
+    #[cfg(feature = "unstable")]
     pub handler: Handler,
+    #[cfg(not(feature = "unstable"))]
+    pub(crate) handler: Handler,
 }
 
 impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {

@@ -16,16 +16,16 @@
 //!
 //! see [`Liveliness`](Liveliness)
 
-use zenoh_protocol::core::SubInfo;
-
-use crate::{
-    handlers::locked,
-    subscriber::{Subscriber, SubscriberInner},
-};
-
 #[zenoh_core::unstable]
 use {
-    crate::{handlers::DefaultHandler, prelude::*, query::GetBuilder, SessionRef, Undeclarable},
+    crate::{
+        handlers::locked,
+        handlers::DefaultHandler,
+        prelude::*,
+        query::GetBuilder,
+        subscriber::{Subscriber, SubscriberInner},
+        SessionRef, Undeclarable,
+    },
     std::convert::TryInto,
     std::future::Ready,
     std::sync::Arc,
@@ -35,6 +35,7 @@ use {
     zenoh_core::Resolvable,
     zenoh_core::Result as ZResult,
     zenoh_core::SyncResolve,
+    zenoh_protocol::core::SubInfo,
 };
 
 #[zenoh_core::unstable]
@@ -403,14 +404,16 @@ impl Drop for LivelinessToken<'_> {
 ///     .unwrap();
 /// # })
 /// ```
-#[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[zenoh_core::unstable]
+#[derive(Debug)]
 pub struct LivelinessSubscriberBuilder<'a, 'b, Handler> {
     pub session: SessionRef<'a>,
     pub key_expr: ZResult<KeyExpr<'b>>,
     pub handler: Handler,
 }
 
+#[zenoh_core::unstable]
 impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// Receive the samples for this subscription with a callback.
     ///
@@ -429,6 +432,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
+    #[zenoh_core::unstable]
     pub fn callback<Callback>(
         self,
         callback: Callback,
@@ -469,6 +473,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
+    #[zenoh_core::unstable]
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
@@ -499,6 +504,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
+    #[zenoh_core::unstable]
     pub fn with<Handler>(self, handler: Handler) -> LivelinessSubscriberBuilder<'a, 'b, Handler>
     where
         Handler: crate::prelude::IntoCallbackReceiverPair<'static, Sample>,
@@ -516,6 +522,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     }
 }
 
+#[zenoh_core::unstable]
 impl<'a, Handler> Resolvable for LivelinessSubscriberBuilder<'a, '_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
@@ -524,11 +531,13 @@ where
     type To = ZResult<Subscriber<'a, Handler::Receiver>>;
 }
 
+#[zenoh_core::unstable]
 impl<'a, Handler> SyncResolve for LivelinessSubscriberBuilder<'a, '_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
+    #[zenoh_core::unstable]
     fn res_sync(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
         let session = self.session;
@@ -552,6 +561,7 @@ where
     }
 }
 
+#[zenoh_core::unstable]
 impl<'a, Handler> AsyncResolve for LivelinessSubscriberBuilder<'a, '_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
@@ -559,6 +569,7 @@ where
 {
     type Future = Ready<Self::To>;
 
+    #[zenoh_core::unstable]
     fn res_async(self) -> Self::Future {
         std::future::ready(self.res_sync())
     }
