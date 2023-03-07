@@ -390,7 +390,7 @@ impl TransportManager {
                 guard.insert(config.zid, a_t);
 
                 log::debug!(
-                    "New transport opened between {} and {}: whatami {}, sn resolution {}, initial sn {:?}, shm: {}, qos: {}",
+                    "New transport opened between {} and {}: whatami {}, sn resolution {:?}, initial sn {:?}, shm: {}, qos: {}",
                     self.config.zid,
                     config.zid,
                     config.whatami,

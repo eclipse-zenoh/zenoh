@@ -15,7 +15,7 @@ use super::seq_num::SeqNum;
 use zenoh_buffers::{reader::HasReader, SplitBuffer, ZBuf, ZSlice};
 use zenoh_codec::{RCodec, Zenoh080Reliability};
 use zenoh_protocol::{
-    core::{Reliability, ZInt},
+    core::{Bits, Reliability, ZInt},
     zenoh::ZenohMessage,
 };
 use zenoh_result::{bail, ZResult};
@@ -32,12 +32,12 @@ pub(crate) struct DefragBuffer {
 impl DefragBuffer {
     pub(crate) fn make(
         reliability: Reliability,
-        sn_resolution: ZInt,
+        resolution: Bits,
         capacity: usize,
     ) -> ZResult<DefragBuffer> {
         let db = DefragBuffer {
             reliability,
-            sn: SeqNum::make(0, sn_resolution)?,
+            sn: SeqNum::make(0, resolution)?,
             buffer: ZBuf::default(),
             capacity,
             len: 0,

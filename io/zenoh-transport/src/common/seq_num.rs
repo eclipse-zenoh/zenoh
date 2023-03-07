@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh_protocol::core::ZInt;
+use zenoh_protocol::core::{Bits, ZInt};
 use zenoh_result::{bail, ZResult};
 
 /// Sequence Number
@@ -26,8 +26,7 @@ use zenoh_result::{bail, ZResult};
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct SeqNum {
     value: ZInt,
-    semi_int: ZInt,
-    resolution: ZInt,
+    mask: ZInt,
 }
 
 impl SeqNum {
@@ -47,12 +46,14 @@ impl SeqNum {
     /// This funtion will panic if `value` is out of bound w.r.t. `resolution`. That is if
     /// `value` is greater or equal than `resolution`.
     ///
-    pub(crate) fn make(value: ZInt, resolution: ZInt) -> ZResult<SeqNum> {
-        let mut sn = SeqNum {
-            value: 0,
-            semi_int: resolution >> 1,
-            resolution,
+    pub(crate) fn make(value: ZInt, resolution: Bits) -> ZResult<SeqNum> {
+        let mask = match resolution {
+            Bits::U8 => (u8::MAX >> 1) as ZInt,   // 1 byte max when encoded
+            Bits::U16 => (u16::MAX >> 2) as ZInt, // 2 bytes max when encoded
+            Bits::U32 => (u32::MAX >> 4) as ZInt, // 4 bytes max when encoded
+            Bits::U64 => (u64::MAX >> 8) as ZInt, // 8 bytes max when encoded
         };
+        let mut sn = SeqNum { value: 0, mask };
         sn.set(value)?;
         Ok(sn)
     }
@@ -64,12 +65,12 @@ impl SeqNum {
 
     #[inline(always)]
     pub(crate) fn resolution(&self) -> ZInt {
-        self.resolution
+        self.mask
     }
 
     #[inline(always)]
     pub(crate) fn set(&mut self, value: ZInt) -> ZResult<()> {
-        if value >= self.resolution {
+        if (value & !self.mask) != 0 {
             bail!("The sequence number value must be smaller than the resolution");
         }
 
@@ -79,7 +80,7 @@ impl SeqNum {
 
     #[inline(always)]
     pub(crate) fn increment(&mut self) {
-        self.value = (self.value + 1) % self.resolution;
+        self.value = self.value.wrapping_add(1) & self.mask;
     }
 
     /// Checks to see if two sequence number are in a precedence relationship,
@@ -102,47 +103,20 @@ impl SeqNum {
     ///
     /// * `value` -  The sequence number which should be checked for precedence relation.
     pub(crate) fn precedes(&self, value: ZInt) -> ZResult<bool> {
-        if value >= self.resolution {
+        if (value & !self.mask) != 0 {
             bail!("The sequence number value must be smaller than the resolution");
         }
-
-        let res = if value > self.value {
-            value - self.value <= self.semi_int
-        } else {
-            self.value - value > self.semi_int
-        };
-
-        Ok(res)
+        let gap = value.wrapping_sub(self.value) & self.mask;
+        Ok((gap != 0) && ((gap & !(self.mask >> 1)) == 0))
     }
 
     /// Computes the modulo gap between two sequence numbers.
-    ///
-    /// Two case are considered:
-    ///
-    /// ## Case 1: sna < snb
-    ///
-    /// In this case the gap is computed as *snb* - *sna*.
-    ///
-    /// ## Case 2: sna > snb
-    ///
-    /// In this case the gap is computed as *resolution* - (*sna* - *snb*).
-    ///
-    /// # Arguments
-    ///
-    /// * `value` -  The sequence number which should be checked for gap computation.
     #[cfg(test)] // @TODO: remove once reliability is implemented
     pub(crate) fn gap(&self, value: ZInt) -> ZResult<ZInt> {
-        if value >= self.resolution {
-            bail!("The sequence number value must be smaller than the resolution")
+        if (value & !self.mask) != 0 {
+            bail!("The sequence number value must be smaller than the resolution");
         }
-
-        let gap = if value >= self.value {
-            value - self.value
-        } else {
-            self.resolution - (self.value - value)
-        };
-
-        Ok(gap)
+        Ok(value.wrapping_sub(self.value) & self.mask)
     }
 }
 
@@ -166,8 +140,8 @@ impl SeqNumGenerator {
     /// This funtion will panic if `value` is out of bound w.r.t. `resolution`. That is if
     /// `value` is greater or equal than `resolution`.
     ///
-    pub(crate) fn make(initial_sn: ZInt, sn_resolution: ZInt) -> ZResult<SeqNumGenerator> {
-        let sn = SeqNum::make(initial_sn, sn_resolution)?;
+    pub(crate) fn make(initial_sn: ZInt, resolution: Bits) -> ZResult<SeqNumGenerator> {
+        let sn = SeqNum::make(initial_sn, resolution)?;
         Ok(SeqNumGenerator(sn))
     }
 
@@ -196,17 +170,17 @@ mod tests {
 
     #[test]
     fn sn_set() {
-        let mut sn0a = SeqNum::make(0, 14).unwrap();
+        let mask = (u8::MAX >> 1) as ZInt;
+
+        let mut sn0a = SeqNum::make(0, Bits::U8).unwrap();
         assert_eq!(sn0a.get(), 0);
-        assert_eq!(sn0a.resolution, 14);
+        assert_eq!(sn0a.mask, mask);
 
-        let res = sn0a.set(13);
-        assert!(res.is_ok());
-        assert_eq!(sn0a.get(), 13);
+        sn0a.set(mask).unwrap();
+        assert_eq!(sn0a.get(), mask);
 
-        let res = sn0a.set(14);
-        assert!(res.is_err());
-        assert_eq!(sn0a.get(), 13);
+        assert!(sn0a.set(mask + 1).is_err());
+        assert_eq!(sn0a.get(), mask);
 
         sn0a.increment();
         assert_eq!(sn0a.get(), 0);
@@ -217,76 +191,40 @@ mod tests {
 
     #[test]
     fn sn_gap() {
-        let mut sn0a = SeqNum::make(0, 14).unwrap();
-        let sn1a: ZInt = 0;
-        let res = sn0a.gap(sn1a);
-        assert_eq!(res.unwrap(), 0);
+        let mask = (u8::MAX >> 1) as ZInt;
+        let mut sn0a = SeqNum::make(0, Bits::U8).unwrap();
 
-        let sn1a: ZInt = 1;
-        let res = sn0a.gap(sn1a);
-        assert_eq!(res.unwrap(), 1);
+        assert_eq!(sn0a.gap(0).unwrap(), 0);
+        assert_eq!(sn0a.gap(1).unwrap(), 1);
+        assert_eq!(sn0a.gap(mask).unwrap(), mask);
+        assert!(sn0a.gap(mask + 1).is_err());
 
-        let sn1a: ZInt = 13;
-        let res = sn0a.gap(sn1a);
-        assert_eq!(res.unwrap(), 13);
-
-        let sn1a: ZInt = 14;
-        let res = sn0a.gap(sn1a);
-        assert!(res.is_err());
-
-        let res = sn0a.set(13);
-        assert!(res.is_ok());
-
-        let sn1a: ZInt = 13;
-        let res = sn0a.gap(sn1a);
-        assert_eq!(res.unwrap(), 0);
-
-        let sn1a: ZInt = 0;
-        let res = sn0a.gap(sn1a);
-        assert_eq!(res.unwrap(), 1);
+        sn0a.set(mask).unwrap();
+        assert_eq!(sn0a.gap(mask).unwrap(), 0);
+        assert_eq!(sn0a.gap(0).unwrap(), 1);
     }
 
     #[test]
     fn sn_precedence() {
-        let mut sn0a = SeqNum::make(0, 14).unwrap();
-        let sn1a: ZInt = 1;
-        let res = sn0a.precedes(sn1a);
-        assert!(res.unwrap());
+        let mask = (u8::MAX >> 1) as ZInt;
 
-        let sn1a: ZInt = 0;
-        let res = sn0a.precedes(sn1a);
-        assert!(!res.unwrap());
-
-        let sn1a: ZInt = 6;
-        let res = sn0a.precedes(sn1a);
-        assert!(res.unwrap());
-
-        let sn1a: ZInt = 7;
-        let res = sn0a.precedes(sn1a);
-        assert!(res.unwrap());
-
-        let res = sn0a.set(13);
-        assert!(res.is_ok());
-
-        let sn1a: ZInt = 6;
-        let res = sn0a.precedes(sn1a);
-        assert!(!res.unwrap());
-
-        let sn1a: ZInt = 1;
-        let res = sn0a.precedes(sn1a);
-        assert!(res.unwrap());
-
-        let sn1a: ZInt = 5;
-        let res = sn0a.precedes(sn1a);
-        assert!(res.unwrap());
+        let sn0a = SeqNum::make(0, Bits::U8).unwrap();
+        assert!(sn0a.precedes(1).unwrap());
+        assert!(!sn0a.precedes(0).unwrap());
+        assert!(!sn0a.precedes(mask).unwrap());
+        assert!(sn0a.precedes(6).unwrap());
+        assert!(sn0a.precedes((mask / 2) - 1).unwrap());
+        assert!(sn0a.precedes(mask / 2).unwrap());
+        assert!(!sn0a.precedes((mask / 2) + 1).unwrap());
     }
 
     #[test]
     fn sn_generation() {
-        let mut sn0 = SeqNumGenerator::make(13, 14).unwrap();
-        let mut sn1 = SeqNumGenerator::make(5, 14).unwrap();
+        let mask = (u8::MAX >> 1) as ZInt;
+        let mut sn0 = SeqNumGenerator::make(mask, Bits::U8).unwrap();
+        let mut sn1 = SeqNumGenerator::make(5, Bits::U8).unwrap();
 
-        assert_eq!(sn0.get(), 13);
+        assert_eq!(sn0.get(), mask);
         assert_eq!(sn1.get(), 5);
 
         assert_eq!(sn0.get(), 0);

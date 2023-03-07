@@ -30,7 +30,7 @@ use std::sync::{Arc, Weak};
 use transport::TransportUnicastInner;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{WhatAmI, ZInt, ZenohId},
+    core::{Bits, WhatAmI, ZInt, ZenohId},
     transport::close,
     zenoh::ZenohMessage,
 };
@@ -84,7 +84,7 @@ stats_struct! {
 pub(crate) struct TransportConfigUnicast {
     pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
-    pub(crate) sn_resolution: ZInt,
+    pub(crate) sn_resolution: Bits,
     pub(crate) tx_initial_sn: ZInt,
     pub(crate) is_shm: bool,
     pub(crate) is_qos: bool,
@@ -118,7 +118,7 @@ impl TransportUnicast {
     #[inline(always)]
     pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
         let transport = self.get_inner()?;
-        Ok(transport.get_sn_resolution())
+        Ok(transport.get_sn_resolution().mask())
     }
 
     #[inline(always)]

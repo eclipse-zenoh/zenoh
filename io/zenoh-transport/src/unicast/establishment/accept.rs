@@ -468,7 +468,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
     let config = TransportConfigUnicast {
         zid: osyn_out.other_zid,
         whatami: osyn_out.other_whatami,
-        sn_resolution: state.zenoh.resolution.get(Field::FrameSN).mask(),
+        sn_resolution: state.zenoh.resolution.get(Field::FrameSN),
         tx_initial_sn: oack_out.open_ack.initial_sn,
         is_qos: state.ext_qos.is_qos(),
         #[cfg(feature = "shared-memory")]

@@ -1,5 +1,3 @@
-use crate::TransportConfigUnicast;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -18,13 +16,14 @@ use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::TransportLinkUnicast;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
+use crate::TransportConfigUnicast;
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_core::{zasynclock, zread, zwrite};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::{
-    core::{Priority, WhatAmI, ZInt, ZenohId},
+    core::{Bits, Priority, WhatAmI, ZInt, ZenohId},
     transport::{Close, ConduitSn, TransportMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -367,7 +366,7 @@ impl TransportUnicastInner {
         self.config.whatami
     }
 
-    pub(crate) fn get_sn_resolution(&self) -> ZInt {
+    pub(crate) fn get_sn_resolution(&self) -> Bits {
         self.config.sn_resolution
     }
 

@@ -812,7 +812,7 @@ mod tests {
         }
 
         // Pipeline conduits
-        let tct = TransportConduitTx::make(FRAME_SN_RESOLUTION.mask()).unwrap();
+        let tct = TransportConduitTx::make(FRAME_SN_RESOLUTION).unwrap();
         let conduits = vec![tct];
 
         // Total amount of bytes to send in each test
@@ -898,7 +898,7 @@ mod tests {
         }
 
         // Pipeline
-        let tct = TransportConduitTx::make(FRAME_SN_RESOLUTION.mask()).unwrap();
+        let tct = TransportConduitTx::make(FRAME_SN_RESOLUTION).unwrap();
         let conduits = vec![tct];
         let (producer, mut consumer) =
             TransmissionPipeline::make(TransmissionPipelineConf::default(), conduits.as_slice());
@@ -950,7 +950,7 @@ mod tests {
     #[ignore]
     fn tx_pipeline_thr() {
         // Queue
-        let tct = TransportConduitTx::make(FRAME_SN_RESOLUTION.mask()).unwrap();
+        let tct = TransportConduitTx::make(FRAME_SN_RESOLUTION).unwrap();
         let conduits = vec![tct];
         let (producer, mut consumer) = TransmissionPipeline::make(CONFIG, conduits.as_slice());
         let count = Arc::new(AtomicUsize::new(0));
