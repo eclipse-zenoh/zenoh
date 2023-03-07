@@ -14,13 +14,14 @@
 #[macro_use]
 extern crate criterion;
 
+use std::{io, vec};
+
 use criterion::{measurement::WallTime, BenchmarkGroup, BenchmarkId, Criterion};
 use rand::SeedableRng;
-use zenoh_buffers::writer::HasWriter;
+use zenoh_buffers::writer::{DidntWrite, HasWriter};
 use zenoh_codec::*;
 use zenoh_compression::ZenohCompress;
 use zenoh_crypto::{BlockCipher, PseudoRng};
-
 #[derive(Clone, Copy, Debug)]
 enum EntropyLevel {
     LOW,
@@ -40,6 +41,8 @@ static BATCH_SIZES: &'static [usize] = &[
     48 * KB,
     56 * KB,
     64 * KB,
+    72 * KB,
+    80 * KB,
 ];
 
 fn generate_test_batch(entropy: EntropyLevel, size: usize) -> Vec<u8> {
@@ -72,14 +75,14 @@ fn encode_with_compression(
     codec: &Zenoh060,
     zenoh_compress: &ZenohCompress,
     batch: &Vec<u8>,
-) {
+) -> Result<usize, DidntWrite> {
     // Encoding with zenoh codec
     let mut writer = buff.writer();
     codec.write(&mut writer, batch.as_slice()).unwrap();
 
     // Compressing encoded output from buff into compression
     let mut compression: Vec<u8> = vec![];
-    _ = zenoh_compress.write(
+    let compression_result = zenoh_compress.write(
         &mut compression.writer(),
         (batch.as_slice(), &mut compression_buff),
     );
@@ -88,6 +91,7 @@ fn encode_with_compression(
     buff.clear();
     let mut writer = buff.writer();
     codec.write(&mut writer, compression_buff.as_ref()).unwrap();
+    compression_result
 }
 
 fn bench_encoding_with_compression(
@@ -180,6 +184,80 @@ fn compression_bench(c: &mut Criterion) {
     group.finish();
 }
 
+// Dummy bench to generate a CSV file with custom stats, aiming to determine the amount of bytes
+// we save with the compression algorithm compared to a normally encoded batch.
+fn get_stats(_: &mut Criterion) {
+    let codec = Zenoh060::default();
+    let zenoh_compress = ZenohCompress::default();
+    let mut writer = csv::Writer::from_writer(io::stdout());
+    writer
+        .write_record(&["size", "compression", "entropy", "final_batch_size"])
+        .unwrap();
+    for batch_size in BATCH_SIZES.into_iter() {
+        let low_entropy_batch = generate_test_batch(EntropyLevel::LOW, *batch_size);
+        let high_entropy_batch = generate_test_batch(EntropyLevel::HIGH, *batch_size);
+        let mut buff1: Vec<u8> = vec![];
+        encode_simple(&mut buff1, &codec, &low_entropy_batch);
+
+        let mut buff2: Vec<u8> = vec![];
+        encode_simple(&mut buff2, &codec, &high_entropy_batch);
+
+        let mut buff3: Vec<u8> = vec![];
+        let mut compression_buff1: Box<[u8]> = vec![0; usize::pow(2, 17)].into_boxed_slice();
+        let compression_result1 = encode_with_compression(
+            &mut buff3,
+            &mut compression_buff1,
+            &codec,
+            &zenoh_compress,
+            &low_entropy_batch,
+        );
+
+        let mut buff4: Vec<u8> = vec![];
+        let mut compression_buff2: Box<[u8]> = vec![0; usize::pow(2, 17)].into_boxed_slice();
+        let compression_result2 = encode_with_compression(
+            &mut buff4,
+            &mut compression_buff2,
+            &codec,
+            &zenoh_compress,
+            &high_entropy_batch,
+        );
+
+        writer
+            .write_record(&[
+                batch_size.to_string(),
+                /* compression=*/ "false".to_string(),
+                /*entropy=*/ "low".to_string(),
+                /*final_batch_size=*/ buff1.len().to_string(),
+            ])
+            .unwrap();
+        writer
+            .write_record(&[
+                batch_size.to_string(),
+                /* compression=*/ "false".to_string(),
+                /*entropy=*/ "high".to_string(),
+                /*final_batch_size=*/ buff2.len().to_string(),
+            ])
+            .unwrap();
+        writer
+            .write_record(&[
+                batch_size.to_string(),
+                /* compression=*/ "true".to_string(),
+                /*entropy=*/ "low".to_string(),
+                /*final_batch_size=*/ compression_result1.unwrap().to_string(),
+            ])
+            .unwrap();
+        writer
+            .write_record(&[
+                batch_size.to_string(),
+                /* compression=*/ "true".to_string(),
+                /*entropy=*/ "high".to_string(),
+                /*final_batch_size=*/ compression_result2.unwrap().to_string(),
+            ])
+            .unwrap();
+    }
+    writer.flush().unwrap();
+}
+
 // Run benches with cargo bench --bench compress -- --plotting-backend gnuplot
-criterion_group!(benches, compression_bench,);
+criterion_group!(benches, compression_bench, get_stats);
 criterion_main!(benches);

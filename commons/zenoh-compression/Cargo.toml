@@ -37,6 +37,7 @@ shared-memory = [
 ]
 
 [dependencies]
+csv = "1.2.0"
 lz4_flex = "0.10.0"
 log = { workspace = true }
 uhlc = { workspace = true, default-features = false }
