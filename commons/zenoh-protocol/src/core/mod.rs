@@ -47,6 +47,8 @@ pub use whatami::*;
 pub mod wire_expr;
 pub use wire_expr::*;
 
+mod cowstr;
+pub use cowstr::CowStr;
 mod encoding;
 pub use encoding::{Encoding, KnownEncoding};
 

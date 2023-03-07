@@ -49,7 +49,7 @@ zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
 zenoh-collections = { path = "../zenoh-collections/", default-features = false }
 zenoh-result = { path = "../zenoh-result/", default-features = false }
 
-# INFO: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0
+# NOTE: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0
 [dev-dependencies]
 lazy_static = { workspace = true }
 zenoh-protocol = { path = ".", features = ["test"] }
