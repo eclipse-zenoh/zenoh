@@ -67,17 +67,14 @@ impl SeqNum {
         Ok(sn)
     }
 
-    #[inline(always)]
     pub(crate) fn get(&self) -> ZInt {
         self.value
     }
 
-    #[inline(always)]
     pub(crate) fn resolution(&self) -> ZInt {
         self.mask
     }
 
-    #[inline(always)]
     pub(crate) fn set(&mut self, value: ZInt) -> ZResult<()> {
         if (value & !self.mask) != 0 {
             bail!("The sequence number value must be smaller than the resolution");
@@ -87,7 +84,6 @@ impl SeqNum {
         Ok(())
     }
 
-    #[inline(always)]
     pub(crate) fn increment(&mut self) {
         self.value = self.value.wrapping_add(1) & self.mask;
     }
@@ -154,20 +150,17 @@ impl SeqNumGenerator {
         Ok(SeqNumGenerator(sn))
     }
 
-    #[inline(always)]
     pub(crate) fn now(&mut self) -> ZInt {
         self.0.get()
     }
 
     /// Generates the next sequence number
-    #[inline(always)]
     pub(crate) fn get(&mut self) -> ZInt {
         let now = self.now();
         self.0.increment();
         now
     }
 
-    #[inline(always)]
     pub(crate) fn set(&mut self, sn: ZInt) -> ZResult<()> {
         self.0.set(sn)
     }
