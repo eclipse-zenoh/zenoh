@@ -17,7 +17,7 @@ use std::sync::Arc;
 use zenoh::prelude::KeyExpr;
 use zenoh::Session;
 
-/// Some extensions to the [zenoh::Session](zenoh::Session)
+/// Some extensions to the [`zenoh::Session`](zenoh::Session)
 pub trait SessionExt {
     fn declare_publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
         &'a self,

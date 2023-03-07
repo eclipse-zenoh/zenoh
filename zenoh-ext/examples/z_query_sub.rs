@@ -35,7 +35,7 @@ async fn main() {
         key_expr,
         query.as_ref().unwrap_or(&key_expr)
     );
-    let mut subscriber = if let Some(selector) = query {
+    let subscriber = if let Some(selector) = query {
         session
             .declare_subscriber(key_expr)
             .querying()
@@ -52,7 +52,7 @@ async fn main() {
             .unwrap()
     };
 
-    println!("Enter 'd' to issue the query again, or 'q' to quit...");
+    println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
     let mut input = [0_u8];
     loop {
@@ -66,10 +66,6 @@ async fn main() {
             _ = stdin.read_exact(&mut input).fuse() => {
                 match input[0] {
                     b'q' => break,
-                    b'd' => {
-                        println!("Do query again");
-                        subscriber.query().res().await.unwrap()
-                    }
                     0 => sleep(Duration::from_secs(1)).await,
                     _ => (),
                 }

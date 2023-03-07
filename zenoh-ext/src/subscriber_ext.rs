@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -15,13 +13,17 @@ use std::time::Duration;
 //
 use flume::r#async::RecvStream;
 use futures::stream::{Forward, Map};
+use std::{convert::TryInto, time::Duration};
+use zenoh::sample::Locality;
+use zenoh::Result as ZResult;
 use zenoh::{
+    liveliness::LivelinessSubscriberBuilder,
     prelude::Sample,
     query::{QueryConsolidation, QueryTarget},
-    subscriber::{PushMode, Subscriber, SubscriberBuilder},
+    subscriber::{PushMode, Reliability, Subscriber, SubscriberBuilder},
 };
 
-use crate::QueryingSubscriberBuilder;
+use crate::{querying_subscriber::QueryingSubscriberBuilder, FetchingSubscriberBuilder};
 
 /// Allows writing `subscriber.forward(receiver)` instead of `subscriber.stream().map(Ok).forward(publisher)`
 pub trait SubscriberForward<'a, S> {
@@ -38,18 +40,65 @@ where
     }
 }
 
-/// Some extensions to the [zenoh::SubscriberBuilder](zenoh::SubscriberBuilder)
+/// Some extensions to the [`zenoh::subscriber::SubscriberBuilder`](zenoh::subscriber::SubscriberBuilder)
 pub trait SubscriberBuilderExt<'a, 'b, Handler> {
-    /// Create a [QueryingSubscriber](super::QueryingSubscriber).
+    type KeySpace;
+
+    /// Create a [`FetchingSubscriber`](super::FetchingSubscriber).
+    ///
+    /// This operation returns a [`FetchingSubscriberBuilder`](FetchingSubscriberBuilder) that can be used to finely configure the subscriber.  
+    /// As soon as built (calling `.wait()` or `.await` on the `FetchingSubscriberBuilder`), the `FetchingSubscriber`
+    /// will run the given `fetch` funtion. The user defined `fetch` funtion should fetch some samples and return them
+    /// through the callback funtion. Those samples will be merged with the received publications and made available in the receiver.
+    /// Later on, new fetches can be performed again, calling [`FetchingSubscriber::fetch()`](super::FetchingSubscriber::fetch()).
+    ///
+    /// A typical usage of the `FetchingSubscriber` is to retrieve publications that were made in the past, but stored in some zenoh Storage.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    /// use zenoh_ext::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session
+    ///     .declare_subscriber("key/expr")
+    ///     .fetching( |cb| {
+    ///         use zenoh::prelude::sync::SyncResolve;
+    ///         session
+    ///             .get("key/expr")
+    ///             .callback(cb)
+    ///             .res_sync()
+    ///     })
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// while let Ok(sample) = subscriber.recv_async().await {
+    ///     println!("Received: {:?}", sample);
+    /// }
+    /// # })
+    /// ```
+    fn fetching<
+        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+        TryIntoSample,
+    >(
+        self,
+        fetch: Fetch,
+    ) -> FetchingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler, Fetch, TryIntoSample>
+    where
+        TryIntoSample: TryInto<Sample>,
+        <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>;
+
+    /// Create a [`FetchingSubscriber`](super::FetchingSubscriber) that will perform a query (`session.get()`) as it's
+    /// initial fetch.
     ///
     /// This operation returns a [`QueryingSubscriberBuilder`](QueryingSubscriberBuilder) that can be used to finely configure the subscriber.  
-    /// As soon as built (calling `.wait()` or `.await` on the `QueryingSubscriberBuilder`), the `QueryingSubscriber`
+    /// As soon as built (calling `.wait()` or `.await` on the `QueryingSubscriberBuilder`), the `FetchingSubscriber`
     /// will issue a query on a given key expression (by default it uses the same key expression than it subscribes to).
     /// The results of the query will be merged with the received publications and made available in the receiver.
-    /// Later on, new queries can be issued again, calling [`QueryingSubscriber::query()`](super::QueryingSubscriber::query()) or
-    /// [`QueryingSubscriber::query_on()`](super::QueryingSubscriber::query_on()).
+    /// Later on, new fetches can be performed again, calling [`FetchingSubscriber::fetch()`](super::FetchingSubscriber::fetch()).
     ///
-    /// A typical usage of the `QueryingSubscriber` is to retrieve publications that were made in the past, but stored in some zenoh Storage.
+    /// A typical usage of the `FetchingSubscriber` is to retrieve publications that were made in the past, but stored in some zenoh Storage.
     ///
     /// # Examples
     /// ```no_run
@@ -69,16 +118,105 @@ pub trait SubscriberBuilderExt<'a, 'b, Handler> {
     /// }
     /// # })
     /// ```
-    fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Handler>;
+    fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler>;
 }
 
 impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
     for SubscriberBuilder<'a, 'b, PushMode, Handler>
 {
-    fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Handler> {
+    type KeySpace = crate::UserSpace;
+
+    /// Create a [`FetchingSubscriber`](super::FetchingSubscriber).
+    ///
+    /// This operation returns a [`FetchingSubscriberBuilder`](FetchingSubscriberBuilder) that can be used to finely configure the subscriber.  
+    /// As soon as built (calling `.wait()` or `.await` on the `FetchingSubscriberBuilder`), the `FetchingSubscriber`
+    /// will run the given `fetch` funtion. The user defined `fetch` funtion should fetch some samples and return them
+    /// through the callback funtion. Those samples will be merged with the received publications and made available in the receiver.
+    /// Later on, new fetches can be performed again, calling [`FetchingSubscriber::fetch()`](super::FetchingSubscriber::fetch()).
+    ///
+    /// A typical usage of the `FetchingSubscriber` is to retrieve publications that were made in the past, but stored in some zenoh Storage.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    /// use zenoh_ext::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session
+    ///     .declare_subscriber("key/expr")
+    ///     .fetching( |cb| {
+    ///         use zenoh::prelude::sync::SyncResolve;
+    ///         session
+    ///             .get("key/expr")
+    ///             .callback(cb)
+    ///             .res_sync()
+    ///     })
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// while let Ok(sample) = subscriber.recv_async().await {
+    ///     println!("Received: {:?}", sample);
+    /// }
+    /// # })
+    /// ```
+    fn fetching<
+        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+        TryIntoSample,
+    >(
+        self,
+        fetch: Fetch,
+    ) -> FetchingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler, Fetch, TryIntoSample>
+    where
+        TryIntoSample: TryInto<Sample>,
+        <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+    {
+        FetchingSubscriberBuilder {
+            session: self.session,
+            key_expr: self.key_expr,
+            key_space: crate::UserSpace,
+            reliability: self.reliability,
+            origin: self.origin,
+            fetch,
+            handler: self.handler,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    /// Create a [`FetchingSubscriber`](super::FetchingSubscriber) that will perform a query (`session.get()`) as it's
+    /// initial fetch.
+    ///
+    /// This operation returns a [`QueryingSubscriberBuilder`](QueryingSubscriberBuilder) that can be used to finely configure the subscriber.  
+    /// As soon as built (calling `.wait()` or `.await` on the `QueryingSubscriberBuilder`), the `FetchingSubscriber`
+    /// will issue a query on a given key expression (by default it uses the same key expression than it subscribes to).
+    /// The results of the query will be merged with the received publications and made available in the receiver.
+    /// Later on, new fetches can be performed again, calling [`FetchingSubscriber::fetch()`](super::FetchingSubscriber::fetch()).
+    ///
+    /// A typical usage of the `FetchingSubscriber` is to retrieve publications that were made in the past, but stored in some zenoh Storage.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    /// use zenoh_ext::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session
+    ///     .declare_subscriber("key/expr")
+    ///     .querying()
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// while let Ok(sample) = subscriber.recv_async().await {
+    ///     println!("Received: {:?}", sample);
+    /// }
+    /// # })
+    /// ```
+    fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler> {
         QueryingSubscriberBuilder {
             session: self.session,
             key_expr: self.key_expr,
+            key_space: crate::UserSpace,
             reliability: self.reliability,
             origin: self.origin,
             query_selector: None,
@@ -87,6 +225,118 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
             // By default no query consolidation, to receive more than 1 sample per-resource
             // (if history of publications is available)
             query_consolidation: QueryConsolidation::from(zenoh::query::ConsolidationMode::None),
+            query_timeout: Duration::from_secs(10),
+            handler: self.handler,
+        }
+    }
+}
+
+impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
+    for LivelinessSubscriberBuilder<'a, 'b, Handler>
+{
+    type KeySpace = crate::LivelinessSpace;
+
+    /// Create a fetching liveliness subscriber ([`FetchingSubscriber`](super::FetchingSubscriber)).
+    ///
+    /// This operation returns a [`FetchingSubscriberBuilder`](FetchingSubscriberBuilder) that can be used to finely configure the subscriber.  
+    /// As soon as built (calling `.wait()` or `.await` on the `FetchingSubscriberBuilder`), the `FetchingSubscriber`
+    /// will run the given `fetch` funtion. The user defined `fetch` funtion should fetch some samples and return them
+    /// through the callback funtion. Those samples will be merged with the received publications and made available in the receiver.
+    /// Later on, new fetches can be performed again, calling [`FetchingSubscriber::fetch()`](super::FetchingSubscriber::fetch()).
+    ///
+    /// A typical usage of the fetching liveliness subscriber is to retrieve existing liveliness tokens while susbcribing to
+    /// new liveness changes.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    /// use zenoh_ext::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session
+    ///     .liveliness()
+    ///     .declare_subscriber("key/expr")
+    ///     .fetching( |cb| {
+    ///         use zenoh::prelude::sync::SyncResolve;
+    ///         session
+    ///             .liveliness()
+    ///             .get("key/expr")
+    ///             .callback(cb)
+    ///             .res_sync()
+    ///     })
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// while let Ok(sample) = subscriber.recv_async().await {
+    ///     println!("Received: {:?}", sample);
+    /// }
+    /// # })
+    /// ```
+    fn fetching<
+        Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()>,
+        TryIntoSample,
+    >(
+        self,
+        fetch: Fetch,
+    ) -> FetchingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler, Fetch, TryIntoSample>
+    where
+        TryIntoSample: TryInto<Sample>,
+        <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
+    {
+        FetchingSubscriberBuilder {
+            session: self.session,
+            key_expr: self.key_expr,
+            key_space: crate::LivelinessSpace,
+            reliability: Reliability::default(),
+            origin: Locality::default(),
+            fetch,
+            handler: self.handler,
+            phantom: std::marker::PhantomData,
+        }
+    }
+
+    /// Create a fetching liveliness subscriber ([`FetchingSubscriber`](super::FetchingSubscriber)) that will perform a
+    /// liveliness query (`session.liveliness().get()`) as it's initial fetch.
+    ///
+    /// This operation returns a [`QueryingSubscriberBuilder`](QueryingSubscriberBuilder) that can be used to finely configure the subscriber.  
+    /// As soon as built (calling `.wait()` or `.await` on the `QueryingSubscriberBuilder`), the `FetchingSubscriber`
+    /// will issue a liveliness query on a given key expression (by default it uses the same key expression than it subscribes to).
+    /// The results of the query will be merged with the received publications and made available in the receiver.
+    /// Later on, new fetches can be performed again, calling [`FetchingSubscriber::fetch()`](super::FetchingSubscriber::fetch()).
+    ///
+    /// A typical usage of the fetching liveliness subscriber is to retrieve existing liveliness tokens while susbcribing to
+    /// new liveness changes.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    /// use zenoh_ext::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session
+    ///     .liveliness()
+    ///     .declare_subscriber("key/expr")
+    ///     .querying()
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// while let Ok(sample) = subscriber.recv_async().await {
+    ///     println!("Received: {:?}", sample);
+    /// }
+    /// # })
+    /// ```
+    fn querying(self) -> QueryingSubscriberBuilder<'a, 'b, Self::KeySpace, Handler> {
+        QueryingSubscriberBuilder {
+            session: self.session,
+            key_expr: self.key_expr,
+            key_space: crate::LivelinessSpace,
+            reliability: Reliability::default(),
+            origin: Locality::default(),
+            query_selector: None,
+            query_target: QueryTarget::default(),
+            query_consolidation: QueryConsolidation::default(),
             query_timeout: Duration::from_secs(10),
             handler: self.handler,
         }
