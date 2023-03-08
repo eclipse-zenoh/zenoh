@@ -40,10 +40,6 @@ shared-memory = [
     "zenoh-protocol/shared-memory"
 ]
 complete_n = ["zenoh-protocol/complete_n"]
-defmt = [
-    "zenoh-buffers/defmt",
-    "zenoh-protocol/defmt"
-]
 
 [dependencies]
 uhlc = { workspace = true }

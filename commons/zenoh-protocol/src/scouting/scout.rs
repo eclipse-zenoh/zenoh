@@ -32,7 +32,6 @@ use crate::core::whatami::WhatAmIMatcher;
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Scout {
     pub what: Option<WhatAmIMatcher>,
     pub zid_request: bool,

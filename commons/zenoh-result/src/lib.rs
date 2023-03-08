@@ -90,7 +90,6 @@ pub type ZClonableResult<T> = core::result::Result<T, dyn ClonableError>;
 
 #[repr(transparent)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct NegativeI8(i8);
 
 impl NegativeI8 {
@@ -106,14 +105,11 @@ impl NegativeI8 {
     pub const MIN: Self = Self::new(i8::MIN);
 }
 
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ZError {
-    #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
     error: AnyError,
     file: &'static str,
     line: u32,
     errno: NegativeI8,
-    #[cfg_attr(feature = "defmt", defmt(Debug2Format))]
     source: Option<Error>,
 }
 
@@ -181,7 +177,6 @@ impl From<ZError> for Error {
 // +----------+
 
 #[derive(Debug)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct ShmError(pub ZError);
 
 #[cfg(feature = "std")]
