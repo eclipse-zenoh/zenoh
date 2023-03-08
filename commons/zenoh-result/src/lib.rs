@@ -74,15 +74,11 @@ pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 #[cfg(not(feature = "std"))]
 pub type Error = Box<dyn IError + Send + Sync + 'static>;
 
-pub trait ClonableError: std::error::Error + std::clone::Clone {}
-
 // +---------+
 // | ZRESULT |
 // +---------+
 
 pub type ZResult<T> = core::result::Result<T, Error>;
-
-pub type ZClonableResult<T> = core::result::Result<T, dyn ClonableError>;
 
 // +--------+
 // | ZERROR |
