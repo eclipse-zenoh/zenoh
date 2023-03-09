@@ -84,7 +84,7 @@ pub struct OpenSyn {
 
 // Extensions
 pub mod ext {
-    use crate::common::{ZExtUnit, ZExtZInt, ZExtZSlice};
+    use crate::common::{ZExtUnit, ZExtZBuf, ZExtZInt};
 
     pub const QOS: u8 = 0x01;
     pub const SHM: u8 = 0x02;
@@ -100,13 +100,13 @@ pub mod ext {
 
     /// # Auth extension
     /// Used as challenge for probing authentication rights
-    pub type Auth = ZExtZSlice<AUTH>;
+    pub type Auth = ZExtZBuf<AUTH>;
 }
 
 impl OpenSyn {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::{ZExtUnit, ZExtZInt, ZExtZSlice};
+        use crate::common::{ZExtUnit, ZExtZBuf, ZExtZInt};
         use rand::Rng;
 
         const MIN: usize = 32;
@@ -124,7 +124,7 @@ impl OpenSyn {
         let cookie = ZSlice::rand(rng.gen_range(MIN..=MAX));
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZInt::rand());
-        let ext_auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
+        let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         Self {
             lease,
             initial_sn,
@@ -148,7 +148,7 @@ pub struct OpenAck {
 impl OpenAck {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::{ZExtUnit, ZExtZInt, ZExtZSlice};
+        use crate::common::{ZExtUnit, ZExtZBuf, ZExtZInt};
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
@@ -162,7 +162,7 @@ impl OpenAck {
         let initial_sn: ZInt = rng.gen();
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZInt::rand());
-        let ext_auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
+        let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         Self {
             lease,
             initial_sn,

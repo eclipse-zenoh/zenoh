@@ -56,7 +56,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     // ZInt ZBuf
-    let mut buff = ZBuf::default();
+    let mut buff = ZBuf::empty();
     let codec = Zenoh080::new();
     c.bench_function("ZInt ZBuf", |b| {
         b.iter(|| {
@@ -176,7 +176,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     // Fragmentation ZBuf Write
-    let mut buff = ZBuf::default();
+    let mut buff = ZBuf::empty();
     let codec = Zenoh080::new();
 
     let data = Data {
@@ -208,7 +208,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut writer = buff.writer();
     codec.write(&mut writer, &data).unwrap();
 
-    let mut zbuf = ZBuf::default();
+    let mut zbuf = ZBuf::empty();
     let chunk = u16::MAX as usize;
     let mut idx = 0;
     while idx < buff.len() {
@@ -242,7 +242,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function("Fragmentation ZSlice ZBuf Read", |b| {
         b.iter(|| {
-            let mut zbuf = ZBuf::default();
+            let mut zbuf = ZBuf::empty();
             let chunk = u16::MAX as usize;
             let mut idx = 0;
             while idx < zslice.len() {

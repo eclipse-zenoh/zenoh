@@ -174,18 +174,24 @@ mod tests {
 
         // Create a transport with the peer
         println!("Transport SHM [1b]");
-        let _ = ztimeout!(peer_shm02_manager.open_transport(endpoint.clone())).unwrap();
+        let peer_shm01_transport =
+            ztimeout!(peer_shm02_manager.open_transport(endpoint.clone())).unwrap();
+        assert!(peer_shm01_transport.is_shm().unwrap());
 
         // Create a transport with the peer
         println!("Transport SHM [1c]");
-        let _ = ztimeout!(peer_net01_manager.open_transport(endpoint.clone())).unwrap();
+        let peer_net02_transport =
+            ztimeout!(peer_net01_manager.open_transport(endpoint.clone())).unwrap();
+        assert!(!peer_net02_transport.is_shm().unwrap());
 
         // Retrieve the transports
         println!("Transport SHM [2a]");
         let peer_shm02_transport = peer_shm01_manager.get_transport(&peer_shm02).unwrap();
+        assert!(peer_shm02_transport.is_shm().unwrap());
 
         println!("Transport SHM [2b]");
         let peer_net01_transport = peer_shm01_manager.get_transport(&peer_net01).unwrap();
+        assert!(!peer_net01_transport.is_shm().unwrap());
 
         // Send the message
         println!("Transport SHM [3a]");

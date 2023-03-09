@@ -38,7 +38,7 @@ impl DefragBuffer {
         let db = DefragBuffer {
             reliability,
             sn: SeqNum::make(0, resolution)?,
-            buffer: ZBuf::default(),
+            buffer: ZBuf::empty(),
             capacity,
             len: 0,
         };

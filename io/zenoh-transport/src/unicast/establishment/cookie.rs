@@ -22,7 +22,7 @@ use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_protocol::core::{Resolution, WhatAmI, ZInt, ZenohId};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Cookie {
     pub(crate) whatami: WhatAmI,
     pub(crate) zid: ZenohId,
@@ -33,7 +33,7 @@ pub(crate) struct Cookie {
     pub(crate) ext_qos: ext::qos::State,
     #[cfg(feature = "shared-memory")]
     pub(crate) ext_shm: ext::shm::State,
-    // pub properties: EstablishmentProperties, // @TODO
+    pub(crate) ext_auth: ext::auth::State,
 }
 
 impl<W> WCodec<&Cookie, &mut W> for Zenoh080
@@ -53,7 +53,7 @@ where
         self.write(&mut *writer, &x.ext_qos)?;
         #[cfg(feature = "shared-memory")]
         self.write(&mut *writer, &x.ext_shm)?;
-        // self.write(&mut *writer, x.properties.as_slice())?;
+        self.write(&mut *writer, &x.ext_auth)?;
 
         Ok(())
     }
@@ -77,11 +77,7 @@ where
         let ext_qos: ext::qos::State = self.read(&mut *reader)?;
         #[cfg(feature = "shared-memory")]
         let ext_shm: ext::shm::State = self.read(&mut *reader)?;
-        // let mut ps: Vec<Property> = self.read(&mut *reader)?;
-        // let mut properties = EstablishmentProperties::new();
-        // for p in ps.drain(..) {
-        //     properties.insert(p).map_err(|_| DidntRead)?;
-        // }
+        let ext_auth: ext::auth::State = self.read(&mut *reader)?;
 
         let cookie = Cookie {
             whatami,
@@ -92,7 +88,7 @@ where
             ext_qos,
             #[cfg(feature = "shared-memory")]
             ext_shm,
-            // properties,
+            ext_auth,
         };
 
         Ok(cookie)
@@ -143,7 +139,7 @@ where
 
 impl Cookie {
     #[cfg(test)]
-    pub fn rand() -> Self {
+    pub(crate) fn rand() -> Self {
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
@@ -154,10 +150,10 @@ impl Cookie {
             resolution: Resolution::rand(),
             batch_size: rng.gen(),
             nonce: rng.gen(),
-            ext_qos: ext::qos::State::new(rng.gen_bool(0.5)),
+            ext_qos: ext::qos::State::rand(),
             #[cfg(feature = "shared-memory")]
-            ext_shm: ext::shm::State::new(rng.gen_bool(0.5)),
-            // properties: EstablishmentProperties::rand(),
+            ext_shm: ext::shm::State::rand(),
+            ext_auth: ext::auth::State::rand(),
         }
     }
 }
@@ -196,7 +192,7 @@ mod tests {
                 run_single!($type, $rand, $codec, $codec, buffer);
 
                 println!("ZBuf: codec {}", std::any::type_name::<$type>());
-                let mut buffer = ZBuf::default();
+                let mut buffer = ZBuf::empty();
                 run_single!($type, $rand, $codec, $codec, buffer);
             };
         }

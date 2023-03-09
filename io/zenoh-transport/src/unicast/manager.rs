@@ -14,10 +14,17 @@
 #[cfg(feature = "shared-memory")]
 use crate::unicast::shm::SharedMemoryUnicast;
 use crate::{
-    unicast::{transport::TransportUnicastInner, TransportConfigUnicast, TransportUnicast},
+    unicast::{
+        establishment::ext::auth::Auth, transport::TransportUnicastInner, TransportConfigUnicast,
+        TransportUnicast,
+    },
     TransportManager,
 };
-use async_std::{prelude::FutureExt, sync::Mutex, task};
+use async_std::{
+    prelude::FutureExt,
+    sync::{Mutex, RwLock},
+    task,
+};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 #[cfg(feature = "shared-memory")]
 use zenoh_config::SharedMemoryConf;
@@ -48,8 +55,8 @@ pub struct TransportManagerConfigUnicast {
 pub struct TransportManagerStateUnicast {
     // Incoming uninitialized transports
     pub(super) incoming: Arc<Mutex<usize>>,
-    // Active peer authenticators
-    // pub(super) peer_authenticator: Arc<AsyncRwLock<HashMap<&'static str, TransportAuthenticator>>>, @TODO
+    // Active authenticators
+    pub(super) authenticator: Arc<RwLock<Auth>>,
     // Established listeners
     pub(super) protocols: Arc<Mutex<HashMap<String, LinkManagerUnicast>>>,
     // Established transports
@@ -79,7 +86,7 @@ pub struct TransportManagerBuilderUnicast {
     pub(super) is_qos: bool,
     #[cfg(feature = "shared-memory")]
     pub(super) is_shm: bool,
-    // pub(super) peer_authenticator: HashSet<PeerAuthenticator>, @TODO
+    pub(super) authenticator: Auth,
 }
 
 impl TransportManagerBuilderUnicast {
@@ -113,10 +120,10 @@ impl TransportManagerBuilderUnicast {
         self
     }
 
-    // pub fn peer_authenticator(mut self, peer_authenticator: HashSet<PeerAuthenticator>) -> Self {
-    //     self.peer_authenticator = peer_authenticator;
-    //     self
-    // } @TODO
+    pub fn authenticator(mut self, authenticator: Auth) -> Self {
+        self.authenticator = authenticator;
+        self
+    }
 
     pub fn qos(mut self, is_qos: bool) -> Self {
         self.is_qos = is_qos;
@@ -146,7 +153,7 @@ impl TransportManagerBuilderUnicast {
         {
             self = self.shm(*config.transport().shared_memory().enabled());
         }
-        // self = self.peer_authenticator(PeerAuthenticator::from_config(config).await?);
+        self = self.authenticator(Auth::from_config(config).await?);
 
         Ok(self)
     }
@@ -182,7 +189,7 @@ impl TransportManagerBuilderUnicast {
             incoming: Arc::new(Mutex::new(0)),
             protocols: Arc::new(Mutex::new(HashMap::new())),
             transports: Arc::new(Mutex::new(HashMap::new())),
-            // peer_authenticator: Arc::new(AsyncRwLock::new(self.peer_authenticator)),
+            authenticator: Arc::new(RwLock::new(self.authenticator)),
             #[cfg(feature = "shared-memory")]
             shm: Arc::new(SharedMemoryUnicast::make()?),
         };
@@ -211,7 +218,7 @@ impl Default for TransportManagerBuilderUnicast {
             is_qos: *qos.enabled(),
             #[cfg(feature = "shared-memory")]
             is_shm: *shm.enabled(),
-            // peer_authenticator: HashSet::new(),
+            authenticator: Auth::default(),
         }
     }
 }
@@ -497,5 +504,12 @@ impl TransportManager {
             let mut guard = zasynclock!(c_manager.state.unicast.incoming);
             *guard -= 1;
         });
+    }
+}
+
+#[cfg(feature = "test")]
+impl TransportManager {
+    pub fn get_auth_handle_unicast(&self) -> Arc<RwLock<Auth>> {
+        self.state.unicast.authenticator.clone()
     }
 }

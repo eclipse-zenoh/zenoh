@@ -66,7 +66,7 @@ impl TryFrom<&EstablishmentProperties> for Attachment {
             bail!("Can not create an attachment with zero properties")
         }
 
-        let mut zbuf = ZBuf::default();
+        let mut zbuf = ZBuf::empty();
         let mut writer = zbuf.writer();
         let codec = Zenoh080::new();
 

@@ -12,7 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::core::ZInt;
-use zenoh_buffers::{ZBuf, ZSlice};
+use core::convert::TryFrom;
+use zenoh_buffers::ZBuf;
 
 /// # Zenoh extensions
 ///
@@ -62,6 +63,8 @@ pub mod iext {
     pub const FLAG_Z: u8 = 1 << 7;
 }
 
+pub struct DidntConvert;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ZExtUnit<const ID: u8>;
 
@@ -75,6 +78,20 @@ impl<const ID: u8> ZExtUnit<{ ID }> {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         Self::new()
+    }
+}
+
+impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtUnit<{ ID }> {
+    type Error = DidntConvert;
+
+    fn try_from(v: ZExtUnknown) -> Result<Self, Self::Error> {
+        if v.id != ID {
+            return Err(DidntConvert);
+        }
+        match v.body {
+            ZExtensionBody::Unit => Ok(Self::new()),
+            _ => Err(DidntConvert),
+        }
     }
 }
 
@@ -100,25 +117,17 @@ impl<const ID: u8> ZExtZInt<{ ID }> {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ZExtZSlice<const ID: u8> {
-    pub value: ZSlice,
-}
+impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtZInt<{ ID }> {
+    type Error = DidntConvert;
 
-impl<const ID: u8> ZExtZSlice<{ ID }> {
-    pub const ID: u8 = ID;
-
-    pub const fn new(value: ZSlice) -> Self {
-        Self { value }
-    }
-
-    #[cfg(feature = "test")]
-    pub fn rand() -> Self {
-        use rand::Rng;
-
-        let mut rng = rand::thread_rng();
-        let value = ZSlice::rand(rng.gen_range(8..=64));
-        Self { value }
+    fn try_from(v: ZExtUnknown) -> Result<Self, Self::Error> {
+        if v.id != ID {
+            return Err(DidntConvert);
+        }
+        match v.body {
+            ZExtensionBody::ZInt(v) => Ok(Self::new(v)),
+            _ => Err(DidntConvert),
+        }
     }
 }
 
@@ -141,6 +150,20 @@ impl<const ID: u8> ZExtZBuf<{ ID }> {
         let mut rng = rand::thread_rng();
         let value = ZBuf::rand(rng.gen_range(8..=64));
         Self { value }
+    }
+}
+
+impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtZBuf<{ ID }> {
+    type Error = DidntConvert;
+
+    fn try_from(v: ZExtUnknown) -> Result<Self, Self::Error> {
+        if v.id != ID {
+            return Err(DidntConvert);
+        }
+        match v.body {
+            ZExtensionBody::ZBuf(v) => Ok(Self::new(v)),
+            _ => Err(DidntConvert),
+        }
     }
 }
 
@@ -173,5 +196,32 @@ impl ZExtUnknown {
         .unwrap()
         .clone();
         Self { id, body }
+    }
+}
+
+impl<const ID: u8> From<ZExtUnit<{ ID }>> for ZExtUnknown {
+    fn from(_: ZExtUnit<{ ID }>) -> Self {
+        ZExtUnknown {
+            id: ID,
+            body: ZExtensionBody::Unit,
+        }
+    }
+}
+
+impl<const ID: u8> From<ZExtZInt<{ ID }>> for ZExtUnknown {
+    fn from(e: ZExtZInt<{ ID }>) -> Self {
+        ZExtUnknown {
+            id: ID,
+            body: ZExtensionBody::ZInt(e.value),
+        }
+    }
+}
+
+impl<const ID: u8> From<ZExtZBuf<{ ID }>> for ZExtUnknown {
+    fn from(e: ZExtZBuf<{ ID }>) -> Self {
+        ZExtUnknown {
+            id: ID,
+            body: ZExtensionBody::ZBuf(e.value),
+        }
     }
 }

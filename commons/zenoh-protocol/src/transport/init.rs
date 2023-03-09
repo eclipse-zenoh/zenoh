@@ -117,7 +117,7 @@ pub struct InitSyn {
 
 // Extensions
 pub mod ext {
-    use crate::common::{ZExtUnit, ZExtZSlice};
+    use crate::common::{ZExtUnit, ZExtZBuf};
 
     pub const QOS: u8 = 0x01;
     pub const SHM: u8 = 0x02;
@@ -129,17 +129,17 @@ pub mod ext {
 
     /// # Shm extension
     /// Used as challenge for probing shared memory capabilities
-    pub type Shm = ZExtZSlice<SHM>;
+    pub type Shm = ZExtZBuf<SHM>;
 
     /// # Auth extension
     /// Used as challenge for probing authentication rights
-    pub type Auth = ZExtZSlice<AUTH>;
+    pub type Auth = ZExtZBuf<AUTH>;
 }
 
 impl InitSyn {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::{ZExtUnit, ZExtZSlice};
+        use crate::common::{ZExtUnit, ZExtZBuf};
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
@@ -150,8 +150,8 @@ impl InitSyn {
         let resolution = Resolution::rand();
         let batch_size: u16 = rng.gen();
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
-        let ext_shm = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
-        let ext_auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
+        let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
+        let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
 
         Self {
             version,
@@ -182,7 +182,7 @@ pub struct InitAck {
 impl InitAck {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::{ZExtUnit, ZExtZSlice};
+        use crate::common::{ZExtUnit, ZExtZBuf};
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
@@ -198,8 +198,8 @@ impl InitAck {
         let batch_size: u16 = rng.gen();
         let cookie = ZSlice::rand(64);
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
-        let ext_shm = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
-        let ext_auth = rng.gen_bool(0.5).then_some(ZExtZSlice::rand());
+        let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
+        let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
 
         Self {
             version,

@@ -30,6 +30,10 @@ pub struct ZBuf {
 }
 
 impl ZBuf {
+    pub fn empty() -> Self {
+        Self::default()
+    }
+
     pub fn clear(&mut self) {
         self.slices.clear();
     }
@@ -43,7 +47,9 @@ impl ZBuf {
     }
 
     pub fn push_zslice(&mut self, zslice: ZSlice) {
-        self.slices.push(zslice);
+        if !zslice.is_empty() {
+            self.slices.push(zslice);
+        }
     }
 }
 
@@ -100,15 +106,21 @@ impl PartialEq for ZBuf {
 }
 
 // From impls
+impl From<ZSlice> for ZBuf {
+    fn from(zs: ZSlice) -> Self {
+        let mut zbuf = ZBuf::empty();
+        zbuf.push_zslice(zs);
+        zbuf
+    }
+}
+
 impl<T> From<Arc<T>> for ZBuf
 where
     T: ZSliceBuffer + 'static,
 {
     fn from(buf: Arc<T>) -> Self {
         let zs: ZSlice = buf.into();
-        let mut zbuf = ZBuf::default();
-        zbuf.push_zslice(zs);
-        zbuf
+        Self::from(zs)
     }
 }
 
@@ -264,7 +276,7 @@ impl<'a> BacktrackableReader for ZBufReader<'a> {
 }
 
 impl<'a> SiphonableReader for ZBufReader<'a> {
-    fn siphon<W>(&mut self, mut writer: W) -> Result<NonZeroUsize, DidntSiphon>
+    fn siphon<W>(&mut self, writer: &mut W) -> Result<NonZeroUsize, DidntSiphon>
     where
         W: Writer,
     {
@@ -487,7 +499,7 @@ impl BacktrackableWriter for ZBufWriter<'_> {
 #[cfg(feature = "test")]
 impl ZBuf {
     pub fn rand(len: usize) -> Self {
-        let mut zbuf = ZBuf::default();
+        let mut zbuf = ZBuf::empty();
         zbuf.push_zslice(ZSlice::rand(len));
         zbuf
     }
@@ -500,22 +512,22 @@ mod tests {
 
         let slice: ZSlice = [0u8, 1, 2, 3, 4, 5, 6, 7].to_vec().into();
 
-        let mut zbuf1 = ZBuf::default();
+        let mut zbuf1 = ZBuf::empty();
         zbuf1.push_zslice(slice.new_sub_slice(0, 4).unwrap());
         zbuf1.push_zslice(slice.new_sub_slice(4, 8).unwrap());
 
-        let mut zbuf2 = ZBuf::default();
+        let mut zbuf2 = ZBuf::empty();
         zbuf2.push_zslice(slice.new_sub_slice(0, 1).unwrap());
         zbuf2.push_zslice(slice.new_sub_slice(1, 4).unwrap());
         zbuf2.push_zslice(slice.new_sub_slice(4, 8).unwrap());
 
         assert_eq!(zbuf1, zbuf2);
 
-        let mut zbuf1 = ZBuf::default();
+        let mut zbuf1 = ZBuf::empty();
         zbuf1.push_zslice(slice.new_sub_slice(2, 4).unwrap());
         zbuf1.push_zslice(slice.new_sub_slice(4, 8).unwrap());
 
-        let mut zbuf2 = ZBuf::default();
+        let mut zbuf2 = ZBuf::empty();
         zbuf2.push_zslice(slice.new_sub_slice(2, 3).unwrap());
         zbuf2.push_zslice(slice.new_sub_slice(3, 6).unwrap());
         zbuf2.push_zslice(slice.new_sub_slice(6, 8).unwrap());

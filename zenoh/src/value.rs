@@ -50,7 +50,7 @@ impl Value {
     /// Creates an empty Value.
     pub fn empty() -> Self {
         Value {
-            payload: ZBuf::default(),
+            payload: ZBuf::empty(),
             encoding: KnownEncoding::AppOctetStream.into(),
         }
     }

@@ -548,7 +548,7 @@ impl TransmissionPipeline {
                     current: current.clone(),
                     conduit: conduit[prio].clone(),
                 },
-                fragbuf: ZBuf::default(),
+                fragbuf: ZBuf::empty(),
             }));
 
             // The stage out for this priority

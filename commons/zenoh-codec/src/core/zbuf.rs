@@ -47,7 +47,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<ZBuf, Self::Error> {
         let len: usize = self.read(&mut *reader)?;
-        let mut zbuf = ZBuf::default();
+        let mut zbuf = ZBuf::empty();
         reader.read_zslices(len, |s| zbuf.push_zslice(s))?;
         Ok(zbuf)
     }
@@ -93,7 +93,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<ZBuf, Self::Error> {
         let num: usize = self.codec.read(&mut *reader)?;
-        let mut zbuf = ZBuf::default();
+        let mut zbuf = ZBuf::empty();
         for _ in 0..num {
             let kind: u8 = self.codec.read(&mut *reader)?;
             match kind {

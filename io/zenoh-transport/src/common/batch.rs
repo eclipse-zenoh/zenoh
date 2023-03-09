@@ -330,7 +330,7 @@ impl Encode<(&mut ZBufReader<'_>, FragmentHeader)> for &mut WBatch {
         }
 
         // Write the fragment
-        reader.siphon(&mut *writer).map_err(|_| {
+        reader.siphon(&mut writer).map_err(|_| {
             // Revert the write operation
             writer.rewind(mark);
             DidntWrite

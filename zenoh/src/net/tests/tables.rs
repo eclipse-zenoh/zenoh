@@ -595,7 +595,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::default(),
+        ZBuf::empty(),
         None,
     );
 
@@ -621,7 +621,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::default(),
+        ZBuf::empty(),
         None,
     );
 
@@ -647,7 +647,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::default(),
+        ZBuf::empty(),
         None,
     );
 
@@ -673,7 +673,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::default(),
+        ZBuf::empty(),
         None,
     );
 
@@ -699,7 +699,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::default(),
+        ZBuf::empty(),
         None,
     );
 

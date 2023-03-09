@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use std::time::Duration;
 use zenoh_buffers::ZSlice;
 use zenoh_config::{WhatAmI, ZenohId};
-use zenoh_core::zerror;
+use zenoh_core::{zasynclock, zasyncread, zerror};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::core::{Field, Resolution, ZInt};
 use zenoh_protocol::transport::{close, Close, InitSyn, OpenSyn, TransportBody, TransportMessage};
@@ -41,6 +41,7 @@ struct State {
     ext_qos: ext::qos::State,
     #[cfg(feature = "shared-memory")]
     ext_shm: ext::shm::State,
+    ext_auth: ext::auth::State,
 }
 
 // InitSyn
@@ -83,9 +84,10 @@ struct RecvOpenAckOut {
 // FSM
 struct OpenLink<'a> {
     link: &'a LinkUnicast,
-    ext_qos: ext::qos::QoS<'a>,
+    ext_qos: ext::qos::QoSFsm<'a>,
     #[cfg(feature = "shared-memory")]
-    ext_shm: ext::shm::Shm<'a>,
+    ext_shm: ext::shm::ShmFsm<'a>,
+    ext_auth: ext::auth::AuthFsm<'a>,
 }
 
 #[async_trait]
@@ -117,6 +119,13 @@ impl<'a> OpenFsm for OpenLink<'a> {
         #[cfg(not(feature = "shared-memory"))]
         let ext_shm = None;
 
+        // Extension Auth
+        let ext_auth = self
+            .ext_auth
+            .send_init_syn(&state.ext_auth)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         let msg: TransportMessage = InitSyn {
             version: input.mine_version,
             whatami: input.mine_whatami,
@@ -125,7 +134,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
             resolution: state.zenoh.resolution,
             ext_qos,
             ext_shm,
-            ext_auth: None, // @TODO
+            ext_auth,
         }
         .into();
 
@@ -231,6 +240,12 @@ impl<'a> OpenFsm for OpenLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension Auth
+        self.ext_auth
+            .recv_init_ack((&mut state.ext_auth, init_ack.ext_auth))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         let output = RecvInitAckOut {
             other_zid: init_ack.zid,
             other_whatami: init_ack.whatami,
@@ -266,6 +281,13 @@ impl<'a> OpenFsm for OpenLink<'a> {
         #[cfg(not(feature = "shared-memory"))]
         let ext_shm = None;
 
+        // Extension Auth
+        let ext_auth = self
+            .ext_auth
+            .send_open_syn(&state.ext_auth)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         // Build and send an OpenSyn message
         let mine_initial_sn = compute_sn(input.mine_zid, input.other_zid, state.zenoh.resolution);
         let message: TransportMessage = OpenSyn {
@@ -274,7 +296,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
             cookie: input.other_cookie,
             ext_qos,
             ext_shm,
-            ext_auth: None, // @TODO
+            ext_auth,
         }
         .into();
 
@@ -338,6 +360,12 @@ impl<'a> OpenFsm for OpenLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension Auth
+        self.ext_auth
+            .recv_open_ack((&mut state.ext_auth, open_ack.ext_auth))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         let output = RecvOpenAckOut {
             other_initial_sn: open_ack.initial_sn,
             other_lease: open_ack.lease,
@@ -350,11 +378,13 @@ pub(crate) async fn open_link(
     link: &LinkUnicast,
     manager: &TransportManager,
 ) -> ZResult<TransportUnicast> {
+    let auth = zasyncread!(manager.state.unicast.authenticator);
     let fsm = OpenLink {
         link,
-        ext_qos: ext::qos::QoS::new(),
+        ext_qos: ext::qos::QoSFsm::new(),
         #[cfg(feature = "shared-memory")]
-        ext_shm: ext::shm::Shm::new(&manager.state.unicast.shm),
+        ext_shm: ext::shm::ShmFsm::new(&manager.state.unicast.shm),
+        ext_auth: ext::auth::AuthFsm::new(&auth),
     };
 
     // Init handshake
@@ -378,6 +408,7 @@ pub(crate) async fn open_link(
         ext_qos: ext::qos::State::new(manager.config.unicast.is_qos),
         #[cfg(feature = "shared-memory")]
         ext_shm: ext::shm::State::new(manager.config.unicast.is_shm),
+        ext_auth: auth.state(&mut *zasynclock!(manager.prng)),
     };
 
     let isyn_in = SendInitSynIn {

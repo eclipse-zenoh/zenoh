@@ -35,6 +35,13 @@ impl State {
     pub(crate) const fn is_qos(&self) -> bool {
         self.is_qos
     }
+
+    #[cfg(test)]
+    pub(crate) fn rand() -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        Self::new(rng.gen_bool(0.5))
+    }
 }
 
 // Codec
@@ -65,11 +72,11 @@ where
 }
 
 // Extension Fsm
-pub(crate) struct QoS<'a> {
+pub(crate) struct QoSFsm<'a> {
     _a: PhantomData<&'a ()>,
 }
 
-impl<'a> QoS<'a> {
+impl<'a> QoSFsm<'a> {
     pub(crate) const fn new() -> Self {
         Self { _a: PhantomData }
     }
@@ -79,7 +86,7 @@ impl<'a> QoS<'a> {
 /*              OPEN                 */
 /*************************************/
 #[async_trait]
-impl<'a> OpenFsm for QoS<'a> {
+impl<'a> OpenFsm for QoSFsm<'a> {
     type Error = ZError;
 
     type SendInitSynIn = &'a State;
@@ -126,7 +133,7 @@ impl<'a> OpenFsm for QoS<'a> {
 /*            ACCEPT                 */
 /*************************************/
 #[async_trait]
-impl<'a> AcceptFsm for QoS<'a> {
+impl<'a> AcceptFsm for QoSFsm<'a> {
     type Error = ZError;
 
     type RecvInitSynIn = (&'a mut State, Option<init::ext::QoS>);

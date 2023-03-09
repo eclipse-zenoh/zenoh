@@ -55,7 +55,7 @@ macro_rules! run_fragmented {
             let mut writer = vbuf.writer();
             $wcode.write(&mut writer, &x).unwrap();
 
-            let mut zbuf = ZBuf::default();
+            let mut zbuf = ZBuf::empty();
             let mut reader = vbuf.reader();
             while let Ok(b) = reader.read_u8() {
                 zbuf.push_zslice(vec![b].into());
@@ -81,7 +81,7 @@ macro_rules! run_buffers {
         run_single!($type, $rand, $wcode, $rcode, buffer);
 
         println!("ZBuf: codec {}", std::any::type_name::<$type>());
-        let mut buffer = ZBuf::default();
+        let mut buffer = ZBuf::empty();
         run_single!($type, $rand, $wcode, $rcode, buffer);
 
         println!("ZSlice: codec {}", std::any::type_name::<$type>());
@@ -157,7 +157,7 @@ fn codec_zid() {
 fn codec_zbuf() {
     run!(
         ZBuf,
-        ZBuf::rand(thread_rng().gen_range(1..=MAX_PAYLOAD_SIZE))
+        ZBuf::rand(thread_rng().gen_range(0..=MAX_PAYLOAD_SIZE))
     );
 }
 
@@ -238,14 +238,14 @@ fn codec_extension() {
             run_extension_single!($type, buff);
 
             println!("ZBuf: codec {}", std::any::type_name::<$type>());
-            let mut buff = ZBuf::default();
+            let mut buff = ZBuf::empty();
             run_extension_single!($type, buff);
         };
     }
 
     run_extension!(ZExtUnit<0>);
     run_extension!(ZExtZInt<1>);
-    run_extension!(ZExtZSlice<2>);
+    run_extension!(ZExtZBuf<2>);
     run_extension!(ZExtZBuf<3>);
     run_extension!(ZExtUnknown);
 }

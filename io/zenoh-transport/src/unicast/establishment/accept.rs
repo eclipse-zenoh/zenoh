@@ -26,7 +26,7 @@ use rand::Rng;
 use std::time::Duration;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZSlice};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_core::{zasynclock, zerror};
+use zenoh_core::{zasynclock, zasyncread, zerror};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::{
@@ -50,6 +50,7 @@ struct State {
     ext_qos: ext::qos::State,
     #[cfg(feature = "shared-memory")]
     ext_shm: ext::shm::State,
+    ext_auth: ext::auth::State,
 }
 
 // InitSyn
@@ -103,9 +104,10 @@ struct AcceptLink<'a> {
     link: &'a LinkUnicast,
     prng: &'a Mutex<PseudoRng>,
     cipher: &'a BlockCipher,
-    ext_qos: ext::qos::QoS<'a>,
+    ext_qos: ext::qos::QoSFsm<'a>,
     #[cfg(feature = "shared-memory")]
-    ext_shm: ext::shm::Shm<'a>,
+    ext_shm: ext::shm::ShmFsm<'a>,
+    ext_auth: ext::auth::AuthFsm<'a>,
 }
 
 #[async_trait]
@@ -182,6 +184,12 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension Auth
+        self.ext_auth
+            .recv_init_syn((&mut state.ext_auth, init_syn.ext_auth))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         let output = RecvInitSynOut {
             other_whatami: init_syn.whatami,
             other_zid: init_syn.zid,
@@ -191,13 +199,13 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         Ok(output)
     }
 
-    type SendInitAckIn = (&'a mut State, SendInitAckIn);
+    type SendInitAckIn = (State, SendInitAckIn);
     type SendInitAckOut = SendInitAckOut;
     async fn send_init_ack(
         &self,
         input: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
-        let (state, input) = input;
+        let (mut state, input) = input;
 
         // Extension QoS
         let ext_qos = self
@@ -216,6 +224,13 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         #[cfg(not(feature = "shared-memory"))]
         let ext_shm = None;
 
+        // Extension Auth
+        let ext_auth = self
+            .ext_auth
+            .send_init_ack(&state.ext_auth)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         // Create the cookie
         let cookie_nonce: ZInt = zasynclock!(self.prng).gen();
         let cookie = Cookie {
@@ -227,7 +242,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             ext_qos: state.ext_qos,
             #[cfg(feature = "shared-memory")]
             ext_shm: state.ext_shm,
-            // properties: EstablishmentProperties::new(),
+            ext_auth: state.ext_auth,
         };
 
         let mut encrypted = vec![];
@@ -255,7 +270,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             cookie,
             ext_qos,
             ext_shm,
-            ext_auth: None, // @TODO
+            ext_auth,
         }
         .into();
 
@@ -336,11 +351,25 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             ext_qos: cookie.ext_qos,
             #[cfg(feature = "shared-memory")]
             ext_shm: cookie.ext_shm,
+            ext_auth: cookie.ext_auth,
         };
 
         // Extension QoS
         self.ext_qos
             .recv_open_syn((&mut state.ext_qos, open_syn.ext_qos))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension Shm
+        #[cfg(feature = "shared-memory")]
+        self.ext_shm
+            .recv_open_syn((&mut state.ext_shm, open_syn.ext_shm))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension Auth
+        self.ext_auth
+            .recv_open_syn((&mut state.ext_auth, open_syn.ext_auth))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -378,6 +407,13 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         #[cfg(not(feature = "shared-memory"))]
         let ext_shm = None;
 
+        // Extension Auth
+        let ext_auth = self
+            .ext_auth
+            .send_open_ack(&state.ext_auth)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         // Build OpenAck message
         let mine_initial_sn = compute_sn(input.mine_zid, input.other_zid, state.zenoh.resolution);
         let open_ack = OpenAck {
@@ -385,7 +421,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             initial_sn: mine_initial_sn,
             ext_qos,
             ext_shm,
-            ext_auth: None, // @TODO
+            ext_auth,
         };
 
         // Do not send the OpenAck right now since we might still incur in MAX_LINKS error
@@ -396,13 +432,15 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
 }
 
 pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) -> ZResult<()> {
+    let auth = zasyncread!(manager.state.unicast.authenticator);
     let fsm = AcceptLink {
         link,
         prng: &manager.prng,
         cipher: &manager.cipher,
-        ext_qos: ext::qos::QoS::new(),
+        ext_qos: ext::qos::QoSFsm::new(),
         #[cfg(feature = "shared-memory")]
-        ext_shm: ext::shm::Shm::new(&manager.state.unicast.shm),
+        ext_shm: ext::shm::ShmFsm::new(&manager.state.unicast.shm),
+        ext_auth: ext::auth::AuthFsm::new(&auth),
     };
 
     // Init handshake
@@ -428,6 +466,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
             ext_qos: ext::qos::State::new(manager.config.unicast.is_qos),
             #[cfg(feature = "shared-memory")]
             ext_shm: ext::shm::State::new(manager.config.unicast.is_shm),
+            ext_auth: auth.state(&mut *zasynclock!(manager.prng)),
         };
 
         // Let's scope the Init phase in such a way memory is freed by Rust
@@ -447,7 +486,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
             #[cfg(feature = "shared-memory")]
             ext_shm: isyn_out.ext_shm,
         };
-        step!(fsm.send_init_ack((&mut state, iack_in)).await)
+        step!(fsm.send_init_ack((state, iack_in)).await)
     };
 
     // Open handshake

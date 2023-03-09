@@ -293,7 +293,7 @@ validated_struct::validator! {
                 /// The configuration of authentification.
                 /// A password implies a username is required.
                 pub usrpwd: #[derive(Default)]
-                UserConf {
+                UsrPwdConf {
                     user: Option<String>,
                     password: Option<String>,
                     /// The path to a file containing the user password dictionary, a file containing `<user>:<password>`
@@ -762,7 +762,7 @@ fn queue_size_validator(q: &QueueSizeConf) -> bool {
         && check(background)
 }
 
-fn user_conf_validator(u: &UserConf) -> bool {
+fn user_conf_validator(u: &UsrPwdConf) -> bool {
     (u.password().is_none() && u.user().is_none()) || (u.password().is_some() && u.user().is_some())
 }
 

@@ -117,7 +117,7 @@ pub mod reader {
     pub struct DidntSiphon;
 
     pub trait SiphonableReader: Reader {
-        fn siphon<W>(&mut self, writer: W) -> Result<NonZeroUsize, DidntSiphon>
+        fn siphon<W>(&mut self, writer: &mut W) -> Result<NonZeroUsize, DidntSiphon>
         where
             W: crate::writer::Writer;
     }

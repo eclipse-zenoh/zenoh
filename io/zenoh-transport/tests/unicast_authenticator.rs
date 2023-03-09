@@ -1,117 +1,99 @@
-// //
-// // Copyright (c) 2022 ZettaScale Technology
-// //
-// // This program and the accompanying materials are made available under the
-// // terms of the Eclipse Public License 2.0 which is available at
-// // http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
-// // which is available at https://www.apache.org/licenses/LICENSE-2.0.
-// //
-// // SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
-// //
-// // Contributors:
-// //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-// //
-// use async_std::{prelude::FutureExt, task};
-// #[cfg(feature = "auth_pubkey")]
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
+use async_std::{prelude::FutureExt, task};
+#[cfg(feature = "auth_pubkey")]
 // use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
-// #[cfg(feature = "auth_usrpwd")]
-// use std::collections::HashMap;
-// use std::{any::Any, collections::HashSet, iter::FromIterator, sync::Arc, time::Duration};
-// use zenoh_core::zasync_executor_init;
-// use zenoh_link::Link;
-// use zenoh_protocol::{
-//     core::{EndPoint, WhatAmI, ZenohId},
-//     zenoh::ZenohMessage,
-// };
-// use zenoh_result::ZResult;
+use std::{any::Any, sync::Arc, time::Duration};
+use zenoh_core::{zasync_executor_init, zasyncwrite};
+use zenoh_link::Link;
+use zenoh_protocol::{
+    core::{EndPoint, WhatAmI, ZenohId},
+    zenoh::ZenohMessage,
+};
+use zenoh_result::ZResult;
 // #[cfg(feature = "auth_pubkey")]
-// use zenoh_transport::unicast::establishment::authenticator::PubKeyAuthenticator;
-// #[cfg(feature = "shared-memory")]
-// use zenoh_transport::unicast::establishment::authenticator::SharedMemoryAuthenticator;
-// #[cfg(feature = "auth_usrpwd")]
-// use zenoh_transport::unicast::establishment::authenticator::UserPasswordAuthenticator;
-// use zenoh_transport::{
-//     DummyTransportPeerEventHandler, TransportEventHandler, TransportMulticast,
-//     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
-// };
+// use zenoh_transport::unicast::establishment::ext::auth::PubKeyAuthenticator;
+#[cfg(feature = "auth_usrpwd")]
+use zenoh_transport::unicast::establishment::ext::auth::Auth;
+use zenoh_transport::{
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportPeer,
+    TransportPeerEventHandler, TransportUnicast,
+};
 
-// const TIMEOUT: Duration = Duration::from_secs(60);
-// const SLEEP: Duration = Duration::from_millis(100);
+const TIMEOUT: Duration = Duration::from_secs(60);
+const SLEEP: Duration = Duration::from_millis(100);
 
-// macro_rules! ztimeout {
-//     ($f:expr) => {
-//         $f.timeout(TIMEOUT).await.unwrap()
-//     };
-// }
+macro_rules! ztimeout {
+    ($f:expr) => {
+        $f.timeout(TIMEOUT).await.unwrap()
+    };
+}
 
-// #[cfg(test)]
-// struct SHRouterAuthenticator;
+#[cfg(test)]
+struct SHRouterAuthenticator;
 
-// impl SHRouterAuthenticator {
-//     fn new() -> Self {
-//         Self
-//     }
-// }
+impl SHRouterAuthenticator {
+    fn new() -> Self {
+        Self
+    }
+}
 
-// impl TransportEventHandler for SHRouterAuthenticator {
-//     fn new_unicast(
-//         &self,
-//         _peer: TransportPeer,
-//         _transport: TransportUnicast,
-//     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-//         Ok(Arc::new(MHRouterAuthenticator::new()))
-//     }
+impl TransportEventHandler for SHRouterAuthenticator {
+    fn new_unicast(
+        &self,
+        _peer: TransportPeer,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        Ok(Arc::new(MHRouterAuthenticator::new()))
+    }
+}
 
-//     fn new_multicast(
-//         &self,
-//         _transport: TransportMulticast,
-//     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-//         panic!();
-//     }
-// }
+struct MHRouterAuthenticator;
 
-// struct MHRouterAuthenticator;
+impl MHRouterAuthenticator {
+    fn new() -> Self {
+        Self
+    }
+}
 
-// impl MHRouterAuthenticator {
-//     fn new() -> Self {
-//         Self
-//     }
-// }
+impl TransportPeerEventHandler for MHRouterAuthenticator {
+    fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
+        Ok(())
+    }
+    fn new_link(&self, _link: Link) {}
+    fn del_link(&self, _link: Link) {}
+    fn closing(&self) {}
+    fn closed(&self) {}
 
-// impl TransportPeerEventHandler for MHRouterAuthenticator {
-//     fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
-//         Ok(())
-//     }
-//     fn new_link(&self, _link: Link) {}
-//     fn del_link(&self, _link: Link) {}
-//     fn closing(&self) {}
-//     fn closed(&self) {}
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
 
-//     fn as_any(&self) -> &dyn Any {
-//         self
-//     }
-// }
+// Transport Handler for the client
+#[derive(Default)]
+struct SHClientAuthenticator;
 
-// // Transport Handler for the client
-// #[derive(Default)]
-// struct SHClientAuthenticator;
-
-// impl TransportEventHandler for SHClientAuthenticator {
-//     fn new_unicast(
-//         &self,
-//         _peer: TransportPeer,
-//         _transport: TransportUnicast,
-//     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-//         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
-//     }
-
-//     fn new_multicast(
-//         &self,
-//         _transport: TransportMulticast,
-//     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-//         panic!();
-//     }
-// }
+impl TransportEventHandler for SHClientAuthenticator {
+    fn new_unicast(
+        &self,
+        _peer: TransportPeer,
+        _transport: TransportUnicast,
+    ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+    }
+}
 
 // #[cfg(feature = "auth_pubkey")]
 // async fn authenticator_multilink(endpoint: &EndPoint) {
@@ -513,291 +495,213 @@
 //     task::sleep(SLEEP).await;
 // }
 
-// #[cfg(feature = "auth_usrpwd")]
-// async fn authenticator_user_password(endpoint: &EndPoint) {
-//     use std::convert::TryFrom;
-//     use zenoh_transport::TransportManager;
+#[cfg(feature = "auth_usrpwd")]
+async fn auth_usrpwd(endpoint: &EndPoint) {
+    use std::convert::TryFrom;
+    use zenoh_transport::establishment::ext::auth::usrpwd::AuthUsrPwd;
+    use zenoh_transport::TransportManager;
 
-//     /* [CLIENT] */
-//     let client01_id = ZenohId::try_from([2]).unwrap();
-//     let user01 = "user01".to_string();
-//     let password01 = "password01".to_string();
+    /* [CLIENT] */
+    let client01_id = ZenohId::try_from([2]).unwrap();
+    let user01 = "user01".to_string();
+    let password01 = "password01".to_string();
 
-//     let client02_id = ZenohId::try_from([3]).unwrap();
-//     let user02 = "invalid".to_string();
-//     let password02 = "invalid".to_string();
+    let client02_id = ZenohId::try_from([3]).unwrap();
+    let user02 = "invalid".to_string();
+    let password02 = "invalid".to_string();
 
-//     let client03_id = client01_id;
-//     let user03 = "user03".to_string();
-//     let password03 = "password03".to_string();
+    let client03_id = client01_id;
+    let user03 = "user03".to_string();
+    let password03 = "password03".to_string();
 
-//     /* [ROUTER] */
-//     let router_id = ZenohId::try_from([1]).unwrap();
-//     let router_handler = Arc::new(SHRouterAuthenticator::new());
-//     // Create the router transport manager
-//     let mut lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-//     lookup.insert(user01.clone().into(), password01.clone().into());
-//     lookup.insert(user03.clone().into(), password03.clone().into());
+    /* [ROUTER] */
+    let router_id = ZenohId::try_from([1]).unwrap();
+    let router_handler = Arc::new(SHRouterAuthenticator::new());
+    // Create the router transport manager
+    let mut auth_usrpwd_router = AuthUsrPwd::new(None);
+    auth_usrpwd_router
+        .add_user(user01.clone().into(), password01.clone().into())
+        .await
+        .unwrap();
+    auth_usrpwd_router
+        .add_user(user03.clone().into(), password03.clone().into())
+        .await
+        .unwrap();
+    let mut auth_router = Auth::empty();
+    auth_router.set_usrpwd(Some(auth_usrpwd_router));
 
-//     let peer_auth_router = Arc::new(UserPasswordAuthenticator::new(lookup, None));
-//     let unicast = TransportManager::config_unicast()
-//         .peer_authenticator(HashSet::from_iter(vec![peer_auth_router.clone().into()]));
-//     let router_manager = TransportManager::builder()
-//         .whatami(WhatAmI::Router)
-//         .zid(router_id)
-//         .unicast(unicast)
-//         .build(router_handler.clone())
-//         .unwrap();
+    let unicast = TransportManager::config_unicast().authenticator(auth_router);
+    let router_manager = TransportManager::builder()
+        .whatami(WhatAmI::Router)
+        .zid(router_id)
+        .unicast(unicast)
+        .build(router_handler.clone())
+        .unwrap();
 
-//     // Create the transport transport manager for the first client
-//     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-//     let peer_auth_client01 = UserPasswordAuthenticator::new(
-//         lookup,
-//         Some((user01.clone().into(), password01.clone().into())),
-//     );
-//     let unicast = TransportManager::config_unicast()
-//         .peer_authenticator(HashSet::from_iter(vec![peer_auth_client01.into()]));
-//     let client01_manager = TransportManager::builder()
-//         .whatami(WhatAmI::Client)
-//         .zid(client01_id)
-//         .unicast(unicast)
-//         .build(Arc::new(SHClientAuthenticator::default()))
-//         .unwrap();
+    // Create the transport transport manager for the first client
+    let auth_usrpwdr_client01 =
+        AuthUsrPwd::new(Some((user01.clone().into(), password01.clone().into())));
+    let mut auth_client01 = Auth::empty();
+    auth_client01.set_usrpwd(Some(auth_usrpwdr_client01));
+    let unicast = TransportManager::config_unicast().authenticator(auth_client01);
+    let client01_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client01_id)
+        .unicast(unicast)
+        .build(Arc::new(SHClientAuthenticator::default()))
+        .unwrap();
 
-//     // Create the transport transport manager for the second client
-//     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-//     let peer_auth_client02 = UserPasswordAuthenticator::new(
-//         lookup,
-//         Some((user02.clone().into(), password02.clone().into())),
-//     );
-//     let unicast = TransportManager::config_unicast()
-//         .peer_authenticator(HashSet::from_iter(vec![peer_auth_client02.into()]));
-//     let client02_manager = TransportManager::builder()
-//         .whatami(WhatAmI::Client)
-//         .zid(client02_id)
-//         .unicast(unicast)
-//         .build(Arc::new(SHClientAuthenticator::default()))
-//         .unwrap();
+    // Create the transport transport manager for the second client
+    let auth_usrpwdr_client02 =
+        AuthUsrPwd::new(Some((user02.clone().into(), password02.clone().into())));
+    let mut auth_client02 = Auth::empty();
+    auth_client02.set_usrpwd(Some(auth_usrpwdr_client02));
+    let unicast = TransportManager::config_unicast().authenticator(auth_client02);
+    let client02_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client02_id)
+        .unicast(unicast)
+        .build(Arc::new(SHClientAuthenticator::default()))
+        .unwrap();
 
-//     // Create the transport transport manager for the third client
-//     let lookup: HashMap<Vec<u8>, Vec<u8>> = HashMap::new();
-//     let peer_auth_client03 = UserPasswordAuthenticator::new(
-//         lookup,
-//         Some((user03.clone().into(), password03.clone().into())),
-//     );
-//     let unicast = TransportManager::config_unicast()
-//         .peer_authenticator(HashSet::from_iter(vec![peer_auth_client03.into()]));
-//     let client03_manager = TransportManager::builder()
-//         .whatami(WhatAmI::Client)
-//         .zid(client03_id)
-//         .unicast(unicast)
-//         .build(Arc::new(SHClientAuthenticator::default()))
-//         .unwrap();
+    // Create the transport transport manager for the third client
+    let auth_usrpwdr_client03 =
+        AuthUsrPwd::new(Some((user03.clone().into(), password03.clone().into())));
+    let mut auth_client03 = Auth::empty();
+    auth_client03.set_usrpwd(Some(auth_usrpwdr_client03));
+    let unicast = TransportManager::config_unicast().authenticator(auth_client03);
+    let client03_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client03_id)
+        .unicast(unicast)
+        .build(Arc::new(SHClientAuthenticator::default()))
+        .unwrap();
 
-//     /* [1] */
-//     println!("\nTransport Authenticator UserPassword [1a1]");
-//     // Add the locator on the router
-//     let res = ztimeout!(router_manager.add_listener(endpoint.clone()));
-//     println!("Transport Authenticator UserPassword [1a1]: {res:?}");
-//     assert!(res.is_ok());
-//     println!("Transport Authenticator UserPassword [1a2]");
-//     let locators = router_manager.get_listeners();
-//     println!("Transport Authenticator UserPassword [1a2]: {locators:?}");
-//     assert_eq!(locators.len(), 1);
+    /* [1] */
+    println!("\nTransport Authenticator UserPassword [1a1]");
+    // Add the locator on the router
+    let res = ztimeout!(router_manager.add_listener(endpoint.clone()));
+    println!("Transport Authenticator UserPassword [1a1]: {res:?}");
+    assert!(res.is_ok());
+    println!("Transport Authenticator UserPassword [1a2]");
+    let locators = router_manager.get_listeners();
+    println!("Transport Authenticator UserPassword [1a2]: {locators:?}");
+    assert_eq!(locators.len(), 1);
 
-//     /* [2] */
-//     // Open a first transport from the client to the router
-//     // -> This should be accepted
-//     println!("Transport Authenticator UserPassword [2a1]");
-//     let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
-//     println!("Transport Authenticator UserPassword [2a1]: {res:?}");
-//     assert!(res.is_ok());
-//     let c_ses1 = res.unwrap();
+    /* [2] */
+    // Open a first transport from the client to the router
+    // -> This should be accepted
+    println!("Transport Authenticator UserPassword [2a1]");
+    let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
+    println!("Transport Authenticator UserPassword [2a1]: {res:?}");
+    assert!(res.is_ok());
+    let c_ses1 = res.unwrap();
 
-//     /* [3] */
-//     println!("Transport Authenticator UserPassword [3a1]");
-//     let res = ztimeout!(c_ses1.close());
-//     println!("Transport Authenticator UserPassword [3a1]: {res:?}");
-//     assert!(res.is_ok());
+    /* [3] */
+    println!("Transport Authenticator UserPassword [3a1]");
+    let res = ztimeout!(c_ses1.close());
+    println!("Transport Authenticator UserPassword [3a1]: {res:?}");
+    assert!(res.is_ok());
 
-//     ztimeout!(async {
-//         while !router_manager.get_transports().is_empty() {
-//             task::sleep(SLEEP).await;
-//         }
-//     });
+    ztimeout!(async {
+        while !router_manager.get_transports().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
-//     /* [4] */
-//     // Open a second transport from the client to the router
-//     // -> This should be rejected
-//     println!("Transport Authenticator UserPassword [4a1]");
-//     let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
-//     println!("Transport Authenticator UserPassword [4a1]: {res:?}");
-//     assert!(res.is_err());
+    /* [4] */
+    // Open a second transport from the client to the router
+    // -> This should be rejected
+    println!("Transport Authenticator UserPassword [4a1]");
+    let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
+    println!("Transport Authenticator UserPassword [4a1]: {res:?}");
+    assert!(res.is_err());
 
-//     /* [5] */
-//     // Open a third transport from the client to the router
-//     // -> This should be accepted
-//     println!("Transport Authenticator UserPassword [5a1]");
-//     let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
-//     println!("Transport Authenticator UserPassword [5a1]: {res:?}");
-//     assert!(res.is_ok());
-//     let c_ses1 = res.unwrap();
+    /* [5] */
+    // Open a third transport from the client to the router
+    // -> This should be accepted
+    println!("Transport Authenticator UserPassword [5a1]");
+    let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
+    println!("Transport Authenticator UserPassword [5a1]: {res:?}");
+    assert!(res.is_ok());
+    let c_ses1 = res.unwrap();
 
-//     /* [6] */
-//     // Add client02 credentials on the router
-//     let res = ztimeout!(peer_auth_router.add_user(user02.into(), password02.into()));
-//     assert!(res.is_ok());
-//     // Open a fourth transport from the client to the router
-//     // -> This should be accepted
-//     println!("Transport Authenticator UserPassword [6a1]");
-//     let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
-//     println!("Transport Authenticator UserPassword [6a1]: {res:?}");
-//     assert!(res.is_ok());
-//     let c_ses2 = res.unwrap();
+    /* [6] */
+    // Add client02 credentials on the router
+    let auth_router = router_manager.get_auth_handle_unicast();
+    ztimeout!(zasyncwrite!(auth_router)
+        .get_usrpwd_mut()
+        .unwrap()
+        .add_user(user02.into(), password02.into()))
+    .unwrap();
 
-//     /* [7] */
-//     // Open a fourth transport from the client to the router
-//     // -> This should be rejected
-//     println!("Transport Authenticator UserPassword [7a1]");
-//     let res = ztimeout!(client03_manager.open_transport(endpoint.clone()));
-//     println!("Transport Authenticator UserPassword [7a1]: {res:?}");
-//     assert!(res.is_err());
+    // Open a fourth transport from the client to the router
+    // -> This should be accepted
+    println!("Transport Authenticator UserPassword [6a1]");
+    let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
+    println!("Transport Authenticator UserPassword [6a1]: {res:?}");
+    assert!(res.is_ok());
+    let c_ses2 = res.unwrap();
 
-//     /* [8] */
-//     println!("Transport Authenticator UserPassword [8a1]");
-//     let res = ztimeout!(c_ses1.close());
-//     println!("Transport Authenticator UserPassword [8a1]: {res:?}");
-//     assert!(res.is_ok());
-//     println!("Transport Authenticator UserPassword [8a2]");
-//     let res = ztimeout!(c_ses2.close());
-//     println!("Transport Authenticator UserPassword [8a2]: {res:?}");
-//     assert!(res.is_ok());
+    /* [7] */
+    // Open a fourth transport from the client to the router
+    // -> This should be rejected
+    println!("Transport Authenticator UserPassword [7a1]");
+    let res = ztimeout!(client03_manager.open_transport(endpoint.clone()));
+    println!("Transport Authenticator UserPassword [7a1]: {res:?}");
+    assert!(res.is_err());
 
-//     ztimeout!(async {
-//         while !router_manager.get_transports().is_empty() {
-//             task::sleep(SLEEP).await;
-//         }
-//     });
+    /* [8] */
+    println!("Transport Authenticator UserPassword [8a1]");
+    let res = ztimeout!(c_ses1.close());
+    println!("Transport Authenticator UserPassword [8a1]: {res:?}");
+    assert!(res.is_ok());
+    println!("Transport Authenticator UserPassword [8a2]");
+    let res = ztimeout!(c_ses2.close());
+    println!("Transport Authenticator UserPassword [8a2]: {res:?}");
+    assert!(res.is_ok());
 
-//     /* [9] */
-//     // Perform clean up of the open locators
-//     println!("Transport Authenticator UserPassword [9a1]");
-//     let res = ztimeout!(router_manager.del_listener(endpoint));
-//     println!("Transport Authenticator UserPassword [9a2]: {res:?}");
-//     assert!(res.is_ok());
+    ztimeout!(async {
+        while !router_manager.get_transports().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
-//     ztimeout!(async {
-//         while !router_manager.get_listeners().is_empty() {
-//             task::sleep(SLEEP).await;
-//         }
-//     });
+    /* [9] */
+    // Perform clean up of the open locators
+    println!("Transport Authenticator UserPassword [9a1]");
+    let res = ztimeout!(router_manager.del_listener(endpoint));
+    println!("Transport Authenticator UserPassword [9a2]: {res:?}");
+    assert!(res.is_ok());
 
-//     // Wait a little bit
-//     task::sleep(SLEEP).await;
-// }
+    ztimeout!(async {
+        while !router_manager.get_listeners().is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
-// #[cfg(feature = "shared-memory")]
-// async fn authenticator_shared_memory(endpoint: &EndPoint) {
-//     use std::convert::TryFrom;
-//     use zenoh_transport::TransportManager;
+    // Wait a little bit
+    task::sleep(SLEEP).await;
+}
 
-//     /* [CLIENT] */
-//     let client_id = ZenohId::try_from([2]).unwrap();
+async fn run(endpoint: &EndPoint) {
+    // #[cfg(feature = "auth_pubkey")]
+    // authenticator_multilink(endpoint).await;
+    #[cfg(feature = "auth_usrpwd")]
+    auth_usrpwd(endpoint).await;
+}
 
-//     /* [ROUTER] */
-//     let router_id = ZenohId::try_from([1]).unwrap();
-//     let router_handler = Arc::new(SHRouterAuthenticator::new());
-//     // Create the router transport manager
-//     let peer_auth_router = SharedMemoryAuthenticator::make().unwrap();
-//     let unicast = TransportManager::config_unicast()
-//         .peer_authenticator(HashSet::from_iter(vec![peer_auth_router.into()]));
-//     let router_manager = TransportManager::builder()
-//         .whatami(WhatAmI::Router)
-//         .zid(router_id)
-//         .unicast(unicast)
-//         .build(router_handler.clone())
-//         .unwrap();
+#[cfg(feature = "transport_tcp")]
+#[test]
+fn authenticator_tcp() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
 
-//     // Create the transport transport manager for the first client
-//     let peer_auth_client = SharedMemoryAuthenticator::make().unwrap();
-//     let unicast = TransportManager::config_unicast()
-//         .peer_authenticator(HashSet::from_iter(vec![peer_auth_client.into()]));
-//     let client_manager = TransportManager::builder()
-//         .whatami(WhatAmI::Router)
-//         .zid(client_id)
-//         .unicast(unicast)
-//         .build(Arc::new(SHClientAuthenticator::default()))
-//         .unwrap();
-
-//     /* [1] */
-//     println!("\nTransport Authenticator SharedMemory [1a1]");
-//     // Add the locator on the router
-//     let res = ztimeout!(router_manager.add_listener(endpoint.clone()));
-//     println!("Transport Authenticator SharedMemory [1a1]: {res:?}");
-//     assert!(res.is_ok());
-//     println!("Transport Authenticator SharedMemory [1a2]");
-//     let locators = router_manager.get_listeners();
-//     println!("Transport Authenticator SharedMemory 1a2]: {locators:?}");
-//     assert_eq!(locators.len(), 1);
-
-//     /* [2] */
-//     // Open a transport from the client to the router
-//     // -> This should be accepted
-//     println!("Transport Authenticator SharedMemory [2a1]");
-//     let res = ztimeout!(client_manager.open_transport(endpoint.clone()));
-//     println!("Transport Authenticator SharedMemory [2a1]: {res:?}");
-//     assert!(res.is_ok());
-//     let c_ses1 = res.unwrap();
-//     assert!(c_ses1.is_shm().unwrap());
-
-//     /* [3] */
-//     println!("Transport Authenticator SharedMemory [3a1]");
-//     let res = ztimeout!(c_ses1.close());
-//     println!("Transport Authenticator SharedMemory [3a1]: {res:?}");
-//     assert!(res.is_ok());
-
-//     ztimeout!(async {
-//         while !router_manager.get_transports().is_empty() {
-//             task::sleep(SLEEP).await;
-//         }
-//     });
-
-//     /* [4] */
-//     // Perform clean up of the open locators
-//     println!("Transport Authenticator SharedMemory [4a1]");
-//     let res = ztimeout!(router_manager.del_listener(endpoint));
-//     println!("Transport Authenticator SharedMemory [4a2]: {res:?}");
-//     assert!(res.is_ok());
-
-//     ztimeout!(async {
-//         while !router_manager.get_listeners().is_empty() {
-//             task::sleep(SLEEP).await;
-//         }
-//     });
-
-//     task::sleep(SLEEP).await;
-// }
-
-// async fn run(endpoint: &EndPoint) {
-//     #[cfg(feature = "auth_pubkey")]
-//     authenticator_multilink(endpoint).await;
-//     #[cfg(feature = "auth_usrpwd")]
-//     authenticator_user_password(endpoint).await;
-//     #[cfg(feature = "shared-memory")]
-//     authenticator_shared_memory(endpoint).await;
-// }
-
-// #[cfg(feature = "transport_tcp")]
-// #[test]
-// fn authenticator_tcp() {
-//     let _ = env_logger::try_init();
-//     task::block_on(async {
-//         zasync_executor_init!();
-//     });
-
-//     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8000).parse().unwrap();
-//     task::block_on(run(&endpoint));
-// }
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8000).parse().unwrap();
+    task::block_on(run(&endpoint));
+}
 
 // #[cfg(feature = "transport_udp")]
 // #[test]

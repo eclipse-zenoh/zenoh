@@ -91,6 +91,18 @@ macro_rules! run_read {
     };
 }
 
+macro_rules! run_empty {
+    ($buffer:expr) => {
+        let mut s = [0u8; 64];
+
+        println!(">>> Read empty");
+        let mut reader = $buffer.reader();
+        assert!(reader.read_u8().is_err());
+        assert!(reader.read(&mut s).is_err());
+        assert!(reader.read_exact(&mut s).is_err());
+    };
+}
+
 macro_rules! run_bound {
     ($buffer:expr, $capacity:expr) => {
         println!(">>> Write bound");
@@ -127,8 +139,8 @@ macro_rules! run_siphon {
         while read < $fcap {
             $into.clear();
 
-            let writer = $into.writer();
-            let written = reader.siphon(writer).unwrap();
+            let mut writer = $into.writer();
+            let written = reader.siphon(&mut writer).unwrap();
 
             let mut reader = $into.reader();
             for i in read..read + written.get() {
@@ -155,6 +167,7 @@ fn buffer_slice() {
 fn buffer_vec() {
     println!("Buffer Vec");
     let mut vbuf = vec![];
+    run_empty!(vbuf);
     run_write!(&mut vbuf);
     run_read!(&vbuf);
 }
@@ -164,6 +177,7 @@ fn buffer_bbuf() {
     println!("Buffer BBuf");
     let capacity = 1 + u8::MAX as usize;
     let mut bbuf = BBuf::with_capacity(capacity);
+    run_empty!(bbuf);
     run_write!(bbuf);
     run_read!(bbuf);
 
@@ -175,9 +189,13 @@ fn buffer_bbuf() {
 #[test]
 fn buffer_zbuf() {
     println!("Buffer ZBuf");
-    let mut zbuf = ZBuf::default();
+    let mut zbuf = ZBuf::empty();
+    run_empty!(zbuf);
     run_write!(zbuf);
     run_read!(zbuf);
+
+    let zbuf = ZBuf::from(vec![]);
+    run_empty!(zbuf);
 }
 
 #[test]
@@ -188,6 +206,9 @@ fn buffer_zslice() {
 
     let mut zslice = ZSlice::from(Arc::new(vbuf));
     run_read!(zslice);
+
+    let mut zslice = ZSlice::from(vec![]);
+    run_empty!(zslice);
 }
 
 #[test]
@@ -200,12 +221,12 @@ fn buffer_siphon() {
     run_siphon!(bbuf1, capacity, bbuf2, capacity);
 
     println!("Buffer Siphon ZBuf({capacity}) -> ZBuf({capacity})");
-    let mut zbuf1 = ZBuf::default();
-    let mut zbuf2 = ZBuf::default();
+    let mut zbuf1 = ZBuf::empty();
+    let mut zbuf2 = ZBuf::empty();
     run_siphon!(zbuf1, capacity, zbuf2, capacity);
 
     println!("Buffer Siphon ZBuf({capacity}) -> BBuf({capacity})");
-    let mut zbuf1 = ZBuf::default();
+    let mut zbuf1 = ZBuf::empty();
     let mut bbuf1 = BBuf::with_capacity(capacity);
     run_siphon!(zbuf1, capacity, bbuf1, capacity);
 
@@ -216,7 +237,7 @@ fn buffer_siphon() {
     run_siphon!(bbuf1, capacity, bbuf2, capacity2);
 
     println!("Buffer Siphon ZBuf({capacity}) -> BBuf({capacity2})");
-    let mut zbuf1 = ZBuf::default();
+    let mut zbuf1 = ZBuf::empty();
     let mut bbuf1 = BBuf::with_capacity(capacity2);
     run_siphon!(zbuf1, capacity, bbuf1, capacity2);
 }

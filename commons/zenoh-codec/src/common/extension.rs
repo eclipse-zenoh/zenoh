@@ -15,12 +15,10 @@ use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
-    ZBuf, ZSlice,
+    ZBuf,
 };
 use zenoh_protocol::{
-    common::{
-        iext, imsg::has_flag, ZExtUnit, ZExtUnknown, ZExtZBuf, ZExtZInt, ZExtZSlice, ZExtensionBody,
-    },
+    common::{iext, imsg::has_flag, ZExtUnit, ZExtUnknown, ZExtZBuf, ZExtZInt, ZExtensionBody},
     core::ZInt,
 };
 
@@ -114,54 +112,6 @@ where
         let value: ZInt = self.codec.read(&mut *reader)?;
 
         Ok((ZExtZInt::new(value), has_flag(self.header, iext::FLAG_Z)))
-    }
-}
-
-impl<const ID: u8, W> WCodec<(&ZExtZSlice<{ ID }>, bool), &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: (&ZExtZSlice<{ ID }>, bool)) -> Self::Output {
-        let (x, more) = x;
-        let mut header: u8 = ID | iext::ENC_ZINT;
-        if more {
-            header |= iext::FLAG_Z;
-        }
-        self.write(&mut *writer, header)?;
-        self.write(&mut *writer, &x.value)?;
-        Ok(())
-    }
-}
-
-impl<const ID: u8, R> RCodec<(ZExtZSlice<{ ID }>, bool), &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<(ZExtZSlice<{ ID }>, bool), Self::Error> {
-        let header: u8 = self.read(&mut *reader)?;
-        let codec = Zenoh080Header::new(header);
-        codec.read(&mut *reader)
-    }
-}
-
-impl<const ID: u8, R> RCodec<(ZExtZSlice<{ ID }>, bool), &mut R> for Zenoh080Header
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<(ZExtZSlice<{ ID }>, bool), Self::Error> {
-        if (self.header & iext::ID_MASK != ID) || (self.header & iext::ENC_MASK != iext::ENC_ZINT) {
-            return Err(DidntRead);
-        }
-
-        let value: ZSlice = self.codec.read(&mut *reader)?;
-
-        Ok((ZExtZSlice::new(value), has_flag(self.header, iext::FLAG_Z)))
     }
 }
 
@@ -285,5 +235,38 @@ where
             },
             has_flag(self.header, iext::FLAG_Z),
         ))
+    }
+}
+
+impl<W> WCodec<&[ZExtUnknown], &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &[ZExtUnknown]) -> Self::Output {
+        let len = x.len();
+        for (i, e) in x.iter().enumerate() {
+            self.write(&mut *writer, (e, i < len - 1))?;
+        }
+        Ok(())
+    }
+}
+
+impl<R> RCodec<Vec<ZExtUnknown>, &mut R> for Zenoh080
+where
+    R: Reader + std::fmt::Debug,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<Vec<ZExtUnknown>, Self::Error> {
+        let mut exts = vec![];
+        let mut has_ext = reader.can_read();
+        while has_ext {
+            let (e, more): (ZExtUnknown, bool) = self.read(&mut *reader)?;
+            exts.push(e);
+            has_ext = more;
+        }
+        Ok(exts)
     }
 }

@@ -177,7 +177,7 @@ impl<'a> BacktrackableReader for &'a [u8] {
 }
 
 impl<'a> SiphonableReader for &'a [u8] {
-    fn siphon<W>(&mut self, mut writer: W) -> Result<NonZeroUsize, DidntSiphon>
+    fn siphon<W>(&mut self, writer: &mut W) -> Result<NonZeroUsize, DidntSiphon>
     where
         W: Writer,
     {
