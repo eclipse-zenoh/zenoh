@@ -3772,6 +3772,7 @@ dependencies = [
  "uhlc",
  "uuid",
  "vec_map",
+ "zenoh",
  "zenoh-buffers",
  "zenoh-cfg-properties",
  "zenoh-codec",
