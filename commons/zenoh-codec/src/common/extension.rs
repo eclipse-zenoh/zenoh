@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
+use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -255,12 +256,12 @@ where
 
 impl<R> RCodec<Vec<ZExtUnknown>, &mut R> for Zenoh080
 where
-    R: Reader + std::fmt::Debug,
+    R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Vec<ZExtUnknown>, Self::Error> {
-        let mut exts = vec![];
+        let mut exts = Vec::new();
         let mut has_ext = reader.can_read();
         while has_ext {
             let (e, more): (ZExtUnknown, bool) = self.read(&mut *reader)?;
