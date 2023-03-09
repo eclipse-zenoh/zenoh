@@ -47,10 +47,10 @@ struct StateZenoh {
 
 struct State {
     zenoh: StateZenoh,
-    ext_qos: ext::qos::State,
+    ext_qos: ext::qos::StateAccept,
     #[cfg(feature = "shared-memory")]
-    ext_shm: ext::shm::State,
-    ext_auth: ext::auth::State,
+    ext_shm: ext::shm::StateAccept,
+    ext_auth: ext::auth::StateAccept,
 }
 
 // InitSyn
@@ -323,18 +323,20 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         let encrypted = open_syn.cookie.to_vec();
 
         // Decrypt the cookie with the cipher
-        let mut reader = encrypted.reader();
-        let mut codec = Zenoh080Cookie {
-            prng: &mut *zasynclock!(self.prng),
-            cipher: self.cipher,
-            codec: Zenoh080::new(),
-        };
-        let cookie: Cookie = codec.read(&mut reader).map_err(|_| {
-            (
-                zerror!("Decoding cookie failed").into(),
-                Some(close::reason::INVALID),
-            )
-        })?;
+        let cookie: Cookie = {
+            let mut codec = Zenoh080Cookie {
+                prng: &mut *zasynclock!(self.prng),
+                cipher: self.cipher,
+                codec: Zenoh080::new(),
+            };
+            let mut reader = encrypted.reader();
+            codec.read(&mut reader).map_err(|_| {
+                (
+                    zerror!("Decoding cookie failed").into(),
+                    Some(close::reason::INVALID),
+                )
+            })
+        }?;
 
         // Verify that the cookie is the one we sent
         if input.cookie_nonce != cookie.nonce {
@@ -440,7 +442,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         ext_qos: ext::qos::QoSFsm::new(),
         #[cfg(feature = "shared-memory")]
         ext_shm: ext::shm::ShmFsm::new(&manager.state.unicast.shm),
-        ext_auth: ext::auth::AuthFsm::new(&auth),
+        ext_auth: ext::auth::AuthFsm::new(&auth, &manager.prng),
     };
 
     // Init handshake
@@ -463,10 +465,10 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
                 batch_size: manager.config.batch_size,
                 resolution: manager.config.resolution,
             },
-            ext_qos: ext::qos::State::new(manager.config.unicast.is_qos),
+            ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos),
             #[cfg(feature = "shared-memory")]
-            ext_shm: ext::shm::State::new(manager.config.unicast.is_shm),
-            ext_auth: auth.state(&mut *zasynclock!(manager.prng)),
+            ext_shm: ext::shm::StateAccept::new(manager.config.unicast.is_shm),
+            ext_auth: auth.accept(&mut *zasynclock!(manager.prng)),
         };
 
         // Let's scope the Init phase in such a way memory is freed by Rust

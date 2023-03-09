@@ -14,15 +14,18 @@
 #[cfg(feature = "auth_pubkey")]
 mod pubkey;
 #[cfg(feature = "auth_usrpwd")]
-pub mod usrpwd;
+mod usrpwd;
 
-#[cfg(feature = "auth_usrpwd")]
-use crate::establishment::ext::auth::usrpwd::{AuthUsrPwd, AuthUsrPwdFsm};
 use crate::establishment::{AcceptFsm, OpenFsm};
+use async_std::sync::Mutex;
 use async_trait::async_trait;
-use rand::Rng;
+#[cfg(feature = "auth_pubkey")]
+pub use pubkey::*;
+use rand::{CryptoRng, Rng};
 use std::convert::TryInto;
 use std::marker::PhantomData;
+#[cfg(feature = "auth_usrpwd")]
+pub use usrpwd::*;
 use zenoh_buffers::reader::SiphonableReader;
 use zenoh_buffers::ZBuf;
 use zenoh_buffers::{
@@ -32,14 +35,238 @@ use zenoh_buffers::{
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_config::Config;
 use zenoh_core::{bail, zerror, Error as ZError, Result as ZResult};
+use zenoh_crypto::PseudoRng;
 use zenoh_protocol::{
     common::ZExtUnknown,
     transport::{init, open},
 };
 
 pub(crate) mod id {
-    pub(crate) const USRPWD: u8 = 1;
-    // pub(crate) const PUBKEY: u8 = 2;
+    pub(crate) const PUBKEY: u8 = 1;
+    pub(crate) const USRPWD: u8 = 2;
+}
+
+#[derive(Debug, Default)]
+pub struct Auth {
+    #[cfg(feature = "auth_pubkey")]
+    pubkey: Option<AuthPubKey>,
+    #[cfg(feature = "auth_usrpwd")]
+    usrpwd: Option<AuthUsrPwd>,
+}
+
+impl Auth {
+    pub(crate) async fn from_config(config: &Config) -> ZResult<Self> {
+        let auth = config.transport().auth();
+
+        Ok(Self {
+            #[cfg(feature = "auth_pubkey")]
+            pubkey: AuthPubKey::from_config(auth.pubkey()).await?,
+            #[cfg(feature = "auth_usrpwd")]
+            usrpwd: AuthUsrPwd::from_config(auth.usrpwd()).await?,
+        })
+    }
+
+    pub(crate) fn open<R>(&self, prng: &mut R) -> StateOpen
+    where
+        R: Rng + CryptoRng,
+    {
+        StateOpen {
+            #[cfg(feature = "auth_pubkey")]
+            pubkey: self.pubkey.is_some().then_some(pubkey::StateOpen::new()),
+            #[cfg(feature = "auth_usrpwd")]
+            usrpwd: self
+                .usrpwd
+                .is_some()
+                .then_some(usrpwd::StateOpen::new(prng)),
+        }
+    }
+
+    pub(crate) fn accept<R>(&self, prng: &mut R) -> StateAccept
+    where
+        R: Rng + CryptoRng,
+    {
+        StateAccept {
+            #[cfg(feature = "auth_pubkey")]
+            pubkey: self.pubkey.is_some().then_some(pubkey::StateAccept::new()),
+            #[cfg(feature = "auth_usrpwd")]
+            usrpwd: self
+                .usrpwd
+                .is_some()
+                .then_some(usrpwd::StateAccept::new(prng)),
+        }
+    }
+}
+
+#[cfg(feature = "test")]
+impl Auth {
+    pub const fn empty() -> Self {
+        Self {
+            #[cfg(feature = "auth_pubkey")]
+            pubkey: None,
+            #[cfg(feature = "auth_usrpwd")]
+            usrpwd: None,
+        }
+    }
+
+    #[cfg(feature = "auth_pubkey")]
+    pub fn set_pubkey(&mut self, pubkey: Option<AuthPubKey>) {
+        self.pubkey = pubkey;
+    }
+
+    #[cfg(feature = "auth_pubkey")]
+    pub fn get_pubkey(&self) -> Option<&AuthPubKey> {
+        self.pubkey.as_ref()
+    }
+
+    #[cfg(feature = "auth_pubkey")]
+    pub fn get_pubkey_mut(&mut self) -> Option<&mut AuthPubKey> {
+        self.pubkey.as_mut()
+    }
+
+    #[cfg(feature = "auth_usrpwd")]
+    pub fn set_usrpwd(&mut self, usrpwd: Option<AuthUsrPwd>) {
+        self.usrpwd = usrpwd;
+    }
+
+    #[cfg(feature = "auth_usrpwd")]
+    pub fn get_usrpwd(&self) -> Option<&AuthUsrPwd> {
+        self.usrpwd.as_ref()
+    }
+
+    #[cfg(feature = "auth_usrpwd")]
+    pub fn get_usrpwd_mut(&mut self) -> Option<&mut AuthUsrPwd> {
+        self.usrpwd.as_mut()
+    }
+}
+
+pub(crate) struct AuthFsm<'a> {
+    #[cfg(feature = "auth_pubkey")]
+    pubkey: Option<AuthPubKeyFsm<'a>>,
+    #[cfg(feature = "auth_usrpwd")]
+    usrpwd: Option<AuthUsrPwdFsm<'a>>,
+    _a: PhantomData<&'a ()>, // Required only when all auth features are disabled
+}
+
+impl<'a> AuthFsm<'a> {
+    pub(crate) fn new(a: &'a Auth, prng: &'a Mutex<PseudoRng>) -> Self {
+        Self {
+            #[cfg(feature = "auth_pubkey")]
+            pubkey: a.pubkey.as_ref().map(|x| AuthPubKeyFsm::new(x, prng)),
+            #[cfg(feature = "auth_usrpwd")]
+            usrpwd: a.usrpwd.as_ref().map(AuthUsrPwdFsm::new),
+            _a: PhantomData,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct StateOpen {
+    #[cfg(feature = "auth_pubkey")]
+    pubkey: Option<pubkey::StateOpen>,
+    #[cfg(feature = "auth_usrpwd")]
+    usrpwd: Option<usrpwd::StateOpen>,
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) struct StateAccept {
+    #[cfg(feature = "auth_pubkey")]
+    pubkey: Option<pubkey::StateAccept>,
+    #[cfg(feature = "auth_usrpwd")]
+    usrpwd: Option<usrpwd::StateAccept>,
+}
+
+impl StateAccept {
+    #[cfg(test)]
+    pub(crate) fn rand() -> Self {
+        let mut rng = rand::thread_rng();
+        Self {
+            #[cfg(feature = "auth_pubkey")]
+            pubkey: rng.gen_bool(0.5).then_some(pubkey::StateAccept::rand()),
+            #[cfg(feature = "auth_usrpwd")]
+            usrpwd: rng.gen_bool(0.5).then_some(usrpwd::StateAccept::rand()),
+        }
+    }
+}
+
+// Codec
+impl<W> WCodec<&StateAccept, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &StateAccept) -> Self::Output {
+        let mut count: usize = 0;
+        let mut buff = vec![];
+        let mut wbuf = buff.writer();
+
+        #[cfg(feature = "auth_pubkey")]
+        {
+            if let Some(pubkey) = x.pubkey.as_ref() {
+                self.write(&mut wbuf, id::PUBKEY)?;
+                self.write(&mut wbuf, pubkey)?;
+                count += 1;
+            }
+        }
+
+        #[cfg(feature = "auth_usrpwd")]
+        {
+            if let Some(usrpwd) = x.usrpwd.as_ref() {
+                self.write(&mut wbuf, id::USRPWD)?;
+                self.write(&mut wbuf, usrpwd)?;
+                count += 1;
+            }
+        }
+
+        self.write(&mut *writer, count)?;
+        if !buff.is_empty() {
+            let mut rbuf = buff.reader();
+            rbuf.siphon(&mut *writer).map_err(|_| DidntWrite)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<R> RCodec<StateAccept, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<StateAccept, Self::Error> {
+        let mut count: usize = self.read(&mut *reader)?;
+
+        #[cfg(feature = "auth_pubkey")]
+        let mut pubkey: Option<pubkey::StateAccept> = None;
+        #[cfg(feature = "auth_usrpwd")]
+        let mut usrpwd: Option<usrpwd::StateAccept> = None;
+
+        while count > 0 {
+            let e: u8 = self.read(&mut *reader)?;
+            match e {
+                #[cfg(feature = "auth_pubkey")]
+                id::PUBKEY => {
+                    pubkey = Some(self.read(&mut *reader)?);
+                }
+                #[cfg(feature = "auth_usrpwd")]
+                id::USRPWD => {
+                    usrpwd = Some(self.read(&mut *reader)?);
+                }
+                _ => return Err(DidntRead),
+            }
+
+            count -= 1;
+        }
+
+        let state = StateAccept {
+            #[cfg(feature = "auth_pubkey")]
+            pubkey,
+            #[cfg(feature = "auth_usrpwd")]
+            usrpwd,
+        };
+        Ok(state)
+    }
 }
 
 macro_rules! ztryinto {
@@ -61,155 +288,6 @@ macro_rules! ztake {
     };
 }
 
-#[derive(Debug, Default)]
-pub struct Auth {
-    #[cfg(feature = "auth_usrpwd")]
-    usrpwd: Option<AuthUsrPwd>,
-}
-
-impl Auth {
-    pub(crate) async fn from_config(config: &Config) -> ZResult<Self> {
-        let auth = config.transport().auth();
-
-        Ok(Self {
-            #[cfg(feature = "auth_usrpwd")]
-            usrpwd: AuthUsrPwd::from_config(auth.usrpwd()).await?,
-        })
-    }
-
-    pub(crate) fn state<R>(&self, prng: &mut R) -> State
-    where
-        R: Rng,
-    {
-        State {
-            #[cfg(feature = "auth_usrpwd")]
-            usrpwd: self.usrpwd.is_some().then_some(usrpwd::State::new(prng)),
-        }
-    }
-}
-
-#[cfg(feature = "test")]
-impl Auth {
-    pub const fn empty() -> Self {
-        Self {
-            #[cfg(feature = "auth_usrpwd")]
-            usrpwd: None,
-        }
-    }
-
-    #[cfg(feature = "auth_usrpwd")]
-    pub fn set_usrpwd(&mut self, usrpwd: Option<AuthUsrPwd>) {
-        self.usrpwd = usrpwd;
-    }
-
-    #[cfg(feature = "auth_usrpwd")]
-    pub fn get_usrpwd(&self) -> Option<&AuthUsrPwd> {
-        self.usrpwd.as_ref()
-    }
-
-    #[cfg(feature = "auth_usrpwd")]
-    pub fn get_usrpwd_mut(&mut self) -> Option<&mut AuthUsrPwd> {
-        self.usrpwd.as_mut()
-    }
-}
-
-pub(crate) struct AuthFsm<'a> {
-    #[cfg(feature = "auth_usrpwd")]
-    usrpwd: Option<AuthUsrPwdFsm<'a>>,
-    _a: PhantomData<&'a ()>, // Required only when all auth features are disabled
-}
-
-impl<'a> AuthFsm<'a> {
-    pub(crate) fn new(a: &'a Auth) -> Self {
-        Self {
-            #[cfg(feature = "auth_usrpwd")]
-            usrpwd: a.usrpwd.as_ref().map(AuthUsrPwdFsm::new),
-            _a: PhantomData,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct State {
-    #[cfg(feature = "auth_usrpwd")]
-    usrpwd: Option<usrpwd::State>,
-}
-
-impl State {
-    #[cfg(test)]
-    pub(crate) fn rand() -> Self {
-        let mut rng = rand::thread_rng();
-        Self {
-            #[cfg(feature = "auth_usrpwd")]
-            usrpwd: rng.gen_bool(0.5).then_some(usrpwd::State::rand()),
-        }
-    }
-}
-
-// Codec
-impl<W> WCodec<&State, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: &State) -> Self::Output {
-        let mut buff = vec![];
-        let mut wbuf = buff.writer();
-
-        let mut count: usize = 0;
-        #[cfg(feature = "auth_usrpwd")]
-        {
-            if let Some(usrpwd) = x.usrpwd.as_ref() {
-                self.write(&mut wbuf, id::USRPWD)?;
-                self.write(&mut wbuf, usrpwd)?;
-                count += 1;
-            }
-        }
-
-        self.write(&mut *writer, count)?;
-        if !buff.is_empty() {
-            let mut rbuf = buff.reader();
-            rbuf.siphon(&mut *writer).map_err(|_| DidntWrite)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl<R> RCodec<State, &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<State, Self::Error> {
-        let mut count: usize = self.read(&mut *reader)?;
-
-        #[cfg(feature = "auth_usrpwd")]
-        let mut usrpwd: Option<usrpwd::State> = None;
-
-        while count > 0 {
-            let e: u8 = self.read(&mut *reader)?;
-            match e {
-                #[cfg(feature = "auth_usrpwd")]
-                id::USRPWD => {
-                    usrpwd = Some(self.read(&mut *reader)?);
-                }
-                _ => return Err(DidntRead),
-            }
-
-            count -= 1;
-        }
-
-        let state = State {
-            #[cfg(feature = "auth_usrpwd")]
-            usrpwd,
-        };
-        Ok(state)
-    }
-}
-
 /*************************************/
 /*              OPEN                 */
 /*************************************/
@@ -217,7 +295,7 @@ where
 impl<'a> OpenFsm for AuthFsm<'a> {
     type Error = ZError;
 
-    type SendInitSynIn = &'a State;
+    type SendInitSynIn = &'a StateOpen;
     type SendInitSynOut = Option<init::ext::Auth>;
     async fn send_init_syn(
         &self,
@@ -226,6 +304,19 @@ impl<'a> OpenFsm for AuthFsm<'a> {
         const S: &str = "Auth extension - Send InitSyn.";
 
         let mut exts: Vec<ZExtUnknown> = vec![];
+
+        #[cfg(feature = "auth_pubkey")]
+        {
+            match (self.pubkey.as_ref(), state.pubkey.as_ref()) {
+                (Some(e), Some(s)) => {
+                    if let Some(e) = e.send_init_syn(s).await?.take() {
+                        exts.push(e.into())
+                    }
+                }
+                (None, None) => {}
+                _ => bail!("{S} Invalid PubKey configuration."),
+            }
+        }
 
         #[cfg(feature = "auth_usrpwd")]
         {
@@ -236,7 +327,7 @@ impl<'a> OpenFsm for AuthFsm<'a> {
                     }
                 }
                 (None, None) => {}
-                _ => bail!("{} Invalid configuration.", S),
+                _ => bail!("{S} Invalid UsrPwd configuration."),
             }
         }
 
@@ -245,13 +336,13 @@ impl<'a> OpenFsm for AuthFsm<'a> {
         let mut writer = buff.writer();
         codec
             .write(&mut writer, exts.as_slice())
-            .map_err(|_| zerror!("{} Encoding error.", S))?;
+            .map_err(|_| zerror!("{S} Encoding error."))?;
 
         let output = (!buff.is_empty()).then_some(init::ext::Auth::new(buff.into()));
         Ok(output)
     }
 
-    type RecvInitAckIn = (&'a mut State, Option<init::ext::Auth>);
+    type RecvInitAckIn = (&'a mut StateOpen, Option<init::ext::Auth>);
     type RecvInitAckOut = ();
     async fn recv_init_ack(
         &self,
@@ -266,7 +357,19 @@ impl<'a> OpenFsm for AuthFsm<'a> {
         let mut reader = ext.value.reader();
         let mut exts: Vec<ZExtUnknown> = codec
             .read(&mut reader)
-            .map_err(|_| zerror!("{} Decoding error.", S))?;
+            .map_err(|_| zerror!("{S} Decoding error."))?;
+
+        #[cfg(feature = "auth_pubkey")]
+        {
+            match (self.pubkey.as_ref(), state.pubkey.as_mut()) {
+                (Some(e), Some(s)) => {
+                    let x = ztake!(exts, id::PUBKEY);
+                    e.recv_init_ack((s, ztryinto!(x, S))).await?;
+                }
+                (None, None) => {}
+                _ => bail!("{S} Invalid PubKey configuration."),
+            }
+        }
 
         #[cfg(feature = "auth_usrpwd")]
         {
@@ -276,14 +379,14 @@ impl<'a> OpenFsm for AuthFsm<'a> {
                     e.recv_init_ack((s, ztryinto!(x, S))).await?;
                 }
                 (None, None) => {}
-                _ => bail!("{} Invalid configuration.", S),
+                _ => bail!("{S} Invalid UsrPwd configuration."),
             }
         }
 
         Ok(())
     }
 
-    type SendOpenSynIn = &'a State;
+    type SendOpenSynIn = &'a StateOpen;
     type SendOpenSynOut = Option<open::ext::Auth>;
     async fn send_open_syn(
         &self,
@@ -292,6 +395,19 @@ impl<'a> OpenFsm for AuthFsm<'a> {
         const S: &str = "Auth extension - Send OpenSyn.";
 
         let mut exts: Vec<ZExtUnknown> = vec![];
+
+        #[cfg(feature = "auth_pubkey")]
+        {
+            match (self.pubkey.as_ref(), state.pubkey.as_ref()) {
+                (Some(e), Some(s)) => {
+                    if let Some(e) = e.send_open_syn(s).await?.take() {
+                        exts.push(e.into())
+                    }
+                }
+                (None, None) => {}
+                _ => bail!("{S} Invalid PubKey configuration."),
+            }
+        }
 
         #[cfg(feature = "auth_usrpwd")]
         {
@@ -302,7 +418,7 @@ impl<'a> OpenFsm for AuthFsm<'a> {
                     }
                 }
                 (None, None) => {}
-                _ => bail!("{} Invalid configuration.", S),
+                _ => bail!("{S} Invalid UsrPwd configuration."),
             }
         }
 
@@ -311,13 +427,13 @@ impl<'a> OpenFsm for AuthFsm<'a> {
         let mut writer = buff.writer();
         codec
             .write(&mut writer, exts.as_slice())
-            .map_err(|_| zerror!("{} Encoding error.", S))?;
+            .map_err(|_| zerror!("{S} Encoding error."))?;
 
         let output = (!buff.is_empty()).then_some(open::ext::Auth::new(buff.into()));
         Ok(output)
     }
 
-    type RecvOpenAckIn = (&'a mut State, Option<open::ext::Auth>);
+    type RecvOpenAckIn = (&'a mut StateOpen, Option<open::ext::Auth>);
     type RecvOpenAckOut = ();
     async fn recv_open_ack(
         &self,
@@ -332,7 +448,19 @@ impl<'a> OpenFsm for AuthFsm<'a> {
         let mut reader = ext.value.reader();
         let mut exts: Vec<ZExtUnknown> = codec
             .read(&mut reader)
-            .map_err(|_| zerror!("{} Decoding error.", S))?;
+            .map_err(|_| zerror!("{S} Decoding error."))?;
+
+        #[cfg(feature = "auth_pubkey")]
+        {
+            match (self.pubkey.as_ref(), state.pubkey.as_mut()) {
+                (Some(e), Some(s)) => {
+                    let x = ztake!(exts, id::PUBKEY);
+                    e.recv_open_ack((s, ztryinto!(x, S))).await?;
+                }
+                (None, None) => {}
+                _ => bail!("{S} Invalid PubKey configuration."),
+            }
+        }
 
         #[cfg(feature = "auth_usrpwd")]
         {
@@ -342,7 +470,7 @@ impl<'a> OpenFsm for AuthFsm<'a> {
                     e.recv_open_ack((s, ztryinto!(x, S))).await?;
                 }
                 (None, None) => {}
-                _ => bail!("{} Invalid configuration.", S),
+                _ => bail!("{S} Invalid UsrPwd configuration."),
             }
         }
 
@@ -357,7 +485,7 @@ impl<'a> OpenFsm for AuthFsm<'a> {
 impl<'a> AcceptFsm for AuthFsm<'a> {
     type Error = ZError;
 
-    type RecvInitSynIn = (&'a mut State, Option<init::ext::Auth>);
+    type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::Auth>);
     type RecvInitSynOut = ();
     async fn recv_init_syn(
         &self,
@@ -372,7 +500,19 @@ impl<'a> AcceptFsm for AuthFsm<'a> {
         let mut reader = ext.value.reader();
         let mut exts: Vec<ZExtUnknown> = codec
             .read(&mut reader)
-            .map_err(|_| zerror!("{} Decoding error.", S))?;
+            .map_err(|_| zerror!("{S} Decoding error."))?;
+
+        #[cfg(feature = "auth_pubkey")]
+        {
+            match (self.pubkey.as_ref(), state.pubkey.as_mut()) {
+                (Some(e), Some(s)) => {
+                    let x = ztake!(exts, id::PUBKEY);
+                    e.recv_init_syn((s, ztryinto!(x, S))).await?;
+                }
+                (None, None) => {}
+                _ => bail!("{S} Invalid PubKey configuration."),
+            }
+        }
 
         #[cfg(feature = "auth_usrpwd")]
         {
@@ -382,14 +522,14 @@ impl<'a> AcceptFsm for AuthFsm<'a> {
                     e.recv_init_syn((s, ztryinto!(x, S))).await?;
                 }
                 (None, None) => {}
-                _ => bail!("{} Invalid configuration.", S),
+                _ => bail!("{S} Invalid UsrPwd configuration."),
             }
         }
 
         Ok(())
     }
 
-    type SendInitAckIn = &'a State;
+    type SendInitAckIn = &'a StateAccept;
     type SendInitAckOut = Option<init::ext::Auth>;
     async fn send_init_ack(
         &self,
@@ -398,6 +538,19 @@ impl<'a> AcceptFsm for AuthFsm<'a> {
         const S: &str = "Auth extension - Send InitAck.";
 
         let mut exts: Vec<ZExtUnknown> = vec![];
+
+        #[cfg(feature = "auth_pubkey")]
+        {
+            match (self.pubkey.as_ref(), state.pubkey.as_ref()) {
+                (Some(e), Some(s)) => {
+                    if let Some(e) = e.send_init_ack(s).await?.take() {
+                        exts.push(e.into())
+                    }
+                }
+                (None, None) => {}
+                _ => bail!("{S} Invalid PubKey configuration."),
+            }
+        }
 
         #[cfg(feature = "auth_usrpwd")]
         {
@@ -408,7 +561,7 @@ impl<'a> AcceptFsm for AuthFsm<'a> {
                     }
                 }
                 (None, None) => {}
-                _ => bail!("{} Invalid configuration.", S),
+                _ => bail!("{S} Invalid UsrPwd configuration."),
             }
         }
 
@@ -417,13 +570,13 @@ impl<'a> AcceptFsm for AuthFsm<'a> {
         let mut writer = buff.writer();
         codec
             .write(&mut writer, exts.as_slice())
-            .map_err(|_| zerror!("{} Encoding error.", S))?;
+            .map_err(|_| zerror!("{S} Encoding error."))?;
 
         let output = (!buff.is_empty()).then_some(init::ext::Auth::new(buff.into()));
         Ok(output)
     }
 
-    type RecvOpenSynIn = (&'a mut State, Option<open::ext::Auth>);
+    type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::Auth>);
     type RecvOpenSynOut = ();
     async fn recv_open_syn(
         &self,
@@ -438,7 +591,19 @@ impl<'a> AcceptFsm for AuthFsm<'a> {
         let mut reader = ext.value.reader();
         let mut exts: Vec<ZExtUnknown> = codec
             .read(&mut reader)
-            .map_err(|_| zerror!("{} Decoding error.", S))?;
+            .map_err(|_| zerror!("{S} Decoding error."))?;
+
+        #[cfg(feature = "auth_pubkey")]
+        {
+            match (self.pubkey.as_ref(), state.pubkey.as_mut()) {
+                (Some(e), Some(s)) => {
+                    let x = ztake!(exts, id::PUBKEY);
+                    e.recv_open_syn((s, ztryinto!(x, S))).await?;
+                }
+                (None, None) => {}
+                _ => bail!("{S} Invalid PubKey configuration."),
+            }
+        }
 
         #[cfg(feature = "auth_usrpwd")]
         {
@@ -448,22 +613,35 @@ impl<'a> AcceptFsm for AuthFsm<'a> {
                     e.recv_open_syn((s, ztryinto!(x, S))).await?;
                 }
                 (None, None) => {}
-                _ => bail!("{} Invalid configuration.", S),
+                _ => bail!("{S} Invalid UsrPwd configuration."),
             }
         }
 
         Ok(())
     }
 
-    type SendOpenAckIn = &'a State;
+    type SendOpenAckIn = &'a StateAccept;
     type SendOpenAckOut = Option<open::ext::Auth>;
     async fn send_open_ack(
         &self,
         state: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
-        const S: &str = "Auth extension - Send InitAck.";
+        const S: &str = "Auth extension - Send OpenAck.";
 
         let mut exts: Vec<ZExtUnknown> = vec![];
+
+        #[cfg(feature = "auth_pubkey")]
+        {
+            match (self.pubkey.as_ref(), state.pubkey.as_ref()) {
+                (Some(e), Some(s)) => {
+                    if let Some(e) = e.send_open_ack(s).await?.take() {
+                        exts.push(e.into())
+                    }
+                }
+                (None, None) => {}
+                _ => bail!("{S} Invalid PubKey configuration."),
+            }
+        }
 
         #[cfg(feature = "auth_usrpwd")]
         {
@@ -474,7 +652,7 @@ impl<'a> AcceptFsm for AuthFsm<'a> {
                     }
                 }
                 (None, None) => {}
-                _ => bail!("{} Invalid configuration.", S),
+                _ => bail!("{S} Invalid UsrPwd configuration."),
             }
         }
 
@@ -483,7 +661,7 @@ impl<'a> AcceptFsm for AuthFsm<'a> {
         let mut writer = buff.writer();
         codec
             .write(&mut writer, exts.as_slice())
-            .map_err(|_| zerror!("{} Encoding error.", S))?;
+            .map_err(|_| zerror!("{S} Encoding error."))?;
 
         let output = (!buff.is_empty()).then_some(open::ext::Auth::new(buff.into()));
         Ok(output)

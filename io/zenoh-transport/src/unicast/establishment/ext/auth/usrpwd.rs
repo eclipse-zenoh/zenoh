@@ -19,7 +19,7 @@
 use crate::establishment::{AcceptFsm, OpenFsm};
 use async_std::fs;
 use async_trait::async_trait;
-use rand::Rng;
+use rand::{CryptoRng, Rng};
 use std::collections::HashMap;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
@@ -64,30 +64,32 @@ impl AuthUsrPwd {
     }
 
     pub async fn from_config(config: &UsrPwdConf) -> ZResult<Option<Self>> {
+        const S: &str = "UsrPwd extension - From config.";
+
         let mut lookup: HashMap<User, Password> = HashMap::new();
         if let Some(dict) = config.dictionary_file() {
             let content = fs::read_to_string(dict)
                 .await
-                .map_err(|e| zerror!("Invalid user-password dictionary file: {}", e))?;
+                .map_err(|e| zerror!("{S} Invalid user-password dictionary file: {}.", e))?;
 
             // Populate the user-password dictionary
             let mut ps = Properties::from(content);
             for (user, password) in ps.drain() {
                 lookup.insert(user.as_bytes().to_owned(), password.as_bytes().to_owned());
             }
-            log::debug!("User-password dictionary has been configured");
+            log::debug!("{S} User-password dictionary has been configured.");
         }
 
         let mut credentials: Option<(User, Password)> = None;
         if let Some(user) = config.user() {
             if let Some(password) = config.password() {
-                log::debug!("User and password have been configured");
+                log::debug!("{S} User-password has been configured.");
                 credentials = Some((user.as_bytes().to_owned(), password.as_bytes().to_owned()));
             }
         }
 
         if !lookup.is_empty() || credentials.is_some() {
-            log::debug!("User-password authentication is enabled");
+            log::debug!("{S} User-password authentication is enabled.");
             Ok(Some(Self {
                 lookup,
                 credentials,
@@ -100,19 +102,34 @@ impl AuthUsrPwd {
 
 // OpenFsm / AcceptFsm
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct State {
+pub(crate) struct StateOpen {
     nonce: ZInt,
 }
 
-impl State {
+impl StateOpen {
     pub(crate) fn new<R>(prng: &mut R) -> Self
     where
-        R: Rng,
+        R: Rng + CryptoRng,
+    {
+        Self { nonce: prng.gen() }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct StateAccept {
+    nonce: ZInt,
+}
+
+impl StateAccept {
+    pub(crate) fn new<R>(prng: &mut R) -> Self
+    where
+        R: Rng + CryptoRng,
     {
         Self { nonce: prng.gen() }
     }
 
-    #[cfg(test)]
+    #[cfg(feature = "test")]
+    #[allow(unused)] // Used for testing
     pub(crate) fn rand() -> Self {
         let mut rng = rand::thread_rng();
         Self::new(&mut rng)
@@ -120,26 +137,26 @@ impl State {
 }
 
 // Codec
-impl<W> WCodec<&State, &mut W> for Zenoh080
+impl<W> WCodec<&StateAccept, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &State) -> Self::Output {
+    fn write(self, writer: &mut W, x: &StateAccept) -> Self::Output {
         self.write(&mut *writer, x.nonce)
     }
 }
 
-impl<R> RCodec<State, &mut R> for Zenoh080
+impl<R> RCodec<StateAccept, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<State, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<StateAccept, Self::Error> {
         let nonce: ZInt = self.read(&mut *reader)?;
-        Ok(State { nonce })
+        Ok(StateAccept { nonce })
     }
 }
 
@@ -227,7 +244,7 @@ where
 impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
     type Error = ZError;
 
-    type SendInitSynIn = &'a State;
+    type SendInitSynIn = &'a StateOpen;
     type SendInitSynOut = Option<ZExtUnit<{ super::id::USRPWD }>>;
     async fn send_init_syn(
         &self,
@@ -237,7 +254,7 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
         Ok(output)
     }
 
-    type RecvInitAckIn = (&'a mut State, Option<ZExtZInt<{ super::id::USRPWD }>>);
+    type RecvInitAckIn = (&'a mut StateOpen, Option<ZExtZInt<{ super::id::USRPWD }>>);
     type RecvInitAckOut = ();
     async fn recv_init_ack(
         &self,
@@ -252,13 +269,13 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
         let (state, mut ext_userwpd) = input;
         let ext_usrpwd = ext_userwpd
             .take()
-            .ok_or_else(|| zerror!("{} Decoding error.", S))?;
+            .ok_or_else(|| zerror!("{S} Decoding error."))?;
         state.nonce = ext_usrpwd.value;
 
         Ok(())
     }
 
-    type SendOpenSynIn = &'a State;
+    type SendOpenSynIn = &'a StateOpen;
     type SendOpenSynOut = Option<ZExtZBuf<{ super::id::USRPWD }>>;
     async fn send_open_syn(
         &self,
@@ -274,7 +291,7 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
 
         // Create the HMAC of the password using the nonce received as a key (it's a challenge)
         let key = state.nonce.to_le_bytes();
-        let hmac = hmac::sign(&key, password).map_err(|_| zerror!("{} Encoding error.", S))?;
+        let hmac = hmac::sign(&key, password).map_err(|_| zerror!("{S} Encoding error."))?;
         // Create the OpenSyn extension
         let open_syn = OpenSyn {
             user: user.to_vec(),
@@ -285,13 +302,13 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
         let mut writer = buff.writer();
         codec
             .write(&mut writer, &open_syn)
-            .map_err(|_| zerror!("{} Encoding error.", S))?;
+            .map_err(|_| zerror!("{S} Encoding error."))?;
 
         let output = Some(ZExtZBuf::new(buff.into()));
         Ok(output)
     }
 
-    type RecvOpenAckIn = (&'a mut State, Option<ZExtUnit<{ super::id::USRPWD }>>);
+    type RecvOpenAckIn = (&'a mut StateOpen, Option<ZExtUnit<{ super::id::USRPWD }>>);
     type RecvOpenAckOut = ();
     async fn recv_open_ack(
         &self,
@@ -301,7 +318,7 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
 
         let (_, ext) = input;
         if self.inner.credentials.is_some() && ext.is_none() {
-            bail!("{} Expected extension.", S);
+            bail!("{S} Expected extension.");
         }
 
         Ok(())
@@ -315,7 +332,7 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
 impl<'a> AcceptFsm for AuthUsrPwdFsm<'a> {
     type Error = ZError;
 
-    type RecvInitSynIn = (&'a mut State, Option<ZExtUnit<{ super::id::USRPWD }>>);
+    type RecvInitSynIn = (&'a mut StateAccept, Option<ZExtUnit<{ super::id::USRPWD }>>);
     type RecvInitSynOut = ();
     async fn recv_init_syn(
         &self,
@@ -325,13 +342,13 @@ impl<'a> AcceptFsm for AuthUsrPwdFsm<'a> {
 
         let (_, ext_usrpwd) = input;
         if ext_usrpwd.is_none() {
-            bail!("{} Expected extension.", S);
+            bail!("{S} Expected extension.");
         }
 
         Ok(())
     }
 
-    type SendInitAckIn = &'a State;
+    type SendInitAckIn = &'a StateAccept;
     type SendInitAckOut = Option<ZExtZInt<{ super::id::USRPWD }>>;
     async fn send_init_ack(
         &self,
@@ -340,7 +357,7 @@ impl<'a> AcceptFsm for AuthUsrPwdFsm<'a> {
         Ok(Some(ZExtZInt::new(state.nonce)))
     }
 
-    type RecvOpenSynIn = (&'a mut State, Option<ZExtZBuf<{ super::id::USRPWD }>>);
+    type RecvOpenSynIn = (&'a mut StateAccept, Option<ZExtZBuf<{ super::id::USRPWD }>>);
     type RecvOpenSynOut = ();
     async fn recv_open_syn(
         &self,
@@ -351,31 +368,31 @@ impl<'a> AcceptFsm for AuthUsrPwdFsm<'a> {
         let (state, mut ext_usrpwd) = input;
         let ext_usrpwd = ext_usrpwd
             .take()
-            .ok_or_else(|| zerror!("{} Expected extension.", S))?;
+            .ok_or_else(|| zerror!("{S} Expected extension."))?;
 
         let codec = Zenoh080::new();
         let mut reader = ext_usrpwd.value.reader();
         let open_syn: OpenSyn = codec
             .read(&mut reader)
-            .map_err(|_| zerror!("{} Decoding error.", S))?;
+            .map_err(|_| zerror!("{S} Decoding error."))?;
 
         let pwd = self
             .inner
             .lookup
             .get(&open_syn.user)
-            .ok_or_else(|| zerror!("{} Invalid user.", S))?;
+            .ok_or_else(|| zerror!("{S} Invalid user."))?;
 
         // Create the HMAC of the password using the nonce received as challenge
         let key = state.nonce.to_le_bytes();
-        let hmac = hmac::sign(&key, pwd).map_err(|_| zerror!("{} Encoding error.", S))?;
+        let hmac = hmac::sign(&key, pwd).map_err(|_| zerror!("{S} Encoding error."))?;
         if hmac != open_syn.hmac {
-            bail!("{} Invalid password.", S);
+            bail!("{S} Invalid password.");
         }
 
         Ok(())
     }
 
-    type SendOpenAckIn = &'a State;
+    type SendOpenAckIn = &'a StateAccept;
     type SendOpenAckOut = Option<ZExtUnit<{ super::id::USRPWD }>>;
     async fn send_open_ack(
         &self,
@@ -384,229 +401,3 @@ impl<'a> AcceptFsm for AuthUsrPwdFsm<'a> {
         Ok(Some(ZExtUnit::new()))
     }
 }
-
-// #[async_trait]
-// impl TransportAuthenticatorTrait for UserPasswordAuthenticator {
-//     fn id(&self) -> ZNodeAuthenticatorId {
-//         ZNodeAuthenticatorId::UserPassword
-//     }
-
-//     async fn close(&self) {
-//         // No cleanup needed
-//     }
-
-//     async fn get_init_syn_properties(
-//         &self,
-//         link: &AuthenticatedLink,
-//         _node_id: &ZenohId,
-//     ) -> ZResult<Option<Vec<u8>>> {
-//         // If credentials are not configured, don't initiate the USRPWD authentication
-//         if self.credentials.is_none() {
-//             return Ok(None);
-//         }
-
-//         let init_syn_property = InitSynProperty {
-//             version: USRPWD_VERSION,
-//         };
-//         let mut wbuf = vec![];
-//         let codec = Zenoh080::new();
-//         let mut writer = wbuf.writer();
-//         codec
-//             .write(&mut writer, &init_syn_property)
-//             .map_err(|_| zerror!("Error in encoding InitSyn for UsrPwd on link: {}", link))?;
-//         let attachment = wbuf;
-
-//         Ok(Some(attachment))
-//     }
-
-//     async fn handle_init_syn(
-//         &self,
-//         link: &AuthenticatedLink,
-//         cookie: &Cookie,
-//         property: Option<Vec<u8>>,
-//     ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)> {
-//         let p = property.ok_or_else(|| {
-//             zerror!(
-//                 "Received InitSyn with no UsrPwd attachment on link: {}",
-//                 link
-//             )
-//         })?;
-
-//         let codec = Zenoh080::new();
-
-//         let mut reader = p.reader();
-//         let init_syn_property: InitSynProperty = codec.read(&mut reader).map_err(|_| {
-//             zerror!(
-//                 "Received InitSyn with invalid UsrPwd attachment on link: {}",
-//                 link
-//             )
-//         })?;
-//         if init_syn_property.version > USRPWD_VERSION {
-//             bail!("Rejected InitSyn with invalid attachment on link: {}", link)
-//         }
-
-//         // Create the InitAck attachment
-//         let init_ack_property = InitAckProperty {
-//             nonce: cookie.nonce,
-//         };
-//         let mut wbuf = vec![];
-//         let mut writer = wbuf.writer();
-//         codec
-//             .write(&mut writer, &init_ack_property)
-//             .map_err(|_| zerror!("Error in encoding InitAck for UsrPwd on link: {}", link))?;
-//         let attachment = wbuf;
-
-//         Ok((Some(attachment), None))
-//     }
-
-//     async fn handle_init_ack(
-//         &self,
-//         link: &AuthenticatedLink,
-//         _node_id: &ZenohId,
-//         _sn_resolution: ZInt,
-//         property: Option<Vec<u8>>,
-//     ) -> ZResult<Option<Vec<u8>>> {
-//         // If credentials are not configured, don't continue the USRPWD authentication
-//         let credentials = match self.credentials.as_ref() {
-//             Some(cr) => cr,
-//             None => return Ok(None),
-//         };
-
-//         let p = property.ok_or_else(|| {
-//             zerror!(
-//                 "Received InitAck with no UsrPwd attachment on link: {}",
-//                 link
-//             )
-//         })?;
-
-//         let codec = Zenoh080::new();
-
-//         let mut reader = p.reader();
-//         let init_ack_property: InitAckProperty = codec.read(&mut reader).map_err(|_| {
-//             zerror!(
-//                 "Received InitAck with invalid UsrPwd attachment on link: {}",
-//                 link
-//             )
-//         })?;
-
-//         // Create the HMAC of the password using the nonce received as a key (it's a challenge)
-//         let key = init_ack_property.nonce.to_le_bytes();
-//         let hmac = hmac::sign(&key, &credentials.password)?;
-//         // Create the OpenSyn attachment
-//         let open_syn_property = OpenSynProperty {
-//             user: credentials.user.clone(),
-//             hmac,
-//         };
-//         // Encode the InitAck attachment
-//         let mut wbuf = vec![];
-//         let mut writer = wbuf.writer();
-//         codec
-//             .write(&mut writer, &open_syn_property)
-//             .map_err(|_| zerror!("Error in encoding OpenSyn for UsrPwd on link: {}", link))?;
-//         let attachment = wbuf;
-
-//         Ok(Some(attachment))
-//     }
-
-//     async fn handle_open_syn(
-//         &self,
-//         link: &AuthenticatedLink,
-//         cookie: &Cookie,
-//         property: (Option<Vec<u8>>, Option<Vec<u8>>),
-//     ) -> ZResult<Option<Vec<u8>>> {
-//         let (attachment, _cookie) = property;
-//         let a = attachment.ok_or_else(|| {
-//             zerror!(
-//                 "Received OpenSyn with no UsrPwd attachment on link: {}",
-//                 link
-//             )
-//         })?;
-
-//         let codec = Zenoh080::new();
-
-//         let mut reader = a.reader();
-//         let open_syn_property: OpenSynProperty = codec.read(&mut reader).map_err(|_| {
-//             zerror!(
-//                 "Received OpenSyn with invalid UsrPwd attachment on link: {}",
-//                 link
-//             )
-//         })?;
-//         let password = match zasyncread!(self.lookup).get(&open_syn_property.user) {
-//             Some(password) => password.clone(),
-//             None => bail!("Received OpenSyn with invalid user on link: {}", link),
-//         };
-
-//         // Create the HMAC of the password using the nonce received as challenge
-//         let key = cookie.nonce.to_le_bytes();
-//         let hmac = hmac::sign(&key, &password)?;
-//         if hmac != open_syn_property.hmac {
-//             bail!("Received OpenSyn with invalid password on link: {}", link)
-//         }
-
-//         // Check PID validity
-//         let mut guard = zasynclock!(self.authenticated);
-//         match guard.get_mut(&cookie.zid) {
-//             Some(auth) => {
-//                 if open_syn_property.user != auth.credentials.user
-//                     || password != auth.credentials.password
-//                 {
-//                     bail!("Received OpenSyn with invalid password on link: {}", link)
-//                 }
-//                 auth.links.insert((link.src.clone(), link.dst.clone()));
-//             }
-//             None => {
-//                 let credentials = Credentials {
-//                     user: open_syn_property.user,
-//                     password,
-//                 };
-//                 let mut links = HashSet::new();
-//                 links.insert((link.src.clone(), link.dst.clone()));
-//                 let auth = Authenticated { credentials, links };
-//                 guard.insert(cookie.zid, auth);
-//             }
-//         }
-
-//         Ok(None)
-//     }
-
-//     async fn handle_open_ack(
-//         &self,
-//         _link: &AuthenticatedLink,
-//         _property: Option<Vec<u8>>,
-//     ) -> ZResult<Option<Vec<u8>>> {
-//         Ok(None)
-//     }
-
-//     async fn handle_link_err(&self, link: &AuthenticatedLink) {
-//         // Need to check if it authenticated and remove it if this is the last link
-//         let mut guard = zasynclock!(self.authenticated);
-//         let mut to_del: Option<ZenohId> = None;
-//         for (node_id, auth) in guard.iter_mut() {
-//             auth.links.remove(&(link.src.clone(), link.dst.clone()));
-//             if auth.links.is_empty() {
-//                 to_del = Some(*node_id);
-//                 break;
-//             }
-//         }
-//         if let Some(node_id) = to_del.take() {
-//             guard.remove(&node_id);
-//         }
-//     }
-
-//     async fn handle_close(&self, node_id: &ZenohId) {
-//         zasynclock!(self.authenticated).remove(node_id);
-//     }
-// }
-
-// //noinspection ALL
-// impl From<Arc<UserPasswordAuthenticator>> for TransportAuthenticator {
-//     fn from(v: Arc<UserPasswordAuthenticator>) -> TransportAuthenticator {
-//         TransportAuthenticator(v)
-//     }
-// }
-
-// impl From<UserPasswordAuthenticator> for TransportAuthenticator {
-//     fn from(v: UserPasswordAuthenticator) -> TransportAuthenticator {
-//         Self::from(Arc::new(v))
-//     }
-// }

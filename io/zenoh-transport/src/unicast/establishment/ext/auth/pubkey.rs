@@ -14,673 +14,618 @@
 // use super::{
 //     AuthenticatedLink, TransportAuthenticator, TransportAuthenticatorTrait, ZNodeAuthenticatorId,
 // };
-// use crate::unicast::establishment::Cookie;
-// use async_std::sync::Mutex;
-// use async_trait::async_trait;
-// use rand::SeedableRng;
-// use rsa::pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey};
-// use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
-// use std::collections::HashMap;
-// use std::ops::Deref;
-// use std::path::Path;
-// use std::sync::Arc;
-// use zenoh_buffers::{
-//     reader::{DidntRead, HasReader, Reader},
-//     writer::{DidntWrite, HasWriter, Writer},
-// };
-// use zenoh_cfg_properties::config::ZN_AUTH_RSA_KEY_SIZE_DEFAULT;
-// use zenoh_codec::{RCodec, WCodec, Zenoh080};
-// use zenoh_config::Config;
-// use zenoh_core::{zasynclock, zparse};
-// use zenoh_crypto::PseudoRng;
-// use zenoh_protocol::core::{ZInt, ZenohId};
-// use zenoh_result::{bail, zerror, ZResult};
+use async_std::sync::Mutex;
+use async_trait::async_trait;
+use rand::{CryptoRng, Rng};
+use rsa::pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey};
+use rsa::{BigUint, Pkcs1v15Encrypt, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
+use std::collections::HashSet;
+use std::ops::Deref;
+use std::path::Path;
+use zenoh_buffers::{
+    reader::{DidntRead, HasReader, Reader},
+    writer::{DidntWrite, HasWriter, Writer},
+};
+use zenoh_codec::{RCodec, WCodec, Zenoh080};
+use zenoh_config::PubKeyConf;
+use zenoh_core::{bail, zasynclock, zerror, Error as ZError, Result as ZResult};
+use zenoh_crypto::PseudoRng;
+use zenoh_protocol::common::{ZExtUnit, ZExtZBuf};
+use zenoh_protocol::core::ZInt;
 
-// const MULTILINK_VERSION: ZInt = 1;
+use crate::establishment::{AcceptFsm, OpenFsm};
 
-// /// # Attachment decorator
-// ///
-// /// ```text
-// /// The Attachment can decorate any message (i.e., TransportMessage and ZenohMessage) and it allows to
-// /// append to the message any additional information. Since the information contained in the
-// /// Attachement is relevant only to the layer that provided them (e.g., Transport, Zenoh, User) it
-// /// is the duty of that layer to serialize and de-serialize the attachment whenever deemed necessary.
-// ///
-// ///  7 6 5 4 3 2 1 0
-// /// +-+-+-+-+-+-+-+-+
-// /// | ENC |  ATTCH  |
-// /// +-+-+-+---------+
-// /// ~   Attachment  ~
-// /// +---------------+
-// ///
-// /// ENC values:
-// /// - 0x00 => Zenoh Properties
-// /// ```
-// #[repr(transparent)]
-// #[derive(Debug, Clone, PartialEq, Eq)]
-// pub struct ZPublicKey(RsaPublicKey);
+const KEY_SIZE: usize = 512;
 
-// impl Deref for ZPublicKey {
-//     type Target = RsaPublicKey;
+// Authenticator
+#[derive(Debug)]
+pub struct AuthPubKey {
+    lookup: HashSet<ZPublicKey>,
+    pub_key: ZPublicKey,
+    pri_key: ZPrivateKey,
+}
 
-//     fn deref(&self) -> &Self::Target {
-//         &self.0
-//     }
-// }
+impl AuthPubKey {
+    pub fn new(pub_key: ZPublicKey, pri_key: ZPrivateKey) -> Self {
+        Self {
+            lookup: HashSet::new(),
+            pub_key,
+            pri_key,
+        }
+    }
 
-// impl From<RsaPublicKey> for ZPublicKey {
-//     fn from(x: RsaPublicKey) -> Self {
-//         Self(x)
-//     }
-// }
+    pub fn make<R>(rng: &mut R) -> ZResult<Self>
+    where
+        R: Rng + CryptoRng,
+    {
+        let pri_key = RsaPrivateKey::new(rng, KEY_SIZE)?;
+        let pub_key = RsaPublicKey::from(&pri_key);
+        Ok(Self::new(pub_key.into(), pri_key.into()))
+    }
 
-// #[repr(transparent)]
-// #[derive(Debug, Clone, PartialEq, Eq)]
-// pub struct ZPrivateKey(RsaPrivateKey);
+    pub async fn add_pubkey(&mut self, pub_key: ZPublicKey) -> ZResult<()> {
+        self.lookup.insert(pub_key);
+        Ok(())
+    }
 
-// impl Deref for ZPrivateKey {
-//     type Target = RsaPrivateKey;
+    pub async fn del_pubkey(&mut self, pub_key: &ZPublicKey) -> ZResult<()> {
+        self.lookup.remove(pub_key);
+        Ok(())
+    }
 
-//     fn deref(&self) -> &Self::Target {
-//         &self.0
-//     }
-// }
+    pub async fn from_config(config: &PubKeyConf) -> ZResult<Option<Self>> {
+        const S: &str = "PubKey extension - From config.";
 
-// impl From<RsaPrivateKey> for ZPrivateKey {
-//     fn from(x: RsaPrivateKey) -> Self {
-//         Self(x)
-//     }
-// }
+        // First, check if PEM keys are provided
+        match (config.public_key_pem(), config.private_key_pem()) {
+            (Some(public), Some(private)) => {
+                let pub_key = RsaPublicKey::from_pkcs1_pem(public)
+                    .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?;
+                let pri_key = RsaPrivateKey::from_pkcs1_pem(private)
+                    .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?;
+                return Ok(Some(Self::new(pub_key.into(), pri_key.into())));
+            }
+            (Some(_), None) => {
+                bail!("{S} Missing Rsa Private Key: PEM.")
+            }
+            (None, Some(_)) => {
+                bail!("{S} Missing Rsa Public Key: PEM.")
+            }
+            (None, None) => {}
+        }
 
-// impl<W> WCodec<&ZPublicKey, &mut W> for Zenoh080
-// where
-//     W: Writer,
-// {
-//     type Output = Result<(), DidntWrite>;
+        // Second, check if PEM files are provided
+        match (config.public_key_file(), config.private_key_file()) {
+            (Some(public), Some(private)) => {
+                let path = Path::new(public);
+                let pub_key = RsaPublicKey::read_pkcs1_pem_file(path)
+                    .map_err(|e| zerror!("{} Rsa Public Key: {}.", S, e))?;
+                let path = Path::new(private);
+                let pri_key = RsaPrivateKey::read_pkcs1_pem_file(path)
+                    .map_err(|e| zerror!("{} Rsa Private Key: {}.", S, e))?;
+                return Ok(Some(Self::new(pub_key.into(), pri_key.into())));
+            }
+            (Some(_), None) => {
+                bail!("{S} Missing Rsa Private Key: file.")
+            }
+            (None, Some(_)) => {
+                bail!("{S} Missing Rsa Public Key: file.")
+            }
+            (None, None) => {}
+        }
 
-//     fn write(self, writer: &mut W, x: &ZPublicKey) -> Self::Output {
-//         self.write(&mut *writer, x.n().to_bytes_le().as_slice())?;
-//         self.write(&mut *writer, x.e().to_bytes_le().as_slice())?;
-//         Ok(())
-//     }
-// }
+        // @TODO: populate lookup file
 
-// impl<R> RCodec<ZPublicKey, &mut R> for Zenoh080
-// where
-//     R: Reader,
-// {
-//     type Error = DidntRead;
+        Ok(None)
+    }
+}
 
-//     fn read(self, reader: &mut R) -> Result<ZPublicKey, Self::Error> {
-//         let n: Vec<u8> = self.read(&mut *reader)?;
-//         let n = BigUint::from_bytes_le(n.as_slice());
-//         let e: Vec<u8> = self.read(&mut *reader)?;
-//         let e = BigUint::from_bytes_le(e.as_slice());
-//         let rsa = RsaPublicKey::new(n, e).map_err(|_| DidntRead)?;
+#[repr(transparent)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ZPublicKey(RsaPublicKey);
 
-//         Ok(ZPublicKey(rsa))
-//     }
-// }
+impl Deref for ZPublicKey {
+    type Target = RsaPublicKey;
 
-// /*************************************/
-// /*             InitSyn               */
-// /*************************************/
-// ///  7 6 5 4 3 2 1 0
-// /// +-+-+-+-+-+-+-+-+
-// /// |0 0 0|  ATTCH  |
-// /// +-+-+-+---------+
-// /// ~    version    ~
-// /// +---------------+
-// /// ~  public key   ~
-// /// +---------------+
-// struct InitSynProperty {
-//     version: ZInt,
-//     alice_pubkey: ZPublicKey,
-// }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
-// impl<W> WCodec<&InitSynProperty, &mut W> for Zenoh080
-// where
-//     W: Writer,
-// {
-//     type Output = Result<(), DidntWrite>;
+impl From<RsaPublicKey> for ZPublicKey {
+    fn from(x: RsaPublicKey) -> Self {
+        Self(x)
+    }
+}
 
-//     fn write(self, writer: &mut W, x: &InitSynProperty) -> Self::Output {
-//         self.write(&mut *writer, x.version)?;
-//         self.write(&mut *writer, &x.alice_pubkey)?;
-//         Ok(())
-//     }
-// }
+#[repr(transparent)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ZPrivateKey(RsaPrivateKey);
 
-// impl<R> RCodec<InitSynProperty, &mut R> for Zenoh080
-// where
-//     R: Reader,
-// {
-//     type Error = DidntRead;
+impl Deref for ZPrivateKey {
+    type Target = RsaPrivateKey;
 
-//     fn read(self, reader: &mut R) -> Result<InitSynProperty, Self::Error> {
-//         let version: ZInt = self.read(&mut *reader)?;
-//         let alice_pubkey: ZPublicKey = self.read(&mut *reader)?;
-//         Ok(InitSynProperty {
-//             version,
-//             alice_pubkey,
-//         })
-//     }
-// }
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
-// /*************************************/
-// /*             InitAck               */
-// /*************************************/
-// ///  7 6 5 4 3 2 1 0
-// /// +-+-+-+-+-+-+-+-+
-// /// |0 0 0|  ATTCH  |
-// /// +-+-+-+---------+
-// /// ~  public key   ~
-// /// +---------------+
-// /// ~ ciphered nonce~
-// /// +---------------+
-// struct InitAckProperty {
-//     bob_pubkey: ZPublicKey,
-//     nonce_encrypted_with_alice_pubkey: Vec<u8>,
-// }
+impl From<RsaPrivateKey> for ZPrivateKey {
+    fn from(x: RsaPrivateKey) -> Self {
+        Self(x)
+    }
+}
 
-// impl<W> WCodec<&InitAckProperty, &mut W> for Zenoh080
-// where
-//     W: Writer,
-// {
-//     type Output = Result<(), DidntWrite>;
+impl<W> WCodec<&ZPublicKey, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
 
-//     fn write(self, writer: &mut W, x: &InitAckProperty) -> Self::Output {
-//         self.write(&mut *writer, &x.bob_pubkey)?;
-//         self.write(&mut *writer, x.nonce_encrypted_with_alice_pubkey.as_slice())?;
-//         Ok(())
-//     }
-// }
+    fn write(self, writer: &mut W, x: &ZPublicKey) -> Self::Output {
+        self.write(&mut *writer, x.n().to_bytes_le().as_slice())?;
+        self.write(&mut *writer, x.e().to_bytes_le().as_slice())?;
+        Ok(())
+    }
+}
 
-// impl<R> RCodec<InitAckProperty, &mut R> for Zenoh080
-// where
-//     R: Reader,
-// {
-//     type Error = DidntRead;
+impl<R> RCodec<ZPublicKey, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
 
-//     fn read(self, reader: &mut R) -> Result<InitAckProperty, Self::Error> {
-//         let bob_pubkey: ZPublicKey = self.read(&mut *reader)?;
-//         let nonce_encrypted_with_alice_pubkey: Vec<u8> = self.read(&mut *reader)?;
-//         Ok(InitAckProperty {
-//             bob_pubkey,
-//             nonce_encrypted_with_alice_pubkey,
-//         })
-//     }
-// }
+    fn read(self, reader: &mut R) -> Result<ZPublicKey, Self::Error> {
+        let n: Vec<u8> = self.read(&mut *reader)?;
+        let n = BigUint::from_bytes_le(n.as_slice());
+        let e: Vec<u8> = self.read(&mut *reader)?;
+        let e = BigUint::from_bytes_le(e.as_slice());
+        let rsa = RsaPublicKey::new(n, e).map_err(|_| DidntRead)?;
 
-// /*************************************/
-// /*             OpenSyn               */
-// /*************************************/
-// ///  7 6 5 4 3 2 1 0
-// /// +-+-+-+-+-+-+-+-+
-// /// |0 0 0|  ATTCH  |
-// /// +-+-+-+---------+
-// /// ~ ciphered nonce~
-// /// +---------------+
-// struct OpenSynProperty {
-//     nonce_encrypted_with_bob_pubkey: Vec<u8>,
-// }
-
-// impl<W> WCodec<&OpenSynProperty, &mut W> for Zenoh080
-// where
-//     W: Writer,
-// {
-//     type Output = Result<(), DidntWrite>;
-
-//     fn write(self, writer: &mut W, x: &OpenSynProperty) -> Self::Output {
-//         self.write(&mut *writer, x.nonce_encrypted_with_bob_pubkey.as_slice())?;
-//         Ok(())
-//     }
-// }
-
-// impl<R> RCodec<OpenSynProperty, &mut R> for Zenoh080
-// where
-//     R: Reader,
-// {
-//     type Error = DidntRead;
-
-//     fn read(self, reader: &mut R) -> Result<OpenSynProperty, Self::Error> {
-//         let nonce_encrypted_with_bob_pubkey: Vec<u8> = self.read(&mut *reader)?;
-//         Ok(OpenSynProperty {
-//             nonce_encrypted_with_bob_pubkey,
-//         })
-//     }
-// }
+        Ok(ZPublicKey(rsa))
+    }
+}
 
 /*************************************/
-/*          Authenticator            */
-// /*************************************/
-// struct InnerState {
-//     prng: PseudoRng,
-//     known_keys: Option<Vec<ZPublicKey>>,
-//     authenticated: HashMap<ZenohId, Option<ZPublicKey>>,
-// }
+/*             InitSyn               */
+/*************************************/
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// ~  public key   ~
+/// +---------------+
+///
+/// ZExtZBuf
+struct InitSyn {
+    alice_pubkey: ZPublicKey,
+}
 
-// pub struct PubKeyAuthenticator {
-//     pub_key: ZPublicKey,
-//     pri_key: ZPrivateKey,
-//     state: Mutex<InnerState>,
-// }
+impl<W> WCodec<&InitSyn, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
 
-// impl PubKeyAuthenticator {
-//     pub fn new<T, U>(pub_key: T, pri_key: U) -> PubKeyAuthenticator
-//     where
-//         T: Into<ZPublicKey>,
-//         U: Into<ZPrivateKey>,
-//     {
-//         PubKeyAuthenticator {
-//             pub_key: pub_key.into(),
-//             pri_key: pri_key.into(),
-//             state: Mutex::new(InnerState {
-//                 prng: PseudoRng::from_entropy(),
-//                 known_keys: None,
-//                 authenticated: HashMap::new(),
-//             }),
-//         }
-//     }
+    fn write(self, writer: &mut W, x: &InitSyn) -> Self::Output {
+        self.write(&mut *writer, &x.alice_pubkey)?;
+        Ok(())
+    }
+}
 
-//     pub fn make() -> ZResult<PubKeyAuthenticator> {
-//         let mut prng = PseudoRng::from_entropy();
-//         let bits = zparse!(ZN_AUTH_RSA_KEY_SIZE_DEFAULT)?;
-//         let pri_key = RsaPrivateKey::new(&mut prng, bits)?;
-//         let pub_key = RsaPublicKey::from(&pri_key);
+impl<R> RCodec<InitSyn, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
 
-//         let pka = PubKeyAuthenticator {
-//             pub_key: pub_key.into(),
-//             pri_key: pri_key.into(),
-//             state: Mutex::new(InnerState {
-//                 prng,
-//                 known_keys: None,
-//                 authenticated: HashMap::new(),
-//             }),
-//         };
-//         Ok(pka)
-//     }
+    fn read(self, reader: &mut R) -> Result<InitSyn, Self::Error> {
+        let alice_pubkey: ZPublicKey = self.read(&mut *reader)?;
+        Ok(InitSyn { alice_pubkey })
+    }
+}
 
-//     pub async fn add_key(&self, key: ZPublicKey) -> ZResult<()> {
-//         let mut guard = zasynclock!(self.state);
-//         match guard.known_keys.as_mut() {
-//             Some(kk) => {
-//                 if !kk.iter().any(|x| x == &key) {
-//                     kk.push(key);
-//                 }
-//             }
-//             None => {
-//                 let hs = vec![key];
-//                 guard.known_keys = Some(hs);
-//             }
-//         }
-//         Ok(())
-//     }
+/*************************************/
+/*             InitAck               */
+/*************************************/
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// ~  public key   ~
+/// +---------------+
+/// ~ ciphered nonce~
+/// +---------------+
+///
+/// ZExtZBuf
+struct InitAck {
+    bob_pubkey: ZPublicKey,
+    nonce_encrypted_with_alice_pubkey: Vec<u8>,
+}
 
-//     pub async fn del_key(&self, key: &ZPublicKey) -> ZResult<()> {
-//         let mut guard = zasynclock!(self.state);
-//         if let Some(kk) = guard.known_keys.as_mut() {
-//             if let Some(i) = kk.iter().position(|x| x == key) {
-//                 kk.remove(i);
-//             }
-//         }
-//         Ok(())
-//     }
+impl<W> WCodec<&InitAck, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
 
-//     pub async fn from_config(config: &Config) -> ZResult<Option<PubKeyAuthenticator>> {
-//         let c = config.transport().auth().pubkey();
+    fn write(self, writer: &mut W, x: &InitAck) -> Self::Output {
+        self.write(&mut *writer, &x.bob_pubkey)?;
+        self.write(&mut *writer, x.nonce_encrypted_with_alice_pubkey.as_slice())?;
+        Ok(())
+    }
+}
 
-//         // @TODO: support PubKey keys import
+impl<R> RCodec<InitAck, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
 
-//         // First, check if PEM keys are provided
-//         match (c.public_key_pem(), c.private_key_pem()) {
-//             (Some(public), Some(private)) => {
-//                 let pub_key = RsaPublicKey::from_pkcs1_pem(public)
-//                     .map_err(|e| zerror!("Rsa Public Key: {}", e))?;
-//                 let pri_key = RsaPrivateKey::from_pkcs1_pem(private)
-//                     .map_err(|e| zerror!("Rsa Private Key: {}", e))?;
-//                 return Ok(Some(Self::new(pub_key, pri_key)));
-//             }
-//             (Some(_), None) => {
-//                 bail!("Missing Rsa Private Key: PEM")
-//             }
-//             (None, Some(_)) => {
-//                 bail!("Missing Rsa Public Key: PEM")
-//             }
-//             (None, None) => {}
-//         }
+    fn read(self, reader: &mut R) -> Result<InitAck, Self::Error> {
+        let bob_pubkey: ZPublicKey = self.read(&mut *reader)?;
+        let nonce_encrypted_with_alice_pubkey: Vec<u8> = self.read(&mut *reader)?;
+        Ok(InitAck {
+            bob_pubkey,
+            nonce_encrypted_with_alice_pubkey,
+        })
+    }
+}
 
-//         // Second, check if PEM files are provided
-//         match (c.public_key_file(), c.private_key_file()) {
-//             (Some(public), Some(private)) => {
-//                 let path = Path::new(public);
-//                 let pub_key = RsaPublicKey::read_pkcs1_pem_file(path)
-//                     .map_err(|e| zerror!("Rsa Public Key: {}", e))?;
-//                 let path = Path::new(private);
-//                 let pri_key = RsaPrivateKey::read_pkcs1_pem_file(path)
-//                     .map_err(|e| zerror!("Rsa Private Key: {}", e))?;
-//                 return Ok(Some(Self::new(pub_key, pri_key)));
-//             }
-//             (Some(_), None) => {
-//                 bail!("Missing Rsa Private Key: file")
-//             }
-//             (None, Some(_)) => {
-//                 bail!("Missing Rsa Public Key: file")
-//             }
-//             (None, None) => {}
-//         }
+/*************************************/
+/*             OpenSyn               */
+/*************************************/
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// ~ ciphered nonce~
+/// +---------------+
+///
+/// ZExtZBuf
+struct OpenSyn {
+    nonce_encrypted_with_bob_pubkey: Vec<u8>,
+}
 
-//         Ok(None)
-//     }
-// }
+impl<W> WCodec<&OpenSyn, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
 
-// #[async_trait]
-// impl TransportAuthenticatorTrait for PubKeyAuthenticator {
-//     fn id(&self) -> ZNodeAuthenticatorId {
-//         ZNodeAuthenticatorId::PublicKey
-//     }
+    fn write(self, writer: &mut W, x: &OpenSyn) -> Self::Output {
+        self.write(&mut *writer, x.nonce_encrypted_with_bob_pubkey.as_slice())?;
+        Ok(())
+    }
+}
 
-//     async fn close(&self) {
-//         // No cleanup needed
-//     }
+impl<R> RCodec<OpenSyn, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
 
-//     async fn get_init_syn_properties(
-//         &self,
-//         link: &AuthenticatedLink,
-//         _node_id: &ZenohId,
-//     ) -> ZResult<Option<Vec<u8>>> {
-//         let init_syn_property = InitSynProperty {
-//             version: MULTILINK_VERSION,
-//             alice_pubkey: self.pub_key.clone(),
-//         };
+    fn read(self, reader: &mut R) -> Result<OpenSyn, Self::Error> {
+        let nonce_encrypted_with_bob_pubkey: Vec<u8> = self.read(&mut *reader)?;
+        Ok(OpenSyn {
+            nonce_encrypted_with_bob_pubkey,
+        })
+    }
+}
 
-//         let mut wbuf = vec![];
-//         let codec = Zenoh080::new();
-//         let mut writer = wbuf.writer();
-//         codec
-//             .write(&mut writer, &init_syn_property)
-//             .map_err(|_| zerror!("Error in encoding InitSyn for PubKey on link: {}", link))?;
+/*************************************/
+/*             OpenAck               */
+/*************************************/
+///  7 6 5 4 3 2 1 0
+/// +-+-+-+-+-+-+-+-+
+/// +---------------+
+///
+/// ZExtUnit
 
-//         Ok(Some(wbuf))
-//     }
+pub(crate) struct AuthPubKeyFsm<'a> {
+    inner: &'a AuthPubKey,
+    prng: &'a Mutex<PseudoRng>,
+}
 
-//     async fn handle_init_syn(
-//         &self,
-//         link: &AuthenticatedLink,
-//         cookie: &Cookie,
-//         property: Option<Vec<u8>>,
-//     ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)> {
-//         match property {
-//             // The connecting zenoh peer wants to do multilink
-//             Some(pk) => {
-//                 // Decode the multilink attachment
-//                 let mut reader = pk.reader();
-//                 let codec = Zenoh080::new();
+impl<'a> AuthPubKeyFsm<'a> {
+    pub(super) const fn new(inner: &'a AuthPubKey, prng: &'a Mutex<PseudoRng>) -> Self {
+        Self { inner, prng }
+    }
+}
 
-//                 let init_syn_property: InitSynProperty = codec.read(&mut reader).map_err(|_| {
-//                     zerror!(
-//                         "Received InitSyn with invalid PubKey attachment on link: {}",
-//                         link
-//                     )
-//                 })?;
+/*************************************/
+/*              OPEN                 */
+/*************************************/
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct StateOpen {
+    nonce: Vec<u8>,
+}
 
-//                 // Check if we are compatible
-//                 if init_syn_property.version != MULTILINK_VERSION {
-//                     bail!("PubKey version not supported on link: {}", link);
-//                 }
+impl StateOpen {
+    pub(crate) const fn new() -> Self {
+        Self { nonce: vec![] }
+    }
+}
 
-//                 // Check if the peer is already present
-//                 let mut guard = zasynclock!(self.state);
-//                 match guard.authenticated.get(&cookie.zid) {
-//                     Some(alice_pubkey) => {
-//                         // Check if the public key is the same
-//                         match alice_pubkey.as_ref() {
-//                             Some(apk) => {
-//                                 // Check if pub key is used consistently
-//                                 if apk != &init_syn_property.alice_pubkey {
-//                                     bail!("Invalid multilink PubKey on link: {}", link);
-//                                 }
-//                             }
-//                             None => {
-//                                 // The peer is already present but no previous multilink intereset
-//                                 // was declared. Rejecting for inconsistent declaration.
-//                                 bail!("Unexpected multilink PubKey on link: {}", link);
-//                             }
-//                         }
-//                     }
-//                     None => {
-//                         // It's the first time we see this peer, check if it is authorized it
-//                         if let Some(kk) = guard.known_keys.as_ref() {
-//                             if !kk.iter().any(|x| x == &init_syn_property.alice_pubkey) {
-//                                 // The peer is already present but no previous multilink intereset
-//                                 // was declared. Rejecting for inconsistent declaration.
-//                                 bail!("Unauthorized multilink PubKey on link: {}", link);
-//                             }
-//                         }
+#[async_trait]
+impl<'a> OpenFsm for AuthPubKeyFsm<'a> {
+    type Error = ZError;
 
-//                         guard
-//                             .authenticated
-//                             .insert(cookie.zid, Some(init_syn_property.alice_pubkey.clone()));
-//                     }
-//                 }
+    type SendInitSynIn = &'a StateOpen;
+    type SendInitSynOut = Option<ZExtZBuf<{ super::id::PUBKEY }>>;
+    async fn send_init_syn(
+        &self,
+        _input: Self::SendInitSynIn,
+    ) -> Result<Self::SendInitSynOut, Self::Error> {
+        const S: &str = "PubKey extension - Send InitSyn.";
+        log::trace!("{S}");
 
-//                 // Create the InitAck attachment
-//                 let codec = Zenoh080::new();
+        let init_syn = InitSyn {
+            alice_pubkey: self.inner.pub_key.clone(),
+        };
 
-//                 let mut wbuf = vec![];
-//                 let mut writer = wbuf.writer();
-//                 codec.write(&mut writer, cookie.nonce).map_err(|_| {
-//                     zerror!("Error in encoding InitAck for PubKey on link: {}", link)
-//                 })?;
+        let codec = Zenoh080::new();
+        let mut buff = vec![];
+        let mut writer = buff.writer();
+        codec
+            .write(&mut writer, &init_syn)
+            .map_err(|_| zerror!("{S} Encoding error."))?;
 
-//                 let nonce_bytes = wbuf;
-//                 let nonce_encrypted_with_alice_pubkey = init_syn_property.alice_pubkey.encrypt(
-//                     &mut guard.prng,
-//                     PaddingScheme::PKCS1v15Encrypt,
-//                     nonce_bytes.as_slice(),
-//                 )?;
+        Ok(Some(ZExtZBuf::new(buff.into())))
+    }
 
-//                 let init_ack_property = InitAckProperty {
-//                     bob_pubkey: self.pub_key.clone(),
-//                     nonce_encrypted_with_alice_pubkey,
-//                 };
+    type RecvInitAckIn = (&'a mut StateOpen, Option<ZExtZBuf<{ super::id::PUBKEY }>>);
+    type RecvInitAckOut = ();
+    async fn recv_init_ack(
+        &self,
+        input: Self::RecvInitAckIn,
+    ) -> Result<Self::RecvInitAckOut, Self::Error> {
+        const S: &str = "PubKey extension - Recv InitAck.";
+        log::trace!("{S}");
 
-//                 // Store the public key in the cookie
-//                 let mut wbuf = vec![];
-//                 let mut writer = wbuf.writer();
-//                 codec
-//                     .write(&mut writer, &init_syn_property.alice_pubkey)
-//                     .map_err(|_| {
-//                         zerror!("Error in encoding InitAck for PubKey on link: {}", link)
-//                     })?;
-//                 let cookie = wbuf;
+        let (state, mut ext) = input;
 
-//                 // Encode the InitAck property
-//                 let mut wbuf = vec![];
-//                 let mut writer = wbuf.writer();
-//                 codec.write(&mut writer, &init_ack_property).map_err(|_| {
-//                     zerror!("Error in encoding InitAck for PubKey on link: {}", link)
-//                 })?;
-//                 let attachment = wbuf;
+        let ext = ext
+            .take()
+            .ok_or_else(|| zerror!("{S} Missing PubKey extension."))?;
 
-//                 Ok((Some(attachment), Some(cookie)))
-//             }
-//             // The connecting zenoh peer does not want to do multilink
-//             None => {
-//                 let guard = zasynclock!(self.state);
-//                 if guard.authenticated.get(&cookie.zid).is_some() {
-//                     // The peer is already present but no multilink intereset is declared.
-//                     // Rejecting for inconsistent declaration.
-//                     bail!("No multilink supported on link: {}", link);
-//                 }
+        let codec = Zenoh080::new();
+        let mut reader = ext.value.reader();
+        let init_ack: InitAck = codec
+            .read(&mut reader)
+            .map_err(|_| zerror!("{S} Decoding error."))?;
 
-//                 // No properties need to be included in the InitAck attachment
-//                 Ok((None, None))
-//             }
-//         }
-//     }
+        if !self.inner.lookup.is_empty() && !self.inner.lookup.contains(&init_ack.bob_pubkey) {
+            bail!("{S} Unauthorized PubKey.");
+        }
 
-//     async fn handle_init_ack(
-//         &self,
-//         link: &AuthenticatedLink,
-//         _node_id: &ZenohId,
-//         _sn_resolution: ZInt,
-//         property: Option<Vec<u8>>,
-//     ) -> ZResult<Option<Vec<u8>>> {
-//         let pk = match property {
-//             Some(pk) => pk,
-//             None => return Ok(None),
-//         };
+        let mut prng = zasynclock!(self.prng);
+        let nonce = self
+            .inner
+            .pri_key
+            .decrypt_blinded(
+                &mut *prng,
+                Pkcs1v15Encrypt,
+                init_ack.nonce_encrypted_with_alice_pubkey.as_slice(),
+            )
+            .map_err(|_| zerror!("{S} Decryption error."))?;
 
-//         let codec = Zenoh080::new();
+        state.nonce = init_ack
+            .bob_pubkey
+            .encrypt(&mut *prng, Pkcs1v15Encrypt, nonce.as_slice())?;
 
-//         let mut reader = pk.reader();
-//         let init_ack_property: InitAckProperty = codec.read(&mut reader).map_err(|_| {
-//             zerror!(
-//                 "Received InitAck with invalid PubKey attachment on link: {}",
-//                 link
-//             )
-//         })?;
-//         let nonce = self.pri_key.decrypt(
-//             PaddingScheme::PKCS1v15Encrypt,
-//             init_ack_property
-//                 .nonce_encrypted_with_alice_pubkey
-//                 .as_slice(),
-//         )?;
+        Ok(())
+    }
 
-//         // Create the OpenSyn attachment
-//         let mut guard = zasynclock!(self.state);
-//         let nonce_encrypted_with_bob_pubkey = init_ack_property.bob_pubkey.encrypt(
-//             &mut guard.prng,
-//             PaddingScheme::PKCS1v15Encrypt,
-//             &nonce[..],
-//         )?;
-//         drop(guard);
+    type SendOpenSynIn = &'a StateOpen;
+    type SendOpenSynOut = Option<ZExtZBuf<{ super::id::PUBKEY }>>;
+    async fn send_open_syn(
+        &self,
+        state: Self::SendOpenSynIn,
+    ) -> Result<Self::SendOpenSynOut, Self::Error> {
+        const S: &str = "PubKey extension - Send OpenSyn.";
+        log::trace!("{S}");
 
-//         let open_syn_property = OpenSynProperty {
-//             nonce_encrypted_with_bob_pubkey,
-//         };
+        let open_syn = OpenSyn {
+            nonce_encrypted_with_bob_pubkey: state.nonce.clone(),
+        };
 
-//         // Encode the OpenSyn property
-//         let mut wbuf = vec![];
-//         let mut writer = wbuf.writer();
-//         codec
-//             .write(&mut writer, &open_syn_property)
-//             .map_err(|_| zerror!("Error in encoding OpenSyn for PubKey on link: {}", link))?;
-//         let attachment = wbuf;
+        let codec = Zenoh080::new();
+        let mut buff = vec![];
+        let mut writer = buff.writer();
+        codec
+            .write(&mut writer, &open_syn)
+            .map_err(|_| zerror!("{S} Encoding error."))?;
 
-//         Ok(Some(attachment))
-//     }
+        Ok(Some(ZExtZBuf::new(buff.into())))
+    }
 
-//     async fn handle_open_syn(
-//         &self,
-//         link: &AuthenticatedLink,
-//         cookie: &Cookie,
-//         property: (Option<Vec<u8>>, Option<Vec<u8>>),
-//     ) -> ZResult<Option<Vec<u8>>> {
-//         match property {
-//             (Some(att), Some(cke)) => {
-//                 let codec = Zenoh080::new();
+    type RecvOpenAckIn = (&'a mut StateOpen, Option<ZExtUnit<{ super::id::PUBKEY }>>);
+    type RecvOpenAckOut = ();
+    async fn recv_open_ack(
+        &self,
+        input: Self::RecvOpenAckIn,
+    ) -> Result<Self::RecvOpenAckOut, Self::Error> {
+        const S: &str = "PubKey extension - Recv OpenAck.";
 
-//                 let mut reader = att.reader();
-//                 let open_syn_property: OpenSynProperty = codec.read(&mut reader).map_err(|_| {
-//                     zerror!(
-//                         "Received OpenSyn with invalid PubKey attachment on link: {}",
-//                         link
-//                     )
-//                 })?;
+        let (_, ext) = input;
+        if ext.is_none() {
+            bail!("{S} Expected extension.");
+        }
 
-//                 let nonce_bytes = self.pri_key.decrypt(
-//                     PaddingScheme::PKCS1v15Encrypt,
-//                     open_syn_property.nonce_encrypted_with_bob_pubkey.as_slice(),
-//                 )?;
-//                 let mut reader = nonce_bytes.reader();
-//                 let nonce: ZInt = codec.read(&mut reader).map_err(|_| {
-//                     zerror!(
-//                         "Received OpenSyn with invalid PubKey attachment on link: {}",
-//                         link
-//                     )
-//                 })?;
+        Ok(())
+    }
+}
 
-//                 if nonce != cookie.nonce {
-//                     bail!("Received invalid nonce on link: {}", link);
-//                 }
+/*************************************/
+/*            ACCEPT                 */
+/*************************************/
 
-//                 let mut reader = cke.reader();
-//                 let alice_pubkey: ZPublicKey = codec.read(&mut reader).map_err(|_| {
-//                     zerror!(
-//                         "Received OpenSyn with invalid PubKey attachment on link: {}",
-//                         link
-//                     )
-//                 })?;
+#[derive(Debug)]
+pub(crate) struct StateAccept {
+    nonce: Vec<u8>,
+    challenge: ZInt,
+}
 
-//                 let mut guard = zasynclock!(self.state);
-//                 match guard.authenticated.get(&cookie.zid) {
-//                     Some(apk) => match apk {
-//                         Some(apk) => {
-//                             // Check if the public key is still correct
-//                             if apk != &alice_pubkey {
-//                                 bail!("Invalid multilink pub key on link: {}", link);
-//                             }
-//                         }
-//                         None => {
-//                             // The peer did not previously express interest in multilink
-//                             bail!("Invalid multilink pub key on link: {}", link);
-//                         }
-//                     },
-//                     None => {
-//                         // Finally store the public key
-//                         guard.authenticated.insert(cookie.zid, Some(alice_pubkey));
-//                     }
-//                 }
-//             }
-//             (None, None) => {
-//                 // No multilink
-//                 let mut guard = zasynclock!(self.state);
-//                 if guard.authenticated.get(&cookie.zid).is_some() {
-//                     // The peer did not previously express interest in multilink
-//                     bail!("Invalid multilink pub key on link: {}", link);
-//                 }
-//                 // Finally store the public key
-//                 guard.authenticated.insert(cookie.zid, None);
-//             }
-//             _ => {
-//                 bail!("Received invalid nonce on link: {}", link);
-//             }
-//         }
+impl StateAccept {
+    pub(crate) const fn new() -> Self {
+        Self {
+            nonce: vec![],
+            challenge: 0,
+        }
+    }
 
-//         Ok(None)
-//     }
+    #[cfg(test)]
+    pub(crate) fn rand() -> Self {
+        let mut rng = rand::thread_rng();
+        let mut nonce = vec![0u8; rng.gen_range(0..=64)];
+        rng.fill(&mut nonce[..]);
+        Self {
+            nonce,
+            challenge: rng.gen(),
+        }
+    }
+}
 
-//     async fn handle_open_ack(
-//         &self,
-//         _link: &AuthenticatedLink,
-//         _property: Option<Vec<u8>>,
-//     ) -> ZResult<Option<Vec<u8>>> {
-//         Ok(None)
-//     }
+// Codec
+impl<W> WCodec<&StateAccept, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
 
-//     async fn handle_link_err(&self, link: &AuthenticatedLink) {
-//         // Need to check if it authenticated and remove it if this is the last link
-//         if let Some(zid) = link.node_id.as_ref() {
-//             zasynclock!(self.state).authenticated.remove(zid);
-//         }
-//     }
+    fn write(self, writer: &mut W, x: &StateAccept) -> Self::Output {
+        self.write(&mut *writer, x.challenge)
+    }
+}
 
-//     async fn handle_close(&self, node_id: &ZenohId) {
-//         zasynclock!(self.state).authenticated.remove(node_id);
-//     }
-// }
+impl<R> RCodec<StateAccept, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
 
-// //noinspection ALL
-// impl From<Arc<PubKeyAuthenticator>> for TransportAuthenticator {
-//     fn from(v: Arc<PubKeyAuthenticator>) -> TransportAuthenticator {
-//         TransportAuthenticator(v)
-//     }
-// }
+    fn read(self, reader: &mut R) -> Result<StateAccept, Self::Error> {
+        let challenge: ZInt = self.read(&mut *reader)?;
+        Ok(StateAccept {
+            nonce: vec![],
+            challenge,
+        })
+    }
+}
 
-// impl From<PubKeyAuthenticator> for TransportAuthenticator {
-//     fn from(v: PubKeyAuthenticator) -> TransportAuthenticator {
-//         Self::from(Arc::new(v))
-//     }
-// }
+impl PartialEq for StateAccept {
+    fn eq(&self, other: &Self) -> bool {
+        self.challenge == other.challenge
+    }
+}
+
+#[async_trait]
+impl<'a> AcceptFsm for AuthPubKeyFsm<'a> {
+    type Error = ZError;
+
+    type RecvInitSynIn = (&'a mut StateAccept, Option<ZExtZBuf<{ super::id::PUBKEY }>>);
+    type RecvInitSynOut = ();
+    async fn recv_init_syn(
+        &self,
+        input: Self::RecvInitSynIn,
+    ) -> Result<Self::RecvInitSynOut, Self::Error> {
+        const S: &str = "PubKey extension - Recv InitSyn.";
+        log::trace!("{S}");
+
+        let (state, mut ext) = input;
+
+        let ext = ext
+            .take()
+            .ok_or_else(|| zerror!("{S} Missing PubKey extension."))?;
+
+        let codec = Zenoh080::new();
+        let mut reader = ext.value.reader();
+        let init_syn: InitSyn = codec
+            .read(&mut reader)
+            .map_err(|_| zerror!("{S} Decoding error."))?;
+
+        if !self.inner.lookup.contains(&init_syn.alice_pubkey) {
+            bail!("{S} Unauthorized PubKey.");
+        }
+
+        let mut prng = zasynclock!(self.prng);
+        state.challenge = prng.gen();
+        state.nonce = init_syn
+            .alice_pubkey
+            .encrypt(&mut *prng, Pkcs1v15Encrypt, &state.challenge.to_le_bytes())
+            .map_err(|_| zerror!("{S} Encoding error."))?;
+
+        Ok(())
+    }
+
+    type SendInitAckIn = &'a StateAccept;
+    type SendInitAckOut = Option<ZExtZBuf<{ super::id::PUBKEY }>>;
+    async fn send_init_ack(
+        &self,
+        state: Self::SendInitAckIn,
+    ) -> Result<Self::SendInitAckOut, Self::Error> {
+        const S: &str = "PubKey extension - Send InitAck.";
+        log::trace!("{S}");
+
+        let init_ack = InitAck {
+            bob_pubkey: self.inner.pub_key.clone(),
+            nonce_encrypted_with_alice_pubkey: state.nonce.clone(),
+        };
+
+        let codec = Zenoh080::new();
+        let mut buff = vec![];
+        let mut writer = buff.writer();
+        codec
+            .write(&mut writer, &init_ack)
+            .map_err(|_| zerror!("{S} Encoding error."))?;
+
+        Ok(Some(ZExtZBuf::new(buff.into())))
+    }
+
+    type RecvOpenSynIn = (&'a mut StateAccept, Option<ZExtZBuf<{ super::id::PUBKEY }>>);
+    type RecvOpenSynOut = ();
+    async fn recv_open_syn(
+        &self,
+        input: Self::RecvOpenSynIn,
+    ) -> Result<Self::RecvOpenSynOut, Self::Error> {
+        const S: &str = "PubKey extension - Recv OpenSyn.";
+        log::trace!("{S}");
+
+        let (state, mut ext) = input;
+
+        let ext = ext
+            .take()
+            .ok_or_else(|| zerror!("{S} Missing PubKey extension."))?;
+
+        let codec = Zenoh080::new();
+        let mut reader = ext.value.reader();
+        let open_syn: OpenSyn = codec
+            .read(&mut reader)
+            .map_err(|_| zerror!("{S} Decoding error."))?;
+
+        let mut prng = zasynclock!(self.prng);
+        let nonce = self
+            .inner
+            .pri_key
+            .decrypt_blinded(
+                &mut *prng,
+                Pkcs1v15Encrypt,
+                open_syn.nonce_encrypted_with_bob_pubkey.as_slice(),
+            )
+            .map_err(|_| zerror!("{S} Decryption error."))?;
+
+        if nonce.as_slice() != state.challenge.to_le_bytes() {
+            println!("{:02x?}\n{:02x?}", nonce, state.nonce);
+            bail!("{S} Invalid nonce.");
+        }
+
+        Ok(())
+    }
+
+    type SendOpenAckIn = &'a StateAccept;
+    type SendOpenAckOut = Option<ZExtUnit<{ super::id::PUBKEY }>>;
+    async fn send_open_ack(
+        &self,
+        _input: Self::SendOpenAckIn,
+    ) -> Result<Self::SendOpenAckOut, Self::Error> {
+        const S: &str = "PubKey extension - Send OpenAck.";
+        log::trace!("{S}");
+
+        Ok(Some(ZExtUnit::new()))
+    }
+}

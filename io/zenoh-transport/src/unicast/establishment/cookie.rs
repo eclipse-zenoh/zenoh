@@ -22,7 +22,7 @@ use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_protocol::core::{Resolution, WhatAmI, ZInt, ZenohId};
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq)]
 pub(crate) struct Cookie {
     pub(crate) whatami: WhatAmI,
     pub(crate) zid: ZenohId,
@@ -30,10 +30,10 @@ pub(crate) struct Cookie {
     pub(crate) batch_size: u16,
     pub(crate) nonce: ZInt,
     // Extensions
-    pub(crate) ext_qos: ext::qos::State,
+    pub(crate) ext_qos: ext::qos::StateAccept,
     #[cfg(feature = "shared-memory")]
-    pub(crate) ext_shm: ext::shm::State,
-    pub(crate) ext_auth: ext::auth::State,
+    pub(crate) ext_shm: ext::shm::StateAccept,
+    pub(crate) ext_auth: ext::auth::StateAccept,
 }
 
 impl<W> WCodec<&Cookie, &mut W> for Zenoh080
@@ -74,10 +74,10 @@ where
         let batch_size: u16 = self.read(&mut *reader)?;
         let nonce: ZInt = self.read(&mut *reader)?;
         // Extensions
-        let ext_qos: ext::qos::State = self.read(&mut *reader)?;
+        let ext_qos: ext::qos::StateAccept = self.read(&mut *reader)?;
         #[cfg(feature = "shared-memory")]
-        let ext_shm: ext::shm::State = self.read(&mut *reader)?;
-        let ext_auth: ext::auth::State = self.read(&mut *reader)?;
+        let ext_shm: ext::shm::StateAccept = self.read(&mut *reader)?;
+        let ext_auth: ext::auth::StateAccept = self.read(&mut *reader)?;
 
         let cookie = Cookie {
             whatami,
@@ -150,10 +150,10 @@ impl Cookie {
             resolution: Resolution::rand(),
             batch_size: rng.gen(),
             nonce: rng.gen(),
-            ext_qos: ext::qos::State::rand(),
+            ext_qos: ext::qos::StateAccept::rand(),
             #[cfg(feature = "shared-memory")]
-            ext_shm: ext::shm::State::rand(),
-            ext_auth: ext::auth::State::rand(),
+            ext_shm: ext::shm::StateAccept::rand(),
+            ext_auth: ext::auth::StateAccept::rand(),
         }
     }
 }

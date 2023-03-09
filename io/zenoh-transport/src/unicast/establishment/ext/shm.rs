@@ -125,56 +125,6 @@ where
 /// ~      ack      ~
 /// +---------------+
 
-// Extension Fsm State
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct State {
-    is_shm: bool,
-}
-
-impl State {
-    pub(crate) const fn new(is_shm: bool) -> Self {
-        Self { is_shm }
-    }
-
-    pub(crate) const fn is_shm(&self) -> bool {
-        self.is_shm
-    }
-
-    #[cfg(test)]
-    pub(crate) fn rand() -> Self {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        Self::new(rng.gen_bool(0.5))
-    }
-}
-
-// Codec
-impl<W> WCodec<&State, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: &State) -> Self::Output {
-        let is_shm = u8::from(x.is_shm);
-        self.write(&mut *writer, is_shm)?;
-        Ok(())
-    }
-}
-
-impl<R> RCodec<State, &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<State, Self::Error> {
-        let is_shm: u8 = self.read(&mut *reader)?;
-        let is_shm = is_shm == 1;
-        Ok(State { is_shm })
-    }
-}
-
 // Extension Fsm
 pub(crate) struct ShmFsm<'a> {
     inner: &'a SharedMemoryUnicast,
@@ -186,11 +136,29 @@ impl<'a> ShmFsm<'a> {
     }
 }
 
+/*************************************/
+/*              OPEN                 */
+/*************************************/
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct StateOpen {
+    is_shm: bool,
+}
+
+impl StateOpen {
+    pub(crate) const fn new(is_shm: bool) -> Self {
+        Self { is_shm }
+    }
+
+    pub(crate) const fn is_shm(&self) -> bool {
+        self.is_shm
+    }
+}
+
 #[async_trait]
 impl<'a> OpenFsm for ShmFsm<'a> {
     type Error = ZError;
 
-    type SendInitSynIn = &'a State;
+    type SendInitSynIn = &'a StateOpen;
     type SendInitSynOut = Option<init::ext::Shm>;
     async fn send_init_syn(
         &self,
@@ -216,7 +184,7 @@ impl<'a> OpenFsm for ShmFsm<'a> {
         Ok(Some(init::ext::Shm::new(buff.into())))
     }
 
-    type RecvInitAckIn = (&'a mut State, Option<init::ext::Shm>);
+    type RecvInitAckIn = (&'a mut StateOpen, Option<init::ext::Shm>);
     type RecvInitAckOut = Challenge;
     async fn recv_init_ack(
         &self,
@@ -288,7 +256,7 @@ impl<'a> OpenFsm for ShmFsm<'a> {
         Ok(bob_challenge)
     }
 
-    type SendOpenSynIn = (&'a State, Self::RecvInitAckOut);
+    type SendOpenSynIn = (&'a StateOpen, Self::RecvInitAckOut);
     type SendOpenSynOut = Option<open::ext::Shm>;
     async fn send_open_syn(
         &self,
@@ -304,7 +272,7 @@ impl<'a> OpenFsm for ShmFsm<'a> {
         Ok(Some(open::ext::Shm::new(bob_challenge)))
     }
 
-    type RecvOpenAckIn = (&'a mut State, Option<open::ext::Shm>);
+    type RecvOpenAckIn = (&'a mut StateOpen, Option<open::ext::Shm>);
     type RecvOpenAckOut = ();
     async fn recv_open_ack(
         &self,
@@ -336,11 +304,61 @@ impl<'a> OpenFsm for ShmFsm<'a> {
 /*************************************/
 /*            ACCEPT                 */
 /*************************************/
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct StateAccept {
+    is_shm: bool,
+}
+
+impl StateAccept {
+    pub(crate) const fn new(is_shm: bool) -> Self {
+        Self { is_shm }
+    }
+
+    pub(crate) const fn is_shm(&self) -> bool {
+        self.is_shm
+    }
+
+    #[cfg(test)]
+    pub(crate) fn rand() -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        Self::new(rng.gen_bool(0.5))
+    }
+}
+
+// Codec
+impl<W> WCodec<&StateAccept, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &StateAccept) -> Self::Output {
+        let is_shm = u8::from(x.is_shm);
+        self.write(&mut *writer, is_shm)?;
+        Ok(())
+    }
+}
+
+impl<R> RCodec<StateAccept, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<StateAccept, Self::Error> {
+        let is_shm: u8 = self.read(&mut *reader)?;
+        let is_shm = is_shm == 1;
+        Ok(StateAccept { is_shm })
+    }
+}
+
 #[async_trait]
 impl<'a> AcceptFsm for ShmFsm<'a> {
     type Error = ZError;
 
-    type RecvInitSynIn = (&'a mut State, Option<init::ext::Shm>);
+    type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::Shm>);
     type RecvInitSynOut = Challenge;
     async fn recv_init_syn(
         &self,
@@ -391,7 +409,7 @@ impl<'a> AcceptFsm for ShmFsm<'a> {
         Ok(alice_challenge)
     }
 
-    type SendInitAckIn = (&'a State, Self::RecvInitSynOut);
+    type SendInitAckIn = (&'a StateAccept, Self::RecvInitSynOut);
     type SendInitAckOut = Option<init::ext::Shm>;
     async fn send_init_ack(
         &self,
@@ -419,7 +437,7 @@ impl<'a> AcceptFsm for ShmFsm<'a> {
         Ok(Some(init::ext::Shm::new(buff.into())))
     }
 
-    type RecvOpenSynIn = (&'a mut State, Option<open::ext::Shm>);
+    type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::Shm>);
     type RecvOpenSynOut = ();
     async fn recv_open_syn(
         &self,
@@ -462,7 +480,7 @@ impl<'a> AcceptFsm for ShmFsm<'a> {
         Ok(())
     }
 
-    type SendOpenAckIn = &'a mut State;
+    type SendOpenAckIn = &'a mut StateAccept;
     type SendOpenAckOut = Option<open::ext::Shm>;
     async fn send_open_ack(
         &self,

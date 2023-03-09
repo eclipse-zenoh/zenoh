@@ -38,10 +38,10 @@ struct StateZenoh {
 
 struct State {
     zenoh: StateZenoh,
-    ext_qos: ext::qos::State,
+    ext_qos: ext::qos::StateOpen,
     #[cfg(feature = "shared-memory")]
-    ext_shm: ext::shm::State,
-    ext_auth: ext::auth::State,
+    ext_shm: ext::shm::StateOpen,
+    ext_auth: ext::auth::StateOpen,
 }
 
 // InitSyn
@@ -384,7 +384,7 @@ pub(crate) async fn open_link(
         ext_qos: ext::qos::QoSFsm::new(),
         #[cfg(feature = "shared-memory")]
         ext_shm: ext::shm::ShmFsm::new(&manager.state.unicast.shm),
-        ext_auth: ext::auth::AuthFsm::new(&auth),
+        ext_auth: ext::auth::AuthFsm::new(&auth, &manager.prng),
     };
 
     // Init handshake
@@ -405,10 +405,10 @@ pub(crate) async fn open_link(
             batch_size: manager.config.batch_size,
             resolution: manager.config.resolution,
         },
-        ext_qos: ext::qos::State::new(manager.config.unicast.is_qos),
+        ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos),
         #[cfg(feature = "shared-memory")]
-        ext_shm: ext::shm::State::new(manager.config.unicast.is_shm),
-        ext_auth: auth.state(&mut *zasynclock!(manager.prng)),
+        ext_shm: ext::shm::StateOpen::new(manager.config.unicast.is_shm),
+        ext_auth: auth.open(&mut *zasynclock!(manager.prng)),
     };
 
     let isyn_in = SendInitSynIn {
