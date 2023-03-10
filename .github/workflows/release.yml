@@ -108,7 +108,7 @@ jobs:
 
       - name: Install nextest
         run: cargo install cargo-nextest --locked
-      env:
+        env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Run tests
