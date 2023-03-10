@@ -67,6 +67,37 @@ pub struct Property {
     pub value: Vec<u8>,
 }
 
+/// The kind of a `Sample`.
+#[repr(u8)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub enum SampleKind {
+    /// if the `Sample` was issued by a `put` operation.
+    #[default]
+    Put = 0,
+    /// if the `Sample` was issued by a `delete` operation.
+    Delete = 1,
+}
+
+impl fmt::Display for SampleKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SampleKind::Put => write!(f, "PUT"),
+            SampleKind::Delete => write!(f, "DELETE"),
+        }
+    }
+}
+
+impl TryFrom<ZInt> for SampleKind {
+    type Error = ZInt;
+    fn try_from(kind: ZInt) -> Result<Self, ZInt> {
+        match kind {
+            0 => Ok(SampleKind::Put),
+            1 => Ok(SampleKind::Delete),
+            _ => Err(kind),
+        }
+    }
+}
+
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, Eq)]
 pub struct ZenohId(uhlc::ID);
@@ -288,40 +319,7 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
     }
 }
 
-/// The kind of congestion control.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[repr(u8)]
-pub enum CongestionControl {
-    Block,
-    Drop,
-}
-
-impl Default for CongestionControl {
-    fn default() -> CongestionControl {
-        CongestionControl::Drop
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-#[repr(u8)]
-pub enum Reliability {
-    BestEffort,
-    Reliable,
-}
-
-impl Default for Reliability {
-    fn default() -> Reliability {
-        Reliability::BestEffort
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-pub struct Channel {
-    pub priority: Priority,
-    pub reliability: Reliability,
-}
-
-#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
 #[repr(u8)]
 pub enum Priority {
     Control = 0,
@@ -329,6 +327,7 @@ pub enum Priority {
     InteractiveHigh = 2,
     InteractiveLow = 3,
     DataHigh = 4,
+    #[default]
     Data = 5,
     DataLow = 6,
     Background = 7,
@@ -341,12 +340,6 @@ impl Priority {
     pub const MAX: Self = Self::Control;
     /// The number of available priorities
     pub const NUM: usize = 1 + Self::MIN as usize - Self::MAX as usize;
-}
-
-impl Default for Priority {
-    fn default() -> Priority {
-        Priority::Data
-    }
 }
 
 impl TryFrom<u8> for Priority {
@@ -369,5 +362,131 @@ impl TryFrom<u8> for Priority {
                 Self::MIN as u8
             ),
         }
+    }
+}
+
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Reliability {
+    #[default]
+    BestEffort,
+    Reliable,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+pub struct Channel {
+    pub priority: Priority,
+    pub reliability: Reliability,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConduitSnList {
+    Plain(ConduitSn),
+    QoS(Box<[ConduitSn; Priority::NUM]>),
+}
+
+impl fmt::Display for ConduitSnList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[ ")?;
+        match self {
+            ConduitSnList::Plain(sn) => {
+                write!(
+                    f,
+                    "{:?} {{ reliable: {}, best effort: {} }}",
+                    Priority::default(),
+                    sn.reliable,
+                    sn.best_effort
+                )?;
+            }
+            ConduitSnList::QoS(ref sns) => {
+                for (prio, sn) in sns.iter().enumerate() {
+                    let p: Priority = (prio as u8).try_into().unwrap();
+                    write!(
+                        f,
+                        "{:?} {{ reliable: {}, best effort: {} }}",
+                        p, sn.reliable, sn.best_effort
+                    )?;
+                    if p != Priority::Background {
+                        write!(f, ", ")?;
+                    }
+                }
+            }
+        }
+        write!(f, " ]")
+    }
+}
+
+/// The kind of reliability.
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+pub struct ConduitSn {
+    pub reliable: ZInt,
+    pub best_effort: ZInt,
+}
+
+/// The kind of congestion control.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum CongestionControl {
+    Block,
+    #[default]
+    Drop,
+}
+
+/// The subscription mode.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SubMode {
+    #[default]
+    Push,
+    Pull,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SubInfo {
+    pub reliability: Reliability,
+    pub mode: SubMode,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub struct QueryableInfo {
+    pub complete: ZInt, // Default 0: incomplete
+    pub distance: ZInt, // Default 0: no distance
+}
+
+/// The kind of consolidation.
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum ConsolidationMode {
+    /// No consolidation applied: multiple samples may be received for the same key-timestamp.
+    None,
+    /// Monotonic consolidation immediately forwards samples, except if one with an equal or more recent timestamp
+    /// has already been sent with the same key.
+    ///
+    /// This optimizes latency while potentially reducing bandwidth.
+    ///
+    /// Note that this doesn't cause re-ordering, but drops the samples for which a more recent timestamp has already
+    /// been observed with the same key.
+    Monotonic,
+    /// Holds back samples to only send the set of samples that had the highest timestamp for their key.
+    Latest,
+}
+
+/// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum QueryTarget {
+    #[default]
+    BestMatching,
+    All,
+    AllComplete,
+    #[cfg(feature = "complete_n")]
+    Complete(ZInt),
+}
+
+pub(crate) fn split_once(s: &str, c: char) -> (&str, &str) {
+    match s.find(c) {
+        Some(index) => {
+            let (l, r) = s.split_at(index);
+            (l, &r[1..])
+        }
+        None => (s, ""),
     }
 }

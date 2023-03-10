@@ -27,10 +27,11 @@ use zenoh_protocol::zenoh::DataInfo;
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_core::unstable]
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
 pub enum Locality {
     SessionLocal,
     Remote,
+    #[default]
     Any,
 }
 #[cfg(not(feature = "unstable"))]
@@ -39,12 +40,6 @@ pub(crate) enum Locality {
     SessionLocal,
     Remote,
     Any,
-}
-
-impl Default for Locality {
-    fn default() -> Self {
-        Locality::Any
-    }
 }
 
 /// Informations on the source of a zenoh [`Sample`].
