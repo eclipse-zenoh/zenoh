@@ -182,20 +182,13 @@ impl ForgetPublisher {
 }
 
 /// The subscription mode.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SubMode {
+    #[default]
     Push,
     Pull,
 }
-
-impl Default for SubMode {
-    #[inline]
-    fn default() -> Self {
-        SubMode::Push
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SubInfo {
     pub reliability: Reliability,

@@ -36,19 +36,14 @@ pub enum ConsolidationMode {
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum QueryTarget {
+    #[default]
     BestMatching,
     All,
     AllComplete,
     #[cfg(feature = "complete_n")]
     Complete(ZInt),
-}
-
-impl Default for QueryTarget {
-    fn default() -> Self {
-        QueryTarget::BestMatching
-    }
 }
 
 /// # QueryBody

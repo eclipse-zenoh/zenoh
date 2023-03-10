@@ -17,18 +17,13 @@ use zenoh_buffers::ZBuf;
 
 /// The kind of a `Sample`.
 #[repr(u8)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub enum SampleKind {
     /// if the `Sample` was issued by a `put` operation.
+    #[default]
     Put = 0,
     /// if the `Sample` was issued by a `delete` operation.
     Delete = 1,
-}
-
-impl Default for SampleKind {
-    fn default() -> Self {
-        SampleKind::Put
-    }
 }
 
 impl fmt::Display for SampleKind {

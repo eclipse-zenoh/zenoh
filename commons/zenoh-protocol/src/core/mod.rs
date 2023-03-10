@@ -480,13 +480,3 @@ pub enum QueryTarget {
     #[cfg(feature = "complete_n")]
     Complete(ZInt),
 }
-
-pub(crate) fn split_once(s: &str, c: char) -> (&str, &str) {
-    match s.find(c) {
-        Some(index) => {
-            let (l, r) = s.split_at(index);
-            (l, &r[1..])
-        }
-        None => (s, ""),
-    }
-}
