@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use std::time::Duration;
 use zenoh_buffers::ZSlice;
 use zenoh_config::{WhatAmI, ZenohId};
-use zenoh_core::{zasynclock, zasyncread, zerror};
+use zenoh_core::{zasynclock,  zerror};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::core::{Field, Resolution, ZInt};
 use zenoh_protocol::transport::{close, Close, InitSyn, OpenSyn, TransportBody, TransportMessage};
@@ -380,13 +380,27 @@ pub(crate) async fn open_link(
     link: &LinkUnicast,
     manager: &TransportManager,
 ) -> ZResult<TransportUnicast> {
-    let auth = zasyncread!(manager.state.unicast.authenticator);
     let fsm = OpenLink {
         link,
         ext_qos: ext::qos::QoSFsm::new(),
         #[cfg(feature = "shared-memory")]
         ext_shm: ext::shm::ShmFsm::new(&manager.state.unicast.shm),
-        ext_auth: ext::auth::AuthFsm::new(&auth, &manager.prng),
+        ext_auth: manager.state.unicast.authenticator.fsm(&manager.prng),
+    };
+
+    let mut state = State {
+        zenoh: StateZenoh {
+            batch_size: manager.config.batch_size,
+            resolution: manager.config.resolution,
+        },
+        ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos),
+        #[cfg(feature = "shared-memory")]
+        ext_shm: ext::shm::StateOpen::new(manager.config.unicast.is_shm),
+        ext_auth: manager
+            .state
+            .unicast
+            .authenticator
+            .open(&mut *zasynclock!(manager.prng)),
     };
 
     // Init handshake
@@ -401,17 +415,6 @@ pub(crate) async fn open_link(
             }
         };
     }
-
-    let mut state = State {
-        zenoh: StateZenoh {
-            batch_size: manager.config.batch_size,
-            resolution: manager.config.resolution,
-        },
-        ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos),
-        #[cfg(feature = "shared-memory")]
-        ext_shm: ext::shm::StateOpen::new(manager.config.unicast.is_shm),
-        ext_auth: auth.open(&mut *zasynclock!(manager.prng)),
-    };
 
     let isyn_in = SendInitSynIn {
         mine_version: manager.config.version,

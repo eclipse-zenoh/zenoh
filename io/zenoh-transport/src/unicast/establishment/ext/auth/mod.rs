@@ -17,7 +17,7 @@ mod pubkey;
 mod usrpwd;
 
 use crate::establishment::{AcceptFsm, OpenFsm};
-use async_std::sync::Mutex;
+use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
 #[cfg(feature = "auth_pubkey")]
 pub use pubkey::*;
@@ -49,9 +49,9 @@ pub(crate) mod id {
 #[derive(Debug, Default)]
 pub struct Auth {
     #[cfg(feature = "auth_pubkey")]
-    pubkey: Option<AuthPubKey>,
+    pubkey: Option<RwLock<AuthPubKey>>,
     #[cfg(feature = "auth_usrpwd")]
-    usrpwd: Option<AuthUsrPwd>,
+    usrpwd: Option<RwLock<AuthUsrPwd>>,
 }
 
 impl Auth {
@@ -60,9 +60,13 @@ impl Auth {
 
         Ok(Self {
             #[cfg(feature = "auth_pubkey")]
-            pubkey: AuthPubKey::from_config(auth.pubkey()).await?,
+            pubkey: AuthPubKey::from_config(auth.pubkey())
+                .await?
+                .map(RwLock::new),
             #[cfg(feature = "auth_usrpwd")]
-            usrpwd: AuthUsrPwd::from_config(auth.usrpwd()).await?,
+            usrpwd: AuthUsrPwd::from_config(auth.usrpwd())
+                .await?
+                .map(RwLock::new),
         })
     }
 
@@ -95,6 +99,16 @@ impl Auth {
                 .then_some(usrpwd::StateAccept::new(prng)),
         }
     }
+
+    pub(crate) fn fsm<'a>(&'a self, prng: &'a Mutex<PseudoRng>) -> AuthFsm<'a> {
+        AuthFsm {
+            #[cfg(feature = "auth_pubkey")]
+            pubkey: self.pubkey.as_ref().map(|x| AuthPubKeyFsm::new(x, prng)),
+            #[cfg(feature = "auth_usrpwd")]
+            usrpwd: self.usrpwd.as_ref().map(AuthUsrPwdFsm::new),
+            _a: PhantomData,
+        }
+    }
 }
 
 #[cfg(feature = "test")]
@@ -110,32 +124,22 @@ impl Auth {
 
     #[cfg(feature = "auth_pubkey")]
     pub fn set_pubkey(&mut self, pubkey: Option<AuthPubKey>) {
-        self.pubkey = pubkey;
+        self.pubkey = pubkey.map(RwLock::new);
     }
 
     #[cfg(feature = "auth_pubkey")]
-    pub fn get_pubkey(&self) -> Option<&AuthPubKey> {
+    pub fn get_pubkey(&self) -> Option<&RwLock<AuthPubKey>> {
         self.pubkey.as_ref()
-    }
-
-    #[cfg(feature = "auth_pubkey")]
-    pub fn get_pubkey_mut(&mut self) -> Option<&mut AuthPubKey> {
-        self.pubkey.as_mut()
     }
 
     #[cfg(feature = "auth_usrpwd")]
     pub fn set_usrpwd(&mut self, usrpwd: Option<AuthUsrPwd>) {
-        self.usrpwd = usrpwd;
+        self.usrpwd = usrpwd.map(RwLock::new);
     }
 
     #[cfg(feature = "auth_usrpwd")]
-    pub fn get_usrpwd(&self) -> Option<&AuthUsrPwd> {
+    pub fn get_usrpwd(&self) -> Option<&RwLock<AuthUsrPwd>> {
         self.usrpwd.as_ref()
-    }
-
-    #[cfg(feature = "auth_usrpwd")]
-    pub fn get_usrpwd_mut(&mut self) -> Option<&mut AuthUsrPwd> {
-        self.usrpwd.as_mut()
     }
 }
 
@@ -145,18 +149,6 @@ pub(crate) struct AuthFsm<'a> {
     #[cfg(feature = "auth_usrpwd")]
     usrpwd: Option<AuthUsrPwdFsm<'a>>,
     _a: PhantomData<&'a ()>, // Required only when all auth features are disabled
-}
-
-impl<'a> AuthFsm<'a> {
-    pub(crate) fn new(a: &'a Auth, prng: &'a Mutex<PseudoRng>) -> Self {
-        Self {
-            #[cfg(feature = "auth_pubkey")]
-            pubkey: a.pubkey.as_ref().map(|x| AuthPubKeyFsm::new(x, prng)),
-            #[cfg(feature = "auth_usrpwd")]
-            usrpwd: a.usrpwd.as_ref().map(AuthUsrPwdFsm::new),
-            _a: PhantomData,
-        }
-    }
 }
 
 #[derive(Debug, PartialEq, Eq)]

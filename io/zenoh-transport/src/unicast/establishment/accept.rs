@@ -26,7 +26,7 @@ use rand::Rng;
 use std::time::Duration;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZSlice};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_core::{zasynclock, zasyncread, zerror};
+use zenoh_core::{zasynclock, zerror};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::{
@@ -436,7 +436,6 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
 }
 
 pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) -> ZResult<()> {
-    let auth = zasyncread!(manager.state.unicast.authenticator);
     let fsm = AcceptLink {
         link,
         prng: &manager.prng,
@@ -444,7 +443,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         ext_qos: ext::qos::QoSFsm::new(),
         #[cfg(feature = "shared-memory")]
         ext_shm: ext::shm::ShmFsm::new(&manager.state.unicast.shm),
-        ext_auth: ext::auth::AuthFsm::new(&auth, &manager.prng),
+        ext_auth: manager.state.unicast.authenticator.fsm(&manager.prng),
     };
 
     // Init handshake
@@ -470,7 +469,11 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
             ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos),
             #[cfg(feature = "shared-memory")]
             ext_shm: ext::shm::StateAccept::new(manager.config.unicast.is_shm),
-            ext_auth: auth.accept(&mut *zasynclock!(manager.prng)),
+            ext_auth: manager
+                .state
+                .unicast
+                .authenticator
+                .accept(&mut *zasynclock!(manager.prng)),
         };
 
         // Let's scope the Init phase in such a way memory is freed by Rust

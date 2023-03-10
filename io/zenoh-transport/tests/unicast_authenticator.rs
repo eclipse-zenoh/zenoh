@@ -310,9 +310,7 @@ async fn auth_pubkey(endpoint: &EndPoint) {
 
     // Add client02 pubkey to the router
     let router_auth_handle = router_manager.get_auth_handle_unicast();
-    zasyncwrite!(router_auth_handle)
-        .get_pubkey_mut()
-        .unwrap()
+    zasyncwrite!(router_auth_handle.get_pubkey().unwrap())
         .add_pubkey(client02_pub_key.into())
         .await
         .unwrap();
@@ -509,10 +507,9 @@ async fn auth_usrpwd(endpoint: &EndPoint) {
     /* [6] */
     // Add client02 credentials on the router
     let auth_router = router_manager.get_auth_handle_unicast();
-    ztimeout!(zasyncwrite!(auth_router)
-        .get_usrpwd_mut()
-        .unwrap()
-        .add_user(user02.into(), password02.into()))
+    ztimeout!(
+        zasyncwrite!(auth_router.get_usrpwd().unwrap()).add_user(user02.into(), password02.into())
+    )
     .unwrap();
 
     // Open a fourth transport from the client to the router

@@ -1,23 +1,18 @@
-// //
-// // Copyright (c) 2022 ZettaScale Technology
-// //
-// // This program and the accompanying materials are made available under the
-// // terms of the Eclipse Public License 2.0 which is available at
-// // http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
-// // which is available at https://www.apache.org/licenses/LICENSE-2.0.
-// //
-// // SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
-// //
-// // Contributors:
-// //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-// //
-// use super::{
-//     AuthenticatedLink, TransportAuthenticator, TransportAuthenticatorTrait, ZNodeAuthenticatorId,
-// };
-// use super::{Locator, ZInt, ZenohId};
-// use crate::unicast::establishment::Cookie;
+//
+// Copyright (c) 2022 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
 use crate::establishment::{AcceptFsm, OpenFsm};
-use async_std::fs;
+use async_std::{fs, sync::RwLock};
 use async_trait::async_trait;
 use rand::{CryptoRng, Rng};
 use std::collections::HashMap;
@@ -28,7 +23,7 @@ use zenoh_buffers::{
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_collections::Properties;
 use zenoh_config::UsrPwdConf;
-use zenoh_core::{bail, zerror, Error as ZError, Result as ZResult};
+use zenoh_core::{bail, zasyncread, zerror, Error as ZError, Result as ZResult};
 use zenoh_crypto::hmac;
 use zenoh_protocol::{
     common::{ZExtUnit, ZExtZBuf, ZExtZInt},
@@ -161,12 +156,12 @@ where
 }
 
 pub(crate) struct AuthUsrPwdFsm<'a> {
-    inner: &'a AuthUsrPwd,
+    inner: &'a RwLock<AuthUsrPwd>,
 }
 
 impl<'a> AuthUsrPwdFsm<'a> {
-    pub(super) const fn new(a: &'a AuthUsrPwd) -> Self {
-        Self { inner: a }
+    pub(super) const fn new(inner: &'a RwLock<AuthUsrPwd>) -> Self {
+        Self { inner }
     }
 }
 
@@ -250,7 +245,10 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
         &self,
         _input: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
-        let output = self.inner.credentials.is_some().then_some(ZExtUnit::new());
+        let output = zasyncread!(self.inner)
+            .credentials
+            .is_some()
+            .then_some(ZExtUnit::new());
         Ok(output)
     }
 
@@ -262,7 +260,7 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         const S: &str = "UsrPwd extension - Recv InitSyn.";
 
-        if self.inner.credentials.is_none() {
+        if zasyncread!(self.inner).credentials.is_none() {
             return Ok(());
         };
 
@@ -284,7 +282,8 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
         const S: &str = "UsrPwd extension - Send OpenSyn.";
 
         // If credentials are not configured, don't continue the USRPWD authentication
-        let (user, password) = match self.inner.credentials.as_ref() {
+        let r_inner = zasyncread!(self.inner);
+        let (user, password) = match r_inner.credentials.as_ref() {
             Some(cr) => cr,
             None => return Ok(None),
         };
@@ -297,6 +296,8 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
             user: user.to_vec(),
             hmac,
         };
+        drop(r_inner);
+
         let codec = Zenoh080::new();
         let mut buff = vec![];
         let mut writer = buff.writer();
@@ -317,7 +318,7 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
         const S: &str = "UsrPwd extension - Recv OpenAck.";
 
         let (_, ext) = input;
-        if self.inner.credentials.is_some() && ext.is_none() {
+        if zasyncread!(self.inner).credentials.is_some() && ext.is_none() {
             bail!("{S} Expected extension.");
         }
 
@@ -376,8 +377,8 @@ impl<'a> AcceptFsm for AuthUsrPwdFsm<'a> {
             .read(&mut reader)
             .map_err(|_| zerror!("{S} Decoding error."))?;
 
-        let pwd = self
-            .inner
+        let r_inner = zasyncread!(self.inner);
+        let pwd = r_inner
             .lookup
             .get(&open_syn.user)
             .ok_or_else(|| zerror!("{S} Invalid user."))?;

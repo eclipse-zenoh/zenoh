@@ -20,11 +20,7 @@ use crate::{
     },
     TransportManager,
 };
-use async_std::{
-    prelude::FutureExt,
-    sync::{Mutex, RwLock},
-    task,
-};
+use async_std::{prelude::FutureExt, sync::Mutex, task};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 #[cfg(feature = "shared-memory")]
 use zenoh_config::SharedMemoryConf;
@@ -56,7 +52,7 @@ pub struct TransportManagerStateUnicast {
     // Incoming uninitialized transports
     pub(super) incoming: Arc<Mutex<usize>>,
     // Active authenticators
-    pub(super) authenticator: Arc<RwLock<Auth>>,
+    pub(super) authenticator: Arc<Auth>,
     // Established listeners
     pub(super) protocols: Arc<Mutex<HashMap<String, LinkManagerUnicast>>>,
     // Established transports
@@ -174,22 +170,11 @@ impl TransportManagerBuilderUnicast {
             is_shm: self.is_shm,
         };
 
-        // Enable pubkey authentication by default to avoid ZenohId spoofing
-        // #[cfg(feature = "auth_pubkey")]
-        // if !self
-        //     .peer_authenticator
-        //     .iter()
-        //     .any(|a| a.id() == PeerAuthenticatorId::PublicKey)
-        // {
-        //     self.peer_authenticator
-        //         .insert(PubKeyAuthenticator::make()?.into());
-        // } @TODO
-
         let state = TransportManagerStateUnicast {
             incoming: Arc::new(Mutex::new(0)),
             protocols: Arc::new(Mutex::new(HashMap::new())),
             transports: Arc::new(Mutex::new(HashMap::new())),
-            authenticator: Arc::new(RwLock::new(self.authenticator)),
+            authenticator: Arc::new(self.authenticator),
             #[cfg(feature = "shared-memory")]
             shm: Arc::new(SharedMemoryUnicast::make()?),
         };
@@ -509,7 +494,7 @@ impl TransportManager {
 
 #[cfg(feature = "test")]
 impl TransportManager {
-    pub fn get_auth_handle_unicast(&self) -> Arc<RwLock<Auth>> {
+    pub fn get_auth_handle_unicast(&self) -> Arc<Auth> {
         self.state.unicast.authenticator.clone()
     }
 }

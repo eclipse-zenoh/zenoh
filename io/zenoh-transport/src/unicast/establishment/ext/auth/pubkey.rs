@@ -14,7 +14,7 @@
 // use super::{
 //     AuthenticatedLink, TransportAuthenticator, TransportAuthenticatorTrait, ZNodeAuthenticatorId,
 // };
-use async_std::sync::Mutex;
+use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
 use rand::{CryptoRng, Rng};
 use rsa::pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey};
@@ -28,7 +28,7 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_config::PubKeyConf;
-use zenoh_core::{bail, zasynclock, zerror, Error as ZError, Result as ZResult};
+use zenoh_core::{bail, zasynclock, zasyncread, zerror, Error as ZError, Result as ZResult};
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::common::{ZExtUnit, ZExtZBuf};
 use zenoh_protocol::core::ZInt;
@@ -317,12 +317,12 @@ where
 /// ZExtUnit
 
 pub(crate) struct AuthPubKeyFsm<'a> {
-    inner: &'a AuthPubKey,
+    inner: &'a RwLock<AuthPubKey>,
     prng: &'a Mutex<PseudoRng>,
 }
 
 impl<'a> AuthPubKeyFsm<'a> {
-    pub(super) const fn new(inner: &'a AuthPubKey, prng: &'a Mutex<PseudoRng>) -> Self {
+    pub(super) const fn new(inner: &'a RwLock<AuthPubKey>, prng: &'a Mutex<PseudoRng>) -> Self {
         Self { inner, prng }
     }
 }
@@ -355,7 +355,7 @@ impl<'a> OpenFsm for AuthPubKeyFsm<'a> {
         log::trace!("{S}");
 
         let init_syn = InitSyn {
-            alice_pubkey: self.inner.pub_key.clone(),
+            alice_pubkey: zasyncread!(self.inner).pub_key.clone(),
         };
 
         let codec = Zenoh080::new();
@@ -389,13 +389,13 @@ impl<'a> OpenFsm for AuthPubKeyFsm<'a> {
             .read(&mut reader)
             .map_err(|_| zerror!("{S} Decoding error."))?;
 
-        if !self.inner.lookup.is_empty() && !self.inner.lookup.contains(&init_ack.bob_pubkey) {
+        let r_inner = zasyncread!(self.inner);
+        if !r_inner.lookup.is_empty() && !r_inner.lookup.contains(&init_ack.bob_pubkey) {
             bail!("{S} Unauthorized PubKey.");
         }
 
         let mut prng = zasynclock!(self.prng);
-        let nonce = self
-            .inner
+        let nonce = r_inner
             .pri_key
             .decrypt_blinded(
                 &mut *prng,
@@ -403,6 +403,7 @@ impl<'a> OpenFsm for AuthPubKeyFsm<'a> {
                 init_ack.nonce_encrypted_with_alice_pubkey.as_slice(),
             )
             .map_err(|_| zerror!("{S} Decryption error."))?;
+        drop(r_inner);
 
         state.nonce = init_ack
             .bob_pubkey
@@ -539,7 +540,10 @@ impl<'a> AcceptFsm for AuthPubKeyFsm<'a> {
             .read(&mut reader)
             .map_err(|_| zerror!("{S} Decoding error."))?;
 
-        if !self.inner.lookup.contains(&init_syn.alice_pubkey) {
+        if !zasyncread!(self.inner)
+            .lookup
+            .contains(&init_syn.alice_pubkey)
+        {
             bail!("{S} Unauthorized PubKey.");
         }
 
@@ -563,7 +567,7 @@ impl<'a> AcceptFsm for AuthPubKeyFsm<'a> {
         log::trace!("{S}");
 
         let init_ack = InitAck {
-            bob_pubkey: self.inner.pub_key.clone(),
+            bob_pubkey: zasyncread!(self.inner).pub_key.clone(),
             nonce_encrypted_with_alice_pubkey: state.nonce.clone(),
         };
 
@@ -599,8 +603,7 @@ impl<'a> AcceptFsm for AuthPubKeyFsm<'a> {
             .map_err(|_| zerror!("{S} Decoding error."))?;
 
         let mut prng = zasynclock!(self.prng);
-        let nonce = self
-            .inner
+        let nonce = zasyncread!(self.inner)
             .pri_key
             .decrypt_blinded(
                 &mut *prng,
