@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "auth_pubkey")]
+use crate::unicast::establishment::ext::multilink::MultiLink;
 #[cfg(feature = "shared-memory")]
 use crate::unicast::shm::SharedMemoryUnicast;
 use crate::{
@@ -26,6 +28,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 use zenoh_config::SharedMemoryConf;
 use zenoh_config::{Config, LinkTxConf, QoSConf, TransportUnicastConf};
 use zenoh_core::zasynclock;
+use zenoh_crypto::PseudoRng;
 use zenoh_link::*;
 use zenoh_protocol::{
     core::{endpoint, locator::LocatorProtocol, ZenohId},
@@ -60,6 +63,8 @@ pub struct TransportManagerStateUnicast {
     // Shared memory
     #[cfg(feature = "shared-memory")]
     pub(super) shm: Arc<SharedMemoryUnicast>,
+    // Multilink
+    pub(super) multilink: Arc<MultiLink>,
 }
 
 pub struct TransportManagerParamsUnicast {
@@ -157,6 +162,7 @@ impl TransportManagerBuilderUnicast {
     pub fn build(
         #[allow(unused_mut)] // auth_pubkey and shared-memory features require mut
         mut self,
+        prng: &mut PseudoRng,
     ) -> ZResult<TransportManagerParamsUnicast> {
         let config = TransportManagerConfigUnicast {
             lease: self.lease,
@@ -177,6 +183,8 @@ impl TransportManagerBuilderUnicast {
             authenticator: Arc::new(self.authenticator),
             #[cfg(feature = "shared-memory")]
             shm: Arc::new(SharedMemoryUnicast::make()?),
+            #[cfg(feature = "auth_pubkey")]
+            multilink: Arc::new(MultiLink::make(prng)?),
         };
 
         let params = TransportManagerParamsUnicast { config, state };

@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #[cfg(feature = "auth_pubkey")]
-mod pubkey;
+pub(crate) mod pubkey;
 #[cfg(feature = "auth_usrpwd")]
-mod usrpwd;
+pub(crate) mod usrpwd;
 
 use crate::establishment::{AcceptFsm, OpenFsm};
 use async_std::sync::{Mutex, RwLock};

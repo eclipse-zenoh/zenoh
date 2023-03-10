@@ -75,6 +75,10 @@ impl<const ID: u8> ZExtUnit<{ ID }> {
         Self
     }
 
+    pub const fn transmute<const DI: u8>(self) -> ZExtUnit<{ DI }> {
+        ZExtUnit::new()
+    }
+
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         Self::new()
@@ -105,6 +109,10 @@ impl<const ID: u8> ZExtZInt<{ ID }> {
 
     pub const fn new(value: ZInt) -> Self {
         Self { value }
+    }
+
+    pub const fn transmute<const DI: u8>(self) -> ZExtZInt<{ DI }> {
+        ZExtZInt::new(self.value)
     }
 
     #[cfg(feature = "test")]
@@ -141,6 +149,10 @@ impl<const ID: u8> ZExtZBuf<{ ID }> {
 
     pub const fn new(value: ZBuf) -> Self {
         Self { value }
+    }
+
+    pub fn transmute<const DI: u8>(self) -> ZExtZBuf<{ DI }> {
+        ZExtZBuf::new(self.value)
     }
 
     #[cfg(feature = "test")]

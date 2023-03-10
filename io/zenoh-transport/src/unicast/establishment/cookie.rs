@@ -20,12 +20,11 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_crypto::{BlockCipher, PseudoRng};
-use zenoh_protocol::core::{Resolution, WhatAmI, ZInt, ZenohId};
+use zenoh_protocol::core::{Resolution, WhatAmI, ZInt};
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct Cookie {
     pub(crate) whatami: WhatAmI,
-    pub(crate) zid: ZenohId,
     pub(crate) resolution: Resolution,
     pub(crate) batch_size: u16,
     pub(crate) nonce: ZInt,
@@ -34,6 +33,8 @@ pub(crate) struct Cookie {
     #[cfg(feature = "shared-memory")]
     pub(crate) ext_shm: ext::shm::StateAccept,
     pub(crate) ext_auth: ext::auth::StateAccept,
+    #[cfg(feature = "auth_pubkey")]
+    pub(crate) ext_mlink: ext::multilink::StateAccept,
 }
 
 impl<W> WCodec<&Cookie, &mut W> for Zenoh080
@@ -45,7 +46,6 @@ where
     fn write(self, writer: &mut W, x: &Cookie) -> Self::Output {
         let wai: u8 = x.whatami.into();
         self.write(&mut *writer, wai)?;
-        self.write(&mut *writer, &x.zid)?;
         self.write(&mut *writer, x.resolution.as_u8())?;
         self.write(&mut *writer, x.batch_size)?;
         self.write(&mut *writer, x.nonce)?;
@@ -54,6 +54,8 @@ where
         #[cfg(feature = "shared-memory")]
         self.write(&mut *writer, &x.ext_shm)?;
         self.write(&mut *writer, &x.ext_auth)?;
+        #[cfg(feature = "auth_pubkey")]
+        self.write(&mut *writer, &x.ext_mlink)?;
 
         Ok(())
     }
@@ -68,7 +70,6 @@ where
     fn read(self, reader: &mut R) -> Result<Cookie, Self::Error> {
         let wai: u8 = self.read(&mut *reader)?;
         let whatami = WhatAmI::try_from(wai).map_err(|_| DidntRead)?;
-        let zid: ZenohId = self.read(&mut *reader)?;
         let resolution: u8 = self.read(&mut *reader)?;
         let resolution = Resolution::from(resolution);
         let batch_size: u16 = self.read(&mut *reader)?;
@@ -78,10 +79,11 @@ where
         #[cfg(feature = "shared-memory")]
         let ext_shm: ext::shm::StateAccept = self.read(&mut *reader)?;
         let ext_auth: ext::auth::StateAccept = self.read(&mut *reader)?;
+        #[cfg(feature = "auth_pubkey")]
+        let ext_mlink: ext::multilink::StateAccept = self.read(&mut *reader)?;
 
         let cookie = Cookie {
             whatami,
-            zid,
             resolution,
             batch_size,
             nonce,
@@ -89,6 +91,8 @@ where
             #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
+            #[cfg(feature = "auth_pubkey")]
+            ext_mlink,
         };
 
         Ok(cookie)
@@ -146,7 +150,6 @@ impl Cookie {
 
         Self {
             whatami: WhatAmI::rand(),
-            zid: ZenohId::default(),
             resolution: Resolution::rand(),
             batch_size: rng.gen(),
             nonce: rng.gen(),
@@ -154,6 +157,8 @@ impl Cookie {
             #[cfg(feature = "shared-memory")]
             ext_shm: ext::shm::StateAccept::rand(),
             ext_auth: ext::auth::StateAccept::rand(),
+            #[cfg(feature = "auth_pubkey")]
+            ext_mlink: ext::multilink::StateAccept::rand(),
         }
     }
 }

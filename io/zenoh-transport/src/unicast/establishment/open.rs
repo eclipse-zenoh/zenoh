@@ -23,7 +23,7 @@ use async_trait::async_trait;
 use std::time::Duration;
 use zenoh_buffers::ZSlice;
 use zenoh_config::{WhatAmI, ZenohId};
-use zenoh_core::{zasynclock,  zerror};
+use zenoh_core::{zasynclock, zerror};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::core::{Field, Resolution, ZInt};
 use zenoh_protocol::transport::{close, Close, InitSyn, OpenSyn, TransportBody, TransportMessage};
@@ -409,7 +409,8 @@ pub(crate) async fn open_link(
             match $s {
                 Ok(output) => output,
                 Err((e, reason)) => {
-                    close_link(link, reason).await;
+                    // @TODO
+                    close_link(link, manager, ZenohId::default(), reason).await;
                     return Err(e);
                 }
             }

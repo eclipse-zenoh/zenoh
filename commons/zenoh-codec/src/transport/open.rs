@@ -140,8 +140,8 @@ where
                     ext_auth = Some(a);
                     has_ext = ext;
                 }
-                ext::MultiLink::ID => {
-                    let (a, ext): (ext::MultiLink, bool) = eodec.read(&mut *reader)?;
+                ext::MultiLinkSyn::ID => {
+                    let (a, ext): (ext::MultiLinkSyn, bool) = eodec.read(&mut *reader)?;
                     ext_mlink = Some(a);
                     has_ext = ext;
                 }
@@ -277,8 +277,8 @@ where
                     ext_auth = Some(a);
                     has_ext = ext;
                 }
-                ext::MultiLink::ID => {
-                    let (a, ext): (ext::MultiLink, bool) = eodec.read(&mut *reader)?;
+                ext::MultiLinkAck::ID => {
+                    let (a, ext): (ext::MultiLinkAck, bool) = eodec.read(&mut *reader)?;
                     ext_mlink = Some(a);
                     has_ext = ext;
                 }

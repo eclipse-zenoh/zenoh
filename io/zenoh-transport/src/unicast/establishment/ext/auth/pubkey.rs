@@ -16,7 +16,7 @@
 // };
 use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
-use rand::{CryptoRng, Rng};
+use rand::Rng;
 use rsa::pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey};
 use rsa::{BigUint, Pkcs1v15Encrypt, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
 use std::collections::HashSet;
@@ -35,8 +35,6 @@ use zenoh_protocol::core::ZInt;
 
 use crate::establishment::{AcceptFsm, OpenFsm};
 
-const KEY_SIZE: usize = 512;
-
 // Authenticator
 #[derive(Debug)]
 pub struct AuthPubKey {
@@ -52,15 +50,6 @@ impl AuthPubKey {
             pub_key,
             pri_key,
         }
-    }
-
-    pub fn make<R>(rng: &mut R) -> ZResult<Self>
-    where
-        R: Rng + CryptoRng,
-    {
-        let pri_key = RsaPrivateKey::new(rng, KEY_SIZE)?;
-        let pub_key = RsaPublicKey::from(&pri_key);
-        Ok(Self::new(pub_key.into(), pri_key.into()))
     }
 
     pub async fn add_pubkey(&mut self, pub_key: ZPublicKey) -> ZResult<()> {
@@ -195,8 +184,8 @@ where
 /// +---------------+
 ///
 /// ZExtZBuf
-struct InitSyn {
-    alice_pubkey: ZPublicKey,
+pub(crate) struct InitSyn {
+    pub(crate) alice_pubkey: ZPublicKey,
 }
 
 impl<W> WCodec<&InitSyn, &mut W> for Zenoh080
@@ -234,9 +223,9 @@ where
 /// +---------------+
 ///
 /// ZExtZBuf
-struct InitAck {
-    bob_pubkey: ZPublicKey,
-    nonce_encrypted_with_alice_pubkey: Vec<u8>,
+pub(crate) struct InitAck {
+    pub(crate) bob_pubkey: ZPublicKey,
+    pub(crate) nonce_encrypted_with_alice_pubkey: Vec<u8>,
 }
 
 impl<W> WCodec<&InitAck, &mut W> for Zenoh080
@@ -277,8 +266,8 @@ where
 /// +---------------+
 ///
 /// ZExtZBuf
-struct OpenSyn {
-    nonce_encrypted_with_bob_pubkey: Vec<u8>,
+pub(crate) struct OpenSyn {
+    pub(crate) nonce_encrypted_with_bob_pubkey: Vec<u8>,
 }
 
 impl<W> WCodec<&OpenSyn, &mut W> for Zenoh080
@@ -322,7 +311,7 @@ pub(crate) struct AuthPubKeyFsm<'a> {
 }
 
 impl<'a> AuthPubKeyFsm<'a> {
-    pub(super) const fn new(inner: &'a RwLock<AuthPubKey>, prng: &'a Mutex<PseudoRng>) -> Self {
+    pub(crate) const fn new(inner: &'a RwLock<AuthPubKey>, prng: &'a Mutex<PseudoRng>) -> Self {
         Self { inner, prng }
     }
 }

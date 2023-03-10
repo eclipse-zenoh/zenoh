@@ -216,7 +216,10 @@ impl TransportManagerBuilder {
     }
 
     pub fn build(self, handler: Arc<dyn TransportEventHandler>) -> ZResult<TransportManager> {
-        let unicast = self.unicast.build()?;
+        // Initialize the PRNG and the Cipher
+        let mut prng = PseudoRng::from_entropy();
+
+        let unicast = self.unicast.build(&mut prng)?;
 
         let mut queue_size = [0; Priority::NUM];
         queue_size[Priority::Control as usize] = *self.queue_size.control();
@@ -250,7 +253,7 @@ impl TransportManagerBuilder {
 
         let params = TransportManagerParams { config, state };
 
-        Ok(TransportManager::new(params))
+        Ok(TransportManager::new(params, prng))
     }
 }
 
@@ -318,9 +321,8 @@ pub struct TransportManager {
 }
 
 impl TransportManager {
-    pub fn new(params: TransportManagerParams) -> TransportManager {
-        // Initialize the PRNG and the Cipher
-        let mut prng = PseudoRng::from_entropy();
+    pub fn new(params: TransportManagerParams, mut prng: PseudoRng) -> TransportManager {
+        // Initialize the Cipher
         let mut key = [0_u8; BlockCipher::BLOCK_SIZE];
         prng.fill_bytes(&mut key);
         let cipher = BlockCipher::new(key);

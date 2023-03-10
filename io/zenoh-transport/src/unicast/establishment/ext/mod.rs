@@ -13,6 +13,8 @@
 //
 
 pub mod auth;
+#[cfg(feature = "auth_pubkey")]
+pub(crate) mod multilink;
 pub(crate) mod qos;
 #[cfg(feature = "shared-memory")]
 pub(crate) mod shm;

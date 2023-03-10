@@ -41,6 +41,7 @@ use zenoh_result::ZResult;
 pub(super) type AcceptError = (zenoh_result::Error, Option<u8>);
 
 struct StateZenoh {
+    other_zid: ZenohId,
     batch_size: u16,
     resolution: Resolution,
 }
@@ -51,6 +52,7 @@ struct State {
     #[cfg(feature = "shared-memory")]
     ext_shm: ext::shm::StateAccept,
     ext_auth: ext::auth::StateAccept,
+    ext_mlink: ext::multilink::StateAccept,
 }
 
 // InitSyn
@@ -58,7 +60,6 @@ struct RecvInitSynIn {
     mine_version: u8,
 }
 struct RecvInitSynOut {
-    other_zid: ZenohId,
     other_whatami: WhatAmI,
     #[cfg(feature = "shared-memory")]
     ext_shm: Challenge,
@@ -69,21 +70,21 @@ struct SendInitAckIn {
     mine_version: u8,
     mine_zid: ZenohId,
     mine_whatami: WhatAmI,
-    other_zid: ZenohId,
     other_whatami: WhatAmI,
     #[cfg(feature = "shared-memory")]
     ext_shm: Challenge,
 }
 struct SendInitAckOut {
+    other_zid: ZenohId,
     cookie_nonce: ZInt,
 }
 
 // OpenSyn
 struct RecvOpenSynIn {
+    other_zid: ZenohId,
     cookie_nonce: ZInt,
 }
 struct RecvOpenSynOut {
-    other_zid: ZenohId,
     other_whatami: WhatAmI,
     other_lease: Duration,
     other_initial_sn: ZInt,
@@ -93,7 +94,6 @@ struct RecvOpenSynOut {
 struct SendOpenAckIn {
     mine_zid: ZenohId,
     mine_lease: Duration,
-    other_zid: ZenohId,
 }
 struct SendOpenAckOut {
     open_ack: OpenAck,
@@ -108,6 +108,8 @@ struct AcceptLink<'a> {
     #[cfg(feature = "shared-memory")]
     ext_shm: ext::shm::ShmFsm<'a>,
     ext_auth: ext::auth::AuthFsm<'a>,
+    #[cfg(feature = "auth_pubkey")]
+    ext_mlink: ext::multilink::MultiLinkFsm<'a>,
 }
 
 #[async_trait]
@@ -139,6 +141,9 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
                 return Err((e.into(), Some(close::reason::INVALID)));
             }
         };
+
+        // Store the ZenohId
+        state.zenoh.other_zid = init_syn.zid;
 
         // Check if the version is supported
         if init_syn.version != input.mine_version {
@@ -190,9 +195,14 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension MultiLink
+        self.ext_mlink
+            .recv_init_syn((&mut state.ext_mlink, init_syn.ext_mlink, init_syn.zid))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         let output = RecvInitSynOut {
             other_whatami: init_syn.whatami,
-            other_zid: init_syn.zid,
             #[cfg(feature = "shared-memory")]
             ext_shm,
         };
@@ -231,11 +241,17 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension MultiLink
+        let ext_mlink = self
+            .ext_mlink
+            .send_init_ack(&state.ext_mlink)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         // Create the cookie
         let cookie_nonce: ZInt = zasynclock!(self.prng).gen();
         let cookie = Cookie {
             whatami: input.other_whatami,
-            zid: input.other_zid,
             resolution: state.zenoh.resolution,
             batch_size: state.zenoh.batch_size,
             nonce: cookie_nonce,
@@ -243,6 +259,8 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             #[cfg(feature = "shared-memory")]
             ext_shm: state.ext_shm,
             ext_auth: state.ext_auth,
+            #[cfg(feature = "auth_pubkey")]
+            ext_mlink: state.ext_mlink,
         };
 
         let mut encrypted = vec![];
@@ -271,7 +289,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             ext_qos,
             ext_shm,
             ext_auth,
-            ext_mlink: None, // @TODO
+            ext_mlink,
         }
         .into();
 
@@ -281,7 +299,10 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
-        let output = SendInitAckOut { cookie_nonce };
+        let output = SendInitAckOut {
+            other_zid: state.zenoh.other_zid,
+            cookie_nonce,
+        };
         Ok(output)
     }
 
@@ -348,6 +369,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         // Rebuild the state from the cookie
         let mut state = State {
             zenoh: StateZenoh {
+                other_zid: input.other_zid,
                 batch_size: cookie.batch_size,
                 resolution: cookie.resolution,
             },
@@ -355,6 +377,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             #[cfg(feature = "shared-memory")]
             ext_shm: cookie.ext_shm,
             ext_auth: cookie.ext_auth,
+            ext_mlink: cookie.ext_mlink,
         };
 
         // Extension QoS
@@ -376,8 +399,13 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension MultiLink
+        self.ext_mlink
+            .recv_open_syn((&mut state.ext_mlink, open_syn.ext_mlink))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         let output = RecvOpenSynOut {
-            other_zid: cookie.zid,
             other_whatami: cookie.whatami,
             other_lease: open_syn.lease,
             other_initial_sn: open_syn.initial_sn,
@@ -418,7 +446,11 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Build OpenAck message
-        let mine_initial_sn = compute_sn(input.mine_zid, input.other_zid, state.zenoh.resolution);
+        let mine_initial_sn = compute_sn(
+            input.mine_zid,
+            state.zenoh.other_zid,
+            state.zenoh.resolution,
+        );
         let open_ack = OpenAck {
             lease: input.mine_lease,
             initial_sn: mine_initial_sn,
@@ -444,16 +476,19 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         #[cfg(feature = "shared-memory")]
         ext_shm: ext::shm::ShmFsm::new(&manager.state.unicast.shm),
         ext_auth: manager.state.unicast.authenticator.fsm(&manager.prng),
+        #[cfg(feature = "auth_pubkey")]
+        ext_mlink: manager.state.unicast.multilink.fsm(&manager.prng),
     };
 
     // Init handshake
     macro_rules! step {
-        ($s: expr) => {
-            match $s {
+        ($res:expr) => {
+            match $res {
                 Ok(output) => output,
                 Err((e, reason)) => {
                     log::error!("{}", e);
-                    close_link(link, reason).await;
+                    // @TODO
+                    close_link(link, manager, ZenohId::default(), reason).await;
                     return Err(e);
                 }
             }
@@ -463,6 +498,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
     let iack_out = {
         let mut state = State {
             zenoh: StateZenoh {
+                other_zid: manager.config.zid, // This is a temporary value
                 batch_size: manager.config.batch_size,
                 resolution: manager.config.resolution,
             },
@@ -474,6 +510,8 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
                 .unicast
                 .authenticator
                 .accept(&mut *zasynclock!(manager.prng)),
+            #[cfg(feature = "auth_pubkey")]
+            ext_mlink: manager.state.unicast.multilink.accept(false), // @TODO
         };
 
         // Let's scope the Init phase in such a way memory is freed by Rust
@@ -488,7 +526,6 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
             mine_version: manager.config.version,
             mine_zid: manager.config.zid,
             mine_whatami: manager.config.whatami,
-            other_zid: isyn_out.other_zid,
             other_whatami: isyn_out.other_whatami,
             #[cfg(feature = "shared-memory")]
             ext_shm: isyn_out.ext_shm,
@@ -498,6 +535,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
 
     // Open handshake
     let osyn_in = RecvOpenSynIn {
+        other_zid: iack_out.other_zid,
         cookie_nonce: iack_out.cookie_nonce,
     };
     let (mut state, osyn_out) = step!(fsm.recv_open_syn(osyn_in).await);
@@ -506,13 +544,12 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
     let oack_in = SendOpenAckIn {
         mine_zid: manager.config.zid,
         mine_lease: manager.config.unicast.lease,
-        other_zid: osyn_out.other_zid,
     };
     let oack_out = step!(fsm.send_open_ack((&mut state, oack_in)).await);
 
     // Initialize the transport
     let config = TransportConfigUnicast {
-        zid: osyn_out.other_zid,
+        zid: state.zenoh.other_zid,
         whatami: osyn_out.other_whatami,
         sn_resolution: state.zenoh.resolution.get(Field::FrameSN),
         tx_initial_sn: oack_out.open_ack.initial_sn,
@@ -559,7 +596,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
 
     log::debug!(
         "New transport link accepted from {} to {}: {}",
-        osyn_out.other_zid,
+        state.zenoh.other_zid,
         manager.config.zid,
         link
     );
