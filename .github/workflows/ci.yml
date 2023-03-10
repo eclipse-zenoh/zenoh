@@ -43,18 +43,24 @@ jobs:
         with:
           command: fmt
           args: -- --check
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Clippy
         uses: actions-rs/cargo@v1
         with:
           command: clippy
           args: --all-targets -- -D warnings
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Clippy unstable
         uses: actions-rs/cargo@v1
         with:
           command: clippy
           args: --all-targets --features unstable -- -D warnings
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
   test:
     name: Run tests on ${{ matrix.os }}
@@ -82,6 +88,8 @@ jobs:
         with:
           command: build
           args: --verbose --all-targets
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Install nextest
         run: cargo install cargo-nextest --locked
@@ -92,6 +100,7 @@ jobs:
           command: nextest
           args: run
         env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
       - name: Run doctests
@@ -100,6 +109,7 @@ jobs:
           command: test
           args: --doc
         env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
   nostd:
@@ -124,3 +134,5 @@ jobs:
         with:
           command: check
           args: --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse

@@ -30,21 +30,31 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           components: rustfmt, clippy
+
       - name: Code format check
         uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: -- --check
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
       - name: Clippy check
         uses: actions-rs/cargo@v1
         with:
           command: clippy
           args: --all-targets -- -D warnings
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
       - name: Clippy unstable check
         uses: actions-rs/cargo@v1
         with:
           command: clippy
           args: --all-targets --features unstable -- -D warnings
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
       - name: Environment setup
         id: env
         shell: bash
@@ -95,21 +105,28 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
+
       - name: Install nextest
         run: cargo install cargo-nextest --locked
+      env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
           command: nextest
           args: run --release --verbose
         env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
+
       - name: Run doctests
         uses: actions-rs/cargo@v1
         with:
           command: test
           args: --doc
         env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
   doc:
@@ -121,12 +138,13 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
       - name: generate doc
-        env:
-          RUSTDOCFLAGS: -Dwarnings
         uses: actions-rs/cargo@v1
         with:
           command: doc
           args: --no-deps
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+          RUSTDOCFLAGS: -Dwarnings
 
   builds:
     name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
@@ -221,6 +239,8 @@ jobs:
           use-cross: ${{ matrix.job.use-cross }}
           command: build
           args: --release --bins --lib --target=${{ matrix.job.target }}
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Debian package - zenohd
         if: contains(matrix.job.target, '-linux-gnu')
@@ -228,6 +248,8 @@ jobs:
         with:
           command: deb
           args: --no-build --target=${{ matrix.job.target }} -p zenohd
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse          
 
       - name: Debian package - zenoh-plugin-storage-manager
         if: contains(matrix.job.target, '-linux-gnu')
@@ -235,6 +257,8 @@ jobs:
         with:
           command: deb
           args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-storage-manager
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse          
 
       - name: Debian package - zenoh-plugin-rest
         if: contains(matrix.job.target, '-linux-gnu')
@@ -242,6 +266,8 @@ jobs:
         with:
           command: deb
           args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-rest
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse          
 
       - name: Packaging
         id: package
