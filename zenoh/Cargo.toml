@@ -38,6 +38,7 @@ shared-memory = [
     "zenoh-transport/shared-memory",
 ]
 stats = ["zenoh-transport/stats"]
+transport_multilink = ["zenoh-transport/transport_multilink"]
 transport_quic = ["zenoh-transport/transport_quic"]
 transport_serial = ["zenoh-transport/transport_serial"]
 transport_tcp = ["zenoh-transport/transport_tcp"]
@@ -49,6 +50,7 @@ unstable = []
 default = [
     "auth_pubkey",
     "auth_usrpwd",
+    "transport_multilink",
     "transport_quic",
     "transport_tcp",
     "transport_tls",

@@ -38,7 +38,7 @@ use crate::establishment::{AcceptFsm, OpenFsm};
 // Authenticator
 #[derive(Debug)]
 pub struct AuthPubKey {
-    lookup: HashSet<ZPublicKey>,
+    lookup: Option<HashSet<ZPublicKey>>,
     pub_key: ZPublicKey,
     pri_key: ZPrivateKey,
 }
@@ -46,19 +46,27 @@ pub struct AuthPubKey {
 impl AuthPubKey {
     pub fn new(pub_key: ZPublicKey, pri_key: ZPrivateKey) -> Self {
         Self {
-            lookup: HashSet::new(),
+            lookup: Some(HashSet::new()),
             pub_key,
             pri_key,
         }
     }
 
+    pub(crate) fn disable_lookup(&mut self) {
+        self.lookup = None;
+    }
+
     pub async fn add_pubkey(&mut self, pub_key: ZPublicKey) -> ZResult<()> {
-        self.lookup.insert(pub_key);
+        if let Some(lookup) = self.lookup.as_mut() {
+            lookup.insert(pub_key);
+        }
         Ok(())
     }
 
     pub async fn del_pubkey(&mut self, pub_key: &ZPublicKey) -> ZResult<()> {
-        self.lookup.remove(pub_key);
+        if let Some(lookup) = self.lookup.as_mut() {
+            lookup.remove(pub_key);
+        }
         Ok(())
     }
 
@@ -379,8 +387,10 @@ impl<'a> OpenFsm for AuthPubKeyFsm<'a> {
             .map_err(|_| zerror!("{S} Decoding error."))?;
 
         let r_inner = zasyncread!(self.inner);
-        if !r_inner.lookup.is_empty() && !r_inner.lookup.contains(&init_ack.bob_pubkey) {
-            bail!("{S} Unauthorized PubKey.");
+        if let Some(lookup) = r_inner.lookup.as_ref() {
+            if !lookup.is_empty() && !lookup.contains(&init_ack.bob_pubkey) {
+                bail!("{S} Unauthorized PubKey.");
+            }
         }
 
         let mut prng = zasynclock!(self.prng);
@@ -529,11 +539,11 @@ impl<'a> AcceptFsm for AuthPubKeyFsm<'a> {
             .read(&mut reader)
             .map_err(|_| zerror!("{S} Decoding error."))?;
 
-        if !zasyncread!(self.inner)
-            .lookup
-            .contains(&init_syn.alice_pubkey)
-        {
-            bail!("{S} Unauthorized PubKey.");
+        let r_inner = zasyncread!(self.inner);
+        if let Some(lookup) = r_inner.lookup.as_ref() {
+            if !lookup.contains(&init_syn.alice_pubkey) {
+                bail!("{S} Unauthorized PubKey.");
+            }
         }
 
         let mut prng = zasynclock!(self.prng);

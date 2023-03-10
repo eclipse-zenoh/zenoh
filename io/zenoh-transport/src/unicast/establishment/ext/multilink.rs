@@ -21,25 +21,20 @@ use crate::{
 use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
 use rand::{CryptoRng, Rng};
-use rsa::{RsaPrivateKey, RsaPublicKey};
-use std::collections::HashMap;
+use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_core::{bail, zasynclock, zasyncwrite, zerror, Error as ZError, Result as ZResult};
+use zenoh_core::{zerror, Error as ZError, Result as ZResult};
 use zenoh_crypto::PseudoRng;
-use zenoh_protocol::{
-    core::ZenohId,
-    transport::{init, open},
-};
+use zenoh_protocol::transport::{init, open};
 
 const KEY_SIZE: usize = 512;
 
 // Extension Fsm
 pub(crate) struct MultiLink {
-    known: Mutex<HashMap<ZenohId, Option<ZPublicKey>>>,
     pubkey: RwLock<AuthPubKey>,
 }
 
@@ -50,44 +45,39 @@ impl MultiLink {
     {
         let pri_key = RsaPrivateKey::new(rng, KEY_SIZE)?;
         let pub_key = RsaPublicKey::from(&pri_key);
-        let s = Self {
-            known: Mutex::new(HashMap::new()),
-            pubkey: RwLock::new(AuthPubKey::new(pub_key.into(), pri_key.into())),
-        };
-        Ok(s)
+        let mut auth = AuthPubKey::new(pub_key.into(), pri_key.into());
+        auth.disable_lookup();
+        Ok(Self {
+            pubkey: RwLock::new(auth),
+        })
     }
 
     pub(crate) fn open(&self, is_multilink: bool) -> StateOpen {
         StateOpen {
-            pubkey: is_multilink.then_some(pubkey::StateOpen::new()),
+            pubkey: is_multilink.then_some((
+                pubkey::StateOpen::new(),
+                RsaPublicKey::new_unchecked(BigUint::new(vec![]), BigUint::new(vec![])).into(),
+            )),
         }
     }
 
     pub(crate) fn accept(&self, is_multilink: bool) -> StateAccept {
         StateAccept {
-            pubkey: is_multilink.then_some(pubkey::StateAccept::new()),
+            pubkey: is_multilink.then_some((
+                pubkey::StateAccept::new(),
+                RsaPublicKey::new_unchecked(BigUint::new(vec![]), BigUint::new(vec![])).into(),
+            )),
         }
     }
 
     pub(crate) fn fsm<'a>(&'a self, prng: &'a Mutex<PseudoRng>) -> MultiLinkFsm<'a> {
         MultiLinkFsm {
-            known: &self.known,
-            pubkey: &self.pubkey,
             fsm: AuthPubKeyFsm::new(&self.pubkey, prng),
         }
-    }
-
-    pub(crate) async fn close(&self, zid: ZenohId) -> ZResult<()> {
-        if let Some(Some(pk)) = zasynclock!(self.known).remove(&zid) {
-            zasyncwrite!(self.pubkey).del_pubkey(&pk).await?;
-        }
-        Ok(())
     }
 }
 
 pub(crate) struct MultiLinkFsm<'a> {
-    known: &'a Mutex<HashMap<ZenohId, Option<ZPublicKey>>>,
-    pubkey: &'a RwLock<AuthPubKey>,
     fsm: AuthPubKeyFsm<'a>,
 }
 
@@ -95,12 +85,12 @@ pub(crate) struct MultiLinkFsm<'a> {
 /*              OPEN                 */
 /*************************************/
 pub(crate) struct StateOpen {
-    pubkey: Option<pubkey::StateOpen>,
+    pubkey: Option<(pubkey::StateOpen, ZPublicKey)>,
 }
 
 impl StateOpen {
-    pub(crate) const fn is_multilink(&self) -> bool {
-        self.pubkey.is_some()
+    pub(crate) fn multilink(&self) -> Option<ZPublicKey> {
+        self.pubkey.as_ref().map(|(_, p)| p.clone())
     }
 }
 
@@ -119,7 +109,11 @@ impl<'a> OpenFsm for MultiLinkFsm<'a> {
             None => return Ok(None),
         };
 
-        let r = self.fsm.send_init_syn(pubkey).await?.map(|x| x.transmute());
+        let r = self
+            .fsm
+            .send_init_syn(&pubkey.0)
+            .await?
+            .map(|x| x.transmute());
         Ok(r)
     }
 
@@ -129,23 +123,33 @@ impl<'a> OpenFsm for MultiLinkFsm<'a> {
         &self,
         input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
+        const S: &str = "MultiLink extension - Recv InitAck.";
+
         let (state, mut ext) = input;
-        let pubkey = match state.pubkey.as_mut() {
+        let mut pubkey = match state.pubkey.take() {
             Some(pubkey) => pubkey,
             None => return Ok(()),
         };
 
         match ext.take() {
             Some(ext) => {
+                let codec = Zenoh080::new();
+                let mut reader = ext.value.reader();
+                let init_ack: pubkey::InitAck = codec
+                    .read(&mut reader)
+                    .map_err(|_| zerror!("{S} Decoding error."))?;
+
                 self.fsm
-                    .recv_init_ack((pubkey, Some(ext.transmute())))
-                    .await
+                    .recv_init_ack((&mut pubkey.0, Some(ext.transmute())))
+                    .await?;
+
+                state.pubkey = Some((pubkey.0, init_ack.bob_pubkey));
             }
             None => {
                 state.pubkey = None;
-                Ok(())
             }
         }
+        Ok(())
     }
 
     type SendOpenSynIn = &'a StateOpen;
@@ -159,7 +163,11 @@ impl<'a> OpenFsm for MultiLinkFsm<'a> {
             None => return Ok(None),
         };
 
-        let r = self.fsm.send_open_syn(pubkey).await?.map(|x| x.transmute());
+        let r = self
+            .fsm
+            .send_open_syn(&pubkey.0)
+            .await?
+            .map(|x| x.transmute());
         Ok(r)
     }
 
@@ -178,14 +186,15 @@ impl<'a> OpenFsm for MultiLinkFsm<'a> {
         match ext.take() {
             Some(ext) => {
                 self.fsm
-                    .recv_open_ack((pubkey, Some(ext.transmute())))
-                    .await
+                    .recv_open_ack((&mut pubkey.0, Some(ext.transmute())))
+                    .await?;
             }
             None => {
                 state.pubkey = None;
-                Ok(())
             }
         }
+
+        Ok(())
     }
 }
 
@@ -194,16 +203,32 @@ impl<'a> OpenFsm for MultiLinkFsm<'a> {
 /*************************************/
 #[derive(Debug, PartialEq)]
 pub(crate) struct StateAccept {
-    pubkey: Option<pubkey::StateAccept>,
+    pubkey: Option<(pubkey::StateAccept, ZPublicKey)>,
 }
 
 impl StateAccept {
+    pub(crate) fn multilink(&self) -> Option<ZPublicKey> {
+        self.pubkey.as_ref().map(|(_, p)| p.clone())
+    }
+
     #[cfg(test)]
     pub(crate) fn rand() -> Self {
         let mut rng = rand::thread_rng();
-        Self {
-            pubkey: rng.gen_bool(0.5).then_some(pubkey::StateAccept::rand()),
-        }
+        let pubkey = if rng.gen_bool(0.5) {
+            let n = BigUint::from_bytes_le(&[
+                0x41, 0x74, 0xc6, 0x40, 0x18, 0x63, 0xbd, 0x59, 0xe6, 0x0d, 0xe9, 0x23, 0x3e, 0x95,
+                0xca, 0xb4, 0x5d, 0x17, 0x3d, 0x14, 0xdd, 0xbb, 0x16, 0x4a, 0x49, 0xeb, 0x43, 0x27,
+                0x79, 0x3e, 0x75, 0x67, 0xd6, 0xf6, 0x7f, 0xe7, 0xbf, 0xb5, 0x1d, 0xf6, 0x27, 0x80,
+                0xca, 0x26, 0x35, 0xa2, 0xc5, 0x4c, 0x96, 0x50, 0xaa, 0x9f, 0xf4, 0x47, 0xbe, 0x06,
+                0x9c, 0xd1, 0xec, 0xfd, 0x1e, 0x81, 0xe9, 0xc4,
+            ]);
+            let e = BigUint::from_bytes_le(&[0x01, 0x00, 0x01]);
+            let pub_key = RsaPublicKey::new(n, e).unwrap();
+            Some((pubkey::StateAccept::rand(), pub_key.into()))
+        } else {
+            None
+        };
+        Self { pubkey }
     }
 }
 
@@ -215,8 +240,9 @@ where
 
     fn write(self, writer: &mut W, x: &StateAccept) -> Self::Output {
         match x.pubkey.as_ref() {
-            Some(p) => {
+            Some((s, p)) => {
                 self.write(&mut *writer, 1u8)?;
+                self.write(&mut *writer, s)?;
                 self.write(&mut *writer, p)
             }
             None => self.write(&mut *writer, 0u8),
@@ -232,13 +258,14 @@ where
 
     fn read(self, reader: &mut R) -> Result<StateAccept, Self::Error> {
         let is_multilink: u8 = self.read(&mut *reader)?;
-        Ok(StateAccept {
-            pubkey: if is_multilink == 1 {
-                Some(self.read(&mut *reader)?)
-            } else {
-                None
-            },
-        })
+        let pubkey = if is_multilink == 1 {
+            let s: pubkey::StateAccept = self.read(&mut *reader)?;
+            let p: ZPublicKey = self.read(&mut *reader)?;
+            Some((s, p))
+        } else {
+            None
+        };
+        Ok(StateAccept { pubkey })
     }
 }
 
@@ -246,7 +273,7 @@ where
 impl<'a> AcceptFsm for MultiLinkFsm<'a> {
     type Error = ZError;
 
-    type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::MultiLink>, ZenohId);
+    type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::MultiLink>);
     type RecvInitSynOut = ();
     async fn recv_init_syn(
         &self,
@@ -254,56 +281,32 @@ impl<'a> AcceptFsm for MultiLinkFsm<'a> {
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         const S: &str = "MultiLink extension - Recv InitSyn.";
 
-        let (state, mut ext, zid) = input;
-        let pubkey = match state.pubkey.as_mut() {
+        let (mut state, mut ext) = input;
+        let mut pubkey = match state.pubkey.take() {
             Some(pubkey) => pubkey,
             None => return Ok(()),
         };
 
         match ext.take() {
             Some(ext) => {
-                // Verify if the configuration is coherent with what we have in memory
                 let codec = Zenoh080::new();
                 let mut reader = ext.value.reader();
                 let init_syn: pubkey::InitSyn = codec
                     .read(&mut reader)
                     .map_err(|_| zerror!("{S} Decoding error."))?;
 
-                {
-                    let mut m_known = zasynclock!(self.known);
-                    match m_known.get(&zid) {
-                        Some(Some(pk)) if pk != &init_syn.alice_pubkey => {
-                            bail!("{S} Spoofing detected.");
-                        }
-                        Some(None) => bail!("{S} Spoofing detected."),
-                        _ => {}
-                    }
-                    m_known.insert(zid, Some(init_syn.alice_pubkey.clone()));
-                    zasyncwrite!(self.pubkey)
-                        .add_pubkey(init_syn.alice_pubkey)
-                        .await?;
-                }
-
                 self.fsm
-                    .recv_open_syn((pubkey, Some(ext.transmute())))
-                    .await
+                    .recv_init_syn((&mut pubkey.0, Some(ext.transmute())))
+                    .await?;
+
+                state.pubkey = Some((pubkey.0, init_syn.alice_pubkey));
             }
             None => {
-                // Verify if the configuration is coherent with what we have in memory
-                let mut m_known = zasynclock!(self.known);
-                match m_known.get(&zid) {
-                    Some(Some(_)) => {
-                        bail!("{S} Spoofing detected.");
-                    }
-                    Some(None) => {}
-                    None => {
-                        let _ = m_known.insert(zid, None);
-                    }
-                }
                 state.pubkey = None;
-                Ok(())
             }
         }
+
+        Ok(())
     }
 
     type SendInitAckIn = &'a StateAccept;
@@ -317,7 +320,11 @@ impl<'a> AcceptFsm for MultiLinkFsm<'a> {
             None => return Ok(None),
         };
 
-        let r = self.fsm.send_init_ack(pubkey).await?.map(|x| x.transmute());
+        let r = self
+            .fsm
+            .send_init_ack(&pubkey.0)
+            .await?
+            .map(|x| x.transmute());
         Ok(r)
     }
 
@@ -334,7 +341,7 @@ impl<'a> AcceptFsm for MultiLinkFsm<'a> {
         };
 
         self.fsm
-            .recv_open_syn((pubkey, ext.map(|x| x.transmute())))
+            .recv_open_syn((&mut pubkey.0, ext.map(|x| x.transmute())))
             .await
     }
 
@@ -349,7 +356,11 @@ impl<'a> AcceptFsm for MultiLinkFsm<'a> {
             None => return Ok(None),
         };
 
-        let r = self.fsm.send_open_ack(pubkey).await?.map(|x| x.transmute());
+        let r = self
+            .fsm
+            .send_open_ack(&pubkey.0)
+            .await?
+            .map(|x| x.transmute());
         Ok(r)
     }
 }

@@ -204,7 +204,13 @@ impl TransportUnicastInner {
         // Check if we can add more inbound links
         if let LinkUnicastDirection::Inbound = direction {
             let count = guard.iter().filter(|l| l.direction == direction).count();
-            let limit = self.manager.config.unicast.max_links;
+
+            let mut limit = 1;
+
+            #[cfg(feature = "transport_multilink")]
+            if self.config.multilink.is_some() {
+                limit = self.manager.config.unicast.max_links;
+            }
 
             if count >= limit {
                 let e = zerror!(

@@ -24,6 +24,8 @@ use super::common;
 #[cfg(feature = "stats")]
 use super::common::stats::stats_struct;
 use super::{TransportPeer, TransportPeerEventHandler};
+#[cfg(feature = "transport_multilink")]
+use crate::establishment::ext::auth::ZPublicKey;
 pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};
@@ -80,7 +82,7 @@ stats_struct! {
 /*************************************/
 /*        TRANSPORT UNICAST          */
 /*************************************/
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct TransportConfigUnicast {
     pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
@@ -88,6 +90,8 @@ pub(crate) struct TransportConfigUnicast {
     pub(crate) tx_initial_sn: ZInt,
     pub(crate) is_shm: bool,
     pub(crate) is_qos: bool,
+            #[cfg(feature = "transport_multilink")]
+    pub(crate) multilink: Option<ZPublicKey>,
 }
 
 /// [`TransportUnicast`] is the transport handler returned

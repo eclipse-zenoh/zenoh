@@ -116,15 +116,7 @@ pub(super) fn compute_sn(zid1: ZenohId, zid2: ZenohId, resolution: Resolution) -
     ZInt::from_le_bytes(array) & seq_num::get_mask(resolution.get(Field::FrameSN))
 }
 
-pub(super) async fn close_link(
-    link: &LinkUnicast,
-    manager: &TransportManager,
-    zid: ZenohId,
-    reason: Option<u8>,
-) {
-    #[cfg(feature = "auth_pubkey")]
-    let _ = manager.state.unicast.multilink.close(zid).await;
-
+pub(super) async fn close_link(link: &LinkUnicast, reason: Option<u8>) {
     if let Some(reason) = reason {
         // Build the close message
         let message: TransportMessage = Close {

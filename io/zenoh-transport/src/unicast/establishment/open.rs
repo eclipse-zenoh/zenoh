@@ -42,6 +42,8 @@ struct State {
     #[cfg(feature = "shared-memory")]
     ext_shm: ext::shm::StateOpen,
     ext_auth: ext::auth::StateOpen,
+    #[cfg(feature = "transport_multilink")]
+    ext_mlink: ext::multilink::StateOpen,
 }
 
 // InitSyn
@@ -88,6 +90,8 @@ struct OpenLink<'a> {
     #[cfg(feature = "shared-memory")]
     ext_shm: ext::shm::ShmFsm<'a>,
     ext_auth: ext::auth::AuthFsm<'a>,
+    #[cfg(feature = "transport_multilink")]
+    ext_mlink: ext::multilink::MultiLinkFsm<'a>,
 }
 
 #[async_trait]
@@ -126,6 +130,14 @@ impl<'a> OpenFsm for OpenLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension MultiLink
+        #[cfg(feature = "transport_multilink")]
+        let ext_mlink = self
+            .ext_mlink
+            .send_init_syn(&state.ext_mlink)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         let msg: TransportMessage = InitSyn {
             version: input.mine_version,
             whatami: input.mine_whatami,
@@ -135,7 +147,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
             ext_qos,
             ext_shm,
             ext_auth,
-            ext_mlink: None, // @TODO
+            ext_mlink,
         }
         .into();
 
@@ -247,6 +259,13 @@ impl<'a> OpenFsm for OpenLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension MultiLink
+        #[cfg(feature = "transport_multilink")]
+        self.ext_mlink
+            .recv_init_ack((&mut state.ext_mlink, init_ack.ext_mlink))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         let output = RecvInitAckOut {
             other_zid: init_ack.zid,
             other_whatami: init_ack.whatami,
@@ -289,6 +308,14 @@ impl<'a> OpenFsm for OpenLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension MultiLink
+        #[cfg(feature = "transport_multilink")]
+        let ext_mlink = self
+            .ext_mlink
+            .send_open_syn(&state.ext_mlink)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         // Build and send an OpenSyn message
         let mine_initial_sn = compute_sn(input.mine_zid, input.other_zid, state.zenoh.resolution);
         let message: TransportMessage = OpenSyn {
@@ -298,7 +325,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
             ext_qos,
             ext_shm,
             ext_auth,
-            ext_mlink: None, // @TODO
+            ext_mlink,
         }
         .into();
 
@@ -368,6 +395,13 @@ impl<'a> OpenFsm for OpenLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension MultiLink
+        #[cfg(feature = "transport_multilink")]
+        self.ext_mlink
+            .recv_open_ack((&mut state.ext_mlink, open_ack.ext_mlink))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         let output = RecvOpenAckOut {
             other_initial_sn: open_ack.initial_sn,
             other_lease: open_ack.lease,
@@ -386,6 +420,8 @@ pub(crate) async fn open_link(
         #[cfg(feature = "shared-memory")]
         ext_shm: ext::shm::ShmFsm::new(&manager.state.unicast.shm),
         ext_auth: manager.state.unicast.authenticator.fsm(&manager.prng),
+        #[cfg(feature = "transport_multilink")]
+        ext_mlink: manager.state.unicast.multilink.fsm(&manager.prng),
     };
 
     let mut state = State {
@@ -401,6 +437,12 @@ pub(crate) async fn open_link(
             .unicast
             .authenticator
             .open(&mut *zasynclock!(manager.prng)),
+        #[cfg(feature = "transport_multilink")]
+        ext_mlink: manager
+            .state
+            .unicast
+            .multilink
+            .open(manager.config.unicast.max_links > 1),
     };
 
     // Init handshake
@@ -409,8 +451,7 @@ pub(crate) async fn open_link(
             match $s {
                 Ok(output) => output,
                 Err((e, reason)) => {
-                    // @TODO
-                    close_link(link, manager, ZenohId::default(), reason).await;
+                    close_link(link, reason).await;
                     return Err(e);
                 }
             }
@@ -450,6 +491,8 @@ pub(crate) async fn open_link(
         is_shm: state.ext_shm.is_shm(),
         #[cfg(not(feature = "shared-memory"))]
         is_shm: false,
+        #[cfg(feature = "transport_multilink")]
+        multilink: state.ext_mlink.multilink(),
     };
     let transport = step!(manager
         .init_transport_unicast(config)

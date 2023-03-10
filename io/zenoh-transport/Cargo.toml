@@ -32,6 +32,7 @@ shared-memory = [
 ]
 auth_pubkey = ["rsa"]
 auth_usrpwd = []
+transport_multilink = ["auth_pubkey"]
 transport_quic = ["zenoh-link/transport_quic"]
 transport_tcp = ["zenoh-link/transport_tcp"]
 transport_tls = ["zenoh-link/transport_tls"]

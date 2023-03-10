@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "auth_pubkey")]
+#[cfg(feature = "transport_multilink")]
 use crate::unicast::establishment::ext::multilink::MultiLink;
 #[cfg(feature = "shared-memory")]
 use crate::unicast::shm::SharedMemoryUnicast;
@@ -159,11 +159,7 @@ impl TransportManagerBuilderUnicast {
         Ok(self)
     }
 
-    pub fn build(
-        #[allow(unused_mut)] // auth_pubkey and shared-memory features require mut
-        mut self,
-        prng: &mut PseudoRng,
-    ) -> ZResult<TransportManagerParamsUnicast> {
+    pub fn build(self, prng: &mut PseudoRng) -> ZResult<TransportManagerParamsUnicast> {
         let config = TransportManagerConfigUnicast {
             lease: self.lease,
             keep_alive: self.keep_alive,
@@ -183,7 +179,7 @@ impl TransportManagerBuilderUnicast {
             authenticator: Arc::new(self.authenticator),
             #[cfg(feature = "shared-memory")]
             shm: Arc::new(SharedMemoryUnicast::make()?),
-            #[cfg(feature = "auth_pubkey")]
+            #[cfg(feature = "transport_multilink")]
             multilink: Arc::new(MultiLink::make(prng)?),
         };
 
@@ -375,6 +371,11 @@ impl TransportManager {
                 }
 
                 // Create the transport
+                #[cfg(not(feature = "transport_multilink"))]
+                let is_multilink = false;
+                #[cfg(feature = "transport_multilink")]
+                let is_multilink = config.multilink.is_some();
+
                 let stc = TransportConfigUnicast {
                     zid: config.zid,
                     whatami: config.whatami,
@@ -382,6 +383,8 @@ impl TransportManager {
                     tx_initial_sn: config.tx_initial_sn,
                     is_shm: config.is_shm,
                     is_qos: config.is_qos,
+                    #[cfg(feature = "transport_multilink")]
+                    multilink: config.multilink,
                 };
                 let a_t = Arc::new(TransportUnicastInner::make(self.clone(), stc)?);
 
@@ -390,14 +393,15 @@ impl TransportManager {
                 guard.insert(config.zid, a_t);
 
                 log::debug!(
-                    "New transport opened between {} and {}: whatami {}, sn resolution {:?}, initial sn {:?}, shm: {}, qos: {}",
+                    "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, shm: {}, qos: {}, multilink: {}",
                     self.config.zid,
                     config.zid,
                     config.whatami,
                     config.sn_resolution,
                     config.tx_initial_sn,
                     config.is_shm,
-                    config.is_qos
+                    config.is_qos,
+                    is_multilink
                 );
 
                 Ok(transport)
