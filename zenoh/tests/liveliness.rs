@@ -36,16 +36,32 @@ fn zenoh_liveliness() {
 
         let session2 = ztimeout!(zenoh::open(config::peer()).res_async()).unwrap();
 
-        let replies = ztimeout!(session2.liveliness().get("zenoh_liveliness_test").res_async()).unwrap();
+        let replies = ztimeout!(session2
+            .liveliness()
+            .get("zenoh_liveliness_test")
+            .res_async())
+        .unwrap();
         assert!(replies.into_iter().count() == 0);
 
-        let sub = ztimeout!(session2.liveliness().declare_subscriber("zenoh_liveliness_test").res_async()).unwrap();
+        let sub = ztimeout!(session2
+            .liveliness()
+            .declare_subscriber("zenoh_liveliness_test")
+            .res_async())
+        .unwrap();
 
-        let token = ztimeout!(session1.liveliness().declare_token("zenoh_liveliness_test").res_async()).unwrap();
+        let token = ztimeout!(session1
+            .liveliness()
+            .declare_token("zenoh_liveliness_test")
+            .res_async())
+        .unwrap();
 
         task::sleep(SLEEP).await;
 
-        let replies = ztimeout!(session2.liveliness().get("zenoh_liveliness_test").res_async()).unwrap();
+        let replies = ztimeout!(session2
+            .liveliness()
+            .get("zenoh_liveliness_test")
+            .res_async())
+        .unwrap();
         let sample = ztimeout!(replies.recv_async()).unwrap().sample.unwrap();
         assert!(sample.kind == SampleKind::Put);
         assert!(sample.key_expr.as_str() == "zenoh_liveliness_test");
@@ -60,7 +76,11 @@ fn zenoh_liveliness() {
 
         task::sleep(SLEEP).await;
 
-        let replies = ztimeout!(session2.liveliness().get("zenoh_liveliness_test").res_async()).unwrap();
+        let replies = ztimeout!(session2
+            .liveliness()
+            .get("zenoh_liveliness_test")
+            .res_async())
+        .unwrap();
         assert!(ztimeout!(replies.recv_async()).is_err());
 
         assert!(replies.try_recv().is_err());
