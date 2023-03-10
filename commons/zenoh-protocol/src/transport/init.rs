@@ -113,6 +113,7 @@ pub struct InitSyn {
     pub ext_qos: Option<ext::QoS>,
     pub ext_shm: Option<ext::Shm>,
     pub ext_auth: Option<ext::Auth>,
+    pub ext_mlink: Option<ext::MultiLink>,
 }
 
 // Extensions
@@ -122,6 +123,7 @@ pub mod ext {
     pub const QOS: u8 = 0x01;
     pub const SHM: u8 = 0x02;
     pub const AUTH: u8 = 0x03;
+    pub const MLINK: u8 = 0x04;
 
     /// # QoS extension
     /// Used to negotiate the use of QoS
@@ -134,6 +136,10 @@ pub mod ext {
     /// # Auth extension
     /// Used as challenge for probing authentication rights
     pub type Auth = ZExtZBuf<AUTH>;
+
+    /// # Multilink extension
+    /// Used as challenge for probing multilink capabilities
+    pub type MultiLink = ZExtZBuf<MLINK>;
 }
 
 impl InitSyn {
@@ -152,6 +158,7 @@ impl InitSyn {
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
+        let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
 
         Self {
             version,
@@ -162,6 +169,7 @@ impl InitSyn {
             ext_qos,
             ext_shm,
             ext_auth,
+            ext_mlink,
         }
     }
 }
@@ -177,6 +185,7 @@ pub struct InitAck {
     pub ext_qos: Option<ext::QoS>,
     pub ext_shm: Option<ext::Shm>,
     pub ext_auth: Option<ext::Auth>,
+    pub ext_mlink: Option<ext::MultiLink>,
 }
 
 impl InitAck {
@@ -200,6 +209,7 @@ impl InitAck {
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
+        let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
 
         Self {
             version,
@@ -211,6 +221,7 @@ impl InitAck {
             ext_qos,
             ext_shm,
             ext_auth,
+            ext_mlink,
         }
     }
 }

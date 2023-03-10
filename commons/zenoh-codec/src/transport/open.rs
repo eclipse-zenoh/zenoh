@@ -40,8 +40,11 @@ where
         if x.lease.as_millis() % 1_000 == 0 {
             header |= flag::T;
         }
-        let has_ext = x.ext_qos.is_some() || x.ext_shm.is_some() || x.ext_auth.is_some();
-        if has_ext {
+        let mut n_exts = (x.ext_qos.is_some() as u8)
+            + (x.ext_shm.is_some() as u8)
+            + (x.ext_auth.is_some() as u8)
+            + (x.ext_mlink.is_some() as u8);
+        if n_exts != 0 {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
@@ -57,16 +60,20 @@ where
 
         // Extensions
         if let Some(qos) = x.ext_qos.as_ref() {
-            let has_ext = x.ext_shm.is_some() || x.ext_auth.is_some();
-            self.write(&mut *writer, (qos, has_ext))?;
+            n_exts -= 1;
+            self.write(&mut *writer, (qos, n_exts != 0))?;
         }
         if let Some(shm) = x.ext_shm.as_ref() {
-            let has_ext = x.ext_auth.is_some();
-            self.write(&mut *writer, (shm, has_ext))?;
+            n_exts -= 1;
+            self.write(&mut *writer, (shm, n_exts != 0))?;
         }
         if let Some(auth) = x.ext_auth.as_ref() {
-            let has_ext = false;
-            self.write(&mut *writer, (auth, has_ext))?;
+            n_exts -= 1;
+            self.write(&mut *writer, (auth, n_exts != 0))?;
+        }
+        if let Some(mlink) = x.ext_mlink.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (mlink, n_exts != 0))?;
         }
 
         Ok(())
@@ -108,28 +115,34 @@ where
         let cookie: ZSlice = self.codec.read(&mut *reader)?;
 
         // Extensions
-        let mut qos = None;
-        let mut shm = None;
-        let mut auth = None;
+        let mut ext_qos = None;
+        let mut ext_shm = None;
+        let mut ext_auth = None;
+        let mut ext_mlink = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
             match imsg::mid(ext) {
-                ext::QOS => {
+                ext::QoS::ID => {
                     let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
-                    qos = Some(q);
+                    ext_qos = Some(q);
                     has_ext = ext;
                 }
-                ext::SHM => {
+                ext::Shm::ID => {
                     let (s, ext): (ext::Shm, bool) = eodec.read(&mut *reader)?;
-                    shm = Some(s);
+                    ext_shm = Some(s);
                     has_ext = ext;
                 }
-                ext::AUTH => {
+                ext::Auth::ID => {
                     let (a, ext): (ext::Auth, bool) = eodec.read(&mut *reader)?;
-                    auth = Some(a);
+                    ext_auth = Some(a);
+                    has_ext = ext;
+                }
+                ext::MultiLink::ID => {
+                    let (a, ext): (ext::MultiLink, bool) = eodec.read(&mut *reader)?;
+                    ext_mlink = Some(a);
                     has_ext = ext;
                 }
                 _ => {
@@ -143,9 +156,10 @@ where
             lease,
             initial_sn,
             cookie,
-            ext_qos: qos,
-            ext_shm: shm,
-            ext_auth: auth,
+            ext_qos,
+            ext_shm,
+            ext_auth,
+            ext_mlink,
         })
     }
 }
@@ -165,8 +179,11 @@ where
         if x.lease.subsec_nanos() == 0 {
             header |= flag::T;
         }
-        let has_extensions = x.ext_qos.is_some() || x.ext_shm.is_some() || x.ext_auth.is_some();
-        if has_extensions {
+        let mut n_exts = (x.ext_qos.is_some() as u8)
+            + (x.ext_shm.is_some() as u8)
+            + (x.ext_auth.is_some() as u8)
+            + (x.ext_mlink.is_some() as u8);
+        if n_exts != 0 {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
@@ -181,16 +198,20 @@ where
 
         // Extensions
         if let Some(qos) = x.ext_qos.as_ref() {
-            let has_ext = x.ext_shm.is_some() || x.ext_auth.is_some();
-            self.write(&mut *writer, (qos, has_ext))?;
+            n_exts -= 1;
+            self.write(&mut *writer, (qos, n_exts != 0))?;
         }
         if let Some(shm) = x.ext_shm.as_ref() {
-            let has_ext = x.ext_auth.is_some();
-            self.write(&mut *writer, (shm, has_ext))?;
+            n_exts -= 1;
+            self.write(&mut *writer, (shm, n_exts != 0))?;
         }
         if let Some(auth) = x.ext_auth.as_ref() {
-            let has_ext = false;
-            self.write(&mut *writer, (auth, has_ext))?;
+            n_exts -= 1;
+            self.write(&mut *writer, (auth, n_exts != 0))?;
+        }
+        if let Some(mlink) = x.ext_mlink.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (mlink, n_exts != 0))?;
         }
 
         Ok(())
@@ -234,25 +255,31 @@ where
         let mut ext_qos = None;
         let mut ext_shm = None;
         let mut ext_auth = None;
+        let mut ext_mlink = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
             match imsg::mid(ext) {
-                ext::QOS => {
+                ext::QoS::ID => {
                     let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
                     ext_qos = Some(q);
                     has_ext = ext;
                 }
-                ext::SHM => {
+                ext::Shm::ID => {
                     let (s, ext): (ext::Shm, bool) = eodec.read(&mut *reader)?;
                     ext_shm = Some(s);
                     has_ext = ext;
                 }
-                ext::AUTH => {
+                ext::Auth::ID => {
                     let (a, ext): (ext::Auth, bool) = eodec.read(&mut *reader)?;
                     ext_auth = Some(a);
+                    has_ext = ext;
+                }
+                ext::MultiLink::ID => {
+                    let (a, ext): (ext::MultiLink, bool) = eodec.read(&mut *reader)?;
+                    ext_mlink = Some(a);
                     has_ext = ext;
                 }
                 _ => {
@@ -268,6 +295,7 @@ where
             ext_qos,
             ext_shm,
             ext_auth,
+            ext_mlink,
         })
     }
 }

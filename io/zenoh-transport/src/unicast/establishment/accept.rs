@@ -271,6 +271,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             ext_qos,
             ext_shm,
             ext_auth,
+            ext_mlink: None, // @TODO
         }
         .into();
 
@@ -424,6 +425,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             ext_qos,
             ext_shm,
             ext_auth,
+            ext_mlink: None, // @TODO
         };
 
         // Do not send the OpenAck right now since we might still incur in MAX_LINKS error

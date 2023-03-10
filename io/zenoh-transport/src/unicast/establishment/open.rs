@@ -135,6 +135,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
             ext_qos,
             ext_shm,
             ext_auth,
+            ext_mlink: None, // @TODO
         }
         .into();
 
@@ -297,6 +298,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
             ext_qos,
             ext_shm,
             ext_auth,
+            ext_mlink: None, // @TODO
         }
         .into();
 
