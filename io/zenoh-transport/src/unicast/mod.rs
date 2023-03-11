@@ -90,7 +90,7 @@ pub(crate) struct TransportConfigUnicast {
     pub(crate) tx_initial_sn: ZInt,
     pub(crate) is_shm: bool,
     pub(crate) is_qos: bool,
-            #[cfg(feature = "transport_multilink")]
+    #[cfg(feature = "transport_multilink")]
     pub(crate) multilink: Option<ZPublicKey>,
 }
 

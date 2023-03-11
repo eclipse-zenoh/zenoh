@@ -14,14 +14,15 @@
 // use super::{
 //     AuthenticatedLink, TransportAuthenticator, TransportAuthenticatorTrait, ZNodeAuthenticatorId,
 // };
+use crate::establishment::{AcceptFsm, OpenFsm};
 use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
 use rand::Rng;
-use rsa::pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey};
-use rsa::{BigUint, Pkcs1v15Encrypt, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
-use std::collections::HashSet;
-use std::ops::Deref;
-use std::path::Path;
+use rsa::{
+    pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey},
+    BigUint, Pkcs1v15Encrypt, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey,
+};
+use std::{collections::HashSet, fmt, ops::Deref, path::Path};
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, HasWriter, Writer},
@@ -30,10 +31,10 @@ use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_config::PubKeyConf;
 use zenoh_core::{bail, zasynclock, zasyncread, zerror, Error as ZError, Result as ZResult};
 use zenoh_crypto::PseudoRng;
-use zenoh_protocol::common::{ZExtUnit, ZExtZBuf};
-use zenoh_protocol::core::ZInt;
-
-use crate::establishment::{AcceptFsm, OpenFsm};
+use zenoh_protocol::{
+    common::{ZExtUnit, ZExtZBuf},
+    core::ZInt,
+};
 
 // Authenticator
 #[derive(Debug)]
@@ -118,7 +119,7 @@ impl AuthPubKey {
 }
 
 #[repr(transparent)]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct ZPublicKey(RsaPublicKey);
 
 impl Deref for ZPublicKey {
@@ -129,6 +130,18 @@ impl Deref for ZPublicKey {
     }
 }
 
+impl fmt::Debug for ZPublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for b in self.0.n().to_bytes_le() {
+            write!(f, "{:02x}", b)?;
+        }
+        for b in self.0.e().to_bytes_le() {
+            write!(f, "{:02x}", b)?;
+        }
+        Ok(())
+    }
+}
+
 impl From<RsaPublicKey> for ZPublicKey {
     fn from(x: RsaPublicKey) -> Self {
         Self(x)
@@ -136,7 +149,7 @@ impl From<RsaPublicKey> for ZPublicKey {
 }
 
 #[repr(transparent)]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ZPrivateKey(RsaPrivateKey);
 
 impl Deref for ZPrivateKey {
@@ -144,6 +157,12 @@ impl Deref for ZPrivateKey {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl fmt::Debug for ZPrivateKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "***",)
     }
 }
 

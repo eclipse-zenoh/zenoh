@@ -58,20 +58,28 @@ macro_rules! ztimeout {
 
 // Transport Handler for the router
 struct SHRouter {
-    priority: Priority,
+    priority: Arc<AtomicUsize>,
     count: Arc<AtomicUsize>,
 }
 
 impl SHRouter {
-    fn new(priority: Priority) -> Self {
+    fn new() -> Self {
         Self {
-            priority,
+            priority: Arc::new(AtomicUsize::new(0)),
             count: Arc::new(AtomicUsize::new(0)),
         }
     }
 
+    fn set_priority(&self, priority: Priority) {
+        self.priority.store(priority as usize, Ordering::Relaxed)
+    }
+
+    fn reset_count(&self) {
+        self.count.store(0, Ordering::Relaxed)
+    }
+
     fn get_count(&self) -> usize {
-        self.count.load(Ordering::SeqCst)
+        self.count.load(Ordering::Relaxed)
     }
 }
 
@@ -81,27 +89,30 @@ impl TransportEventHandler for SHRouter {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        let arc = Arc::new(SCRouter::new(self.count.clone(), self.priority));
+        let arc = Arc::new(SCRouter::new(self.priority.clone(), self.count.clone()));
         Ok(arc)
     }
 }
 
 // Transport Callback for the router
 pub struct SCRouter {
-    priority: Priority,
+    priority: Arc<AtomicUsize>,
     count: Arc<AtomicUsize>,
 }
 
 impl SCRouter {
-    pub fn new(count: Arc<AtomicUsize>, priority: Priority) -> Self {
+    pub fn new(priority: Arc<AtomicUsize>, count: Arc<AtomicUsize>) -> Self {
         Self { priority, count }
     }
 }
 
 impl TransportPeerEventHandler for SCRouter {
     fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
-        assert_eq!(self.priority, message.channel.priority);
-        self.count.fetch_add(1, Ordering::SeqCst);
+        assert_eq!(
+            self.priority.load(Ordering::Relaxed),
+            message.channel.priority as usize
+        );
+        self.count.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
 
@@ -160,7 +171,6 @@ impl TransportPeerEventHandler for SCClient {
 
 async fn open_transport(
     endpoints: &[EndPoint],
-    priority: Priority,
 ) -> (
     TransportManager,
     Arc<SHRouter>,
@@ -172,7 +182,7 @@ async fn open_transport(
     let router_id = ZenohId::try_from([2]).unwrap();
 
     // Create the router transport manager
-    let router_handler = Arc::new(SHRouter::new(priority));
+    let router_handler = Arc::new(SHRouter::new());
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
         .zid(router_id)
@@ -249,50 +259,60 @@ async fn close_transport(
 async fn single_run(
     router_handler: Arc<SHRouter>,
     client_transport: TransportUnicast,
-    channel: Channel,
-    msg_size: usize,
+    channel: &[Channel],
+    msg_size: &[usize],
 ) {
-    // Create the message to send
-    let key = "test".into();
-    let payload = ZBuf::from(vec![0_u8; msg_size]);
-    let data_info = None;
-    let routing_context = None;
-    let reply_context = None;
-    let message = ZenohMessage::make_data(
-        key,
-        payload,
-        channel,
-        CongestionControl::Block,
-        data_info,
-        routing_context,
-        reply_context,
-    );
+    for ch in channel.iter() {
+        for ms in msg_size.iter() {
+            // Reset the counter and set priority on the router
+            router_handler.reset_count();
+            router_handler.set_priority(ch.priority);
 
-    println!("Sending {MSG_COUNT} messages... {channel:?} {msg_size}");
-    for _ in 0..MSG_COUNT {
-        client_transport.schedule(message.clone()).unwrap();
-    }
+            // Create the message to send
+            let key = "test".into();
+            let payload = ZBuf::from(vec![0_u8; *ms]);
+            let data_info = None;
+            let routing_context = None;
+            let reply_context = None;
+            let message = ZenohMessage::make_data(
+                key,
+                payload,
+                *ch,
+                CongestionControl::Block,
+                data_info,
+                routing_context,
+                reply_context,
+            );
 
-    // Wait for the messages to arrive to the other side
-    ztimeout!(async {
-        while router_handler.get_count() != MSG_COUNT {
-            task::sleep(SLEEP_COUNT).await;
+            println!("Sending {MSG_COUNT} messages... {ch:?} {ms}");
+            for _ in 0..MSG_COUNT {
+                client_transport.schedule(message.clone()).unwrap();
+            }
+
+            // Wait for the messages to arrive to the other side
+            ztimeout!(async {
+                while router_handler.get_count() != MSG_COUNT {
+                    task::sleep(SLEEP_COUNT).await;
+                }
+            });
         }
-    });
+    }
 
     // Wait a little bit
     task::sleep(SLEEP).await;
 }
 
 async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {
-    for ch in channel.iter() {
-        for ms in msg_size.iter() {
-            let (router_manager, router_handler, client_manager, client_transport) =
-                open_transport(endpoints, ch.priority).await;
-            single_run(router_handler.clone(), client_transport.clone(), *ch, *ms).await;
-            close_transport(router_manager, client_manager, client_transport, endpoints).await;
-        }
-    }
+    let (router_manager, router_handler, client_manager, client_transport) =
+        open_transport(endpoints).await;
+    single_run(
+        router_handler.clone(),
+        client_transport.clone(),
+        channel,
+        msg_size,
+    )
+    .await;
+    close_transport(router_manager, client_manager, client_transport, endpoints).await;
 }
 
 #[cfg(feature = "transport_tcp")]

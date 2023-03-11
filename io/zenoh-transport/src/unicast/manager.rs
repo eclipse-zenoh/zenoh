@@ -223,12 +223,6 @@ impl TransportManager {
     pub async fn close_unicast(&self) {
         log::trace!("TransportManagerUnicast::clear())");
 
-        // let mut pa_guard = zasyncwrite!(self.state.unicast.peer_authenticator);
-
-        // for pa in pa_guard.drain() {
-        //     pa.close().await;
-        // } @TODO
-
         let mut pl_guard = zasynclock!(self.state.unicast.protocols)
             .drain()
             .map(|(_, v)| v)

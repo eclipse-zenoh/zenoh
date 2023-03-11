@@ -15,7 +15,7 @@ use crate::establishment::{AcceptFsm, OpenFsm};
 use async_std::{fs, sync::RwLock};
 use async_trait::async_trait;
 use rand::{CryptoRng, Rng};
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, HasWriter, Writer},
@@ -34,7 +34,6 @@ use zenoh_protocol::{
 type User = Vec<u8>;
 type Password = Vec<u8>;
 
-#[derive(Debug)]
 pub struct AuthUsrPwd {
     lookup: HashMap<User, Password>,
     credentials: Option<(User, Password)>,
@@ -92,6 +91,27 @@ impl AuthUsrPwd {
         } else {
             Ok(None)
         }
+    }
+}
+
+impl fmt::Debug for AuthUsrPwd {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.credentials.as_ref() {
+            Some(c) => write!(
+                f,
+                "User: '{}', Password: '***'",
+                String::from_utf8_lossy(&c.0)
+            )?,
+            None => write!(f, "User: '', Password: ''")?,
+        }
+        write!(f, "Dictionary: {{")?;
+        for (i, (u, _)) in self.lookup.iter().enumerate() {
+            if i != 0 {
+                write!(f, ",")?;
+            }
+            write!(f, " {}", String::from_utf8_lossy(u))?;
+        }
+        write!(f, " }}")
     }
 }
 
