@@ -54,7 +54,6 @@ struct SendInitSynIn {
 }
 
 // InitAck
-
 struct RecvInitAckOut {
     other_zid: ZenohId,
     other_whatami: WhatAmI,

@@ -492,7 +492,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
             match $res {
                 Ok(output) => output,
                 Err((e, reason)) => {
-                    log::error!("{}", e);
+                    log::debug!("{}", e);
                     close_link(link, reason).await;
                     return Err(e);
                 }

@@ -12,12 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::TransportUnicastInner;
-#[cfg(feature = "shared-memory")]
-use async_std::task;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
-#[cfg(feature = "shared-memory")]
-use zenoh_core::zasyncwrite;
 use zenoh_core::zread;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
@@ -76,10 +72,7 @@ impl TransportUnicastInner {
             let res = if self.config.is_shm {
                 crate::shm::map_zmsg_to_shminfo(&mut msg)
             } else {
-                task::block_on(async {
-                    let mut w_guard = zasyncwrite!(self.manager.state.unicast.shm.reader);
-                    crate::shm::map_zmsg_to_shmbuf(&mut msg, &mut w_guard)
-                })
+                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.state.unicast.shm.reader)
             };
             if let Err(e) = res {
                 log::trace!("Failed SHM conversion: {}", e);
