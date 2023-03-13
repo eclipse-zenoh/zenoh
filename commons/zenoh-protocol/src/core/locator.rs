@@ -110,8 +110,6 @@ impl fmt::Display for Locator {
     }
 }
 
-pub type LocatorProtocol = str;
-
 impl Locator {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {

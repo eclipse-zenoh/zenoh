@@ -106,6 +106,7 @@ pub struct TransportManagerConfig {
     pub endpoint: HashMap<String, Properties>,
     pub handler: Arc<dyn TransportEventHandler>,
     pub tx_threads: usize,
+    pub protocols: Option<Vec<String>>,
 }
 
 pub struct TransportManagerState {
@@ -132,6 +133,7 @@ pub struct TransportManagerBuilder {
     multicast: TransportManagerBuilderMulticast,
     endpoint: HashMap<String, Properties>,
     tx_threads: usize,
+    protocols: Option<Vec<String>>,
 }
 
 impl TransportManagerBuilder {
@@ -195,6 +197,11 @@ impl TransportManagerBuilder {
         self
     }
 
+    pub fn protocols(mut self, protocols: Option<Vec<String>>) -> Self {
+        self.protocols = protocols;
+        self
+    }
+
     pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilder> {
         self = self.zid(*config.id());
         if let Some(v) = config.mode() {
@@ -214,6 +221,7 @@ impl TransportManagerBuilder {
         self = self.link_rx_buffer_size(config.transport().link().rx().buffer_size().unwrap());
         self = self.queue_size(config.transport().link().tx().queue().size().clone());
         self = self.tx_threads(config.transport().link().tx().threads().unwrap());
+        self = self.protocols(config.transport().link().protocols().clone());
 
         let (c, errors) = zenoh_link::LinkConfigurator::default()
             .configurations(config)
@@ -270,6 +278,7 @@ impl TransportManagerBuilder {
             endpoint: self.endpoint,
             handler,
             tx_threads: self.tx_threads,
+            protocols: self.protocols,
         };
 
         let state = TransportManagerState {
@@ -301,6 +310,7 @@ impl Default for TransportManagerBuilder {
             unicast: TransportManagerBuilderUnicast::default(),
             multicast: TransportManagerBuilderMulticast::default(),
             tx_threads: 1,
+            protocols: None,
         }
     }
 }
@@ -404,6 +414,17 @@ impl TransportManager {
     /*              LISTENER             */
     /*************************************/
     pub async fn add_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
+        if let Some(protocols) = self.config.protocols.as_ref() {
+            let p = endpoint.protocol();
+            if !protocols.iter().any(|x| x.as_str() == p.as_str()) {
+                bail!(
+                    "Unauthorized protocol: {}. Whitelisted protocols are: {:?}",
+                    p,
+                    protocols
+                );
+            }
+        }
+
         if self
             .locator_inspector
             .is_multicast(&endpoint.to_locator())
@@ -453,6 +474,17 @@ impl TransportManager {
     }
 
     pub async fn open_transport(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
+        if let Some(protocols) = self.config.protocols.as_ref() {
+            let p = endpoint.protocol();
+            if !protocols.iter().any(|x| x.as_str() == p.as_str()) {
+                bail!(
+                    "Unauthorized protocol: {}. Whitelisted protocols are: {:?}",
+                    p,
+                    protocols
+                );
+            }
+        }
+
         if self
             .locator_inspector
             .is_multicast(&endpoint.to_locator())
