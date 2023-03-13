@@ -486,13 +486,13 @@ pub(crate) async fn open_link(
         whatami: iack_out.other_whatami,
         sn_resolution: state.zenoh.resolution.get(Field::FrameSN),
         tx_initial_sn: osyn_out.mine_initial_sn,
+        #[cfg(feature = "transport_multilink")]
+        multilink: state.ext_mlink.multilink(),
         is_qos: state.ext_qos.is_qos(),
         #[cfg(feature = "shared-memory")]
         is_shm: state.ext_shm.is_shm(),
         #[cfg(not(feature = "shared-memory"))]
         is_shm: false,
-        #[cfg(feature = "transport_multilink")]
-        multilink: state.ext_mlink.multilink(),
     };
     let transport = step!(manager
         .init_transport_unicast(config)
