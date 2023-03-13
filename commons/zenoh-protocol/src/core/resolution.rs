@@ -13,6 +13,7 @@
 //
 use super::ZInt;
 use crate::defaults::{FRAME_SN_RESOLUTION, REQUEST_ID_RESOLUTION};
+use alloc::string::String;
 use core::{fmt, str::FromStr};
 use zenoh_result::{bail, ZError};
 
