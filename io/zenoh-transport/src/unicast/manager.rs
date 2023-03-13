@@ -31,7 +31,7 @@ use zenoh_core::zasynclock;
 use zenoh_crypto::PseudoRng;
 use zenoh_link::*;
 use zenoh_protocol::{
-    core::{endpoint, locator::LocatorProtocol, ZenohId},
+    core::{endpoint, ZenohId},
     transport::close,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -253,15 +253,12 @@ impl TransportManager {
         } else {
             let lm =
                 LinkManagerBuilderUnicast::make(self.new_unicast_link_sender.clone(), protocol)?;
-            w_guard.insert(protocol.to_owned(), lm.clone());
+            w_guard.insert(protocol.to_string(), lm.clone());
             Ok(lm)
         }
     }
 
-    async fn get_link_manager_unicast(
-        &self,
-        protocol: &LocatorProtocol,
-    ) -> ZResult<LinkManagerUnicast> {
+    async fn get_link_manager_unicast(&self, protocol: &str) -> ZResult<LinkManagerUnicast> {
         match zasynclock!(self.state.unicast.protocols).get(protocol) {
             Some(manager) => Ok(manager.clone()),
             None => bail!(
@@ -271,7 +268,7 @@ impl TransportManager {
         }
     }
 
-    async fn del_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<()> {
+    async fn del_link_manager_unicast(&self, protocol: &str) -> ZResult<()> {
         match zasynclock!(self.state.unicast.protocols).remove(protocol) {
             Some(_) => Ok(()),
             None => bail!(

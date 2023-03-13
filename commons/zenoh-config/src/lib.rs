@@ -229,6 +229,9 @@ validated_struct::validator! {
             },
             pub link: #[derive(Default)]
             TransportLinkConf {
+                // An optional whitelist of protocols to be used for accepting and opening sessions.
+                // If not configured, all the supported protocols are automatically whitelisted.
+                pub protocols: Option<Vec<String>>,
                 pub tx: LinkTxConf {
                     /// The resolution in bits to be used for the message sequence numbers.
                     /// When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
