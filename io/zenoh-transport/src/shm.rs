@@ -93,33 +93,31 @@ pub fn map_zbuf_to_shmbuf(zbuf: &mut ZBuf, shmr: &RwLock<SharedMemoryReader>) ->
     Ok(res)
 }
 
-pub fn map_zslice_to_shminfo(zslice: &mut ZSlice) -> ZResult<bool> {
-    let mut res = false;
-    let ZSlice { buf, .. } = zslice;
-    if let Some(shmb) = buf.as_any().downcast_ref::<SharedMemoryBuf>() {
-        // Serialize the shmb info
-        let codec = Zenoh080::new();
-        let mut bytes = vec![];
-        let mut writer = bytes.writer();
-        codec
-            .write(&mut writer, &shmb.info)
-            .map_err(|e| zerror!("{:?}", e))?;
-        let info: SharedMemoryBufInfoSerialized = bytes.into();
-        // Increase the reference count so to keep the SharedMemoryBuf valid
-        shmb.inc_ref_count();
-        // Replace the content of the slice
-        let zs: ZSlice = info.into();
-        *zslice = zs;
-
-        res = true;
-    }
-    Ok(res)
+#[cold]
+#[inline(never)]
+pub fn map_zslice_to_shminfo(shmb: &SharedMemoryBuf) -> ZResult<ZSlice> {
+    // Serialize the shmb info
+    let codec = Zenoh080::new();
+    let mut bytes = vec![];
+    let mut writer = bytes.writer();
+    codec
+        .write(&mut writer, &shmb.info)
+        .map_err(|e| zerror!("{:?}", e))?;
+    let info: SharedMemoryBufInfoSerialized = bytes.into();
+    // Increase the reference count so to keep the SharedMemoryBuf valid
+    shmb.inc_ref_count();
+    // Replace the content of the slice
+    Ok(info.into())
 }
 
 pub fn map_zbuf_to_shminfo(zbuf: &mut ZBuf) -> ZResult<bool> {
     let mut res = false;
     for zs in zbuf.zslices_mut() {
-        res |= map_zslice_to_shminfo(zs)?;
+        let ZSlice { buf, .. } = zs;
+        if let Some(shmb) = buf.as_any().downcast_ref::<SharedMemoryBuf>() {
+            *zs = map_zslice_to_shminfo(shmb)?;
+            res = true;
+        }
     }
     Ok(res)
 }
@@ -135,13 +133,17 @@ pub fn map_zmsg_to_shmbuf(
     }) = &mut msg.body
     {
         res |= map_zbuf_to_shmbuf(payload, shmr)?;
-        unset_sliced!(msg, data_info);
+        if res {
+            unset_sliced!(msg, data_info);
+        }
     } else if let ZenohBody::Query(Query {
         body: Some(body), ..
     }) = &mut msg.body
     {
         res |= map_zbuf_to_shmbuf(&mut body.payload, shmr)?;
-        body.data_info.sliced = false;
+        if res {
+            body.data_info.sliced = false;
+        }
     }
 
     Ok(res)
@@ -155,13 +157,17 @@ pub fn map_zmsg_to_shminfo(msg: &mut ZenohMessage) -> ZResult<bool> {
     }) = &mut msg.body
     {
         res |= map_zbuf_to_shminfo(payload)?;
-        set_sliced!(msg, data_info);
+        if res {
+            set_sliced!(msg, data_info);
+        }
     } else if let ZenohBody::Query(Query {
         body: Some(body), ..
     }) = &mut msg.body
     {
         res |= map_zbuf_to_shminfo(&mut body.payload)?;
-        body.data_info.sliced = true;
+        if res {
+            body.data_info.sliced = true;
+        }
     }
 
     Ok(res)
