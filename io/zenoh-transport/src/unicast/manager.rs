@@ -457,10 +457,6 @@ impl TransportManager {
                 e
             })?;
 
-        // for pa in zasyncread!(self.state.unicast.peer_authenticator).iter() {
-        //     pa.handle_close(peer).await;
-        // } @TODO
-
         Ok(())
     }
 

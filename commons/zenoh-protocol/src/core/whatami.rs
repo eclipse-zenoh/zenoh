@@ -16,10 +16,6 @@ use const_format::formatcp;
 use core::{convert::TryFrom, fmt, num::NonZeroU8, ops::BitOr, str::FromStr};
 use zenoh_result::{bail, ZError};
 
-const WAI_STR_R: &str = "router";
-const WAI_STR_P: &str = "peer";
-const WAI_STR_C: &str = "client";
-
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum WhatAmI {
@@ -29,15 +25,19 @@ pub enum WhatAmI {
 }
 
 impl WhatAmI {
-    const U8_R: u8 = WhatAmI::Router as u8;
-    const U8_P: u8 = WhatAmI::Peer as u8;
-    const U8_C: u8 = WhatAmI::Client as u8;
+    const STR_R: &str = "router";
+    const STR_P: &str = "peer";
+    const STR_C: &str = "client";
+
+    const U8_R: u8 = Self::Router as u8;
+    const U8_P: u8 = Self::Peer as u8;
+    const U8_C: u8 = Self::Client as u8;
 
     pub const fn to_str(self) -> &'static str {
         match self {
-            WhatAmI::Router => WAI_STR_R,
-            WhatAmI::Peer => WAI_STR_P,
-            WhatAmI::Client => WAI_STR_C,
+            Self::Router => Self::STR_R,
+            Self::Peer => Self::STR_P,
+            Self::Client => Self::STR_C,
         }
     }
 
@@ -46,7 +46,7 @@ impl WhatAmI {
         use rand::prelude::SliceRandom;
 
         let mut rng = rand::thread_rng();
-        *[WhatAmI::Router, WhatAmI::Peer, WhatAmI::Client]
+        *[Self::Router, Self::Peer, Self::Client]
             .choose(&mut rng)
             .unwrap()
     }
@@ -57,9 +57,9 @@ impl TryFrom<u8> for WhatAmI {
 
     fn try_from(v: u8) -> Result<Self, Self::Error> {
         match v {
-            Self::U8_R => Ok(WhatAmI::Router),
-            Self::U8_P => Ok(WhatAmI::Peer),
-            Self::U8_C => Ok(WhatAmI::Client),
+            Self::U8_R => Ok(Self::Router),
+            Self::U8_P => Ok(Self::Peer),
+            Self::U8_C => Ok(Self::Client),
             _ => Err(()),
         }
     }
@@ -70,11 +70,14 @@ impl FromStr for WhatAmI {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            WAI_STR_R => Ok(WhatAmI::Router),
-            WAI_STR_P => Ok(WhatAmI::Peer),
-            WAI_STR_C => Ok(WhatAmI::Client),
+            Self::STR_R => Ok(Self::Router),
+            Self::STR_P => Ok(Self::Peer),
+            Self::STR_C => Ok(Self::Client),
             _ => bail!(
-                "{s} is not a valid WhatAmI value. Valid values are: {WAI_STR_R}, {WAI_STR_P}, {WAI_STR_C}."
+                "{s} is not a valid WhatAmI value. Valid values are: {}, {}, {}.",
+                Self::STR_R,
+                Self::STR_P,
+                Self::STR_C
             ),
         }
     }
@@ -134,13 +137,13 @@ impl WhatAmIMatcher {
     pub const fn to_str(self) -> &'static str {
         match self.0.get() {
             Self::U8_0 => "",
-            Self::U8_R => WAI_STR_R,
-            Self::U8_P => WAI_STR_P,
-            Self::U8_C => WAI_STR_C,
-            Self::U8_R_P => formatcp!("{}|{}", WAI_STR_R, WAI_STR_P),
-            Self::U8_R_C => formatcp!("{}|{}", WAI_STR_R, WAI_STR_C),
-            Self::U8_P_C => formatcp!("{}|{}", WAI_STR_P, WAI_STR_C),
-            Self::U8_R_P_C => formatcp!("{}|{}|{}", WAI_STR_R, WAI_STR_P, WAI_STR_C),
+            Self::U8_R => WhatAmI::STR_R,
+            Self::U8_P => WhatAmI::STR_P,
+            Self::U8_C => WhatAmI::STR_C,
+            Self::U8_R_P => formatcp!("{}|{}", WhatAmI::STR_R, WhatAmI::STR_P),
+            Self::U8_R_C => formatcp!("{}|{}", WhatAmI::STR_R, WhatAmI::STR_C),
+            Self::U8_P_C => formatcp!("{}|{}", WhatAmI::STR_P, WhatAmI::STR_C),
+            Self::U8_R_P_C => formatcp!("{}|{}|{}", WhatAmI::STR_R, WhatAmI::STR_P, WhatAmI::STR_C),
             _ => unreachable!(),
         }
     }
@@ -189,9 +192,9 @@ impl FromStr for WhatAmIMatcher {
         for s in s.split('|') {
             match s.trim() {
                 "" => {}
-                WAI_STR_R => inner |= WhatAmI::U8_R,
-                WAI_STR_P => inner |= WhatAmI::U8_P,
-                WAI_STR_C => inner |= WhatAmI::U8_C,
+                WhatAmI::STR_R => inner |= WhatAmI::U8_R,
+                WhatAmI::STR_P => inner |= WhatAmI::U8_P,
+                WhatAmI::STR_C => inner |= WhatAmI::U8_C,
                 _ => return Err(()),
             }
         }
@@ -270,14 +273,21 @@ impl<'de> serde::de::Visitor<'de> for WhatAmIVisitor {
     type Value = WhatAmI;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("either 'router', 'client' or 'peer'")
+        write!(
+            formatter,
+            "either '{}', '{}' or '{}'",
+            WhatAmI::STR_R,
+            WhatAmI::STR_P,
+            WhatAmI::STR_C
+        )
     }
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
-        v.parse()
-            .map_err(|_| serde::de::Error::unknown_variant(v, &["router", "client", "peer"]))
+        v.parse().map_err(|_| {
+            serde::de::Error::unknown_variant(v, &[WhatAmI::STR_R, WhatAmI::STR_P, WhatAmI::STR_C])
+        })
     }
     fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
     where
@@ -315,8 +325,15 @@ pub struct WhatAmIMatcherVisitor;
 impl<'de> serde::de::Visitor<'de> for WhatAmIMatcherVisitor {
     type Value = WhatAmIMatcher;
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("a | separated list of whatami variants ('peer', 'client' or 'router')")
+        write!(
+            formatter,
+            "a | separated list of whatami variants ('{}', '{}', '{}')",
+            WhatAmI::STR_R,
+            WhatAmI::STR_P,
+            WhatAmI::STR_C
+        )
     }
+
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
@@ -324,10 +341,16 @@ impl<'de> serde::de::Visitor<'de> for WhatAmIMatcherVisitor {
         v.parse().map_err(|_| {
             serde::de::Error::invalid_value(
                 serde::de::Unexpected::Str(v),
-                &"a | separated list of whatami variants ('peer', 'client' or 'router')",
+                &formatcp!(
+                    "a | separated list of whatami variants ('{}', '{}', '{}')",
+                    WhatAmI::STR_R,
+                    WhatAmI::STR_P,
+                    WhatAmI::STR_C
+                ),
             )
         })
     }
+
     fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
     where
         E: serde::de::Error,

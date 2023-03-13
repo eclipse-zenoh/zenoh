@@ -125,10 +125,10 @@
     link: {
       /// Configure the zenoh TX parameters of a link
       tx: {
-        /// The largest value allowed for Zenoh message sequence numbers (wrappring to 0 when reached).
+        /// The resolution in bits to be used for the message sequence numbers.
         /// When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
-        /// Defaults to 2^28.
-        sequence_number_resolution: 268435456,
+        /// Accepted values: 8bit, 16bit, 32bit, 64bit.
+        sequence_number_resolution: "32bit",
         /// Link lease duration in milliseconds to announce to other zenoh nodes
         lease: 10000,
         /// Number of keep-alive messages in a link lease duration. If no data is sent, keep alive

@@ -116,7 +116,7 @@ impl SeqNum {
     }
 
     /// Computes the modulo gap between two sequence numbers.
-    #[cfg(test)] // @TODO: remove once reliability is implemented
+    #[cfg(test)] // @TODO: remove #[cfg(test)] once reliability is implemented
     pub(crate) fn gap(&self, value: ZInt) -> ZResult<ZInt> {
         if (value & !self.mask) != 0 {
             bail!("The sequence number value must be smaller than the resolution");

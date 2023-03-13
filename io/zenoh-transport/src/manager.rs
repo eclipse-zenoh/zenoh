@@ -25,7 +25,7 @@ use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
 use zenoh_protocol::{
-    core::{EndPoint, Locator, Priority, Resolution, WhatAmI, ZenohId},
+    core::{EndPoint, Field, Locator, Priority, Resolution, WhatAmI, ZenohId},
     defaults::BATCH_SIZE,
     VERSION,
 };
@@ -180,14 +180,17 @@ impl TransportManagerBuilder {
             self = self.whatami(*v);
         }
 
-        // self = self.resolution(
-        //     config
-        //         .transport()
-        //         .link()
-        //         .tx()
-        //         .sequence_number_resolution()
-        //         .unwrap(),
-        // ); // @TODO
+        let mut resolution = Resolution::default();
+        resolution.set(
+            Field::FrameSN,
+            config
+                .transport()
+                .link()
+                .tx()
+                .sequence_number_resolution()
+                .unwrap(),
+        );
+        self = self.resolution(resolution);
         self = self.batch_size(config.transport().link().tx().batch_size().unwrap());
         self = self.defrag_buff_size(config.transport().link().rx().max_message_size().unwrap());
         self = self.link_rx_buffer_size(config.transport().link().rx().buffer_size().unwrap());

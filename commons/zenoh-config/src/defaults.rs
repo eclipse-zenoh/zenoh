@@ -135,7 +135,7 @@ impl Default for LinkTxConf {
     fn default() -> Self {
         let num = 1 + ((num_cpus::get() - 1) / 4);
         Self {
-            sequence_number_resolution: Some((2 as ZInt).pow(28)),
+            sequence_number_resolution: Some(Bits::U32),
             lease: Some(10000),
             keep_alive: Some(4),
             batch_size: Some(u16::MAX),

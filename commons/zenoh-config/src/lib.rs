@@ -37,6 +37,7 @@ use zenoh_core::zlock;
 use zenoh_protocol::core::{
     key_expr::OwnedKeyExpr,
     whatami::{WhatAmIMatcher, WhatAmIMatcherVisitor},
+    Bits,
 };
 pub use zenoh_protocol::core::{whatami, EndPoint, Locator, Priority, WhatAmI, ZenohId};
 use zenoh_result::{bail, zerror, ZResult};
@@ -229,9 +230,10 @@ validated_struct::validator! {
             pub link: #[derive(Default)]
             TransportLinkConf {
                 pub tx: LinkTxConf {
-                    /// The largest value allowed for Zenoh message sequence numbers (wrappring to 0 when reached). When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
-                    /// Defaults to 2^28.
-                    sequence_number_resolution: Option<ZInt>,
+                    /// The resolution in bits to be used for the message sequence numbers.
+                    /// When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
+                    /// Accepted values: 8bit, 16bit, 32bit, 64bit.
+                    sequence_number_resolution: Option<Bits>,
                     /// Link lease duration in milliseconds (default: 10000)
                     lease: Option<ZInt>,
                     /// Number fo keep-alive messages in a link lease duration (default: 4)

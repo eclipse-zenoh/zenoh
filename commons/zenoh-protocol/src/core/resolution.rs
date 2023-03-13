@@ -13,6 +13,8 @@
 //
 use super::ZInt;
 use crate::defaults::{FRAME_SN_RESOLUTION, REQUEST_ID_RESOLUTION};
+use core::{fmt, str::FromStr};
+use zenoh_result::{bail, ZError};
 
 #[repr(u8)]
 // The value represents the 2-bit encoded value
@@ -25,6 +27,11 @@ pub enum Bits {
 }
 
 impl Bits {
+    const S8: &str = "8bit";
+    const S16: &str = "16bit";
+    const S32: &str = "32bit";
+    const S64: &str = "64bit";
+
     pub const fn mask(&self) -> ZInt {
         match self {
             Bits::U8 => u8::MAX as ZInt,
@@ -32,6 +39,41 @@ impl Bits {
             Bits::U32 => u32::MAX as ZInt,
             Bits::U64 => u64::MAX as ZInt,
         }
+    }
+
+    pub const fn to_str(self) -> &'static str {
+        match self {
+            Bits::U8 => Self::S8,
+            Bits::U16 => Self::S16,
+            Bits::U32 => Self::S32,
+            Bits::U64 => Self::S64,
+        }
+    }
+}
+
+impl FromStr for Bits {
+    type Err = ZError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            Bits::S8 => Ok(Bits::U8),
+            Bits::S16 => Ok(Bits::U16),
+            Bits::S32 => Ok(Bits::U32),
+            Bits::S64 => Ok(Bits::U64),
+            _ => bail!(
+                "{s} is not a valid Bits value. Valid values are: '{}', '{}', '{}', '{}'.",
+                Bits::S8,
+                Bits::S16,
+                Bits::S32,
+                Bits::S64
+            ),
+        }
+    }
+}
+
+impl fmt::Display for Bits {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.to_str())
     }
 }
 
@@ -83,5 +125,63 @@ impl Default for Resolution {
 impl From<u8> for Resolution {
     fn from(v: u8) -> Self {
         Self(v)
+    }
+}
+
+// Serde
+impl serde::Serialize for Bits {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(self.to_str())
+    }
+}
+
+pub struct BitsVisitor;
+impl<'de> serde::de::Visitor<'de> for BitsVisitor {
+    type Value = Bits;
+
+    fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            formatter,
+            "either '{}', '{}', '{}', '{}'.",
+            Bits::S8,
+            Bits::S16,
+            Bits::S32,
+            Bits::S64,
+        )
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        v.parse().map_err(|_| {
+            serde::de::Error::unknown_variant(v, &[Bits::S8, Bits::S16, Bits::S32, Bits::S64])
+        })
+    }
+
+    fn visit_borrowed_str<E>(self, v: &'de str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_str(v)
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_str(&v)
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for Bits {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        deserializer.deserialize_str(BitsVisitor)
     }
 }
