@@ -30,8 +30,9 @@ shared-memory = [
     "zenoh-shm",
     "zenoh-codec/shared-memory",
 ]
-auth_pubkey = ["rsa"]
-auth_usrpwd = []
+auth_pubkey = ["transport_auth", "rsa"]
+auth_usrpwd = ["transport_auth"]
+transport_auth = []
 transport_multilink = ["auth_pubkey"]
 transport_quic = ["zenoh-link/transport_quic"]
 transport_tcp = ["zenoh-link/transport_tcp"]

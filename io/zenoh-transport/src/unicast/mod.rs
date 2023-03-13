@@ -88,10 +88,11 @@ pub(crate) struct TransportConfigUnicast {
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: Bits,
     pub(crate) tx_initial_sn: ZInt,
-    pub(crate) is_shm: bool,
     pub(crate) is_qos: bool,
     #[cfg(feature = "transport_multilink")]
     pub(crate) multilink: Option<ZPublicKey>,
+    #[cfg(feature = "shared-memory")]
+    pub(crate) is_shm: bool,
 }
 
 /// [`TransportUnicast`] is the transport handler returned

@@ -31,11 +31,12 @@ pub(crate) struct Cookie {
     pub(crate) nonce: ZInt,
     // Extensions
     pub(crate) ext_qos: ext::qos::StateAccept,
-    #[cfg(feature = "shared-memory")]
-    pub(crate) ext_shm: ext::shm::StateAccept,
-    pub(crate) ext_auth: ext::auth::StateAccept,
     #[cfg(feature = "transport_multilink")]
     pub(crate) ext_mlink: ext::multilink::StateAccept,
+    #[cfg(feature = "shared-memory")]
+    pub(crate) ext_shm: ext::shm::StateAccept,
+    #[cfg(feature = "transport_auth")]
+    pub(crate) ext_auth: ext::auth::StateAccept,
 }
 
 impl<W> WCodec<&Cookie, &mut W> for Zenoh080
@@ -53,11 +54,12 @@ where
         self.write(&mut *writer, x.nonce)?;
         // Extensions
         self.write(&mut *writer, &x.ext_qos)?;
-        #[cfg(feature = "shared-memory")]
-        self.write(&mut *writer, &x.ext_shm)?;
-        self.write(&mut *writer, &x.ext_auth)?;
         #[cfg(feature = "transport_multilink")]
         self.write(&mut *writer, &x.ext_mlink)?;
+        #[cfg(feature = "shared-memory")]
+        self.write(&mut *writer, &x.ext_shm)?;
+        #[cfg(feature = "transport_auth")]
+        self.write(&mut *writer, &x.ext_auth)?;
 
         Ok(())
     }
@@ -79,11 +81,12 @@ where
         let nonce: ZInt = self.read(&mut *reader)?;
         // Extensions
         let ext_qos: ext::qos::StateAccept = self.read(&mut *reader)?;
-        #[cfg(feature = "shared-memory")]
-        let ext_shm: ext::shm::StateAccept = self.read(&mut *reader)?;
-        let ext_auth: ext::auth::StateAccept = self.read(&mut *reader)?;
         #[cfg(feature = "transport_multilink")]
         let ext_mlink: ext::multilink::StateAccept = self.read(&mut *reader)?;
+        #[cfg(feature = "shared-memory")]
+        let ext_shm: ext::shm::StateAccept = self.read(&mut *reader)?;
+        #[cfg(feature = "transport_auth")]
+        let ext_auth: ext::auth::StateAccept = self.read(&mut *reader)?;
 
         let cookie = Cookie {
             zid,
@@ -92,11 +95,12 @@ where
             batch_size,
             nonce,
             ext_qos,
-            #[cfg(feature = "shared-memory")]
-            ext_shm,
-            ext_auth,
             #[cfg(feature = "transport_multilink")]
             ext_mlink,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
+            #[cfg(feature = "transport_auth")]
+            ext_auth,
         };
 
         Ok(cookie)
@@ -159,11 +163,12 @@ impl Cookie {
             batch_size: rng.gen(),
             nonce: rng.gen(),
             ext_qos: ext::qos::StateAccept::rand(),
-            #[cfg(feature = "shared-memory")]
-            ext_shm: ext::shm::StateAccept::rand(),
-            ext_auth: ext::auth::StateAccept::rand(),
             #[cfg(feature = "transport_multilink")]
             ext_mlink: ext::multilink::StateAccept::rand(),
+            #[cfg(feature = "shared-memory")]
+            ext_shm: ext::shm::StateAccept::rand(),
+            #[cfg(feature = "transport_auth")]
+            ext_auth: ext::auth::StateAccept::rand(),
         }
     }
 }

@@ -20,7 +20,7 @@ use crate::TransportConfigUnicast;
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_core::{zasynclock, zread, zwrite};
+use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::{
     core::{Bits, Priority, WhatAmI, ZInt, ZenohId},
@@ -205,12 +205,14 @@ impl TransportUnicastInner {
         if let LinkUnicastDirection::Inbound = direction {
             let count = guard.iter().filter(|l| l.direction == direction).count();
 
-            let mut limit = 1;
-
-            #[cfg(feature = "transport_multilink")]
-            if self.config.multilink.is_some() {
-                limit = self.manager.config.unicast.max_links;
-            }
+            let limit = zcondfeat!(
+                "transport_multilink",
+                match self.config.multilink {
+                    Some(_) => self.manager.config.unicast.max_links,
+                    None => 1,
+                },
+                1
+            );
 
             if count >= limit {
                 let e = zerror!(

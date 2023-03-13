@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
+#[cfg(feature = "transport_auth")]
 pub mod auth;
 #[cfg(feature = "transport_multilink")]
 pub(crate) mod multilink;

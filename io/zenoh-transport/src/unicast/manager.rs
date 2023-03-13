@@ -11,15 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "transport_auth")]
+use crate::unicast::establishment::ext::auth::Auth;
 #[cfg(feature = "transport_multilink")]
 use crate::unicast::establishment::ext::multilink::MultiLink;
 #[cfg(feature = "shared-memory")]
 use crate::unicast::shm::SharedMemoryUnicast;
 use crate::{
-    unicast::{
-        establishment::ext::auth::Auth, transport::TransportUnicastInner, TransportConfigUnicast,
-        TransportUnicast,
-    },
+    unicast::{transport::TransportUnicastInner, TransportConfigUnicast, TransportUnicast},
     TransportManager,
 };
 use async_std::{prelude::FutureExt, sync::Mutex, task};
@@ -27,7 +26,7 @@ use std::{collections::HashMap, sync::Arc, time::Duration};
 #[cfg(feature = "shared-memory")]
 use zenoh_config::SharedMemoryConf;
 use zenoh_config::{Config, LinkTxConf, QoSConf, TransportUnicastConf};
-use zenoh_core::zasynclock;
+use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_crypto::PseudoRng;
 use zenoh_link::*;
 use zenoh_protocol::{
@@ -45,8 +44,9 @@ pub struct TransportManagerConfigUnicast {
     pub accept_timeout: Duration,
     pub accept_pending: usize,
     pub max_sessions: usize,
-    pub max_links: usize,
     pub is_qos: bool,
+    #[cfg(feature = "transport_multilink")]
+    pub max_links: usize,
     #[cfg(feature = "shared-memory")]
     pub is_shm: bool,
 }
@@ -54,17 +54,19 @@ pub struct TransportManagerConfigUnicast {
 pub struct TransportManagerStateUnicast {
     // Incoming uninitialized transports
     pub(super) incoming: Arc<Mutex<usize>>,
-    // Active authenticators
-    pub(super) authenticator: Arc<Auth>,
     // Established listeners
     pub(super) protocols: Arc<Mutex<HashMap<String, LinkManagerUnicast>>>,
     // Established transports
     pub(super) transports: Arc<Mutex<HashMap<ZenohId, Arc<TransportUnicastInner>>>>,
+    // Multilink
+    #[cfg(feature = "transport_multilink")]
+    pub(super) multilink: Arc<MultiLink>,
+    // Active authenticators
+    #[cfg(feature = "transport_auth")]
+    pub(super) authenticator: Arc<Auth>,
     // Shared memory
     #[cfg(feature = "shared-memory")]
     pub(super) shm: Arc<SharedMemoryUnicast>,
-    // Multilink
-    pub(super) multilink: Arc<MultiLink>,
 }
 
 pub struct TransportManagerParamsUnicast {
@@ -83,10 +85,12 @@ pub struct TransportManagerBuilderUnicast {
     pub(super) accept_timeout: Duration,
     pub(super) accept_pending: usize,
     pub(super) max_sessions: usize,
-    pub(super) max_links: usize,
     pub(super) is_qos: bool,
+    #[cfg(feature = "transport_multilink")]
+    pub(super) max_links: usize,
     #[cfg(feature = "shared-memory")]
     pub(super) is_shm: bool,
+    #[cfg(feature = "transport_auth")]
     pub(super) authenticator: Auth,
 }
 
@@ -116,18 +120,20 @@ impl TransportManagerBuilderUnicast {
         self
     }
 
+    pub fn qos(mut self, is_qos: bool) -> Self {
+        self.is_qos = is_qos;
+        self
+    }
+
+    #[cfg(feature = "transport_multilink")]
     pub fn max_links(mut self, max_links: usize) -> Self {
         self.max_links = max_links;
         self
     }
 
+    #[cfg(feature = "transport_auth")]
     pub fn authenticator(mut self, authenticator: Auth) -> Self {
         self.authenticator = authenticator;
-        self
-    }
-
-    pub fn qos(mut self, is_qos: bool) -> Self {
-        self.is_qos = is_qos;
         self
     }
 
@@ -147,27 +153,37 @@ impl TransportManagerBuilderUnicast {
         ));
         self = self.accept_pending(config.transport().unicast().accept_pending().unwrap());
         self = self.max_sessions(config.transport().unicast().max_sessions().unwrap());
-        self = self.max_links(config.transport().unicast().max_links().unwrap());
         self = self.qos(*config.transport().qos().enabled());
 
+        #[cfg(feature = "transport_multilink")]
+        {
+            self = self.max_links(config.transport().unicast().max_links().unwrap());
+        }
         #[cfg(feature = "shared-memory")]
         {
             self = self.shm(*config.transport().shared_memory().enabled());
         }
-        self = self.authenticator(Auth::from_config(config).await?);
+        #[cfg(feature = "transport_auth")]
+        {
+            self = self.authenticator(Auth::from_config(config).await?);
+        }
 
         Ok(self)
     }
 
-    pub fn build(self, prng: &mut PseudoRng) -> ZResult<TransportManagerParamsUnicast> {
+    pub fn build(
+        self,
+        #[allow(unused)] prng: &mut PseudoRng, // Required for #[cfg(feature = "transport_multilink")]
+    ) -> ZResult<TransportManagerParamsUnicast> {
         let config = TransportManagerConfigUnicast {
             lease: self.lease,
             keep_alive: self.keep_alive,
             accept_timeout: self.accept_timeout,
             accept_pending: self.accept_pending,
             max_sessions: self.max_sessions,
-            max_links: self.max_links,
             is_qos: self.is_qos,
+            #[cfg(feature = "transport_multilink")]
+            max_links: self.max_links,
             #[cfg(feature = "shared-memory")]
             is_shm: self.is_shm,
         };
@@ -176,11 +192,12 @@ impl TransportManagerBuilderUnicast {
             incoming: Arc::new(Mutex::new(0)),
             protocols: Arc::new(Mutex::new(HashMap::new())),
             transports: Arc::new(Mutex::new(HashMap::new())),
-            authenticator: Arc::new(self.authenticator),
-            #[cfg(feature = "shared-memory")]
-            shm: Arc::new(SharedMemoryUnicast::make()?),
             #[cfg(feature = "transport_multilink")]
             multilink: Arc::new(MultiLink::make(prng)?),
+            #[cfg(feature = "shared-memory")]
+            shm: Arc::new(SharedMemoryUnicast::make()?),
+            #[cfg(feature = "transport_auth")]
+            authenticator: Arc::new(self.authenticator),
         };
 
         let params = TransportManagerParamsUnicast { config, state };
@@ -203,10 +220,12 @@ impl Default for TransportManagerBuilderUnicast {
             accept_timeout: Duration::from_millis(transport.accept_timeout().unwrap()),
             accept_pending: transport.accept_pending().unwrap(),
             max_sessions: transport.max_sessions().unwrap(),
-            max_links: transport.max_links().unwrap(),
             is_qos: *qos.enabled(),
+            #[cfg(feature = "transport_multilink")]
+            max_links: transport.max_links().unwrap(),
             #[cfg(feature = "shared-memory")]
             is_shm: *shm.enabled(),
+            #[cfg(feature = "transport_auth")]
             authenticator: Auth::default(),
         }
     }
@@ -362,10 +381,8 @@ impl TransportManager {
                 }
 
                 // Create the transport
-                #[cfg(not(feature = "transport_multilink"))]
-                let is_multilink = false;
-                #[cfg(feature = "transport_multilink")]
-                let is_multilink = config.multilink.is_some();
+                let is_multilink =
+                    zcondfeat!("transport_multilink", config.multilink.is_some(), false);
 
                 let stc = TransportConfigUnicast {
                     zid: config.zid,
@@ -491,7 +508,7 @@ impl TransportManager {
     }
 }
 
-#[cfg(feature = "test")]
+#[cfg(all(feature = "test", feature = "transport_auth"))]
 impl TransportManager {
     pub fn get_auth_handle_unicast(&self) -> Arc<Auth> {
         self.state.unicast.authenticator.clone()

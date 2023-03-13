@@ -191,3 +191,21 @@ macro_rules! zparse {
         })
     };
 }
+
+// This macro allows to do conditional compilation
+#[macro_export]
+macro_rules! zcondfeat {
+    ($feature:literal, $yes:expr, $not:expr) => {{
+        {
+            #[cfg(feature = $feature)]
+            {
+                $yes
+            }
+
+            #[cfg(not(feature = $feature))]
+            {
+                $not
+            }
+        }
+    }};
+}

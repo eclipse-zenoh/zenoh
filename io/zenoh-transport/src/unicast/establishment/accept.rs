@@ -26,7 +26,7 @@ use rand::Rng;
 use std::time::Duration;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZSlice};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_core::{zasynclock, zerror};
+use zenoh_core::{zasynclock, zcondfeat, zerror};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::{
@@ -48,11 +48,12 @@ struct StateZenoh {
 struct State {
     zenoh: StateZenoh,
     ext_qos: ext::qos::StateAccept,
-    #[cfg(feature = "shared-memory")]
-    ext_shm: ext::shm::StateAccept,
-    ext_auth: ext::auth::StateAccept,
     #[cfg(feature = "transport_multilink")]
     ext_mlink: ext::multilink::StateAccept,
+    #[cfg(feature = "shared-memory")]
+    ext_shm: ext::shm::StateAccept,
+    #[cfg(feature = "transport_auth")]
+    ext_auth: ext::auth::StateAccept,
 }
 
 // InitSyn
@@ -107,11 +108,12 @@ struct AcceptLink<'a> {
     prng: &'a Mutex<PseudoRng>,
     cipher: &'a BlockCipher,
     ext_qos: ext::qos::QoSFsm<'a>,
-    #[cfg(feature = "shared-memory")]
-    ext_shm: ext::shm::ShmFsm<'a>,
-    ext_auth: ext::auth::AuthFsm<'a>,
     #[cfg(feature = "transport_multilink")]
     ext_mlink: ext::multilink::MultiLinkFsm<'a>,
+    #[cfg(feature = "shared-memory")]
+    ext_shm: ext::shm::ShmFsm<'a>,
+    #[cfg(feature = "transport_auth")]
+    ext_auth: ext::auth::AuthFsm<'a>,
 }
 
 #[async_trait]
@@ -189,6 +191,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension Auth
+        #[cfg(feature = "transport_auth")]
         self.ext_auth
             .recv_init_syn((&mut state.ext_auth, init_syn.ext_auth))
             .await
@@ -227,29 +230,35 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension Shm
-        #[cfg(feature = "shared-memory")]
-        let ext_shm = self
-            .ext_shm
-            .send_init_ack((&mut state.ext_shm, input.ext_shm))
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-        #[cfg(not(feature = "shared-memory"))]
-        let ext_shm = None;
+        let ext_shm = zcondfeat!(
+            "shared-memory",
+            self.ext_shm
+                .send_init_ack((&mut state.ext_shm, input.ext_shm))
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
+            None
+        );
 
         // Extension Auth
-        let ext_auth = self
-            .ext_auth
-            .send_init_ack(&state.ext_auth)
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        let ext_auth = zcondfeat!(
+            "transport_auth",
+            self.ext_auth
+                .send_init_ack(&state.ext_auth)
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
+            None
+        );
 
         // Extension MultiLink
         #[cfg(feature = "transport_multilink")]
-        let ext_mlink = self
-            .ext_mlink
-            .send_init_ack(&state.ext_mlink)
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        let ext_mlink = zcondfeat!(
+            "transport_multilink",
+            self.ext_mlink
+                .send_init_ack(&state.ext_mlink)
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
+            None
+        );
 
         // Create the cookie
         let cookie_nonce: ZInt = zasynclock!(self.prng).gen();
@@ -260,11 +269,12 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             batch_size: state.zenoh.batch_size,
             nonce: cookie_nonce,
             ext_qos: state.ext_qos,
-            #[cfg(feature = "shared-memory")]
-            ext_shm: state.ext_shm,
-            ext_auth: state.ext_auth,
             #[cfg(feature = "transport_multilink")]
             ext_mlink: state.ext_mlink,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: state.ext_shm,
+            #[cfg(feature = "transport_auth")]
+            ext_auth: state.ext_auth,
         };
 
         let mut encrypted = vec![];
@@ -374,10 +384,12 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
                 resolution: cookie.resolution,
             },
             ext_qos: cookie.ext_qos,
+            #[cfg(feature = "transport_multilink")]
+            ext_mlink: cookie.ext_mlink,
             #[cfg(feature = "shared-memory")]
             ext_shm: cookie.ext_shm,
+            #[cfg(feature = "transport_auth")]
             ext_auth: cookie.ext_auth,
-            ext_mlink: cookie.ext_mlink,
         };
 
         // Extension QoS
@@ -394,6 +406,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension Auth
+        #[cfg(feature = "transport_auth")]
         self.ext_auth
             .recv_open_syn((&mut state.ext_auth, open_syn.ext_auth))
             .await
@@ -431,29 +444,34 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension Shm
-        #[cfg(feature = "shared-memory")]
-        let ext_shm = self
-            .ext_shm
-            .send_open_ack(&mut state.ext_shm)
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-        #[cfg(not(feature = "shared-memory"))]
-        let ext_shm = None;
+        let ext_shm = zcondfeat!(
+            "shared-memory",
+            self.ext_shm
+                .send_open_ack(&mut state.ext_shm)
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
+            None
+        );
 
         // Extension Auth
-        let ext_auth = self
-            .ext_auth
-            .send_open_ack(&state.ext_auth)
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        let ext_auth = zcondfeat!(
+            "transport_auth",
+            self.ext_auth
+                .send_open_ack(&state.ext_auth)
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
+            None
+        );
 
         // Extension MultiLink
-        #[cfg(feature = "transport_multilink")]
-        let ext_mlink = self
-            .ext_mlink
-            .send_open_ack(&state.ext_mlink)
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+        let ext_mlink = zcondfeat!(
+            "transport_multilink",
+            self.ext_mlink
+                .send_open_ack(&state.ext_mlink)
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
+            None
+        );
 
         // Build OpenAck message
         let mine_initial_sn = compute_sn(input.mine_zid, input.other_zid, state.zenoh.resolution);
@@ -481,9 +499,10 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         ext_qos: ext::qos::QoSFsm::new(),
         #[cfg(feature = "shared-memory")]
         ext_shm: ext::shm::ShmFsm::new(&manager.state.unicast.shm),
-        ext_auth: manager.state.unicast.authenticator.fsm(&manager.prng),
         #[cfg(feature = "transport_multilink")]
         ext_mlink: manager.state.unicast.multilink.fsm(&manager.prng),
+        #[cfg(feature = "transport_auth")]
+        ext_auth: manager.state.unicast.authenticator.fsm(&manager.prng),
     };
 
     // Init handshake
@@ -507,19 +526,20 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
                 resolution: manager.config.resolution,
             },
             ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos),
-            #[cfg(feature = "shared-memory")]
-            ext_shm: ext::shm::StateAccept::new(manager.config.unicast.is_shm),
-            ext_auth: manager
-                .state
-                .unicast
-                .authenticator
-                .accept(&mut *zasynclock!(manager.prng)),
             #[cfg(feature = "transport_multilink")]
             ext_mlink: manager
                 .state
                 .unicast
                 .multilink
                 .accept(manager.config.unicast.max_links > 1),
+            #[cfg(feature = "shared-memory")]
+            ext_shm: ext::shm::StateAccept::new(manager.config.unicast.is_shm),
+            #[cfg(feature = "transport_auth")]
+            ext_auth: manager
+                .state
+                .unicast
+                .authenticator
+                .accept(&mut *zasynclock!(manager.prng)),
         };
 
         // Let's scope the Init phase in such a way memory is freed by Rust
@@ -562,13 +582,11 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         whatami: osyn_out.other_whatami,
         sn_resolution: state.zenoh.resolution.get(Field::FrameSN),
         tx_initial_sn: oack_out.open_ack.initial_sn,
+        is_qos: state.ext_qos.is_qos(),
         #[cfg(feature = "transport_multilink")]
         multilink: state.ext_mlink.multilink(),
-        is_qos: state.ext_qos.is_qos(),
         #[cfg(feature = "shared-memory")]
         is_shm: state.ext_shm.is_shm(),
-        #[cfg(not(feature = "shared-memory"))]
-        is_shm: false,
     };
     let transport = step!(manager
         .init_transport_unicast(config)
