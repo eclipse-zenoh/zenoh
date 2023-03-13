@@ -250,7 +250,6 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         );
 
         // Extension MultiLink
-        #[cfg(feature = "transport_multilink")]
         let ext_mlink = zcondfeat!(
             "transport_multilink",
             self.ext_mlink

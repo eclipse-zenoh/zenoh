@@ -321,7 +321,6 @@ impl<'a> OpenFsm for OpenLink<'a> {
         );
 
         // Extension MultiLink
-        #[cfg(feature = "transport_multilink")]
         let ext_mlink = zcondfeat!(
             "transport_multilink",
             self.ext_mlink

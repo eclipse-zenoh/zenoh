@@ -30,6 +30,7 @@ pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};
 use transport::TransportUnicastInner;
+use zenoh_core::zcondfeat;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Bits, WhatAmI, ZInt, ZenohId},
@@ -126,6 +127,7 @@ impl TransportUnicast {
         Ok(transport.get_sn_resolution().mask())
     }
 
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub fn is_shm(&self) -> ZResult<bool> {
         let transport = self.get_inner()?;
@@ -149,13 +151,14 @@ impl TransportUnicast {
         let tp = TransportPeer {
             zid: transport.get_zid(),
             whatami: transport.get_whatami(),
-            is_qos: transport.is_qos(),
-            is_shm: transport.is_shm(),
             links: transport
                 .get_links()
                 .into_iter()
                 .map(|l| l.into())
                 .collect(),
+            is_qos: transport.is_qos(),
+            #[cfg(feature = "shared-memory")]
+            is_shm: transport.is_shm(),
         };
         Ok(tp)
     }
@@ -226,15 +229,17 @@ impl PartialEq for TransportUnicast {
 impl fmt::Debug for TransportUnicast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.get_inner() {
-            Ok(transport) => f
-                .debug_struct("Transport Unicast")
-                .field("zid", &transport.get_zid())
-                .field("whatami", &transport.get_whatami())
-                .field("sn_resolution", &transport.get_sn_resolution())
-                .field("is_qos", &transport.is_qos())
-                .field("is_shm", &transport.is_shm())
-                .field("links", &transport.get_links())
-                .finish(),
+            Ok(transport) => {
+                let is_shm = zcondfeat!("shared-memory", transport.is_shm(), false);
+                f.debug_struct("Transport Unicast")
+                    .field("zid", &transport.get_zid())
+                    .field("whatami", &transport.get_whatami())
+                    .field("sn_resolution", &transport.get_sn_resolution())
+                    .field("is_qos", &transport.is_qos())
+                    .field("is_shm", &is_shm)
+                    .field("links", &transport.get_links())
+                    .finish()
+            }
             Err(e) => {
                 write!(f, "{e}")
             }

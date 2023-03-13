@@ -378,6 +378,7 @@ impl TransportUnicastInner {
         self.config.sn_resolution
     }
 
+    #[cfg(feature = "shared-memory")]
     pub(crate) fn is_shm(&self) -> bool {
         self.config.is_shm
     }

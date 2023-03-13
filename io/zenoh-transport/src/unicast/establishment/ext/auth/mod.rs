@@ -42,7 +42,9 @@ use zenoh_protocol::{
 };
 
 pub(crate) mod id {
+    #[cfg(feature = "auth_pubkey")]
     pub(crate) const PUBKEY: u8 = 1;
+    #[cfg(feature = "auth_usrpwd")]
     pub(crate) const USRPWD: u8 = 2;
 }
 
@@ -70,7 +72,7 @@ impl Auth {
         })
     }
 
-    pub(crate) fn open<R>(&self, prng: &mut R) -> StateOpen
+    pub(crate) fn open<R>(&self, #[allow(unused)] prng: &mut R) -> StateOpen
     where
         R: Rng + CryptoRng,
     {
@@ -85,7 +87,7 @@ impl Auth {
         }
     }
 
-    pub(crate) fn accept<R>(&self, prng: &mut R) -> StateAccept
+    pub(crate) fn accept<R>(&self, #[allow(unused)] prng: &mut R) -> StateAccept
     where
         R: Rng + CryptoRng,
     {
@@ -100,7 +102,7 @@ impl Auth {
         }
     }
 
-    pub(crate) fn fsm<'a>(&'a self, prng: &'a Mutex<PseudoRng>) -> AuthFsm<'a> {
+    pub(crate) fn fsm<'a>(&'a self, #[allow(unused)] prng: &'a Mutex<PseudoRng>) -> AuthFsm<'a> {
         AuthFsm {
             #[cfg(feature = "auth_pubkey")]
             pubkey: self.pubkey.as_ref().map(|x| AuthPubKeyFsm::new(x, prng)),

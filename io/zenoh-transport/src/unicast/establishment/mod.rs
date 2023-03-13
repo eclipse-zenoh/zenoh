@@ -162,9 +162,10 @@ pub(super) async fn finalize_transport(
         let peer = TransportPeer {
             zid: transport.get_zid(),
             whatami: transport.get_whatami(),
-            is_qos: transport.is_qos(),
-            is_shm: transport.is_shm(),
             links: vec![Link::from(link)],
+            is_qos: transport.is_qos(),
+            #[cfg(feature = "shared-memory")]
+            is_shm: transport.is_shm(),
         };
         // Notify the transport handler that there is a new transport and get back a callback
         // NOTE: the read loop of the link the open message was sent on remains blocked

@@ -383,16 +383,18 @@ impl TransportManager {
                 // Create the transport
                 let is_multilink =
                     zcondfeat!("transport_multilink", config.multilink.is_some(), false);
+                let is_shm = zcondfeat!("shared-memory", config.is_shm, false);
 
                 let stc = TransportConfigUnicast {
                     zid: config.zid,
                     whatami: config.whatami,
                     sn_resolution: config.sn_resolution,
                     tx_initial_sn: config.tx_initial_sn,
-                    is_shm: config.is_shm,
                     is_qos: config.is_qos,
                     #[cfg(feature = "transport_multilink")]
                     multilink: config.multilink,
+                    #[cfg(feature = "shared-memory")]
+                    is_shm: config.is_shm,
                 };
                 let a_t = Arc::new(TransportUnicastInner::make(self.clone(), stc)?);
 
@@ -401,15 +403,14 @@ impl TransportManager {
                 guard.insert(config.zid, a_t);
 
                 log::debug!(
-                    "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, shm: {}, qos: {}, multilink: {}",
+                    "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, shm: {}, multilink: {}",
                     self.config.zid,
                     config.zid,
                     config.whatami,
                     config.sn_resolution,
                     config.tx_initial_sn,
-                    config.is_shm,
                     config.is_qos,
-                    is_multilink
+                    is_multilink,                    is_shm
                 );
 
                 Ok(transport)

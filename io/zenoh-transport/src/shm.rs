@@ -55,6 +55,7 @@ macro_rules! set_sliced {
     };
 }
 
+#[cold]
 #[inline(never)]
 pub fn map_zslice_to_shmbuf(
     zslice: &mut ZSlice,
