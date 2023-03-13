@@ -216,6 +216,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         &self,
         input: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
+        #[allow(unused_mut)] // Required for "shared-memory" feature
         let (mut state, input) = input;
 
         // Extension QoS
