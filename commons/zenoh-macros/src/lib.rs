@@ -216,7 +216,7 @@ impl syn::parse::Parse for FormatDeclarations {
 
 /// Create format modules from a format specification.
 ///
-/// `declare_format!($($vis $ident: $lit),*)` will validate each `$lit` to be a valid KeFormat, and declare a module called `$ident` with `$vis` visibility at its call-site for each format.
+/// `define_format!($($vis $ident: $lit),*)` will validate each `$lit` to be a valid KeFormat, and declare a module called `$ident` with `$vis` visibility at its call-site for each format.
 ///  The modules contain the following elements:
 /// - `Format`, a zero-sized type that represents your format.
 /// - `formatter()`, a function that constructs a `Formatter` specialized for your format:
@@ -224,7 +224,7 @@ impl syn::parse::Parse for FormatDeclarations {
 /// - `parse(target: &keyexpr) -> ZResult<Parsed<'_>>` will parse the provided key expression according to your format. Just like `KeFormat::parse`, parsing is lazy: each field will match the smallest subsection of your `target` that is included in its pattern.
 ///     - like `Formatter`, `Parsed` will have a method named after each spec's `id` that returns `Option<&keyexpr>`. That `Option` will only be `None` if the spec's format was `**` and matched a sequence of 0 chunks.
 #[proc_macro]
-pub fn declare_format(tokens: TokenStream) -> TokenStream {
+pub fn define_format(tokens: TokenStream) -> TokenStream {
     let declarations: FormatDeclarations = syn::parse(tokens).unwrap();
     let content = declarations.0.into_iter().map(|FormatDeclaration { vis, name, lit }|
     {

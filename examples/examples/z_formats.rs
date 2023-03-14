@@ -14,7 +14,7 @@
 
 use zenoh::prelude::keyexpr;
 
-zenoh::declare_format!(pub format1: "user_id/${user_id:*}/file/${file:**}", pub(crate) format2: "user_id/${user_id:*}/settings/${setting:*/**}");
+zenoh::define_format!(pub format1: "user_id/${user_id:*}/file/${file:**}", pub(crate) format2: "user_id/${user_id:*}/settings/${setting:*/**}");
 
 fn main() {
     // Formatting
