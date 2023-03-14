@@ -193,81 +193,121 @@ fn keformat_support(source: &str) -> proc_macro2::TokenStream {
     }
 }
 
-enum KeformatInput {
-    Litteral(syn::LitStr, syn::Ident),
-    Format(syn::Expr, Vec<(syn::Expr, syn::Expr)>),
+struct FormatDeclaration {
+    vis: syn::Visibility,
+    name: syn::Ident,
+    lit: syn::LitStr,
 }
-impl syn::parse::Parse for KeformatInput {
+impl syn::parse::Parse for FormatDeclaration {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        if input.fork().parse::<syn::LitStr>().is_ok() {
-            let lit = input.parse().expect("Already inspected");
-            input.parse::<syn::Token!(mod)>()?;
-            let id = input.parse()?;
-            Ok(KeformatInput::Litteral(lit, id))
-        } else {
-            let id = input.parse()?;
-            let mut formats = Vec::new();
-            if !input.is_empty() {
-                input.parse::<syn::Token!(,)>()?;
-            }
-            formats.extend(
-                input
-                    .parse_terminated::<_, syn::Token!(,)>(syn::Expr::parse)?
-                    .into_iter()
-                    .map(|a| match a {
-                        syn::Expr::Assign(a) => (*a.left, *a.right),
-                        a => (a.clone(), a),
-                    }),
-            );
-            Ok(KeformatInput::Format(id, formats))
-        }
+        let vis = input.parse()?;
+        let name = input.parse()?;
+        let _: syn::Token!(:) = input.parse()?;
+        let lit = input.parse()?;
+        Ok(FormatDeclaration { vis, name, lit })
+    }
+}
+struct FormatDeclarations(syn::punctuated::Punctuated<FormatDeclaration, syn::Token!(,)>);
+impl syn::parse::Parse for FormatDeclarations {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        Ok(Self(input.parse_terminated(FormatDeclaration::parse)?))
     }
 }
 
-/// The best way to build Key Expression Formats into your applications.
+/// Create format modules from a format specification.
 ///
-/// This macro has two usages, letting you validate a few things at compile time in both cases. The `z_formats.rs` example file shows off both usages.
-///
-/// # Declaring formatting modules.
-/// `keformat!($format: lit mod $name: ident)` validates `$format` to be a string litteral for a valid KeFormat, and declares a public module named `$name` in its call-site. The module contains the following elements:
+/// `declare_format!($($vis $ident: $lit),*)` will validate each `$lit` to be a valid KeFormat, and declare a module called `$ident` with `$vis` visibility at its call-site for each format.
+///  The modules contain the following elements:
 /// - `Format`, a zero-sized type that represents your format.
 /// - `formatter()`, a function that constructs a `Formatter` specialized for your format:
 ///     - for every spec in your format, `Formatter` will have a method named after the spec's `id` that lets you set a value for that field of your format. These methods will return `Result<&mut Formatter, FormatError>`.
 /// - `parse(target: &keyexpr) -> ZResult<Parsed<'_>>` will parse the provided key expression according to your format. Just like `KeFormat::parse`, parsing is lazy: each field will match the smallest subsection of your `target` that is included in its pattern.
 ///     - like `Formatter`, `Parsed` will have a method named after each spec's `id` that returns `Option<&keyexpr>`. That `Option` will only be `None` if the spec's format was `**` and matched a sequence of 0 chunks.
-///
-/// # Using declared formatters
-/// `keformat!($formatter: expr, $($field: ident [= $value: expr]),*)`where `$formatter` dereferences to `&mut Formatter`, can be used to succintly use a format. Each `$field` will be set to `$value`. If `$value` is omitted, `$field` will be reused.
 #[proc_macro]
-pub fn keformat(tokens: TokenStream) -> TokenStream {
-    match syn::parse::<KeformatInput>(tokens).expect("Failed to parse") {
-        KeformatInput::Litteral(lit, name) => {
-            let source = lit.value();
-            let docstring = format!(r"The module associated with the `{source}` format, it contains:
+pub fn declare_format(tokens: TokenStream) -> TokenStream {
+    let declarations: FormatDeclarations = syn::parse(tokens).unwrap();
+    let content = declarations.0.into_iter().map(|FormatDeclaration { vis, name, lit }|
+    {
+    let source = lit.value();
+    let docstring = format!(
+        r"The module associated with the `{source}` format, it contains:
 - `Format`, a zero-sized type that represents your format.
 - `formatter()`, a function that constructs a `Formatter` specialized for your format:
     - for every spec in your format, `Formatter` will have a method named after the spec's `id` that lets you set a value for that field of your format. These methods will return `Result<&mut Formatter, FormatError>`.
 - `parse(target: &keyexpr) -> ZResult<Parsed<'_>>` will parse the provided key expression according to your format. Just like `KeFormat::parse`, parsing is lazy: each field will match the smallest subsection of your `target` that is included in its pattern.
-    - like `Formatter`, `Parsed` will have a method named after each spec's `id` that returns `Option<&keyexpr>`. That `Option` will only be `None` if the spec's format was `**` and matched a sequence of 0 chunks.");
-            let support = keformat_support(&source);
-            quote! {
-                #[doc = #docstring]
-                pub mod #name{
-                    #support
-                }
-            }
+    - like `Formatter`, `Parsed` will have a method named after each spec's `id` that returns `Option<&keyexpr>`. That `Option` will only be `None` if the spec's format was `**` and matched a sequence of 0 chunks."
+    );
+    let support = keformat_support(&source);
+    quote! {
+        #[doc = #docstring]
+        #vis mod #name{
+            #support
         }
-        KeformatInput::Format(id, assigns) => {
-            let mut sets = None;
-            for (l, r) in assigns.iter().rev() {
-                if let Some(set) = sets {
-                    sets = Some(quote!(.#l(#r).and_then(|x| x #set)));
-                } else {
-                    sets = Some(quote!(.#l(#r)));
-                }
-            }
-            quote! {#id #sets}
+    }});
+    quote!(#(#content)*).into()
+}
+
+struct FormatUsage {
+    id: syn::Expr,
+    assigns: Vec<(syn::Expr, syn::Expr)>,
+}
+impl syn::parse::Parse for FormatUsage {
+    fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
+        let id = input.parse()?;
+        let mut assigns = Vec::new();
+        if !input.is_empty() {
+            input.parse::<syn::Token!(,)>()?;
+        }
+        assigns.extend(
+            input
+                .parse_terminated::<_, syn::Token!(,)>(syn::Expr::parse)?
+                .into_iter()
+                .map(|a| match a {
+                    syn::Expr::Assign(a) => (*a.left, *a.right),
+                    a => (a.clone(), a),
+                }),
+        );
+        Ok(FormatUsage { id, assigns })
+    }
+}
+
+/// Write a set of values into a `Formatter`, stopping as soon as a value doesn't fit the specification for its field.
+/// Contrary to `keformat` doesn't build the Formatter into a Key Expression.
+///
+/// `kewrite!($formatter, $($ident [= $expr]),*)` will attempt to write `$expr` into their respective `$ident` fields for `$formatter`.  
+/// `$formatter` must be an expression that dereferences to `&mut Formatter`.  
+/// `$expr` must resolve to a value that implements `core::fmt::Display`.  
+/// `$expr` defaults to `$ident` if omitted.
+///
+/// This macro always results in an expression that resolves to `Result<&mut Formatter, FormatSetError>`.
+#[proc_macro]
+pub fn kewrite(tokens: TokenStream) -> TokenStream {
+    let FormatUsage { id, assigns } = syn::parse(tokens).unwrap();
+    let mut sets = None;
+    for (l, r) in assigns.iter().rev() {
+        if let Some(set) = sets {
+            sets = Some(quote!(.#l(#r).and_then(|x| x #set)));
+        } else {
+            sets = Some(quote!(.#l(#r)));
         }
     }
+    quote!(#id #sets).into()
+}
+
+/// Write a set of values into a `Formatter` and then builds it into an `OwnedKeyExpr`, stopping as soon as a value doesn't fit the specification for its field.
+///
+/// `keformat!($formatter, $($ident [= $expr]),*)` will attempt to write `$expr` into their respective `$ident` fields for `$formatter`.  
+/// `$formatter` must be an expression that dereferences to `&mut Formatter`.  
+/// `$expr` must resolve to a value that implements `core::fmt::Display`.  
+/// `$expr` defaults to `$ident` if omitted.
+///
+/// This macro always results in an expression that resolves to `ZResult<OwnedKeyExpr>`, and leaves `$formatter` in its written state.
+#[proc_macro]
+pub fn keformat(tokens: TokenStream) -> TokenStream {
+    let formatted: proc_macro2::TokenStream = kewrite(tokens).into();
+    quote!(match #formatted {
+        Ok(ok) => ok.build(),
+        Err(e) => Err(e.into()),
+    })
     .into()
 }

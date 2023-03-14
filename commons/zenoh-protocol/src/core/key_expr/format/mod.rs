@@ -19,7 +19,7 @@ use core::{
     num::NonZeroU32,
 };
 
-use zenoh_result::{bail, zerror, Error, ZResult};
+use zenoh_result::{bail, zerror, Error, IError, ZResult};
 
 use super::{keyexpr, OwnedKeyExpr};
 
@@ -349,6 +349,12 @@ pub enum FormatSetError {
     InvalidId,
     PatternNotMatched,
 }
+impl core::fmt::Display for FormatSetError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{self:?}")
+    }
+}
+impl IError for FormatSetError {}
 impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
     pub fn format(&self) -> &KeFormat<'s, Storage> {
         self.format
