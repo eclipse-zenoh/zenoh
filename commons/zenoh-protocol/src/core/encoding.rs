@@ -14,7 +14,7 @@
 use crate::core::CowStr;
 use alloc::{borrow::Cow, string::String};
 use core::{
-    convert::TryFrom,
+    convert::{TryFrom, TryInto},
     fmt::{self, Debug},
     mem,
 };
@@ -74,25 +74,13 @@ pub enum KnownEncoding {
 
 impl From<KnownEncoding> for u8 {
     fn from(val: KnownEncoding) -> Self {
-        unsafe { mem::transmute(val) }
-    }
-}
-
-impl From<KnownEncoding> for u64 {
-    fn from(val: KnownEncoding) -> Self {
-        u8::from(val) as u64
+        val as u8
     }
 }
 
 impl From<KnownEncoding> for &str {
     fn from(val: KnownEncoding) -> Self {
-        consts::MIMES[usize::from(val)]
-    }
-}
-
-impl From<KnownEncoding> for usize {
-    fn from(val: KnownEncoding) -> Self {
-        u8::from(val) as usize
+        consts::MIMES[u8::from(val) as usize]
     }
 }
 
@@ -107,23 +95,12 @@ impl TryFrom<u8> for KnownEncoding {
     }
 }
 
-impl TryFrom<u64> for KnownEncoding {
-    type Error = ();
-
-    fn try_from(value: u64) -> Result<Self, Self::Error> {
-        if value < consts::MIMES.len() as u64 + 1 {
-            Ok(unsafe { mem::transmute(value as u8) })
-        } else {
-            Err(())
-        }
-    }
-}
-
 impl AsRef<str> for KnownEncoding {
     fn as_ref(&self) -> &str {
-        consts::MIMES[usize::from(*self)]
+        consts::MIMES[u8::from(*self) as usize]
     }
 }
+
 /// The encoding of a zenoh `zenoh::Value`.
 ///
 /// A zenoh encoding is a HTTP Mime type represented, for wire efficiency,
@@ -139,7 +116,8 @@ impl Encoding {
     where
         IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
     {
-        let prefix = KnownEncoding::try_from(prefix).ok()?;
+        let e: u8 = prefix.try_into().ok()?;
+        let prefix = KnownEncoding::try_from(e).ok()?;
         if suffix.as_ref().is_empty() {
             Some(Encoding::Exact(prefix))
         } else {
