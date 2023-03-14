@@ -64,7 +64,7 @@ where
 
         if imsg::has_flag(header, flag::S) {
             self.write(&mut *writer, x.resolution.as_u8())?;
-            self.write(&mut *writer, x.batch_size)?;
+            self.write(&mut *writer, x.batch_size.to_le_bytes())?;
         }
 
         // Extensions
@@ -128,12 +128,13 @@ where
         let zid: ZenohId = lodec.read(&mut *reader)?;
 
         let mut resolution = Resolution::default();
-        let mut batch_size = u16::MAX;
+        let mut batch_size = u16::MAX.to_le_bytes();
         if imsg::has_flag(self.header, flag::S) {
             let flags: u8 = self.codec.read(&mut *reader)?;
             resolution = Resolution::from(flags & 0b00111111);
             batch_size = self.codec.read(&mut *reader)?;
         }
+        let batch_size = u16::from_le_bytes(batch_size);
 
         // Extensions
         let mut ext_qos = None;

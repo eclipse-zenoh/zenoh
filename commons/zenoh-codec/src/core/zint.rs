@@ -20,6 +20,110 @@ use zenoh_buffers::{
 
 const VLE_LEN: usize = 10;
 
+// u8
+impl<W> WCodec<u8, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: u8) -> Self::Output {
+        writer.write_u8(x)
+    }
+}
+
+impl<W> WCodec<&u8, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &u8) -> Self::Output {
+        self.write(writer, *x)
+    }
+}
+
+impl<R> RCodec<u8, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<u8, Self::Error> {
+        reader.read_u8()
+    }
+}
+
+// u16
+impl<W> WCodec<u16, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: u16) -> Self::Output {
+        self.write(writer, x as u64)
+    }
+}
+
+impl<W> WCodec<&u16, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &u16) -> Self::Output {
+        self.write(writer, *x)
+    }
+}
+
+impl<R> RCodec<u16, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<u16, Self::Error> {
+        let x: u64 = self.read(reader)?;
+        x.try_into().map_err(|_| DidntRead)
+    }
+}
+
+// u32
+impl<W> WCodec<u32, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: u32) -> Self::Output {
+        self.write(writer, x as u64)
+    }
+}
+
+impl<W> WCodec<&u32, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &u32) -> Self::Output {
+        self.write(writer, *x)
+    }
+}
+
+impl<R> RCodec<u32, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<u32, Self::Error> {
+        let x: u64 = self.read(reader)?;
+        x.try_into().map_err(|_| DidntRead)
+    }
+}
+
 // u64
 impl<W> WCodec<u64, &mut W> for Zenoh080
 where
@@ -91,6 +195,17 @@ where
     fn write(self, writer: &mut W, x: usize) -> Self::Output {
         let x: u64 = x.try_into().map_err(|_| DidntWrite)?;
         self.write(writer, x)
+    }
+}
+
+impl<W> WCodec<&usize, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &usize) -> Self::Output {
+        self.write(writer, *x)
     }
 }
 

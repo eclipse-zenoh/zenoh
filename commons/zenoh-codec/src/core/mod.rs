@@ -31,74 +31,39 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 
-// u8
-impl<W> WCodec<u8, &mut W> for Zenoh080
+// [u8; 2]
+impl<W> WCodec<[u8; 2], &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: u8) -> Self::Output {
-        writer.write_u8(x)
-    }
-}
-
-impl<W> WCodec<&u8, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: &u8) -> Self::Output {
-        self.write(writer, *x)
-    }
-}
-
-impl<R> RCodec<u8, &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<u8, Self::Error> {
-        reader.read_u8()
-    }
-}
-
-// u16
-impl<W> WCodec<u16, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: u16) -> Self::Output {
-        let x = x.to_le_bytes();
+    fn write(self, writer: &mut W, x: [u8; 2]) -> Self::Output {
         writer.write_exact(x.as_slice())
     }
 }
 
-impl<W> WCodec<&u16, &mut W> for Zenoh080
+impl<W> WCodec<&[u8; 2], &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &u16) -> Self::Output {
+    fn write(self, writer: &mut W, x: &[u8; 2]) -> Self::Output {
         self.write(writer, *x)
     }
 }
 
-impl<R> RCodec<u16, &mut R> for Zenoh080
+impl<R> RCodec<[u8; 2], &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<u16, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<[u8; 2], Self::Error> {
         let mut x = [0u8; 2];
         reader.read_exact(&mut x)?;
-        Ok(u16::from_le_bytes(x))
+        Ok(x)
     }
 }
 

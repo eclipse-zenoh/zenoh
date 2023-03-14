@@ -46,7 +46,7 @@ where
         self.write(&mut *writer, options)?;
 
         // Body
-        self.write(&mut *writer, &x.psid)?;
+        self.write(&mut *writer, x.psid)?;
         self.write(&mut *writer, x.sn)?;
         if let Some(zid) = x.zid.as_ref() {
             self.write(&mut *writer, zid)?;

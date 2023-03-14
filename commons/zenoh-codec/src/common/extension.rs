@@ -183,7 +183,7 @@ where
             ZExtensionBody::Z64(u64) => {
                 header |= iext::ENC_Z64;
                 self.write(&mut *writer, header)?;
-                self.write(&mut *writer, u64)?
+                self.write(&mut *writer, *u64)?
             }
             ZExtensionBody::ZBuf(zbuf) => {
                 header |= iext::ENC_ZBUF;
