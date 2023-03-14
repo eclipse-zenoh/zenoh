@@ -46,6 +46,9 @@ members = [
   "zenoh-ext",
   "zenohd",
 ]
+exclude = [
+  "ci/nostd-check",
+]
 
 [workspace.package]
 rust-version = "1.62.1"

@@ -617,13 +617,14 @@ impl<'a, 'b> AsyncResolve for PublisherBuilder<'a, 'b> {
 }
 
 /// The Priority of zenoh messages.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Priority {
     RealTime = 1,
     InteractiveHigh = 2,
     InteractiveLow = 3,
     DataHigh = 4,
+    #[default]
     Data = 5,
     DataLow = 6,
     Background = 7,
@@ -636,12 +637,6 @@ impl Priority {
     pub const MAX: Self = Self::RealTime;
     /// The number of available priorities
     pub const NUM: usize = 1 + Self::MIN as usize - Self::MAX as usize;
-}
-
-impl Default for Priority {
-    fn default() -> Priority {
-        Priority::Data
-    }
 }
 
 impl TryFrom<u8> for Priority {
