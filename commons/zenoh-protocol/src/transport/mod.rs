@@ -40,6 +40,9 @@ pub mod id {
     pub const FRAGMENT: u8 = 0x07;
 }
 
+#[allow(non_camel_case_types)]
+pub type uSN = u32;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConduitSnList {
     Plain(ConduitSn),
@@ -80,8 +83,8 @@ impl fmt::Display for ConduitSnList {
 /// The kind of reliability.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct ConduitSn {
-    pub reliable: u64,
-    pub best_effort: u64,
+    pub reliable: uSN,
+    pub best_effort: uSN,
 }
 
 // Zenoh messages at zenoh-transport level

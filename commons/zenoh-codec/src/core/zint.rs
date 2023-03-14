@@ -85,7 +85,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<u16, Self::Error> {
         let x: u64 = self.read(reader)?;
-        x.try_into().map_err(|_| DidntRead)
+        Ok(x as u16)
     }
 }
 
@@ -120,7 +120,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<u32, Self::Error> {
         let x: u64 = self.read(reader)?;
-        x.try_into().map_err(|_| DidntRead)
+        Ok(x as u32)
     }
 }
 
@@ -217,7 +217,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<usize, Self::Error> {
         let x: u64 = self.read(reader)?;
-        x.try_into().map_err(|_| DidntRead)
+        Ok(x as usize)
     }
 }
 

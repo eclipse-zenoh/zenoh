@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::{Bits, Reliability},
-    transport::ConduitSn,
+    transport::{uSN, ConduitSn},
 };
 use zenoh_result::ZResult;
 
@@ -34,7 +34,7 @@ impl TransportChannelTx {
         Ok(tch)
     }
 
-    pub(crate) fn sync(&mut self, sn: u64) -> ZResult<()> {
+    pub(crate) fn sync(&mut self, sn: uSN) -> ZResult<()> {
         self.sn.set(sn)
     }
 }
@@ -57,7 +57,7 @@ impl TransportChannelRx {
         Ok(tch)
     }
 
-    pub(crate) fn sync(&mut self, sn: u64) -> ZResult<()> {
+    pub(crate) fn sync(&mut self, sn: uSN) -> ZResult<()> {
         // Set the sequence number in the state as it had received a message with sn - 1
         let sn = if sn == 0 {
             self.sn.resolution() - 1

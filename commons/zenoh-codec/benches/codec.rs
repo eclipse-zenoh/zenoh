@@ -24,7 +24,7 @@ use zenoh_codec::*;
 use zenoh_protocol::{
     core::{CongestionControl, Reliability},
     defaults::BATCH_SIZE,
-    transport::{Frame, FrameHeader},
+    transport::{uSN, Frame, FrameHeader},
     zenoh::Data,
 };
 
@@ -74,7 +74,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let frame = FrameHeader {
         reliability: Reliability::default(),
-        sn: u64::MIN,
+        sn: uSN::MIN,
         ext_qos: zenoh_protocol::transport::frame::ext::QoS::default(),
     };
 
@@ -111,7 +111,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let frame = FrameHeader {
         reliability: Reliability::default(),
-        sn: u64::MIN,
+        sn: uSN::MIN,
         ext_qos: zenoh_protocol::transport::frame::ext::QoS::default(),
     };
 
@@ -143,7 +143,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let frame = FrameHeader {
         reliability: Reliability::default(),
-        sn: u64::MIN,
+        sn: uSN::MIN,
         ext_qos: zenoh_protocol::transport::frame::ext::QoS::default(),
     };
 

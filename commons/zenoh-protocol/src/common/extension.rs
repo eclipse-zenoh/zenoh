@@ -99,19 +99,19 @@ impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtUnit<{ ID }> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ZExtu64<const ID: u8> {
+pub struct ZExtZ64<const ID: u8> {
     pub value: u64,
 }
 
-impl<const ID: u8> ZExtu64<{ ID }> {
+impl<const ID: u8> ZExtZ64<{ ID }> {
     pub const ID: u8 = ID;
 
     pub const fn new(value: u64) -> Self {
         Self { value }
     }
 
-    pub const fn transmute<const DI: u8>(self) -> ZExtu64<{ DI }> {
-        ZExtu64::new(self.value)
+    pub const fn transmute<const DI: u8>(self) -> ZExtZ64<{ DI }> {
+        ZExtZ64::new(self.value)
     }
 
     #[cfg(feature = "test")]
@@ -124,7 +124,7 @@ impl<const ID: u8> ZExtu64<{ ID }> {
     }
 }
 
-impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtu64<{ ID }> {
+impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtZ64<{ ID }> {
     type Error = DidntConvert;
 
     fn try_from(v: ZExtUnknown) -> Result<Self, Self::Error> {
@@ -219,8 +219,8 @@ impl<const ID: u8> From<ZExtUnit<{ ID }>> for ZExtUnknown {
     }
 }
 
-impl<const ID: u8> From<ZExtu64<{ ID }>> for ZExtUnknown {
-    fn from(e: ZExtu64<{ ID }>) -> Self {
+impl<const ID: u8> From<ZExtZ64<{ ID }>> for ZExtUnknown {
+    fn from(e: ZExtZ64<{ ID }>) -> Self {
         ZExtUnknown {
             id: ID,
             body: ZExtensionBody::Z64(e.value),

@@ -244,7 +244,7 @@ fn codec_extension() {
     }
 
     run_extension!(ZExtUnit<0>);
-    run_extension!(ZExtu64<1>);
+    run_extension!(ZExtZ64<1>);
     run_extension!(ZExtZBuf<2>);
     run_extension!(ZExtZBuf<3>);
     run_extension!(ZExtUnknown);

@@ -25,7 +25,7 @@ use zenoh_collections::Properties;
 use zenoh_config::UsrPwdConf;
 use zenoh_core::{bail, zasyncread, zerror, Error as ZError, Result as ZResult};
 use zenoh_crypto::hmac;
-use zenoh_protocol::common::{ZExtUnit, ZExtZBuf, ZExtu64};
+use zenoh_protocol::common::{ZExtUnit, ZExtZ64, ZExtZBuf};
 
 // Authenticator
 type User = Vec<u8>;
@@ -199,7 +199,7 @@ impl<'a> AuthUsrPwdFsm<'a> {
 /// ~     nonce     ~
 /// +---------------+
 ///
-/// ZExtu64
+/// ZExtZ64
 
 /*************************************/
 /*             OpenSyn               */
@@ -269,7 +269,7 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
         Ok(output)
     }
 
-    type RecvInitAckIn = (&'a mut StateOpen, Option<ZExtu64<{ super::id::USRPWD }>>);
+    type RecvInitAckIn = (&'a mut StateOpen, Option<ZExtZ64<{ super::id::USRPWD }>>);
     type RecvInitAckOut = ();
     async fn recv_init_ack(
         &self,
@@ -367,12 +367,12 @@ impl<'a> AcceptFsm for AuthUsrPwdFsm<'a> {
     }
 
     type SendInitAckIn = &'a StateAccept;
-    type SendInitAckOut = Option<ZExtu64<{ super::id::USRPWD }>>;
+    type SendInitAckOut = Option<ZExtZ64<{ super::id::USRPWD }>>;
     async fn send_init_ack(
         &self,
         state: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
-        Ok(Some(ZExtu64::new(state.nonce)))
+        Ok(Some(ZExtZ64::new(state.nonce)))
     }
 
     type RecvOpenSynIn = (&'a mut StateAccept, Option<ZExtZBuf<{ super::id::USRPWD }>>);

@@ -20,7 +20,7 @@ use zenoh_buffers::{
 use zenoh_codec::{WCodec, Zenoh080};
 use zenoh_protocol::{
     core::Reliability,
-    transport::{fragment::FragmentHeader, frame::FrameHeader, TransportMessage},
+    transport::{fragment::FragmentHeader, frame::FrameHeader, uSN, TransportMessage},
     zenoh::ZenohMessage,
 };
 
@@ -46,8 +46,8 @@ pub(crate) enum CurrentFrame {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct LatestSn {
-    pub(crate) reliable: Option<u64>,
-    pub(crate) best_effort: Option<u64>,
+    pub(crate) reliable: Option<uSN>,
+    pub(crate) best_effort: Option<uSN>,
 }
 
 impl LatestSn {

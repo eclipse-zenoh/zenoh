@@ -33,7 +33,7 @@ use zenoh_protocol::{
     core::{Field, Resolution, WhatAmI, ZenohId},
     transport::{
         close::{self, Close},
-        InitAck, OpenAck, TransportBody, TransportMessage,
+        uSN, InitAck, OpenAck, TransportBody, TransportMessage,
     },
 };
 use zenoh_result::ZResult;
@@ -89,7 +89,7 @@ struct RecvOpenSynOut {
     other_zid: ZenohId,
     other_whatami: WhatAmI,
     other_lease: Duration,
-    other_initial_sn: u64,
+    other_initial_sn: uSN,
 }
 
 // OpenAck

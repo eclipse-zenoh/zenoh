@@ -11,15 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh_protocol::core::Bits;
+use zenoh_protocol::{core::Bits, transport::uSN};
 use zenoh_result::{bail, ZResult};
 
-const RES_U8: u64 = (u8::MAX >> 1) as u64; // 1 byte max when encoded
-const RES_U16: u64 = (u16::MAX >> 2) as u64; // 2 bytes max when encoded
-const RES_U32: u64 = (u32::MAX >> 4) as u64; // 4 bytes max when encoded
-const RES_U64: u64 = u64::MAX >> 1; // 9 bytes max when encoded
+const RES_U8: uSN = (u8::MAX >> 1) as uSN; // 1 byte max when encoded
+const RES_U16: uSN = (u16::MAX >> 2) as uSN; // 2 bytes max when encoded
+const RES_U32: uSN = (u32::MAX >> 4) as uSN; // 4 bytes max when encoded
+const RES_U64: uSN = (u64::MAX >> 1) as uSN; // 9 bytes max when encoded
 
-pub(crate) fn get_mask(resolution: Bits) -> u64 {
+pub(crate) fn get_mask(resolution: Bits) -> uSN {
     match resolution {
         Bits::U8 => RES_U8,
         Bits::U16 => RES_U16,
@@ -39,8 +39,8 @@ pub(crate) fn get_mask(resolution: Bits) -> u64 {
 ///
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct SeqNum {
-    value: u64,
-    mask: u64,
+    value: uSN,
+    mask: uSN,
 }
 
 impl SeqNum {
@@ -60,22 +60,22 @@ impl SeqNum {
     /// This funtion will panic if `value` is out of bound w.r.t. `resolution`. That is if
     /// `value` is greater or equal than `resolution`.
     ///
-    pub(crate) fn make(value: u64, resolution: Bits) -> ZResult<SeqNum> {
+    pub(crate) fn make(value: uSN, resolution: Bits) -> ZResult<SeqNum> {
         let mask = get_mask(resolution);
         let mut sn = SeqNum { value: 0, mask };
         sn.set(value)?;
         Ok(sn)
     }
 
-    pub(crate) fn get(&self) -> u64 {
+    pub(crate) fn get(&self) -> uSN {
         self.value
     }
 
-    pub(crate) fn resolution(&self) -> u64 {
+    pub(crate) fn resolution(&self) -> uSN {
         self.mask
     }
 
-    pub(crate) fn set(&mut self, value: u64) -> ZResult<()> {
+    pub(crate) fn set(&mut self, value: uSN) -> ZResult<()> {
         if (value & !self.mask) != 0 {
             bail!("The sequence number value must be smaller than the resolution");
         }
@@ -107,7 +107,7 @@ impl SeqNum {
     /// # Arguments
     ///
     /// * `value` -  The sequence number which should be checked for precedence relation.
-    pub(crate) fn precedes(&self, value: u64) -> ZResult<bool> {
+    pub(crate) fn precedes(&self, value: uSN) -> ZResult<bool> {
         if (value & !self.mask) != 0 {
             bail!("The sequence number value must be smaller than the resolution");
         }
@@ -117,7 +117,7 @@ impl SeqNum {
 
     /// Computes the modulo gap between two sequence numbers.
     #[cfg(test)] // @TODO: remove #[cfg(test)] once reliability is implemented
-    pub(crate) fn gap(&self, value: u64) -> ZResult<u64> {
+    pub(crate) fn gap(&self, value: uSN) -> ZResult<uSN> {
         if (value & !self.mask) != 0 {
             bail!("The sequence number value must be smaller than the resolution");
         }
@@ -145,23 +145,23 @@ impl SeqNumGenerator {
     /// This funtion will panic if `value` is out of bound w.r.t. `resolution`. That is if
     /// `value` is greater or equal than `resolution`.
     ///
-    pub(crate) fn make(initial_sn: u64, resolution: Bits) -> ZResult<SeqNumGenerator> {
+    pub(crate) fn make(initial_sn: uSN, resolution: Bits) -> ZResult<SeqNumGenerator> {
         let sn = SeqNum::make(initial_sn, resolution)?;
         Ok(SeqNumGenerator(sn))
     }
 
-    pub(crate) fn now(&mut self) -> u64 {
+    pub(crate) fn now(&mut self) -> uSN {
         self.0.get()
     }
 
     /// Generates the next sequence number
-    pub(crate) fn get(&mut self) -> u64 {
+    pub(crate) fn get(&mut self) -> uSN {
         let now = self.now();
         self.0.increment();
         now
     }
 
-    pub(crate) fn set(&mut self, sn: u64) -> ZResult<()> {
+    pub(crate) fn set(&mut self, sn: uSN) -> ZResult<()> {
         self.0.set(sn)
     }
 }
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn sn_set() {
-        let mask = (u8::MAX >> 1) as u64;
+        let mask = (u8::MAX >> 1) as uSN;
 
         let mut sn0a = SeqNum::make(0, Bits::U8).unwrap();
         assert_eq!(sn0a.get(), 0);
@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn sn_gap() {
-        let mask = (u8::MAX >> 1) as u64;
+        let mask = (u8::MAX >> 1) as uSN;
         let mut sn0a = SeqNum::make(0, Bits::U8).unwrap();
 
         assert_eq!(sn0a.gap(0).unwrap(), 0);
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn sn_precedence() {
-        let mask = (u8::MAX >> 1) as u64;
+        let mask = (u8::MAX >> 1) as uSN;
 
         let sn0a = SeqNum::make(0, Bits::U8).unwrap();
         assert!(sn0a.precedes(1).unwrap());
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn sn_generation() {
-        let mask = (u8::MAX >> 1) as u64;
+        let mask = (u8::MAX >> 1) as uSN;
         let mut sn0 = SeqNumGenerator::make(mask, Bits::U8).unwrap();
         let mut sn1 = SeqNumGenerator::make(5, Bits::U8).unwrap();
 

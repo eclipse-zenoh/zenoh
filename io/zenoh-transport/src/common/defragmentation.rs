@@ -16,6 +16,7 @@ use zenoh_buffers::{reader::HasReader, SplitBuffer, ZBuf, ZSlice};
 use zenoh_codec::{RCodec, Zenoh080Reliability};
 use zenoh_protocol::{
     core::{Bits, Reliability},
+    transport::uSN,
     zenoh::ZenohMessage,
 };
 use zenoh_result::{bail, ZResult};
@@ -57,11 +58,11 @@ impl DefragBuffer {
     }
 
     #[inline(always)]
-    pub(crate) fn sync(&mut self, sn: u64) -> ZResult<()> {
+    pub(crate) fn sync(&mut self, sn: uSN) -> ZResult<()> {
         self.sn.set(sn)
     }
 
-    pub(crate) fn push(&mut self, sn: u64, zslice: ZSlice) -> ZResult<()> {
+    pub(crate) fn push(&mut self, sn: uSN, zslice: ZSlice) -> ZResult<()> {
         if sn != self.sn.get() {
             self.clear();
             bail!("Expected SN {}, received {}", self.sn.get(), sn)

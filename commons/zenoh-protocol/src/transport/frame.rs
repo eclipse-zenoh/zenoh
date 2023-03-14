@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::Reliability, zenoh::ZenohMessage};
+use crate::{core::Reliability, transport::uSN, zenoh::ZenohMessage};
 use alloc::vec::Vec;
 
 /// # Frame message
@@ -69,7 +69,7 @@ pub mod flag {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Frame {
     pub reliability: Reliability,
-    pub sn: u64,
+    pub sn: uSN,
     pub ext_qos: ext::QoS,
     pub payload: Vec<ZenohMessage>,
 }
@@ -120,7 +120,7 @@ impl Frame {
         } else {
             Reliability::BestEffort
         };
-        let sn: u64 = rng.gen();
+        let sn: uSN = rng.gen();
         let qos = ext::QoS::rand();
         let mut payload = vec![];
         for _ in 0..rng.gen_range(1..4) {
@@ -143,7 +143,7 @@ impl Frame {
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct FrameHeader {
     pub reliability: Reliability,
-    pub sn: u64,
+    pub sn: uSN,
     pub ext_qos: ext::QoS,
 }
 
@@ -159,7 +159,7 @@ impl FrameHeader {
         } else {
             Reliability::BestEffort
         };
-        let sn: u64 = rng.gen();
+        let sn: uSN = rng.gen();
         let qos = ext::QoS::rand();
 
         FrameHeader {

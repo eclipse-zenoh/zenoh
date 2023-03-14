@@ -28,7 +28,9 @@ use zenoh_core::zasynclock;
 use zenoh_core::{zcondfeat, zerror};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::core::{Field, Resolution};
-use zenoh_protocol::transport::{close, Close, InitSyn, OpenSyn, TransportBody, TransportMessage};
+use zenoh_protocol::transport::{
+    close, uSN, Close, InitSyn, OpenSyn, TransportBody, TransportMessage,
+};
 use zenoh_result::ZResult;
 
 type OpenError = (zenoh_result::Error, Option<u8>);
@@ -76,13 +78,13 @@ struct SendOpenSynIn {
 }
 
 struct SendOpenSynOut {
-    mine_initial_sn: u64,
+    mine_initial_sn: uSN,
 }
 
 // OpenAck
 struct RecvOpenAckOut {
     other_lease: Duration,
-    other_initial_sn: u64,
+    other_initial_sn: uSN,
 }
 
 // FSM
