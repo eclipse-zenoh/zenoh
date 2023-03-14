@@ -76,15 +76,12 @@ pub mod zmsg {
     pub mod data {
         pub mod info {
             #[cfg(feature = "shared-memory")]
-            pub const SLICED: u64 = 1 << 0; // 0x01
-            pub const KIND: u64 = 1 << 1; // 0x02
-            pub const ENCODING: u64 = 1 << 2; // 0x04
-            pub const TIMESTAMP: u64 = 1 << 3; // 0x08
-                                               // 0x10: Reserved
-                                               // 0x20: Reserved
-                                               // 0x40: Reserved
-            pub const SRCID: u64 = 1 << 7; // 0x80
-            pub const SRCSN: u64 = 1 << 8; // 0x100
+            pub const SLICED: u8 = 1 << 0; // 0x01
+            pub const KIND: u8 = 1 << 1; // 0x02
+            pub const ENCODING: u8 = 1 << 2; // 0x04
+            pub const TIMESTAMP: u8 = 1 << 3; // 0x08
+            pub const SRCID: u8 = 1 << 4; // 0x10
+            pub const SRCSN: u8 = 1 << 5; // 0x20
         }
     }
 

@@ -24,6 +24,7 @@ use zenoh_buffers::{
 use zenoh_protocol::{
     common::imsg,
     core::{CongestionControl, Encoding, WireExpr, ZenohId},
+    transport::uSN,
     zenoh::{zmsg, Data, DataInfo, ReplierInfo, ReplyContext, SampleKind},
 };
 
@@ -96,7 +97,7 @@ where
 
     fn write(self, writer: &mut W, x: &DataInfo) -> Self::Output {
         // Options
-        let mut options: u64 = 0;
+        let mut options: u8 = 0;
         #[cfg(feature = "shared-memory")]
         if x.sliced {
             options |= zmsg::data::info::SLICED;
@@ -119,7 +120,7 @@ where
         self.write(&mut *writer, options)?;
 
         if x.kind != SampleKind::Put {
-            self.write(&mut *writer, x.kind as u64)?;
+            self.write(&mut *writer, x.kind as u8)?;
         }
         if let Some(enc) = x.encoding.as_ref() {
             self.write(&mut *writer, enc)?;
@@ -146,29 +147,29 @@ where
 
     fn read(self, reader: &mut R) -> Result<DataInfo, Self::Error> {
         let mut info = DataInfo::default();
-        let options: u64 = self.read(&mut *reader)?;
+        let options: u8 = self.read(&mut *reader)?;
         #[cfg(feature = "shared-memory")]
         {
             info.sliced = imsg::has_option(options, zmsg::data::info::SLICED);
         }
-        if imsg::has_option(options, zmsg::data::info::KIND) {
-            let kind: u64 = self.read(&mut *reader)?;
+        if imsg::has_flag(options, zmsg::data::info::KIND) {
+            let kind: u8 = self.read(&mut *reader)?;
             info.kind = kind.try_into().map_err(|_| DidntRead)?;
         }
-        if imsg::has_option(options, zmsg::data::info::ENCODING) {
+        if imsg::has_flag(options, zmsg::data::info::ENCODING) {
             let encoding: Encoding = self.read(&mut *reader)?;
             info.encoding = Some(encoding);
         }
-        if imsg::has_option(options, zmsg::data::info::TIMESTAMP) {
+        if imsg::has_flag(options, zmsg::data::info::TIMESTAMP) {
             let timestamp: Timestamp = self.read(&mut *reader)?;
             info.timestamp = Some(timestamp);
         }
-        if imsg::has_option(options, zmsg::data::info::SRCID) {
+        if imsg::has_flag(options, zmsg::data::info::SRCID) {
             let source_id: ZenohId = self.read(&mut *reader)?;
             info.source_id = Some(source_id);
         }
-        if imsg::has_option(options, zmsg::data::info::SRCSN) {
-            let source_sn: u64 = self.read(&mut *reader)?;
+        if imsg::has_flag(options, zmsg::data::info::SRCSN) {
+            let source_sn: uSN = self.read(&mut *reader)?;
             info.source_sn = Some(source_sn);
         }
 

@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{CongestionControl, Encoding, Timestamp, WireExpr, ZenohId};
+use crate::{
+    core::{CongestionControl, Encoding, Timestamp, WireExpr, ZenohId},
+    transport::uSN,
+};
 use core::{convert::TryFrom, fmt};
 use zenoh_buffers::ZBuf;
 
@@ -35,9 +38,9 @@ impl fmt::Display for SampleKind {
     }
 }
 
-impl TryFrom<u64> for SampleKind {
-    type Error = u64;
-    fn try_from(kind: u64) -> Result<Self, u64> {
+impl TryFrom<u8> for SampleKind {
+    type Error = u8;
+    fn try_from(kind: u8) -> Result<Self, u8> {
         match kind {
             0 => Ok(SampleKind::Put),
             1 => Ok(SampleKind::Delete),
@@ -151,7 +154,7 @@ pub struct DataInfo {
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
     pub source_id: Option<ZenohId>,
-    pub source_sn: Option<u64>,
+    pub source_sn: Option<uSN>,
 }
 
 impl DataInfo {
