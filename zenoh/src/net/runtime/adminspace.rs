@@ -25,6 +25,7 @@ use std::sync::Mutex;
 use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_config::ValidatedMap;
 use zenoh_config::WhatAmI;
+use zenoh_protocol::transport::uSN;
 use zenoh_protocol::{
     core::{
         key_expr::OwnedKeyExpr, Channel, CongestionControl, Encoding, ExprId, KnownEncoding,
@@ -366,7 +367,7 @@ impl Primitives for AdminSpace {
         &self,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: u64,
+        qid: uSN,
         target: QueryTarget,
         _consolidation: ConsolidationMode,
         _body: Option<QueryBody>,
@@ -473,7 +474,7 @@ impl Primitives for AdminSpace {
 
     fn send_reply_data(
         &self,
-        qid: u64,
+        qid: uSN,
         replier_id: ZenohId,
         key_expr: WireExpr,
         info: Option<DataInfo>,
@@ -489,7 +490,7 @@ impl Primitives for AdminSpace {
         );
     }
 
-    fn send_reply_final(&self, qid: u64) {
+    fn send_reply_final(&self, qid: uSN) {
         trace!("recv ReplyFinal {:?}", qid);
     }
 

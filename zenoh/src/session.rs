@@ -42,7 +42,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicU16, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -51,6 +51,7 @@ use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
+use zenoh_protocol::transport::uSN;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -74,14 +75,14 @@ zconfigurable! {
 pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicU16,    // @TODO: manage rollover and uniqueness
-    pub(crate) qid_counter: Atomicu64,
+    pub(crate) qid_counter: AtomicU32,
     pub(crate) decl_id_counter: AtomicUsize,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
     pub(crate) remote_resources: HashMap<ExprId, Resource>,
     pub(crate) publications: Vec<OwnedKeyExpr>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
-    pub(crate) queries: HashMap<u64, QueryState>,
+    pub(crate) queries: HashMap<uSN, QueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
 }
@@ -94,7 +95,7 @@ impl SessionState {
         SessionState {
             primitives: None,
             expr_id_counter: AtomicU16::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
-            qid_counter: Atomicu64::new(0),
+            qid_counter: AtomicU32::new(0),
             decl_id_counter: AtomicUsize::new(0),
             local_resources: HashMap::new(),
             remote_resources: HashMap::new(),
@@ -1403,7 +1404,7 @@ impl Session {
         local: bool,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: u64,
+        qid: uSN,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
         body: Option<QueryBody>,
@@ -1713,7 +1714,7 @@ impl Primitives for Session {
         &self,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: u64,
+        qid: uSN,
         target: QueryTarget,
         consolidation: ConsolidationMode,
         body: Option<QueryBody>,
@@ -1739,7 +1740,7 @@ impl Primitives for Session {
 
     fn send_reply_data(
         &self,
-        qid: u64,
+        qid: uSN,
         replier_id: ZenohId,
         key_expr: WireExpr,
         data_info: Option<DataInfo>,
@@ -1852,7 +1853,7 @@ impl Primitives for Session {
         }
     }
 
-    fn send_reply_final(&self, qid: u64) {
+    fn send_reply_final(&self, qid: uSN) {
         trace!("recv ReplyFinal {:?}", qid);
         let mut state = zwrite!(self.state);
         match state.queries.get_mut(&qid) {

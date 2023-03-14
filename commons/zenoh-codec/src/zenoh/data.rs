@@ -77,7 +77,7 @@ where
             return Err(DidntRead);
         }
 
-        let qid: u64 = self.codec.read(&mut *reader)?;
+        let qid: uSN = self.codec.read(&mut *reader)?;
         let replier = if imsg::has_flag(self.header, zmsg::flag::F) {
             None
         } else {

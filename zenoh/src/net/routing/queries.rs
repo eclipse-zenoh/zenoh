@@ -24,6 +24,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::{RwLock, Weak};
 use zenoh_buffers::ZBuf;
+use zenoh_protocol::transport::uSN;
 use zenoh_protocol::{
     core::{
         key_expr::{
@@ -39,7 +40,7 @@ use zenoh_util::Timed;
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
-    src_qid: u64,
+    src_qid: uSN,
 }
 
 #[cfg(feature = "complete_n")]
@@ -1316,7 +1317,7 @@ pub(crate) fn compute_matches_query_routes(tables: &mut Tables, res: &mut Arc<Re
 }
 
 #[inline]
-fn insert_pending_query(outface: &mut Arc<FaceState>, query: Arc<Query>) -> u64 {
+fn insert_pending_query(outface: &mut Arc<FaceState>, query: Arc<Query>) -> uSN {
     let outface_mut = get_mut_unchecked(outface);
     outface_mut.next_qid += 1;
     let qid = outface_mut.next_qid;
@@ -1485,7 +1486,7 @@ fn compute_final_route(
 struct QueryCleanup {
     tables: Arc<RwLock<Tables>>,
     face: Weak<FaceState>,
-    qid: u64,
+    qid: uSN,
 }
 
 #[async_trait]
@@ -1591,7 +1592,7 @@ pub fn route_query(
     face: &Arc<FaceState>,
     expr: &WireExpr,
     parameters: &str,
-    qid: u64,
+    qid: uSN,
     target: QueryTarget,
     consolidation: ConsolidationMode,
     body: Option<QueryBody>,
@@ -1705,7 +1706,7 @@ pub fn route_query(
 pub(crate) fn route_send_reply_data(
     tables_ref: &RwLock<Tables>,
     face: &mut Arc<FaceState>,
-    qid: u64,
+    qid: uSN,
     replier_id: ZenohId,
     key_expr: WireExpr,
     info: Option<DataInfo>,
@@ -1735,7 +1736,7 @@ pub(crate) fn route_send_reply_data(
 pub(crate) fn route_send_reply_final(
     tables_ref: &RwLock<Tables>,
     face: &mut Arc<FaceState>,
-    qid: u64,
+    qid: uSN,
 ) {
     let tables_lock = zwrite!(tables_ref);
     match get_mut_unchecked(face).pending_queries.remove(&qid) {

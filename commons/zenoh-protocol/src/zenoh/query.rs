@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, zenoh::DataInfo};
+use crate::{core::WireExpr, transport::uSN, zenoh::DataInfo};
 use alloc::string::String;
 use zenoh_buffers::ZBuf;
 
@@ -101,7 +101,7 @@ impl QueryBody {
 pub struct Query {
     pub key: WireExpr<'static>,
     pub parameters: String,
-    pub qid: u64,
+    pub qid: uSN,
     pub target: Option<QueryTarget>,
     pub consolidation: ConsolidationMode,
     pub body: Option<QueryBody>,
@@ -130,7 +130,7 @@ impl Query {
             String::new()
         };
 
-        let qid: u64 = rng.gen();
+        let qid: uSN = rng.gen();
 
         let target = if rng.gen_bool(0.5) {
             let t = [

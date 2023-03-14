@@ -16,6 +16,7 @@ use super::Primitives;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
     core::{Channel, CongestionControl, ExprId, WireExpr, ZenohId},
+    transport::uSN,
     zenoh::{
         zmsg, ConsolidationMode, DataInfo, Declaration, ForgetPublisher, ForgetQueryable,
         ForgetResource, ForgetSubscriber, Publisher, QueryBody, QueryTarget, Queryable,
@@ -150,7 +151,7 @@ impl Primitives for Mux {
         &self,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: u64,
+        qid: uSN,
         target: QueryTarget,
         consolidation: ConsolidationMode,
         body: Option<QueryBody>,
@@ -174,7 +175,7 @@ impl Primitives for Mux {
 
     fn send_reply_data(
         &self,
-        qid: u64,
+        qid: uSN,
         replier_id: ZenohId,
         key_expr: WireExpr,
         data_info: Option<DataInfo>,
@@ -191,7 +192,7 @@ impl Primitives for Mux {
         ));
     }
 
-    fn send_reply_final(&self, qid: u64) {
+    fn send_reply_final(&self, qid: uSN) {
         let _ = self.handler.handle_message(ZenohMessage::make_unit(
             zmsg::default_channel::REPLY,
             zmsg::default_congestion_control::REPLY,

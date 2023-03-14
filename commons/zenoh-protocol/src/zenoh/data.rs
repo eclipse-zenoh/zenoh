@@ -75,13 +75,13 @@ pub struct ReplierInfo {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplyContext {
-    pub qid: u64,
+    pub qid: uSN,
     pub replier: Option<ReplierInfo>,
 }
 
 impl ReplyContext {
     // Note: id replier_id=None flag F is set, meaning it's a REPLY_FINAL
-    pub fn new(qid: u64, replier: Option<ReplierInfo>) -> Self {
+    pub fn new(qid: uSN, replier: Option<ReplierInfo>) -> Self {
         Self { qid, replier }
     }
 
@@ -97,7 +97,7 @@ impl ReplyContext {
 
         let mut rng = rand::thread_rng();
 
-        let qid: u64 = rng.gen();
+        let qid: uSN = rng.gen();
         let replier = if rng.gen_bool(0.5) {
             Some(ReplierInfo {
                 id: ZenohId::default(),

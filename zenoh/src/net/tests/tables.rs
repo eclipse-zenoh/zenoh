@@ -18,6 +18,7 @@ use std::time::Duration;
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
 use zenoh_core::zlock;
+use zenoh_protocol::transport::uSN;
 use zenoh_protocol::{
     core::{
         key_expr::keyexpr, Channel, CongestionControl, ExprId, Reliability, WhatAmI, WireExpr,
@@ -462,7 +463,7 @@ impl Primitives for ClientPrimitives {
         &self,
         _key_expr: &WireExpr,
         _parameters: &str,
-        _qid: u64,
+        _qid: uSN,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
         _body: Option<QueryBody>,
@@ -472,14 +473,14 @@ impl Primitives for ClientPrimitives {
 
     fn send_reply_data(
         &self,
-        _qid: u64,
+        _qid: uSN,
         _replier_id: ZenohId,
         _key_expr: WireExpr,
         _info: Option<DataInfo>,
         _payload: ZBuf,
     ) {
     }
-    fn send_reply_final(&self, _qid: u64) {}
+    fn send_reply_final(&self, _qid: uSN) {}
 
     fn send_pull(
         &self,
