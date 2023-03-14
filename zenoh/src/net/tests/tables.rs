@@ -20,8 +20,8 @@ use zenoh_buffers::ZBuf;
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::{
-        key_expr::keyexpr, Channel, CongestionControl, Reliability, WhatAmI, WireExpr, ZInt,
-        ZenohId, EMPTY_EXPR_ID,
+        key_expr::keyexpr, Channel, CongestionControl, Reliability, WhatAmI, WireExpr, ZenohId,
+        EMPTY_EXPR_ID,
     },
     zenoh::{
         ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext,
@@ -366,7 +366,7 @@ fn clean_test() {
 
 pub struct ClientPrimitives {
     data: std::sync::Mutex<Option<WireExpr<'static>>>,
-    mapping: std::sync::Mutex<std::collections::HashMap<ZInt, String>>,
+    mapping: std::sync::Mutex<std::collections::HashMap<u64, String>>,
 }
 
 impl ClientPrimitives {
@@ -416,12 +416,12 @@ impl ClientPrimitives {
 }
 
 impl Primitives for ClientPrimitives {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
+    fn decl_resource(&self, expr_id: u64, key_expr: &WireExpr) {
         let name = self.get_name(key_expr);
         zlock!(self.mapping).insert(expr_id, name);
     }
 
-    fn forget_resource(&self, expr_id: ZInt) {
+    fn forget_resource(&self, expr_id: u64) {
         zlock!(self.mapping).remove(&expr_id);
     }
 
@@ -462,7 +462,7 @@ impl Primitives for ClientPrimitives {
         &self,
         _key_expr: &WireExpr,
         _parameters: &str,
-        _qid: ZInt,
+        _qid: u64,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
         _body: Option<QueryBody>,
@@ -472,21 +472,21 @@ impl Primitives for ClientPrimitives {
 
     fn send_reply_data(
         &self,
-        _qid: ZInt,
+        _qid: u64,
         _replier_id: ZenohId,
         _key_expr: WireExpr,
         _info: Option<DataInfo>,
         _payload: ZBuf,
     ) {
     }
-    fn send_reply_final(&self, _qid: ZInt) {}
+    fn send_reply_final(&self, _qid: u64) {}
 
     fn send_pull(
         &self,
         _is_final: bool,
         _key_expr: &WireExpr,
-        _pull_id: ZInt,
-        _max_samples: &Option<ZInt>,
+        _pull_id: u64,
+        _max_samples: &Option<u64>,
     ) {
     }
 

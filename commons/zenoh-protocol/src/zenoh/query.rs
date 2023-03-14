@@ -11,10 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    core::{WireExpr, ZInt},
-    zenoh::DataInfo,
-};
+use crate::{core::WireExpr, zenoh::DataInfo};
 use alloc::string::String;
 use zenoh_buffers::ZBuf;
 
@@ -43,7 +40,7 @@ pub enum QueryTarget {
     All,
     AllComplete,
     #[cfg(feature = "complete_n")]
-    Complete(ZInt),
+    Complete(u64),
 }
 
 /// # QueryBody
@@ -104,7 +101,7 @@ impl QueryBody {
 pub struct Query {
     pub key: WireExpr<'static>,
     pub parameters: String,
-    pub qid: ZInt,
+    pub qid: u64,
     pub target: Option<QueryTarget>,
     pub consolidation: ConsolidationMode,
     pub body: Option<QueryBody>,
@@ -133,7 +130,7 @@ impl Query {
             String::new()
         };
 
-        let qid: ZInt = rng.gen();
+        let qid: u64 = rng.gen();
 
         let target = if rng.gen_bool(0.5) {
             let t = [

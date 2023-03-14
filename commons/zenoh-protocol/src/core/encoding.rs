@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{CowStr, ZInt};
+use crate::core::CowStr;
 use alloc::{borrow::Cow, string::String};
 use core::{
     convert::TryFrom,
@@ -78,9 +78,9 @@ impl From<KnownEncoding> for u8 {
     }
 }
 
-impl From<KnownEncoding> for ZInt {
+impl From<KnownEncoding> for u64 {
     fn from(val: KnownEncoding) -> Self {
-        u8::from(val) as ZInt
+        u8::from(val) as u64
     }
 }
 
@@ -107,11 +107,11 @@ impl TryFrom<u8> for KnownEncoding {
     }
 }
 
-impl TryFrom<ZInt> for KnownEncoding {
+impl TryFrom<u64> for KnownEncoding {
     type Error = ();
 
-    fn try_from(value: ZInt) -> Result<Self, Self::Error> {
-        if value < consts::MIMES.len() as ZInt + 1 {
+    fn try_from(value: u64) -> Result<Self, Self::Error> {
+        if value < consts::MIMES.len() as u64 + 1 {
             Ok(unsafe { mem::transmute(value as u8) })
         } else {
             Err(())
@@ -135,7 +135,7 @@ pub enum Encoding {
 }
 
 impl Encoding {
-    pub fn new<IntoCowStr>(prefix: ZInt, suffix: IntoCowStr) -> Option<Self>
+    pub fn new<IntoCowStr>(prefix: u64, suffix: IntoCowStr) -> Option<Self>
     where
         IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
     {
@@ -296,7 +296,7 @@ impl Encoding {
 
         let mut rng = rand::thread_rng();
 
-        let prefix: ZInt = rng.gen_range(0..20);
+        let prefix: u64 = rng.gen_range(0..20);
         let suffix: String = if rng.gen_bool(0.5) {
             let len = rng.gen_range(MIN..MAX);
             Alphanumeric.sample_string(&mut rng, len)

@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    core::{WhatAmI, ZInt, ZenohId},
+    core::{WhatAmI, ZenohId},
     transport::ConduitSnList,
 };
 use core::time::Duration;
@@ -61,7 +61,7 @@ pub struct Join {
     pub whatami: WhatAmI,
     pub zid: ZenohId,
     pub lease: Duration,
-    pub sn_resolution: ZInt,
+    pub sn_resolution: u64,
     pub next_sns: ConduitSnList,
 }
 
@@ -90,7 +90,7 @@ impl Join {
         } else {
             Duration::from_millis(rng.gen())
         };
-        let sn_resolution: ZInt = rng.gen();
+        let sn_resolution: u64 = rng.gen();
         let next_sns = if rng.gen_bool(0.5) {
             let mut sns = Box::new([ConduitSn::default(); Priority::NUM]);
             for i in 0..Priority::NUM {

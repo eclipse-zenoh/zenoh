@@ -58,14 +58,14 @@ pub const VERSION: u8 = 0x08;
 // ```
 //
 //
-// # ZInt field
+// # u64 field
 //
-// A ZInt is a specialized variable lenght field that is used to encode an unsigned integer.
+// A u64 is a specialized variable lenght field that is used to encode an unsigned integer.
 //
 // ```text
 //  7 6 5 4 3 2 1 0
 // +-+-+-+-+-+-+-+-+
-// %     zint      %
+// %     u64      %
 // +---------------+
 // ```
 //

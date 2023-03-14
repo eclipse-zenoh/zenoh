@@ -22,49 +22,49 @@ use zenoh_buffers::{
 };
 use zenoh_codec::*;
 use zenoh_protocol::{
-    core::{CongestionControl, Reliability, ZInt},
+    core::{CongestionControl, Reliability},
     defaults::BATCH_SIZE,
     transport::{Frame, FrameHeader},
     zenoh::Data,
 };
 
 fn criterion_benchmark(c: &mut Criterion) {
-    // ZInt Vec<u8>
+    // u64 Vec<u8>
     let mut buff = vec![];
     let codec = Zenoh080::new();
-    c.bench_function("ZInt Vec<u8>", |b| {
+    c.bench_function("u64 Vec<u8>", |b| {
         b.iter(|| {
             buff.clear();
             let mut writer = buff.writer();
-            codec.write(&mut writer, ZInt::MAX).unwrap();
+            codec.write(&mut writer, u64::MAX).unwrap();
             let mut reader = buff.reader();
-            let _: ZInt = codec.read(&mut reader).unwrap();
+            let _: u64 = codec.read(&mut reader).unwrap();
         })
     });
 
-    // ZInt BBuf
+    // u64 BBuf
     let mut buff = BBuf::with_capacity(BATCH_SIZE as usize);
     let codec = Zenoh080::new();
-    c.bench_function("ZInt BBuf", |b| {
+    c.bench_function("u64 BBuf", |b| {
         b.iter(|| {
             buff.clear();
             let mut writer = buff.writer();
-            codec.write(&mut writer, ZInt::MAX).unwrap();
+            codec.write(&mut writer, u64::MAX).unwrap();
             let mut reader = buff.reader();
-            let _: ZInt = codec.read(&mut reader).unwrap();
+            let _: u64 = codec.read(&mut reader).unwrap();
         })
     });
 
-    // ZInt ZBuf
+    // u64 ZBuf
     let mut buff = ZBuf::empty();
     let codec = Zenoh080::new();
-    c.bench_function("ZInt ZBuf", |b| {
+    c.bench_function("u64 ZBuf", |b| {
         b.iter(|| {
             buff.clear();
             let mut writer = buff.writer();
-            codec.write(&mut writer, ZInt::MAX).unwrap();
+            codec.write(&mut writer, u64::MAX).unwrap();
             let mut reader = buff.reader();
-            let _: ZInt = codec.read(&mut reader).unwrap();
+            let _: u64 = codec.read(&mut reader).unwrap();
         })
     });
 
@@ -74,7 +74,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let frame = FrameHeader {
         reliability: Reliability::default(),
-        sn: ZInt::MIN,
+        sn: u64::MIN,
         ext_qos: zenoh_protocol::transport::frame::ext::QoS::default(),
     };
 
@@ -111,7 +111,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let frame = FrameHeader {
         reliability: Reliability::default(),
-        sn: ZInt::MIN,
+        sn: u64::MIN,
         ext_qos: zenoh_protocol::transport::frame::ext::QoS::default(),
     };
 
@@ -143,7 +143,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let frame = FrameHeader {
         reliability: Reliability::default(),
-        sn: ZInt::MIN,
+        sn: u64::MIN,
         ext_qos: zenoh_protocol::transport::frame::ext::QoS::default(),
     };
 

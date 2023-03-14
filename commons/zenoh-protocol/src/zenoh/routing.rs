@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::ZInt;
 
 /// -- RoutingContext decorator
 ///
@@ -28,11 +27,11 @@ use crate::core::ZInt;
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RoutingContext {
-    pub tree_id: ZInt,
+    pub tree_id: u64,
 }
 
 impl RoutingContext {
-    pub fn new(tree_id: ZInt) -> RoutingContext {
+    pub fn new(tree_id: u64) -> RoutingContext {
         RoutingContext { tree_id }
     }
 }

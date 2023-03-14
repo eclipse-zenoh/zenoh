@@ -18,9 +18,8 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
     ZBuf,
 };
-use zenoh_protocol::{
-    common::{iext, imsg::has_flag, ZExtUnit, ZExtUnknown, ZExtZBuf, ZExtZInt, ZExtensionBody},
-    core::ZInt,
+use zenoh_protocol::common::{
+    iext, imsg::has_flag, ZExtUnit, ZExtUnknown, ZExtZBuf, ZExtensionBody, ZExtu64,
 };
 
 impl<const ID: u8, W> WCodec<(&ZExtUnit<{ ID }>, bool), &mut W> for Zenoh080
@@ -68,15 +67,15 @@ where
     }
 }
 
-impl<const ID: u8, W> WCodec<(&ZExtZInt<{ ID }>, bool), &mut W> for Zenoh080
+impl<const ID: u8, W> WCodec<(&ZExtu64<{ ID }>, bool), &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: (&ZExtZInt<{ ID }>, bool)) -> Self::Output {
+    fn write(self, writer: &mut W, x: (&ZExtu64<{ ID }>, bool)) -> Self::Output {
         let (x, more) = x;
-        let mut header: u8 = ID | iext::ENC_ZINT;
+        let mut header: u8 = ID | iext::ENC_Z64;
         if more {
             header |= iext::FLAG_Z;
         }
@@ -86,33 +85,33 @@ where
     }
 }
 
-impl<const ID: u8, R> RCodec<(ZExtZInt<{ ID }>, bool), &mut R> for Zenoh080
+impl<const ID: u8, R> RCodec<(ZExtu64<{ ID }>, bool), &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<(ZExtZInt<{ ID }>, bool), Self::Error> {
+    fn read(self, reader: &mut R) -> Result<(ZExtu64<{ ID }>, bool), Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
         codec.read(&mut *reader)
     }
 }
 
-impl<const ID: u8, R> RCodec<(ZExtZInt<{ ID }>, bool), &mut R> for Zenoh080Header
+impl<const ID: u8, R> RCodec<(ZExtu64<{ ID }>, bool), &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<(ZExtZInt<{ ID }>, bool), Self::Error> {
-        if (self.header & iext::ID_MASK != ID) || (self.header & iext::ENC_MASK != iext::ENC_ZINT) {
+    fn read(self, reader: &mut R) -> Result<(ZExtu64<{ ID }>, bool), Self::Error> {
+        if (self.header & iext::ID_MASK != ID) || (self.header & iext::ENC_MASK != iext::ENC_Z64) {
             return Err(DidntRead);
         }
 
-        let value: ZInt = self.codec.read(&mut *reader)?;
+        let value: u64 = self.codec.read(&mut *reader)?;
 
-        Ok((ZExtZInt::new(value), has_flag(self.header, iext::FLAG_Z)))
+        Ok((ZExtu64::new(value), has_flag(self.header, iext::FLAG_Z)))
     }
 }
 
@@ -124,7 +123,7 @@ where
 
     fn write(self, writer: &mut W, x: (&ZExtZBuf<{ ID }>, bool)) -> Self::Output {
         let (x, more) = x;
-        let mut header: u8 = ID | iext::ENC_ZINT;
+        let mut header: u8 = ID | iext::ENC_Z64;
         if more {
             header |= iext::FLAG_Z;
         }
@@ -154,7 +153,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<(ZExtZBuf<{ ID }>, bool), Self::Error> {
-        if (self.header & iext::ID_MASK != ID) || (self.header & iext::ENC_MASK != iext::ENC_ZINT) {
+        if (self.header & iext::ID_MASK != ID) || (self.header & iext::ENC_MASK != iext::ENC_Z64) {
             return Err(DidntRead);
         }
 
@@ -181,10 +180,10 @@ where
                 header |= iext::ENC_UNIT;
                 self.write(&mut *writer, header)?
             }
-            ZExtensionBody::ZInt(zint) => {
-                header |= iext::ENC_ZINT;
+            ZExtensionBody::Z64(u64) => {
+                header |= iext::ENC_Z64;
                 self.write(&mut *writer, header)?;
-                self.write(&mut *writer, zint)?
+                self.write(&mut *writer, u64)?
             }
             ZExtensionBody::ZBuf(zbuf) => {
                 header |= iext::ENC_ZBUF;
@@ -218,9 +217,9 @@ where
     fn read(self, reader: &mut R) -> Result<(ZExtUnknown, bool), Self::Error> {
         let body = match self.header & iext::ENC_MASK {
             iext::ENC_UNIT => ZExtensionBody::Unit,
-            iext::ENC_ZINT => {
-                let zint: ZInt = self.codec.read(&mut *reader)?;
-                ZExtensionBody::ZInt(zint)
+            iext::ENC_Z64 => {
+                let u64: u64 = self.codec.read(&mut *reader)?;
+                ZExtensionBody::Z64(u64)
             }
             iext::ENC_ZBUF => {
                 let zbuf: ZBuf = self.codec.read(&mut *reader)?;

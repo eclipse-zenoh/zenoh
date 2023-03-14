@@ -33,7 +33,7 @@ use transport::TransportUnicastInner;
 use zenoh_core::zcondfeat;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{Bits, WhatAmI, ZInt, ZenohId},
+    core::{Bits, WhatAmI, ZenohId},
     transport::close,
     zenoh::ZenohMessage,
 };
@@ -88,7 +88,7 @@ pub(crate) struct TransportConfigUnicast {
     pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: Bits,
-    pub(crate) tx_initial_sn: ZInt,
+    pub(crate) tx_initial_sn: u64,
     pub(crate) is_qos: bool,
     #[cfg(feature = "transport_multilink")]
     pub(crate) multilink: Option<ZPublicKey>,
@@ -122,7 +122,7 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
+    pub fn get_sn_resolution(&self) -> ZResult<u64> {
         let transport = self.get_inner()?;
         Ok(transport.get_sn_resolution().mask())
     }

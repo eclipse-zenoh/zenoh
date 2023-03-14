@@ -19,7 +19,7 @@ mod query;
 mod routing;
 mod unit;
 
-use crate::core::{Channel, CongestionControl, Reliability, WireExpr, ZInt};
+use crate::core::{Channel, CongestionControl, Reliability, WireExpr};
 use alloc::{string::String, vec::Vec};
 use core::fmt;
 pub use data::*;
@@ -34,7 +34,7 @@ use zenoh_buffers::ZBuf;
 pub mod zmsg {
     use crate::{
         common::imsg,
-        core::{Channel, CongestionControl, Priority, Reliability, ZInt},
+        core::{Channel, CongestionControl, Priority, Reliability},
     };
 
     // Zenoh message IDs -- Re-export of some of the Inner Message IDs
@@ -74,21 +74,17 @@ pub mod zmsg {
 
     // Options used for DataInfo
     pub mod data {
-        use super::ZInt;
-
         pub mod info {
-            use super::ZInt;
-
             #[cfg(feature = "shared-memory")]
-            pub const SLICED: ZInt = 1 << 0; // 0x01
-            pub const KIND: ZInt = 1 << 1; // 0x02
-            pub const ENCODING: ZInt = 1 << 2; // 0x04
-            pub const TIMESTAMP: ZInt = 1 << 3; // 0x08
-                                                // 0x10: Reserved
-                                                // 0x20: Reserved
-                                                // 0x40: Reserved
-            pub const SRCID: ZInt = 1 << 7; // 0x80
-            pub const SRCSN: ZInt = 1 << 8; // 0x100
+            pub const SLICED: u64 = 1 << 0; // 0x01
+            pub const KIND: u64 = 1 << 1; // 0x02
+            pub const ENCODING: u64 = 1 << 2; // 0x04
+            pub const TIMESTAMP: u64 = 1 << 3; // 0x08
+                                               // 0x10: Reserved
+                                               // 0x20: Reserved
+                                               // 0x40: Reserved
+            pub const SRCID: u64 = 1 << 7; // 0x80
+            pub const SRCSN: u64 = 1 << 8; // 0x100
         }
     }
 
@@ -117,11 +113,9 @@ pub mod zmsg {
 
     // Options used for LinkState
     pub mod link_state {
-        use super::ZInt;
-
-        pub const PID: ZInt = 1; // 0x01
-        pub const WAI: ZInt = 1 << 1; // 0x02
-        pub const LOC: ZInt = 1 << 2; // 0x04
+        pub const PID: u64 = 1; // 0x01
+        pub const WAI: u64 = 1 << 1; // 0x02
+        pub const LOC: u64 = 1 << 2; // 0x04
     }
 
     pub mod conduit {
@@ -266,8 +260,8 @@ impl ZenohMessage {
     pub fn make_pull(
         is_final: bool,
         key: WireExpr<'static>,
-        pull_id: ZInt,
-        max_samples: Option<ZInt>,
+        pull_id: u64,
+        max_samples: Option<u64>,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Pull(Pull {
@@ -288,7 +282,7 @@ impl ZenohMessage {
     pub fn make_query(
         key: WireExpr<'static>,
         parameters: String,
-        qid: ZInt,
+        qid: u64,
         target: Option<QueryTarget>,
         consolidation: ConsolidationMode,
         body: Option<QueryBody>,

@@ -19,7 +19,7 @@ pub mod init;
 pub mod keepalive;
 pub mod open;
 
-use crate::core::{Priority, ZInt};
+use crate::core::Priority;
 use alloc::boxed::Box;
 pub use close::Close;
 use core::{convert::TryInto, fmt};
@@ -80,8 +80,8 @@ impl fmt::Display for ConduitSnList {
 /// The kind of reliability.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct ConduitSn {
-    pub reliable: ZInt,
-    pub best_effort: ZInt,
+    pub reliable: u64,
+    pub best_effort: u64,
 }
 
 // Zenoh messages at zenoh-transport level

@@ -31,10 +31,7 @@ use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_config::PubKeyConf;
 use zenoh_core::{bail, zasynclock, zasyncread, zerror, Error as ZError, Result as ZResult};
 use zenoh_crypto::PseudoRng;
-use zenoh_protocol::{
-    common::{ZExtUnit, ZExtZBuf},
-    core::ZInt,
-};
+use zenoh_protocol::common::{ZExtUnit, ZExtZBuf};
 
 // Authenticator
 #[derive(Debug)]
@@ -477,7 +474,7 @@ impl<'a> OpenFsm for AuthPubKeyFsm<'a> {
 #[derive(Debug)]
 pub(crate) struct StateAccept {
     nonce: Vec<u8>,
-    challenge: ZInt,
+    challenge: u64,
 }
 
 impl StateAccept {
@@ -519,7 +516,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<StateAccept, Self::Error> {
-        let challenge: ZInt = self.read(&mut *reader)?;
+        let challenge: u64 = self.read(&mut *reader)?;
         Ok(StateAccept {
             nonce: vec![],
             challenge,

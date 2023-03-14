@@ -20,7 +20,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{WireExpr, ZInt},
+    core::WireExpr,
     zenoh::{zmsg, ConsolidationMode, DataInfo, Query, QueryBody, QueryTarget},
 };
 
@@ -34,12 +34,12 @@ where
     fn write(self, writer: &mut W, x: &QueryTarget) -> Self::Output {
         #![allow(clippy::unnecessary_cast)]
         match x {
-            QueryTarget::BestMatching => self.write(&mut *writer, 0 as ZInt)?,
-            QueryTarget::All => self.write(&mut *writer, 1 as ZInt)?,
-            QueryTarget::AllComplete => self.write(&mut *writer, 2 as ZInt)?,
+            QueryTarget::BestMatching => self.write(&mut *writer, 0 as u64)?,
+            QueryTarget::All => self.write(&mut *writer, 1 as u64)?,
+            QueryTarget::AllComplete => self.write(&mut *writer, 2 as u64)?,
             #[cfg(feature = "complete_n")]
             QueryTarget::Complete(n) => {
-                self.write(&mut *writer, 3 as ZInt)?;
+                self.write(&mut *writer, 3 as u64)?;
                 self.write(&mut *writer, *n)?;
             }
         }
@@ -54,14 +54,14 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<QueryTarget, Self::Error> {
-        let t: ZInt = self.read(&mut *reader)?;
+        let t: u64 = self.read(&mut *reader)?;
         let t = match t {
             0 => QueryTarget::BestMatching,
             1 => QueryTarget::All,
             2 => QueryTarget::AllComplete,
             #[cfg(feature = "complete_n")]
             3 => {
-                let n: ZInt = self.read(&mut *reader)?;
+                let n: u64 = self.read(&mut *reader)?;
                 QueryTarget::Complete(n)
             }
             _ => return Err(DidntRead),
@@ -78,7 +78,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &ConsolidationMode) -> Self::Output {
-        let cm: ZInt = match x {
+        let cm: u64 = match x {
             ConsolidationMode::None => 0,
             ConsolidationMode::Monotonic => 1,
             ConsolidationMode::Latest => 2,
@@ -95,7 +95,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ConsolidationMode, Self::Error> {
-        let cm: ZInt = self.read(&mut *reader)?;
+        let cm: u64 = self.read(&mut *reader)?;
         let cm = match cm {
             0 => ConsolidationMode::None,
             1 => ConsolidationMode::Monotonic,
@@ -202,7 +202,7 @@ where
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
 
         let parameters: String = self.codec.read(&mut *reader)?;
-        let qid: ZInt = self.codec.read(&mut *reader)?;
+        let qid: u64 = self.codec.read(&mut *reader)?;
         let target = if imsg::has_flag(self.header, zmsg::flag::T) {
             let qt: QueryTarget = self.codec.read(&mut *reader)?;
             Some(qt)

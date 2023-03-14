@@ -20,7 +20,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{Priority, WhatAmI, ZInt, ZenohId},
+    core::{Priority, WhatAmI, ZenohId},
     transport::{ConduitSn, ConduitSnList, Join},
 };
 
@@ -31,7 +31,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Join) -> Self::Output {
-        // fn options(x: &Join) -> ZInt {
+        // fn options(x: &Join) -> u64 {
         //     let mut options = 0;
         //     if x.is_qos() {
         //         options |= tmsg::join_options::QOS;
@@ -62,9 +62,9 @@ where
         // self.write(&mut *writer, wai)?;
         // self.write(&mut *writer, &x.zid)?;
         // if imsg::has_flag(header, tmsg::flag::T1) {
-        //     self.write(&mut *writer, x.lease.as_secs() as ZInt)?;
+        //     self.write(&mut *writer, x.lease.as_secs() as u64)?;
         // } else {
-        //     self.write(&mut *writer, x.lease.as_millis() as ZInt)?;
+        //     self.write(&mut *writer, x.lease.as_millis() as u64)?;
         // }
         // if imsg::has_flag(header, tmsg::flag::S) {
         //     self.write(&mut *writer, x.sn_resolution)?;
@@ -111,7 +111,7 @@ where
         //     return Err(DidntRead);
         // }
 
-        // let options: ZInt = if imsg::has_flag(self.header, tmsg::flag::O) {
+        // let options: u64 = if imsg::has_flag(self.header, tmsg::flag::O) {
         //     self.codec.read(&mut *reader)?
         // } else {
         //     0
@@ -120,13 +120,13 @@ where
         // let wai: u8 = self.codec.read(&mut *reader)?;
         // let whatami = WhatAmI::try_from(wai).map_err(|_| DidntRead)?;
         // let zid: ZenohId = self.codec.read(&mut *reader)?;
-        // let lease: ZInt = self.codec.read(&mut *reader)?;
+        // let lease: u64 = self.codec.read(&mut *reader)?;
         // let lease = if imsg::has_flag(self.header, tmsg::flag::T1) {
         //     Duration::from_secs(lease)
         // } else {
         //     Duration::from_millis(lease)
         // };
-        // let sn_resolution: ZInt = if imsg::has_flag(self.header, tmsg::flag::S) {
+        // let sn_resolution: u64 = if imsg::has_flag(self.header, tmsg::flag::S) {
         //     self.codec.read(&mut *reader)?
         // } else {
         //     SEQ_NUM_RES

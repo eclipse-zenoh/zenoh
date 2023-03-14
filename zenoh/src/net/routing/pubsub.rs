@@ -26,7 +26,7 @@ use zenoh_core::zread;
 use zenoh_protocol::{
     core::{
         key_expr::OwnedKeyExpr, Channel, CongestionControl, Priority, Reliability, WhatAmI,
-        WireExpr, ZInt, ZenohId,
+        WireExpr, ZenohId,
     },
     zenoh::{DataInfo, RoutingContext, SubInfo, SubMode},
 };
@@ -145,7 +145,7 @@ fn propagate_sourced_subscription(
                     res,
                     src_face,
                     sub_info,
-                    Some(RoutingContext::new(tree_sid.index() as ZInt)),
+                    Some(RoutingContext::new(tree_sid.index() as u64)),
                 );
             } else {
                 log::trace!(
@@ -483,7 +483,7 @@ fn propagate_forget_sourced_subscription(
                     &net.trees[tree_sid.index()].childs,
                     res,
                     src_face,
-                    Some(RoutingContext::new(tree_sid.index() as ZInt)),
+                    Some(RoutingContext::new(tree_sid.index() as u64)),
                 );
             } else {
                 log::trace!(
@@ -840,7 +840,7 @@ pub(crate) fn pubsub_tree_change(
                                 res,
                                 None,
                                 &sub_info,
-                                Some(RoutingContext::new(tree_sid as ZInt)),
+                                Some(RoutingContext::new(tree_sid as u64)),
                             );
                         }
                     }
@@ -937,7 +937,7 @@ fn insert_faces_for_subs(
                                         face.clone(),
                                         key_expr.to_owned(),
                                         if source != 0 {
-                                            Some(RoutingContext::new(source as ZInt))
+                                            Some(RoutingContext::new(source as u64))
                                         } else {
                                             None
                                         },
@@ -1450,8 +1450,8 @@ pub fn pull_data(
     face: &Arc<FaceState>,
     _is_final: bool,
     expr: &WireExpr,
-    _pull_id: ZInt,
-    _max_samples: &Option<ZInt>,
+    _pull_id: u64,
+    _max_samples: &Option<u64>,
 ) {
     let tables = zread!(tables_ref);
     match tables.get_mapping(face, &expr.scope) {

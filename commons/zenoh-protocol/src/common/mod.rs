@@ -19,7 +19,6 @@ pub use extension::*;
 /*************************************/
 // Inner Message IDs
 pub mod imsg {
-    use crate::core::ZInt;
 
     pub mod id {
         // Zenoh Messages
@@ -52,7 +51,7 @@ pub mod imsg {
         byte & flag != 0
     }
 
-    pub const fn has_option(options: ZInt, flag: ZInt) -> bool {
+    pub const fn has_option(options: u64, flag: u64) -> bool {
         options & flag != 0
     }
 }

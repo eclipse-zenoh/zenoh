@@ -15,7 +15,7 @@ use super::super::TransportUnicast;
 use super::Primitives;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{Channel, CongestionControl, WireExpr, ZInt, ZenohId},
+    core::{Channel, CongestionControl, WireExpr, ZenohId},
     zenoh::{
         zmsg, ConsolidationMode, DataInfo, Declaration, ForgetPublisher, ForgetQueryable,
         ForgetResource, ForgetSubscriber, Publisher, QueryBody, QueryTarget, Queryable,
@@ -35,7 +35,7 @@ impl Mux {
 }
 
 impl Primitives for Mux {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
+    fn decl_resource(&self, expr_id: u64, key_expr: &WireExpr) {
         let d = Declaration::Resource(Resource {
             expr_id,
             key: key_expr.to_owned(),
@@ -46,7 +46,7 @@ impl Primitives for Mux {
             .handle_message(ZenohMessage::make_declare(decls, None));
     }
 
-    fn forget_resource(&self, expr_id: ZInt) {
+    fn forget_resource(&self, expr_id: u64) {
         let d = Declaration::ForgetResource(ForgetResource { expr_id });
         let decls = vec![d];
         let _ = self
@@ -150,7 +150,7 @@ impl Primitives for Mux {
         &self,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: ZInt,
+        qid: u64,
         target: QueryTarget,
         consolidation: ConsolidationMode,
         body: Option<QueryBody>,
@@ -174,7 +174,7 @@ impl Primitives for Mux {
 
     fn send_reply_data(
         &self,
-        qid: ZInt,
+        qid: u64,
         replier_id: ZenohId,
         key_expr: WireExpr,
         data_info: Option<DataInfo>,
@@ -191,7 +191,7 @@ impl Primitives for Mux {
         ));
     }
 
-    fn send_reply_final(&self, qid: ZInt) {
+    fn send_reply_final(&self, qid: u64) {
         let _ = self.handler.handle_message(ZenohMessage::make_unit(
             zmsg::default_channel::REPLY,
             zmsg::default_congestion_control::REPLY,
@@ -203,8 +203,8 @@ impl Primitives for Mux {
         &self,
         is_final: bool,
         key_expr: &WireExpr,
-        pull_id: ZInt,
-        max_samples: &Option<ZInt>,
+        pull_id: u64,
+        max_samples: &Option<u64>,
     ) {
         let _ = self.handler.handle_message(ZenohMessage::make_pull(
             is_final,

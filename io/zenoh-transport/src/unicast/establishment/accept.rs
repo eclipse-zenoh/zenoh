@@ -30,7 +30,7 @@ use zenoh_core::{zasynclock, zcondfeat, zerror};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::{
-    core::{Field, Resolution, WhatAmI, ZInt, ZenohId},
+    core::{Field, Resolution, WhatAmI, ZenohId},
     transport::{
         close::{self, Close},
         InitAck, OpenAck, TransportBody, TransportMessage,
@@ -78,18 +78,18 @@ struct SendInitAckIn {
     ext_shm: Challenge,
 }
 struct SendInitAckOut {
-    cookie_nonce: ZInt,
+    cookie_nonce: u64,
 }
 
 // OpenSyn
 struct RecvOpenSynIn {
-    cookie_nonce: ZInt,
+    cookie_nonce: u64,
 }
 struct RecvOpenSynOut {
     other_zid: ZenohId,
     other_whatami: WhatAmI,
     other_lease: Duration,
-    other_initial_sn: ZInt,
+    other_initial_sn: u64,
 }
 
 // OpenAck
@@ -260,7 +260,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         );
 
         // Create the cookie
-        let cookie_nonce: ZInt = zasynclock!(self.prng).gen();
+        let cookie_nonce: u64 = zasynclock!(self.prng).gen();
         let cookie = Cookie {
             zid: input.other_zid,
             whatami: input.other_whatami,

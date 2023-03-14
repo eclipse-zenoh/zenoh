@@ -23,19 +23,12 @@ use core::{
     convert::{From, TryFrom, TryInto},
     fmt,
     hash::{Hash, Hasher},
-    num::NonZeroU64,
     str::FromStr,
 };
 use key_expr::OwnedKeyExpr;
 pub use uhlc::{Timestamp, NTP64};
 use uuid::Uuid;
 use zenoh_result::{bail, zerror};
-
-/// A zenoh integer.
-pub type ZInt = u64;
-pub type ZiInt = i64;
-pub type NonZeroZInt = NonZeroU64;
-pub const ZINT_MAX_BYTES: usize = 10;
 
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;
@@ -63,7 +56,7 @@ pub use resolution::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Property {
-    pub key: ZInt,
+    pub key: u64,
     pub value: Vec<u8>,
 }
 
@@ -87,9 +80,9 @@ impl fmt::Display for SampleKind {
     }
 }
 
-impl TryFrom<ZInt> for SampleKind {
-    type Error = ZInt;
-    fn try_from(kind: ZInt) -> Result<Self, ZInt> {
+impl TryFrom<u64> for SampleKind {
+    type Error = u64;
+    fn try_from(kind: u64) -> Result<Self, u64> {
         match kind {
             0 => Ok(SampleKind::Put),
             1 => Ok(SampleKind::Delete),
@@ -419,8 +412,8 @@ impl fmt::Display for ConduitSnList {
 /// The kind of reliability.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct ConduitSn {
-    pub reliable: ZInt,
-    pub best_effort: ZInt,
+    pub reliable: u64,
+    pub best_effort: u64,
 }
 
 /// The kind of congestion control.
@@ -449,8 +442,8 @@ pub struct SubInfo {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct QueryableInfo {
-    pub complete: ZInt, // Default 0: incomplete
-    pub distance: ZInt, // Default 0: no distance
+    pub complete: u64, // Default 0: incomplete
+    pub distance: u64, // Default 0: no distance
 }
 
 /// The kind of consolidation.
@@ -478,5 +471,5 @@ pub enum QueryTarget {
     All,
     AllComplete,
     #[cfg(feature = "complete_n")]
-    Complete(ZInt),
+    Complete(u64),
 }

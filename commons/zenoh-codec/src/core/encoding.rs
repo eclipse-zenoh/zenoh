@@ -17,7 +17,7 @@ use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::core::{Encoding, ZInt};
+use zenoh_protocol::core::Encoding;
 
 impl<W> WCodec<&Encoding, &mut W> for Zenoh080
 where
@@ -26,7 +26,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Encoding) -> Self::Output {
-        self.write(&mut *writer, ZInt::from(*x.prefix()))?;
+        self.write(&mut *writer, u64::from(*x.prefix()))?;
         self.write(&mut *writer, x.suffix())?;
         Ok(())
     }
@@ -39,7 +39,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Encoding, Self::Error> {
-        let prefix: ZInt = self.read(&mut *reader)?;
+        let prefix: u64 = self.read(&mut *reader)?;
         let suffix: String = self.read(&mut *reader)?;
         let encoding = Encoding::new(prefix, suffix).ok_or(DidntRead)?;
         Ok(encoding)

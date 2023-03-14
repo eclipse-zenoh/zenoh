@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{Locator, WhatAmI, ZInt, ZenohId};
+use crate::core::{Locator, WhatAmI, ZenohId};
 use alloc::vec::Vec;
 
 //  7 6 5 4 3 2 1 0
@@ -32,12 +32,12 @@ use alloc::vec::Vec;
 // +---------------+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LinkState {
-    pub psid: ZInt,
-    pub sn: ZInt,
+    pub psid: u64,
+    pub sn: u64,
     pub zid: Option<ZenohId>,
     pub whatami: Option<WhatAmI>,
     pub locators: Option<Vec<Locator>>,
-    pub links: Vec<ZInt>,
+    pub links: Vec<u64>,
 }
 
 impl LinkState {
@@ -50,8 +50,8 @@ impl LinkState {
 
         let mut rng = rand::thread_rng();
 
-        let psid: ZInt = rng.gen();
-        let sn: ZInt = rng.gen();
+        let psid: u64 = rng.gen();
+        let sn: u64 = rng.gen();
         let zid = if rng.gen_bool(0.5) {
             Some(ZenohId::default())
         } else {
@@ -70,7 +70,7 @@ impl LinkState {
             None
         };
         let n = rng.gen_range(MIN..=MAX);
-        let links = (0..n).map(|_| rng.gen()).collect::<Vec<ZInt>>();
+        let links = (0..n).map(|_| rng.gen()).collect::<Vec<u64>>();
 
         Self {
             psid,

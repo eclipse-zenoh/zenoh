@@ -23,7 +23,7 @@ use std::time::Duration;
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::{
-    core::{Bits, Priority, WhatAmI, ZInt, ZenohId},
+    core::{Bits, Priority, WhatAmI, ZenohId},
     transport::{Close, ConduitSn, TransportMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -125,7 +125,7 @@ impl TransportUnicastInner {
     /*************************************/
     /*           INITIATION              */
     /*************************************/
-    pub(super) async fn sync(&self, initial_sn_rx: ZInt) -> ZResult<()> {
+    pub(super) async fn sync(&self, initial_sn_rx: u64) -> ZResult<()> {
         // Mark the transport as alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
         let mut a_guard = zasynclock!(self.alive);

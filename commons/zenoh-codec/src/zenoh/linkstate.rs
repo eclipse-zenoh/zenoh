@@ -20,7 +20,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{Locator, WhatAmI, ZInt, ZenohId},
+    core::{Locator, WhatAmI, ZenohId},
     zenoh::{zmsg, LinkState, LinkStateList},
 };
 
@@ -74,9 +74,9 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<LinkState, Self::Error> {
-        let options: ZInt = self.read(&mut *reader)?;
-        let psid: ZInt = self.read(&mut *reader)?;
-        let sn: ZInt = self.read(&mut *reader)?;
+        let options: u64 = self.read(&mut *reader)?;
+        let psid: u64 = self.read(&mut *reader)?;
+        let sn: u64 = self.read(&mut *reader)?;
         let zid = if imsg::has_option(options, zmsg::link_state::PID) {
             let zid: ZenohId = self.read(&mut *reader)?;
             Some(zid)
@@ -96,9 +96,9 @@ where
             None
         };
         let len: usize = self.read(&mut *reader)?;
-        let mut links: Vec<ZInt> = Vec::with_capacity(len);
+        let mut links: Vec<u64> = Vec::with_capacity(len);
         for _ in 0..len {
-            let l: ZInt = self.read(&mut *reader)?;
+            let l: u64 = self.read(&mut *reader)?;
             links.push(l);
         }
 

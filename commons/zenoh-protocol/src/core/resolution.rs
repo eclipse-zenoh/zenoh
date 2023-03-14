@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::ZInt;
 use crate::defaults::{FRAME_SN_RESOLUTION, REQUEST_ID_RESOLUTION};
 use alloc::string::String;
 use core::{fmt, str::FromStr};
@@ -33,12 +32,12 @@ impl Bits {
     const S32: &str = "32bit";
     const S64: &str = "64bit";
 
-    pub const fn mask(&self) -> ZInt {
+    pub const fn mask(&self) -> u64 {
         match self {
-            Bits::U8 => u8::MAX as ZInt,
-            Bits::U16 => u16::MAX as ZInt,
-            Bits::U32 => u32::MAX as ZInt,
-            Bits::U64 => u64::MAX as ZInt,
+            Bits::U8 => u8::MAX as u64,
+            Bits::U16 => u16::MAX as u64,
+            Bits::U32 => u32::MAX as u64,
+            Bits::U64 => u64::MAX,
         }
     }
 

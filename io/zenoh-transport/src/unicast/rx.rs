@@ -22,7 +22,7 @@ use zenoh_link::LinkUnicast;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
 use zenoh_protocol::{
-    core::{Priority, Reliability, ZInt},
+    core::{Priority, Reliability},
     transport::{Close, Fragment, Frame, KeepAlive, TransportBody, TransportMessage},
     zenoh::ZenohMessage,
 };
@@ -183,7 +183,7 @@ impl TransportUnicastInner {
         Ok(())
     }
 
-    fn verify_sn(&self, sn: ZInt, guard: &mut MutexGuard<'_, TransportChannelRx>) -> ZResult<()> {
+    fn verify_sn(&self, sn: u64, guard: &mut MutexGuard<'_, TransportChannelRx>) -> ZResult<()> {
         let precedes = guard.sn.precedes(sn)?;
         if !precedes {
             log::debug!(

@@ -28,7 +28,7 @@ use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{
         key_expr::OwnedKeyExpr, Channel, CongestionControl, Encoding, KnownEncoding, WireExpr,
-        ZInt, ZenohId, EMPTY_EXPR_ID,
+        ZenohId, EMPTY_EXPR_ID,
     },
     zenoh::{
         ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext,
@@ -54,7 +54,7 @@ type Handler = Box<
 pub struct AdminSpace {
     zid: ZenohId,
     primitives: Mutex<Option<Arc<Face>>>,
-    mappings: Mutex<HashMap<ZInt, String>>,
+    mappings: Mutex<HashMap<u64, String>>,
     handlers: HashMap<OwnedKeyExpr, Arc<Handler>>,
     context: Arc<AdminContext>,
 }
@@ -243,7 +243,7 @@ impl AdminSpace {
 }
 
 impl Primitives for AdminSpace {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
+    fn decl_resource(&self, expr_id: u64, key_expr: &WireExpr) {
         trace!("recv Resource {} {:?}", expr_id, key_expr);
         match self.key_expr_to_string(key_expr) {
             Ok(s) => {
@@ -253,7 +253,7 @@ impl Primitives for AdminSpace {
         }
     }
 
-    fn forget_resource(&self, _expr_id: ZInt) {
+    fn forget_resource(&self, _expr_id: u64) {
         trace!("recv Forget Resource {}", _expr_id);
     }
 
@@ -366,7 +366,7 @@ impl Primitives for AdminSpace {
         &self,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: ZInt,
+        qid: u64,
         target: QueryTarget,
         _consolidation: ConsolidationMode,
         _body: Option<QueryBody>,
@@ -473,7 +473,7 @@ impl Primitives for AdminSpace {
 
     fn send_reply_data(
         &self,
-        qid: ZInt,
+        qid: u64,
         replier_id: ZenohId,
         key_expr: WireExpr,
         info: Option<DataInfo>,
@@ -489,7 +489,7 @@ impl Primitives for AdminSpace {
         );
     }
 
-    fn send_reply_final(&self, qid: ZInt) {
+    fn send_reply_final(&self, qid: u64) {
         trace!("recv ReplyFinal {:?}", qid);
     }
 
@@ -497,8 +497,8 @@ impl Primitives for AdminSpace {
         &self,
         _is_final: bool,
         _key_expr: &WireExpr,
-        _pull_id: ZInt,
-        _max_samples: &Option<ZInt>,
+        _pull_id: u64,
+        _max_samples: &Option<u64>,
     ) {
         trace!(
             "recv Pull {:?} {:?} {:?} {:?}",

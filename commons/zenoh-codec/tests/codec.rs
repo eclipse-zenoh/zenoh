@@ -117,26 +117,26 @@ macro_rules! run {
 
 // Core
 #[test]
-fn codec_zint() {
-    run!(ZInt, { thread_rng().gen::<u8>() as ZInt });
-    run!(ZInt, u8::MIN as ZInt);
-    run!(ZInt, u8::MAX as ZInt);
+fn codec_u64() {
+    run!(u64, { thread_rng().gen::<u8>() as u64 });
+    run!(u64, u8::MIN as u64);
+    run!(u64, u8::MAX as u64);
 
-    run!(ZInt, { thread_rng().gen::<u16>() as ZInt });
-    run!(ZInt, u16::MIN as ZInt);
-    run!(ZInt, u16::MAX as ZInt);
+    run!(u64, { thread_rng().gen::<u16>() as u64 });
+    run!(u64, u16::MIN as u64);
+    run!(u64, u16::MAX as u64);
 
-    run!(ZInt, { thread_rng().gen::<u32>() as ZInt });
-    run!(ZInt, u32::MIN as ZInt);
-    run!(ZInt, u32::MAX as ZInt);
+    run!(u64, { thread_rng().gen::<u32>() as u64 });
+    run!(u64, u32::MIN as u64);
+    run!(u64, u32::MAX as u64);
 
-    run!(ZInt, { thread_rng().gen::<u64>() as ZInt });
-    run!(ZInt, u64::MIN as ZInt);
-    run!(ZInt, u64::MAX as ZInt);
+    run!(u64, { thread_rng().gen::<u64>() });
+    run!(u64, u64::MIN);
+    run!(u64, u64::MAX);
 
-    run!(ZInt, thread_rng().gen::<usize>() as ZInt);
-    run!(ZInt, usize::MIN as ZInt);
-    run!(ZInt, usize::MAX as ZInt);
+    run!(u64, thread_rng().gen::<usize>() as u64);
+    run!(u64, usize::MIN as u64);
+    run!(u64, usize::MAX as u64);
 }
 
 #[test]
@@ -244,7 +244,7 @@ fn codec_extension() {
     }
 
     run_extension!(ZExtUnit<0>);
-    run_extension!(ZExtZInt<1>);
+    run_extension!(ZExtu64<1>);
     run_extension!(ZExtZBuf<2>);
     run_extension!(ZExtZBuf<3>);
     run_extension!(ZExtUnknown);

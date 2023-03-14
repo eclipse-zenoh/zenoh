@@ -709,7 +709,7 @@ mod tests {
     };
     use zenoh_codec::{RCodec, Zenoh080};
     use zenoh_protocol::{
-        core::{Channel, CongestionControl, Priority, Reliability, ZInt},
+        core::{Channel, CongestionControl, Priority, Reliability},
         defaults::{BATCH_SIZE, FRAME_SN_RESOLUTION},
         transport::{Fragment, Frame, TransportBody},
         zenoh::ZenohMessage,
@@ -823,7 +823,7 @@ mod tests {
 
         task::block_on(async {
             for ps in payload_sizes.iter() {
-                if ZInt::try_from(*ps).is_err() {
+                if u64::try_from(*ps).is_err() {
                     break;
                 }
 

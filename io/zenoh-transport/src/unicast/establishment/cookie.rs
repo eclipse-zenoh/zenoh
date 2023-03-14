@@ -20,7 +20,7 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_crypto::{BlockCipher, PseudoRng};
-use zenoh_protocol::core::{Resolution, WhatAmI, ZInt, ZenohId};
+use zenoh_protocol::core::{Resolution, WhatAmI, ZenohId};
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct Cookie {
@@ -28,7 +28,7 @@ pub(crate) struct Cookie {
     pub(crate) whatami: WhatAmI,
     pub(crate) resolution: Resolution,
     pub(crate) batch_size: u16,
-    pub(crate) nonce: ZInt,
+    pub(crate) nonce: u64,
     // Extensions
     pub(crate) ext_qos: ext::qos::StateAccept,
     #[cfg(feature = "transport_multilink")]
@@ -78,7 +78,7 @@ where
         let resolution: u8 = self.read(&mut *reader)?;
         let resolution = Resolution::from(resolution);
         let batch_size: u16 = self.read(&mut *reader)?;
-        let nonce: ZInt = self.read(&mut *reader)?;
+        let nonce: u64 = self.read(&mut *reader)?;
         // Extensions
         let ext_qos: ext::qos::StateAccept = self.read(&mut *reader)?;
         #[cfg(feature = "transport_multilink")]

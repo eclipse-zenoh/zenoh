@@ -11,10 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    core::{WireExpr, ZInt},
-    zenoh::Reliability,
-};
+use crate::{core::WireExpr, zenoh::Reliability};
 use alloc::vec::Vec;
 
 /// ```text
@@ -93,7 +90,7 @@ impl Declaration {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resource {
-    pub expr_id: ZInt,
+    pub expr_id: u64,
     pub key: WireExpr<'static>,
 }
 
@@ -104,7 +101,7 @@ impl Resource {
 
         let mut rng = rand::thread_rng();
 
-        let expr_id: ZInt = rng.gen();
+        let expr_id: u64 = rng.gen();
         let key = WireExpr::rand();
 
         Self { expr_id, key }
@@ -121,7 +118,7 @@ impl Resource {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForgetResource {
-    pub expr_id: ZInt,
+    pub expr_id: u64,
 }
 
 impl ForgetResource {
@@ -131,7 +128,7 @@ impl ForgetResource {
 
         let mut rng = rand::thread_rng();
 
-        let expr_id: ZInt = rng.gen();
+        let expr_id: u64 = rng.gen();
 
         Self { expr_id }
     }
@@ -259,8 +256,8 @@ impl ForgetSubscriber {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct QueryableInfo {
-    pub complete: ZInt, // Default 0: incomplete
-    pub distance: ZInt, // Default 0: no distance
+    pub complete: u64, // Default 0: incomplete
+    pub distance: u64, // Default 0: no distance
 }
 
 /// ```text
@@ -287,8 +284,8 @@ impl Queryable {
         let mut rng = rand::thread_rng();
 
         let key = WireExpr::rand();
-        let complete: ZInt = rng.gen();
-        let distance: ZInt = rng.gen();
+        let complete: u64 = rng.gen();
+        let distance: u64 = rng.gen();
         let info = QueryableInfo { complete, distance };
 
         Self { key, info }

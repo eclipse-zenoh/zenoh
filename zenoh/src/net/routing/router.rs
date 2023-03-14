@@ -29,7 +29,7 @@ use uhlc::HLC;
 use zenoh_config::whatami::WhatAmIMatcher;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{WhatAmI, ZInt, ZenohId},
+    core::{WhatAmI, ZenohId},
     zenoh::{ZenohBody, ZenohMessage},
 };
 use zenoh_transport::{DeMux, Mux, Primitives, TransportPeerEventHandler, TransportUnicast};
@@ -138,7 +138,7 @@ impl Tables {
     pub(crate) fn get_mapping<'a>(
         &'a self,
         face: &'a FaceState,
-        expr_id: &ZInt,
+        expr_id: &u64,
     ) -> Option<&'a Arc<Resource>> {
         match expr_id {
             0 => Some(&self.root_res),

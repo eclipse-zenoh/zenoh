@@ -17,7 +17,7 @@ use std::{
 };
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_protocol::core::{Property, ZInt};
+use zenoh_protocol::core::Property;
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -50,7 +50,7 @@ impl EstablishmentProperties {
         Ok(())
     }
 
-    pub(super) fn remove(&mut self, key: ZInt) -> Option<Property> {
+    pub(super) fn remove(&mut self, key: u64) -> Option<Property> {
         self.0
             .iter()
             .position(|x| x.key == key)
@@ -117,7 +117,7 @@ impl EstablishmentProperties {
         let mut eps = EstablishmentProperties::new();
         for _ in MIN..=MAX {
             loop {
-                let key: ZInt = rng.gen();
+                let key: u64 = rng.gen();
                 let mut value = vec![0u8; rng.gen_range(MIN..=MAX)];
                 rng.fill(&mut value[..]);
                 let p = Property { key, value };

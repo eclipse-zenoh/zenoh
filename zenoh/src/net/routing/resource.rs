@@ -19,7 +19,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, WireExpr, ZInt, ZenohId},
+    core::{key_expr::keyexpr, WireExpr, ZenohId},
     zenoh::{DataInfo, QueryableInfo, RoutingContext, SubInfo},
 };
 use zenoh_sync::get_mut_unchecked;
@@ -27,12 +27,12 @@ use zenoh_sync::get_mut_unchecked;
 pub(super) type Direction = (Arc<FaceState>, WireExpr<'static>, Option<RoutingContext>);
 pub(super) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
-pub(super) type QueryRoute = HashMap<usize, (Direction, ZInt, zenoh_protocol::core::QueryTarget)>;
+pub(super) type QueryRoute = HashMap<usize, (Direction, zenoh_protocol::core::QueryTarget)>;
 #[cfg(not(feature = "complete_n"))]
-pub(super) type QueryRoute = HashMap<usize, (Direction, ZInt)>;
+pub(super) type QueryRoute = HashMap<usize, (Direction, u64)>;
 pub(super) struct QueryTargetQabl {
     pub(super) direction: Direction,
-    pub(super) complete: ZInt,
+    pub(super) complete: u64,
     pub(super) distance: f64,
 }
 pub(super) type QueryTargetQablSet = Vec<QueryTargetQabl>;
@@ -40,8 +40,8 @@ pub(super) type PullCaches = Vec<Arc<SessionContext>>;
 
 pub(super) struct SessionContext {
     pub(super) face: Arc<FaceState>,
-    pub(super) local_expr_id: Option<ZInt>,
-    pub(super) remote_expr_id: Option<ZInt>,
+    pub(super) local_expr_id: Option<u64>,
+    pub(super) remote_expr_id: Option<u64>,
     pub(super) subs: Option<SubInfo>,
     pub(super) qabl: Option<QueryableInfo>,
     pub(super) last_values: HashMap<String, (Option<DataInfo>, ZBuf)>,
@@ -583,7 +583,7 @@ impl Resource {
 pub fn register_expr(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr_id: ZInt,
+    expr_id: u64,
     expr: &WireExpr,
 ) {
     match tables.get_mapping(face, &expr.scope).cloned() {
@@ -633,7 +633,7 @@ pub fn register_expr(
     }
 }
 
-pub fn unregister_expr(_tables: &mut Tables, face: &mut Arc<FaceState>, expr_id: ZInt) {
+pub fn unregister_expr(_tables: &mut Tables, face: &mut Arc<FaceState>, expr_id: u64) {
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),
         None => log::error!("Undeclare unknown resource!"),

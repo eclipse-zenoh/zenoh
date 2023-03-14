@@ -20,7 +20,6 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{imsg, ZExtUnknown},
-    core::ZInt,
     transport::{
         id,
         open::{ext, flag, OpenAck, OpenSyn},
@@ -51,9 +50,9 @@ where
 
         // Body
         if imsg::has_flag(header, flag::T) {
-            self.write(&mut *writer, x.lease.as_secs() as ZInt)?;
+            self.write(&mut *writer, x.lease.as_secs())?;
         } else {
-            self.write(&mut *writer, x.lease.as_millis() as ZInt)?;
+            self.write(&mut *writer, x.lease.as_millis() as u64)?;
         }
         self.write(&mut *writer, x.initial_sn)?;
         self.write(&mut *writer, &x.cookie)?;
@@ -105,13 +104,13 @@ where
         }
 
         // Body
-        let lease: ZInt = self.codec.read(&mut *reader)?;
+        let lease: u64 = self.codec.read(&mut *reader)?;
         let lease = if imsg::has_flag(self.header, flag::T) {
             Duration::from_secs(lease)
         } else {
             Duration::from_millis(lease)
         };
-        let initial_sn: ZInt = self.codec.read(&mut *reader)?;
+        let initial_sn: u64 = self.codec.read(&mut *reader)?;
         let cookie: ZSlice = self.codec.read(&mut *reader)?;
 
         // Extensions
@@ -190,9 +189,9 @@ where
 
         // Body
         if imsg::has_flag(header, flag::T) {
-            self.write(&mut *writer, x.lease.as_secs() as ZInt)?;
+            self.write(&mut *writer, x.lease.as_secs())?;
         } else {
-            self.write(&mut *writer, x.lease.as_millis() as ZInt)?;
+            self.write(&mut *writer, x.lease.as_millis() as u64)?;
         }
         self.write(&mut *writer, x.initial_sn)?;
 
@@ -243,13 +242,13 @@ where
         }
 
         // Body
-        let lease: ZInt = self.codec.read(&mut *reader)?;
+        let lease: u64 = self.codec.read(&mut *reader)?;
         let lease = if imsg::has_flag(self.header, flag::T) {
             Duration::from_secs(lease)
         } else {
             Duration::from_millis(lease)
         };
-        let initial_sn: ZInt = self.codec.read(&mut *reader)?;
+        let initial_sn: u64 = self.codec.read(&mut *reader)?;
 
         // Extensions
         let mut ext_qos = None;

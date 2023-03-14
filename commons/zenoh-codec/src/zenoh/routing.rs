@@ -18,7 +18,6 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::ZInt,
     zenoh::{zmsg, RoutingContext},
 };
 
@@ -64,7 +63,7 @@ where
             return Err(DidntRead);
         }
 
-        let tree_id: ZInt = self.codec.read(&mut *reader)?;
+        let tree_id: u64 = self.codec.read(&mut *reader)?;
         Ok(RoutingContext { tree_id })
     }
 }

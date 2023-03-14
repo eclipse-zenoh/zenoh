@@ -13,7 +13,6 @@
 //
 
 //! This module defines the wire representation of Key Expressions.
-use crate::core::ZInt;
 use alloc::{
     borrow::Cow,
     string::{String, ToString},
@@ -22,7 +21,7 @@ use core::{convert::TryInto, fmt};
 use zenoh_result::{bail, ZResult};
 
 /// A numerical Id mapped to a key expression.
-pub type ExprId = ZInt;
+pub type ExprId = u64;
 pub const EMPTY_EXPR_ID: ExprId = 0;
 
 /// A zenoh **resource** is represented by a pair composed by a **key** and a

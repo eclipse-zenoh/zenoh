@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{Reliability, ZInt};
+use crate::core::Reliability;
 use zenoh_buffers::ZSlice;
 
 /// # Fragment message
@@ -70,7 +70,7 @@ pub mod flag {
 pub struct Fragment {
     pub reliability: Reliability,
     pub more: bool,
-    pub sn: ZInt,
+    pub sn: u64,
     pub qos: ext::QoS,
     pub payload: ZSlice,
 }
@@ -95,7 +95,7 @@ impl Fragment {
             Reliability::BestEffort
         };
         let more = rng.gen_bool(0.5);
-        let sn: ZInt = rng.gen();
+        let sn: u64 = rng.gen();
         let qos = ext::QoS::rand();
         let payload = ZSlice::rand(rng.gen_range(8..128));
 
@@ -114,7 +114,7 @@ impl Fragment {
 pub struct FragmentHeader {
     pub reliability: Reliability,
     pub more: bool,
-    pub sn: ZInt,
+    pub sn: u64,
     pub qos: ext::QoS,
 }
 
@@ -131,7 +131,7 @@ impl FragmentHeader {
             Reliability::BestEffort
         };
         let more = rng.gen_bool(0.5);
-        let sn: ZInt = rng.gen();
+        let sn: u64 = rng.gen();
         let qos = ext::QoS::rand();
 
         FragmentHeader {

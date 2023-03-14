@@ -19,7 +19,7 @@ use vec_map::VecMap;
 use zenoh_config::whatami::WhatAmIMatcher;
 use zenoh_link::Locator;
 use zenoh_protocol::{
-    core::{WhatAmI, ZInt, ZenohId},
+    core::{WhatAmI, ZenohId},
     zenoh::{LinkState, ZenohMessage},
 };
 use zenoh_transport::TransportUnicast;
@@ -36,7 +36,7 @@ pub(crate) struct Node {
     pub(crate) zid: ZenohId,
     pub(crate) whatami: Option<WhatAmI>,
     pub(crate) locators: Option<Vec<Locator>>,
-    pub(crate) sn: ZInt,
+    pub(crate) sn: u64,
     pub(crate) links: Vec<ZenohId>,
 }
 
@@ -50,7 +50,7 @@ pub(crate) struct Link {
     pub(crate) transport: TransportUnicast,
     zid: ZenohId,
     mappings: VecMap<ZenohId>,
-    local_mappings: VecMap<ZInt>,
+    local_mappings: VecMap<u64>,
 }
 
 impl Link {
@@ -65,23 +65,23 @@ impl Link {
     }
 
     #[inline]
-    pub(crate) fn set_zid_mapping(&mut self, psid: ZInt, zid: ZenohId) {
+    pub(crate) fn set_zid_mapping(&mut self, psid: u64, zid: ZenohId) {
         self.mappings.insert(psid.try_into().unwrap(), zid);
     }
 
     #[inline]
-    pub(crate) fn get_zid(&self, psid: &ZInt) -> Option<&ZenohId> {
+    pub(crate) fn get_zid(&self, psid: &u64) -> Option<&ZenohId> {
         self.mappings.get((*psid).try_into().unwrap())
     }
 
     #[inline]
-    pub(crate) fn set_local_psid_mapping(&mut self, psid: ZInt, local_psid: ZInt) {
+    pub(crate) fn set_local_psid_mapping(&mut self, psid: u64, local_psid: u64) {
         self.local_mappings
             .insert(psid.try_into().unwrap(), local_psid);
     }
 
     #[inline]
-    pub(crate) fn get_local_psid(&self, psid: &ZInt) -> Option<&ZInt> {
+    pub(crate) fn get_local_psid(&self, psid: &u64) -> Option<&u64> {
         self.local_mappings.get((*psid).try_into().unwrap())
     }
 }
@@ -185,7 +185,7 @@ impl Network {
     }
 
     #[inline]
-    pub(crate) fn get_local_context(&self, context: Option<ZInt>, link_id: usize) -> usize {
+    pub(crate) fn get_local_context(&self, context: Option<u64>, link_id: usize) -> usize {
         let context = context.unwrap_or(0);
         match self.get_link(link_id) {
             Some(link) => match link.get_local_psid(&context) {
@@ -211,7 +211,7 @@ impl Network {
         let idx = self.graph.add_node(node);
         for link in self.links.values_mut() {
             if let Some((psid, _)) = link.mappings.iter().find(|(_, p)| **p == zid) {
-                link.local_mappings.insert(psid, idx.index() as ZInt);
+                link.local_mappings.insert(psid, idx.index() as u64);
             }
         }
         idx

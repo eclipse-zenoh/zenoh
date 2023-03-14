@@ -30,7 +30,7 @@ use zenoh_protocol::{
             include::{Includer, DEFAULT_INCLUDER},
             OwnedKeyExpr,
         },
-        WhatAmI, WireExpr, ZInt, ZenohId,
+        WhatAmI, WireExpr, ZenohId,
     },
     zenoh::{ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext},
 };
@@ -39,7 +39,7 @@ use zenoh_util::Timed;
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
-    src_qid: ZInt,
+    src_qid: u64,
 }
 
 #[cfg(feature = "complete_n")]
@@ -53,7 +53,7 @@ fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableI
 #[cfg(not(feature = "complete_n"))]
 #[inline]
 fn merge_qabl_infos(mut this: QueryableInfo, info: &QueryableInfo) -> QueryableInfo {
-    this.complete = ZInt::from(this.complete != 0 || info.complete != 0);
+    this.complete = u64::from(this.complete != 0 || info.complete != 0);
     this.distance = std::cmp::min(this.distance, info.distance);
     this
 }
@@ -290,7 +290,7 @@ fn propagate_sourced_queryable(
                     res,
                     qabl_info,
                     src_face,
-                    Some(RoutingContext::new(tree_sid.index() as ZInt)),
+                    Some(RoutingContext::new(tree_sid.index() as u64)),
                 );
             } else {
                 log::trace!(
@@ -630,7 +630,7 @@ fn propagate_forget_sourced_queryable(
                     &net.trees[tree_sid.index()].childs,
                     res,
                     src_face,
-                    Some(RoutingContext::new(tree_sid.index() as ZInt)),
+                    Some(RoutingContext::new(tree_sid.index() as u64)),
                 );
             } else {
                 log::trace!(
@@ -1051,7 +1051,7 @@ pub(crate) fn queries_tree_change(
                             res,
                             qabl_info,
                             None,
-                            Some(RoutingContext::new(tree_sid as ZInt)),
+                            Some(RoutingContext::new(tree_sid as u64)),
                         );
                     }
                 }
@@ -1089,7 +1089,7 @@ fn insert_target_for_qabls(
                                             face.clone(),
                                             key_expr.to_owned(),
                                             if source != 0 {
-                                                Some(RoutingContext::new(source as ZInt))
+                                                Some(RoutingContext::new(source as u64))
                                             } else {
                                                 None
                                             },
@@ -1316,7 +1316,7 @@ pub(crate) fn compute_matches_query_routes(tables: &mut Tables, res: &mut Arc<Re
 }
 
 #[inline]
-fn insert_pending_query(outface: &mut Arc<FaceState>, query: Arc<Query>) -> ZInt {
+fn insert_pending_query(outface: &mut Arc<FaceState>, query: Arc<Query>) -> u64 {
     let outface_mut = get_mut_unchecked(outface);
     outface_mut.next_qid += 1;
     let qid = outface_mut.next_qid;
@@ -1485,7 +1485,7 @@ fn compute_final_route(
 struct QueryCleanup {
     tables: Arc<RwLock<Tables>>,
     face: Weak<FaceState>,
-    qid: ZInt,
+    qid: u64,
 }
 
 #[async_trait]
@@ -1591,7 +1591,7 @@ pub fn route_query(
     face: &Arc<FaceState>,
     expr: &WireExpr,
     parameters: &str,
-    qid: ZInt,
+    qid: u64,
     target: QueryTarget,
     consolidation: ConsolidationMode,
     body: Option<QueryBody>,
@@ -1705,7 +1705,7 @@ pub fn route_query(
 pub(crate) fn route_send_reply_data(
     tables_ref: &RwLock<Tables>,
     face: &mut Arc<FaceState>,
-    qid: ZInt,
+    qid: u64,
     replier_id: ZenohId,
     key_expr: WireExpr,
     info: Option<DataInfo>,
@@ -1735,7 +1735,7 @@ pub(crate) fn route_send_reply_data(
 pub(crate) fn route_send_reply_final(
     tables_ref: &RwLock<Tables>,
     face: &mut Arc<FaceState>,
-    qid: ZInt,
+    qid: u64,
 ) {
     let tables_lock = zwrite!(tables_ref);
     match get_mut_unchecked(face).pending_queries.remove(&qid) {

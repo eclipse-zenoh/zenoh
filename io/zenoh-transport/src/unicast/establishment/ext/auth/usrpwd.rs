@@ -25,10 +25,7 @@ use zenoh_collections::Properties;
 use zenoh_config::UsrPwdConf;
 use zenoh_core::{bail, zasyncread, zerror, Error as ZError, Result as ZResult};
 use zenoh_crypto::hmac;
-use zenoh_protocol::{
-    common::{ZExtUnit, ZExtZBuf, ZExtZInt},
-    core::ZInt,
-};
+use zenoh_protocol::common::{ZExtUnit, ZExtZBuf, ZExtu64};
 
 // Authenticator
 type User = Vec<u8>;
@@ -118,7 +115,7 @@ impl fmt::Debug for AuthUsrPwd {
 // OpenFsm / AcceptFsm
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct StateOpen {
-    nonce: ZInt,
+    nonce: u64,
 }
 
 impl StateOpen {
@@ -132,7 +129,7 @@ impl StateOpen {
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct StateAccept {
-    nonce: ZInt,
+    nonce: u64,
 }
 
 impl StateAccept {
@@ -170,7 +167,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<StateAccept, Self::Error> {
-        let nonce: ZInt = self.read(&mut *reader)?;
+        let nonce: u64 = self.read(&mut *reader)?;
         Ok(StateAccept { nonce })
     }
 }
@@ -202,7 +199,7 @@ impl<'a> AuthUsrPwdFsm<'a> {
 /// ~     nonce     ~
 /// +---------------+
 ///
-/// ZExtZInt
+/// ZExtu64
 
 /*************************************/
 /*             OpenSyn               */
@@ -272,7 +269,7 @@ impl<'a> OpenFsm for AuthUsrPwdFsm<'a> {
         Ok(output)
     }
 
-    type RecvInitAckIn = (&'a mut StateOpen, Option<ZExtZInt<{ super::id::USRPWD }>>);
+    type RecvInitAckIn = (&'a mut StateOpen, Option<ZExtu64<{ super::id::USRPWD }>>);
     type RecvInitAckOut = ();
     async fn recv_init_ack(
         &self,
@@ -370,12 +367,12 @@ impl<'a> AcceptFsm for AuthUsrPwdFsm<'a> {
     }
 
     type SendInitAckIn = &'a StateAccept;
-    type SendInitAckOut = Option<ZExtZInt<{ super::id::USRPWD }>>;
+    type SendInitAckOut = Option<ZExtu64<{ super::id::USRPWD }>>;
     async fn send_init_ack(
         &self,
         state: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
-        Ok(Some(ZExtZInt::new(state.nonce)))
+        Ok(Some(ZExtu64::new(state.nonce)))
     }
 
     type RecvOpenSynIn = (&'a mut StateAccept, Option<ZExtZBuf<{ super::id::USRPWD }>>);

@@ -23,7 +23,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{CongestionControl, Encoding, WireExpr, ZInt, ZenohId},
+    core::{CongestionControl, Encoding, WireExpr, ZenohId},
     zenoh::{zmsg, Data, DataInfo, ReplierInfo, ReplyContext, SampleKind},
 };
 
@@ -76,7 +76,7 @@ where
             return Err(DidntRead);
         }
 
-        let qid: ZInt = self.codec.read(&mut *reader)?;
+        let qid: u64 = self.codec.read(&mut *reader)?;
         let replier = if imsg::has_flag(self.header, zmsg::flag::F) {
             None
         } else {
@@ -96,7 +96,7 @@ where
 
     fn write(self, writer: &mut W, x: &DataInfo) -> Self::Output {
         // Options
-        let mut options: ZInt = 0;
+        let mut options: u64 = 0;
         #[cfg(feature = "shared-memory")]
         if x.sliced {
             options |= zmsg::data::info::SLICED;
@@ -119,7 +119,7 @@ where
         self.write(&mut *writer, options)?;
 
         if x.kind != SampleKind::Put {
-            self.write(&mut *writer, x.kind as ZInt)?;
+            self.write(&mut *writer, x.kind as u64)?;
         }
         if let Some(enc) = x.encoding.as_ref() {
             self.write(&mut *writer, enc)?;
@@ -146,13 +146,13 @@ where
 
     fn read(self, reader: &mut R) -> Result<DataInfo, Self::Error> {
         let mut info = DataInfo::default();
-        let options: ZInt = self.read(&mut *reader)?;
+        let options: u64 = self.read(&mut *reader)?;
         #[cfg(feature = "shared-memory")]
         {
             info.sliced = imsg::has_option(options, zmsg::data::info::SLICED);
         }
         if imsg::has_option(options, zmsg::data::info::KIND) {
-            let kind: ZInt = self.read(&mut *reader)?;
+            let kind: u64 = self.read(&mut *reader)?;
             info.kind = kind.try_into().map_err(|_| DidntRead)?;
         }
         if imsg::has_option(options, zmsg::data::info::ENCODING) {
@@ -168,7 +168,7 @@ where
             info.source_id = Some(source_id);
         }
         if imsg::has_option(options, zmsg::data::info::SRCSN) {
-            let source_sn: ZInt = self.read(&mut *reader)?;
+            let source_sn: u64 = self.read(&mut *reader)?;
             info.source_sn = Some(source_sn);
         }
 

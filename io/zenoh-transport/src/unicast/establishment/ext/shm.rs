@@ -23,10 +23,7 @@ use zenoh_buffers::{
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::zasyncwrite;
-use zenoh_protocol::{
-    core::ZInt,
-    transport::{init, open},
-};
+use zenoh_protocol::transport::{init, open};
 use zenoh_result::{zerror, Error as ZError};
 use zenoh_shm::SharedMemoryBufInfo;
 
@@ -76,7 +73,7 @@ where
 /// ~ ShmMemBufInfo ~
 /// +---------------+
 struct InitAck {
-    alice_challenge: ZInt,
+    alice_challenge: u64,
     bob_info: SharedMemoryBufInfo,
 }
 
@@ -100,7 +97,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<InitAck, Self::Error> {
-        let alice_challenge: ZInt = self.read(&mut *reader)?;
+        let alice_challenge: u64 = self.read(&mut *reader)?;
         let bob_info: SharedMemoryBufInfo = self.read(&mut *reader)?;
         Ok(InitAck {
             alice_challenge,
@@ -218,7 +215,7 @@ impl<'a> OpenFsm for ShmFsm<'a> {
             .as_slice()
             .try_into()
             .map_err(|e| zerror!("{}", e))?;
-        let challenge = ZInt::from_le_bytes(bytes);
+        let challenge = u64::from_le_bytes(bytes);
 
         // Verify that Bob has correctly read Alice challenge
         if challenge != init_ack.alice_challenge {
@@ -251,7 +248,7 @@ impl<'a> OpenFsm for ShmFsm<'a> {
                 return Ok(0);
             }
         };
-        let bob_challenge = ZInt::from_le_bytes(bytes);
+        let bob_challenge = u64::from_le_bytes(bytes);
 
         Ok(bob_challenge)
     }
@@ -404,7 +401,7 @@ impl<'a> AcceptFsm for ShmFsm<'a> {
                 return Ok(0);
             }
         };
-        let alice_challenge = ZInt::from_le_bytes(bytes);
+        let alice_challenge = u64::from_le_bytes(bytes);
 
         Ok(alice_challenge)
     }
@@ -462,7 +459,7 @@ impl<'a> AcceptFsm for ShmFsm<'a> {
             .as_slice()
             .try_into()
             .map_err(|e| zerror!("{}", e))?;
-        let challenge = ZInt::from_le_bytes(bytes);
+        let challenge = u64::from_le_bytes(bytes);
 
         // Verify that Alice has correctly read Bob challenge
         let bob_challnge = ext.value;

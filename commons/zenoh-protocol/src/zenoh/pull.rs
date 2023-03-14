@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{WireExpr, ZInt};
+use crate::core::WireExpr;
 
 /// # Pull message
 ///
@@ -30,8 +30,8 @@ use crate::core::{WireExpr, ZInt};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pull {
     pub key: WireExpr<'static>,
-    pub pull_id: ZInt,
-    pub max_samples: Option<ZInt>,
+    pub pull_id: u64,
+    pub max_samples: Option<u64>,
     pub is_final: bool,
 }
 
@@ -43,7 +43,7 @@ impl Pull {
         let mut rng = rand::thread_rng();
 
         let key = WireExpr::rand();
-        let pull_id: ZInt = rng.gen();
+        let pull_id: u64 = rng.gen();
         let max_samples = if rng.gen_bool(0.5) {
             Some(rng.gen())
         } else {

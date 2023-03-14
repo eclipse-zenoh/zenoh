@@ -17,7 +17,7 @@ use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::core::{WireExpr, ZInt};
+use zenoh_protocol::core::WireExpr;
 
 impl<W> WCodec<&WireExpr<'_>, &mut W> for Zenoh080
 where
@@ -41,7 +41,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<WireExpr<'static>, Self::Error> {
-        let scope: ZInt = self.codec.read(&mut *reader)?;
+        let scope: u64 = self.codec.read(&mut *reader)?;
         let suffix: String = if self.condition {
             self.codec.read(&mut *reader)?
         } else {

@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::ZInt;
 use core::convert::TryFrom;
 use zenoh_buffers::ZBuf;
 
@@ -36,7 +35,7 @@ use zenoh_buffers::ZBuf;
 /// +-+-+-+-+-+-+-+-+
 /// |Z|ENC|    ID   |
 /// +-+-+-+---------+
-/// %    length     % -- If ENC == ZInt || ENC == ZBuf
+/// %    length     % -- If ENC == u64 || ENC == ZBuf
 /// +---------------+
 /// ~     [u8]      ~ -- If ENC == ZBuf
 /// +---------------+
@@ -44,7 +43,7 @@ use zenoh_buffers::ZBuf;
 ///
 /// Encoding:
 /// - 0b00: Unit
-/// - 0b01: ZInt
+/// - 0b01: u64
 /// - 0b10: ZBuf
 /// - 0b11: Reserved
 ///
@@ -56,7 +55,7 @@ pub mod iext {
     pub const ID_MASK: u8 = !(u8::MAX << ID_BITS);
 
     pub const ENC_UNIT: u8 = 0b00 << ID_BITS;
-    pub const ENC_ZINT: u8 = 0b01 << ID_BITS;
+    pub const ENC_Z64: u8 = 0b01 << ID_BITS;
     pub const ENC_ZBUF: u8 = 0b10 << ID_BITS;
     pub const ENC_MASK: u8 = 0b11 << ID_BITS;
 
@@ -100,19 +99,19 @@ impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtUnit<{ ID }> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ZExtZInt<const ID: u8> {
-    pub value: ZInt,
+pub struct ZExtu64<const ID: u8> {
+    pub value: u64,
 }
 
-impl<const ID: u8> ZExtZInt<{ ID }> {
+impl<const ID: u8> ZExtu64<{ ID }> {
     pub const ID: u8 = ID;
 
-    pub const fn new(value: ZInt) -> Self {
+    pub const fn new(value: u64) -> Self {
         Self { value }
     }
 
-    pub const fn transmute<const DI: u8>(self) -> ZExtZInt<{ DI }> {
-        ZExtZInt::new(self.value)
+    pub const fn transmute<const DI: u8>(self) -> ZExtu64<{ DI }> {
+        ZExtu64::new(self.value)
     }
 
     #[cfg(feature = "test")]
@@ -120,12 +119,12 @@ impl<const ID: u8> ZExtZInt<{ ID }> {
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
-        let value: ZInt = rng.gen();
+        let value: u64 = rng.gen();
         Self { value }
     }
 }
 
-impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtZInt<{ ID }> {
+impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtu64<{ ID }> {
     type Error = DidntConvert;
 
     fn try_from(v: ZExtUnknown) -> Result<Self, Self::Error> {
@@ -133,7 +132,7 @@ impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtZInt<{ ID }> {
             return Err(DidntConvert);
         }
         match v.body {
-            ZExtensionBody::ZInt(v) => Ok(Self::new(v)),
+            ZExtensionBody::Z64(v) => Ok(Self::new(v)),
             _ => Err(DidntConvert),
         }
     }
@@ -188,7 +187,7 @@ pub struct ZExtUnknown {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ZExtensionBody {
     Unit,
-    ZInt(ZInt),
+    Z64(u64),
     ZBuf(ZBuf),
 }
 
@@ -201,7 +200,7 @@ impl ZExtUnknown {
         let id: u8 = rng.gen_range(0x00..=iext::ID_MASK);
         let body = [
             ZExtensionBody::Unit,
-            ZExtensionBody::ZInt(rng.gen()),
+            ZExtensionBody::Z64(rng.gen()),
             ZExtensionBody::ZBuf(ZBuf::rand(rng.gen_range(8..=64))),
         ]
         .choose(&mut rng)
@@ -220,11 +219,11 @@ impl<const ID: u8> From<ZExtUnit<{ ID }>> for ZExtUnknown {
     }
 }
 
-impl<const ID: u8> From<ZExtZInt<{ ID }>> for ZExtUnknown {
-    fn from(e: ZExtZInt<{ ID }>) -> Self {
+impl<const ID: u8> From<ZExtu64<{ ID }>> for ZExtUnknown {
+    fn from(e: ZExtu64<{ ID }>) -> Self {
         ZExtUnknown {
             id: ID,
-            body: ZExtensionBody::ZInt(e.value),
+            body: ZExtensionBody::Z64(e.value),
         }
     }
 }

@@ -20,8 +20,8 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::{imsg, ZExtUnknown, ZExtZInt},
-    core::{Priority, Reliability, ZInt},
+    common::{imsg, ZExtUnknown, ZExtu64},
+    core::{Priority, Reliability},
     transport::{
         frame::{ext, flag, Frame, FrameHeader},
         id,
@@ -38,7 +38,7 @@ where
 
     fn write(self, writer: &mut W, x: (ext::QoS, bool)) -> Self::Output {
         let (qos, more) = x;
-        let ext: ZExtZInt<{ ext::QOS }> = ZExtZInt::new(qos.priority as ZInt);
+        let ext: ZExtu64<{ ext::QOS }> = ZExtu64::new(qos.priority as u64);
         self.write(&mut *writer, (&ext, more))
     }
 }
@@ -68,7 +68,7 @@ where
             return Err(DidntRead);
         }
 
-        let (ext, more): (ZExtZInt<{ ext::QOS }>, bool) = self.read(&mut *reader)?;
+        let (ext, more): (ZExtu64<{ ext::QOS }>, bool) = self.read(&mut *reader)?;
 
         let v: u8 = ext.value.try_into().map_err(|_| DidntRead)?;
         let priority: Priority = v.try_into().map_err(|_| DidntRead)?;
@@ -134,7 +134,7 @@ where
             true => Reliability::Reliable,
             false => Reliability::BestEffort,
         };
-        let sn: ZInt = self.codec.read(&mut *reader)?;
+        let sn: u64 = self.codec.read(&mut *reader)?;
 
         // Extensions
         let mut qos = ext::QoS::default();

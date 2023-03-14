@@ -18,15 +18,15 @@ pub use demux::*;
 pub use mux::*;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{Channel, CongestionControl, WireExpr, ZInt, ZenohId},
+    core::{Channel, CongestionControl, WireExpr, ZenohId},
     zenoh::{
         ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext, SubInfo,
     },
 };
 
 pub trait Primitives: Send + Sync {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr);
-    fn forget_resource(&self, expr_id: ZInt);
+    fn decl_resource(&self, expr_id: u64, key_expr: &WireExpr);
+    fn forget_resource(&self, expr_id: u64);
 
     fn decl_publisher(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>);
     fn forget_publisher(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>);
@@ -62,7 +62,7 @@ pub trait Primitives: Send + Sync {
         &self,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: ZInt,
+        qid: u64,
         target: QueryTarget,
         consolidation: ConsolidationMode,
         body: Option<QueryBody>,
@@ -71,21 +71,21 @@ pub trait Primitives: Send + Sync {
 
     fn send_reply_data(
         &self,
-        qid: ZInt,
+        qid: u64,
         replier_id: ZenohId,
         key_expr: WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
     );
 
-    fn send_reply_final(&self, qid: ZInt);
+    fn send_reply_final(&self, qid: u64);
 
     fn send_pull(
         &self,
         is_final: bool,
         key_expr: &WireExpr,
-        pull_id: ZInt,
-        max_samples: &Option<ZInt>,
+        pull_id: u64,
+        max_samples: &Option<u64>,
     );
 
     fn send_close(&self);
@@ -101,8 +101,8 @@ impl DummyPrimitives {
 }
 
 impl Primitives for DummyPrimitives {
-    fn decl_resource(&self, _expr_id: ZInt, _key_expr: &WireExpr) {}
-    fn forget_resource(&self, _expr_id: ZInt) {}
+    fn decl_resource(&self, _expr_id: u64, _key_expr: &WireExpr) {}
+    fn forget_resource(&self, _expr_id: u64) {}
 
     fn decl_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
     fn forget_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
@@ -139,7 +139,7 @@ impl Primitives for DummyPrimitives {
         &self,
         _key_expr: &WireExpr,
         _parameters: &str,
-        _qid: ZInt,
+        _qid: u64,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
         _body: Option<QueryBody>,
@@ -148,20 +148,20 @@ impl Primitives for DummyPrimitives {
     }
     fn send_reply_data(
         &self,
-        _qid: ZInt,
+        _qid: u64,
         _replier_id: ZenohId,
         _key_expr: WireExpr,
         _info: Option<DataInfo>,
         _payload: ZBuf,
     ) {
     }
-    fn send_reply_final(&self, _qid: ZInt) {}
+    fn send_reply_final(&self, _qid: u64) {}
     fn send_pull(
         &self,
         _is_final: bool,
         _key_expr: &WireExpr,
-        _pull_id: ZInt,
-        _max_samples: &Option<ZInt>,
+        _pull_id: u64,
+        _max_samples: &Option<u64>,
     ) {
     }
 

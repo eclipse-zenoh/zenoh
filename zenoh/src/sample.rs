@@ -21,8 +21,6 @@ use crate::time::{new_reception_timestamp, Timestamp};
 #[zenoh_core::unstable]
 use serde::Serialize;
 use std::convert::TryInto;
-#[zenoh_core::unstable]
-use zenoh_protocol::core::ZInt;
 use zenoh_protocol::zenoh::DataInfo;
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
@@ -49,7 +47,7 @@ pub struct SourceInfo {
     /// The [`ZenohId`] of the zenoh instance that published the concerned [`Sample`].
     pub source_id: Option<ZenohId>,
     /// The sequence number of the [`Sample`] from the source.
-    pub source_sn: Option<ZInt>,
+    pub source_sn: Option<u64>,
 }
 
 #[test]

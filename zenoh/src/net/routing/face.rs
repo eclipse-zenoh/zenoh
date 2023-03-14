@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{Channel, CongestionControl, WhatAmI, WireExpr, ZInt, ZenohId},
+    core::{Channel, CongestionControl, WhatAmI, WireExpr, ZenohId},
     zenoh::{
         ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext, SubInfo,
     },
@@ -31,14 +31,14 @@ pub struct FaceState {
     pub(super) whatami: WhatAmI,
     pub(super) primitives: Arc<dyn Primitives + Send + Sync>,
     pub(super) link_id: usize,
-    pub(super) local_mappings: HashMap<ZInt, Arc<Resource>>,
-    pub(super) remote_mappings: HashMap<ZInt, Arc<Resource>>,
+    pub(super) local_mappings: HashMap<u64, Arc<Resource>>,
+    pub(super) remote_mappings: HashMap<u64, Arc<Resource>>,
     pub(super) local_subs: HashSet<Arc<Resource>>,
     pub(super) remote_subs: HashSet<Arc<Resource>>,
     pub(super) local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
     pub(super) remote_qabls: HashSet<Arc<Resource>>,
-    pub(super) next_qid: ZInt,
-    pub(super) pending_queries: HashMap<ZInt, Arc<Query>>,
+    pub(super) next_qid: u64,
+    pub(super) pending_queries: HashMap<u64, Arc<Query>>,
 }
 
 impl FaceState {
@@ -68,14 +68,14 @@ impl FaceState {
 
     #[inline]
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub(super) fn get_mapping(&self, prefixid: &ZInt) -> Option<&std::sync::Arc<Resource>> {
+    pub(super) fn get_mapping(&self, prefixid: &u64) -> Option<&std::sync::Arc<Resource>> {
         match self.remote_mappings.get(prefixid) {
             Some(prefix) => Some(prefix),
             None => self.local_mappings.get(prefixid),
         }
     }
 
-    pub(super) fn get_next_local_id(&self) -> ZInt {
+    pub(super) fn get_next_local_id(&self) -> u64 {
         let mut id = 1;
         while self.local_mappings.get(&id).is_some() || self.remote_mappings.get(&id).is_some() {
             id += 1;
@@ -165,12 +165,12 @@ pub struct Face {
 }
 
 impl Primitives for Face {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
+    fn decl_resource(&self, expr_id: u64, key_expr: &WireExpr) {
         let mut tables = zwrite!(self.tables);
         register_expr(&mut tables, &mut self.state.clone(), expr_id, key_expr);
     }
 
-    fn forget_resource(&self, expr_id: ZInt) {
+    fn forget_resource(&self, expr_id: u64) {
         let mut tables = zwrite!(self.tables);
         unregister_expr(&mut tables, &mut self.state.clone(), expr_id);
     }
@@ -357,7 +357,7 @@ impl Primitives for Face {
         &self,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: ZInt,
+        qid: u64,
         target: QueryTarget,
         consolidation: ConsolidationMode,
         body: Option<QueryBody>,
@@ -378,7 +378,7 @@ impl Primitives for Face {
 
     fn send_reply_data(
         &self,
-        qid: ZInt,
+        qid: u64,
         replier_id: ZenohId,
         key_expr: WireExpr,
         info: Option<DataInfo>,
@@ -395,7 +395,7 @@ impl Primitives for Face {
         );
     }
 
-    fn send_reply_final(&self, qid: ZInt) {
+    fn send_reply_final(&self, qid: u64) {
         route_send_reply_final(&self.tables, &mut self.state.clone(), qid);
     }
 
@@ -403,8 +403,8 @@ impl Primitives for Face {
         &self,
         is_final: bool,
         key_expr: &WireExpr,
-        pull_id: ZInt,
-        max_samples: &Option<ZInt>,
+        pull_id: u64,
+        max_samples: &Option<u64>,
     ) {
         pull_data(
             &self.tables,

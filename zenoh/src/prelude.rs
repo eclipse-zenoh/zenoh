@@ -54,7 +54,6 @@ pub(crate) mod common {
 
     /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
     pub use zenoh_protocol::core::Locator;
-    pub use zenoh_protocol::core::ZInt;
     /// The global unique id of a zenoh peer.
     pub use zenoh_protocol::core::ZenohId;
 }

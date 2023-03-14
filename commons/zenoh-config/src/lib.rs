@@ -52,7 +52,6 @@ pub type ValidationFunction = std::sync::Arc<
         + Send
         + Sync,
 >;
-type ZInt = u64;
 
 /// Creates an empty zenoh net Session configuration.
 pub fn empty() -> Config {
@@ -174,7 +173,7 @@ validated_struct::validator! {
         },
 
         /// The default timeout to apply to queries in milliseconds.
-        queries_default_timeout: Option<ZInt>,
+        queries_default_timeout: Option<u64>,
 
         /// The routing strategy to use and it's configuration.
         pub routing: #[derive(Default)]
@@ -208,7 +207,7 @@ validated_struct::validator! {
         TransportConf {
             pub unicast: TransportUnicastConf {
                 /// Timeout in milliseconds when opening a link (default: 10000).
-                accept_timeout: Option<ZInt>,
+                accept_timeout: Option<u64>,
                 /// Number of links that may stay pending during accept phase (default: 100).
                 accept_pending: Option<usize>,
                 /// Maximum number of unicast sessions (default: 1000)
@@ -218,7 +217,7 @@ validated_struct::validator! {
             },
             pub multicast: TransportMulticastConf {
                 /// Link join interval duration in milliseconds (default: 2500)
-                join_interval: Option<ZInt>,
+                join_interval: Option<u64>,
                 /// Maximum number of multicast sessions (default: 1000)
                 max_sessions: Option<usize>,
             },
@@ -238,7 +237,7 @@ validated_struct::validator! {
                     /// Accepted values: 8bit, 16bit, 32bit, 64bit.
                     sequence_number_resolution: Option<Bits>,
                     /// Link lease duration in milliseconds (default: 10000)
-                    lease: Option<ZInt>,
+                    lease: Option<u64>,
                     /// Number fo keep-alive messages in a link lease duration (default: 4)
                     keep_alive: Option<usize>,
                     /// Zenoh's MTU equivalent (default: 2^16-1)
@@ -261,7 +260,7 @@ validated_struct::validator! {
                         } where (queue_size_validator),
                         /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
                         /// Higher values lead to a more aggressive batching but it will introduce additional latency.
-                        backoff: Option<ZInt>
+                        backoff: Option<u64>
                     },
                     // Number of threads used for TX
                     threads: Option<usize>,

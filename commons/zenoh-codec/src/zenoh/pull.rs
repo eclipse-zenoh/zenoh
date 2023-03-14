@@ -18,7 +18,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{WireExpr, ZInt},
+    core::WireExpr,
     zenoh::{zmsg, Pull},
 };
 
@@ -83,9 +83,9 @@ where
             codec: self.codec,
         };
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
-        let pull_id: ZInt = self.codec.read(&mut *reader)?;
+        let pull_id: u64 = self.codec.read(&mut *reader)?;
         let max_samples = if imsg::has_flag(self.header, zmsg::flag::N) {
-            let n: ZInt = self.codec.read(&mut *reader)?;
+            let n: u64 = self.codec.read(&mut *reader)?;
             Some(n)
         } else {
             None

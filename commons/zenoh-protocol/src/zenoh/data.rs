@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{CongestionControl, Encoding, Timestamp, WireExpr, ZInt, ZenohId};
+use crate::core::{CongestionControl, Encoding, Timestamp, WireExpr, ZenohId};
 use core::{convert::TryFrom, fmt};
 use zenoh_buffers::ZBuf;
 
@@ -35,9 +35,9 @@ impl fmt::Display for SampleKind {
     }
 }
 
-impl TryFrom<ZInt> for SampleKind {
-    type Error = ZInt;
-    fn try_from(kind: ZInt) -> Result<Self, ZInt> {
+impl TryFrom<u64> for SampleKind {
+    type Error = u64;
+    fn try_from(kind: u64) -> Result<Self, u64> {
         match kind {
             0 => Ok(SampleKind::Put),
             1 => Ok(SampleKind::Delete),
@@ -72,13 +72,13 @@ pub struct ReplierInfo {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplyContext {
-    pub qid: ZInt,
+    pub qid: u64,
     pub replier: Option<ReplierInfo>,
 }
 
 impl ReplyContext {
     // Note: id replier_id=None flag F is set, meaning it's a REPLY_FINAL
-    pub fn new(qid: ZInt, replier: Option<ReplierInfo>) -> Self {
+    pub fn new(qid: u64, replier: Option<ReplierInfo>) -> Self {
         Self { qid, replier }
     }
 
@@ -94,7 +94,7 @@ impl ReplyContext {
 
         let mut rng = rand::thread_rng();
 
-        let qid: ZInt = rng.gen();
+        let qid: u64 = rng.gen();
         let replier = if rng.gen_bool(0.5) {
             Some(ReplierInfo {
                 id: ZenohId::default(),
@@ -151,7 +151,7 @@ pub struct DataInfo {
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
     pub source_id: Option<ZenohId>,
-    pub source_sn: Option<ZInt>,
+    pub source_sn: Option<u64>,
 }
 
 impl DataInfo {

@@ -18,7 +18,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{imsg, ZExtUnknown},
-    core::{Reliability, ZInt},
+    core::Reliability,
     transport::{
         fragment::{ext, flag, Fragment, FragmentHeader},
         id,
@@ -87,7 +87,7 @@ where
             false => Reliability::BestEffort,
         };
         let more = imsg::has_flag(self.header, flag::M);
-        let sn: ZInt = self.codec.read(&mut *reader)?;
+        let sn: u64 = self.codec.read(&mut *reader)?;
 
         // Extensions
         let mut qos = ext::QoS::default();

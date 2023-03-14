@@ -741,7 +741,7 @@ impl<'a> AcceptFsm for AuthFsm<'a> {
 //     &self,
 //     link: &AuthenticatedLink,
 //     node_id: &ZenohId,
-//     sn_resolution: ZInt,
+//     sn_resolution: u64,
 //     property: Option<Vec<u8>>,
 // ) -> ZResult<Option<Vec<u8>>>;
 

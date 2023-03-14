@@ -20,7 +20,7 @@ use zenoh_buffers::{
 
 const VLE_LEN: usize = 10;
 
-// ZInt
+// u64
 impl<W> WCodec<u64, &mut W> for Zenoh080
 where
     W: Writer,
@@ -151,16 +151,16 @@ where
 //             return Ok(b as u64);
 //         }
 //         let n = (1 + (b & !VLE_THR as u8)) as usize;
-//         let mut zint: [u8; 8] = 0u64.to_le_bytes();
-//         reader.read_exact(&mut zint[0..n])?;
-//         let zint = u64::from_le_bytes(zint);
-//         Ok(zint.saturating_add(VLE_THR - 1))
+//         let mut u64: [u8; 8] = 0u64.to_le_bytes();
+//         reader.read_exact(&mut u64[0..n])?;
+//         let u64 = u64::from_le_bytes(u64);
+//         Ok(u64.saturating_add(VLE_THR - 1))
 //     }
 // }
 
 // mod tests {
 //     #[test]
-//     fn zint_overhead() {
+//     fn u64_overhead() {
 //         use crate::{WCodec, Zenoh080};
 //         use zenoh_buffers::{
 //             reader::{HasReader, Reader},
@@ -344,7 +344,7 @@ where
 // #[cfg(test)]
 // mod test {
 //     #[test]
-//     fn zint_fuzz() {
+//     fn u64_fuzz() {
 //         use crate::*;
 //         use rand::Rng;
 //         use zenoh_buffers::{reader::HasReader, writer::HasWriter};

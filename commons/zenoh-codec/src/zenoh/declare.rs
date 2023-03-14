@@ -19,7 +19,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{Reliability, WireExpr, ZInt},
+    core::{Reliability, WireExpr},
     zenoh::{
         zmsg, Declaration, Declare, ForgetPublisher, ForgetQueryable, ForgetResource,
         ForgetSubscriber, Publisher, Queryable, QueryableInfo, Resource, SubInfo, SubMode,
@@ -184,7 +184,7 @@ where
             return Err(DidntRead);
         }
 
-        let expr_id: ZInt = self.codec.read(&mut *reader)?;
+        let expr_id: u64 = self.codec.read(&mut *reader)?;
         let ccond = Zenoh080Condition {
             condition: imsg::has_flag(self.header, zmsg::flag::K),
             codec: self.codec,
@@ -239,7 +239,7 @@ where
             return Err(DidntRead);
         }
 
-        let expr_id: ZInt = self.codec.read(&mut *reader)?;
+        let expr_id: u64 = self.codec.read(&mut *reader)?;
 
         Ok(ForgetResource { expr_id })
     }
@@ -559,8 +559,8 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<QueryableInfo, Self::Error> {
-        let complete: ZInt = self.read(&mut *reader)?;
-        let distance: ZInt = self.read(&mut *reader)?;
+        let complete: u64 = self.read(&mut *reader)?;
+        let distance: u64 = self.read(&mut *reader)?;
 
         Ok(QueryableInfo { complete, distance })
     }
