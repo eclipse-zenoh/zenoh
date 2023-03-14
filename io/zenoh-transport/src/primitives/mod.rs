@@ -18,15 +18,15 @@ pub use demux::*;
 pub use mux::*;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{Channel, CongestionControl, WireExpr, ZenohId},
+    core::{Channel, CongestionControl, ExprId, WireExpr, ZenohId},
     zenoh::{
         ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext, SubInfo,
     },
 };
 
 pub trait Primitives: Send + Sync {
-    fn decl_resource(&self, expr_id: u64, key_expr: &WireExpr);
-    fn forget_resource(&self, expr_id: u64);
+    fn decl_resource(&self, expr_id: ExprId, key_expr: &WireExpr);
+    fn forget_resource(&self, expr_id: ExprId);
 
     fn decl_publisher(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>);
     fn forget_publisher(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>);
@@ -101,8 +101,8 @@ impl DummyPrimitives {
 }
 
 impl Primitives for DummyPrimitives {
-    fn decl_resource(&self, _expr_id: u64, _key_expr: &WireExpr) {}
-    fn forget_resource(&self, _expr_id: u64) {}
+    fn decl_resource(&self, _expr_id: ExprId, _key_expr: &WireExpr) {}
+    fn forget_resource(&self, _expr_id: ExprId) {}
 
     fn decl_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
     fn forget_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}

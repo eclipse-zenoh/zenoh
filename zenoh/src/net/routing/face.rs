@@ -18,7 +18,7 @@ use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{Channel, CongestionControl, WhatAmI, WireExpr, ZenohId},
+    core::{Channel, CongestionControl, ExprId, WhatAmI, WireExpr, ZenohId},
     zenoh::{
         ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext, SubInfo,
     },
@@ -31,8 +31,8 @@ pub struct FaceState {
     pub(super) whatami: WhatAmI,
     pub(super) primitives: Arc<dyn Primitives + Send + Sync>,
     pub(super) link_id: usize,
-    pub(super) local_mappings: HashMap<u64, Arc<Resource>>,
-    pub(super) remote_mappings: HashMap<u64, Arc<Resource>>,
+    pub(super) local_mappings: HashMap<ExprId, Arc<Resource>>,
+    pub(super) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(super) local_subs: HashSet<Arc<Resource>>,
     pub(super) remote_subs: HashSet<Arc<Resource>>,
     pub(super) local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
@@ -68,14 +68,14 @@ impl FaceState {
 
     #[inline]
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub(super) fn get_mapping(&self, prefixid: &u64) -> Option<&std::sync::Arc<Resource>> {
+    pub(super) fn get_mapping(&self, prefixid: &ExprId) -> Option<&std::sync::Arc<Resource>> {
         match self.remote_mappings.get(prefixid) {
             Some(prefix) => Some(prefix),
             None => self.local_mappings.get(prefixid),
         }
     }
 
-    pub(super) fn get_next_local_id(&self) -> u64 {
+    pub(super) fn get_next_local_id(&self) -> ExprId {
         let mut id = 1;
         while self.local_mappings.get(&id).is_some() || self.remote_mappings.get(&id).is_some() {
             id += 1;
@@ -165,12 +165,12 @@ pub struct Face {
 }
 
 impl Primitives for Face {
-    fn decl_resource(&self, expr_id: u64, key_expr: &WireExpr) {
+    fn decl_resource(&self, expr_id: ExprId, key_expr: &WireExpr) {
         let mut tables = zwrite!(self.tables);
         register_expr(&mut tables, &mut self.state.clone(), expr_id, key_expr);
     }
 
-    fn forget_resource(&self, expr_id: u64) {
+    fn forget_resource(&self, expr_id: ExprId) {
         let mut tables = zwrite!(self.tables);
         unregister_expr(&mut tables, &mut self.state.clone(), expr_id);
     }

@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, zenoh::Reliability};
+use crate::{
+    core::{ExprId, WireExpr},
+    zenoh::Reliability,
+};
 use alloc::vec::Vec;
 
 /// ```text
@@ -90,7 +93,7 @@ impl Declaration {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resource {
-    pub expr_id: u64,
+    pub expr_id: ExprId,
     pub key: WireExpr<'static>,
 }
 
@@ -101,7 +104,7 @@ impl Resource {
 
         let mut rng = rand::thread_rng();
 
-        let expr_id: u64 = rng.gen();
+        let expr_id: ExprId = rng.gen();
         let key = WireExpr::rand();
 
         Self { expr_id, key }
@@ -118,7 +121,7 @@ impl Resource {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForgetResource {
-    pub expr_id: u64,
+    pub expr_id: ExprId,
 }
 
 impl ForgetResource {
@@ -128,7 +131,7 @@ impl ForgetResource {
 
         let mut rng = rand::thread_rng();
 
-        let expr_id: u64 = rng.gen();
+        let expr_id: ExprId = rng.gen();
 
         Self { expr_id }
     }

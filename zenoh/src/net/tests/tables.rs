@@ -20,8 +20,8 @@ use zenoh_buffers::ZBuf;
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::{
-        key_expr::keyexpr, Channel, CongestionControl, Reliability, WhatAmI, WireExpr, ZenohId,
-        EMPTY_EXPR_ID,
+        key_expr::keyexpr, Channel, CongestionControl, ExprId, Reliability, WhatAmI, WireExpr,
+        ZenohId, EMPTY_EXPR_ID,
     },
     zenoh::{
         ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext,
@@ -366,7 +366,7 @@ fn clean_test() {
 
 pub struct ClientPrimitives {
     data: std::sync::Mutex<Option<WireExpr<'static>>>,
-    mapping: std::sync::Mutex<std::collections::HashMap<u64, String>>,
+    mapping: std::sync::Mutex<std::collections::HashMap<ExprId, String>>,
 }
 
 impl ClientPrimitives {
@@ -416,12 +416,12 @@ impl ClientPrimitives {
 }
 
 impl Primitives for ClientPrimitives {
-    fn decl_resource(&self, expr_id: u64, key_expr: &WireExpr) {
+    fn decl_resource(&self, expr_id: ExprId, key_expr: &WireExpr) {
         let name = self.get_name(key_expr);
         zlock!(self.mapping).insert(expr_id, name);
     }
 
-    fn forget_resource(&self, expr_id: u64) {
+    fn forget_resource(&self, expr_id: ExprId) {
         zlock!(self.mapping).remove(&expr_id);
     }
 

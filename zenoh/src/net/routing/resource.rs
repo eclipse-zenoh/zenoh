@@ -19,7 +19,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, WireExpr, ZenohId},
+    core::{key_expr::keyexpr, ExprId, WireExpr, ZenohId},
     zenoh::{DataInfo, QueryableInfo, RoutingContext, SubInfo},
 };
 use zenoh_sync::get_mut_unchecked;
@@ -40,8 +40,8 @@ pub(super) type PullCaches = Vec<Arc<SessionContext>>;
 
 pub(super) struct SessionContext {
     pub(super) face: Arc<FaceState>,
-    pub(super) local_expr_id: Option<u64>,
-    pub(super) remote_expr_id: Option<u64>,
+    pub(super) local_expr_id: Option<ExprId>,
+    pub(super) remote_expr_id: Option<ExprId>,
     pub(super) subs: Option<SubInfo>,
     pub(super) qabl: Option<QueryableInfo>,
     pub(super) last_values: HashMap<String, (Option<DataInfo>, ZBuf)>,
@@ -583,7 +583,7 @@ impl Resource {
 pub fn register_expr(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr_id: u64,
+    expr_id: ExprId,
     expr: &WireExpr,
 ) {
     match tables.get_mapping(face, &expr.scope).cloned() {
@@ -633,7 +633,7 @@ pub fn register_expr(
     }
 }
 
-pub fn unregister_expr(_tables: &mut Tables, face: &mut Arc<FaceState>, expr_id: u64) {
+pub fn unregister_expr(_tables: &mut Tables, face: &mut Arc<FaceState>, expr_id: ExprId) {
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),
         None => log::error!("Undeclare unknown resource!"),

@@ -73,7 +73,7 @@ zconfigurable! {
 
 pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
-    pub(crate) expr_id_counter: AtomicUsize,  // @TODO: manage rollover and uniqueness
+    pub(crate) expr_id_counter: AtomicU16,    // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: Atomicu64,
     pub(crate) decl_id_counter: AtomicUsize,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
@@ -93,7 +93,7 @@ impl SessionState {
     ) -> SessionState {
         SessionState {
             primitives: None,
-            expr_id_counter: AtomicUsize::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
+            expr_id_counter: AtomicU16::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: Atomicu64::new(0),
             decl_id_counter: AtomicUsize::new(0),
             local_resources: HashMap::new(),
@@ -809,7 +809,10 @@ impl Session {
         })
     }
 
-    pub(crate) fn declare_prefix<'a>(&'a self, prefix: &'a str) -> impl Resolve<u64> + Send + 'a {
+    pub(crate) fn declare_prefix<'a>(
+        &'a self,
+        prefix: &'a str,
+    ) -> impl Resolve<ExprId> + Send + 'a {
         ResolveClosure::new(move || {
             trace!("declare_prefix({:?})", prefix);
             let mut state = zwrite!(self.state);
@@ -820,7 +823,7 @@ impl Session {
             {
                 Some((expr_id, _res)) => *expr_id,
                 None => {
-                    let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst) as u64;
+                    let expr_id = state.expr_id_counter.fetch_add(1, Ordering::SeqCst);
                     let mut res = Resource::new(Box::from(prefix));
                     if let Resource::Node(ResourceNode {
                         key_expr,
@@ -1623,7 +1626,7 @@ impl SessionDeclarations for Arc<Session> {
 }
 
 impl Primitives for Session {
-    fn decl_resource(&self, expr_id: u64, wire_expr: &WireExpr) {
+    fn decl_resource(&self, expr_id: ExprId, wire_expr: &WireExpr) {
         trace!("recv Decl Resource {} {:?}", expr_id, wire_expr);
         let state = &mut zwrite!(self.state);
         match state.remote_key_to_expr(wire_expr) {
@@ -1648,7 +1651,7 @@ impl Primitives for Session {
         }
     }
 
-    fn forget_resource(&self, _expr_id: u64) {
+    fn forget_resource(&self, _expr_id: ExprId) {
         trace!("recv Forget Resource {}", _expr_id);
     }
 

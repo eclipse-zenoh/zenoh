@@ -27,8 +27,8 @@ use zenoh_config::ValidatedMap;
 use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{
-        key_expr::OwnedKeyExpr, Channel, CongestionControl, Encoding, KnownEncoding, WireExpr,
-        ZenohId, EMPTY_EXPR_ID,
+        key_expr::OwnedKeyExpr, Channel, CongestionControl, Encoding, ExprId, KnownEncoding,
+        WireExpr, ZenohId, EMPTY_EXPR_ID,
     },
     zenoh::{
         ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext,
@@ -54,7 +54,7 @@ type Handler = Box<
 pub struct AdminSpace {
     zid: ZenohId,
     primitives: Mutex<Option<Arc<Face>>>,
-    mappings: Mutex<HashMap<u64, String>>,
+    mappings: Mutex<HashMap<ExprId, String>>,
     handlers: HashMap<OwnedKeyExpr, Arc<Handler>>,
     context: Arc<AdminContext>,
 }
@@ -243,7 +243,7 @@ impl AdminSpace {
 }
 
 impl Primitives for AdminSpace {
-    fn decl_resource(&self, expr_id: u64, key_expr: &WireExpr) {
+    fn decl_resource(&self, expr_id: ExprId, key_expr: &WireExpr) {
         trace!("recv Resource {} {:?}", expr_id, key_expr);
         match self.key_expr_to_string(key_expr) {
             Ok(s) => {
@@ -253,7 +253,7 @@ impl Primitives for AdminSpace {
         }
     }
 
-    fn forget_resource(&self, _expr_id: u64) {
+    fn forget_resource(&self, _expr_id: ExprId) {
         trace!("recv Forget Resource {}", _expr_id);
     }
 

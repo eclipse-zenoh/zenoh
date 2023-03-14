@@ -15,7 +15,7 @@ use super::super::TransportUnicast;
 use super::Primitives;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{Channel, CongestionControl, WireExpr, ZenohId},
+    core::{Channel, CongestionControl, ExprId, WireExpr, ZenohId},
     zenoh::{
         zmsg, ConsolidationMode, DataInfo, Declaration, ForgetPublisher, ForgetQueryable,
         ForgetResource, ForgetSubscriber, Publisher, QueryBody, QueryTarget, Queryable,
@@ -35,7 +35,7 @@ impl Mux {
 }
 
 impl Primitives for Mux {
-    fn decl_resource(&self, expr_id: u64, key_expr: &WireExpr) {
+    fn decl_resource(&self, expr_id: ExprId, key_expr: &WireExpr) {
         let d = Declaration::Resource(Resource {
             expr_id,
             key: key_expr.to_owned(),
@@ -46,7 +46,7 @@ impl Primitives for Mux {
             .handle_message(ZenohMessage::make_declare(decls, None));
     }
 
-    fn forget_resource(&self, expr_id: u64) {
+    fn forget_resource(&self, expr_id: ExprId) {
         let d = Declaration::ForgetResource(ForgetResource { expr_id });
         let decls = vec![d];
         let _ = self
