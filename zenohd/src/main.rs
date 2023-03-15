@@ -139,9 +139,7 @@ fn config_from_args(args: &ArgMatches) -> Config {
             Config::from_file(conf_file).unwrap()
         });
     if config.mode().is_none() {
-        config
-            .set_mode(Some(WhatAmI::Router))
-            .unwrap();
+        config.set_mode(Some(WhatAmI::Router)).unwrap();
     }
     if args.occurrences_of("id") > 0 {
         config

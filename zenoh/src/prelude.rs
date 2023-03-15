@@ -50,7 +50,7 @@ pub(crate) mod common {
     pub use zenoh_protocol::zenoh::{ConsolidationMode, SampleKind};
 
     pub use crate::publication::Priority;
-    pub use zenoh_protocol::core::{CongestionControl, WhatAmI, Reliability};
+    pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
 
     /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
     pub use zenoh_protocol::core::EndPoint;
