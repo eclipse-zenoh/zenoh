@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use core::convert::TryInto;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -32,17 +32,6 @@ where
     }
 }
 
-impl<W> WCodec<&u8, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: &u8) -> Self::Output {
-        self.write(writer, *x)
-    }
-}
-
 impl<R> RCodec<u8, &mut R> for Zenoh080
 where
     R: Reader,
@@ -51,76 +40,6 @@ where
 
     fn read(self, reader: &mut R) -> Result<u8, Self::Error> {
         reader.read_u8()
-    }
-}
-
-// u16
-impl<W> WCodec<u16, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: u16) -> Self::Output {
-        self.write(writer, x as u64)
-    }
-}
-
-impl<W> WCodec<&u16, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: &u16) -> Self::Output {
-        self.write(writer, *x)
-    }
-}
-
-impl<R> RCodec<u16, &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<u16, Self::Error> {
-        let x: u64 = self.read(reader)?;
-        Ok(x as u16)
-    }
-}
-
-// u32
-impl<W> WCodec<u32, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: u32) -> Self::Output {
-        self.write(writer, x as u64)
-    }
-}
-
-impl<W> WCodec<&u32, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: &u32) -> Self::Output {
-        self.write(writer, *x)
-    }
-}
-
-impl<R> RCodec<u32, &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<u32, Self::Error> {
-        let x: u64 = self.read(reader)?;
-        Ok(x as u32)
     }
 }
 
@@ -144,17 +63,6 @@ where
             buffer[len] = b;
             len + 1
         })
-    }
-}
-
-impl<W> WCodec<&u64, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: &u64) -> Self::Output {
-        self.write(writer, *x)
     }
 }
 
@@ -185,41 +93,104 @@ where
     }
 }
 
-// usize
-impl<W> WCodec<usize, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
+// Derive impls
+macro_rules! uint_impl {
+    ($uint:ty) => {
+        impl<W> WCodec<$uint, &mut W> for Zenoh080
+        where
+            W: Writer,
+        {
+            type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: usize) -> Self::Output {
-        let x: u64 = x.try_into().map_err(|_| DidntWrite)?;
-        self.write(writer, x)
-    }
+            fn write(self, writer: &mut W, x: $uint) -> Self::Output {
+                let x: u64 = x.try_into().map_err(|_| DidntWrite)?;
+                self.write(writer, x)
+            }
+        }
+
+        impl<R> RCodec<$uint, &mut R> for Zenoh080
+        where
+            R: Reader,
+        {
+            type Error = DidntRead;
+
+            fn read(self, reader: &mut R) -> Result<$uint, Self::Error> {
+                let x: u64 = self.read(reader)?;
+                Ok(x as $uint)
+            }
+        }
+    };
 }
 
-impl<W> WCodec<&usize, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
+uint_impl!(u16);
+uint_impl!(u32);
+uint_impl!(usize);
 
-    fn write(self, writer: &mut W, x: &usize) -> Self::Output {
-        self.write(writer, *x)
-    }
+macro_rules! uint_ref_impl {
+    ($uint:ty) => {
+        impl<W> WCodec<&$uint, &mut W> for Zenoh080
+        where
+            W: Writer,
+        {
+            type Output = Result<(), DidntWrite>;
+
+            fn write(self, writer: &mut W, x: &$uint) -> Self::Output {
+                self.write(writer, *x)
+            }
+        }
+    };
 }
 
-impl<R> RCodec<usize, &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
+uint_ref_impl!(u8);
+uint_ref_impl!(u16);
+uint_ref_impl!(u32);
+uint_ref_impl!(u64);
+uint_ref_impl!(usize);
 
-    fn read(self, reader: &mut R) -> Result<usize, Self::Error> {
-        let x: u64 = self.read(reader)?;
-        Ok(x as usize)
-    }
+// Encode unsigned integer and verify that the size boundaries are respected
+macro_rules! zint_impl_codec {
+    ($zint:ty, $bound:ty) => {
+        impl<W> WCodec<$zint, &mut W> for Zenoh080Bounded<$bound>
+        where
+            W: Writer,
+        {
+            type Output = Result<(), DidntWrite>;
+
+            fn write(self, writer: &mut W, x: $zint) -> Self::Output {
+                let t: $bound = x.try_into().map_err(|_| DidntWrite)?;
+                Zenoh080.write(writer, t)
+            }
+        }
+
+        impl<R> RCodec<$zint, &mut R> for Zenoh080Bounded<$bound>
+        where
+            R: Reader,
+        {
+            type Error = DidntRead;
+
+            fn read(self, reader: &mut R) -> Result<$zint, Self::Error> {
+                let x: u64 = Zenoh080.read(reader)?;
+                let t: $bound = x.try_into().map_err(|_| DidntRead)?;
+                t.try_into().map_err(|_| DidntRead)
+            }
+        }
+    };
 }
+macro_rules! zint_impl {
+    ($zint:ty) => {
+        zint_impl_codec!($zint, u8);
+        zint_impl_codec!($zint, u16);
+        zint_impl_codec!($zint, u32);
+        zint_impl_codec!($zint, u64);
+        zint_impl_codec!($zint, usize);
+    };
+}
+
+zint_impl!(u8);
+zint_impl!(u16);
+zint_impl!(u32);
+zint_impl!(u64);
+zint_impl!(usize);
 
 // const MAX_LEN: usize = 9;
 // const VLE_THR: u64 = 0xf8; // 248

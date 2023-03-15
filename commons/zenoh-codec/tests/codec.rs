@@ -117,26 +117,58 @@ macro_rules! run {
 
 // Core
 #[test]
-fn codec_u64() {
-    run!(u64, { thread_rng().gen::<u8>() as u64 });
-    run!(u64, u8::MIN as u64);
-    run!(u64, u8::MAX as u64);
-
-    run!(u64, { thread_rng().gen::<u16>() as u64 });
-    run!(u64, u16::MIN as u64);
-    run!(u64, u16::MAX as u64);
-
-    run!(u64, { thread_rng().gen::<u32>() as u64 });
-    run!(u64, u32::MIN as u64);
-    run!(u64, u32::MAX as u64);
-
+fn codec_zint() {
+    run!(u8, { thread_rng().gen::<u8>() });
+    run!(u16, { thread_rng().gen::<u16>() });
+    run!(u32, { thread_rng().gen::<u32>() });
     run!(u64, { thread_rng().gen::<u64>() });
-    run!(u64, u64::MIN);
-    run!(u64, u64::MAX);
+    run!(usize, thread_rng().gen::<usize>());
+}
 
-    run!(u64, thread_rng().gen::<usize>() as u64);
-    run!(u64, usize::MIN as u64);
-    run!(u64, usize::MAX as u64);
+#[test]
+fn codec_zint_bounded() {
+    use crate::Zenoh080Bounded;
+
+    // Check bounded encoding
+    for i in [
+        u8::MAX as u64,
+        u16::MAX as u64,
+        u32::MAX as u64,
+        usize::MAX as u64,
+        u64::MAX,
+    ] {
+        let mut buff = vec![];
+
+        let codec = Zenoh080::new();
+        let mut writer = buff.writer();
+        codec.write(&mut writer, i).unwrap();
+
+        macro_rules! check {
+            ($zint:ty) => {
+                let zodec = Zenoh080Bounded::<$zint>::new();
+
+                let mut btmp = vec![];
+                let mut wtmp = btmp.writer();
+                let w_res = zodec.write(&mut wtmp, i);
+
+                let mut reader = buff.reader();
+                let r_res: Result<$zint, _> = zodec.read(&mut reader);
+                if i <= <$zint>::MAX as u64 {
+                    w_res.unwrap();
+                    assert_eq!(i, r_res.unwrap() as u64);
+                } else {
+                    assert!(w_res.is_err());
+                    assert!(r_res.is_err());
+                }
+            };
+        }
+
+        check!(u8);
+        check!(u16);
+        check!(u32);
+        check!(u64);
+        check!(usize);
+    }
 }
 
 #[test]
@@ -146,6 +178,31 @@ fn codec_string() {
         let len = rng.gen_range(0..16);
         Alphanumeric.sample_string(&mut rng, len)
     });
+}
+
+#[test]
+fn codec_string_bounded() {
+    use crate::Zenoh080Bounded;
+
+    let mut rng = rand::thread_rng();
+    let str = Alphanumeric.sample_string(&mut rng, 1 + u8::MAX as usize);
+
+    let zodec = Zenoh080Bounded::<u8>::new();
+    let codec = Zenoh080::new();
+
+    let mut buff = vec![];
+
+    let mut writer = buff.writer();
+    assert!(zodec.write(&mut writer, &str).is_err());
+    let mut writer = buff.writer();
+    codec.write(&mut writer, &str).unwrap();
+
+    let mut reader = buff.reader();
+    let r_res: Result<String, _> = zodec.read(&mut reader);
+    assert!(r_res.is_err());
+    let mut reader = buff.reader();
+    let r_res: Result<String, _> = codec.read(&mut reader);
+    assert_eq!(str, r_res.unwrap());
 }
 
 #[test]
@@ -159,11 +216,6 @@ fn codec_zbuf() {
         ZBuf,
         ZBuf::rand(thread_rng().gen_range(0..=MAX_PAYLOAD_SIZE))
     );
-}
-
-#[test]
-fn codec_endpoint() {
-    run!(EndPoint, EndPoint::rand());
 }
 
 #[test]

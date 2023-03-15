@@ -24,8 +24,7 @@ use zenoh_buffers::{
 use zenoh_protocol::{
     common::imsg,
     core::{CongestionControl, Encoding, WireExpr, ZenohId},
-    transport::TransportSn,
-    zenoh::{zmsg, Data, DataInfo, QueryId, ReplierInfo, ReplyContext, SampleKind},
+    zenoh::{zmsg, Data, DataInfo, QueryId, ReplierInfo, ReplyContext, SampleKind, SourceSn},
 };
 
 // ReplyContext
@@ -169,7 +168,7 @@ where
             info.source_id = Some(source_id);
         }
         if imsg::has_flag(options, zmsg::data::info::SRCSN) {
-            let source_sn: TransportSn = self.read(&mut *reader)?;
+            let source_sn: SourceSn = self.read(&mut *reader)?;
             info.source_sn = Some(source_sn);
         }
 

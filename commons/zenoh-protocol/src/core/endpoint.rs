@@ -619,7 +619,7 @@ impl EndPoint {
         };
 
         const MIN: usize = 2;
-        const MAX: usize = 16;
+        const MAX: usize = 8;
 
         fn gen_hashmap(rng: &mut ThreadRng, endpoint: &mut String) {
             let num = rng.gen_range(MIN..MAX);

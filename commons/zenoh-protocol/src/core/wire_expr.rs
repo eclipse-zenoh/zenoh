@@ -22,6 +22,8 @@ use zenoh_result::{bail, ZResult};
 
 /// A numerical Id mapped to a key expression.
 pub type ExprId = u16;
+pub type ExprLen = u16;
+
 pub type AtomicExprId = AtomicU16;
 pub const EMPTY_EXPR_ID: ExprId = 0;
 

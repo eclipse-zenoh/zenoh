@@ -13,7 +13,6 @@
 //
 use crate::{
     core::{CongestionControl, Encoding, Timestamp, WireExpr, ZenohId},
-    transport::TransportSn,
     zenoh::QueryId,
 };
 use core::{convert::TryFrom, fmt};
@@ -147,6 +146,8 @@ impl ReplyContext {
 /// - if options & (1 << 0) then the payload is sliced
 ///
 /// ```
+pub type SourceSn = u64;
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DataInfo {
     #[cfg(feature = "shared-memory")]
@@ -155,7 +156,7 @@ pub struct DataInfo {
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
     pub source_id: Option<ZenohId>,
-    pub source_sn: Option<TransportSn>,
+    pub source_sn: Option<SourceSn>,
 }
 
 impl DataInfo {

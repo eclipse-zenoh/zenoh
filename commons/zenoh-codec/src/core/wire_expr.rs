@@ -11,13 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Condition};
+use crate::{core::Zenoh080Bounded, RCodec, WCodec, Zenoh080, Zenoh080Condition};
 use alloc::string::String;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::core::{ExprId, WireExpr};
+use zenoh_protocol::core::{ExprId, ExprLen, WireExpr};
 
 impl<W> WCodec<&WireExpr<'_>, &mut W> for Zenoh080
 where
@@ -26,9 +26,12 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &WireExpr<'_>) -> Self::Output {
-        self.write(&mut *writer, x.scope)?;
+        let zodec = Zenoh080Bounded::<ExprId>::new();
+        zodec.write(&mut *writer, x.scope)?;
+
         if x.has_suffix() {
-            self.write(&mut *writer, x.suffix.as_ref())?;
+            let zodec = Zenoh080Bounded::<ExprLen>::new();
+            zodec.write(&mut *writer, x.suffix.as_ref())?;
         }
         Ok(())
     }
@@ -41,9 +44,12 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<WireExpr<'static>, Self::Error> {
-        let scope: ExprId = self.codec.read(&mut *reader)?;
+        let zodec = Zenoh080Bounded::<ExprId>::new();
+        let scope: ExprId = zodec.read(&mut *reader)?;
+
         let suffix: String = if self.condition {
-            self.codec.read(&mut *reader)?
+            let zodec = Zenoh080Bounded::<ExprLen>::new();
+            zodec.read(&mut *reader)?
         } else {
             String::new()
         };

@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use alloc::{string::String, vec::Vec};
 use core::convert::TryFrom;
 use zenoh_buffers::{
@@ -27,7 +27,8 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Locator) -> Self::Output {
-        self.write(writer, x.as_str())
+        let zodec = Zenoh080Bounded::<u8>::new();
+        zodec.write(writer, x.as_str())
     }
 }
 
@@ -38,7 +39,8 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Locator, Self::Error> {
-        let loc: String = self.read(reader)?;
+        let zodec = Zenoh080Bounded::<u8>::new();
+        let loc: String = zodec.read(reader)?;
         Locator::try_from(loc).map_err(|_| DidntRead)
     }
 }

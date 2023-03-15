@@ -20,6 +20,7 @@ mod scouting;
 mod transport;
 mod zenoh;
 
+use ::core::marker::PhantomData;
 use zenoh_protocol::{core::Reliability, zenoh::ReplyContext};
 
 pub trait WCodec<Message, Buffer> {
@@ -106,4 +107,15 @@ pub struct Zenoh080HeaderReplyContext {
     pub header: u8,
     pub reply_context: Option<ReplyContext>,
     pub codec: Zenoh080,
+}
+
+#[derive(Clone, Copy)]
+pub struct Zenoh080Bounded<T> {
+    _t: PhantomData<T>,
+}
+
+impl<T> Zenoh080Bounded<T> {
+    pub const fn new() -> Self {
+        Self { _t: PhantomData }
+    }
 }

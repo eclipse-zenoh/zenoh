@@ -12,19 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod encoding;
-mod endpoint;
-mod keyexpr;
 mod locator;
 mod property;
 #[cfg(feature = "shared-memory")]
 mod shm;
 mod timestamp;
+mod wire_expr;
 mod zbuf;
 mod zenohid;
 mod zint;
 mod zslice;
 
-use crate::{RCodec, WCodec, Zenoh080};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use alloc::{string::String, vec::Vec};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -88,6 +87,50 @@ array_impl!(14);
 array_impl!(15);
 array_impl!(16);
 
+// &[u8] / Vec<u8> - Bounded
+macro_rules! vec_impl {
+    ($bound:ty) => {
+        impl<W> WCodec<&[u8], &mut W> for Zenoh080Bounded<$bound>
+        where
+            W: Writer,
+        {
+            type Output = Result<(), DidntWrite>;
+
+            fn write(self, writer: &mut W, x: &[u8]) -> Self::Output {
+                self.write(&mut *writer, x.len())?;
+                if x.is_empty() {
+                    Ok(())
+                } else {
+                    writer.write_exact(x)
+                }
+            }
+        }
+
+        impl<R> RCodec<Vec<u8>, &mut R> for Zenoh080Bounded<$bound>
+        where
+            R: Reader,
+        {
+            type Error = DidntRead;
+
+            #[allow(clippy::uninit_vec)]
+            fn read(self, reader: &mut R) -> Result<Vec<u8>, Self::Error> {
+                let len: usize = self.read(&mut *reader)?;
+                let mut buff = zenoh_buffers::vec::uninit(len);
+                if len != 0 {
+                    reader.read_exact(&mut buff[..])?;
+                }
+                Ok(buff)
+            }
+        }
+    };
+}
+
+vec_impl!(u8);
+vec_impl!(u16);
+vec_impl!(u32);
+vec_impl!(u64);
+vec_impl!(usize);
+
 // &[u8] / Vec<u8>
 impl<W> WCodec<&[u8], &mut W> for Zenoh080
 where
@@ -96,12 +139,8 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &[u8]) -> Self::Output {
-        self.write(&mut *writer, x.len())?;
-        if x.is_empty() {
-            Ok(())
-        } else {
-            writer.write_exact(x)
-        }
+        let zcodec = Zenoh080Bounded::<usize>::new();
+        zcodec.write(&mut *writer, x)
     }
 }
 
@@ -111,16 +150,57 @@ where
 {
     type Error = DidntRead;
 
-    #[allow(clippy::uninit_vec)]
     fn read(self, reader: &mut R) -> Result<Vec<u8>, Self::Error> {
-        let len: usize = self.read(&mut *reader)?;
-        let mut buff = zenoh_buffers::vec::uninit(len);
-        if len != 0 {
-            reader.read_exact(&mut buff[..])?;
-        }
-        Ok(buff)
+        let zcodec = Zenoh080Bounded::<usize>::new();
+        zcodec.read(&mut *reader)
     }
 }
+
+// &str / String - Bounded
+macro_rules! str_impl {
+    ($bound:ty) => {
+        impl<W> WCodec<&str, &mut W> for Zenoh080Bounded<$bound>
+        where
+            W: Writer,
+        {
+            type Output = Result<(), DidntWrite>;
+
+            fn write(self, writer: &mut W, x: &str) -> Self::Output {
+                self.write(&mut *writer, x.as_bytes())
+            }
+        }
+
+        impl<W> WCodec<&String, &mut W> for Zenoh080Bounded<$bound>
+        where
+            W: Writer,
+        {
+            type Output = Result<(), DidntWrite>;
+
+            fn write(self, writer: &mut W, x: &String) -> Self::Output {
+                self.write(&mut *writer, x.as_str())
+            }
+        }
+
+        impl<R> RCodec<String, &mut R> for Zenoh080Bounded<$bound>
+        where
+            R: Reader,
+        {
+            type Error = DidntRead;
+
+            #[allow(clippy::uninit_vec)]
+            fn read(self, reader: &mut R) -> Result<String, Self::Error> {
+                let vec: Vec<u8> = self.read(&mut *reader)?;
+                String::from_utf8(vec).map_err(|_| DidntRead)
+            }
+        }
+    };
+}
+
+str_impl!(u8);
+str_impl!(u16);
+str_impl!(u32);
+str_impl!(u64);
+str_impl!(usize);
 
 // &str / String
 impl<W> WCodec<&str, &mut W> for Zenoh080
@@ -130,7 +210,8 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &str) -> Self::Output {
-        self.write(&mut *writer, x.as_bytes())
+        let zcodec = Zenoh080Bounded::<usize>::new();
+        zcodec.write(&mut *writer, x)
     }
 }
 
@@ -141,7 +222,8 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &String) -> Self::Output {
-        self.write(&mut *writer, x.as_str())
+        let zcodec = Zenoh080Bounded::<usize>::new();
+        zcodec.write(&mut *writer, x)
     }
 }
 
@@ -152,7 +234,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<String, Self::Error> {
-        let vec: Vec<u8> = self.read(&mut *reader)?;
-        String::from_utf8(vec).map_err(|_| DidntRead)
+        let zcodec = Zenoh080Bounded::<usize>::new();
+        zcodec.read(&mut *reader)
     }
 }
