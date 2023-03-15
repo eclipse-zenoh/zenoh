@@ -40,3 +40,8 @@ pub(crate) mod utils;
 /// Exposes a random Key Expression generator to help with testing.
 #[cfg(feature = "test")]
 pub mod fuzzer;
+
+pub mod format;
+
+#[cfg(all(test, feature = "test"))]
+mod tests;
