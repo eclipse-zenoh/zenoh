@@ -70,7 +70,7 @@ pub mod macro_support {
     /// # Safety
     /// DO NOT USE THIS, EVER
     ///
-    /// This is a support fonction which is only meant to be used through the `zenoh::keformat` macro
+    /// This is a support function which is only meant to be used through the `zenoh::keformat` macro
     pub unsafe fn specs<'s>(this: &KeFormat<'s, Vec<Segment<'s>>>) -> Vec<SegmentBuilder> {
         let segments = this.storage.segments();
         if segments.is_empty() {
@@ -100,7 +100,7 @@ pub mod macro_support {
     /// # Safety
     /// DO NOT USE THIS, EVER
     ///
-    /// This is a support fonction which is only meant to be used through the `zenoh::keformat` macro
+    /// This is a support function which is only meant to be used through the `zenoh::keformat` macro
     pub const unsafe fn const_new<const N: usize>(
         source: &'static str,
         segments: [SegmentBuilder; N],

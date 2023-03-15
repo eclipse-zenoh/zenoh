@@ -88,7 +88,7 @@ use prelude::*;
 use scouting::ScoutBuilder;
 use std::future::Ready;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-pub use zenoh_macros::{define_format, keformat, kewrite};
+pub use zenoh_macros::{kedefine, keformat, kewrite};
 use zenoh_result::{zerror, ZResult};
 
 /// A zenoh error.
