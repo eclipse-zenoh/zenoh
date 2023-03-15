@@ -28,7 +28,7 @@ use std::time::Duration;
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::{
     core::{Field, Resolution, ZenohId},
-    transport::{uSN, Close, TransportMessage},
+    transport::{Close, TransportMessage, TransportSn},
 };
 use zenoh_result::ZResult;
 
@@ -104,16 +104,16 @@ pub trait AcceptFsm {
 /*************************************/
 /*           FUNCTIONS               */
 /*************************************/
-pub(super) fn compute_sn(zid1: ZenohId, zid2: ZenohId, resolution: Resolution) -> uSN {
+pub(super) fn compute_sn(zid1: ZenohId, zid2: ZenohId, resolution: Resolution) -> TransportSn {
     // Create a random yet deterministic initial_sn.
     // In case of multilink it's important that the same initial_sn is used for every connection attempt.
     // Instead of storing the state everywhere, we make sure that the we always compute the same initial_sn.
     let mut hasher = Shake128::default();
     hasher.update(zid1.as_slice());
     hasher.update(zid2.as_slice());
-    let mut array = (0 as uSN).to_le_bytes();
+    let mut array = (0 as TransportSn).to_le_bytes();
     hasher.finalize_xof().read(&mut array);
-    uSN::from_le_bytes(array) & seq_num::get_mask(resolution.get(Field::FrameSN))
+    TransportSn::from_le_bytes(array) & seq_num::get_mask(resolution.get(Field::FrameSN))
 }
 
 pub(super) async fn close_link(link: &LinkUnicast, reason: Option<u8>) {

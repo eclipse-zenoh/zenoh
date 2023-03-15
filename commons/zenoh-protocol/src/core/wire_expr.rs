@@ -17,11 +17,12 @@ use alloc::{
     borrow::Cow,
     string::{String, ToString},
 };
-use core::{convert::TryInto, fmt};
+use core::{convert::TryInto, fmt, sync::atomic::AtomicU16};
 use zenoh_result::{bail, ZResult};
 
 /// A numerical Id mapped to a key expression.
 pub type ExprId = u16;
+pub type AtomicExprId = AtomicU16;
 pub const EMPTY_EXPR_ID: ExprId = 0;
 
 /// A zenoh **resource** is represented by a pair composed by a **key** and a

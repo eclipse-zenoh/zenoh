@@ -36,7 +36,7 @@ use zenoh_protocol::{
     transport::{
         fragment::FragmentHeader,
         frame::{self, FrameHeader},
-        TransportMessage,
+        BatchSize, TransportMessage,
     },
     zenoh::ZenohMessage,
 };
@@ -74,7 +74,7 @@ struct StageInOut {
 
 impl StageInOut {
     #[inline]
-    fn notify(&self, bytes: u16) {
+    fn notify(&self, bytes: BatchSize) {
         self.bytes.store(bytes, Ordering::Relaxed);
         if !self.backoff.load(Ordering::Relaxed) {
             let _ = self.n_out_w.try_send(());
@@ -329,7 +329,7 @@ enum Pull {
 #[derive(Clone)]
 struct Backoff {
     retry_time: NanoSeconds,
-    last_bytes: u16,
+    last_bytes: BatchSize,
     bytes: Arc<AtomicU16>,
     backoff: Arc<AtomicBool>,
 }
@@ -475,7 +475,7 @@ impl StageOut {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TransmissionPipelineConf {
     pub(crate) is_streamed: bool,
-    pub(crate) batch_size: u16,
+    pub(crate) batch_size: BatchSize,
     pub(crate) queue_size: [usize; Priority::NUM],
     pub(crate) backoff: Duration,
 }
@@ -484,7 +484,7 @@ impl Default for TransmissionPipelineConf {
     fn default() -> Self {
         Self {
             is_streamed: false,
-            batch_size: u16::MAX,
+            batch_size: BatchSize::MAX,
             queue_size: [1; Priority::NUM],
             backoff: Duration::from_micros(1),
         }
@@ -621,7 +621,7 @@ impl TransmissionPipelineProducer {
 
         // Unblock waiting pullers
         for ig in in_guards.iter_mut() {
-            ig.s_out.notify(u16::MAX);
+            ig.s_out.notify(BatchSize::MAX);
         }
     }
 }
@@ -709,9 +709,8 @@ mod tests {
     };
     use zenoh_codec::{RCodec, Zenoh080};
     use zenoh_protocol::{
-        core::{Channel, CongestionControl, Priority, Reliability},
-        defaults::{BATCH_SIZE, FRAME_SN_RESOLUTION},
-        transport::{Fragment, Frame, TransportBody},
+        core::{Bits, Channel, CongestionControl, Priority, Reliability},
+        transport::{BatchSize, Fragment, Frame, TransportBody, TransportSn},
         zenoh::ZenohMessage,
     };
 
@@ -720,7 +719,7 @@ mod tests {
 
     const CONFIG: TransmissionPipelineConf = TransmissionPipelineConf {
         is_streamed: true,
-        batch_size: BATCH_SIZE,
+        batch_size: BatchSize::MAX,
         queue_size: [1; Priority::NUM],
         backoff: Duration::from_micros(1),
     };
@@ -812,7 +811,7 @@ mod tests {
         }
 
         // Pipeline conduits
-        let tct = TransportConduitTx::make(FRAME_SN_RESOLUTION).unwrap();
+        let tct = TransportConduitTx::make(Bits::from(TransportSn::MAX)).unwrap();
         let conduits = vec![tct];
 
         // Total amount of bytes to send in each test
@@ -898,7 +897,7 @@ mod tests {
         }
 
         // Pipeline
-        let tct = TransportConduitTx::make(FRAME_SN_RESOLUTION).unwrap();
+        let tct = TransportConduitTx::make(Bits::from(TransportSn::MAX)).unwrap();
         let conduits = vec![tct];
         let (producer, mut consumer) =
             TransmissionPipeline::make(TransmissionPipelineConf::default(), conduits.as_slice());
@@ -950,7 +949,7 @@ mod tests {
     #[ignore]
     fn tx_pipeline_thr() {
         // Queue
-        let tct = TransportConduitTx::make(FRAME_SN_RESOLUTION).unwrap();
+        let tct = TransportConduitTx::make(Bits::from(TransportSn::MAX)).unwrap();
         let conduits = vec![tct];
         let (producer, mut consumer) = TransmissionPipeline::make(CONFIG, conduits.as_slice());
         let count = Arc::new(AtomicUsize::new(0));

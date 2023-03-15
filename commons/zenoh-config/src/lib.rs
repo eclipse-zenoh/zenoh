@@ -34,12 +34,14 @@ use std::{
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
 use zenoh_core::zlock;
-use zenoh_protocol::core::{
-    key_expr::OwnedKeyExpr,
-    whatami::{WhatAmIMatcher, WhatAmIMatcherVisitor},
-    Bits,
+use zenoh_protocol::{
+    core::{
+        key_expr::OwnedKeyExpr,
+        whatami::{self, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor},
+        Bits, EndPoint, ZenohId,
+    },
+    transport::BatchSize,
 };
-pub use zenoh_protocol::core::{whatami, EndPoint, Locator, Priority, WhatAmI, ZenohId};
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_util::LibLoader;
 
@@ -241,7 +243,7 @@ validated_struct::validator! {
                     /// Number fo keep-alive messages in a link lease duration (default: 4)
                     keep_alive: Option<usize>,
                     /// Zenoh's MTU equivalent (default: 2^16-1)
-                    batch_size: Option<u16>,
+                    batch_size: Option<BatchSize>,
                     pub queue: QueueConf {
                         /// The size of each priority queue indicates the number of batches a given queue can contain.
                         /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.

@@ -42,7 +42,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicU16, AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -51,18 +51,18 @@ use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
-use zenoh_protocol::transport::uSN;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        Channel, CongestionControl, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
+        AtomicExprId, Channel, CongestionControl, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
     },
-    zenoh::{DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext, SubInfo},
+    zenoh::{
+        AtomicQueryId, DataInfo, QueryBody, QueryId, QueryTarget, QueryableInfo, RoutingContext,
+        SubInfo,
+    },
 };
 use zenoh_result::ZResult;
 use zenoh_util::core::AsyncResolve;
-
-pub type Atomicu64 = AtomicU64;
 
 zconfigurable! {
     pub(crate) static ref API_DATA_RECEPTION_CHANNEL_SIZE: usize = 256;
@@ -74,15 +74,15 @@ zconfigurable! {
 
 pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
-    pub(crate) expr_id_counter: AtomicU16,    // @TODO: manage rollover and uniqueness
-    pub(crate) qid_counter: AtomicU32,
+    pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
+    pub(crate) qid_counter: AtomicQueryId,
     pub(crate) decl_id_counter: AtomicUsize,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
     pub(crate) remote_resources: HashMap<ExprId, Resource>,
     pub(crate) publications: Vec<OwnedKeyExpr>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
-    pub(crate) queries: HashMap<uSN, QueryState>,
+    pub(crate) queries: HashMap<QueryId, QueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
 }
@@ -94,8 +94,8 @@ impl SessionState {
     ) -> SessionState {
         SessionState {
             primitives: None,
-            expr_id_counter: AtomicU16::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
-            qid_counter: AtomicU32::new(0),
+            expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
+            qid_counter: AtomicQueryId::new(0),
             decl_id_counter: AtomicUsize::new(0),
             local_resources: HashMap::new(),
             remote_resources: HashMap::new(),
@@ -1404,7 +1404,7 @@ impl Session {
         local: bool,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: uSN,
+        qid: QueryId,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
         body: Option<QueryBody>,
@@ -1714,7 +1714,7 @@ impl Primitives for Session {
         &self,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: uSN,
+        qid: QueryId,
         target: QueryTarget,
         consolidation: ConsolidationMode,
         body: Option<QueryBody>,
@@ -1740,7 +1740,7 @@ impl Primitives for Session {
 
     fn send_reply_data(
         &self,
-        qid: uSN,
+        qid: QueryId,
         replier_id: ZenohId,
         key_expr: WireExpr,
         data_info: Option<DataInfo>,
@@ -1853,7 +1853,7 @@ impl Primitives for Session {
         }
     }
 
-    fn send_reply_final(&self, qid: uSN) {
+    fn send_reply_final(&self, qid: QueryId) {
         trace!("recv ReplyFinal {:?}", qid);
         let mut state = zwrite!(self.state);
         match state.queries.get_mut(&qid) {

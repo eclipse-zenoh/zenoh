@@ -83,11 +83,11 @@ use git_version::git_version;
 use handlers::DefaultHandler;
 #[zenoh_core::unstable]
 use net::runtime::Runtime;
-use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
 use scouting::ScoutBuilder;
 use std::future::Ready;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::{zerror, ZResult};
 
 /// A zenoh error.

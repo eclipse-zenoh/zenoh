@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::defaults::{FRAME_SN_RESOLUTION, REQUEST_ID_RESOLUTION};
+use crate::{transport::TransportSn, zenoh::QueryId};
 use alloc::string::String;
 use core::{fmt, str::FromStr};
 use zenoh_result::{bail, ZError};
@@ -48,6 +48,30 @@ impl Bits {
             Bits::U32 => Self::S32,
             Bits::U64 => Self::S64,
         }
+    }
+}
+
+impl From<u8> for Bits {
+    fn from(_: u8) -> Self {
+        Self::U8
+    }
+}
+
+impl From<u16> for Bits {
+    fn from(_: u16) -> Self {
+        Self::U16
+    }
+}
+
+impl From<u32> for Bits {
+    fn from(_: u32) -> Self {
+        Self::U32
+    }
+}
+
+impl From<u64> for Bits {
+    fn from(_: u64) -> Self {
+        Self::U64
     }
 }
 
@@ -116,8 +140,8 @@ impl Resolution {
 
 impl Default for Resolution {
     fn default() -> Self {
-        let frame_sn = FRAME_SN_RESOLUTION as u8;
-        let request_id = (REQUEST_ID_RESOLUTION as u8) << 2;
+        let frame_sn = Bits::from(TransportSn::MAX) as u8;
+        let request_id = (Bits::from(QueryId::MAX) as u8) << 2;
         Self(frame_sn | request_id)
     }
 }

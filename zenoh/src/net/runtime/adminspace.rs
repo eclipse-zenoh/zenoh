@@ -24,16 +24,14 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_config::ValidatedMap;
-use zenoh_config::WhatAmI;
-use zenoh_protocol::transport::uSN;
 use zenoh_protocol::{
     core::{
         key_expr::OwnedKeyExpr, Channel, CongestionControl, Encoding, ExprId, KnownEncoding,
-        WireExpr, ZenohId, EMPTY_EXPR_ID,
+        WhatAmI, WireExpr, ZenohId, EMPTY_EXPR_ID,
     },
     zenoh::{
-        ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext,
-        SampleKind, SubInfo,
+        ConsolidationMode, DataInfo, QueryBody, QueryId, QueryTarget, QueryableInfo,
+        RoutingContext, SampleKind, SubInfo,
     },
 };
 use zenoh_result::ZResult;
@@ -367,7 +365,7 @@ impl Primitives for AdminSpace {
         &self,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: uSN,
+        qid: QueryId,
         target: QueryTarget,
         _consolidation: ConsolidationMode,
         _body: Option<QueryBody>,
@@ -474,7 +472,7 @@ impl Primitives for AdminSpace {
 
     fn send_reply_data(
         &self,
-        qid: uSN,
+        qid: QueryId,
         replier_id: ZenohId,
         key_expr: WireExpr,
         info: Option<DataInfo>,
@@ -490,7 +488,7 @@ impl Primitives for AdminSpace {
         );
     }
 
-    fn send_reply_final(&self, qid: uSN) {
+    fn send_reply_final(&self, qid: QueryId) {
         trace!("recv ReplyFinal {:?}", qid);
     }
 

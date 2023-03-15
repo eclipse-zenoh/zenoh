@@ -20,7 +20,9 @@ use zenoh_buffers::{
 use zenoh_codec::{WCodec, Zenoh080};
 use zenoh_protocol::{
     core::Reliability,
-    transport::{fragment::FragmentHeader, frame::FrameHeader, uSN, TransportMessage},
+    transport::{
+        fragment::FragmentHeader, frame::FrameHeader, BatchSize, TransportMessage, TransportSn,
+    },
     zenoh::ZenohMessage,
 };
 
@@ -46,8 +48,8 @@ pub(crate) enum CurrentFrame {
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct LatestSn {
-    pub(crate) reliable: Option<uSN>,
-    pub(crate) best_effort: Option<uSN>,
+    pub(crate) reliable: Option<TransportSn>,
+    pub(crate) best_effort: Option<TransportSn>,
 }
 
 impl LatestSn {
@@ -105,7 +107,7 @@ pub(crate) struct WBatch {
 }
 
 impl WBatch {
-    pub(crate) fn new(size: u16, is_streamed: bool) -> Self {
+    pub(crate) fn new(size: BatchSize, is_streamed: bool) -> Self {
         let mut batch = Self {
             buffer: BBuf::with_capacity(size as usize),
             is_streamed,
@@ -132,10 +134,10 @@ impl WBatch {
 
     /// Get the total number of bytes that have been serialized on the [`SerializationBatch`][SerializationBatch].
     #[inline(always)]
-    pub(crate) fn len(&self) -> u16 {
-        let len = self.buffer.len() as u16;
+    pub(crate) fn len(&self) -> BatchSize {
+        let len = self.buffer.len() as BatchSize;
         if self.is_streamed() {
-            len - (LENGTH_BYTES.len() as u16)
+            len - (LENGTH_BYTES.len() as BatchSize)
         } else {
             len
         }

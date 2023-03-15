@@ -11,9 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, transport::uSN, zenoh::DataInfo};
+use crate::{core::WireExpr, zenoh::DataInfo};
 use alloc::string::String;
+use core::sync::atomic::AtomicU32;
 use zenoh_buffers::ZBuf;
+
+/// The resolution of a QueryId
+pub type QueryId = u32;
+pub type AtomicQueryId = AtomicU32;
 
 /// The kind of consolidation.
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
@@ -101,7 +106,7 @@ impl QueryBody {
 pub struct Query {
     pub key: WireExpr<'static>,
     pub parameters: String,
-    pub qid: uSN,
+    pub qid: QueryId,
     pub target: Option<QueryTarget>,
     pub consolidation: ConsolidationMode,
     pub body: Option<QueryBody>,
@@ -130,7 +135,7 @@ impl Query {
             String::new()
         };
 
-        let qid: uSN = rng.gen();
+        let qid: QueryId = rng.gen();
 
         let target = if rng.gen_bool(0.5) {
             let t = [

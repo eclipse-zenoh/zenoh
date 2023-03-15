@@ -18,10 +18,9 @@ use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 use zenoh_buffers::ZBuf;
-use zenoh_protocol::transport::uSN;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr, ZenohId},
-    zenoh::{DataInfo, QueryableInfo, RoutingContext, SubInfo},
+    zenoh::{DataInfo, QueryId, QueryableInfo, RoutingContext, SubInfo},
 };
 use zenoh_sync::get_mut_unchecked;
 
@@ -30,7 +29,7 @@ pub(super) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
 pub(super) type QueryRoute = HashMap<usize, (Direction, zenoh_protocol::core::QueryTarget)>;
 #[cfg(not(feature = "complete_n"))]
-pub(super) type QueryRoute = HashMap<usize, (Direction, uSN)>;
+pub(super) type QueryRoute = HashMap<usize, (Direction, QueryId)>;
 pub(super) struct QueryTargetQabl {
     pub(super) direction: Direction,
     pub(super) complete: u64,

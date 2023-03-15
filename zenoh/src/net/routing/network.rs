@@ -16,10 +16,9 @@ use petgraph::graph::NodeIndex;
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
 use std::convert::TryInto;
 use vec_map::VecMap;
-use zenoh_config::whatami::WhatAmIMatcher;
 use zenoh_link::Locator;
 use zenoh_protocol::{
-    core::{WhatAmI, ZenohId},
+    core::{WhatAmI, WhatAmIMatcher, ZenohId},
     zenoh::{LinkState, ZenohMessage},
 };
 use zenoh_transport::TransportUnicast;

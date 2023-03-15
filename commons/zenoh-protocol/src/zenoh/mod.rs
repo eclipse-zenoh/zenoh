@@ -20,7 +20,6 @@ mod routing;
 mod unit;
 
 use crate::core::{Channel, CongestionControl, Reliability, WireExpr};
-use crate::transport::uSN;
 use alloc::{string::String, vec::Vec};
 use core::fmt;
 pub use data::*;
@@ -280,7 +279,7 @@ impl ZenohMessage {
     pub fn make_query(
         key: WireExpr<'static>,
         parameters: String,
-        qid: uSN,
+        qid: QueryId,
         target: Option<QueryTarget>,
         consolidation: ConsolidationMode,
         body: Option<QueryBody>,

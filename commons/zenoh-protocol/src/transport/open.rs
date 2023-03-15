@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::transport::uSN;
+use crate::transport::TransportSn;
 use core::time::Duration;
 use zenoh_buffers::ZSlice;
 
@@ -75,7 +75,7 @@ pub mod flag {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenSyn {
     pub lease: Duration,
-    pub initial_sn: uSN,
+    pub initial_sn: TransportSn,
     pub cookie: ZSlice,
     pub ext_qos: Option<ext::QoS>,
     pub ext_shm: Option<ext::Shm>,
@@ -127,7 +127,7 @@ impl OpenSyn {
             Duration::from_millis(rng.gen())
         };
 
-        let initial_sn: uSN = rng.gen();
+        let initial_sn: TransportSn = rng.gen();
         let cookie = ZSlice::rand(rng.gen_range(MIN..=MAX));
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZ64::rand());
@@ -149,7 +149,7 @@ impl OpenSyn {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct OpenAck {
     pub lease: Duration,
-    pub initial_sn: uSN,
+    pub initial_sn: TransportSn,
     pub ext_qos: Option<ext::QoS>,
     pub ext_shm: Option<ext::Shm>,
     pub ext_auth: Option<ext::Auth>,
@@ -170,7 +170,7 @@ impl OpenAck {
             Duration::from_millis(rng.gen())
         };
 
-        let initial_sn: uSN = rng.gen();
+        let initial_sn: TransportSn = rng.gen();
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZ64::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());

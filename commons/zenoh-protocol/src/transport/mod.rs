@@ -30,6 +30,13 @@ pub use init::{InitAck, InitSyn};
 pub use keepalive::KeepAlive;
 pub use open::{OpenAck, OpenSyn};
 
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the length of a message must not exceed 65_535 bytes.
+pub type BatchSize = u16;
+
 pub mod id {
     // pub const JOIN: u8 = 0x01; // For multicast communications only
     pub const INIT: u8 = 0x02; // For unicast communications only
@@ -40,8 +47,8 @@ pub mod id {
     pub const FRAGMENT: u8 = 0x07;
 }
 
-#[allow(non_camel_case_types)]
-pub type uSN = u32;
+pub type TransportSn = u32;
+// pub const TRANSPORT_SN_RESOLUTION: Bits = Bits::U32;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConduitSnList {
@@ -83,8 +90,8 @@ impl fmt::Display for ConduitSnList {
 /// The kind of reliability.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct ConduitSn {
-    pub reliable: uSN,
-    pub best_effort: uSN,
+    pub reliable: TransportSn,
+    pub best_effort: TransportSn,
 }
 
 // Zenoh messages at zenoh-transport level

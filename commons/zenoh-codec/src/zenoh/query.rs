@@ -21,8 +21,7 @@ use zenoh_buffers::{
 use zenoh_protocol::{
     common::imsg,
     core::WireExpr,
-    transport::uSN,
-    zenoh::{zmsg, ConsolidationMode, DataInfo, Query, QueryBody, QueryTarget},
+    zenoh::{zmsg, ConsolidationMode, DataInfo, Query, QueryBody, QueryId, QueryTarget},
 };
 
 // QueryTarget
@@ -203,7 +202,7 @@ where
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
 
         let parameters: String = self.codec.read(&mut *reader)?;
-        let qid: uSN = self.codec.read(&mut *reader)?;
+        let qid: QueryId = self.codec.read(&mut *reader)?;
         let target = if imsg::has_flag(self.header, zmsg::flag::T) {
             let qt: QueryTarget = self.codec.read(&mut *reader)?;
             Some(qt)

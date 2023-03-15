@@ -22,21 +22,22 @@ use crate::{
 use async_trait::async_trait;
 use std::time::Duration;
 use zenoh_buffers::ZSlice;
-use zenoh_config::{WhatAmI, ZenohId};
 #[cfg(feature = "transport_auth")]
 use zenoh_core::zasynclock;
 use zenoh_core::{zcondfeat, zerror};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
-use zenoh_protocol::core::{Field, Resolution};
-use zenoh_protocol::transport::{
-    close, uSN, Close, InitSyn, OpenSyn, TransportBody, TransportMessage,
+use zenoh_protocol::{
+    core::{Field, Resolution, WhatAmI, ZenohId},
+    transport::{
+        close, BatchSize, Close, InitSyn, OpenSyn, TransportBody, TransportMessage, TransportSn,
+    },
 };
 use zenoh_result::ZResult;
 
 type OpenError = (zenoh_result::Error, Option<u8>);
 
 struct StateZenoh {
-    batch_size: u16,
+    batch_size: BatchSize,
     resolution: Resolution,
 }
 
@@ -78,13 +79,13 @@ struct SendOpenSynIn {
 }
 
 struct SendOpenSynOut {
-    mine_initial_sn: uSN,
+    mine_initial_sn: TransportSn,
 }
 
 // OpenAck
 struct RecvOpenAckOut {
     other_lease: Duration,
-    other_initial_sn: uSN,
+    other_initial_sn: TransportSn,
 }
 
 // FSM

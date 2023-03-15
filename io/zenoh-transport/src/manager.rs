@@ -26,7 +26,7 @@ use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
 use zenoh_protocol::{
     core::{EndPoint, Field, Locator, Priority, Resolution, WhatAmI, ZenohId},
-    defaults::BATCH_SIZE,
+    transport::BatchSize,
     VERSION,
 };
 use zenoh_result::{bail, ZResult};
@@ -279,7 +279,7 @@ impl Default for TransportManagerBuilder {
             zid: ZenohId::rand(),
             whatami: zenoh_config::defaults::mode,
             resolution: Resolution::default(),
-            batch_size: BATCH_SIZE,
+            batch_size: BatchSize::MAX,
             queue_size: queue.size,
             queue_backoff: Duration::from_nanos(backoff),
             defrag_buff_size: link_rx.max_message_size().unwrap(),

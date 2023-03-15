@@ -19,9 +19,9 @@ pub use mux::*;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
     core::{Channel, CongestionControl, ExprId, WireExpr, ZenohId},
-    transport::uSN,
     zenoh::{
-        ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext, SubInfo,
+        ConsolidationMode, DataInfo, QueryBody, QueryId, QueryTarget, QueryableInfo,
+        RoutingContext, SubInfo,
     },
 };
 
@@ -63,7 +63,7 @@ pub trait Primitives: Send + Sync {
         &self,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: uSN,
+        qid: QueryId,
         target: QueryTarget,
         consolidation: ConsolidationMode,
         body: Option<QueryBody>,
@@ -72,14 +72,14 @@ pub trait Primitives: Send + Sync {
 
     fn send_reply_data(
         &self,
-        qid: uSN,
+        qid: QueryId,
         replier_id: ZenohId,
         key_expr: WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
     );
 
-    fn send_reply_final(&self, qid: uSN);
+    fn send_reply_final(&self, qid: QueryId);
 
     fn send_pull(
         &self,
@@ -140,7 +140,7 @@ impl Primitives for DummyPrimitives {
         &self,
         _key_expr: &WireExpr,
         _parameters: &str,
-        _qid: uSN,
+        _qid: QueryId,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
         _body: Option<QueryBody>,
@@ -149,14 +149,14 @@ impl Primitives for DummyPrimitives {
     }
     fn send_reply_data(
         &self,
-        _qid: uSN,
+        _qid: QueryId,
         _replier_id: ZenohId,
         _key_expr: WireExpr,
         _info: Option<DataInfo>,
         _payload: ZBuf,
     ) {
     }
-    fn send_reply_final(&self, _qid: uSN) {}
+    fn send_reply_final(&self, _qid: QueryId) {}
     fn send_pull(
         &self,
         _is_final: bool,

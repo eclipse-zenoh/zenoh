@@ -33,7 +33,7 @@ use zenoh_protocol::{
     core::{Field, Resolution, WhatAmI, ZenohId},
     transport::{
         close::{self, Close},
-        uSN, InitAck, OpenAck, TransportBody, TransportMessage,
+        BatchSize, InitAck, OpenAck, TransportBody, TransportMessage, TransportSn,
     },
 };
 use zenoh_result::ZResult;
@@ -41,7 +41,7 @@ use zenoh_result::ZResult;
 pub(super) type AcceptError = (zenoh_result::Error, Option<u8>);
 
 struct StateZenoh {
-    batch_size: u16,
+    batch_size: BatchSize,
     resolution: Resolution,
 }
 
@@ -89,7 +89,7 @@ struct RecvOpenSynOut {
     other_zid: ZenohId,
     other_whatami: WhatAmI,
     other_lease: Duration,
-    other_initial_sn: uSN,
+    other_initial_sn: TransportSn,
 }
 
 // OpenAck

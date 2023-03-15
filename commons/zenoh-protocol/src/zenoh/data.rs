@@ -13,7 +13,8 @@
 //
 use crate::{
     core::{CongestionControl, Encoding, Timestamp, WireExpr, ZenohId},
-    transport::uSN,
+    transport::TransportSn,
+    zenoh::QueryId,
 };
 use core::{convert::TryFrom, fmt};
 use zenoh_buffers::ZBuf;
@@ -75,13 +76,13 @@ pub struct ReplierInfo {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplyContext {
-    pub qid: uSN,
+    pub qid: QueryId,
     pub replier: Option<ReplierInfo>,
 }
 
 impl ReplyContext {
     // Note: id replier_id=None flag F is set, meaning it's a REPLY_FINAL
-    pub fn new(qid: uSN, replier: Option<ReplierInfo>) -> Self {
+    pub fn new(qid: QueryId, replier: Option<ReplierInfo>) -> Self {
         Self { qid, replier }
     }
 
@@ -97,7 +98,7 @@ impl ReplyContext {
 
         let mut rng = rand::thread_rng();
 
-        let qid: uSN = rng.gen();
+        let qid: QueryId = rng.gen();
         let replier = if rng.gen_bool(0.5) {
             Some(ReplierInfo {
                 id: ZenohId::default(),
@@ -154,7 +155,7 @@ pub struct DataInfo {
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
     pub source_id: Option<ZenohId>,
-    pub source_sn: Option<uSN>,
+    pub source_sn: Option<TransportSn>,
 }
 
 impl DataInfo {

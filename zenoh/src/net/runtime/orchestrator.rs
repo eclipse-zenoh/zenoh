@@ -21,10 +21,10 @@ use std::time::Duration;
 use zenoh_buffers::reader::DidntRead;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_config::{unwrap_or_default, EndPoint, ModeDependent};
+use zenoh_config::{unwrap_or_default, ModeDependent};
 use zenoh_link::Locator;
 use zenoh_protocol::{
-    core::{whatami::WhatAmIMatcher, WhatAmI, ZenohId},
+    core::{whatami::WhatAmIMatcher, EndPoint, WhatAmI, ZenohId},
     scouting::{Hello, Scout, ScoutingBody, ScoutingMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};

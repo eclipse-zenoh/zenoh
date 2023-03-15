@@ -17,8 +17,8 @@ use crate::net::runtime::{orchestrator::Loop, Runtime};
 use async_std::net::UdpSocket;
 use futures::StreamExt;
 use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};
-use zenoh_config::whatami::WhatAmIMatcher;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::ZResult;
 
 /// Constants and helpers for zenoh `whatami` flags.

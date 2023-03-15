@@ -34,7 +34,7 @@ use zenoh_core::zcondfeat;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Bits, WhatAmI, ZenohId},
-    transport::{close, uSN},
+    transport::{close, TransportSn},
     zenoh::ZenohMessage,
 };
 use zenoh_result::{zerror, ZResult};
@@ -88,7 +88,7 @@ pub(crate) struct TransportConfigUnicast {
     pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: Bits,
-    pub(crate) tx_initial_sn: uSN,
+    pub(crate) tx_initial_sn: TransportSn,
     pub(crate) is_qos: bool,
     #[cfg(feature = "transport_multilink")]
     pub(crate) multilink: Option<ZPublicKey>,

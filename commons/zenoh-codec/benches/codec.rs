@@ -23,8 +23,7 @@ use zenoh_buffers::{
 use zenoh_codec::*;
 use zenoh_protocol::{
     core::{CongestionControl, Reliability},
-    defaults::BATCH_SIZE,
-    transport::{uSN, Frame, FrameHeader},
+    transport::{BatchSize, Frame, FrameHeader, TransportSn},
     zenoh::Data,
 };
 
@@ -43,7 +42,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     // u64 BBuf
-    let mut buff = BBuf::with_capacity(BATCH_SIZE as usize);
+    let mut buff = BBuf::with_capacity(BatchSize::MAX as usize);
     let codec = Zenoh080::new();
     c.bench_function("u64 BBuf", |b| {
         b.iter(|| {
@@ -74,7 +73,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let frame = FrameHeader {
         reliability: Reliability::default(),
-        sn: uSN::MIN,
+        sn: TransportSn::MIN,
         ext_qos: zenoh_protocol::transport::frame::ext::QoS::default(),
     };
 
@@ -111,7 +110,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let frame = FrameHeader {
         reliability: Reliability::default(),
-        sn: uSN::MIN,
+        sn: TransportSn::MIN,
         ext_qos: zenoh_protocol::transport::frame::ext::QoS::default(),
     };
 
@@ -143,7 +142,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     let frame = FrameHeader {
         reliability: Reliability::default(),
-        sn: uSN::MIN,
+        sn: TransportSn::MIN,
         ext_qos: zenoh_protocol::transport::frame::ext::QoS::default(),
     };
 

@@ -11,15 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh_protocol::{core::Bits, transport::uSN};
+use zenoh_protocol::{core::Bits, transport::TransportSn};
 use zenoh_result::{bail, ZResult};
 
-const RES_U8: uSN = (u8::MAX >> 1) as uSN; // 1 byte max when encoded
-const RES_U16: uSN = (u16::MAX >> 2) as uSN; // 2 bytes max when encoded
-const RES_U32: uSN = (u32::MAX >> 4) as uSN; // 4 bytes max when encoded
-const RES_U64: uSN = (u64::MAX >> 1) as uSN; // 9 bytes max when encoded
+const RES_U8: TransportSn = (u8::MAX >> 1) as TransportSn; // 1 byte max when encoded
+const RES_U16: TransportSn = (u16::MAX >> 2) as TransportSn; // 2 bytes max when encoded
+const RES_U32: TransportSn = (u32::MAX >> 4) as TransportSn; // 4 bytes max when encoded
+const RES_U64: TransportSn = (u64::MAX >> 1) as TransportSn; // 9 bytes max when encoded
 
-pub(crate) fn get_mask(resolution: Bits) -> uSN {
+pub(crate) fn get_mask(resolution: Bits) -> TransportSn {
     match resolution {
         Bits::U8 => RES_U8,
         Bits::U16 => RES_U16,
@@ -39,8 +39,8 @@ pub(crate) fn get_mask(resolution: Bits) -> uSN {
 ///
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct SeqNum {
-    value: uSN,
-    mask: uSN,
+    value: TransportSn,
+    mask: TransportSn,
 }
 
 impl SeqNum {
@@ -60,22 +60,22 @@ impl SeqNum {
     /// This funtion will panic if `value` is out of bound w.r.t. `resolution`. That is if
     /// `value` is greater or equal than `resolution`.
     ///
-    pub(crate) fn make(value: uSN, resolution: Bits) -> ZResult<SeqNum> {
+    pub(crate) fn make(value: TransportSn, resolution: Bits) -> ZResult<SeqNum> {
         let mask = get_mask(resolution);
         let mut sn = SeqNum { value: 0, mask };
         sn.set(value)?;
         Ok(sn)
     }
 
-    pub(crate) fn get(&self) -> uSN {
+    pub(crate) fn get(&self) -> TransportSn {
         self.value
     }
 
-    pub(crate) fn resolution(&self) -> uSN {
+    pub(crate) fn resolution(&self) -> TransportSn {
         self.mask
     }
 
-    pub(crate) fn set(&mut self, value: uSN) -> ZResult<()> {
+    pub(crate) fn set(&mut self, value: TransportSn) -> ZResult<()> {
         if (value & !self.mask) != 0 {
             bail!("The sequence number value must be smaller than the resolution");
         }
@@ -107,7 +107,7 @@ impl SeqNum {
     /// # Arguments
     ///
     /// * `value` -  The sequence number which should be checked for precedence relation.
-    pub(crate) fn precedes(&self, value: uSN) -> ZResult<bool> {
+    pub(crate) fn precedes(&self, value: TransportSn) -> ZResult<bool> {
         if (value & !self.mask) != 0 {
             bail!("The sequence number value must be smaller than the resolution");
         }
@@ -117,7 +117,7 @@ impl SeqNum {
 
     /// Computes the modulo gap between two sequence numbers.
     #[cfg(test)] // @TODO: remove #[cfg(test)] once reliability is implemented
-    pub(crate) fn gap(&self, value: uSN) -> ZResult<uSN> {
+    pub(crate) fn gap(&self, value: TransportSn) -> ZResult<TransportSn> {
         if (value & !self.mask) != 0 {
             bail!("The sequence number value must be smaller than the resolution");
         }
@@ -145,23 +145,23 @@ impl SeqNumGenerator {
     /// This funtion will panic if `value` is out of bound w.r.t. `resolution`. That is if
     /// `value` is greater or equal than `resolution`.
     ///
-    pub(crate) fn make(initial_sn: uSN, resolution: Bits) -> ZResult<SeqNumGenerator> {
+    pub(crate) fn make(initial_sn: TransportSn, resolution: Bits) -> ZResult<SeqNumGenerator> {
         let sn = SeqNum::make(initial_sn, resolution)?;
         Ok(SeqNumGenerator(sn))
     }
 
-    pub(crate) fn now(&mut self) -> uSN {
+    pub(crate) fn now(&mut self) -> TransportSn {
         self.0.get()
     }
 
     /// Generates the next sequence number
-    pub(crate) fn get(&mut self) -> uSN {
+    pub(crate) fn get(&mut self) -> TransportSn {
         let now = self.now();
         self.0.increment();
         now
     }
 
-    pub(crate) fn set(&mut self, sn: uSN) -> ZResult<()> {
+    pub(crate) fn set(&mut self, sn: TransportSn) -> ZResult<()> {
         self.0.set(sn)
     }
 }
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn sn_set() {
-        let mask = (u8::MAX >> 1) as uSN;
+        let mask = (u8::MAX >> 1) as TransportSn;
 
         let mut sn0a = SeqNum::make(0, Bits::U8).unwrap();
         assert_eq!(sn0a.get(), 0);
@@ -193,7 +193,7 @@ mod tests {
 
     #[test]
     fn sn_gap() {
-        let mask = (u8::MAX >> 1) as uSN;
+        let mask = (u8::MAX >> 1) as TransportSn;
         let mut sn0a = SeqNum::make(0, Bits::U8).unwrap();
 
         assert_eq!(sn0a.gap(0).unwrap(), 0);
@@ -208,7 +208,7 @@ mod tests {
 
     #[test]
     fn sn_precedence() {
-        let mask = (u8::MAX >> 1) as uSN;
+        let mask = (u8::MAX >> 1) as TransportSn;
 
         let sn0a = SeqNum::make(0, Bits::U8).unwrap();
         assert!(sn0a.precedes(1).unwrap());
@@ -222,7 +222,7 @@ mod tests {
 
     #[test]
     fn sn_generation() {
-        let mask = (u8::MAX >> 1) as uSN;
+        let mask = (u8::MAX >> 1) as TransportSn;
         let mut sn0 = SeqNumGenerator::make(mask, Bits::U8).unwrap();
         let mut sn1 = SeqNumGenerator::make(5, Bits::U8).unwrap();
 

@@ -24,7 +24,7 @@ use zenoh_protocol::{
     core::{Priority, Reliability},
     transport::{
         frame::{ext, flag, Frame, FrameHeader},
-        id, uSN,
+        id, TransportSn,
     },
     zenoh::ZenohMessage,
 };
@@ -134,7 +134,7 @@ where
             true => Reliability::Reliable,
             false => Reliability::BestEffort,
         };
-        let sn: uSN = self.codec.read(&mut *reader)?;
+        let sn: TransportSn = self.codec.read(&mut *reader)?;
 
         // Extensions
         let mut qos = ext::QoS::default();

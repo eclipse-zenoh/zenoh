@@ -17,11 +17,11 @@ use std::fmt;
 use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_buffers::ZBuf;
-use zenoh_protocol::transport::uSN;
 use zenoh_protocol::{
     core::{Channel, CongestionControl, ExprId, WhatAmI, WireExpr, ZenohId},
     zenoh::{
-        ConsolidationMode, DataInfo, QueryBody, QueryTarget, QueryableInfo, RoutingContext, SubInfo,
+        ConsolidationMode, DataInfo, QueryBody, QueryId, QueryTarget, QueryableInfo,
+        RoutingContext, SubInfo,
     },
 };
 use zenoh_transport::Primitives;
@@ -38,8 +38,8 @@ pub struct FaceState {
     pub(super) remote_subs: HashSet<Arc<Resource>>,
     pub(super) local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
     pub(super) remote_qabls: HashSet<Arc<Resource>>,
-    pub(super) next_qid: uSN,
-    pub(super) pending_queries: HashMap<uSN, Arc<Query>>,
+    pub(super) next_qid: QueryId,
+    pub(super) pending_queries: HashMap<QueryId, Arc<Query>>,
 }
 
 impl FaceState {
@@ -358,7 +358,7 @@ impl Primitives for Face {
         &self,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: uSN,
+        qid: QueryId,
         target: QueryTarget,
         consolidation: ConsolidationMode,
         body: Option<QueryBody>,
@@ -379,7 +379,7 @@ impl Primitives for Face {
 
     fn send_reply_data(
         &self,
-        qid: uSN,
+        qid: QueryId,
         replier_id: ZenohId,
         key_expr: WireExpr,
         info: Option<DataInfo>,
@@ -396,7 +396,7 @@ impl Primitives for Face {
         );
     }
 
-    fn send_reply_final(&self, qid: uSN) {
+    fn send_reply_final(&self, qid: QueryId) {
         route_send_reply_final(&self.tables, &mut self.state.clone(), qid);
     }
 

@@ -20,7 +20,7 @@ use zenoh_protocol::{
     common::{imsg, ZExtUnknown},
     core::Reliability,
     transport::{
-        fragment::{ext, flag, uSN, Fragment, FragmentHeader},
+        fragment::{ext, flag, Fragment, FragmentHeader, TransportSn},
         id,
     },
 };
@@ -87,7 +87,7 @@ where
             false => Reliability::BestEffort,
         };
         let more = imsg::has_flag(self.header, flag::M);
-        let sn: uSN = self.codec.read(&mut *reader)?;
+        let sn: TransportSn = self.codec.read(&mut *reader)?;
 
         // Extensions
         let mut qos = ext::QoS::default();

@@ -26,10 +26,9 @@ use std::sync::{Arc, Weak};
 use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 use uhlc::HLC;
-use zenoh_config::whatami::WhatAmIMatcher;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{ExprId, WhatAmI, ZenohId},
+    core::{ExprId, WhatAmI, WhatAmIMatcher, ZenohId},
     zenoh::{ZenohBody, ZenohMessage},
 };
 use zenoh_transport::{DeMux, Mux, Primitives, TransportPeerEventHandler, TransportUnicast};

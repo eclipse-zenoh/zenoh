@@ -23,7 +23,7 @@ use zenoh_protocol::{
     transport::{
         id,
         open::{ext, flag, OpenAck, OpenSyn},
-        uSN,
+        TransportSn,
     },
 };
 
@@ -111,7 +111,7 @@ where
         } else {
             Duration::from_millis(lease)
         };
-        let initial_sn: uSN = self.codec.read(&mut *reader)?;
+        let initial_sn: TransportSn = self.codec.read(&mut *reader)?;
         let cookie: ZSlice = self.codec.read(&mut *reader)?;
 
         // Extensions
@@ -249,7 +249,7 @@ where
         } else {
             Duration::from_millis(lease)
         };
-        let initial_sn: uSN = self.codec.read(&mut *reader)?;
+        let initial_sn: TransportSn = self.codec.read(&mut *reader)?;
 
         // Extensions
         let mut ext_qos = None;
