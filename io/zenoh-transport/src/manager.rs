@@ -106,7 +106,7 @@ pub struct TransportManagerConfig {
     pub endpoint: HashMap<String, Properties>,
     pub handler: Arc<dyn TransportEventHandler>,
     pub tx_threads: usize,
-    pub protocols: Option<Vec<String>>,
+    pub protocols: Vec<String>,
 }
 
 pub struct TransportManagerState {
@@ -278,7 +278,12 @@ impl TransportManagerBuilder {
             endpoint: self.endpoint,
             handler,
             tx_threads: self.tx_threads,
-            protocols: self.protocols,
+            protocols: self.protocols.unwrap_or_else(|| {
+                zenoh_link::PROTOCOLS
+                    .iter()
+                    .map(|x| x.to_string())
+                    .collect()
+            }),
         };
 
         let state = TransportManagerState {
@@ -414,15 +419,18 @@ impl TransportManager {
     /*              LISTENER             */
     /*************************************/
     pub async fn add_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
-        if let Some(protocols) = self.config.protocols.as_ref() {
-            let p = endpoint.protocol();
-            if !protocols.iter().any(|x| x.as_str() == p.as_str()) {
-                bail!(
-                    "Unauthorized protocol: {}. Whitelisted protocols are: {:?}",
-                    p,
-                    protocols
-                );
-            }
+        let p = endpoint.protocol();
+        if !self
+            .config
+            .protocols
+            .iter()
+            .any(|x| x.as_str() == p.as_str())
+        {
+            bail!(
+                "Unsupported protocol: {}. Supported protocols are: {:?}",
+                p,
+                self.config.protocols
+            );
         }
 
         if self
@@ -474,15 +482,18 @@ impl TransportManager {
     }
 
     pub async fn open_transport(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
-        if let Some(protocols) = self.config.protocols.as_ref() {
-            let p = endpoint.protocol();
-            if !protocols.iter().any(|x| x.as_str() == p.as_str()) {
-                bail!(
-                    "Unauthorized protocol: {}. Whitelisted protocols are: {:?}",
-                    p,
-                    protocols
-                );
-            }
+        let p = endpoint.protocol();
+        if !self
+            .config
+            .protocols
+            .iter()
+            .any(|x| x.as_str() == p.as_str())
+        {
+            bail!(
+                "Unsupported protocol: {}. Supported protocols are: {:?}",
+                p,
+                self.config.protocols
+            );
         }
 
         if self
