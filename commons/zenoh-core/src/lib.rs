@@ -21,7 +21,6 @@ pub use lazy_static::lazy_static;
 pub mod macros;
 pub use macros::*;
 use std::future::{Future, Ready};
-pub use zenoh_macros::*;
 
 // Re-exports after moving ZError/ZResult to zenoh-result
 pub use zenoh_result::{bail, to_zerror, zerror};

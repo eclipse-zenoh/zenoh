@@ -167,7 +167,7 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, Handler> {
 
     /// Restrict the matching publications that will be receive by this [`Subscriber`]
     /// to the ones that have the given [`Locality`](zenoh::prelude::Locality).
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;

@@ -14,17 +14,17 @@
 
 //! Sample primitives
 use crate::buffers::ZBuf;
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 use crate::prelude::ZenohId;
 use crate::prelude::{KeyExpr, SampleKind, Value};
 use crate::time::{new_reception_timestamp, Timestamp};
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 use serde::Serialize;
 use std::convert::TryInto;
 use zenoh_protocol::zenoh::{DataInfo, SourceSn};
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 #[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
 pub enum Locality {
     SessionLocal,
@@ -41,7 +41,7 @@ pub(crate) enum Locality {
 }
 
 /// Informations on the source of a zenoh [`Sample`].
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
     /// The [`ZenohId`] of the zenoh instance that published the concerned [`Sample`].
@@ -56,7 +56,7 @@ fn source_info_stack_size() {
     assert_eq!(std::mem::size_of::<SourceInfo>(), 16 * 2);
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl SourceInfo {
     pub(crate) fn empty() -> Self {
         SourceInfo {
@@ -66,7 +66,7 @@ impl SourceInfo {
     }
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl From<DataInfo> for SourceInfo {
     fn from(data_info: DataInfo) -> Self {
         SourceInfo {
@@ -76,7 +76,7 @@ impl From<DataInfo> for SourceInfo {
     }
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl From<Option<DataInfo>> for SourceInfo {
     fn from(data_info: Option<DataInfo>) -> Self {
         match data_info {
@@ -214,7 +214,7 @@ impl Sample {
     }
 
     /// Sets the source info of this Sample.
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     #[inline]
     pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
         self.source_info = source_info;

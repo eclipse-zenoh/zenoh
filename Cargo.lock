@@ -3816,6 +3816,7 @@ dependencies = [
  "zenoh-core",
  "zenoh-crypto",
  "zenoh-link",
+ "zenoh-macros",
  "zenoh-plugin-trait",
  "zenoh-protocol",
  "zenoh-result",
@@ -3874,7 +3875,6 @@ version = "0.8.0-rc"
 dependencies = [
  "async-std",
  "lazy_static",
- "zenoh-macros",
  "zenoh-result",
 ]
 
@@ -3922,6 +3922,7 @@ dependencies = [
  "serde",
  "zenoh",
  "zenoh-core",
+ "zenoh-macros",
  "zenoh-result",
  "zenoh-sync",
  "zenoh-util",
@@ -4104,6 +4105,7 @@ dependencies = [
  "rustc_version 0.4.0",
  "syn",
  "unzip-n",
+ "zenoh-protocol",
 ]
 
 [[package]]
@@ -4186,7 +4188,6 @@ dependencies = [
  "uuid",
  "zenoh-buffers",
  "zenoh-collections",
- "zenoh-protocol",
  "zenoh-result",
 ]
 
@@ -4284,7 +4285,6 @@ dependencies = [
  "zenoh-core",
  "zenoh-protocol",
  "zenoh-result",
- "zenoh-util",
 ]
 
 [[package]]
