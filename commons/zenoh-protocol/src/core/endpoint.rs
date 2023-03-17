@@ -14,7 +14,7 @@
 use super::locator::*;
 use alloc::{borrow::ToOwned, format, string::String, vec::Vec};
 use core::{convert::TryFrom, fmt, str::FromStr};
-use zenoh_result::{zerror, Error as ZError, ZResult};
+use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 // Parsing chars
 pub const PROTO_SEPARATOR: char = '/';
@@ -448,6 +448,11 @@ impl EndPoint {
         let a: &str = address.as_ref();
         let m: &str = metadata.as_ref();
         let c: &str = config.as_ref();
+
+        let len = p.as_bytes().len() + a.as_bytes().len() + m.as_bytes().len();
+        if len > u8::MAX as usize {
+            bail!("Endpoint too big: {} bytes. Max: {} bytes. ", len, u8::MAX);
+        }
 
         let s = match (m.is_empty(), c.is_empty()) {
             (true, true) => format!("{p}{PROTO_SEPARATOR}{a}"),

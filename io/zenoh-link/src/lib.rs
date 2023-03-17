@@ -192,5 +192,3 @@ impl LinkManagerBuilderMulticast {
         }
     }
 }
-
-pub const WBUF_SIZE: usize = 64;

@@ -28,7 +28,7 @@ use zenoh_protocol::{
         key_expr::OwnedKeyExpr, Channel, CongestionControl, Priority, Reliability, WhatAmI,
         WireExpr, ZenohId,
     },
-    zenoh::{DataInfo, RoutingContext, SubInfo, SubMode},
+    zenoh::{DataInfo, PullId, RoutingContext, SubInfo, SubMode},
 };
 use zenoh_sync::get_mut_unchecked;
 
@@ -1450,8 +1450,8 @@ pub fn pull_data(
     face: &Arc<FaceState>,
     _is_final: bool,
     expr: &WireExpr,
-    _pull_id: u64,
-    _max_samples: &Option<u64>,
+    _pull_id: PullId,
+    _max_samples: &Option<u16>,
 ) {
     let tables = zread!(tables_ref);
     match tables.get_mapping(face, &expr.scope) {

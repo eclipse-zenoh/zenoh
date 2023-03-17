@@ -24,7 +24,7 @@ use zenoh_protocol::{
         ZenohId, EMPTY_EXPR_ID,
     },
     zenoh::{
-        ConsolidationMode, DataInfo, QueryBody, QueryId, QueryTarget, QueryableInfo,
+        ConsolidationMode, DataInfo, PullId, QueryBody, QueryId, QueryTarget, QueryableInfo,
         RoutingContext, SubInfo, SubMode,
     },
 };
@@ -485,8 +485,8 @@ impl Primitives for ClientPrimitives {
         &self,
         _is_final: bool,
         _key_expr: &WireExpr,
-        _pull_id: u64,
-        _max_samples: &Option<u64>,
+        _pull_id: PullId,
+        _max_samples: &Option<u16>,
     ) {
     }
 

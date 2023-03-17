@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use alloc::string::String;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -26,8 +26,9 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Encoding) -> Self::Output {
-        self.write(&mut *writer, *x.prefix() as u64)?;
-        self.write(&mut *writer, x.suffix())?;
+        let zodec = Zenoh080Bounded::<u8>::new();
+        zodec.write(&mut *writer, *x.prefix() as u8)?;
+        zodec.write(&mut *writer, x.suffix())?;
         Ok(())
     }
 }
@@ -39,9 +40,10 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Encoding, Self::Error> {
-        let prefix: u64 = self.read(&mut *reader)?;
-        let suffix: String = self.read(&mut *reader)?;
-        let encoding = Encoding::new(prefix, suffix).ok_or(DidntRead)?;
+        let zodec = Zenoh080Bounded::<u8>::new();
+        let prefix: u8 = zodec.read(&mut *reader)?;
+        let suffix: String = zodec.read(&mut *reader)?;
+        let encoding = Encoding::new(prefix, suffix).map_err(|_| DidntRead)?;
         Ok(encoding)
     }
 }

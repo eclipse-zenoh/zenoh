@@ -57,8 +57,8 @@ use zenoh_protocol::{
         AtomicExprId, Channel, CongestionControl, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
     },
     zenoh::{
-        AtomicQueryId, DataInfo, QueryBody, QueryId, QueryTarget, QueryableInfo, RoutingContext,
-        SubInfo,
+        AtomicQueryId, DataInfo, PullId, QueryBody, QueryId, QueryTarget, QueryableInfo,
+        RoutingContext, SubInfo,
     },
 };
 use zenoh_result::ZResult;
@@ -1880,8 +1880,8 @@ impl Primitives for Session {
         &self,
         _is_final: bool,
         _key_expr: &WireExpr,
-        _pull_id: u64,
-        _max_samples: &Option<u64>,
+        _pull_id: PullId,
+        _max_samples: &Option<u16>,
     ) {
         trace!(
             "recv Pull {:?} {:?} {:?} {:?}",

@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -23,6 +23,46 @@ use {
     zenoh_shm::SharedMemoryBufInfoSerialized,
 };
 
+// ZBuf bounded
+macro_rules! zbuf_impl {
+    ($bound:ty) => {
+        impl<W> WCodec<&ZBuf, &mut W> for Zenoh080Bounded<$bound>
+        where
+            W: Writer,
+        {
+            type Output = Result<(), DidntWrite>;
+
+            fn write(self, writer: &mut W, x: &ZBuf) -> Self::Output {
+                self.write(&mut *writer, x.len())?;
+                for s in x.zslices() {
+                    writer.write_zslice(s)?;
+                }
+                Ok(())
+            }
+        }
+
+        impl<R> RCodec<ZBuf, &mut R> for Zenoh080Bounded<$bound>
+        where
+            R: Reader,
+        {
+            type Error = DidntRead;
+
+            fn read(self, reader: &mut R) -> Result<ZBuf, Self::Error> {
+                let len: usize = self.read(&mut *reader)?;
+                let mut zbuf = ZBuf::empty();
+                reader.read_zslices(len, |s| zbuf.push_zslice(s))?;
+                Ok(zbuf)
+            }
+        }
+    };
+}
+
+zbuf_impl!(u8);
+zbuf_impl!(u16);
+zbuf_impl!(u32);
+zbuf_impl!(u64);
+zbuf_impl!(usize);
+
 // ZBuf flat
 impl<W> WCodec<&ZBuf, &mut W> for Zenoh080
 where
@@ -31,11 +71,8 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &ZBuf) -> Self::Output {
-        self.write(&mut *writer, x.len())?;
-        for s in x.zslices() {
-            writer.write_zslice(s)?;
-        }
-        Ok(())
+        let zodec = Zenoh080Bounded::<usize>::new();
+        zodec.write(&mut *writer, x)
     }
 }
 
@@ -46,10 +83,8 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ZBuf, Self::Error> {
-        let len: usize = self.read(&mut *reader)?;
-        let mut zbuf = ZBuf::empty();
-        reader.read_zslices(len, |s| zbuf.push_zslice(s))?;
-        Ok(zbuf)
+        let zodec = Zenoh080Bounded::<usize>::new();
+        zodec.read(&mut *reader)
     }
 }
 

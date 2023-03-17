@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{Resolution, WhatAmI, ZenohId};
+use crate::{
+    core::{Resolution, WhatAmI, ZenohId},
+    transport::BatchSize,
+};
 use zenoh_buffers::ZSlice;
 
 /// # Init message
@@ -109,7 +112,7 @@ pub struct InitSyn {
     pub whatami: WhatAmI,
     pub zid: ZenohId,
     pub resolution: Resolution,
-    pub batch_size: u16,
+    pub batch_size: BatchSize,
     pub ext_qos: Option<ext::QoS>,
     pub ext_shm: Option<ext::Shm>,
     pub ext_auth: Option<ext::Auth>,
@@ -180,7 +183,7 @@ pub struct InitAck {
     pub whatami: WhatAmI,
     pub zid: ZenohId,
     pub resolution: Resolution,
-    pub batch_size: u16,
+    pub batch_size: BatchSize,
     pub cookie: ZSlice,
     pub ext_qos: Option<ext::QoS>,
     pub ext_shm: Option<ext::Shm>,

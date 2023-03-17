@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header, Zenoh080Length};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -23,6 +23,7 @@ use zenoh_protocol::{
     transport::{
         id,
         init::{ext, flag, InitAck, InitSyn},
+        BatchSize,
     },
 };
 
@@ -128,13 +129,13 @@ where
         let zid: ZenohId = lodec.read(&mut *reader)?;
 
         let mut resolution = Resolution::default();
-        let mut batch_size = u16::MAX.to_le_bytes();
+        let mut batch_size = BatchSize::MAX.to_le_bytes();
         if imsg::has_flag(self.header, flag::S) {
             let flags: u8 = self.codec.read(&mut *reader)?;
             resolution = Resolution::from(flags & 0b00111111);
             batch_size = self.codec.read(&mut *reader)?;
         }
-        let batch_size = u16::from_le_bytes(batch_size);
+        let batch_size = BatchSize::from_le_bytes(batch_size);
 
         // Extensions
         let mut ext_qos = None;
@@ -226,10 +227,11 @@ where
 
         if imsg::has_flag(header, flag::S) {
             self.write(&mut *writer, x.resolution.as_u8())?;
-            self.write(&mut *writer, x.batch_size)?;
+            self.write(&mut *writer, x.batch_size.to_le_bytes())?;
         }
 
-        self.write(&mut *writer, &x.cookie)?;
+        let zodec = Zenoh080Bounded::<BatchSize>::new();
+        zodec.write(&mut *writer, &x.cookie)?;
 
         // Extensions
         if let Some(qos) = x.ext_qos.as_ref() {
@@ -292,14 +294,16 @@ where
         let zid: ZenohId = lodec.read(&mut *reader)?;
 
         let mut resolution = Resolution::default();
-        let mut batch_size = u16::MAX;
+        let mut batch_size = BatchSize::MAX.to_le_bytes();
         if imsg::has_flag(self.header, flag::S) {
             let flags: u8 = self.codec.read(&mut *reader)?;
             resolution = Resolution::from(flags & 0b00111111);
             batch_size = self.codec.read(&mut *reader)?;
         }
+        let batch_size = BatchSize::from_le_bytes(batch_size);
 
-        let cookie: ZSlice = self.codec.read(&mut *reader)?;
+        let zodec = Zenoh080Bounded::<BatchSize>::new();
+        let cookie: ZSlice = zodec.read(&mut *reader)?;
 
         // Extensions
         let mut ext_qos = None;

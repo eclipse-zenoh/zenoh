@@ -40,7 +40,7 @@ use zenoh_protocol::{
         whatami::{self, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor},
         Bits, EndPoint, ZenohId,
     },
-    transport::BatchSize,
+    transport::{BatchSize, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_util::LibLoader;
@@ -209,13 +209,13 @@ validated_struct::validator! {
         TransportConf {
             pub unicast: TransportUnicastConf {
                 /// Timeout in milliseconds when opening a link (default: 10000).
-                accept_timeout: Option<u64>,
+                accept_timeout: u64,
                 /// Number of links that may stay pending during accept phase (default: 100).
-                accept_pending: Option<usize>,
+                accept_pending: usize,
                 /// Maximum number of unicast sessions (default: 1000)
-                max_sessions: Option<usize>,
+                max_sessions: usize,
                 /// Maximum number of unicast incoming links per transport session (default: 1)
-                max_links: Option<usize>,
+                max_links: usize,
             },
             pub multicast: TransportMulticastConf {
                 /// Link join interval duration in milliseconds (default: 2500)
@@ -237,13 +237,13 @@ validated_struct::validator! {
                     /// The resolution in bits to be used for the message sequence numbers.
                     /// When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
                     /// Accepted values: 8bit, 16bit, 32bit, 64bit.
-                    sequence_number_resolution: Option<Bits>,
+                    sequence_number_resolution: Bits where (sequence_number_resolution_validator),
                     /// Link lease duration in milliseconds (default: 10000)
-                    lease: Option<u64>,
+                    lease: u64,
                     /// Number fo keep-alive messages in a link lease duration (default: 4)
-                    keep_alive: Option<usize>,
+                    keep_alive: usize,
                     /// Zenoh's MTU equivalent (default: 2^16-1)
-                    batch_size: Option<BatchSize>,
+                    batch_size: BatchSize,
                     pub queue: QueueConf {
                         /// The size of each priority queue indicates the number of batches a given queue can contain.
                         /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.
@@ -262,10 +262,10 @@ validated_struct::validator! {
                         } where (queue_size_validator),
                         /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
                         /// Higher values lead to a more aggressive batching but it will introduce additional latency.
-                        backoff: Option<u64>
+                        backoff: u64,
                     },
                     // Number of threads used for TX
-                    threads: Option<usize>,
+                    threads: usize,
                 },
                 pub rx: LinkRxConf {
                     /// Receiving buffer size in bytes for each link
@@ -273,10 +273,10 @@ validated_struct::validator! {
                     /// For very high throughput scenarios, the rx_buffer_size can be increased to accomodate
                     /// more in-flight data. This is particularly relevant when dealing with large messages.
                     /// E.g. for 16MiB rx_buffer_size set the value to: 16777216.
-                    buffer_size: Option<usize>,
+                    buffer_size: usize,
                     /// Maximum size of the defragmentation buffer at receiver end (default: 1GiB).
                     /// Fragmented messages that are larger than the configured size will be dropped.
-                    max_message_size: Option<usize>,
+                    max_message_size: usize,
                 },
                 pub tls: #[derive(Default)]
                 TLSConf {
@@ -741,6 +741,10 @@ impl<'a, T> AsRef<dyn Any> for GetGuard<'a, T> {
     fn as_ref(&self) -> &dyn Any {
         self.deref()
     }
+}
+
+fn sequence_number_resolution_validator(b: &Bits) -> bool {
+    b <= &Bits::from(TransportSn::MAX)
 }
 
 fn queue_size_validator(q: &QueueSizeConf) -> bool {

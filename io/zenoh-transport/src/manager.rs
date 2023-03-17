@@ -187,23 +187,16 @@ impl TransportManagerBuilder {
             self = self.whatami(*v);
         }
 
+        let link = config.transport().link();
         let mut resolution = Resolution::default();
-        resolution.set(
-            Field::FrameSN,
-            config
-                .transport()
-                .link()
-                .tx()
-                .sequence_number_resolution()
-                .unwrap(),
-        );
+        resolution.set(Field::FrameSN, *link.tx().sequence_number_resolution());
         self = self.resolution(resolution);
-        self = self.batch_size(config.transport().link().tx().batch_size().unwrap());
-        self = self.defrag_buff_size(config.transport().link().rx().max_message_size().unwrap());
-        self = self.link_rx_buffer_size(config.transport().link().rx().buffer_size().unwrap());
-        self = self.queue_size(config.transport().link().tx().queue().size().clone());
-        self = self.tx_threads(config.transport().link().tx().threads().unwrap());
-        self = self.protocols(config.transport().link().protocols().clone());
+        self = self.batch_size(*link.tx().batch_size());
+        self = self.defrag_buff_size(*link.rx().max_message_size());
+        self = self.link_rx_buffer_size(*link.rx().buffer_size());
+        self = self.queue_size(link.tx().queue().size().clone());
+        self = self.tx_threads(*link.tx().threads());
+        self = self.protocols(link.protocols().clone());
 
         let (c, errors) = zenoh_link::LinkConfigurator::default()
             .configurations(config)
@@ -273,7 +266,7 @@ impl Default for TransportManagerBuilder {
     fn default() -> Self {
         let link_rx = LinkRxConf::default();
         let queue = QueueConf::default();
-        let backoff = queue.backoff().unwrap();
+        let backoff = *queue.backoff();
         Self {
             version: VERSION,
             zid: ZenohId::rand(),
@@ -282,8 +275,8 @@ impl Default for TransportManagerBuilder {
             batch_size: BatchSize::MAX,
             queue_size: queue.size,
             queue_backoff: Duration::from_nanos(backoff),
-            defrag_buff_size: link_rx.max_message_size().unwrap(),
-            link_rx_buffer_size: link_rx.buffer_size().unwrap(),
+            defrag_buff_size: *link_rx.max_message_size(),
+            link_rx_buffer_size: *link_rx.buffer_size(),
             endpoints: HashMap::new(),
             unicast: TransportManagerBuilderUnicast::default(),
             tx_threads: 1,

@@ -257,8 +257,8 @@ impl ZenohMessage {
     pub fn make_pull(
         is_final: bool,
         key: WireExpr<'static>,
-        pull_id: u64,
-        max_samples: Option<u64>,
+        pull_id: PullId,
+        max_samples: Option<u16>,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Pull(Pull {

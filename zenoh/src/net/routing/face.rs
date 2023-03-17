@@ -20,7 +20,7 @@ use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
     core::{Channel, CongestionControl, ExprId, WhatAmI, WireExpr, ZenohId},
     zenoh::{
-        ConsolidationMode, DataInfo, QueryBody, QueryId, QueryTarget, QueryableInfo,
+        ConsolidationMode, DataInfo, PullId, QueryBody, QueryId, QueryTarget, QueryableInfo,
         RoutingContext, SubInfo,
     },
 };
@@ -404,8 +404,8 @@ impl Primitives for Face {
         &self,
         is_final: bool,
         key_expr: &WireExpr,
-        pull_id: u64,
-        max_samples: &Option<u64>,
+        pull_id: PullId,
+        max_samples: &Option<u16>,
     ) {
         pull_data(
             &self.tables,

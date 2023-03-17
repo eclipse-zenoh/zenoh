@@ -32,6 +32,15 @@ impl Bits {
     const S32: &str = "32bit";
     const S64: &str = "64bit";
 
+    pub const fn bits(&self) -> u32 {
+        match self {
+            Bits::U8 => u8::BITS,
+            Bits::U16 => u16::BITS,
+            Bits::U32 => u32::BITS,
+            Bits::U64 => u64::BITS,
+        }
+    }
+
     pub const fn mask(&self) -> u64 {
         match self {
             Bits::U8 => u8::MAX as u64,

@@ -26,7 +26,7 @@ use zenoh_buffers::{
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{
     core::{EndPoint, Locator},
-    transport::TransportMessage,
+    transport::{BatchSize, TransportMessage},
 };
 use zenoh_result::{zerror, ZResult};
 
@@ -79,7 +79,7 @@ impl LinkUnicast {
         // Reserve 16 bits to write the length
         if self.is_streamed() {
             writer
-                .write_exact(u16::MIN.to_le_bytes().as_slice())
+                .write_exact(BatchSize::MIN.to_le_bytes().as_slice())
                 .map_err(|_| zerror!("{ERR}{self}"))?;
         }
         // Serialize the message
@@ -89,8 +89,9 @@ impl LinkUnicast {
 
         // Write the length
         if self.is_streamed() {
-            let num = u16::MIN.to_le_bytes().len();
-            let len = u16::try_from(writer.len() - num).map_err(|_| zerror!("{ERR}{self}"))?;
+            let num = BatchSize::MIN.to_le_bytes().len();
+            let len =
+                BatchSize::try_from(writer.len() - num).map_err(|_| zerror!("{ERR}{self}"))?;
             buff[..num].copy_from_slice(len.to_le_bytes().as_slice());
         }
 
@@ -104,9 +105,9 @@ impl LinkUnicast {
         // Read from the link
         let buffer = if self.is_streamed() {
             // Read and decode the message length
-            let mut length_bytes = [0_u8; 2];
+            let mut length_bytes = BatchSize::MIN.to_le_bytes();
             self.read_exact(&mut length_bytes).await?;
-            let to_read = u16::from_le_bytes(length_bytes) as usize;
+            let to_read = BatchSize::from_le_bytes(length_bytes) as usize;
             // Read the message
             let mut buffer = zenoh_buffers::vec::uninit(to_read);
             self.read_exact(&mut buffer).await?;

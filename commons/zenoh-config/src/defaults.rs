@@ -100,10 +100,10 @@ pub mod routing {
 impl Default for TransportUnicastConf {
     fn default() -> Self {
         Self {
-            accept_timeout: Some(10000),
-            accept_pending: Some(100),
-            max_sessions: Some(1000),
-            max_links: Some(1),
+            accept_timeout: 10_000,
+            accept_pending: 100,
+            max_sessions: 1_000,
+            max_links: 1,
         }
     }
 }
@@ -135,12 +135,12 @@ impl Default for LinkTxConf {
     fn default() -> Self {
         let num = 1 + ((num_cpus::get() - 1) / 4);
         Self {
-            sequence_number_resolution: Some(Bits::U32),
-            lease: Some(10000),
-            keep_alive: Some(4),
-            batch_size: Some(u16::MAX),
+            sequence_number_resolution: Bits::from(TransportSn::MAX),
+            lease: 10_000,
+            keep_alive: 4,
+            batch_size: BatchSize::MAX,
             queue: QueueConf::default(),
-            threads: Some(num),
+            threads: num,
         }
     }
 }
@@ -149,7 +149,7 @@ impl Default for QueueConf {
     fn default() -> Self {
         Self {
             size: QueueSizeConf::default(),
-            backoff: Some(100),
+            backoff: 100,
         }
     }
 }
@@ -177,8 +177,8 @@ impl Default for QueueSizeConf {
 impl Default for LinkRxConf {
     fn default() -> Self {
         Self {
-            buffer_size: Some(u16::MAX as usize),
-            max_message_size: Some(2_usize.pow(30)),
+            buffer_size: BatchSize::MAX as usize,
+            max_message_size: 2_usize.pow(30),
         }
     }
 }

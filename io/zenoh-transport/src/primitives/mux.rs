@@ -18,9 +18,9 @@ use zenoh_protocol::{
     core::{Channel, CongestionControl, ExprId, WireExpr, ZenohId},
     zenoh::{
         zmsg, ConsolidationMode, DataInfo, Declaration, ForgetPublisher, ForgetQueryable,
-        ForgetResource, ForgetSubscriber, Publisher, QueryBody, QueryId, QueryTarget, Queryable,
-        QueryableInfo, ReplierInfo, ReplyContext, Resource, RoutingContext, SubInfo, Subscriber,
-        ZenohMessage,
+        ForgetResource, ForgetSubscriber, Publisher, PullId, QueryBody, QueryId, QueryTarget,
+        Queryable, QueryableInfo, ReplierInfo, ReplyContext, Resource, RoutingContext, SubInfo,
+        Subscriber, ZenohMessage,
     },
 };
 
@@ -203,8 +203,8 @@ impl Primitives for Mux {
         &self,
         is_final: bool,
         key_expr: &WireExpr,
-        pull_id: u64,
-        max_samples: &Option<u64>,
+        pull_id: PullId,
+        max_samples: &Option<u16>,
     ) {
         let _ = self.handler.handle_message(ZenohMessage::make_pull(
             is_final,

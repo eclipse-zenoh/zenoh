@@ -13,6 +13,9 @@
 //
 use crate::core::WireExpr;
 
+/// The resolution of a PullId
+pub type PullId = u32;
+
 /// # Pull message
 ///
 /// ```text
@@ -30,8 +33,8 @@ use crate::core::WireExpr;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pull {
     pub key: WireExpr<'static>,
-    pub pull_id: u64,
-    pub max_samples: Option<u64>,
+    pub pull_id: PullId,
+    pub max_samples: Option<u16>,
     pub is_final: bool,
 }
 
@@ -43,7 +46,7 @@ impl Pull {
         let mut rng = rand::thread_rng();
 
         let key = WireExpr::rand();
-        let pull_id: u64 = rng.gen();
+        let pull_id: PullId = rng.gen();
         let max_samples = if rng.gen_bool(0.5) {
             Some(rng.gen())
         } else {

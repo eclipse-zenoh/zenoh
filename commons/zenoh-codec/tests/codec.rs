@@ -211,11 +211,67 @@ fn codec_zid() {
 }
 
 #[test]
+fn codec_zslice() {
+    run!(
+        ZSlice,
+        ZSlice::rand(thread_rng().gen_range(1..=MAX_PAYLOAD_SIZE))
+    );
+}
+
+#[test]
+fn codec_zslice_bounded() {
+    use crate::Zenoh080Bounded;
+
+    let zslice = ZSlice::rand(1 + u8::MAX as usize);
+
+    let zodec = Zenoh080Bounded::<u8>::new();
+    let codec = Zenoh080::new();
+
+    let mut buff = vec![];
+
+    let mut writer = buff.writer();
+    assert!(zodec.write(&mut writer, &zslice).is_err());
+    let mut writer = buff.writer();
+    codec.write(&mut writer, &zslice).unwrap();
+
+    let mut reader = buff.reader();
+    let r_res: Result<ZSlice, _> = zodec.read(&mut reader);
+    assert!(r_res.is_err());
+    let mut reader = buff.reader();
+    let r_res: Result<ZSlice, _> = codec.read(&mut reader);
+    assert_eq!(zslice, r_res.unwrap());
+}
+
+#[test]
 fn codec_zbuf() {
     run!(
         ZBuf,
-        ZBuf::rand(thread_rng().gen_range(0..=MAX_PAYLOAD_SIZE))
+        ZBuf::rand(thread_rng().gen_range(1..=MAX_PAYLOAD_SIZE))
     );
+}
+
+#[test]
+fn codec_zbuf_bounded() {
+    use crate::Zenoh080Bounded;
+
+    let zbuf = ZBuf::rand(1 + u8::MAX as usize);
+
+    let zodec = Zenoh080Bounded::<u8>::new();
+    let codec = Zenoh080::new();
+
+    let mut buff = vec![];
+
+    let mut writer = buff.writer();
+    assert!(zodec.write(&mut writer, &zbuf).is_err());
+    let mut writer = buff.writer();
+    codec.write(&mut writer, &zbuf).unwrap();
+
+    let mut reader = buff.reader();
+    let r_res: Result<ZBuf, _> = zodec.read(&mut reader);
+    assert!(r_res.is_err());
+    let mut reader = buff.reader();
+    let r_res: Result<ZBuf, _> = codec.read(&mut reader);
+    assert_eq!(zbuf, r_res.unwrap());
 }
 
 #[test]

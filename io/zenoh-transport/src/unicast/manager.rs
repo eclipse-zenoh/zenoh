@@ -145,19 +145,19 @@ impl TransportManagerBuilderUnicast {
 
     pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilderUnicast> {
         self = self.lease(Duration::from_millis(
-            config.transport().link().tx().lease().unwrap(),
+            *config.transport().link().tx().lease(),
         ));
-        self = self.keep_alive(config.transport().link().tx().keep_alive().unwrap());
+        self = self.keep_alive(*config.transport().link().tx().keep_alive());
         self = self.accept_timeout(Duration::from_millis(
-            config.transport().unicast().accept_timeout().unwrap(),
+            *config.transport().unicast().accept_timeout(),
         ));
-        self = self.accept_pending(config.transport().unicast().accept_pending().unwrap());
-        self = self.max_sessions(config.transport().unicast().max_sessions().unwrap());
+        self = self.accept_pending(*config.transport().unicast().accept_pending());
+        self = self.max_sessions(*config.transport().unicast().max_sessions());
         self = self.qos(*config.transport().qos().enabled());
 
         #[cfg(feature = "transport_multilink")]
         {
-            self = self.max_links(config.transport().unicast().max_links().unwrap());
+            self = self.max_links(*config.transport().unicast().max_links());
         }
         #[cfg(feature = "shared-memory")]
         {
@@ -208,21 +208,21 @@ impl TransportManagerBuilderUnicast {
 
 impl Default for TransportManagerBuilderUnicast {
     fn default() -> Self {
-        let link_tx = LinkTxConf::default();
         let transport = TransportUnicastConf::default();
+        let link_tx = LinkTxConf::default();
         let qos = QoSConf::default();
         #[cfg(feature = "shared-memory")]
         let shm = SharedMemoryConf::default();
 
         Self {
-            lease: Duration::from_millis(link_tx.lease().unwrap()),
-            keep_alive: link_tx.keep_alive().unwrap(),
-            accept_timeout: Duration::from_millis(transport.accept_timeout().unwrap()),
-            accept_pending: transport.accept_pending().unwrap(),
-            max_sessions: transport.max_sessions().unwrap(),
+            lease: Duration::from_millis(*link_tx.lease()),
+            keep_alive: *link_tx.keep_alive(),
+            accept_timeout: Duration::from_millis(*transport.accept_timeout()),
+            accept_pending: *transport.accept_pending(),
+            max_sessions: *transport.max_sessions(),
             is_qos: *qos.enabled(),
             #[cfg(feature = "transport_multilink")]
-            max_links: transport.max_links().unwrap(),
+            max_links: *transport.max_links(),
             #[cfg(feature = "shared-memory")]
             is_shm: *shm.enabled(),
             #[cfg(feature = "transport_auth")]
