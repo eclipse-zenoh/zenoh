@@ -1,5 +1,3 @@
-use core::convert::TryInto;
-
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -21,7 +19,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{imsg, ZExtUnknown, ZExtZ64},
-    core::{Priority, Reliability},
+    core::Reliability,
     transport::{
         frame::{ext, flag, Frame, FrameHeader},
         id, TransportSn,
@@ -38,7 +36,7 @@ where
 
     fn write(self, writer: &mut W, x: (ext::QoS, bool)) -> Self::Output {
         let (qos, more) = x;
-        let ext: ZExtZ64<{ ext::QOS }> = ZExtZ64::new(qos.priority as u64);
+        let ext: ZExtZ64<{ ext::QOS }> = qos.into();
         self.write(&mut *writer, (&ext, more))
     }
 }
@@ -52,7 +50,6 @@ where
     fn read(self, reader: &mut R) -> Result<(ext::QoS, bool), Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
-
         codec.read(reader)
     }
 }
@@ -67,12 +64,8 @@ where
         if imsg::mid(self.header) != ext::QOS {
             return Err(DidntRead);
         }
-
         let (ext, more): (ZExtZ64<{ ext::QOS }>, bool) = self.read(&mut *reader)?;
-
-        let v: u8 = ext.value.try_into().map_err(|_| DidntRead)?;
-        let priority: Priority = v.try_into().map_err(|_| DidntRead)?;
-        Ok((ext::QoS { priority }, more))
+        Ok((ext.into(), more))
     }
 }
 

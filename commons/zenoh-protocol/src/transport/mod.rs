@@ -38,6 +38,8 @@ pub use open::{OpenAck, OpenSyn};
 pub type BatchSize = u16;
 
 pub mod id {
+    // WARNING: it's crucial that these IDs do NOT collide with the IDs
+    //          defined in `crate::network::id`.
     // pub const JOIN: u8 = 0x01; // For multicast communications only
     pub const INIT: u8 = 0x02; // For unicast communications only
     pub const OPEN: u8 = 0x03; // For unicast communications only

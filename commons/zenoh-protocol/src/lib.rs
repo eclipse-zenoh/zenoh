@@ -22,6 +22,7 @@ extern crate alloc;
 
 pub mod common;
 pub mod core;
+pub mod network;
 pub mod scouting;
 pub mod transport;
 pub mod zenoh;

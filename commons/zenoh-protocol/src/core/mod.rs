@@ -54,6 +54,8 @@ pub use endpoint::*;
 pub mod resolution;
 pub use resolution::*;
 
+use crate::transport::TransportSn;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Property {
     pub key: u64,
@@ -312,8 +314,8 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
 #[repr(u8)]
+#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
 pub enum Priority {
     Control = 0,
     RealTime = 1,
@@ -366,6 +368,21 @@ pub enum Reliability {
     Reliable,
 }
 
+impl Reliability {
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        if rng.gen_bool(0.5) {
+            Reliability::Reliable
+        } else {
+            Reliability::BestEffort
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Channel {
     pub priority: Priority,
@@ -412,17 +429,17 @@ impl fmt::Display for ConduitSnList {
 /// The kind of reliability.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct ConduitSn {
-    pub reliable: u64,
-    pub best_effort: u64,
+    pub reliable: TransportSn,
+    pub best_effort: TransportSn,
 }
 
 /// The kind of congestion control.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CongestionControl {
-    Block,
     #[default]
-    Drop,
+    Drop = 0,
+    Block = 1,
 }
 
 /// The subscription mode.
@@ -430,8 +447,8 @@ pub enum CongestionControl {
 #[repr(u8)]
 pub enum SubMode {
     #[default]
-    Push,
-    Pull,
+    Push = 0,
+    Pull = 1,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]

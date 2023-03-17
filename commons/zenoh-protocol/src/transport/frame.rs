@@ -70,12 +70,13 @@ pub mod flag {
 pub struct Frame {
     pub reliability: Reliability,
     pub sn: TransportSn,
-    pub ext_qos: ext::QoS,
     pub payload: Vec<ZenohMessage>,
+    pub ext_qos: ext::QoS,
 }
 
 // Extensions
 pub mod ext {
+    use crate::common::ZExtZ64;
     use crate::core::Priority;
 
     pub const QOS: u8 = 0x01;
@@ -84,26 +85,56 @@ pub mod ext {
     ///     +-+-+-+-+-+-+-+-+
     ///     |Z|0_1|   QoS   |
     ///     +-+-+-+---------+
-    ///     % reserved|prio %
+    ///     %0|  rsv  |prio %
     ///     +---------------+
+    ///
+    ///     - prio: Priority class
     #[repr(transparent)]
-    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct QoS {
-        pub priority: Priority,
+        inner: u8,
     }
 
     impl QoS {
+        pub const P_MASK: u8 = 0b00000111;
+
+        pub const fn new(priority: Priority) -> Self {
+            Self {
+                inner: priority as u8,
+            }
+        }
+
+        pub const fn priority(&self) -> Priority {
+            unsafe { core::mem::transmute(self.inner & Self::P_MASK) }
+        }
+
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
-            use core::convert::TryInto;
             use rand::Rng;
 
             let mut rng = rand::thread_rng();
-            let priority: Priority = rng
-                .gen_range(Priority::MAX as u8..=Priority::MIN as u8)
-                .try_into()
-                .unwrap();
-            Self { priority }
+            let inner: u8 = rng.gen();
+            Self { inner }
+        }
+    }
+
+    impl Default for QoS {
+        fn default() -> Self {
+            Self::new(Priority::default())
+        }
+    }
+
+    impl From<ZExtZ64<{ QOS }>> for QoS {
+        fn from(ext: ZExtZ64<{ QOS }>) -> Self {
+            Self {
+                inner: ext.value as u8,
+            }
+        }
+    }
+
+    impl From<QoS> for ZExtZ64<{ QOS }> {
+        fn from(ext: QoS) -> Self {
+            ZExtZ64::new(ext.inner as u64)
         }
     }
 }
@@ -115,18 +146,14 @@ impl Frame {
 
         let mut rng = rand::thread_rng();
 
-        let reliability = if rng.gen_bool(0.5) {
-            Reliability::Reliable
-        } else {
-            Reliability::BestEffort
-        };
+        let reliability = Reliability::rand();
         let sn: TransportSn = rng.gen();
         let qos = ext::QoS::rand();
         let mut payload = vec![];
         for _ in 0..rng.gen_range(1..4) {
             let mut m = ZenohMessage::rand();
             m.channel.reliability = reliability;
-            m.channel.priority = qos.priority;
+            m.channel.priority = qos.priority();
             payload.push(m);
         }
 
@@ -154,11 +181,7 @@ impl FrameHeader {
 
         let mut rng = rand::thread_rng();
 
-        let reliability = if rng.gen_bool(0.5) {
-            Reliability::Reliable
-        } else {
-            Reliability::BestEffort
-        };
+        let reliability = Reliability::rand();
         let sn: TransportSn = rng.gen();
         let qos = ext::QoS::rand();
 

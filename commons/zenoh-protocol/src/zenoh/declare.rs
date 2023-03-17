@@ -219,11 +219,7 @@ impl Subscriber {
         let mut rng = rand::thread_rng();
 
         let key = WireExpr::rand();
-        let reliability = if rng.gen_bool(0.5) {
-            Reliability::Reliable
-        } else {
-            Reliability::BestEffort
-        };
+        let reliability = Reliability::rand();
         let mode = if rng.gen_bool(0.5) {
             SubMode::Push
         } else {

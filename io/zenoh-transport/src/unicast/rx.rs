@@ -17,6 +17,11 @@ use async_std::task;
 use std::sync::MutexGuard;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
+use zenoh_buffers::{
+    reader::{HasReader, Reader},
+    ZSlice,
+};
+use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::{zlock, zread};
 use zenoh_link::LinkUnicast;
 #[cfg(feature = "stats")]
@@ -110,19 +115,20 @@ impl TransportUnicastInner {
         let Frame {
             reliability,
             sn,
-            ext_qos: qos,
+            ext_qos,
             mut payload,
         } = frame;
 
+        let priority = ext_qos.priority();
         let c = if self.is_qos() {
-            &self.conduit_rx[qos.priority as usize]
-        } else if qos.priority == Priority::default() {
+            &self.conduit_rx[priority as usize]
+        } else if priority == Priority::default() {
             &self.conduit_rx[0]
         } else {
             bail!(
                 "Transport: {}. Unknown conduit: {:?}.",
                 self.config.zid,
-                qos.priority
+                priority
             );
         };
 
@@ -144,19 +150,19 @@ impl TransportUnicastInner {
             reliability,
             more,
             sn,
-            qos,
+            ext_qos: qos,
             payload,
         } = fragment;
 
         let c = if self.is_qos() {
-            &self.conduit_rx[qos.priority as usize]
-        } else if qos.priority == Priority::default() {
+            &self.conduit_rx[qos.priority() as usize]
+        } else if qos.priority() == Priority::default() {
             &self.conduit_rx[0]
         } else {
             bail!(
                 "Transport: {}. Unknown conduit: {:?}.",
                 self.config.zid,
-                qos.priority
+                qos.priority()
             );
         };
 
@@ -211,24 +217,40 @@ impl TransportUnicastInner {
         Ok(())
     }
 
-    pub(super) fn receive_message(&self, msg: TransportMessage, link: &LinkUnicast) -> ZResult<()> {
-        log::trace!("Received: {:?}", msg);
-        // Process the received message
-        match msg.body {
-            TransportBody::Frame(msg) => self.handle_frame(msg),
-            TransportBody::Fragment(fragment) => self.handle_fragment(fragment),
-            TransportBody::Close(Close { reason, session }) => {
-                self.handle_close(link, reason, session)
+    pub(super) fn read_messages(&self, mut zslice: ZSlice, link: &LinkUnicast) -> ZResult<()> {
+        let codec = Zenoh080::new();
+        let mut reader = zslice.reader();
+        while reader.can_read() {
+            let msg: TransportMessage = codec
+                .read(&mut reader)
+                .map_err(|_| zerror!("{}: decoding error", link))?;
+
+            log::trace!("Received: {:?}", msg);
+
+            #[cfg(feature = "stats")]
+            {
+                transport.stats.inc_rx_t_msgs(1);
             }
-            TransportBody::KeepAlive(KeepAlive { .. }) => Ok(()),
-            _ => {
-                log::debug!(
-                    "Transport: {}. Message handling not implemented: {:?}",
-                    self.config.zid,
-                    msg
-                );
-                Ok(())
+
+            match msg.body {
+                TransportBody::Frame(msg) => self.handle_frame(msg)?,
+                TransportBody::Fragment(fragment) => self.handle_fragment(fragment)?,
+                TransportBody::Close(Close { reason, session }) => {
+                    self.handle_close(link, reason, session)?
+                }
+                TransportBody::KeepAlive(KeepAlive { .. }) => {}
+                _ => {
+                    log::debug!(
+                        "Transport: {}. Message handling not implemented: {:?}",
+                        self.config.zid,
+                        msg
+                    );
+                }
             }
         }
+
+        // Process the received message
+
+        Ok(())
     }
 }

@@ -41,7 +41,7 @@ where
         if x.more {
             header |= flag::M;
         }
-        if x.qos != ext::QoS::default() {
+        if x.ext_qos != ext::QoS::default() {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
@@ -50,8 +50,8 @@ where
         self.write(&mut *writer, x.sn)?;
 
         // Extensions
-        if x.qos != ext::QoS::default() {
-            self.write(&mut *writer, (x.qos, false))?;
+        if x.ext_qos != ext::QoS::default() {
+            self.write(&mut *writer, (x.ext_qos, false))?;
         }
 
         Ok(())
@@ -90,7 +90,7 @@ where
         let sn: TransportSn = self.codec.read(&mut *reader)?;
 
         // Extensions
-        let mut qos = ext::QoS::default();
+        let mut ext_qos = ext::QoS::default();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -99,7 +99,7 @@ where
             match imsg::mid(ext) {
                 ext::QOS => {
                     let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
-                    qos = q;
+                    ext_qos = q;
                     has_ext = ext;
                 }
                 _ => {
@@ -113,7 +113,7 @@ where
             reliability,
             more,
             sn,
-            qos,
+            ext_qos,
         })
     }
 }
@@ -131,7 +131,7 @@ where
             reliability: x.reliability,
             more: x.more,
             sn: x.sn,
-            qos: x.qos,
+            ext_qos: x.ext_qos,
         };
         self.write(&mut *writer, &header)?;
 
@@ -169,7 +169,7 @@ where
             reliability: header.reliability,
             more: header.more,
             sn: header.sn,
-            qos: header.qos,
+            ext_qos: header.ext_qos,
             payload,
         })
     }

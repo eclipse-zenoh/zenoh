@@ -375,11 +375,7 @@ impl ZenohMessage {
             .gen_range(Priority::MAX as u8..=Priority::MIN as u8)
             .try_into()
             .unwrap();
-        let reliability = if rng.gen_bool(0.5) {
-            Reliability::Reliable
-        } else {
-            Reliability::BestEffort
-        };
+        let reliability = Reliability::rand();
         let channel = Channel {
             priority,
             reliability,
