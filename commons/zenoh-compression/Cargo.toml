@@ -29,12 +29,8 @@ description = "Internal crate for zenoh."
 
 [features]
 default = ["std"]
-std = [
-    "uhlc/std",
-]
-shared-memory = [
-    "std",
-]
+std = ["uhlc/std"]
+shared-memory = ["std"]
 
 [dependencies]
 csv = "1.2.0"

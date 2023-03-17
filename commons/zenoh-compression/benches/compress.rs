@@ -14,18 +14,44 @@
 #[macro_use]
 extern crate criterion;
 
-use std::{io, vec};
+use std::{fmt, fs, vec};
 
 use criterion::{measurement::WallTime, BenchmarkGroup, BenchmarkId, Criterion};
-use rand::SeedableRng;
 use zenoh_buffers::writer::{DidntWrite, HasWriter};
 use zenoh_codec::*;
 use zenoh_compression::ZenohCompress;
-use zenoh_crypto::{BlockCipher, PseudoRng};
+
+/// Low entropy source file: a series of literary quotes repeated a number of times throughout
+/// the file, the compression ratio should be low.
+static LOW_ENTROPY_SOURCE_FILE: &str = "quotes.txt";
+
+/// Middle entropy source file: a lorem ipsum sample file with random pseudo-latin words.
+static MIDDLE_ENTROPY_SOURCE_FILE: &str = "lipsum.txt";
+
+/// High entropy source file: a series of non repeated strings with random characters.
+static HIGH_ENTROPY_SOURCE_FILE: &str = "random.txt";
+
 #[derive(Clone, Copy, Debug)]
 enum EntropyLevel {
     LOW,
+    MIDDLE,
     HIGH,
+}
+
+impl EntropyLevel {
+    fn get_source(&self) -> &str {
+        match &self {
+            EntropyLevel::LOW => LOW_ENTROPY_SOURCE_FILE,
+            EntropyLevel::MIDDLE => MIDDLE_ENTROPY_SOURCE_FILE,
+            EntropyLevel::HIGH => HIGH_ENTROPY_SOURCE_FILE,
+        }
+    }
+}
+
+impl fmt::Display for EntropyLevel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 static KB: usize = 1024;
@@ -41,26 +67,12 @@ static BATCH_SIZES: &'static [usize] = &[
     48 * KB,
     56 * KB,
     64 * KB,
-    72 * KB,
-    80 * KB,
 ];
 
-fn generate_test_batch(entropy: EntropyLevel, size: usize) -> Vec<u8> {
-    let segment_32: Vec<u8> = Vec::from("AAAAAAAABBBBBBBBCCCCCCCCDDDDDDDD");
-    let mut test_batch: Vec<u8> = vec![];
-    for _i in 0..(size / segment_32.len()) {
-        test_batch.append(&mut segment_32.clone());
-    }
-    match entropy {
-        EntropyLevel::LOW => test_batch,
-        EntropyLevel::HIGH => {
-            let mut prng = PseudoRng::from_entropy();
-            let key = [0_u8; BlockCipher::BLOCK_SIZE];
-            let cipher = BlockCipher::new(key);
-            let encrypted_batch = cipher.encrypt(test_batch, &mut prng);
-            encrypted_batch
-        }
-    }
+fn load_test_batch_from_source_file(entropy: EntropyLevel, size: usize) -> Vec<u8> {
+    let content = fs::read_to_string(entropy.get_source()).unwrap();
+    let batch = &content[..size];
+    batch.as_bytes().to_vec()
 }
 
 fn encode_simple(buff: &mut Vec<u8>, codec: &Zenoh060, batch: &Vec<u8>) {
@@ -147,39 +159,25 @@ fn compression_bench(c: &mut Criterion) {
     let zenoh_compress = ZenohCompress::default();
     let mut group = c.benchmark_group("Compression");
     for batch_size in BATCH_SIZES.into_iter() {
-        let low_entropy_batch = generate_test_batch(EntropyLevel::LOW, *batch_size);
-        let high_entropy_batch = generate_test_batch(EntropyLevel::HIGH, *batch_size);
-        group.throughput(criterion::Throughput::Bytes(*batch_size as u64));
-        bench_simple_encoding(
-            "Simple encoding - Low Entropy",
-            &mut group,
-            batch_size,
-            &codec,
-            &low_entropy_batch,
-        );
-        bench_encoding_with_compression(
-            "Compression - Low Entropy",
-            &mut group,
-            batch_size,
-            &codec,
-            zenoh_compress,
-            &low_entropy_batch,
-        );
-        bench_simple_encoding(
-            "Simple encoding - High Entropy",
-            &mut group,
-            batch_size,
-            &codec,
-            &high_entropy_batch,
-        );
-        bench_encoding_with_compression(
-            "Compression - High Entropy",
-            &mut group,
-            batch_size,
-            &codec,
-            zenoh_compress,
-            &high_entropy_batch,
-        );
+        for entropy in [EntropyLevel::LOW, EntropyLevel::MIDDLE, EntropyLevel::HIGH] {
+            let batch = load_test_batch_from_source_file(entropy, *batch_size);
+            group.throughput(criterion::Throughput::Bytes(*batch_size as u64));
+            bench_simple_encoding(
+                &format!("Simple encoding - {:?} entropy", entropy),
+                &mut group,
+                batch_size,
+                &codec,
+                &batch,
+            );
+            bench_encoding_with_compression(
+                &format!("Compression - {:?} entropy", entropy),
+                &mut group,
+                batch_size,
+                &codec,
+                zenoh_compress,
+                &batch,
+            );
+        }
     }
     group.finish();
 }
@@ -189,75 +187,48 @@ fn compression_bench(c: &mut Criterion) {
 fn get_stats(_: &mut Criterion) {
     let codec = Zenoh060::default();
     let zenoh_compress = ZenohCompress::default();
-    let mut writer = csv::Writer::from_writer(io::stdout());
+    let metrics = std::fs::File::create("metrics.csv").unwrap();
+    let mut writer = csv::Writer::from_writer(metrics);
     writer
-        .write_record(&["size", "compression", "entropy", "final_batch_size"])
+        .write_record(&["size", "is_compressed", "entropy", "output_size"])
         .unwrap();
     for batch_size in BATCH_SIZES.into_iter() {
-        let low_entropy_batch = generate_test_batch(EntropyLevel::LOW, *batch_size);
-        let high_entropy_batch = generate_test_batch(EntropyLevel::HIGH, *batch_size);
-        let mut buff1: Vec<u8> = vec![];
-        encode_simple(&mut buff1, &codec, &low_entropy_batch);
+        for entropy in [EntropyLevel::LOW, EntropyLevel::MIDDLE, EntropyLevel::HIGH] {
+            let batch = load_test_batch_from_source_file(entropy, *batch_size);
+            let mut buffer: Vec<u8> = vec![];
+            encode_simple(&mut buffer, &codec, &batch);
+            writer
+                .write_record(&[
+                    batch_size.to_string(),
+                    /*compression=*/ false.to_string(),
+                    /*entropy=*/ entropy.to_string(),
+                    /*final_batch_size=*/ buffer.len().to_string(),
+                ])
+                .unwrap();
 
-        let mut buff2: Vec<u8> = vec![];
-        encode_simple(&mut buff2, &codec, &high_entropy_batch);
-
-        let mut buff3: Vec<u8> = vec![];
-        let mut compression_buff1: Box<[u8]> = vec![0; usize::pow(2, 17)].into_boxed_slice();
-        let compression_result1 = encode_with_compression(
-            &mut buff3,
-            &mut compression_buff1,
-            &codec,
-            &zenoh_compress,
-            &low_entropy_batch,
-        );
-
-        let mut buff4: Vec<u8> = vec![];
-        let mut compression_buff2: Box<[u8]> = vec![0; usize::pow(2, 17)].into_boxed_slice();
-        let compression_result2 = encode_with_compression(
-            &mut buff4,
-            &mut compression_buff2,
-            &codec,
-            &zenoh_compress,
-            &high_entropy_batch,
-        );
-
-        writer
-            .write_record(&[
-                batch_size.to_string(),
-                /* compression=*/ "false".to_string(),
-                /*entropy=*/ "low".to_string(),
-                /*final_batch_size=*/ buff1.len().to_string(),
-            ])
-            .unwrap();
-        writer
-            .write_record(&[
-                batch_size.to_string(),
-                /* compression=*/ "false".to_string(),
-                /*entropy=*/ "high".to_string(),
-                /*final_batch_size=*/ buff2.len().to_string(),
-            ])
-            .unwrap();
-        writer
-            .write_record(&[
-                batch_size.to_string(),
-                /* compression=*/ "true".to_string(),
-                /*entropy=*/ "low".to_string(),
-                /*final_batch_size=*/ compression_result1.unwrap().to_string(),
-            ])
-            .unwrap();
-        writer
-            .write_record(&[
-                batch_size.to_string(),
-                /* compression=*/ "true".to_string(),
-                /*entropy=*/ "high".to_string(),
-                /*final_batch_size=*/ compression_result2.unwrap().to_string(),
-            ])
-            .unwrap();
+            buffer.clear();
+            let mut compression_buffer: Box<[u8]> = vec![0; usize::pow(2, 17)].into_boxed_slice();
+            let compression_result = encode_with_compression(
+                &mut buffer,
+                &mut compression_buffer,
+                &codec,
+                &zenoh_compress,
+                &batch,
+            );
+            writer
+                .write_record(&[
+                    batch_size.to_string(),
+                    /*compression=*/ true.to_string(),
+                    /*entropy=*/ entropy.to_string(),
+                    /*final_batch_size=*/ compression_result.unwrap().to_string(),
+                ])
+                .unwrap();
+        }
     }
     writer.flush().unwrap();
 }
 
 // Run benches with cargo bench --bench compress -- --plotting-backend gnuplot
+// criterion_group!(benches, compression_bench);
 criterion_group!(benches, compression_bench, get_stats);
 criterion_main!(benches);
