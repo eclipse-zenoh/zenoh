@@ -179,6 +179,19 @@ impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtZBuf<{ ID }> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ZExtZBufHeader<const ID: u8> {
+    pub len: usize,
+}
+
+impl<const ID: u8> ZExtZBufHeader<{ ID }> {
+    pub const ID: u8 = ID;
+
+    pub const fn new(len: usize) -> Self {
+        Self { len }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZExtUnknown {
     pub id: u8,
     pub body: ZExtensionBody,

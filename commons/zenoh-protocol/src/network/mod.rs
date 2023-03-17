@@ -31,6 +31,28 @@ pub mod id {
     pub const RESPONSE_FINAL: u8 = 0x1b;
 }
 
+#[repr(u8)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub enum Mapping {
+    #[default]
+    Receiver = 0,
+    Sender = 1,
+}
+
+impl Mapping {
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+        if rng.gen_bool(0.5) {
+            Mapping::Sender
+        } else {
+            Mapping::Receiver
+        }
+    }
+}
+
 // Zenoh messages at zenoh-network level
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NetworkBody {
@@ -114,6 +136,7 @@ pub mod ext {
         common::{imsg, ZExtZ64},
         core::{CongestionControl, Priority},
     };
+    use core::fmt;
 
     pub const QOS: u8 = 0x01;
     pub const TSTAMP: u8 = 0x02;
@@ -130,7 +153,7 @@ pub mod ext {
     ///     - E:    Express. Don't batch this message.
     ///     - rsv:  Reserved
     #[repr(transparent)]
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Clone, Copy, PartialEq, Eq)]
     pub struct QoS {
         inner: u8,
     }
@@ -200,6 +223,16 @@ pub mod ext {
         }
     }
 
+    impl fmt::Debug for QoS {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            f.debug_struct("QoS")
+                .field("priority", &self.priority())
+                .field("congestion", &self.congestion_control())
+                .field("express", &self.is_express())
+                .finish()
+        }
+    }
+
     ///      7 6 5 4 3 2 1 0
     ///     +-+-+-+-+-+-+-+-+
     ///     |Z|1_0|    ID   |
@@ -223,13 +256,6 @@ pub mod ext {
             let id = uhlc::ID::try_from(ZenohId::rand().as_slice()).unwrap();
             let timestamp = uhlc::Timestamp::new(time, id);
             Self { timestamp }
-        }
-    }
-
-    pub mod qos {
-        pub mod flag {
-            pub const D: u8 = 1 << 3; // 0x08 Don't drop.   Don't drop the message for congestion control.
-            pub const E: u8 = 1 << 4; // 0x10 Express.      Don't batch this message.
         }
     }
 }

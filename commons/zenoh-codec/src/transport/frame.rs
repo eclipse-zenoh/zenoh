@@ -61,9 +61,6 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<(ext::QoS, bool), Self::Error> {
-        if imsg::mid(self.header) != ext::QOS {
-            return Err(DidntRead);
-        }
         let (ext, more): (ZExtZ64<{ ext::QOS }>, bool) = self.read(&mut *reader)?;
         Ok((ext.into(), more))
     }

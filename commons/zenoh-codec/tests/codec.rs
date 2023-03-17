@@ -435,6 +435,12 @@ fn codec_transport() {
     run!(TransportMessage, TransportMessage::rand());
 }
 
+// Network
+// #[test]
+// fn codec_push() {
+//     run!(Push, Push::rand());
+// }
+
 // Zenoh
 #[test]
 fn codec_routing_context() {

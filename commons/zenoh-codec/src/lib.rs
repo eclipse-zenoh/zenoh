@@ -16,6 +16,7 @@ extern crate alloc;
 
 mod common;
 mod core;
+mod network;
 mod scouting;
 mod transport;
 mod zenoh;
@@ -31,6 +32,11 @@ pub trait WCodec<Message, Buffer> {
 pub trait RCodec<Message, Buffer> {
     type Error;
     fn read(self, buffer: Buffer) -> Result<Message, Self::Error>;
+}
+
+// Calculate the length of the value once serialized
+pub trait LCodec<Message> {
+    fn w_len(self, message: Message) -> usize;
 }
 
 #[derive(Clone, Copy)]

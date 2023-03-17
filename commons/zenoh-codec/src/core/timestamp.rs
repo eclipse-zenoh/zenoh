@@ -11,13 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080};
+use crate::{LCodec, RCodec, WCodec, Zenoh080};
 use core::convert::TryFrom;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::core::{Timestamp, ZenohId};
+
+impl LCodec<&Timestamp> for Zenoh080 {
+    fn w_len(self, x: &Timestamp) -> usize {
+        self.w_len(x.get_time().as_u64()) + self.w_len(x.get_id().as_slice())
+    }
+}
 
 impl<W> WCodec<&Timestamp, &mut W> for Zenoh080
 where

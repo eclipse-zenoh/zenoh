@@ -23,7 +23,7 @@ mod zenohid;
 mod zint;
 mod zslice;
 
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded};
+use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use alloc::{string::String, vec::Vec};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -65,6 +65,12 @@ macro_rules! array_impl {
                 let mut x = [0u8; $n];
                 reader.read_exact(&mut x)?;
                 Ok(x)
+            }
+        }
+
+        impl LCodec<[u8; $n]> for Zenoh080 {
+            fn w_len(self, _: [u8; $n]) -> usize {
+                $n
             }
         }
     };
@@ -132,6 +138,12 @@ vec_impl!(u64);
 vec_impl!(usize);
 
 // &[u8] / Vec<u8>
+impl LCodec<&[u8]> for Zenoh080 {
+    fn w_len(self, x: &[u8]) -> usize {
+        self.w_len(x.len()) + x.len()
+    }
+}
+
 impl<W> WCodec<&[u8], &mut W> for Zenoh080
 where
     W: Writer,
