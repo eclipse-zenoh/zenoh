@@ -23,18 +23,21 @@ use crate::{core::WireExpr, network::RequestId, zenoh::ZenohMessage};
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |Z|M|N| ResMore |
+/// |Z|M|N| Response|
 /// +-+-+-+---------+
+/// ~ request_id:z32~  (*)
+/// +---------------+
 /// ~ key_scope:z16 ~
 /// +---------------+
 /// ~  key_suffix   ~  if N==1 -- <u8;z16>
-/// +---------------+
-/// ~      rid      ~
 /// +---------------+
 /// ~  [reply_exts] ~  if Z==1
 /// +---------------+
 /// ~  ZenohMessage ~ -- Payload
 /// +---------------+
+///
+/// (*) The resolution of the request id is negotiated during the session establishment.
+///     This implementation limits the resolution to 32bit.
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Response {
@@ -88,10 +91,13 @@ impl Response {
 /// +-+-+-+-+-+-+-+-+
 /// |Z|M|N| ResFinal|
 /// +-+-+-+---------+
-/// ~      rid      ~
+/// ~ request_id:z32~  (*)
 /// +---------------+
 /// ~  [reply_exts] ~  if Z==1
 /// +---------------+
+///
+/// (*) The resolution of the request id is negotiated during the session establishment.
+///     This implementation limits the resolution to 32bit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResponseFinal {
     pub rid: RequestId,

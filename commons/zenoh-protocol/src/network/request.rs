@@ -30,21 +30,24 @@ pub type AtomicRequestId = AtomicU32;
 /// +-+-+-+-+-+-+-+-+
 /// |Z|M|N| Request |
 /// +-+-+-+---------+
+/// ~ request_id:z32~  (*)
+/// +---------------+
 /// ~ key_scope:z16 ~
 /// +---------------+
 /// ~  key_suffix   ~  if N==1 -- <u8;z16>
-/// +---------------+
-/// ~      rid      ~
 /// +---------------+
 /// ~   [req_exts]  ~  if Z==1
 /// +---------------+
 /// ~  ZenohMessage ~ -- Payload
 /// +---------------+
+///
+/// (*) The resolution of the request id is negotiated during the session establishment.
+///     This implementation limits the resolution to 32bit.
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Request {
+    pub id: RequestId,
     pub wire_expr: WireExpr<'static>,
-    pub rid: RequestId,
     pub payload: ZenohMessage,
     pub ext_qos: ext::QoS,
     pub ext_tstamp: Option<ext::Timestamp>,
@@ -112,7 +115,7 @@ impl Request {
 
         Self {
             wire_expr,
-            rid,
+            id: rid,
             payload,
             ext_qos,
             ext_tstamp,

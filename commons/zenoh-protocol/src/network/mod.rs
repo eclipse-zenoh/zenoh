@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod declare;
+pub mod pull;
 pub mod push;
 pub mod request;
 pub mod response;
@@ -22,8 +23,8 @@ pub use request::{Request, RequestId};
 pub use response::{Response, ResponseFinal};
 
 pub mod id {
-    // WARNING: it's crucial that these IDs do NOT collide with the IDs
-    //          defined in `crate::transport::id`.
+    // WARNING: it's crucial for Zenoh to work that these IDs do NOT
+    //          collide with the IDs defined in `crate::transport::id`.
     pub const DECLARE: u8 = 0x1f;
     pub const PUSH: u8 = 0x1e;
     pub const REQUEST: u8 = 0x1d;
