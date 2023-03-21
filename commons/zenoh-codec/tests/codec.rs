@@ -34,7 +34,7 @@ use zenoh_protocol::{
             subscriber::{DeclareSubscriber, ForgetSubscriber},
             DeclareBody,
         },
-        Push, Request,
+        Pull, Push, Request,
     },
     scouting::*,
     transport::*,
@@ -458,6 +458,11 @@ fn codec_push() {
 }
 
 #[test]
+fn codec_pull() {
+    run!(Pull, Pull::rand());
+}
+
+#[test]
 fn codec_request() {
     run!(Request, Request::rand());
 }
@@ -529,7 +534,7 @@ fn codec_unit() {
 }
 
 #[test]
-fn codec_pull() {
+fn codec_pull_old() {
     run!(Pull, Pull::rand());
 }
 

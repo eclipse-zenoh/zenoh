@@ -18,6 +18,7 @@ pub mod request;
 pub mod response;
 
 pub use declare::Declare;
+pub use pull::Pull;
 pub use push::Push;
 pub use request::{Request, RequestId};
 pub use response::{Response, ResponseFinal};
@@ -27,9 +28,11 @@ pub mod id {
     //          collide with the IDs defined in `crate::transport::id`.
     pub const DECLARE: u8 = 0x1f;
     pub const PUSH: u8 = 0x1e;
-    pub const REQUEST: u8 = 0x1d;
-    pub const RESPONSE: u8 = 0x1c;
-    pub const RESPONSE_FINAL: u8 = 0x1b;
+    pub const PULL: u8 = 0x1d;
+    pub const REQUEST: u8 = 0x1c;
+    pub const RESPONSE: u8 = 0x1b;
+    pub const RESPONSE_FINAL: u8 = 0x1a;
+    pub const OAM: u8 = 0x19;
 }
 
 #[repr(u8)]

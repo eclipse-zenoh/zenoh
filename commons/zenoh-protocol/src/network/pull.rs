@@ -14,29 +14,6 @@
 
 pub type PullId = u32;
 
-#[repr(u8)]
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub enum PullTarget {
-    #[default]
-    Push = 0x00,
-    Request = 0x01,
-}
-
-impl PullTarget {
-    #[cfg(feature = "test")]
-    pub fn rand() -> Self {
-        use rand::Rng;
-
-        let mut rng = rand::thread_rng();
-
-        match rng.gen_range(0..2) {
-            0 => PullTarget::Push,
-            1 => PullTarget::Request,
-            _ => unreachable!(),
-        }
-    }
-}
-
 /// ```text
 /// Flags:
 /// - X: Reserved
@@ -51,23 +28,27 @@ impl PullTarget {
 /// +---------------+
 /// ~    id:z32     ~  (*)
 /// +---------------+
+/// ~  [pull_exts]  ~  (*)
+/// +---------------+
 ///
 /// (*) ID refers to the ID used in a previous target declaration
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pull {
-    pub target: PullTarget,
+    pub target: u8,
     pub id: PullId,
 }
 
 impl Pull {
+    pub const T_SUBSCRIBER: u8 = 0x01;
+
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
 
-        let target = PullTarget::rand();
+        let target: u8 = rng.gen();
         let id: PullId = rng.gen();
 
         Self { target, id }

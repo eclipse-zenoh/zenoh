@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod declare;
+mod pull;
 mod push;
 mod request;
 
