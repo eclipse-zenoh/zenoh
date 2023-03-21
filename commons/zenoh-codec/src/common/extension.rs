@@ -326,3 +326,47 @@ where
         Ok(exts)
     }
 }
+
+// Macros
+#[macro_export]
+macro_rules! impl_zextz64 {
+    ($ext:ty, $id:expr) => {
+        impl<W> WCodec<($ext, bool), &mut W> for Zenoh080
+        where
+            W: Writer,
+        {
+            type Output = Result<(), DidntWrite>;
+
+            fn write(self, writer: &mut W, x: ($ext, bool)) -> Self::Output {
+                let (qos, more) = x;
+                let ext: ZExtZ64<{ $id }> = qos.into();
+                self.write(&mut *writer, (&ext, more))
+            }
+        }
+
+        impl<R> RCodec<($ext, bool), &mut R> for Zenoh080
+        where
+            R: Reader,
+        {
+            type Error = DidntRead;
+
+            fn read(self, reader: &mut R) -> Result<($ext, bool), Self::Error> {
+                let header: u8 = self.read(&mut *reader)?;
+                let codec = Zenoh080Header::new(header);
+                codec.read(reader)
+            }
+        }
+
+        impl<R> RCodec<($ext, bool), &mut R> for Zenoh080Header
+        where
+            R: Reader,
+        {
+            type Error = DidntRead;
+
+            fn read(self, reader: &mut R) -> Result<($ext, bool), Self::Error> {
+                let (ext, more): (ZExtZ64<{ $id }>, bool) = self.read(&mut *reader)?;
+                Ok((ext.into(), more))
+            }
+        }
+    };
+}

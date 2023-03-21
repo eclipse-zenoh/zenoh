@@ -111,8 +111,8 @@ pub mod ext {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::Rng;
-
             let mut rng = rand::thread_rng();
+
             let inner: u8 = rng.gen();
             Self { inner }
         }

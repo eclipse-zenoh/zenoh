@@ -19,7 +19,6 @@ pub use extension::*;
 /*************************************/
 // Inner Message IDs
 pub mod imsg {
-
     pub mod id {
         // Zenoh Messages
         pub const DECLARE: u8 = 0x0b;

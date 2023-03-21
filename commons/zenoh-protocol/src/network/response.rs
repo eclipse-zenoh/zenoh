@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, network::RequestId, zenoh::ZenohMessage};
+use crate::{core::WireExpr, network::RequestId};
 
 /// # Response message
 ///
@@ -43,7 +43,7 @@ use crate::{core::WireExpr, network::RequestId, zenoh::ZenohMessage};
 pub struct Response {
     pub wire_expr: WireExpr<'static>,
     pub rid: RequestId,
-    pub payload: ZenohMessage,
+    pub payload: u8, // @TODO
     pub ext_qos: ext::QoS,
     pub ext_tstamp: Option<ext::Timestamp>,
 }
@@ -65,7 +65,8 @@ impl Response {
         let mut rng = rand::thread_rng();
         let wire_expr = WireExpr::rand();
         let rid: RequestId = rng.gen();
-        let payload = ZenohMessage::rand();
+        // let payload = ZenohMessage::rand();
+        let payload: u8 = rng.gen(); // @TODO
         let ext_qos = ext::QoS::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::Timestamp::rand);
 

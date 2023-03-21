@@ -11,11 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{ExprId, Reliability, WireExpr};
+use crate::{
+    common::{imsg, ZExtZ64},
+    core::{ExprId, Reliability, WireExpr},
+    network::Mapping,
+};
 
-pub type SubscriberId = u32;
-pub type QueryableId = u32;
-pub type TokenId = u32;
+pub mod flag {
+    // pub const X: u8 = 1 << 5; // 0x20 Reserved
+    // pub const X: u8 = 1 << 6; // 0x40 Reserved
+    pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
+}
 
 /// Flags:
 /// - X: Reserved
@@ -55,20 +61,16 @@ pub mod id {
 
     pub const D_QUERYABLE: u8 = 0x05;
     pub const F_QUERYABLE: u8 = 0x06;
-
-    // SubModes
-    pub const MODE_PUSH: u8 = 0x00;
-    pub const MODE_PULL: u8 = 0x01;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeclareBody {
-    DeclareKeyExpr(DeclareKeyExpr),
-    ForgetKeyExpr(ForgetKeyExpr),
-    DeclareSubscriber(DeclareSubscriber),
-    ForgetSubscriber(ForgetSubscriber),
-    DeclareQueryable(DeclareQueryable),
-    ForgetQueryable(ForgetQueryable),
+    DeclareKeyExpr(keyexpr::DeclareKeyExpr),
+    ForgetKeyExpr(keyexpr::ForgetKeyExpr),
+    DeclareSubscriber(subscriber::DeclareSubscriber),
+    ForgetSubscriber(subscriber::ForgetSubscriber),
+    DeclareQueryable(queryable::DeclareQueryable),
+    ForgetQueryable(queryable::ForgetQueryable),
 }
 
 impl DeclareBody {
@@ -79,12 +81,12 @@ impl DeclareBody {
         let mut rng = rand::thread_rng();
 
         match rng.gen_range(0..6) {
-            0 => DeclareBody::DeclareKeyExpr(DeclareKeyExpr::rand()),
-            1 => DeclareBody::ForgetKeyExpr(ForgetKeyExpr::rand()),
-            2 => DeclareBody::DeclareSubscriber(DeclareSubscriber::rand()),
-            3 => DeclareBody::ForgetSubscriber(ForgetSubscriber::rand()),
-            4 => DeclareBody::DeclareQueryable(DeclareQueryable::rand()),
-            5 => DeclareBody::ForgetQueryable(ForgetQueryable::rand()),
+            0 => DeclareBody::DeclareKeyExpr(keyexpr::DeclareKeyExpr::rand()),
+            1 => DeclareBody::ForgetKeyExpr(keyexpr::ForgetKeyExpr::rand()),
+            2 => DeclareBody::DeclareSubscriber(subscriber::DeclareSubscriber::rand()),
+            3 => DeclareBody::ForgetSubscriber(subscriber::ForgetSubscriber::rand()),
+            4 => DeclareBody::DeclareQueryable(queryable::DeclareQueryable::rand()),
+            5 => DeclareBody::ForgetQueryable(queryable::ForgetQueryable::rand()),
             _ => unreachable!(),
         }
     }
@@ -132,330 +134,473 @@ impl Mode {
     }
 }
 
-/// ```text
-/// Flags:
-/// - N: Named          If N==1 then the key expr has name/suffix
-/// - X: Reserved
-/// - Z: Extension      If Z==1 then at least one extension is present
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |Z|X|N| D_KEXPR |
-/// +---------------+
-/// ~  expr_id:z16  ~
-/// +---------------+
-/// ~ key_scope:z16 ~
-/// +---------------+
-/// ~  key_suffix   ~  if N==1 -- <u8;z16>
-/// +---------------+
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DeclareKeyExpr {
-    pub id: ExprId,
-    pub wire_expr: WireExpr<'static>,
-}
+pub mod keyexpr {
+    use super::*;
 
-impl DeclareKeyExpr {
-    #[cfg(feature = "test")]
-    pub fn rand() -> Self {
-        use rand::Rng;
-
-        let mut rng = rand::thread_rng();
-
-        let id: ExprId = rng.gen();
-        let wire_expr = WireExpr::rand();
-
-        Self { id, wire_expr }
+    pub mod flag {
+        pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix
+                                  // pub const X: u8 = 1 << 6; // 0x40 Reserved
+        pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
     }
-}
 
-/// ```text
-/// Flags:
-/// - X: Reserved
-/// - X: Reserved
-/// - Z: Extension      If Z==1 then at least one extension is present
-///
-/// 7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |Z|X|X| F_KEXPR |
-/// +---------------+
-/// ~  expr_id:z16  ~
-/// +---------------+
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ForgetKeyExpr {
-    pub expr_id: ExprId,
-}
-
-impl ForgetKeyExpr {
-    #[cfg(feature = "test")]
-    pub fn rand() -> Self {
-        use rand::Rng;
-
-        let mut rng = rand::thread_rng();
-
-        let expr_id: ExprId = rng.gen();
-
-        Self { expr_id }
+    /// ```text
+    /// Flags:
+    /// - N: Named          If N==1 then the key expr has name/suffix
+    /// - X: Reserved
+    /// - Z: Extension      If Z==1 then at least one extension is present
+    ///
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|X|N| D_KEXPR |
+    /// +---------------+
+    /// ~  expr_id:z16  ~
+    /// +---------------+
+    /// ~ key_scope:z16 ~
+    /// +---------------+
+    /// ~  key_suffix   ~  if N==1 -- <u8;z16>
+    /// +---------------+
+    /// ~  [decl_exts]  ~  if Z==1
+    /// +---------------+
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct DeclareKeyExpr {
+        pub id: ExprId,
+        pub wire_expr: WireExpr<'static>,
     }
-}
 
-/// The subscription mode.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct SubscriberInfo {
-    pub reliability: Reliability,
-    pub mode: Mode,
-}
+    impl DeclareKeyExpr {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
 
-/// ```text
-/// Flags:
-/// - N: Named          If N==1 then the key expr has name/suffix
-/// - M: Mapping        if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
-/// - Z: Extension      If Z==1 then at least one extension is present
-///
-/// 7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |Z|M|N|  D_SUB  |
-/// +---------------+
-/// ~  subs_id:z32  ~
-/// +---------------+
-/// ~ key_scope:z16 ~
-/// +---------------+
-/// ~  key_suffix   ~  if N==1 -- <u8;z16>
-/// +---------------+
-/// |X|X|X|X|X|X|P|R|  (*)
-/// +---------------+
-///
-/// - if R==1 then the subscription is reliable, else it is best effort
-/// - if P==1 then the subscription is pull, else it is push
-///
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DeclareSubscriber {
-    pub id: SubscriberId,
-    pub wire_expr: WireExpr<'static>,
-    pub info: SubscriberInfo,
-}
+            let id: ExprId = rng.gen();
+            let wire_expr = WireExpr::rand();
 
-impl DeclareSubscriber {
-    #[cfg(feature = "test")]
-    pub fn rand() -> Self {
-        use rand::Rng;
+            Self { id, wire_expr }
+        }
+    }
 
-        let mut rng = rand::thread_rng();
+    /// ```text
+    /// Flags:
+    /// - X: Reserved
+    /// - X: Reserved
+    /// - Z: Extension      If Z==1 then at least one extension is present
+    ///
+    /// 7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|X|X| F_KEXPR |
+    /// +---------------+
+    /// ~  expr_id:z16  ~
+    /// +---------------+
+    /// ~  [decl_exts]  ~  if Z==1
+    /// +---------------+
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct ForgetKeyExpr {
+        pub id: ExprId,
+    }
 
-        let id: SubscriberId = rng.gen();
-        let wire_expr = WireExpr::rand();
-        let reliability = Reliability::rand();
-        let mode = Mode::rand();
-        let info = SubscriberInfo { reliability, mode };
+    impl ForgetKeyExpr {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
 
-        Self {
-            id,
-            wire_expr,
-            info,
+            let id: ExprId = rng.gen();
+
+            Self { id }
         }
     }
 }
 
-/// ```text
-/// Flags:
-/// - X: Reserved
-/// - X: Reserved
-/// - Z: Extension      If Z==1 then at least one extension is present
-///
-/// 7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |Z|X|X|  F_SUB  |
-/// +---------------+
-/// ~  subs_id:z32  ~
-/// +---------------+
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ForgetSubscriber {
-    pub id: SubscriberId,
-}
+pub mod subscriber {
+    use super::*;
 
-impl ForgetSubscriber {
-    #[cfg(feature = "test")]
-    pub fn rand() -> Self {
-        use rand::Rng;
+    pub type SubscriberId = u32;
 
-        let mut rng = rand::thread_rng();
-
-        let id: SubscriberId = rng.gen();
-
-        Self { id }
+    pub mod flag {
+        pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix
+        pub const M: u8 = 1 << 6; // 0x40 Mapping       if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
+        pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
     }
-}
 
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub struct QueryableInfo {
-    pub reliability: Reliability,
-    pub mode: Mode,
-    pub complete: u32, // Default 0: incomplete
-    pub distance: u32, // Default 0: no distance
-}
+    /// ```text
+    /// Flags:
+    /// - N: Named          If N==1 then the key expr has name/suffix
+    /// - M: Mapping        if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
+    /// - Z: Extension      If Z==1 then at least one extension is present
+    ///
+    /// 7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|M|N|  D_SUB  |
+    /// +---------------+
+    /// ~  subs_id:z32  ~
+    /// +---------------+
+    /// ~ key_scope:z16 ~
+    /// +---------------+
+    /// ~  key_suffix   ~  if N==1 -- <u8;z16>
+    /// +---------------+
+    /// ~  [decl_exts]  ~  if Z==1
+    /// +---------------+
+    ///
+    /// - if R==1 then the subscription is reliable, else it is best effort
+    /// - if P==1 then the subscription is pull, else it is push
+    ///
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct DeclareSubscriber {
+        pub id: SubscriberId,
+        pub wire_expr: WireExpr<'static>,
+        pub mapping: Mapping,
+        pub ext_info: ext::SubscriberInfo,
+    }
 
-/// ```text
-/// Flags:
-/// - N: Named          If N==1 then the key expr has name/suffix
-/// - M: Mapping        if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
-/// - Z: Extension      If Z==1 then at least one extension is present
-///
-/// 7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |Z|M|N|  D_QBL  |
-/// +---------------+
-/// ~  qbls_id:z32  ~
-/// +---------------+
-/// ~ key_scope:z16 ~
-/// +---------------+
-/// ~  key_suffix   ~  if N==1 -- <u8;z16>
-/// +---------------+
-/// |X|X|X|X|D|C|P|R|  (*)
-/// +---------------+
-/// ~  complete_n   ~  if C==1
-/// +---------------+
-/// ~   distance    ~  if D==1
-/// +---------------+
-///
-/// - if R==1 then the queryable is reliable, else it is best effort
-/// - if P==1 then the queryable is pull, else it is push
-/// - if C==1 then the queryable is complete and the N parameter is present
-/// - if D==1 then the queryable distance is present
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DeclareQueryable {
-    pub id: QueryableId,
-    pub wire_expr: WireExpr<'static>,
-    pub info: QueryableInfo,
-}
+    pub mod ext {
+        use super::*;
 
-impl DeclareQueryable {
-    #[cfg(feature = "test")]
-    pub fn rand() -> Self {
-        use rand::Rng;
+        pub const INFO: u8 = 0x01;
 
-        let mut rng = rand::thread_rng();
+        /// # The subscription mode.
+        ///
+        /// ```text
+        ///  7 6 5 4 3 2 1 0
+        /// +-+-+-+-+-+-+-+-+
+        /// |Z|0_1|    ID   |
+        /// +-+-+-+---------+
+        /// % reserved  |P|R%
+        /// +---------------+
+        ///
+        /// - if R==1 then the subscription is reliable, else it is best effort
+        /// - if P==1 then the subscription is pull, else it is push
+        /// - rsv:  Reserved
+        /// ```        
+        #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+        pub struct SubscriberInfo {
+            pub reliability: Reliability,
+            pub mode: Mode,
+        }
 
-        let id: QueryableId = rng.gen();
-        let wire_expr = WireExpr::rand();
-        let mode = Mode::rand();
-        let reliability = Reliability::rand();
-        let complete: u32 = rng.gen();
-        let distance: u32 = rng.gen();
-        let info = QueryableInfo {
-            reliability,
-            mode,
-            complete,
-            distance,
-        };
+        impl SubscriberInfo {
+            pub const R: u64 = 1;
+            pub const P: u64 = 1 << 1;
 
-        Self {
-            id,
-            wire_expr,
-            info,
+            #[cfg(feature = "test")]
+            pub fn rand() -> Self {
+                let reliability = Reliability::rand();
+                let mode = Mode::rand();
+
+                Self { reliability, mode }
+            }
+        }
+
+        impl From<ZExtZ64<{ INFO }>> for SubscriberInfo {
+            fn from(ext: ZExtZ64<{ INFO }>) -> Self {
+                let reliability = if imsg::has_option(ext.value, SubscriberInfo::R) {
+                    Reliability::Reliable
+                } else {
+                    Reliability::BestEffort
+                };
+                let mode = if imsg::has_option(ext.value, SubscriberInfo::P) {
+                    Mode::Pull
+                } else {
+                    Mode::Push
+                };
+                Self { reliability, mode }
+            }
+        }
+
+        impl From<SubscriberInfo> for ZExtZ64<{ INFO }> {
+            fn from(ext: SubscriberInfo) -> Self {
+                let mut v: u64 = 0;
+                if ext.reliability == Reliability::Reliable {
+                    v |= SubscriberInfo::R;
+                }
+                if ext.mode == Mode::Pull {
+                    v |= SubscriberInfo::P;
+                }
+                ZExtZ64::new(v)
+            }
+        }
+    }
+
+    impl DeclareSubscriber {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let id: SubscriberId = rng.gen();
+            let wire_expr = WireExpr::rand();
+            let mapping = Mapping::rand();
+            let ext_info = ext::SubscriberInfo::rand();
+
+            Self {
+                id,
+                wire_expr,
+                ext_info,
+                mapping,
+            }
+        }
+    }
+
+    /// ```text
+    /// Flags:
+    /// - X: Reserved
+    /// - X: Reserved
+    /// - Z: Extension      If Z==1 then at least one extension is present
+    ///
+    /// 7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|X|X|  F_SUB  |
+    /// +---------------+
+    /// ~  subs_id:z32  ~
+    /// +---------------+
+    /// ~  [decl_exts]  ~  if Z==1
+    /// +---------------+
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct ForgetSubscriber {
+        pub id: SubscriberId,
+    }
+
+    impl ForgetSubscriber {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let id: SubscriberId = rng.gen();
+
+            Self { id }
         }
     }
 }
 
-/// ```text
-/// Flags:
-/// - X: Reserved
-/// - X: Reserved
-/// - Z: Extension      If Z==1 then at least one extension is present
-///
-/// 7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |Z|X|X|  F_QBL  |
-/// +---------------+
-/// ~  qbls_id:z32  ~
-/// +---------------+
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ForgetQueryable {
-    pub id: QueryableId,
-}
+pub mod queryable {
+    use super::*;
 
-impl ForgetQueryable {
-    #[cfg(feature = "test")]
-    pub fn rand() -> Self {
-        use rand::Rng;
+    pub type QueryableId = u32;
 
-        let mut rng = rand::thread_rng();
+    pub mod flag {
+        pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix
+        pub const M: u8 = 1 << 6; // 0x40 Mapping       if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
+        pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
+    }
 
-        let id: QueryableId = rng.gen();
+    /// ```text
+    /// Flags:
+    /// - N: Named          If N==1 then the key expr has name/suffix
+    /// - M: Mapping        if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
+    /// - Z: Extension      If Z==1 then at least one extension is present
+    ///
+    /// 7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|M|N|  D_QBL  |
+    /// +---------------+
+    /// ~  qbls_id:z32  ~
+    /// +---------------+
+    /// ~ key_scope:z16 ~
+    /// +---------------+
+    /// ~  key_suffix   ~  if N==1 -- <u8;z16>
+    /// +---------------+
+    /// ~  [decl_exts]  ~  if Z==1
+    /// +---------------+
+    ///
+    /// - if R==1 then the queryable is reliable, else it is best effort
+    /// - if P==1 then the queryable is pull, else it is push
+    /// - if C==1 then the queryable is complete and the N parameter is present
+    /// - if D==1 then the queryable distance is present
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct DeclareQueryable {
+        pub id: QueryableId,
+        pub wire_expr: WireExpr<'static>,
+        pub mapping: Mapping,
+        pub ext_info: ext::QueryableInfo,
+    }
 
-        Self { id }
+    pub mod ext {
+        use super::*;
+
+        pub const INFO: u8 = 0x01;
+
+        ///  7 6 5 4 3 2 1 0
+        /// +-+-+-+-+-+-+-+-+
+        /// |Z|0_1|    ID   |
+        /// +-+-+-+---------+
+        /// ~  complete_n   ~
+        /// +---------------+
+        /// ~   distance    ~
+        /// +---------------+
+        #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+        pub struct QueryableInfo {
+            pub complete: u8, // Default 0: incomplete
+            pub distance: u8, // Default 0: no distance
+        }
+
+        impl QueryableInfo {
+            #[cfg(feature = "test")]
+            pub fn rand() -> Self {
+                use rand::Rng;
+                let mut rng = rand::thread_rng();
+                let complete: u8 = rng.gen();
+                let distance: u8 = rng.gen();
+
+                Self { complete, distance }
+            }
+        }
+
+        impl From<ZExtZ64<{ INFO }>> for QueryableInfo {
+            fn from(ext: ZExtZ64<{ INFO }>) -> Self {
+                let complete = ext.value as u8;
+                let distance = (ext.value >> 8) as u8;
+
+                Self { complete, distance }
+            }
+        }
+
+        impl From<QueryableInfo> for ZExtZ64<{ INFO }> {
+            fn from(ext: QueryableInfo) -> Self {
+                let mut v: u64 = ext.complete as u64;
+                v |= (ext.distance as u64) << 8;
+                ZExtZ64::new(v)
+            }
+        }
+    }
+
+    impl DeclareQueryable {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let id: QueryableId = rng.gen();
+            let wire_expr = WireExpr::rand();
+            let mapping = Mapping::rand();
+            let ext_info = ext::QueryableInfo::rand();
+
+            Self {
+                id,
+                wire_expr,
+                mapping,
+                ext_info,
+            }
+        }
+    }
+
+    /// ```text
+    /// Flags:
+    /// - X: Reserved
+    /// - X: Reserved
+    /// - Z: Extension      If Z==1 then at least one extension is present
+    ///
+    /// 7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|X|X|  F_QBL  |
+    /// +---------------+
+    /// ~  qbls_id:z32  ~
+    /// +---------------+
+    /// ~  [decl_exts]  ~  if Z==1
+    /// +---------------+
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct ForgetQueryable {
+        pub id: QueryableId,
+    }
+
+    impl ForgetQueryable {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let id: QueryableId = rng.gen();
+
+            Self { id }
+        }
     }
 }
 
-/// ```text
-/// Flags:
-/// - N: Named          If N==1 then the key expr has name/suffix
-/// - M: Mapping        if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
-/// - Z: Extension      If Z==1 then at least one extension is present
-///
-/// 7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |Z|M|N|  D_TKN  |
-/// +---------------+
-/// ~ token_id:z32  ~  
-/// +---------------+
-/// ~ key_scope:z16 ~
-/// +---------------+
-/// ~  key_suffix   ~  if N==1 -- <u8;z16>
-/// +---------------+
-///
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DeclareToken {
-    pub id: TokenId,
-    pub wire_expr: WireExpr<'static>,
-}
+pub mod token {
+    use super::*;
 
-impl DeclareToken {
-    #[cfg(feature = "test")]
-    pub fn rand() -> Self {
-        use rand::Rng;
+    pub type TokenId = u32;
 
-        let mut rng = rand::thread_rng();
-
-        let id: TokenId = rng.gen();
-        let wire_expr = WireExpr::rand();
-
-        Self { id, wire_expr }
+    /// ```text
+    /// Flags:
+    /// - N: Named          If N==1 then the key expr has name/suffix
+    /// - M: Mapping        if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
+    /// - Z: Extension      If Z==1 then at least one extension is present
+    ///
+    /// 7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|M|N|  D_TKN  |
+    /// +---------------+
+    /// ~ token_id:z32  ~  
+    /// +---------------+
+    /// ~ key_scope:z16 ~
+    /// +---------------+
+    /// ~  key_suffix   ~  if N==1 -- <u8;z16>
+    /// +---------------+
+    /// ~  [decl_exts]  ~  if Z==1
+    /// +---------------+
+    ///
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct DeclareToken {
+        pub id: TokenId,
+        pub wire_expr: WireExpr<'static>,
+        pub mapping: Mapping,
     }
-}
 
-/// ```text
-/// Flags:
-/// - X: Reserved
-/// - X: Reserved
-/// - Z: Extension      If Z==1 then at least one extension is present
-///
-/// 7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |Z|X|X|  F_TKN  |
-/// +---------------+
-/// ~ token_id:z32  ~  
-/// +---------------+
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ForgetToken {
-    pub id: TokenId,
-}
+    impl DeclareToken {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
 
-impl ForgetToken {
-    #[cfg(feature = "test")]
-    pub fn rand() -> Self {
-        use rand::Rng;
+            let id: TokenId = rng.gen();
+            let wire_expr = WireExpr::rand();
+            let mapping = Mapping::rand();
 
-        let mut rng = rand::thread_rng();
+            Self {
+                id,
+                wire_expr,
+                mapping,
+            }
+        }
+    }
 
-        let id: TokenId = rng.gen();
+    /// ```text
+    /// Flags:
+    /// - X: Reserved
+    /// - X: Reserved
+    /// - Z: Extension      If Z==1 then at least one extension is present
+    ///
+    /// 7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|X|X|  F_TKN  |
+    /// +---------------+
+    /// ~ token_id:z32  ~  
+    /// +---------------+
+    /// ~  [decl_exts]  ~  if Z==1
+    /// +---------------+
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct ForgetToken {
+        pub id: TokenId,
+    }
 
-        Self { id }
+    impl ForgetToken {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let id: TokenId = rng.gen();
+
+            Self { id }
+        }
     }
 }

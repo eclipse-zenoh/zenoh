@@ -23,7 +23,23 @@ use zenoh_buffers::{
     BBuf, ZBuf, ZSlice,
 };
 use zenoh_codec::*;
-use zenoh_protocol::{common::*, core::*, scouting::*, transport::*, zenoh::*};
+use zenoh_protocol::{
+    common::*,
+    core::*,
+    network::{
+        self,
+        declare::{
+            keyexpr::{DeclareKeyExpr, ForgetKeyExpr},
+            queryable::{DeclareQueryable, ForgetQueryable},
+            subscriber::{DeclareSubscriber, ForgetSubscriber},
+            DeclareBody,
+        },
+        Push, Request,
+    },
+    scouting::*,
+    transport::*,
+    zenoh::*,
+};
 
 const NUM_ITER: usize = 100;
 const MAX_PAYLOAD_SIZE: usize = 256;
@@ -436,10 +452,55 @@ fn codec_transport() {
 }
 
 // Network
-// #[test]
-// fn codec_push() {
-//     run!(Push, Push::rand());
-// }
+#[test]
+fn codec_push() {
+    run!(Push, Push::rand());
+}
+
+#[test]
+fn codec_request() {
+    run!(Request, Request::rand());
+}
+
+#[test]
+fn codec_declare() {
+    run!(network::Declare, network::Declare::rand());
+}
+
+#[test]
+fn codec_declare_body() {
+    run!(DeclareBody, DeclareBody::rand());
+}
+
+#[test]
+fn codec_declare_keyexpr() {
+    run!(DeclareKeyExpr, DeclareKeyExpr::rand());
+}
+
+#[test]
+fn codec_forget_keyexpr() {
+    run!(ForgetKeyExpr, ForgetKeyExpr::rand());
+}
+
+#[test]
+fn codec_declare_subscriber() {
+    run!(DeclareSubscriber, DeclareSubscriber::rand());
+}
+
+#[test]
+fn codec_forget_subscriber() {
+    run!(ForgetSubscriber, ForgetSubscriber::rand());
+}
+
+#[test]
+fn codec_declare_queryable() {
+    run!(DeclareQueryable, DeclareQueryable::rand());
+}
+
+#[test]
+fn codec_forget_queryable() {
+    run!(ForgetQueryable, ForgetQueryable::rand());
+}
 
 // Zenoh
 #[test]
@@ -518,12 +579,12 @@ fn codec_declaration_forget_queryable() {
 }
 
 #[test]
-fn codec_declaration() {
+fn codec_declaration_old() {
     run!(Declaration, Declaration::rand());
 }
 
 #[test]
-fn codec_declare() {
+fn codec_declare_old() {
     run!(Declare, Declare::rand());
 }
 

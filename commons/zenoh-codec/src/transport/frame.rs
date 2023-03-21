@@ -28,43 +28,7 @@ use zenoh_protocol::{
 };
 
 // Extensions: QoS
-impl<W> WCodec<(ext::QoS, bool), &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: (ext::QoS, bool)) -> Self::Output {
-        let (qos, more) = x;
-        let ext: ZExtZ64<{ ext::QOS }> = qos.into();
-        self.write(&mut *writer, (&ext, more))
-    }
-}
-
-impl<R> RCodec<(ext::QoS, bool), &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<(ext::QoS, bool), Self::Error> {
-        let header: u8 = self.read(&mut *reader)?;
-        let codec = Zenoh080Header::new(header);
-        codec.read(reader)
-    }
-}
-
-impl<R> RCodec<(ext::QoS, bool), &mut R> for Zenoh080Header
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<(ext::QoS, bool), Self::Error> {
-        let (ext, more): (ZExtZ64<{ ext::QOS }>, bool) = self.read(&mut *reader)?;
-        Ok((ext.into(), more))
-    }
-}
+crate::impl_zextz64!(ext::QoS, ext::QOS);
 
 // FrameHeader
 impl<W> WCodec<&FrameHeader, &mut W> for Zenoh080

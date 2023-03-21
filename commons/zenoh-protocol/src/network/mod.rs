@@ -197,8 +197,8 @@ pub mod ext {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::Rng;
-
             let mut rng = rand::thread_rng();
+
             let inner: u8 = rng.gen();
             Self { inner }
         }
@@ -251,8 +251,8 @@ pub mod ext {
             use crate::core::ZenohId;
             use core::convert::TryFrom;
             use rand::Rng;
-
             let mut rng = rand::thread_rng();
+
             let time = uhlc::NTP64(rng.gen());
             let id = uhlc::ID::try_from(ZenohId::rand().as_slice()).unwrap();
             let timestamp = uhlc::Timestamp::new(time, id);

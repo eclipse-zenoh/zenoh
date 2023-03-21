@@ -68,7 +68,7 @@ impl<'a> WireExpr<'a> {
     }
 
     pub fn try_as_str(&'a self) -> ZResult<&'a str> {
-        if self.scope == 0 {
+        if self.scope == EMPTY_EXPR_ID {
             Ok(self.suffix.as_ref())
         } else {
             bail!("Scoped key expression")

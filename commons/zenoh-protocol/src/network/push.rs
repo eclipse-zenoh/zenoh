@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, network::Mapping, zenoh::ZenohMessage};
+use crate::{core::WireExpr, network::Mapping};
 
 pub mod flag {
     pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix
@@ -33,7 +33,7 @@ pub mod flag {
 /// +---------------+
 /// ~  key_suffix   ~  if N==1 -- <u8;z16>
 /// +---------------+
-/// ~ [data_exts]   ~  if Z==1
+/// ~  [push_exts]  ~  if Z==1
 /// +---------------+
 /// ~ ZenohMessage  ~
 /// +---------------+
@@ -42,17 +42,41 @@ pub mod flag {
 pub struct Push {
     pub wire_expr: WireExpr<'static>,
     pub mapping: Mapping,
-    pub payload: ZenohMessage,
+    pub payload: u8, // @TODO
     pub ext_qos: ext::QoS,
     pub ext_tstamp: Option<ext::Timestamp>,
+    pub ext_dst: ext::Destination,
 }
 
 pub mod ext {
     pub const QOS: u8 = crate::network::ext::QOS;
     pub const TSTAMP: u8 = crate::network::ext::TSTAMP;
+    pub const DST: u8 = 0x03;
 
     pub type QoS = crate::network::ext::QoS;
     pub type Timestamp = crate::network::ext::Timestamp;
+
+    #[repr(u8)]
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+    pub enum Destination {
+        #[default]
+        Subscribers = 0x00,
+        Queryables = 0x01,
+    }
+
+    impl Destination {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            match rng.gen_range(0..2) {
+                0 => Destination::Subscribers,
+                1 => Destination::Queryables,
+                _ => unreachable!(),
+            }
+        }
+    }
 }
 
 impl Push {
@@ -63,9 +87,11 @@ impl Push {
         let mut rng = rand::thread_rng();
         let wire_expr = WireExpr::rand();
         let mapping = Mapping::rand();
-        let payload = ZenohMessage::rand();
+        // let payload = ZenohMessage::rand();
+        let payload: u8 = rng.gen(); // @TODO
         let ext_qos = ext::QoS::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::Timestamp::rand);
+        let ext_dst = ext::Destination::rand();
 
         Self {
             wire_expr,
@@ -73,6 +99,7 @@ impl Push {
             payload,
             ext_tstamp,
             ext_qos,
+            ext_dst,
         }
     }
 }
