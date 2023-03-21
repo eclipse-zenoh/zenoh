@@ -44,7 +44,6 @@ pub struct StorageService {
     capability: Capability,
     tombstones: RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>,
     wildcard_updates: RwLock<KeBoxTree<Sample, UnknownWildness, KeyedSetProvider>>,
-    // latest_timestamp_cache: Option<RwLock<HashMap<OwnedKeyExpr, Timestamp>>>,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     replication: Option<ReplicationService>,
@@ -60,10 +59,8 @@ impl StorageService {
         rx: Receiver<StorageMessage>,
         replication: Option<ReplicationService>,
     ) {
-        // let mut latest_timestamp_cache = None;
-        // if replication.is_some() || (capability.read_cost > 0 && capability.history.eq(&History::Latest)) {
-        //     latest_timestamp_cache = Some(RwLock::new(HashMap::new()));
-        // }
+        // @TODO: if storage is persistent, check if tombstones and wildcard updates are already present
+        // @TODO: if read_cost is high for the storage, initialize a cache for the latest value
         let mut storage_service = StorageService {
             session,
             key_expr,
@@ -73,7 +70,6 @@ impl StorageService {
             capability: store_intercept.capability,
             tombstones: RwLock::new(KeBoxTree::new()),
             wildcard_updates: RwLock::new(KeBoxTree::new()),
-            // latest_timestamp_cache,
             in_interceptor: store_intercept.in_interceptor,
             out_interceptor: store_intercept.out_interceptor,
             replication,
@@ -266,6 +262,7 @@ impl StorageService {
                     }
                 };
 
+                // @TODO: if strip_prefix present, perform the stripping
                 let mut storage = self.storage.lock().await;
                 let result = if sample.kind == SampleKind::Put {
                     storage.put(k.clone(), sample_to_store.clone()).await
@@ -283,6 +280,7 @@ impl StorageService {
                     && result.is_ok()
                     && !matches!(result.unwrap(), StorageInsertionResult::Outdated)
                 {
+                    // @TODO: if strip_prefix present, add back the prefix
                     let sending = self
                         .replication
                         .as_ref()
@@ -379,7 +377,6 @@ impl StorageService {
                 }
             }
         }
-        // drop(storage);
         true
     }
 
@@ -396,9 +393,11 @@ impl StorageService {
             self.get_matching_keys(q.key_expr()).await
         } else {
             vec![OwnedKeyExpr::new(q.key_expr().as_str()).unwrap()]
+            // @TODO: if there is a single key and it is not available, return Error
         };
         let mut storage = self.storage.lock().await;
         for key in matching_keys {
+            // @TODO: if strip_prefix present, perform the stripping
             match storage.get(key, q.parameters()).await {
                 Ok(samples) => {
                     for sample in samples {
@@ -408,6 +407,7 @@ impl StorageService {
                         } else {
                             sample
                         };
+                        // @TODO: if strip_prefix present, add back the prefix
                         if let Err(e) = q.reply(Ok(sample)).res().await {
                             warn!(
                                 "Storage {} raised an error sending a query: {}",
