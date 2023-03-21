@@ -18,6 +18,7 @@ use futures::select;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
+use zenoh::query::ReplyKeyExpr;
 use zenoh_ext::*;
 
 #[async_std::main]
@@ -40,6 +41,7 @@ async fn main() {
             .declare_subscriber(key_expr)
             .querying()
             .query_selector(&selector)
+            .query_accept_replies(ReplyKeyExpr::Any)
             .res()
             .await
             .unwrap()

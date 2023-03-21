@@ -14,6 +14,7 @@
 use flume::r#async::RecvStream;
 use futures::stream::{Forward, Map};
 use std::{convert::TryInto, time::Duration};
+use zenoh::query::ReplyKeyExpr;
 use zenoh::sample::Locality;
 use zenoh::Result as ZResult;
 use zenoh::{
@@ -225,6 +226,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
             // By default no query consolidation, to receive more than 1 sample per-resource
             // (if history of publications is available)
             query_consolidation: QueryConsolidation::from(zenoh::query::ConsolidationMode::None),
+            query_accept_replies: ReplyKeyExpr::default(),
             query_timeout: Duration::from_secs(10),
             handler: self.handler,
         }
@@ -337,6 +339,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
             query_selector: None,
             query_target: QueryTarget::default(),
             query_consolidation: QueryConsolidation::default(),
+            query_accept_replies: ReplyKeyExpr::MatchingQuery,
             query_timeout: Duration::from_secs(10),
             handler: self.handler,
         }

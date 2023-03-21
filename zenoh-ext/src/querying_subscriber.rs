@@ -19,7 +19,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh::handlers::{locked, DefaultHandler};
 use zenoh::prelude::r#async::*;
-use zenoh::query::{QueryConsolidation, QueryTarget};
+use zenoh::query::{QueryConsolidation, QueryTarget, ReplyKeyExpr};
 use zenoh::subscriber::{Reliability, Subscriber};
 use zenoh::time::Timestamp;
 use zenoh::Result as ZResult;
@@ -36,6 +36,7 @@ pub struct QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
     pub(crate) query_selector: Option<ZResult<Selector<'b>>>,
     pub(crate) query_target: QueryTarget,
     pub(crate) query_consolidation: QueryConsolidation,
+    pub(crate) query_accept_replies: ReplyKeyExpr,
     pub(crate) query_timeout: Duration,
     pub(crate) handler: Handler,
 }
@@ -59,6 +60,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
             query_selector,
             query_target,
             query_consolidation,
+            query_accept_replies,
             query_timeout,
             handler: _,
         } = self;
@@ -71,6 +73,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
             query_selector,
             query_target,
             query_consolidation,
+            query_accept_replies,
             query_timeout,
             handler: callback,
         }
@@ -110,6 +113,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
             query_selector,
             query_target,
             query_consolidation,
+            query_accept_replies,
             query_timeout,
             handler: _,
         } = self;
@@ -122,6 +126,7 @@ impl<'a, 'b, KeySpace> QueryingSubscriberBuilder<'a, 'b, KeySpace, DefaultHandle
             query_selector,
             query_target,
             query_consolidation,
+            query_accept_replies,
             query_timeout,
             handler,
         }
@@ -189,6 +194,13 @@ impl<'a, 'b, KeySpace, Handler> QueryingSubscriberBuilder<'a, 'b, KeySpace, Hand
         self
     }
 
+    /// Change the accepted replies for queries.
+    #[inline]
+    pub fn query_accept_replies(mut self, accept_replies: ReplyKeyExpr) -> Self {
+        self.query_accept_replies = accept_replies;
+        self
+    }
+
     /// Change the timeout to be used for queries.
     #[inline]
     pub fn query_timeout(mut self, query_timeout: Duration) -> Self {
@@ -220,6 +232,7 @@ where
         };
         let query_target = self.query_target;
         let query_consolidation = self.query_consolidation;
+        let query_accept_replies = self.query_accept_replies;
         let query_timeout = self.query_timeout;
         FetchingSubscriberBuilder {
             session: self.session,
@@ -235,6 +248,7 @@ where
                 .callback(cb)
                 .target(query_target)
                 .consolidation(query_consolidation)
+                .accept_replies(query_accept_replies)
                 .timeout(query_timeout)
                 .res_sync()
             },
