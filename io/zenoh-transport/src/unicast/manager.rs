@@ -28,7 +28,7 @@ use zenoh_config::Config;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zlock, zparse};
 use zenoh_link::*;
 use zenoh_protocol::{
-    core::{locator::LocatorProtocol, ZenohId},
+    core::{endpoint::Protocol, ZenohId},
     transport::tmsg,
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -275,20 +275,22 @@ impl TransportManager {
     /*************************************/
     /*            LINK MANAGER           */
     /*************************************/
-    fn new_link_manager_unicast(&self, protocol: &str) -> ZResult<LinkManagerUnicast> {
+    fn new_link_manager_unicast(&self, protocol: &Protocol) -> ZResult<LinkManagerUnicast> {
         let mut w_guard = zlock!(self.state.unicast.protocols);
-        if let Some(lm) = w_guard.get(protocol) {
+        if let Some(lm) = w_guard.get(protocol.as_str()) {
             Ok(lm.clone())
         } else {
-            let lm =
-                LinkManagerBuilderUnicast::make(self.new_unicast_link_sender.clone(), protocol)?;
-            w_guard.insert(protocol.to_owned(), lm.clone());
+            let lm = LinkManagerBuilderUnicast::make(
+                self.new_unicast_link_sender.clone(),
+                protocol.as_str(),
+            )?;
+            w_guard.insert(protocol.to_string(), lm.clone());
             Ok(lm)
         }
     }
 
-    fn get_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<LinkManagerUnicast> {
-        match zlock!(self.state.unicast.protocols).get(protocol) {
+    fn get_link_manager_unicast(&self, protocol: &Protocol) -> ZResult<LinkManagerUnicast> {
+        match zlock!(self.state.unicast.protocols).get(protocol.as_str()) {
             Some(manager) => Ok(manager.clone()),
             None => bail!(
                 "Can not get the link manager for protocol ({}) because it has not been found",
@@ -297,8 +299,8 @@ impl TransportManager {
         }
     }
 
-    fn del_link_manager_unicast(&self, protocol: &LocatorProtocol) -> ZResult<()> {
-        match zlock!(self.state.unicast.protocols).remove(protocol) {
+    fn del_link_manager_unicast(&self, protocol: &Protocol) -> ZResult<()> {
+        match zlock!(self.state.unicast.protocols).remove(protocol.as_str()) {
             Some(_) => Ok(()),
             None => bail!(
                 "Can not delete the link manager for protocol ({}) because it has not been found.",
@@ -311,7 +313,7 @@ impl TransportManager {
     /*              LISTENER             */
     /*************************************/
     pub async fn add_listener_unicast(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
-        let manager = self.new_link_manager_unicast(endpoint.protocol().as_str())?;
+        let manager = self.new_link_manager_unicast(&endpoint.protocol())?;
         // Fill and merge the endpoint configuration
         if let Some(config) = self.config.endpoint.get(endpoint.protocol().as_str()) {
             endpoint.config_mut().extend(config.iter())?;
@@ -320,10 +322,10 @@ impl TransportManager {
     }
 
     pub async fn del_listener_unicast(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let lm = self.get_link_manager_unicast(endpoint.protocol().as_str())?;
+        let lm = self.get_link_manager_unicast(&endpoint.protocol())?;
         lm.del_listener(endpoint).await?;
         if lm.get_listeners().is_empty() {
-            self.del_link_manager_unicast(endpoint.protocol().as_str())?;
+            self.del_link_manager_unicast(&endpoint.protocol())?;
         }
         Ok(())
     }
@@ -462,7 +464,7 @@ impl TransportManager {
         }
 
         // Automatically create a new link manager for the protocol if it does not exist
-        let manager = self.new_link_manager_unicast(endpoint.protocol().as_str())?;
+        let manager = self.new_link_manager_unicast(&endpoint.protocol())?;
         // Fill and merge the endpoint configuration
         if let Some(config) = self.config.endpoint.get(endpoint.protocol().as_str()) {
             endpoint.config_mut().extend(config.iter())?;

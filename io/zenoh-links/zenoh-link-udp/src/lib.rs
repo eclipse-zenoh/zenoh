@@ -20,11 +20,10 @@
 mod multicast;
 mod unicast;
 
-use std::net::SocketAddr;
-
 use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 pub use multicast::*;
+use std::net::SocketAddr;
 pub use unicast::*;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
