@@ -24,8 +24,6 @@ pub type PullId = u32;
 /// +-+-+-+-+-+-+-+-+
 /// |Z|X|X|  PULL   |
 /// +-+-+-+---------+
-/// |    target     |
-/// +---------------+
 /// ~    id:z32     ~  (*)
 /// +---------------+
 /// ~  [pull_exts]  ~  (*)
@@ -35,7 +33,6 @@ pub type PullId = u32;
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pull {
-    pub target: u8,
     pub id: PullId,
 }
 
@@ -45,12 +42,10 @@ impl Pull {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
-
         let mut rng = rand::thread_rng();
 
-        let target: u8 = rng.gen();
         let id: PullId = rng.gen();
 
-        Self { target, id }
+        Self { id }
     }
 }

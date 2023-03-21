@@ -34,7 +34,6 @@ where
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.target)?;
         self.write(&mut *writer, x.id)?;
 
         Ok(())
@@ -66,7 +65,6 @@ where
         }
 
         // Body
-        let target: u8 = self.codec.read(&mut *reader)?;
         let id: PullId = self.codec.read(&mut *reader)?;
 
         // Extensions
@@ -76,6 +74,6 @@ where
             has_ext = ext;
         }
 
-        Ok(Pull { target, id })
+        Ok(Pull { id })
     }
 }

@@ -38,7 +38,7 @@ use zenoh_protocol::{
     },
     scouting::*,
     transport::*,
-    zenoh::*,
+    zenoh,
 };
 
 const NUM_ITER: usize = 100;
@@ -509,106 +509,106 @@ fn codec_forget_queryable() {
 
 // Zenoh
 #[test]
-fn codec_routing_context() {
-    run!(RoutingContext, RoutingContext::rand());
+fn codec_routing_context_old() {
+    run!(zenoh::RoutingContext, zenoh::RoutingContext::rand());
 }
 
 #[test]
-fn codec_reply_context() {
-    run!(ReplyContext, ReplyContext::rand());
+fn codec_reply_context_old() {
+    run!(zenoh::ReplyContext, zenoh::ReplyContext::rand());
 }
 
 #[test]
-fn codec_data_info() {
-    run!(DataInfo, DataInfo::rand());
+fn codec_data_info_old() {
+    run!(zenoh::DataInfo, zenoh::DataInfo::rand());
 }
 
 #[test]
-fn codec_data() {
-    run!(Data, Data::rand());
+fn codec_data_old() {
+    run!(zenoh::Data, zenoh::Data::rand());
 }
 
 #[test]
-fn codec_unit() {
-    run!(Unit, Unit::rand());
+fn codec_unit_old() {
+    run!(zenoh::Unit, zenoh::Unit::rand());
 }
 
 #[test]
 fn codec_pull_old() {
-    run!(Pull, Pull::rand());
+    run!(zenoh::Pull, zenoh::Pull::rand());
 }
 
 #[test]
-fn codec_query() {
-    run!(Query, Query::rand());
+fn codec_query_old() {
+    run!(zenoh::Query, zenoh::Query::rand());
 }
 
 #[test]
-fn codec_declaration_resource() {
-    run!(Resource, Resource::rand());
+fn codec_declaration_resource_old() {
+    run!(zenoh::Resource, zenoh::Resource::rand());
 }
 
 #[test]
-fn codec_declaration_forget_resource() {
-    run!(ForgetResource, ForgetResource::rand());
+fn codec_declaration_forget_resource_old() {
+    run!(zenoh::ForgetResource, zenoh::ForgetResource::rand());
 }
 
 #[test]
-fn codec_declaration_publisher() {
-    run!(Publisher, Publisher::rand());
+fn codec_declaration_publisher_old() {
+    run!(zenoh::Publisher, zenoh::Publisher::rand());
 }
 
 #[test]
-fn codec_declaration_forget_publisher() {
-    run!(ForgetPublisher, ForgetPublisher::rand());
+fn codec_declaration_forget_publisher_old() {
+    run!(zenoh::ForgetPublisher, zenoh::ForgetPublisher::rand());
 }
 
 #[test]
-fn codec_declaration_subscriber() {
-    run!(Subscriber, Subscriber::rand());
+fn codec_declaration_subscriber_old() {
+    run!(zenoh::Subscriber, zenoh::Subscriber::rand());
 }
 
 #[test]
-fn codec_declaration_forget_subscriber() {
-    run!(ForgetSubscriber, ForgetSubscriber::rand());
+fn codec_declaration_forget_subscriber_old() {
+    run!(zenoh::ForgetSubscriber, zenoh::ForgetSubscriber::rand());
 }
 
 #[test]
-fn codec_declaration_queryable() {
-    run!(Queryable, Queryable::rand());
+fn codec_declaration_queryable_old() {
+    run!(zenoh::Queryable, zenoh::Queryable::rand());
 }
 
 #[test]
-fn codec_declaration_forget_queryable() {
+fn codec_declaration_forget_queryable_old() {
     run!(ForgetQueryable, ForgetQueryable::rand());
 }
 
 #[test]
 fn codec_declaration_old() {
-    run!(Declaration, Declaration::rand());
+    run!(zenoh::Declaration, zenoh::Declaration::rand());
 }
 
 #[test]
 fn codec_declare_old() {
-    run!(Declare, Declare::rand());
+    run!(zenoh::Declare, zenoh::Declare::rand());
 }
 
 #[test]
-fn codec_link_state() {
-    run!(LinkState, LinkState::rand());
+fn codec_link_state_old() {
+    run!(zenoh::LinkState, zenoh::LinkState::rand());
 }
 
 #[test]
-fn codec_link_state_list() {
-    run!(LinkStateList, LinkStateList::rand());
+fn codec_link_state_list_old() {
+    run!(zenoh::LinkStateList, zenoh::LinkStateList::rand());
 }
 
 #[test]
-fn codec_zenoh() {
+fn codec_zenoh_old() {
     run!(
-        ZenohMessage,
+        zenoh::ZenohMessage,
         {
-            let mut x = ZenohMessage::rand();
+            let mut x = zenoh::ZenohMessage::rand();
             x.channel.reliability = Reliability::Reliable;
             x
         },
@@ -616,9 +616,9 @@ fn codec_zenoh() {
         { Zenoh080Reliability::new(Reliability::Reliable) }
     );
     run!(
-        ZenohMessage,
+        zenoh::ZenohMessage,
         {
-            let mut x = ZenohMessage::rand();
+            let mut x = zenoh::ZenohMessage::rand();
             x.channel.reliability = Reliability::BestEffort;
             x
         },
