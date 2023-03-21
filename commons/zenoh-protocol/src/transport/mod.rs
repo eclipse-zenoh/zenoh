@@ -19,10 +19,7 @@ pub mod init;
 pub mod keepalive;
 pub mod open;
 
-use crate::core::Priority;
-use alloc::boxed::Box;
 pub use close::Close;
-use core::{convert::TryInto, fmt};
 pub use fragment::{Fragment, FragmentHeader};
 pub use frame::{Frame, FrameHeader};
 pub use init::{InitAck, InitSyn};
@@ -40,54 +37,16 @@ pub type BatchSize = u16;
 pub mod id {
     // WARNING: it's crucial that these IDs do NOT collide with the IDs
     //          defined in `crate::network::id`.
-    // pub const JOIN: u8 = 0x01; // For multicast communications only
-    pub const INIT: u8 = 0x02; // For unicast communications only
-    pub const OPEN: u8 = 0x03; // For unicast communications only
-    pub const CLOSE: u8 = 0x04;
-    pub const KEEP_ALIVE: u8 = 0x05;
-    pub const FRAME: u8 = 0x06;
-    pub const FRAGMENT: u8 = 0x07;
+    pub const INIT: u8 = 0x00; // For unicast communications only
+    pub const OPEN: u8 = 0x01; // For unicast communications only
+    pub const CLOSE: u8 = 0x02;
+    pub const KEEP_ALIVE: u8 = 0x03;
+    pub const FRAME: u8 = 0x04;
+    pub const FRAGMENT: u8 = 0x05;
+    // pub const JOIN: u8 = 0x06; // For multicast communications only
 }
 
 pub type TransportSn = u32;
-// pub const TRANSPORT_SN_RESOLUTION: Bits = Bits::U32;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConduitSnList {
-    Plain(ConduitSn),
-    QoS(Box<[ConduitSn; Priority::NUM]>),
-}
-
-impl fmt::Display for ConduitSnList {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[ ")?;
-        match self {
-            ConduitSnList::Plain(sn) => {
-                write!(
-                    f,
-                    "{:?} {{ reliable: {}, best effort: {} }}",
-                    Priority::default(),
-                    sn.reliable,
-                    sn.best_effort
-                )?;
-            }
-            ConduitSnList::QoS(ref sns) => {
-                for (prio, sn) in sns.iter().enumerate() {
-                    let p: Priority = (prio as u8).try_into().unwrap();
-                    write!(
-                        f,
-                        "{:?} {{ reliable: {}, best effort: {} }}",
-                        p, sn.reliable, sn.best_effort
-                    )?;
-                    if p != Priority::Background {
-                        write!(f, ", ")?;
-                    }
-                }
-            }
-        }
-        write!(f, " ]")
-    }
-}
 
 /// The kind of reliability.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
@@ -129,11 +88,11 @@ impl TransportMessage {
             1 => TransportBody::InitAck(InitAck::rand()),
             2 => TransportBody::OpenSyn(OpenSyn::rand()),
             3 => TransportBody::OpenAck(OpenAck::rand()),
-            // 4 => TransportBody::Join(Join::rand()),
             4 => TransportBody::Close(Close::rand()),
             5 => TransportBody::KeepAlive(KeepAlive::rand()),
             6 => TransportBody::Frame(Frame::rand()),
             7 => TransportBody::Fragment(Fragment::rand()),
+            // 8 => TransportBody::Join(Join::rand()),
             _ => unreachable!(),
         };
 
@@ -175,12 +134,6 @@ impl From<OpenAck> for TransportMessage {
     }
 }
 
-// impl From<Join> for TransportMessage {
-//     fn from(join: Join) -> Self {
-//         TransportBody::Join(join).into()
-//     }
-// }
-
 impl From<Close> for TransportMessage {
     fn from(close: Close) -> Self {
         TransportBody::Close(close).into()
@@ -204,3 +157,9 @@ impl From<Fragment> for TransportMessage {
         TransportBody::Fragment(fragment).into()
     }
 }
+
+// impl From<Join> for TransportMessage {
+//     fn from(join: Join) -> Self {
+//         TransportBody::Join(join).into()
+//     }
+// }
