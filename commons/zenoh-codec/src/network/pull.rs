@@ -18,7 +18,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{imsg, ZExtUnknown},
-    network::{id, push::flag, Pull},
+    network::{id, pull::flag, Pull},
     zenoh::PullId,
 };
 

@@ -15,6 +15,7 @@ mod declare;
 mod pull;
 mod push;
 mod request;
+mod response;
 
 use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{

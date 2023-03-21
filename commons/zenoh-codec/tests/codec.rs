@@ -34,7 +34,7 @@ use zenoh_protocol::{
             subscriber::{DeclareSubscriber, ForgetSubscriber},
             DeclareBody,
         },
-        Pull, Push, Request,
+        Pull, Push, Request, Response, ResponseFinal,
     },
     scouting::*,
     transport::*,
@@ -453,21 +453,6 @@ fn codec_transport() {
 
 // Network
 #[test]
-fn codec_push() {
-    run!(Push, Push::rand());
-}
-
-#[test]
-fn codec_pull() {
-    run!(Pull, Pull::rand());
-}
-
-#[test]
-fn codec_request() {
-    run!(Request, Request::rand());
-}
-
-#[test]
 fn codec_declare() {
     run!(network::Declare, network::Declare::rand());
 }
@@ -505,6 +490,31 @@ fn codec_declare_queryable() {
 #[test]
 fn codec_forget_queryable() {
     run!(ForgetQueryable, ForgetQueryable::rand());
+}
+
+#[test]
+fn codec_push() {
+    run!(Push, Push::rand());
+}
+
+#[test]
+fn codec_pull() {
+    run!(Pull, Pull::rand());
+}
+
+#[test]
+fn codec_request() {
+    run!(Request, Request::rand());
+}
+
+#[test]
+fn codec_response() {
+    run!(Response, Response::rand());
+}
+
+#[test]
+fn codec_response_final() {
+    run!(ResponseFinal, ResponseFinal::rand());
 }
 
 // Zenoh

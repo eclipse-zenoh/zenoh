@@ -218,7 +218,7 @@ where
             }
         }
 
-        // Message
+        // Payload
         // let payload: ZenohMessage = self.codec.read(&mut *reader)?;
         let payload: u8 = self.codec.read(&mut *reader)?; // @TODO
 
