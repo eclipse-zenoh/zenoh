@@ -17,11 +17,11 @@ pub mod push;
 pub mod request;
 pub mod response;
 
-pub use declare::Declare;
-pub use pull::Pull;
-pub use push::Push;
-pub use request::{Request, RequestId};
-pub use response::{Response, ResponseFinal};
+pub use declare::*;
+pub use pull::*;
+pub use push::*;
+pub use request::*;
+pub use response::*;
 
 pub mod id {
     // WARNING: it's crucial for Zenoh to work that these IDs do NOT

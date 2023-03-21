@@ -23,23 +23,7 @@ use zenoh_buffers::{
     BBuf, ZBuf, ZSlice,
 };
 use zenoh_codec::*;
-use zenoh_protocol::{
-    common::*,
-    core::*,
-    network::{
-        self,
-        declare::{
-            keyexpr::{DeclareKeyExpr, ForgetKeyExpr},
-            queryable::{DeclareQueryable, ForgetQueryable},
-            subscriber::{DeclareSubscriber, ForgetSubscriber},
-            DeclareBody,
-        },
-        Pull, Push, Request, Response, ResponseFinal,
-    },
-    scouting::*,
-    transport::*,
-    zenoh,
-};
+use zenoh_protocol::{common::*, core::*, network::*, scouting::*, transport::*, zenoh};
 
 const NUM_ITER: usize = 100;
 const MAX_PAYLOAD_SIZE: usize = 256;
@@ -454,7 +438,7 @@ fn codec_transport() {
 // Network
 #[test]
 fn codec_declare() {
-    run!(network::Declare, network::Declare::rand());
+    run!(Declare, Declare::rand());
 }
 
 #[test]
@@ -490,6 +474,16 @@ fn codec_declare_queryable() {
 #[test]
 fn codec_forget_queryable() {
     run!(ForgetQueryable, ForgetQueryable::rand());
+}
+
+#[test]
+fn codec_declare_token() {
+    run!(DeclareToken, DeclareToken::rand());
+}
+
+#[test]
+fn codec_forget_token() {
+    run!(ForgetToken, ForgetToken::rand());
 }
 
 #[test]

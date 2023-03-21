@@ -16,6 +16,10 @@ use crate::{
     core::{ExprId, Reliability, WireExpr},
     network::Mapping,
 };
+pub use keyexpr::*;
+pub use queryable::*;
+pub use subscriber::*;
+pub use token::*;
 
 pub mod flag {
     // pub const X: u8 = 1 << 5; // 0x20 Reserved
@@ -53,24 +57,29 @@ pub mod ext {
 }
 
 pub mod id {
-    pub const D_KEYEXPR: u8 = 0x01;
-    pub const F_KEYEXPR: u8 = 0x02;
+    pub const D_KEYEXPR: u8 = 0x00;
+    pub const F_KEYEXPR: u8 = 0x01;
 
-    pub const D_SUBSCRIBER: u8 = 0x03;
-    pub const F_SUBSCRIBER: u8 = 0x04;
+    pub const D_SUBSCRIBER: u8 = 0x02;
+    pub const F_SUBSCRIBER: u8 = 0x03;
 
-    pub const D_QUERYABLE: u8 = 0x05;
-    pub const F_QUERYABLE: u8 = 0x06;
+    pub const D_QUERYABLE: u8 = 0x04;
+    pub const F_QUERYABLE: u8 = 0x05;
+
+    pub const D_TOKEN: u8 = 0x06;
+    pub const F_TOKEN: u8 = 0x07;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeclareBody {
-    DeclareKeyExpr(keyexpr::DeclareKeyExpr),
-    ForgetKeyExpr(keyexpr::ForgetKeyExpr),
-    DeclareSubscriber(subscriber::DeclareSubscriber),
-    ForgetSubscriber(subscriber::ForgetSubscriber),
-    DeclareQueryable(queryable::DeclareQueryable),
-    ForgetQueryable(queryable::ForgetQueryable),
+    DeclareKeyExpr(DeclareKeyExpr),
+    ForgetKeyExpr(ForgetKeyExpr),
+    DeclareSubscriber(DeclareSubscriber),
+    ForgetSubscriber(ForgetSubscriber),
+    DeclareQueryable(DeclareQueryable),
+    ForgetQueryable(ForgetQueryable),
+    DeclareToken(DeclareToken),
+    ForgetToken(ForgetToken),
 }
 
 impl DeclareBody {
@@ -80,13 +89,15 @@ impl DeclareBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..6) {
-            0 => DeclareBody::DeclareKeyExpr(keyexpr::DeclareKeyExpr::rand()),
-            1 => DeclareBody::ForgetKeyExpr(keyexpr::ForgetKeyExpr::rand()),
-            2 => DeclareBody::DeclareSubscriber(subscriber::DeclareSubscriber::rand()),
-            3 => DeclareBody::ForgetSubscriber(subscriber::ForgetSubscriber::rand()),
-            4 => DeclareBody::DeclareQueryable(queryable::DeclareQueryable::rand()),
-            5 => DeclareBody::ForgetQueryable(queryable::ForgetQueryable::rand()),
+        match rng.gen_range(0..8) {
+            0 => DeclareBody::DeclareKeyExpr(DeclareKeyExpr::rand()),
+            1 => DeclareBody::ForgetKeyExpr(ForgetKeyExpr::rand()),
+            2 => DeclareBody::DeclareSubscriber(DeclareSubscriber::rand()),
+            3 => DeclareBody::ForgetSubscriber(ForgetSubscriber::rand()),
+            4 => DeclareBody::DeclareQueryable(DeclareQueryable::rand()),
+            5 => DeclareBody::ForgetQueryable(ForgetQueryable::rand()),
+            6 => DeclareBody::DeclareToken(DeclareToken::rand()),
+            7 => DeclareBody::ForgetToken(ForgetToken::rand()),
             _ => unreachable!(),
         }
     }
@@ -526,6 +537,12 @@ pub mod token {
     use super::*;
 
     pub type TokenId = u32;
+
+    pub mod flag {
+        pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix
+        pub const M: u8 = 1 << 6; // 0x40 Mapping       if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
+        pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
+    }
 
     /// ```text
     /// Flags:

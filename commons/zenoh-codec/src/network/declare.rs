@@ -20,7 +20,7 @@ use zenoh_protocol::{
     common::{imsg, ZExtUnknown, ZExtZ64},
     core::{ExprId, WireExpr},
     network::{
-        declare::{self, keyexpr, queryable, subscriber, Declare, DeclareBody},
+        declare::{self, keyexpr, queryable, subscriber, token, Declare, DeclareBody},
         id, Mapping,
     },
 };
@@ -40,6 +40,8 @@ where
             DeclareBody::ForgetSubscriber(r) => self.write(&mut *writer, r)?,
             DeclareBody::DeclareQueryable(r) => self.write(&mut *writer, r)?,
             DeclareBody::ForgetQueryable(r) => self.write(&mut *writer, r)?,
+            DeclareBody::DeclareToken(r) => self.write(&mut *writer, r)?,
+            DeclareBody::ForgetToken(r) => self.write(&mut *writer, r)?,
         }
 
         Ok(())
@@ -64,6 +66,8 @@ where
             F_SUBSCRIBER => DeclareBody::ForgetSubscriber(codec.read(&mut *reader)?),
             D_QUERYABLE => DeclareBody::DeclareQueryable(codec.read(&mut *reader)?),
             F_QUERYABLE => DeclareBody::ForgetQueryable(codec.read(&mut *reader)?),
+            D_TOKEN => DeclareBody::DeclareToken(codec.read(&mut *reader)?),
+            F_TOKEN => DeclareBody::ForgetToken(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 
@@ -431,7 +435,7 @@ where
     }
 }
 
-// SubscriberInfo
+// QueryableInfo
 crate::impl_zextz64!(queryable::ext::QueryableInfo, queryable::ext::INFO);
 
 // DeclareQueryable
@@ -581,5 +585,131 @@ where
         let id: subscriber::SubscriberId = self.codec.read(&mut *reader)?;
 
         Ok(queryable::ForgetQueryable { id })
+    }
+}
+
+// DeclareToken
+impl<W> WCodec<&token::DeclareToken, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &token::DeclareToken) -> Self::Output {
+        // Header
+        let mut header = declare::id::D_TOKEN;
+        if x.mapping != Mapping::default() {
+            header |= subscriber::flag::M;
+        }
+        if x.wire_expr.has_suffix() {
+            header |= subscriber::flag::N;
+        }
+        self.write(&mut *writer, header)?;
+
+        // Body
+        self.write(&mut *writer, x.id)?;
+        self.write(&mut *writer, &x.wire_expr)?;
+
+        Ok(())
+    }
+}
+
+impl<R> RCodec<token::DeclareToken, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<token::DeclareToken, Self::Error> {
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+        codec.read(reader)
+    }
+}
+
+impl<R> RCodec<token::DeclareToken, &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<token::DeclareToken, Self::Error> {
+        if imsg::mid(self.header) != declare::id::D_TOKEN {
+            return Err(DidntRead);
+        }
+
+        // Body
+        let id: token::TokenId = self.codec.read(&mut *reader)?;
+        let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, token::flag::N));
+        let wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
+        let mapping = if imsg::has_flag(self.header, token::flag::M) {
+            Mapping::Sender
+        } else {
+            Mapping::Receiver
+        };
+
+        // Extensions
+        let mut has_ext = imsg::has_flag(self.header, subscriber::flag::Z);
+        while has_ext {
+            let (_, ext): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+            has_ext = ext;
+        }
+
+        Ok(token::DeclareToken {
+            id,
+            wire_expr,
+            mapping,
+        })
+    }
+}
+
+// ForgetToken
+impl<W> WCodec<&token::ForgetToken, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &token::ForgetToken) -> Self::Output {
+        // Header
+        let header = declare::id::F_TOKEN;
+        self.write(&mut *writer, header)?;
+
+        // Body
+        self.write(&mut *writer, x.id)?;
+
+        Ok(())
+    }
+}
+
+impl<R> RCodec<token::ForgetToken, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<token::ForgetToken, Self::Error> {
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
+        codec.read(reader)
+    }
+}
+
+impl<R> RCodec<token::ForgetToken, &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<token::ForgetToken, Self::Error> {
+        if imsg::mid(self.header) != declare::id::F_TOKEN {
+            return Err(DidntRead);
+        }
+
+        // Body
+        let id: token::TokenId = self.codec.read(&mut *reader)?;
+
+        Ok(token::ForgetToken { id })
     }
 }
