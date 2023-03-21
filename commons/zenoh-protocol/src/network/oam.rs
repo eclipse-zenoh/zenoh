@@ -11,7 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub type PullId = u32;
+use zenoh_buffers::ZBuf;
+
+pub type OAMId = u16;
 
 pub mod flag {
     // pub const X: u8 = 1 << 5; // 0x20 Reserved
@@ -27,40 +29,23 @@ pub mod flag {
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |Z|X|X|  PULL   |
+/// |Z|X|X|  OAM    |
 /// +-+-+-+---------+
-/// ~    id:z32     ~  (*)
+/// ~    id:z16     ~  (*)
 /// +---------------+
-/// ~  [pull_exts]  ~  (*)
+/// ~  [oam_exts]   ~
+/// +---------------+
+/// ~   <u8;z32>    ~
 /// +---------------+
 ///
 /// (*) ID refers to the ID used in a previous target declaration
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Pull {
-    pub id: PullId,
+pub struct OAM {
+    pub id: OAMId,
+    pub payload: ZBuf,
     pub ext_qos: ext::QoS,
     pub ext_tstamp: Option<ext::Timestamp>,
-}
-
-impl Pull {
-    pub const T_SUBSCRIBER: u8 = 0x01;
-
-    #[cfg(feature = "test")]
-    pub fn rand() -> Self {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-
-        let id: PullId = rng.gen();
-        let ext_qos = ext::QoS::rand();
-        let ext_tstamp = rng.gen_bool(0.5).then(ext::Timestamp::rand);
-
-        Self {
-            id,
-            ext_qos,
-            ext_tstamp,
-        }
-    }
 }
 
 pub mod ext {
@@ -69,4 +54,24 @@ pub mod ext {
 
     pub type QoS = crate::network::ext::QoS;
     pub type Timestamp = crate::network::ext::Timestamp;
+}
+
+impl OAM {
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        let id: OAMId = rng.gen();
+        let payload = ZBuf::rand(rng.gen_range(1..=u8::MAX as usize));
+        let ext_qos = ext::QoS::rand();
+        let ext_tstamp = rng.gen_bool(0.5).then(ext::Timestamp::rand);
+
+        Self {
+            id,
+            payload,
+            ext_qos,
+            ext_tstamp,
+        }
+    }
 }

@@ -511,6 +511,11 @@ fn codec_response_final() {
     run!(ResponseFinal, ResponseFinal::rand());
 }
 
+#[test]
+fn codec_oam() {
+    run!(OAM, OAM::rand());
+}
+
 // Zenoh
 #[test]
 fn codec_routing_context_old() {

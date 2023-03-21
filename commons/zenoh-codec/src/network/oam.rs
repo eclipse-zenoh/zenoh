@@ -15,26 +15,26 @@ use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
+    ZBuf,
 };
 use zenoh_protocol::{
     common::{imsg, ZExtUnknown},
     network::{
         id,
-        pull::{ext, flag},
-        Pull,
+        oam::{ext, flag},
+        OAMId, OAM,
     },
-    zenoh::PullId,
 };
 
-impl<W> WCodec<&Pull, &mut W> for Zenoh080
+impl<W> WCodec<&OAM, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &Pull) -> Self::Output {
+    fn write(self, writer: &mut W, x: &OAM) -> Self::Output {
         // Header
-        let mut header = id::PULL;
+        let mut header = id::OAM;
         let mut n_exts =
             ((x.ext_qos != ext::QoS::default()) as u8) + (x.ext_tstamp.is_some() as u8);
         if n_exts != 0 {
@@ -55,36 +55,39 @@ where
             self.write(&mut *writer, (ts, n_exts != 0))?;
         }
 
+        // Payload
+        self.write(&mut *writer, &x.payload)?;
+
         Ok(())
     }
 }
 
-impl<R> RCodec<Pull, &mut R> for Zenoh080
+impl<R> RCodec<OAM, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<Pull, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<OAM, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<Pull, &mut R> for Zenoh080Header
+impl<R> RCodec<OAM, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<Pull, Self::Error> {
-        if imsg::mid(self.header) != id::PULL {
+    fn read(self, reader: &mut R) -> Result<OAM, Self::Error> {
+        if imsg::mid(self.header) != id::OAM {
             return Err(DidntRead);
         }
 
         // Body
-        let id: PullId = self.codec.read(&mut *reader)?;
+        let id: OAMId = self.codec.read(&mut *reader)?;
 
         // Extensions
         let mut ext_qos = ext::QoS::default();
@@ -112,8 +115,12 @@ where
             }
         }
 
-        Ok(Pull {
+        // Payload
+        let payload: ZBuf = self.codec.read(&mut *reader)?;
+
+        Ok(OAM {
             id,
+            payload,
             ext_qos,
             ext_tstamp,
         })

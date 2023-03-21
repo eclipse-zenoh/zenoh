@@ -12,12 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod declare;
+pub mod oam;
 pub mod pull;
 pub mod push;
 pub mod request;
 pub mod response;
 
 pub use declare::*;
+pub use oam::*;
 pub use pull::*;
 pub use push::*;
 pub use request::*;
@@ -62,9 +64,11 @@ impl Mapping {
 pub enum NetworkBody {
     Declare(Declare),
     Push(Push),
+    Pull(Pull),
     Request(Request),
     Response(Response),
     ResponseFinal(ResponseFinal),
+    OAM(OAM),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -81,12 +85,14 @@ impl NetworkMessage {
 
         let mut rng = rand::thread_rng();
 
-        let body = match rng.gen_range(0..5) {
+        let body = match rng.gen_range(0..7) {
             0 => NetworkBody::Declare(Declare::rand()),
             1 => NetworkBody::Push(Push::rand()),
-            2 => NetworkBody::Request(Request::rand()),
-            3 => NetworkBody::Response(Response::rand()),
-            4 => NetworkBody::ResponseFinal(ResponseFinal::rand()),
+            2 => NetworkBody::Pull(Pull::rand()),
+            3 => NetworkBody::Request(Request::rand()),
+            4 => NetworkBody::Response(Response::rand()),
+            5 => NetworkBody::ResponseFinal(ResponseFinal::rand()),
+            6 => NetworkBody::OAM(OAM::rand()),
             _ => unreachable!(),
         };
 
