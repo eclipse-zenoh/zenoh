@@ -19,7 +19,7 @@ use zenoh_buffers::{
     ZBuf,
 };
 use zenoh_protocol::common::{
-    iext, imsg::has_flag, ZExtUnit, ZExtUnknown, ZExtZ64, ZExtZBuf, ZExtZBufHeader, ZExtensionBody,
+    iext, imsg::has_flag, ZExtBody, ZExtUnit, ZExtUnknown, ZExtZ64, ZExtZBuf, ZExtZBufHeader,
 };
 
 // ZExtUnit
@@ -232,16 +232,16 @@ where
             header |= iext::FLAG_Z;
         }
         match &x.body {
-            ZExtensionBody::Unit => {
+            ZExtBody::Unit => {
                 header |= iext::ENC_UNIT;
                 self.write(&mut *writer, header)?
             }
-            ZExtensionBody::Z64(u64) => {
+            ZExtBody::Z64(u64) => {
                 header |= iext::ENC_Z64;
                 self.write(&mut *writer, header)?;
                 self.write(&mut *writer, *u64)?
             }
-            ZExtensionBody::ZBuf(zbuf) => {
+            ZExtBody::ZBuf(zbuf) => {
                 header |= iext::ENC_ZBUF;
                 self.write(&mut *writer, header)?;
                 self.write(&mut *writer, zbuf)?
@@ -272,14 +272,14 @@ where
 
     fn read(self, reader: &mut R) -> Result<(ZExtUnknown, bool), Self::Error> {
         let body = match self.header & iext::ENC_MASK {
-            iext::ENC_UNIT => ZExtensionBody::Unit,
+            iext::ENC_UNIT => ZExtBody::Unit,
             iext::ENC_Z64 => {
                 let u64: u64 = self.codec.read(&mut *reader)?;
-                ZExtensionBody::Z64(u64)
+                ZExtBody::Z64(u64)
             }
             iext::ENC_ZBUF => {
                 let zbuf: ZBuf = self.codec.read(&mut *reader)?;
-                ZExtensionBody::ZBuf(zbuf)
+                ZExtBody::ZBuf(zbuf)
             }
             _ => return Err(DidntRead),
         };

@@ -23,7 +23,14 @@ use zenoh_buffers::{
     BBuf, ZBuf, ZSlice,
 };
 use zenoh_codec::*;
-use zenoh_protocol::{common::*, core::*, network::*, scouting::*, transport::*, zenoh};
+use zenoh_protocol::{
+    common::*,
+    core::*,
+    network::{self, *},
+    scouting::*,
+    transport::{self, *},
+    zenoh,
+};
 
 const NUM_ITER: usize = 100;
 const MAX_PAYLOAD_SIZE: usize = 256;
@@ -431,6 +438,11 @@ fn codec_fragment() {
 }
 
 #[test]
+fn codec_transport_oam() {
+    run!(transport::Oam, transport::Oam::rand());
+}
+
+#[test]
 fn codec_transport() {
     run!(TransportMessage, TransportMessage::rand());
 }
@@ -512,8 +524,8 @@ fn codec_response_final() {
 }
 
 #[test]
-fn codec_oam() {
-    run!(OAM, OAM::rand());
+fn codec_network_oam() {
+    run!(network::Oam, network::Oam::rand());
 }
 
 // Zenoh

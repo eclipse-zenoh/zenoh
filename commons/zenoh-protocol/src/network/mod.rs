@@ -26,15 +26,15 @@ pub use request::*;
 pub use response::*;
 
 pub mod id {
-    // WARNING: it's crucial for Zenoh to work that these IDs do NOT
-    //          collide with the IDs defined in `crate::transport::id`.
-    pub const DECLARE: u8 = 0x1f;
-    pub const PUSH: u8 = 0x1e;
-    pub const PULL: u8 = 0x1d;
-    pub const REQUEST: u8 = 0x1c;
-    pub const RESPONSE: u8 = 0x1b;
-    pub const RESPONSE_FINAL: u8 = 0x1a;
-    pub const OAM: u8 = 0x19;
+    // WARNING: it's crucial that these IDs do NOT collide with the IDs
+    //          defined in `crate::transport::id`.
+    pub const OAM: u8 = 0x1f;
+    pub const DECLARE: u8 = 0x1e;
+    pub const PUSH: u8 = 0x1d;
+    pub const PULL: u8 = 0x1c;
+    pub const REQUEST: u8 = 0x1b;
+    pub const RESPONSE: u8 = 0x1a;
+    pub const RESPONSE_FINAL: u8 = 0x19;
 }
 
 #[repr(u8)]
@@ -68,7 +68,7 @@ pub enum NetworkBody {
     Request(Request),
     Response(Response),
     ResponseFinal(ResponseFinal),
-    OAM(OAM),
+    OAM(Oam),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -92,7 +92,7 @@ impl NetworkMessage {
             3 => NetworkBody::Request(Request::rand()),
             4 => NetworkBody::Response(Response::rand()),
             5 => NetworkBody::ResponseFinal(ResponseFinal::rand()),
-            6 => NetworkBody::OAM(OAM::rand()),
+            6 => NetworkBody::OAM(Oam::rand()),
             _ => unreachable!(),
         };
 
@@ -151,17 +151,19 @@ pub mod ext {
     pub const QOS: u8 = 0x01;
     pub const TSTAMP: u8 = 0x02;
 
-    ///      7 6 5 4 3 2 1 0
-    ///     +-+-+-+-+-+-+-+-+
-    ///     |Z|0_1|    ID   |
-    ///     +-+-+-+---------+
-    ///     %0|rsv|E|D|prio %
-    ///     +---------------+
+    /// ```text
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|0_1|    ID   |
+    /// +-+-+-+---------+
+    /// %0|rsv|E|D|prio %
+    /// +---------------+
     ///
-    ///     - prio: Priority class
-    ///     - D:    Don't drop. Don't drop the message for congestion control.
-    ///     - E:    Express. Don't batch this message.
-    ///     - rsv:  Reserved
+    /// - prio: Priority class
+    /// - D:    Don't drop. Don't drop the message for congestion control.
+    /// - E:    Express. Don't batch this message.
+    /// - rsv:  Reserved
+    /// ```
     #[repr(transparent)]
     #[derive(Clone, Copy, PartialEq, Eq)]
     pub struct QoS {
@@ -243,12 +245,14 @@ pub mod ext {
         }
     }
 
-    ///      7 6 5 4 3 2 1 0
-    ///     +-+-+-+-+-+-+-+-+
-    ///     |Z|1_0|    ID   |
-    ///     +-+-+-+---------+
-    ///     ~ ts: <u8;z16>  ~
-    ///     +---------------+
+    /// ```text
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|1_0|    ID   |
+    /// +-+-+-+---------+
+    /// ~ ts: <u8;z16>  ~
+    /// +---------------+
+    /// ```
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct Timestamp {
         pub timestamp: uhlc::Timestamp,

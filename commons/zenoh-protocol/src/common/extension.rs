@@ -92,7 +92,7 @@ impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtUnit<{ ID }> {
             return Err(DidntConvert);
         }
         match v.body {
-            ZExtensionBody::Unit => Ok(Self::new()),
+            ZExtBody::Unit => Ok(Self::new()),
             _ => Err(DidntConvert),
         }
     }
@@ -132,7 +132,7 @@ impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtZ64<{ ID }> {
             return Err(DidntConvert);
         }
         match v.body {
-            ZExtensionBody::Z64(v) => Ok(Self::new(v)),
+            ZExtBody::Z64(v) => Ok(Self::new(v)),
             _ => Err(DidntConvert),
         }
     }
@@ -172,7 +172,7 @@ impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtZBuf<{ ID }> {
             return Err(DidntConvert);
         }
         match v.body {
-            ZExtensionBody::ZBuf(v) => Ok(Self::new(v)),
+            ZExtBody::ZBuf(v) => Ok(Self::new(v)),
             _ => Err(DidntConvert),
         }
     }
@@ -194,31 +194,40 @@ impl<const ID: u8> ZExtZBufHeader<{ ID }> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZExtUnknown {
     pub id: u8,
-    pub body: ZExtensionBody,
+    pub body: ZExtBody,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ZExtensionBody {
+pub enum ZExtBody {
     Unit,
     Z64(u64),
     ZBuf(ZBuf),
 }
 
-impl ZExtUnknown {
+impl ZExtBody {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::{seq::SliceRandom, Rng};
-
         let mut rng = rand::thread_rng();
-        let id: u8 = rng.gen_range(0x00..=iext::ID_MASK);
-        let body = [
-            ZExtensionBody::Unit,
-            ZExtensionBody::Z64(rng.gen()),
-            ZExtensionBody::ZBuf(ZBuf::rand(rng.gen_range(8..=64))),
+        [
+            ZExtBody::Unit,
+            ZExtBody::Z64(rng.gen()),
+            ZExtBody::ZBuf(ZBuf::rand(rng.gen_range(8..=64))),
         ]
         .choose(&mut rng)
         .unwrap()
-        .clone();
+        .clone()
+    }
+}
+
+impl ZExtUnknown {
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        let id: u8 = rng.gen_range(0x00..=iext::ID_MASK);
+        let body = ZExtBody::rand();
         Self { id, body }
     }
 }
@@ -227,7 +236,7 @@ impl<const ID: u8> From<ZExtUnit<{ ID }>> for ZExtUnknown {
     fn from(_: ZExtUnit<{ ID }>) -> Self {
         ZExtUnknown {
             id: ID,
-            body: ZExtensionBody::Unit,
+            body: ZExtBody::Unit,
         }
     }
 }
@@ -236,7 +245,7 @@ impl<const ID: u8> From<ZExtZ64<{ ID }>> for ZExtUnknown {
     fn from(e: ZExtZ64<{ ID }>) -> Self {
         ZExtUnknown {
             id: ID,
-            body: ZExtensionBody::Z64(e.value),
+            body: ZExtBody::Z64(e.value),
         }
     }
 }
@@ -245,7 +254,7 @@ impl<const ID: u8> From<ZExtZBuf<{ ID }>> for ZExtUnknown {
     fn from(e: ZExtZBuf<{ ID }>) -> Self {
         ZExtUnknown {
             id: ID,
-            body: ZExtensionBody::ZBuf(e.value),
+            body: ZExtBody::ZBuf(e.value),
         }
     }
 }

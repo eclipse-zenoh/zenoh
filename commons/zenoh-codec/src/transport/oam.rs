@@ -19,7 +19,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{iext, imsg, ZExtBody, ZExtUnknown},
-    network::{
+    transport::{
         id,
         oam::{ext, flag, Oam, OamId},
     },
@@ -45,8 +45,7 @@ where
                 header |= iext::ENC_ZBUF;
             }
         }
-        let mut n_exts =
-            ((x.ext_qos != ext::QoS::default()) as u8) + (x.ext_tstamp.is_some() as u8);
+        let mut n_exts = (x.ext_qos != ext::QoS::default()) as u8;
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -59,10 +58,6 @@ where
         if x.ext_qos != ext::QoS::default() {
             n_exts -= 1;
             self.write(&mut *writer, (x.ext_qos, n_exts != 0))?;
-        }
-        if let Some(ts) = x.ext_tstamp.as_ref() {
-            n_exts -= 1;
-            self.write(&mut *writer, (ts, n_exts != 0))?;
         }
 
         // Payload
@@ -109,7 +104,6 @@ where
 
         // Extensions
         let mut ext_qos = ext::QoS::default();
-        let mut ext_tstamp = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -119,11 +113,6 @@ where
                 ext::QOS => {
                     let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
                     ext_qos = q;
-                    has_ext = ext;
-                }
-                ext::TSTAMP => {
-                    let (t, ext): (ext::Timestamp, bool) = eodec.read(&mut *reader)?;
-                    ext_tstamp = Some(t);
                     has_ext = ext;
                 }
                 _ => {
@@ -147,11 +136,6 @@ where
             _ => return Err(DidntRead),
         };
 
-        Ok(Oam {
-            id,
-            body,
-            ext_qos,
-            ext_tstamp,
-        })
+        Ok(Oam { id, body, ext_qos })
     }
 }

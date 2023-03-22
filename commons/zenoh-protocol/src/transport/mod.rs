@@ -15,17 +15,19 @@ pub mod close;
 pub mod fragment;
 pub mod frame;
 pub mod init;
-// pub mod join;
 pub mod keepalive;
+pub mod oam;
 pub mod open;
+// pub mod join;
 
 pub use close::Close;
 pub use fragment::{Fragment, FragmentHeader};
 pub use frame::{Frame, FrameHeader};
 pub use init::{InitAck, InitSyn};
-// pub use join::Join;
 pub use keepalive::KeepAlive;
+pub use oam::Oam;
 pub use open::{OpenAck, OpenSyn};
+// pub use join::Join;
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
 ///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
@@ -37,13 +39,14 @@ pub type BatchSize = u16;
 pub mod id {
     // WARNING: it's crucial that these IDs do NOT collide with the IDs
     //          defined in `crate::network::id`.
-    pub const INIT: u8 = 0x00; // For unicast communications only
-    pub const OPEN: u8 = 0x01; // For unicast communications only
-    pub const CLOSE: u8 = 0x02;
-    pub const KEEP_ALIVE: u8 = 0x03;
-    pub const FRAME: u8 = 0x04;
-    pub const FRAGMENT: u8 = 0x05;
-    // pub const JOIN: u8 = 0x06; // For multicast communications only
+    pub const OAM: u8 = 0x00;
+    pub const INIT: u8 = 0x01; // For unicast communications only
+    pub const OPEN: u8 = 0x02; // For unicast communications only
+    pub const CLOSE: u8 = 0x03;
+    pub const KEEP_ALIVE: u8 = 0x04;
+    pub const FRAME: u8 = 0x05;
+    pub const FRAGMENT: u8 = 0x06;
+    // pub const JOIN: u8 = 0x07; // For multicast communications only
 }
 
 pub type TransportSn = u32;
@@ -62,11 +65,12 @@ pub enum TransportBody {
     InitAck(InitAck),
     OpenSyn(OpenSyn),
     OpenAck(OpenAck),
-    // Join(Join),
     Close(Close),
     KeepAlive(KeepAlive),
     Frame(Frame),
     Fragment(Fragment),
+    OAM(Oam),
+    // Join(Join),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,7 +87,7 @@ impl TransportMessage {
 
         let mut rng = rand::thread_rng();
 
-        let body = match rng.gen_range(0..8) {
+        let body = match rng.gen_range(0..9) {
             0 => TransportBody::InitSyn(InitSyn::rand()),
             1 => TransportBody::InitAck(InitAck::rand()),
             2 => TransportBody::OpenSyn(OpenSyn::rand()),
@@ -92,6 +96,7 @@ impl TransportMessage {
             5 => TransportBody::KeepAlive(KeepAlive::rand()),
             6 => TransportBody::Frame(Frame::rand()),
             7 => TransportBody::Fragment(Fragment::rand()),
+            8 => TransportBody::OAM(Oam::rand()),
             // 8 => TransportBody::Join(Join::rand()),
             _ => unreachable!(),
         };

@@ -52,15 +52,12 @@ pub struct Oam {
     pub id: OamId,
     pub body: ZExtBody,
     pub ext_qos: ext::QoS,
-    pub ext_tstamp: Option<ext::Timestamp>,
 }
 
 pub mod ext {
-    pub const QOS: u8 = crate::network::ext::QOS;
-    pub const TSTAMP: u8 = crate::network::ext::TSTAMP;
+    pub const QOS: u8 = crate::transport::frame::ext::QOS;
 
-    pub type QoS = crate::network::ext::QoS;
-    pub type Timestamp = crate::network::ext::Timestamp;
+    pub type QoS = crate::transport::frame::ext::QoS;
 }
 
 impl Oam {
@@ -70,15 +67,13 @@ impl Oam {
         let mut rng = rand::thread_rng();
 
         let id: OamId = rng.gen();
-        let body = ZExtBody::rand();
+        let payload = ZExtBody::rand();
         let ext_qos = ext::QoS::rand();
-        let ext_tstamp = rng.gen_bool(0.5).then(ext::Timestamp::rand);
 
         Self {
             id,
-            body,
+            body: payload,
             ext_qos,
-            ext_tstamp,
         }
     }
 }
