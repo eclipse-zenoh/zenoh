@@ -44,8 +44,8 @@ impl WhatAmI {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::prelude::SliceRandom;
-
         let mut rng = rand::thread_rng();
+
         *[Self::Router, Self::Peer, Self::Client]
             .choose(&mut rng)
             .unwrap()

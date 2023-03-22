@@ -446,8 +446,8 @@ pub mod queryable {
         /// +---------------+
         #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
         pub struct QueryableInfo {
-            pub complete: u8, // Default 0: incomplete
-            pub distance: u8, // Default 0: no distance
+            pub complete: u8,  // Default 0: incomplete // @TODO: maybe a bitflag
+            pub distance: u32, // Default 0: no distance
         }
 
         impl QueryableInfo {
@@ -456,7 +456,7 @@ pub mod queryable {
                 use rand::Rng;
                 let mut rng = rand::thread_rng();
                 let complete: u8 = rng.gen();
-                let distance: u8 = rng.gen();
+                let distance: u32 = rng.gen();
 
                 Self { complete, distance }
             }
@@ -465,7 +465,7 @@ pub mod queryable {
         impl From<ZExtZ64<{ INFO }>> for QueryableInfo {
             fn from(ext: ZExtZ64<{ INFO }>) -> Self {
                 let complete = ext.value as u8;
-                let distance = (ext.value >> 8) as u8;
+                let distance = (ext.value >> 8) as u32;
 
                 Self { complete, distance }
             }
