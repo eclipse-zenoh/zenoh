@@ -382,7 +382,7 @@ mod tests {
         let mut frame = FrameHeader {
             reliability: zmsg.channel.reliability,
             sn: 0,
-            ext_qos: frame::ext::QoS::default(),
+            ext_qos: frame::ext::QoSType::default(),
         };
 
         // Serialize with a frame

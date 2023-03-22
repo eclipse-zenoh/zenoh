@@ -74,7 +74,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let frame = FrameHeader {
         reliability: Reliability::default(),
         sn: TransportSn::MIN,
-        ext_qos: zenoh_protocol::transport::frame::ext::QoS::default(),
+        ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
     };
 
     let data = Data {
@@ -111,7 +111,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let frame = FrameHeader {
         reliability: Reliability::default(),
         sn: TransportSn::MIN,
-        ext_qos: zenoh_protocol::transport::frame::ext::QoS::default(),
+        ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
     };
 
     let data = Data {
@@ -143,7 +143,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let frame = FrameHeader {
         reliability: Reliability::default(),
         sn: TransportSn::MIN,
-        ext_qos: zenoh_protocol::transport::frame::ext::QoS::default(),
+        ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
     };
 
     let data = Data {

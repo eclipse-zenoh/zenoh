@@ -52,16 +52,16 @@ pub struct Response {
     pub wire_expr: WireExpr<'static>,
     pub mapping: Mapping,
     pub payload: u8, // @TODO
-    pub ext_qos: ext::QoS,
-    pub ext_tstamp: Option<ext::Timestamp>,
+    pub ext_qos: ext::QoSType,
+    pub ext_tstamp: Option<ext::TimestampType>,
 }
 
 pub mod ext {
-    pub const QOS: u8 = crate::network::ext::QOS;
-    pub const TSTAMP: u8 = crate::network::ext::TSTAMP;
-
     pub type QoS = crate::network::ext::QoS;
+    pub type QoSType = crate::network::ext::QoSType;
+
     pub type Timestamp = crate::network::ext::Timestamp;
+    pub type TimestampType = crate::network::ext::TimestampType;
 }
 
 impl Response {
@@ -75,8 +75,8 @@ impl Response {
         let mapping = Mapping::rand();
         // let payload = ZenohMessage::rand();
         let payload: u8 = rng.gen(); // @TODO
-        let ext_qos = ext::QoS::rand();
-        let ext_tstamp = rng.gen_bool(0.5).then(ext::Timestamp::rand);
+        let ext_qos = ext::QoSType::rand();
+        let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
 
         Self {
             rid,
@@ -111,8 +111,8 @@ impl Response {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResponseFinal {
     pub rid: RequestId,
-    pub ext_qos: ext::QoS,
-    pub ext_tstamp: Option<ext::Timestamp>,
+    pub ext_qos: ext::QoSType,
+    pub ext_tstamp: Option<ext::TimestampType>,
 }
 
 impl ResponseFinal {
@@ -122,8 +122,8 @@ impl ResponseFinal {
 
         let mut rng = rand::thread_rng();
         let rid: RequestId = rng.gen();
-        let ext_qos = ext::QoS::rand();
-        let ext_tstamp = rng.gen_bool(0.5).then(ext::Timestamp::rand);
+        let ext_qos = ext::QoSType::rand();
+        let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
 
         Self {
             rid,

@@ -18,7 +18,7 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::{imsg, ZExtUnknown, ZExtZ64},
+    common::{iext, imsg, ZExtUnknown, ZExtZ64},
     core::Reliability,
     transport::{
         frame::{ext, flag, Frame, FrameHeader},
@@ -28,7 +28,7 @@ use zenoh_protocol::{
 };
 
 // Extensions: QoS
-crate::impl_zextz64!(ext::QoS, ext::QOS);
+crate::impl_zextz64!(ext::QoSType, ext::QoS::ID);
 
 // FrameHeader
 impl<W> WCodec<&FrameHeader, &mut W> for Zenoh080
@@ -43,7 +43,7 @@ where
         if let Reliability::Reliable = x.reliability {
             header |= flag::R;
         }
-        if x.ext_qos != ext::QoS::default() {
+        if x.ext_qos != ext::QoSType::default() {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
@@ -52,7 +52,7 @@ where
         self.write(&mut *writer, x.sn)?;
 
         // Extensions
-        if x.ext_qos != ext::QoS::default() {
+        if x.ext_qos != ext::QoSType::default() {
             self.write(&mut *writer, (x.ext_qos, false))?;
         }
 
@@ -91,15 +91,15 @@ where
         let sn: TransportSn = self.codec.read(&mut *reader)?;
 
         // Extensions
-        let mut qos = ext::QoS::default();
+        let mut qos = ext::QoSType::default();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
-            match imsg::mid(ext) {
-                ext::QOS => {
-                    let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
+            match iext::eid(ext) {
+                ext::QoS::ID => {
+                    let (q, ext): (ext::QoSType, bool) = eodec.read(&mut *reader)?;
                     qos = q;
                     has_ext = ext;
                 }

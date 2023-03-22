@@ -29,11 +29,9 @@ pub mod flag {
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |Z|ENC|  OAM    |
+/// |X|ENC|  OAM    |
 /// +-+-+-+---------+
 /// ~    id:z16     ~
-/// +---------------+
-/// ~  [oam_exts]   ~
 /// +---------------+
 /// %    length     % -- If ENC == u64 || ENC == ZBuf
 /// +---------------+
@@ -51,16 +49,16 @@ pub mod flag {
 pub struct Oam {
     pub id: OamId,
     pub body: ZExtBody,
-    pub ext_qos: ext::QoS,
-    pub ext_tstamp: Option<ext::Timestamp>,
+    pub ext_qos: ext::QoSType,
+    pub ext_tstamp: Option<ext::TimestampType>,
 }
 
 pub mod ext {
-    pub const QOS: u8 = crate::network::ext::QOS;
-    pub const TSTAMP: u8 = crate::network::ext::TSTAMP;
-
     pub type QoS = crate::network::ext::QoS;
+    pub type QoSType = crate::network::ext::QoSType;
+
     pub type Timestamp = crate::network::ext::Timestamp;
+    pub type TimestampType = crate::network::ext::TimestampType;
 }
 
 impl Oam {
@@ -71,8 +69,8 @@ impl Oam {
 
         let id: OamId = rng.gen();
         let body = ZExtBody::rand();
-        let ext_qos = ext::QoS::rand();
-        let ext_tstamp = rng.gen_bool(0.5).then(ext::Timestamp::rand);
+        let ext_qos = ext::QoSType::rand();
+        let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
 
         Self {
             id,

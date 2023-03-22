@@ -325,7 +325,6 @@ fn codec_extension() {
             let codec = Zenoh080::new();
             for _ in 0..NUM_ITER {
                 let more: bool = thread_rng().gen();
-
                 let x: (&$ext, bool) = (&<$ext>::rand(), more);
 
                 $buff.clear();
@@ -358,7 +357,7 @@ fn codec_extension() {
         };
     }
 
-    run_extension!(ZExtUnit<0>);
+    run_extension!(ZExtUnit::<0>);
     run_extension!(ZExtZ64<1>);
     run_extension!(ZExtZBuf<2>);
     run_extension!(ZExtZBuf<3>);

@@ -17,7 +17,7 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::{imsg, ZExtUnknown, ZExtZ64},
+    common::{iext, imsg, ZExtUnknown, ZExtZ64},
     core::{ExprId, WireExpr},
     network::{
         declare::{self, keyexpr, queryable, subscriber, token, Declare, DeclareBody},
@@ -85,15 +85,15 @@ where
     fn write(self, writer: &mut W, x: &Declare) -> Self::Output {
         // Header
         let mut header = id::DECLARE;
-        let mut n_exts =
-            ((x.ext_qos != declare::ext::QoS::default()) as u8) + (x.ext_tstamp.is_some() as u8);
+        let mut n_exts = ((x.ext_qos != declare::ext::QoSType::default()) as u8)
+            + (x.ext_tstamp.is_some() as u8);
         if n_exts != 0 {
             header |= declare::flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Extensions
-        if x.ext_qos != declare::ext::QoS::default() {
+        if x.ext_qos != declare::ext::QoSType::default() {
             n_exts -= 1;
             self.write(&mut *writer, (x.ext_qos, n_exts != 0))?;
         }
@@ -135,21 +135,21 @@ where
         }
 
         // Extensions
-        let mut ext_qos = declare::ext::QoS::default();
+        let mut ext_qos = declare::ext::QoSType::default();
         let mut ext_tstamp = None;
 
         let mut has_ext = imsg::has_flag(self.header, declare::flag::Z);
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
-            match imsg::mid(ext) {
-                declare::ext::QOS => {
-                    let (q, ext): (declare::ext::QoS, bool) = eodec.read(&mut *reader)?;
+            match iext::eid(ext) {
+                declare::ext::QoS::ID => {
+                    let (q, ext): (declare::ext::QoSType, bool) = eodec.read(&mut *reader)?;
                     ext_qos = q;
                     has_ext = ext;
                 }
-                declare::ext::TSTAMP => {
-                    let (t, ext): (declare::ext::Timestamp, bool) = eodec.read(&mut *reader)?;
+                declare::ext::Timestamp::ID => {
+                    let (t, ext): (declare::ext::TimestampType, bool) = eodec.read(&mut *reader)?;
                     ext_tstamp = Some(t);
                     has_ext = ext;
                 }
@@ -281,7 +281,7 @@ where
 }
 
 // SubscriberInfo
-crate::impl_zextz64!(subscriber::ext::SubscriberInfo, subscriber::ext::INFO);
+crate::impl_zextz64!(subscriber::ext::SubscriberInfo, subscriber::ext::Info::ID);
 
 // DeclareSubscriber
 impl<W> WCodec<&subscriber::DeclareSubscriber, &mut W> for Zenoh080
@@ -361,8 +361,8 @@ where
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
-            match imsg::mid(ext) {
-                subscriber::ext::INFO => {
+            match iext::eid(ext) {
+                subscriber::ext::Info::ID => {
                     let (i, ext): (subscriber::ext::SubscriberInfo, bool) =
                         eodec.read(&mut *reader)?;
                     ext_info = i;
@@ -436,7 +436,7 @@ where
 }
 
 // QueryableInfo
-crate::impl_zextz64!(queryable::ext::QueryableInfo, queryable::ext::INFO);
+crate::impl_zextz64!(queryable::ext::QueryableInfo, queryable::ext::Info::ID);
 
 // DeclareQueryable
 impl<W> WCodec<&queryable::DeclareQueryable, &mut W> for Zenoh080
@@ -514,8 +514,8 @@ where
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
-            match imsg::mid(ext) {
-                queryable::ext::INFO => {
+            match iext::eid(ext) {
+                queryable::ext::Info::ID => {
                     let (i, ext): (queryable::ext::QueryableInfo, bool) =
                         eodec.read(&mut *reader)?;
                     ext_info = i;

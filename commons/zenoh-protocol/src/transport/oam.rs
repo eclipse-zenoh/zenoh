@@ -51,13 +51,13 @@ pub mod flag {
 pub struct Oam {
     pub id: OamId,
     pub body: ZExtBody,
-    pub ext_qos: ext::QoS,
+    pub ext_qos: ext::QoSType,
 }
 
 pub mod ext {
-    pub const QOS: u8 = crate::transport::frame::ext::QOS;
-
     pub type QoS = crate::transport::frame::ext::QoS;
+
+    pub type QoSType = crate::transport::frame::ext::QoSType;
 }
 
 impl Oam {
@@ -68,7 +68,7 @@ impl Oam {
 
         let id: OamId = rng.gen();
         let payload = ZExtBody::rand();
-        let ext_qos = ext::QoS::rand();
+        let ext_qos = ext::QoSType::rand();
 
         Self {
             id,

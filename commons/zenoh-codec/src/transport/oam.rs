@@ -45,7 +45,7 @@ where
                 header |= iext::ENC_ZBUF;
             }
         }
-        let mut n_exts = (x.ext_qos != ext::QoS::default()) as u8;
+        let mut n_exts = (x.ext_qos != ext::QoSType::default()) as u8;
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -55,7 +55,7 @@ where
         self.write(&mut *writer, x.id)?;
 
         // Extensions
-        if x.ext_qos != ext::QoS::default() {
+        if x.ext_qos != ext::QoSType::default() {
             n_exts -= 1;
             self.write(&mut *writer, (x.ext_qos, n_exts != 0))?;
         }
@@ -103,15 +103,15 @@ where
         let id: OamId = self.codec.read(&mut *reader)?;
 
         // Extensions
-        let mut ext_qos = ext::QoS::default();
+        let mut ext_qos = ext::QoSType::default();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
-            match imsg::mid(ext) {
-                ext::QOS => {
-                    let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
+            match iext::eid(ext) {
+                ext::QoS::ID => {
+                    let (q, ext): (ext::QoSType, bool) = eodec.read(&mut *reader)?;
                     ext_qos = q;
                     has_ext = ext;
                 }

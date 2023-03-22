@@ -85,29 +85,27 @@ pub struct OpenSyn {
 
 // Extensions
 pub mod ext {
-    use crate::common::{ZExtUnit, ZExtZ64, ZExtZBuf};
-
-    pub const QOS: u8 = 0x01;
-    pub const SHM: u8 = 0x02;
-    pub const AUTH: u8 = 0x03;
-    pub const MLINK: u8 = 0x04;
+    use crate::{
+        common::{ZExtUnit, ZExtZ64, ZExtZBuf},
+        zextunit, zextz64, zextzbuf,
+    };
 
     /// # QoS extension
     /// Used to negotiate the use of QoS
-    pub type QoS = ZExtUnit<QOS>;
+    pub type QoS = zextunit!(0x1, false);
 
     /// # Shm extension
     /// Used as challenge for probing shared memory capabilities
-    pub type Shm = ZExtZ64<SHM>;
+    pub type Shm = zextz64!(0x2, false);
 
     /// # Auth extension
     /// Used as challenge for probing authentication rights
-    pub type Auth = ZExtZBuf<AUTH>;
+    pub type Auth = zextzbuf!(0x3, false);
 
-    /// # MultiLink extension
+    /// # Multilink extension
     /// Used as challenge for probing multilink capabilities
-    pub type MultiLinkSyn = ZExtZBuf<MLINK>;
-    pub type MultiLinkAck = ZExtUnit<MLINK>;
+    pub type MultiLinkSyn = zextzbuf!(0x4, false);
+    pub type MultiLinkAck = zextunit!(0x4, false);
 }
 
 impl OpenSyn {

@@ -37,15 +37,15 @@ use zenoh_config::Config;
 use zenoh_core::{bail, zerror, Error as ZError, Result as ZResult};
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::{
-    common::ZExtUnknown,
+    common::{iext, ZExtUnknown},
     transport::{init, open},
 };
 
 pub(crate) mod id {
     #[cfg(feature = "auth_pubkey")]
-    pub(crate) const PUBKEY: u8 = 1;
+    pub(crate) const PUBKEY: u8 = 0x1;
     #[cfg(feature = "auth_usrpwd")]
-    pub(crate) const USRPWD: u8 = 2;
+    pub(crate) const USRPWD: u8 = 0x2;
 }
 
 #[derive(Debug, Default)]
@@ -278,7 +278,9 @@ macro_rules! ztryinto {
 
 macro_rules! ztake {
     ($x:expr, $id:expr) => {
-        $x.iter().position(|x| x.id == $id).map(|i| $x.remove(i))
+        $x.iter()
+            .position(|x| x.id & iext::ID_MASK == $id)
+            .map(|i| $x.remove(i))
     };
 }
 

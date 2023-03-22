@@ -31,7 +31,7 @@ where
 
     fn write(self, writer: &mut W, x: (&ZExtUnit<{ ID }>, bool)) -> Self::Output {
         let (_x, more) = x;
-        let mut header: u8 = ID | iext::ENC_UNIT;
+        let mut header: u8 = ID;
         if more {
             header |= iext::FLAG_Z;
         }
@@ -60,10 +60,9 @@ where
     type Error = DidntRead;
 
     fn read(self, _reader: &mut R) -> Result<(ZExtUnit<{ ID }>, bool), Self::Error> {
-        if (self.header & iext::ID_MASK != ID) || (self.header & iext::ENC_MASK != iext::ENC_UNIT) {
+        if iext::eid(self.header) != ID {
             return Err(DidntRead);
         }
-
         Ok((ZExtUnit::new(), has_flag(self.header, iext::FLAG_Z)))
     }
 }
@@ -77,7 +76,7 @@ where
 
     fn write(self, writer: &mut W, x: (&ZExtZ64<{ ID }>, bool)) -> Self::Output {
         let (x, more) = x;
-        let mut header: u8 = ID | iext::ENC_Z64;
+        let mut header: u8 = ID;
         if more {
             header |= iext::FLAG_Z;
         }
@@ -107,12 +106,11 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<(ZExtZ64<{ ID }>, bool), Self::Error> {
-        if (self.header & iext::ID_MASK != ID) || (self.header & iext::ENC_MASK != iext::ENC_Z64) {
+        if iext::eid(self.header) != ID {
             return Err(DidntRead);
         }
 
         let value: u64 = self.codec.read(&mut *reader)?;
-
         Ok((ZExtZ64::new(value), has_flag(self.header, iext::FLAG_Z)))
     }
 }
@@ -126,7 +124,7 @@ where
 
     fn write(self, writer: &mut W, x: (&ZExtZBuf<{ ID }>, bool)) -> Self::Output {
         let (x, more) = x;
-        let mut header: u8 = ID | iext::ENC_ZBUF;
+        let mut header: u8 = ID;
         if more {
             header |= iext::FLAG_Z;
         }
@@ -156,12 +154,10 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<(ZExtZBuf<{ ID }>, bool), Self::Error> {
-        if (self.header & iext::ID_MASK != ID) || (self.header & iext::ENC_MASK != iext::ENC_ZBUF) {
+        if iext::eid(self.header) != ID {
             return Err(DidntRead);
         }
-
         let value: ZBuf = self.codec.read(&mut *reader)?;
-
         Ok((ZExtZBuf::new(value), has_flag(self.header, iext::FLAG_Z)))
     }
 }
@@ -175,7 +171,7 @@ where
 
     fn write(self, writer: &mut W, x: (&ZExtZBufHeader<{ ID }>, bool)) -> Self::Output {
         let (x, more) = x;
-        let mut header: u8 = ID | iext::ENC_ZBUF;
+        let mut header: u8 = ID;
         if more {
             header |= iext::FLAG_Z;
         }
@@ -205,12 +201,11 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<(ZExtZBufHeader<{ ID }>, bool), Self::Error> {
-        if (self.header & iext::ID_MASK != ID) || (self.header & iext::ENC_MASK != iext::ENC_ZBUF) {
+        if iext::eid(self.header) != ID {
             return Err(DidntRead);
         }
 
         let len: usize = self.codec.read(&mut *reader)?;
-
         Ok((
             ZExtZBufHeader::new(len),
             has_flag(self.header, iext::FLAG_Z),
@@ -232,17 +227,12 @@ where
             header |= iext::FLAG_Z;
         }
         match &x.body {
-            ZExtBody::Unit => {
-                header |= iext::ENC_UNIT;
-                self.write(&mut *writer, header)?
-            }
+            ZExtBody::Unit => self.write(&mut *writer, header)?,
             ZExtBody::Z64(u64) => {
-                header |= iext::ENC_Z64;
                 self.write(&mut *writer, header)?;
                 self.write(&mut *writer, *u64)?
             }
             ZExtBody::ZBuf(zbuf) => {
-                header |= iext::ENC_ZBUF;
                 self.write(&mut *writer, header)?;
                 self.write(&mut *writer, zbuf)?
             }
@@ -281,12 +271,15 @@ where
                 let zbuf: ZBuf = self.codec.read(&mut *reader)?;
                 ZExtBody::ZBuf(zbuf)
             }
-            _ => return Err(DidntRead),
+            _ => {
+                println!("CAZZO");
+                return Err(DidntRead);
+            }
         };
 
         Ok((
             ZExtUnknown {
-                id: self.header & iext::ID_MASK,
+                id: self.header & !iext::FLAG_Z,
                 body,
             },
             has_flag(self.header, iext::FLAG_Z),

@@ -81,47 +81,47 @@ where
 }
 
 // Extensions: QoS
-crate::impl_zextz64!(ext::QoS, ext::QOS);
+crate::impl_zextz64!(ext::QoSType, ext::QoS::ID);
 
 // Extensions: Timestamp
-impl<W> WCodec<(&ext::Timestamp, bool), &mut W> for Zenoh080
+impl<W> WCodec<(&ext::TimestampType, bool), &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: (&ext::Timestamp, bool)) -> Self::Output {
+    fn write(self, writer: &mut W, x: (&ext::TimestampType, bool)) -> Self::Output {
         let (tstamp, more) = x;
-        let header: ZExtZBufHeader<{ ext::TSTAMP }> =
+        let header: ZExtZBufHeader<{ ext::Timestamp::ID }> =
             ZExtZBufHeader::new(self.w_len(&tstamp.timestamp));
         self.write(&mut *writer, (&header, more))?;
         self.write(&mut *writer, &tstamp.timestamp)
     }
 }
 
-impl<R> RCodec<(ext::Timestamp, bool), &mut R> for Zenoh080
+impl<R> RCodec<(ext::TimestampType, bool), &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<(ext::Timestamp, bool), Self::Error> {
+    fn read(self, reader: &mut R) -> Result<(ext::TimestampType, bool), Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<(ext::Timestamp, bool), &mut R> for Zenoh080Header
+impl<R> RCodec<(ext::TimestampType, bool), &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<(ext::Timestamp, bool), Self::Error> {
+    fn read(self, reader: &mut R) -> Result<(ext::TimestampType, bool), Self::Error> {
         let codec = Zenoh080::new();
-        let (_, more): (ZExtZBufHeader<{ ext::TSTAMP }>, bool) = self.read(&mut *reader)?;
+        let (_, more): (ZExtZBufHeader<{ ext::Timestamp::ID }>, bool) = self.read(&mut *reader)?;
         let timestamp: uhlc::Timestamp = codec.read(&mut *reader)?;
-        Ok((ext::Timestamp { timestamp }, more))
+        Ok((ext::TimestampType { timestamp }, more))
     }
 }

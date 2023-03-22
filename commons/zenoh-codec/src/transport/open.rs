@@ -19,7 +19,7 @@ use zenoh_buffers::{
     ZSlice,
 };
 use zenoh_protocol::{
-    common::{imsg, ZExtUnknown},
+    common::{iext, imsg, ZExtUnknown},
     transport::{
         id,
         open::{ext, flag, OpenAck, OpenSyn},
@@ -124,7 +124,7 @@ where
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
-            match imsg::mid(ext) {
+            match iext::eid(ext) {
                 ext::QoS::ID => {
                     let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
                     ext_qos = Some(q);
@@ -261,7 +261,7 @@ where
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
-            match imsg::mid(ext) {
+            match iext::eid(ext) {
                 ext::QoS::ID => {
                     let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
                     ext_qos = Some(q);

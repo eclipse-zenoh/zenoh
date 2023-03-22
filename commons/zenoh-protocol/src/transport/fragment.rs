@@ -73,14 +73,14 @@ pub struct Fragment {
     pub more: bool,
     pub sn: TransportSn,
     pub payload: ZSlice,
-    pub ext_qos: ext::QoS,
+    pub ext_qos: ext::QoSType,
 }
 
 // Extensions
 pub mod ext {
-    pub const QOS: u8 = crate::transport::frame::ext::QOS;
-
     pub type QoS = crate::transport::frame::ext::QoS;
+
+    pub type QoSType = crate::transport::frame::ext::QoSType;
 }
 
 impl Fragment {
@@ -94,7 +94,7 @@ impl Fragment {
         let more = rng.gen_bool(0.5);
         let sn: TransportSn = rng.gen();
         let payload = ZSlice::rand(rng.gen_range(8..128));
-        let ext_qos = ext::QoS::rand();
+        let ext_qos = ext::QoSType::rand();
 
         Fragment {
             reliability,
@@ -112,7 +112,7 @@ pub struct FragmentHeader {
     pub reliability: Reliability,
     pub more: bool,
     pub sn: TransportSn,
-    pub ext_qos: ext::QoS,
+    pub ext_qos: ext::QoSType,
 }
 
 impl FragmentHeader {
@@ -125,7 +125,7 @@ impl FragmentHeader {
         let reliability = Reliability::rand();
         let more = rng.gen_bool(0.5);
         let sn: TransportSn = rng.gen();
-        let ext_qos = ext::QoS::rand();
+        let ext_qos = ext::QoSType::rand();
 
         FragmentHeader {
             reliability,

@@ -11,10 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// use super::{
-//     AuthenticatedLink, TransportAuthenticator, TransportAuthenticatorTrait, ZNodeAuthenticatorId,
-// };
-use crate::establishment::{AcceptFsm, OpenFsm};
+use crate::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
 use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
 use rand::Rng;
@@ -32,6 +29,16 @@ use zenoh_config::PubKeyConf;
 use zenoh_core::{bail, zasynclock, zasyncread, zerror, Error as ZError, Result as ZResult};
 use zenoh_crypto::PseudoRng;
 use zenoh_protocol::common::{ZExtUnit, ZExtZBuf};
+
+mod ext {
+    use super::{id::PUBKEY, ZExtUnit, ZExtZBuf};
+    use zenoh_protocol::{zextunit, zextzbuf};
+
+    pub(super) type InitSyn = zextzbuf!(PUBKEY, false);
+    pub(super) type InitAck = zextzbuf!(PUBKEY, false);
+    pub(super) type OpenSyn = zextzbuf!(PUBKEY, false);
+    pub(super) type OpenAck = zextunit!(PUBKEY, false);
+}
 
 // Authenticator
 #[derive(Debug)]
@@ -359,7 +366,7 @@ impl<'a> OpenFsm for AuthPubKeyFsm<'a> {
     type Error = ZError;
 
     type SendInitSynIn = &'a StateOpen;
-    type SendInitSynOut = Option<ZExtZBuf<{ super::id::PUBKEY }>>;
+    type SendInitSynOut = Option<ext::InitSyn>;
     async fn send_init_syn(
         &self,
         _input: Self::SendInitSynIn,
@@ -381,7 +388,7 @@ impl<'a> OpenFsm for AuthPubKeyFsm<'a> {
         Ok(Some(ZExtZBuf::new(buff.into())))
     }
 
-    type RecvInitAckIn = (&'a mut StateOpen, Option<ZExtZBuf<{ super::id::PUBKEY }>>);
+    type RecvInitAckIn = (&'a mut StateOpen, Option<ext::InitAck>);
     type RecvInitAckOut = ();
     async fn recv_init_ack(
         &self,
@@ -428,7 +435,7 @@ impl<'a> OpenFsm for AuthPubKeyFsm<'a> {
     }
 
     type SendOpenSynIn = &'a StateOpen;
-    type SendOpenSynOut = Option<ZExtZBuf<{ super::id::PUBKEY }>>;
+    type SendOpenSynOut = Option<ext::OpenSyn>;
     async fn send_open_syn(
         &self,
         state: Self::SendOpenSynIn,
@@ -450,7 +457,7 @@ impl<'a> OpenFsm for AuthPubKeyFsm<'a> {
         Ok(Some(ZExtZBuf::new(buff.into())))
     }
 
-    type RecvOpenAckIn = (&'a mut StateOpen, Option<ZExtUnit<{ super::id::PUBKEY }>>);
+    type RecvOpenAckIn = (&'a mut StateOpen, Option<ext::OpenAck>);
     type RecvOpenAckOut = ();
     async fn recv_open_ack(
         &self,
@@ -534,7 +541,7 @@ impl PartialEq for StateAccept {
 impl<'a> AcceptFsm for AuthPubKeyFsm<'a> {
     type Error = ZError;
 
-    type RecvInitSynIn = (&'a mut StateAccept, Option<ZExtZBuf<{ super::id::PUBKEY }>>);
+    type RecvInitSynIn = (&'a mut StateAccept, Option<ext::InitSyn>);
     type RecvInitSynOut = ();
     async fn recv_init_syn(
         &self,
@@ -573,7 +580,7 @@ impl<'a> AcceptFsm for AuthPubKeyFsm<'a> {
     }
 
     type SendInitAckIn = &'a StateAccept;
-    type SendInitAckOut = Option<ZExtZBuf<{ super::id::PUBKEY }>>;
+    type SendInitAckOut = Option<ext::InitAck>;
     async fn send_init_ack(
         &self,
         state: Self::SendInitAckIn,
@@ -596,7 +603,7 @@ impl<'a> AcceptFsm for AuthPubKeyFsm<'a> {
         Ok(Some(ZExtZBuf::new(buff.into())))
     }
 
-    type RecvOpenSynIn = (&'a mut StateAccept, Option<ZExtZBuf<{ super::id::PUBKEY }>>);
+    type RecvOpenSynIn = (&'a mut StateAccept, Option<ext::OpenSyn>);
     type RecvOpenSynOut = ();
     async fn recv_open_syn(
         &self,
@@ -636,7 +643,7 @@ impl<'a> AcceptFsm for AuthPubKeyFsm<'a> {
     }
 
     type SendOpenAckIn = &'a StateAccept;
-    type SendOpenAckOut = Option<ZExtUnit<{ super::id::PUBKEY }>>;
+    type SendOpenAckOut = Option<ext::OpenAck>;
     async fn send_open_ack(
         &self,
         _input: Self::SendOpenAckIn,

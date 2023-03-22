@@ -143,13 +143,14 @@ impl From<ResponseFinal> for NetworkMessage {
 // Extensions
 pub mod ext {
     use crate::{
-        common::{imsg, ZExtZ64},
+        common::{imsg, ZExtZ64, ZExtZBuf},
         core::{CongestionControl, Priority},
+        zextz64, zextzbuf,
     };
     use core::fmt;
 
-    pub const QOS: u8 = 0x01;
-    pub const TSTAMP: u8 = 0x02;
+    pub type QoS = zextz64!(0x1, false);
+    pub type Timestamp = zextzbuf!(0x2, false);
 
     /// ```text
     ///  7 6 5 4 3 2 1 0
@@ -166,11 +167,11 @@ pub mod ext {
     /// ```
     #[repr(transparent)]
     #[derive(Clone, Copy, PartialEq, Eq)]
-    pub struct QoS {
+    pub struct QoSType {
         inner: u8,
     }
 
-    impl QoS {
+    impl QoSType {
         const P_MASK: u8 = 0b00000111;
         const D_FLAG: u8 = 0b00001000;
         const E_FLAG: u8 = 0b00010000;
@@ -215,27 +216,27 @@ pub mod ext {
         }
     }
 
-    impl Default for QoS {
+    impl Default for QoSType {
         fn default() -> Self {
             Self::new(Priority::default(), CongestionControl::default(), false)
         }
     }
 
-    impl From<ZExtZ64<{ QOS }>> for QoS {
-        fn from(ext: ZExtZ64<{ QOS }>) -> Self {
+    impl From<QoS> for QoSType {
+        fn from(ext: QoS) -> Self {
             Self {
                 inner: ext.value as u8,
             }
         }
     }
 
-    impl From<QoS> for ZExtZ64<{ QOS }> {
-        fn from(ext: QoS) -> Self {
-            ZExtZ64::new(ext.inner as u64)
+    impl From<QoSType> for QoS {
+        fn from(ext: QoSType) -> Self {
+            QoS::new(ext.inner as u64)
         }
     }
 
-    impl fmt::Debug for QoS {
+    impl fmt::Debug for QoSType {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             f.debug_struct("QoS")
                 .field("priority", &self.priority())
@@ -254,11 +255,11 @@ pub mod ext {
     /// +---------------+
     /// ```
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct Timestamp {
+    pub struct TimestampType {
         pub timestamp: uhlc::Timestamp,
     }
 
-    impl Timestamp {
+    impl TimestampType {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use crate::core::ZenohId;

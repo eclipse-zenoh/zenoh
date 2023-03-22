@@ -39,8 +39,8 @@ pub mod flag {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pull {
     pub id: PullId,
-    pub ext_qos: ext::QoS,
-    pub ext_tstamp: Option<ext::Timestamp>,
+    pub ext_qos: ext::QoSType,
+    pub ext_tstamp: Option<ext::TimestampType>,
 }
 
 impl Pull {
@@ -52,8 +52,8 @@ impl Pull {
         let mut rng = rand::thread_rng();
 
         let id: PullId = rng.gen();
-        let ext_qos = ext::QoS::rand();
-        let ext_tstamp = rng.gen_bool(0.5).then(ext::Timestamp::rand);
+        let ext_qos = ext::QoSType::rand();
+        let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
 
         Self {
             id,
@@ -64,9 +64,9 @@ impl Pull {
 }
 
 pub mod ext {
-    pub const QOS: u8 = crate::network::ext::QOS;
-    pub const TSTAMP: u8 = crate::network::ext::TSTAMP;
-
     pub type QoS = crate::network::ext::QoS;
+    pub type QoSType = crate::network::ext::QoSType;
+
     pub type Timestamp = crate::network::ext::Timestamp;
+    pub type TimestampType = crate::network::ext::TimestampType;
 }

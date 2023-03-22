@@ -56,54 +56,59 @@ pub struct Request {
     pub wire_expr: WireExpr<'static>,
     pub mapping: Mapping,
     pub payload: u8, // @TODO
-    pub ext_qos: ext::QoS,
-    pub ext_tstamp: Option<ext::Timestamp>,
-    pub ext_dst: ext::Destination,
-    pub ext_target: ext::Target,
+    pub ext_qos: ext::QoSType,
+    pub ext_tstamp: Option<ext::TimestampType>,
+    pub ext_dst: ext::DestinationType,
+    pub ext_target: ext::TargetType,
 }
 
 pub mod ext {
-    pub const QOS: u8 = crate::network::ext::QOS;
-    pub const TSTAMP: u8 = crate::network::ext::TSTAMP;
-    pub const DST: u8 = 0x03;
-    pub const TARGET: u8 = 0x04;
+    use crate::{
+        common::{ZExtUnit, ZExtZ64},
+        zextunit, zextz64,
+    };
 
     pub type QoS = crate::network::ext::QoS;
+    pub type QoSType = crate::network::ext::QoSType;
+
     pub type Timestamp = crate::network::ext::Timestamp;
+    pub type TimestampType = crate::network::ext::TimestampType;
+
+    pub type Destination = zextunit!(0x03, true);
 
     #[repr(u8)]
     #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-    pub enum Destination {
+    pub enum DestinationType {
         Subscribers = 0x00,
         #[default]
         Queryables = 0x01,
     }
 
-    impl Destination {
+    impl DestinationType {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
 
             match rng.gen_range(0..2) {
-                0 => Destination::Subscribers,
-                1 => Destination::Queryables,
+                0 => DestinationType::Subscribers,
+                1 => DestinationType::Queryables,
                 _ => unreachable!(),
             }
         }
     }
 
+    pub type Target = zextz64!(0x4, true);
+
     /// - Target (0x03)
     ///     7 6 5 4 3 2 1 0
     ///    +-+-+-+-+-+-+-+-+
-    ///    |Z|ENC|    ID   |
-    ///    +-+-+-+---------+
     ///    %     target    %
     ///    +---------------+
     ///
     /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
     #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-    pub enum Target {
+    pub enum TargetType {
         #[default]
         BestMatching,
         All,
@@ -112,18 +117,18 @@ pub mod ext {
         Complete(u64),
     }
 
-    impl Target {
+    impl TargetType {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::prelude::SliceRandom;
             let mut rng = rand::thread_rng();
 
             *[
-                Target::All,
-                Target::AllComplete,
-                Target::BestMatching,
+                TargetType::All,
+                TargetType::AllComplete,
+                TargetType::BestMatching,
                 #[cfg(feature = "complete_n")]
-                Target::Complete(rng.gen()),
+                TargetType::Complete(rng.gen()),
             ]
             .choose(&mut rng)
             .unwrap()
@@ -142,10 +147,10 @@ impl Request {
         let id: RequestId = rng.gen();
         // let payload = ZenohMessage::rand();
         let payload: u8 = rng.gen(); // @TODO
-        let ext_qos = ext::QoS::rand();
-        let ext_tstamp = rng.gen_bool(0.5).then(ext::Timestamp::rand);
-        let ext_dst = ext::Destination::rand();
-        let ext_target = ext::Target::rand();
+        let ext_qos = ext::QoSType::rand();
+        let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
+        let ext_dst = ext::DestinationType::rand();
+        let ext_target = ext::TargetType::rand();
 
         Self {
             wire_expr,

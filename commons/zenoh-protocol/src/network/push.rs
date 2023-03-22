@@ -43,36 +43,39 @@ pub struct Push {
     pub wire_expr: WireExpr<'static>,
     pub mapping: Mapping,
     pub payload: u8, // @TODO
-    pub ext_qos: ext::QoS,
-    pub ext_tstamp: Option<ext::Timestamp>,
-    pub ext_dst: ext::Destination,
+    pub ext_qos: ext::QoSType,
+    pub ext_tstamp: Option<ext::TimestampType>,
+    pub ext_dst: ext::DestinationType,
 }
 
 pub mod ext {
-    pub const QOS: u8 = crate::network::ext::QOS;
-    pub const TSTAMP: u8 = crate::network::ext::TSTAMP;
-    pub const DST: u8 = 0x03;
+    use crate::{common::ZExtUnit, zextunit};
 
     pub type QoS = crate::network::ext::QoS;
+    pub type QoSType = crate::network::ext::QoSType;
+
     pub type Timestamp = crate::network::ext::Timestamp;
+    pub type TimestampType = crate::network::ext::TimestampType;
+
+    pub type Destination = zextunit!(0x03, true);
 
     #[repr(u8)]
     #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-    pub enum Destination {
+    pub enum DestinationType {
         #[default]
         Subscribers = 0x00,
         Queryables = 0x01,
     }
 
-    impl Destination {
+    impl DestinationType {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::Rng;
             let mut rng = rand::thread_rng();
 
             match rng.gen_range(0..2) {
-                0 => Destination::Subscribers,
-                1 => Destination::Queryables,
+                0 => DestinationType::Subscribers,
+                1 => DestinationType::Queryables,
                 _ => unreachable!(),
             }
         }
@@ -89,9 +92,9 @@ impl Push {
         let mapping = Mapping::rand();
         // let payload = ZenohMessage::rand();
         let payload: u8 = rng.gen(); // @TODO
-        let ext_qos = ext::QoS::rand();
-        let ext_tstamp = rng.gen_bool(0.5).then(ext::Timestamp::rand);
-        let ext_dst = ext::Destination::rand();
+        let ext_qos = ext::QoSType::rand();
+        let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
+        let ext_dst = ext::DestinationType::rand();
 
         Self {
             wire_expr,

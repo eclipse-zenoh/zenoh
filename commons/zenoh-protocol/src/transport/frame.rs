@@ -71,15 +71,16 @@ pub struct Frame {
     pub reliability: Reliability,
     pub sn: TransportSn,
     pub payload: Vec<ZenohMessage>,
-    pub ext_qos: ext::QoS,
+    pub ext_qos: ext::QoSType,
 }
 
 // Extensions
 pub mod ext {
     use crate::common::ZExtZ64;
     use crate::core::Priority;
+    use crate::zextz64;
 
-    pub const QOS: u8 = 0x01;
+    pub type QoS = zextz64!(0x1, true);
 
     ///      7 6 5 4 3 2 1 0
     ///     +-+-+-+-+-+-+-+-+
@@ -91,11 +92,11 @@ pub mod ext {
     ///     - prio: Priority class
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct QoS {
+    pub struct QoSType {
         inner: u8,
     }
 
-    impl QoS {
+    impl QoSType {
         pub const P_MASK: u8 = 0b00000111;
 
         pub const fn new(priority: Priority) -> Self {
@@ -118,23 +119,23 @@ pub mod ext {
         }
     }
 
-    impl Default for QoS {
+    impl Default for QoSType {
         fn default() -> Self {
             Self::new(Priority::default())
         }
     }
 
-    impl From<ZExtZ64<{ QOS }>> for QoS {
-        fn from(ext: ZExtZ64<{ QOS }>) -> Self {
+    impl From<QoS> for QoSType {
+        fn from(ext: QoS) -> Self {
             Self {
                 inner: ext.value as u8,
             }
         }
     }
 
-    impl From<QoS> for ZExtZ64<{ QOS }> {
-        fn from(ext: QoS) -> Self {
-            ZExtZ64::new(ext.inner as u64)
+    impl From<QoSType> for QoS {
+        fn from(ext: QoSType) -> Self {
+            QoS::new(ext.inner as u64)
         }
     }
 }
@@ -148,19 +149,19 @@ impl Frame {
 
         let reliability = Reliability::rand();
         let sn: TransportSn = rng.gen();
-        let qos = ext::QoS::rand();
+        let ext_qos = ext::QoSType::rand();
         let mut payload = vec![];
         for _ in 0..rng.gen_range(1..4) {
             let mut m = ZenohMessage::rand();
             m.channel.reliability = reliability;
-            m.channel.priority = qos.priority();
+            m.channel.priority = ext_qos.priority();
             payload.push(m);
         }
 
         Frame {
             reliability,
             sn,
-            ext_qos: qos,
+            ext_qos,
             payload,
         }
     }
@@ -171,7 +172,7 @@ impl Frame {
 pub struct FrameHeader {
     pub reliability: Reliability,
     pub sn: TransportSn,
-    pub ext_qos: ext::QoS,
+    pub ext_qos: ext::QoSType,
 }
 
 impl FrameHeader {
@@ -183,12 +184,12 @@ impl FrameHeader {
 
         let reliability = Reliability::rand();
         let sn: TransportSn = rng.gen();
-        let qos = ext::QoS::rand();
+        let ext_qos = ext::QoSType::rand();
 
         FrameHeader {
             reliability,
             sn,
-            ext_qos: qos,
+            ext_qos,
         }
     }
 }

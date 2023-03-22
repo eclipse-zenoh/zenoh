@@ -33,13 +33,12 @@ use zenoh_buffers::ZBuf;
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |Z|ENC|    ID   |
+/// |Z|ENC|M|   ID  |
 /// +-+-+-+---------+
 /// %    length     % -- If ENC == u64 || ENC == ZBuf
 /// +---------------+
 /// ~     [u8]      ~ -- If ENC == ZBuf
 /// +---------------+
-/// ```
 ///
 /// Encoding:
 /// - 0b00: Unit
@@ -49,17 +48,46 @@ use zenoh_buffers::ZBuf;
 ///
 /// (*) If the zenoh extension is not understood, then it SHOULD NOT be dropped and it
 ///     SHOULD be forwarded to the next hops.
+/// ```
 ///
+#[repr(u8)]
+pub enum ZExtEnc {
+    Unit = 0b00 << 5,
+    Z64 = 0b01 << 5,
+    ZBuf = 0b10 << 5,
+}
+
 pub mod iext {
-    pub const ID_BITS: u8 = 5;
+    use super::ZExtEnc;
+
+    pub const ID_BITS: u8 = 4;
     pub const ID_MASK: u8 = !(u8::MAX << ID_BITS);
 
-    pub const ENC_UNIT: u8 = 0b00 << ID_BITS;
-    pub const ENC_Z64: u8 = 0b01 << ID_BITS;
-    pub const ENC_ZBUF: u8 = 0b10 << ID_BITS;
-    pub const ENC_MASK: u8 = 0b11 << ID_BITS;
-
+    pub const FLAG_M: u8 = 1 << 4;
+    pub const ENC_UNIT: u8 = ZExtEnc::Unit as u8;
+    pub const ENC_Z64: u8 = ZExtEnc::Z64 as u8;
+    pub const ENC_ZBUF: u8 = ZExtEnc::ZBuf as u8;
+    pub const ENC_MASK: u8 = 0b11 << 5;
     pub const FLAG_Z: u8 = 1 << 7;
+
+    pub const fn eid(header: u8) -> u8 {
+        header & !FLAG_Z
+    }
+
+    pub(super) const fn id(id: u8, mandatory: bool, encoding: ZExtEnc) -> u8 {
+        let mut id = id & ID_MASK;
+        if mandatory {
+            id |= FLAG_M;
+        } else {
+            id &= !FLAG_M;
+        }
+        id |= encoding as u8;
+        id
+    }
+
+    pub(super) const fn is_mandatory(id: u8) -> bool {
+        crate::common::imsg::has_flag(id, FLAG_M)
+    }
 }
 
 pub struct DidntConvert;
@@ -72,6 +100,14 @@ impl<const ID: u8> ZExtUnit<{ ID }> {
 
     pub const fn new() -> Self {
         Self
+    }
+
+    pub const fn id(mandatory: bool) -> u8 {
+        iext::id(ID, mandatory, ZExtEnc::Unit)
+    }
+
+    pub const fn is_mandatory(&self) -> bool {
+        iext::is_mandatory(ID)
     }
 
     pub const fn transmute<const DI: u8>(self) -> ZExtUnit<{ DI }> {
@@ -108,6 +144,14 @@ impl<const ID: u8> ZExtZ64<{ ID }> {
 
     pub const fn new(value: u64) -> Self {
         Self { value }
+    }
+
+    pub const fn id(mandatory: bool) -> u8 {
+        iext::id(ID, mandatory, ZExtEnc::Z64)
+    }
+
+    pub const fn is_mandatory(&self) -> bool {
+        iext::is_mandatory(ID)
     }
 
     pub const fn transmute<const DI: u8>(self) -> ZExtZ64<{ DI }> {
@@ -150,6 +194,14 @@ impl<const ID: u8> ZExtZBuf<{ ID }> {
         Self { value }
     }
 
+    pub const fn id(mandatory: bool) -> u8 {
+        iext::id(ID, mandatory, ZExtEnc::ZBuf)
+    }
+
+    pub const fn is_mandatory(&self) -> bool {
+        iext::is_mandatory(ID)
+    }
+
     pub fn transmute<const DI: u8>(self) -> ZExtZBuf<{ DI }> {
         ZExtZBuf::new(self.value)
     }
@@ -189,12 +241,14 @@ impl<const ID: u8> ZExtZBufHeader<{ ID }> {
     pub const fn new(len: usize) -> Self {
         Self { len }
     }
-}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ZExtUnknown {
-    pub id: u8,
-    pub body: ZExtBody,
+    pub const fn id(mandatory: bool) -> u8 {
+        iext::id(ID, mandatory, ZExtEnc::ZBuf)
+    }
+
+    pub const fn is_mandatory(&self) -> bool {
+        iext::is_mandatory(ID)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -220,15 +274,36 @@ impl ZExtBody {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ZExtUnknown {
+    pub id: u8,
+    pub body: ZExtBody,
+}
+
 impl ZExtUnknown {
+    pub const fn new(id: u8, mandatory: bool, body: ZExtBody) -> Self {
+        let enc = match &body {
+            ZExtBody::Unit => ZExtEnc::Unit,
+            ZExtBody::Z64(_) => ZExtEnc::Z64,
+            ZExtBody::ZBuf(_) => ZExtEnc::ZBuf,
+        };
+        let id = iext::id(id, mandatory, enc);
+        Self { id, body }
+    }
+
+    pub const fn is_mandatory(&self) -> bool {
+        iext::is_mandatory(self.id)
+    }
+
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
         let id: u8 = rng.gen_range(0x00..=iext::ID_MASK);
+        let mandatory: bool = rng.gen_bool(0.5);
         let body = ZExtBody::rand();
-        Self { id, body }
+        Self::new(id, mandatory, body)
     }
 }
 
@@ -256,5 +331,28 @@ impl<const ID: u8> From<ZExtZBuf<{ ID }>> for ZExtUnknown {
             id: ID,
             body: ZExtBody::ZBuf(e.value),
         }
+    }
+}
+
+// Macros
+
+#[macro_export]
+macro_rules! zextunit {
+    ($id:expr, $m:expr) => {
+        ZExtUnit<{ ZExtUnit::<$id>::id($m) }>
+    }
+}
+
+#[macro_export]
+macro_rules! zextz64 {
+    ($id:expr, $m:expr) => {
+        ZExtZ64<{ ZExtZ64::<$id>::id($m) }>
+    }
+}
+
+#[macro_export]
+macro_rules! zextzbuf {
+    ($id:expr, $m:expr) => {
+        ZExtZBuf<{ ZExtZBuf::<$id>::id($m) }>
     }
 }

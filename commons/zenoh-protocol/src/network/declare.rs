@@ -15,6 +15,7 @@ use crate::{
     common::{imsg, ZExtZ64},
     core::{ExprId, Reliability, WireExpr},
     network::Mapping,
+    zextz64,
 };
 pub use keyexpr::*;
 pub use queryable::*;
@@ -43,17 +44,17 @@ pub mod flag {
 ///
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Declare {
-    pub ext_qos: ext::QoS,
-    pub ext_tstamp: Option<ext::Timestamp>,
+    pub ext_qos: ext::QoSType,
+    pub ext_tstamp: Option<ext::TimestampType>,
     pub body: DeclareBody,
 }
 
 pub mod ext {
-    pub const QOS: u8 = crate::network::ext::QOS;
-    pub const TSTAMP: u8 = crate::network::ext::TSTAMP;
-
     pub type QoS = crate::network::ext::QoS;
+    pub type QoSType = crate::network::ext::QoSType;
+
     pub type Timestamp = crate::network::ext::Timestamp;
+    pub type TimestampType = crate::network::ext::TimestampType;
 }
 
 pub mod id {
@@ -111,8 +112,8 @@ impl Declare {
         let mut rng = rand::thread_rng();
 
         let body = DeclareBody::rand();
-        let ext_qos = ext::QoS::rand();
-        let ext_tstamp = rng.gen_bool(0.5).then(ext::Timestamp::rand);
+        let ext_qos = ext::QoSType::rand();
+        let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
 
         Self {
             body,
@@ -270,7 +271,7 @@ pub mod subscriber {
     pub mod ext {
         use super::*;
 
-        pub const INFO: u8 = 0x01;
+        pub type Info = zextz64!(0x01, false);
 
         /// # The subscription mode.
         ///
@@ -305,8 +306,8 @@ pub mod subscriber {
             }
         }
 
-        impl From<ZExtZ64<{ INFO }>> for SubscriberInfo {
-            fn from(ext: ZExtZ64<{ INFO }>) -> Self {
+        impl From<Info> for SubscriberInfo {
+            fn from(ext: Info) -> Self {
                 let reliability = if imsg::has_option(ext.value, SubscriberInfo::R) {
                     Reliability::Reliable
                 } else {
@@ -321,7 +322,7 @@ pub mod subscriber {
             }
         }
 
-        impl From<SubscriberInfo> for ZExtZ64<{ INFO }> {
+        impl From<SubscriberInfo> for Info {
             fn from(ext: SubscriberInfo) -> Self {
                 let mut v: u64 = 0;
                 if ext.reliability == Reliability::Reliable {
@@ -330,7 +331,7 @@ pub mod subscriber {
                 if ext.mode == Mode::Pull {
                     v |= SubscriberInfo::P;
                 }
-                ZExtZ64::new(v)
+                Info::new(v)
             }
         }
     }
@@ -434,7 +435,7 @@ pub mod queryable {
     pub mod ext {
         use super::*;
 
-        pub const INFO: u8 = 0x01;
+        pub type Info = zextz64!(0x01, false);
 
         ///  7 6 5 4 3 2 1 0
         /// +-+-+-+-+-+-+-+-+
@@ -462,8 +463,8 @@ pub mod queryable {
             }
         }
 
-        impl From<ZExtZ64<{ INFO }>> for QueryableInfo {
-            fn from(ext: ZExtZ64<{ INFO }>) -> Self {
+        impl From<Info> for QueryableInfo {
+            fn from(ext: Info) -> Self {
                 let complete = ext.value as u8;
                 let distance = (ext.value >> 8) as u32;
 
@@ -471,11 +472,11 @@ pub mod queryable {
             }
         }
 
-        impl From<QueryableInfo> for ZExtZ64<{ INFO }> {
+        impl From<QueryableInfo> for Info {
             fn from(ext: QueryableInfo) -> Self {
                 let mut v: u64 = ext.complete as u64;
                 v |= (ext.distance as u64) << 8;
-                ZExtZ64::new(v)
+                Info::new(v)
             }
         }
     }

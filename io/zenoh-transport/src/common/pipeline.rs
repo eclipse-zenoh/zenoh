@@ -186,7 +186,7 @@ impl StageIn {
         let frame = FrameHeader {
             reliability: msg.channel.reliability,
             sn,
-            ext_qos: frame::ext::QoS::new(priority),
+            ext_qos: frame::ext::QoSType::new(priority),
         };
 
         if let WError::NewFrame = e {
