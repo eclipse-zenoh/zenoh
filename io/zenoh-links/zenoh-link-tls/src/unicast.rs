@@ -529,6 +529,12 @@ impl TlsServerConfig {
         }
 
         if keys.is_empty() {
+            keys = rustls_pemfile::ec_private_keys(&mut Cursor::new(&tls_server_private_key))
+                .map_err(|e| zerror!(e))
+                .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
+        }
+
+        if keys.is_empty() {
             bail!("No private key found");
         }
 
