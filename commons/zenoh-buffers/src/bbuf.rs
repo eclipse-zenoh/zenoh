@@ -20,7 +20,6 @@ use alloc::boxed::Box;
 use core::num::NonZeroUsize;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct BBuf {
     buffer: Box<[u8]>,
     len: usize,
@@ -135,7 +134,6 @@ impl BBuf {
 
         let mut rng = rand::thread_rng();
         let buffer = (0..len)
-            .into_iter()
             .map(|_| rng.gen())
             .collect::<Vec<u8>>()
             .into_boxed_slice();

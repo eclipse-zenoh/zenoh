@@ -19,5 +19,5 @@
 //! [Click here for Zenoh's documentation](../../zenoh/index.html)
 pub(crate) mod sealed;
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 pub use sealed::*;

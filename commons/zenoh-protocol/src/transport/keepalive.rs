@@ -33,7 +33,6 @@ use crate::core::ZenohId;
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct KeepAlive {
     pub zid: Option<ZenohId>,
 }

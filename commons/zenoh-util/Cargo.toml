@@ -69,7 +69,6 @@ pnet_datalink = { workspace = true }
 criterion = { workspace = true }
 rand = { workspace = true }
 zenoh-protocol = { path = "../zenoh-protocol/", features = ["test"] }
-zenoh-util = { path = ".", features = ["std"] }
 
 [[bench]]
 name = "keyexpr_tree"

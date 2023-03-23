@@ -48,7 +48,6 @@ mod consts {
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum KnownEncoding {
     Empty = 0,
     AppOctetStream = 1,
@@ -124,7 +123,6 @@ impl AsRef<str> for KnownEncoding {
 /// A zenoh encoding is a HTTP Mime type represented, for wire efficiency,
 /// as an integer prefix (that maps to a string) and a string suffix.
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum Encoding {
     Exact(KnownEncoding),
     WithSuffix(KnownEncoding, CowStr<'static>),

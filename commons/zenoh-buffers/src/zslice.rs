@@ -213,13 +213,6 @@ impl fmt::Debug for ZSlice {
     }
 }
 
-#[cfg(feature = "defmt")]
-impl defmt::Format for ZSlice {
-    fn format(&self, f: defmt::Formatter) {
-        defmt::write!(f, "{:02x}", self.as_slice());
-    }
-}
-
 // From impls
 impl<T> From<Arc<T>> for ZSlice
 where
@@ -316,11 +309,7 @@ impl ZSlice {
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
-        (0..len)
-            .into_iter()
-            .map(|_| rng.gen())
-            .collect::<Vec<u8>>()
-            .into()
+        (0..len).map(|_| rng.gen()).collect::<Vec<u8>>().into()
     }
 }
 

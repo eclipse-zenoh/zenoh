@@ -41,7 +41,6 @@ use crate::core::ZenohId;
 ///           the transport's lease period expires.
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Close {
     pub zid: Option<ZenohId>,
     pub reason: u8,
