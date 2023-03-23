@@ -60,7 +60,7 @@ impl StorageService {
         replication: Option<ReplicationService>,
     ) {
         // @TODO: if storage is persistent, check if tombstones and wildcard updates are already present
-        // @TODO: if read_cost is high for the storage, initialize a cache for the latest value
+        // @TODO: optimization: if read_cost is high for the storage, initialize a cache for the latest value
         let mut storage_service = StorageService {
             session,
             key_expr,
@@ -454,7 +454,17 @@ impl StorageService {
                         }
                     }
                 }
-                Err(e) => warn!("Storage {} raised an error on query: {}", self.name, e),
+                Err(e) => {
+                    let err_message =
+                        format!("Storage {} raised an error on query: {}", self.name, e);
+                    warn!("{}", err_message);
+                    if let Err(e) = q.reply(Err(err_message.into())).res().await {
+                        warn!(
+                            "Storage {} raised an error replying a query: {}",
+                            self.name, e
+                        )
+                    }
+                }
             };
         }
     }
