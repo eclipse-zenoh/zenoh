@@ -17,7 +17,7 @@ use async_std::sync::Arc;
 use async_std::sync::{Mutex, RwLock};
 use flume::{Receiver, Sender};
 use futures::select;
-use log::{error, trace, warn};
+use log::{error, info, trace, warn};
 use std::str;
 use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::prelude::r#async::*;
@@ -388,18 +388,56 @@ impl StorageService {
                 return;
             }
         };
-        // resolve key expr into individual keys
-        let matching_keys = if q.key_expr().is_wild() {
-            self.get_matching_keys(q.key_expr()).await
+        if q.key_expr().is_wild() {
+            // resolve key expr into individual keys
+            let matching_keys = self.get_matching_keys(q.key_expr()).await;
+            let mut storage = self.storage.lock().await;
+            for key in matching_keys {
+                // @TODO: if strip_prefix present, perform the stripping
+                match storage.get(key, q.parameters()).await {
+                    Ok(samples) => {
+                        for sample in samples {
+                            // apply outgoing interceptor on results
+                            let sample = if let Some(ref interceptor) = self.out_interceptor {
+                                interceptor(sample)
+                            } else {
+                                sample
+                            };
+                            // @TODO: if strip_prefix present, add back the prefix
+                            if let Err(e) = q.reply(Ok(sample)).res().await {
+                                warn!(
+                                    "Storage {} raised an error replying a query: {}",
+                                    self.name, e
+                                )
+                            }
+                        }
+                    }
+                    Err(e) => warn!("Storage {} raised an error on query: {}", self.name, e),
+                };
+            }
+            drop(storage);
         } else {
-            vec![OwnedKeyExpr::new(q.key_expr().as_str()).unwrap()]
-            // @TODO: if there is a single key and it is not available, return Error
-        };
-        let mut storage = self.storage.lock().await;
-        for key in matching_keys {
             // @TODO: if strip_prefix present, perform the stripping
-            match storage.get(key, q.parameters()).await {
+            let mut storage = self.storage.lock().await;
+            match storage
+                .get(
+                    OwnedKeyExpr::new(q.key_expr().as_str()).unwrap(),
+                    q.parameters(),
+                )
+                .await
+            {
                 Ok(samples) => {
+                    // if key is not available, return Error
+                    if samples.is_empty() {
+                        info!("Requested key `{}` not found", q.key_expr());
+                        if let Err(e) = q.reply(Err("Key not found".into())).res().await {
+                            warn!(
+                                "Storage {} raised an error replying a query: {}",
+                                self.name, e
+                            )
+                        }
+                        return;
+                    }
                     for sample in samples {
                         // apply outgoing interceptor on results
                         let sample = if let Some(ref interceptor) = self.out_interceptor {
@@ -410,7 +448,7 @@ impl StorageService {
                         // @TODO: if strip_prefix present, add back the prefix
                         if let Err(e) = q.reply(Ok(sample)).res().await {
                             warn!(
-                                "Storage {} raised an error sending a query: {}",
+                                "Storage {} raised an error replying a query: {}",
                                 self.name, e
                             )
                         }
@@ -419,7 +457,6 @@ impl StorageService {
                 Err(e) => warn!("Storage {} raised an error on query: {}", self.name, e),
             };
         }
-        drop(storage);
     }
 
     async fn get_matching_keys(&self, key_expr: &KeyExpr<'_>) -> Vec<OwnedKeyExpr> {
