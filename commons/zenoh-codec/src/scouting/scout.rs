@@ -80,9 +80,9 @@ where
         let zid_request = imsg::has_flag(self.header, tmsg::flag::I);
         let what = if imsg::has_flag(self.header, tmsg::flag::W) {
             let wai: ZInt = self.codec.read(reader)?;
-            let wai: ZInt = wai | 0x80;     // FIXME: This fixes a misalignment with Zenoh-Pico, but it is implemented as a workaround because:
-                                            //          1) the new protocol will fix it as intended
-                                            //          2) we want to avoid breaking older builds, while fixing the misalignment with Zenoh-Pico
+            let wai: ZInt = wai | 0x80; // FIXME: This fixes a misalignment with Zenoh-Pico, but it is implemented as a workaround because:
+                                        //          1) the new protocol will fix it as intended
+                                        //          2) we want to avoid breaking older builds, while fixing the misalignment with Zenoh-Pico
             WhatAmIMatcher::try_from(wai)
         } else {
             None
