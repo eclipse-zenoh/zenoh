@@ -95,32 +95,33 @@
 //!         self.config.to_json_value()
 //!     }
 //!
-//!     async fn put(&mut self, key: OwnedKeyExpr, sample: Sample) -> ZResult<StorageInsertionResult> {
-//!         // Store the sample
-//!         let _key = sample.key_expr;
+//!     async fn put(&mut self, key: Option<OwnedKeyExpr>, value: Value, timestamp: Timestamp) -> ZResult<StorageInsertionResult> {
+//!         // the key will be None if it exactly matched with the strip_prefix
+//!         // create a storge specific special structure to store it
+//!         // Store the data with timestamp
 //!         // @TODO:
-//!         // store (key, sample)
+//!         // store (key, value, timestamp)
 //!         return Ok(StorageInsertionResult::Inserted);
-//!         //  - if any issue: drop the sample
+//!         //  - if any issue: drop
 //!         // return Ok(StorageInsertionResult::Outdated);
 //!     }
 //!
-//!     async fn delete(&mut self, key: OwnedKeyExpr, timestamp: Timestamp) -> ZResult<StorageInsertionResult> {
+//!     async fn delete(&mut self, key: Option<OwnedKeyExpr>, timestamp: Timestamp) -> ZResult<StorageInsertionResult> {
 //!         // @TODO:
 //!         // delete the actual entry from storage
 //!         return Ok(StorageInsertionResult::Deleted);
 //!     }
 //!
 //!     // When receiving a GET operation
-//!     async fn get(&mut self, key_expr: OwnedKeyExpr, parameters: &str) -> ZResult<Vec<Sample>> {
+//!     async fn get(&mut self, key_expr: Option<OwnedKeyExpr>, parameters: &str) -> ZResult<Vec<StoredData>> {
 //!         // @TODO:
-//!         // get the sample with key_expr and return it
-//!         // NOTE: in case parameters is not empty something smarter should be done with returned samples...
-//!         Ok(vec!(Sample::new(key_expr, "")))
+//!         // get the data associated with key_expr and return it
+//!         // NOTE: in case parameters is not empty something smarter should be done with returned data...
+//!         Ok(Vec::new())
 //!     }
 //!
 //!     // To get all entries in the datastore
-//!     async fn get_all_entries(&self) -> ZResult<Vec<(OwnedKeyExpr, Timestamp)>> {
+//!     async fn get_all_entries(&self) -> ZResult<Vec<(Option<OwnedKeyExpr>, Timestamp)>> {
 //!         // @TODO: get the list of (key, timestamp) in the datastore
 //!         Ok(Vec::new())
 //!     }
@@ -132,6 +133,7 @@ use std::sync::Arc;
 use zenoh::prelude::{KeyExpr, OwnedKeyExpr, Sample, Selector};
 use zenoh::queryable::ReplyBuilder;
 use zenoh::time::Timestamp;
+use zenoh::value::Value;
 pub use zenoh::Result as ZResult;
 
 pub mod config;
@@ -165,6 +167,12 @@ pub enum StorageInsertionResult {
     Deleted,
 }
 
+#[derive(Debug, Clone)]
+pub struct StoredData {
+    pub value: Value,
+    pub timestamp: Timestamp,
+}
+
 /// Trait to be implemented by a Backend.
 ///
 #[async_trait]
@@ -196,21 +204,30 @@ pub trait Storage: Send + Sync {
     fn get_admin_status(&self) -> serde_json::Value;
 
     /// Function called for each incoming data ([`Sample`]) to be stored in this storage.
-    async fn put(&mut self, key: OwnedKeyExpr, sample: Sample) -> ZResult<StorageInsertionResult>;
+    async fn put(
+        &mut self,
+        key: Option<OwnedKeyExpr>,
+        value: Value,
+        timestamp: Timestamp,
+    ) -> ZResult<StorageInsertionResult>;
 
     /// Function called for each incoming delete request to this storage.
     async fn delete(
         &mut self,
-        key: OwnedKeyExpr,
+        key: Option<OwnedKeyExpr>,
         timestamp: Timestamp,
     ) -> ZResult<StorageInsertionResult>;
 
     /// Function to retrieve the sample associated with a single key.
-    async fn get(&mut self, key: OwnedKeyExpr, parameters: &str) -> ZResult<Vec<Sample>>;
+    async fn get(
+        &mut self,
+        key: Option<OwnedKeyExpr>,
+        parameters: &str,
+    ) -> ZResult<Vec<StoredData>>;
 
     /// Function called to get the list of all storage content (key, timestamp)
     /// The latest Timestamp corresponding to each key is either the timestamp of the delete or put whichever is the latest.
-    async fn get_all_entries(&self) -> ZResult<Vec<(OwnedKeyExpr, Timestamp)>>;
+    async fn get_all_entries(&self) -> ZResult<Vec<(Option<OwnedKeyExpr>, Timestamp)>>;
 }
 
 /// A wrapper around the [`zenoh::queryable::Query`] allowing to call the

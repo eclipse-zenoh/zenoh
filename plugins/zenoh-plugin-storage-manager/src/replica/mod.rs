@@ -30,7 +30,7 @@ use urlencoding::encode;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
-use zenoh_backend_traits::config::ReplicaConfig;
+use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
 
 pub mod align_queryable;
 pub mod aligner;
@@ -75,17 +75,35 @@ pub struct Replica {
 impl Replica {
     // This function starts the replica by initializing all the components
     pub async fn start(
-        config: ReplicaConfig,
         session: Arc<Session>,
         store_intercept: StoreIntercept,
-        key_expr: OwnedKeyExpr,
-        complete: bool,
+        storage_config: StorageConfig,
         name: &str,
         rx: Receiver<StorageMessage>,
     ) {
         trace!("[REPLICA] Opening session...");
         let startup_entries = match store_intercept.storage.get_all_entries().await {
-            Ok(entries) => entries,
+            Ok(entries) => {
+                let mut result = Vec::new();
+                for entry in entries {
+                    if entry.0.is_none() {
+                        if storage_config.clone().strip_prefix.is_some() {
+                            result.push((storage_config.clone().strip_prefix.unwrap(), entry.1));
+                        } else {
+                            error!("Empty key found with timestamp `{}`", entry.1);
+                        }
+                    } else {
+                        result.push((
+                            StorageService::get_prefixed(
+                                &storage_config.strip_prefix,
+                                &entry.0.unwrap().into(),
+                            ),
+                            entry.1,
+                        ));
+                    }
+                }
+                result
+            }
             Err(e) => {
                 error!("[REPLICA] Error fetching entries from storage: {}", e);
                 return;
@@ -95,8 +113,8 @@ impl Replica {
         let replica = Replica {
             name: name.to_string(),
             session,
-            key_expr,
-            replica_config: config,
+            key_expr: storage_config.clone().key_expr,
+            replica_config: storage_config.clone().replica_config.unwrap(),
             digests_published: RwLock::new(HashSet::new()),
         };
 
@@ -146,8 +164,7 @@ impl Replica {
         // channel to pipe the receiver to storage
         let storage_task = StorageService::start(
             replica.session.clone(),
-            replica.key_expr.clone(),
-            complete,
+            storage_config,
             &replica.name,
             store_intercept,
             rx,

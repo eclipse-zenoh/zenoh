@@ -79,7 +79,7 @@ impl Drop for MemoryBackend {
 
 struct MemoryStorage {
     config: StorageConfig,
-    map: Arc<RwLock<HashMap<OwnedKeyExpr, Sample>>>,
+    map: Arc<RwLock<HashMap<Option<OwnedKeyExpr>, StoredData>>>,
 }
 
 impl MemoryStorage {
@@ -97,16 +97,21 @@ impl Storage for MemoryStorage {
         self.config.to_json_value()
     }
 
-    async fn put(&mut self, key: OwnedKeyExpr, sample: Sample) -> ZResult<StorageInsertionResult> {
-        trace!("put for {}", key);
+    async fn put(
+        &mut self,
+        key: Option<OwnedKeyExpr>,
+        value: Value,
+        timestamp: Timestamp,
+    ) -> ZResult<StorageInsertionResult> {
+        trace!("put for {:?}", key);
         let mut map = self.map.write().await;
         match map.entry(key) {
             std::collections::hash_map::Entry::Occupied(mut e) => {
-                e.insert(sample);
+                e.insert(StoredData { value, timestamp });
                 return Ok(StorageInsertionResult::Replaced);
             }
             std::collections::hash_map::Entry::Vacant(e) => {
-                e.insert(sample);
+                e.insert(StoredData { value, timestamp });
                 return Ok(StorageInsertionResult::Inserted);
             }
         }
@@ -114,28 +119,32 @@ impl Storage for MemoryStorage {
 
     async fn delete(
         &mut self,
-        key: OwnedKeyExpr,
+        key: Option<OwnedKeyExpr>,
         _timestamp: Timestamp,
     ) -> ZResult<StorageInsertionResult> {
-        trace!("delete for {}", key);
+        trace!("delete for {:?}", key);
         self.map.write().await.remove_entry(&key);
         return Ok(StorageInsertionResult::Deleted);
     }
 
-    async fn get(&mut self, key: OwnedKeyExpr, _parameters: &str) -> ZResult<Vec<Sample>> {
-        trace!("get for {}", key);
+    async fn get(
+        &mut self,
+        key: Option<OwnedKeyExpr>,
+        _parameters: &str,
+    ) -> ZResult<Vec<StoredData>> {
+        trace!("get for {:?}", key);
         // @TODO: use parameters???
         match self.map.read().await.get(&key) {
             Some(v) => Ok(vec![v.clone()]),
-            None => Err(format!("Key {key} is not present").into()),
+            None => Err(format!("Key {:?} is not present", key).into()),
         }
     }
 
-    async fn get_all_entries(&self) -> ZResult<Vec<(OwnedKeyExpr, Timestamp)>> {
+    async fn get_all_entries(&self) -> ZResult<Vec<(Option<OwnedKeyExpr>, Timestamp)>> {
         let map = self.map.read().await;
         let mut result = Vec::with_capacity(map.len());
         for (k, v) in map.iter() {
-            result.push((k.clone(), *v.get_timestamp().unwrap()));
+            result.push((k.clone(), v.timestamp));
         }
         Ok(result)
     }

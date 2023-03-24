@@ -43,31 +43,10 @@ pub(crate) async fn start_storage(
     async_std::task::spawn(async move {
         // If a configuration for replica is present, we initialize a replica, else only a storage service
         // A replica contains a storage service and all metadata required for anti-entropy
-        match config.replica_config {
-            Some(replica_config) => {
-                Replica::start(
-                    replica_config,
-                    zenoh.clone(),
-                    store_intercept,
-                    config.key_expr,
-                    config.complete,
-                    &name,
-                    rx,
-                )
-                .await
-            }
-            None => {
-                StorageService::start(
-                    zenoh.clone(),
-                    config.key_expr,
-                    config.complete,
-                    &name,
-                    store_intercept,
-                    rx,
-                    None,
-                )
-                .await
-            }
+        if config.replica_config.is_some() {
+            Replica::start(zenoh.clone(), store_intercept, config, &name, rx).await;
+        } else {
+            StorageService::start(zenoh.clone(), config, &name, store_intercept, rx, None).await;
         }
     });
 

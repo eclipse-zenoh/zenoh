@@ -22,8 +22,10 @@ use std::str;
 use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
-use zenoh::Session;
+use zenoh::{Result as ZResult, Session};
+use zenoh_backend_traits::config::StorageConfig;
 use zenoh_backend_traits::{Capability, History, StorageInsertionResult};
+use zenoh_result::bail;
 use zenoh_util::keyexpr_tree::impls::KeyedSetProvider;
 use zenoh_util::keyexpr_tree::{
     IKeyExprTreeExt, IKeyExprTreeExtMut, KeBoxTree, NonWild, UnknownWildness,
@@ -40,6 +42,7 @@ pub struct StorageService {
     key_expr: OwnedKeyExpr,
     complete: bool,
     name: String,
+    strip_prefix: Option<OwnedKeyExpr>,
     storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
     capability: Capability,
     tombstones: RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>,
@@ -52,8 +55,7 @@ pub struct StorageService {
 impl StorageService {
     pub async fn start(
         session: Arc<Session>,
-        key_expr: OwnedKeyExpr,
-        complete: bool,
+        config: StorageConfig,
         name: &str,
         store_intercept: StoreIntercept,
         rx: Receiver<StorageMessage>,
@@ -63,9 +65,10 @@ impl StorageService {
         // @TODO: optimization: if read_cost is high for the storage, initialize a cache for the latest value
         let mut storage_service = StorageService {
             session,
-            key_expr,
-            complete,
+            key_expr: config.key_expr,
+            complete: config.complete,
             name: name.to_string(),
+            strip_prefix: config.strip_prefix,
             storage: Mutex::new(store_intercept.storage),
             capability: store_intercept.capability,
             tombstones: RwLock::new(KeBoxTree::new()),
@@ -199,7 +202,6 @@ impl StorageService {
         }
     }
 
-    // @TODO: handle the case where there is a strip_prefix specified for the storage
     // The storage should only simply save the key, sample pair while put and retrieve the same during get
     // the trimming during PUT and GET should be handled by the plugin
     async fn process_sample(&self, sample: Sample) {
@@ -262,16 +264,28 @@ impl StorageService {
                     }
                 };
 
-                // @TODO: if strip_prefix present, perform the stripping
+                let stripped_key = match self.strip_prefix(&sample_to_store.key_expr) {
+                    Ok(stripped) => stripped,
+                    Err(e) => {
+                        error!("{}", e);
+                        return;
+                    }
+                };
                 let mut storage = self.storage.lock().await;
                 let result = if sample.kind == SampleKind::Put {
-                    storage.put(k.clone(), sample_to_store.clone()).await
+                    storage
+                        .put(
+                            stripped_key,
+                            sample_to_store.value.clone(),
+                            sample_to_store.timestamp.unwrap(),
+                        )
+                        .await
                 } else if sample.kind == SampleKind::Delete {
                     // register a tombstone
                     self.mark_tombstone(&k, sample_to_store.timestamp.unwrap())
                         .await;
                     storage
-                        .delete(k.clone(), sample_to_store.timestamp.unwrap())
+                        .delete(stripped_key, sample_to_store.timestamp.unwrap())
                         .await
                 } else {
                     Err("sample kind not implemented".into())
@@ -280,7 +294,6 @@ impl StorageService {
                     && result.is_ok()
                     && !matches!(result.unwrap(), StorageInsertionResult::Outdated)
                 {
-                    // @TODO: if strip_prefix present, add back the prefix
                     let sending = self
                         .replication
                         .as_ref()
@@ -344,12 +357,17 @@ impl StorageService {
                 // if the key matches a wild card update, check whether it was saved in storage
                 // remember that wild card updates change only existing keys
                 let mut storage = self.storage.lock().await;
-                match storage.get(key_expr.clone(), "").await {
-                    Ok(stored_samples) => {
-                        for stored_sample in stored_samples {
-                            if stored_sample.get_timestamp().is_some()
-                                && stored_sample.get_timestamp().unwrap() > timestamp
-                            {
+                let stripped_key = match self.strip_prefix(&key_expr.into()) {
+                    Ok(stripped) => stripped,
+                    Err(e) => {
+                        error!("{}", e);
+                        return None;
+                    }
+                };
+                match storage.get(stripped_key, "").await {
+                    Ok(stored_data) => {
+                        for entry in stored_data {
+                            if entry.timestamp > *timestamp {
                                 return None;
                             }
                         }
@@ -370,9 +388,16 @@ impl StorageService {
     async fn is_latest(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
         // @TODO: if cache exists, read from there
         let mut storage = self.storage.lock().await;
-        if let Ok(samples) = storage.get(key_expr.clone(), "").await {
-            for sample in samples {
-                if sample.get_timestamp().unwrap() > timestamp {
+        let stripped_key = match self.strip_prefix(&key_expr.into()) {
+            Ok(stripped) => stripped,
+            Err(e) => {
+                error!("{}", e);
+                return false;
+            }
+        };
+        if let Ok(stored_data) = storage.get(stripped_key, "").await {
+            for entry in stored_data {
+                if entry.timestamp > *timestamp {
                     return false;
                 }
             }
@@ -393,17 +418,25 @@ impl StorageService {
             let matching_keys = self.get_matching_keys(q.key_expr()).await;
             let mut storage = self.storage.lock().await;
             for key in matching_keys {
-                // @TODO: if strip_prefix present, perform the stripping
-                match storage.get(key, q.parameters()).await {
-                    Ok(samples) => {
-                        for sample in samples {
+                let stripped_key = match self.strip_prefix(&key.clone().into()) {
+                    Ok(k) => k,
+                    Err(e) => {
+                        error!("{}", e);
+                        // @TODO: return error when it is supported
+                        return;
+                    }
+                };
+                match storage.get(stripped_key, q.parameters()).await {
+                    Ok(stored_data) => {
+                        for entry in stored_data {
+                            let sample = Sample::new(key.clone(), entry.value)
+                                .with_timestamp(entry.timestamp);
                             // apply outgoing interceptor on results
                             let sample = if let Some(ref interceptor) = self.out_interceptor {
                                 interceptor(sample)
                             } else {
                                 sample
                             };
-                            // @TODO: if strip_prefix present, add back the prefix
                             if let Err(e) = q.reply(Ok(sample)).res().await {
                                 warn!(
                                     "Storage {} raised an error replying a query: {}",
@@ -417,18 +450,19 @@ impl StorageService {
             }
             drop(storage);
         } else {
-            // @TODO: if strip_prefix present, perform the stripping
+            let stripped_key = match self.strip_prefix(q.key_expr()) {
+                Ok(k) => k,
+                Err(e) => {
+                    error!("{}", e);
+                    // @TODO: return error when it is supported
+                    return;
+                }
+            };
             let mut storage = self.storage.lock().await;
-            match storage
-                .get(
-                    OwnedKeyExpr::new(q.key_expr().as_str()).unwrap(),
-                    q.parameters(),
-                )
-                .await
-            {
-                Ok(samples) => {
+            match storage.get(stripped_key, q.parameters()).await {
+                Ok(stored_data) => {
                     // if key is not available, return Error
-                    if samples.is_empty() {
+                    if stored_data.is_empty() {
                         info!("Requested key `{}` not found", q.key_expr());
                         if let Err(e) = q.reply(Err("Key not found".into())).res().await {
                             warn!(
@@ -438,7 +472,9 @@ impl StorageService {
                         }
                         return;
                     }
-                    for sample in samples {
+                    for entry in stored_data {
+                        let sample = Sample::new(q.key_expr().clone(), entry.value)
+                            .with_timestamp(entry.timestamp);
                         // apply outgoing interceptor on results
                         let sample = if let Some(ref interceptor) = self.out_interceptor {
                             interceptor(sample)
@@ -476,8 +512,10 @@ impl StorageService {
         match storage.get_all_entries().await {
             Ok(entries) => {
                 for (k, _ts) in entries {
-                    if k.intersects(key_expr) {
-                        result.push(k);
+                    if k.is_none() || key_expr.intersects(&k.clone().unwrap()) {
+                        let full_key =
+                            StorageService::get_prefixed(&self.strip_prefix, &k.unwrap().into());
+                        result.push(full_key);
                     }
                 }
             }
@@ -487,6 +525,35 @@ impl StorageService {
             ),
         }
         result
+    }
+
+    fn strip_prefix(&self, key_expr: &KeyExpr<'_>) -> ZResult<Option<OwnedKeyExpr>> {
+        let key = match &self.strip_prefix {
+            Some(prefix) => match key_expr.strip_prefix(prefix).as_slice() {
+                [ke] => ke.as_str(),
+                _ => bail!(
+                    "Keyexpr doesn't start with prefix '{}': '{}'",
+                    prefix,
+                    key_expr
+                ),
+            },
+            None => key_expr.as_str(),
+        };
+        if key.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(OwnedKeyExpr::new(key.to_string()).unwrap()))
+        }
+    }
+
+    pub fn get_prefixed(
+        strip_prefix: &Option<OwnedKeyExpr>,
+        key_expr: &KeyExpr<'_>,
+    ) -> OwnedKeyExpr {
+        match strip_prefix {
+            Some(prefix) => prefix.join(key_expr.as_keyexpr()).unwrap(),
+            None => OwnedKeyExpr::from(key_expr.as_keyexpr()),
+        }
     }
 
     async fn initialize_if_empty(&mut self) {
