@@ -503,11 +503,6 @@ fn codec_push() {
 }
 
 #[test]
-fn codec_pull() {
-    run!(Pull, Pull::rand());
-}
-
-#[test]
 fn codec_request() {
     run!(Request, Request::rand());
 }

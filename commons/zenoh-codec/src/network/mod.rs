@@ -13,7 +13,6 @@
 //
 mod declare;
 mod oam;
-mod pull;
 mod push;
 mod request;
 mod response;
