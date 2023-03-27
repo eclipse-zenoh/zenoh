@@ -11,13 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::{imsg, ZExtUnknown},
+    common::imsg,
     transport::{
         close::{flag, Close},
         id,
@@ -75,19 +75,9 @@ where
         let reason: u8 = self.codec.read(&mut *reader)?;
 
         // Extensions
-        let mut has_ext = imsg::has_flag(self.header, flag::Z);
-        while has_ext {
-            const S: &str = "Unknown Close ext";
-            let (u, ext): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
-            if u.is_mandatory() {
-                #[cfg(feature = "std")]
-                log::error!("{S}: {:?}", u);
-                return Err(DidntRead);
-            } else {
-                #[cfg(feature = "std")]
-                log::debug!("{S}: {:?}", u);
-            }
-            has_ext = ext;
+        let has_ext = imsg::has_flag(self.header, flag::Z);
+        if has_ext {
+            extension::skip_all(reader, "Close")?;
         }
 
         Ok(Close { reason, session })

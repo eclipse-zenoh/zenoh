@@ -11,14 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
     ZBuf,
 };
 use zenoh_protocol::{
-    common::{iext, imsg, ZExtBody, ZExtUnknown},
+    common::{iext, imsg, ZExtBody},
     network::{
         id,
         oam::{ext, flag, Oam, OamId},
@@ -127,17 +127,7 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    const S: &str = "Unknown OAM ext";
-                    let (u, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
-                    if u.is_mandatory() {
-                        #[cfg(feature = "std")]
-                        log::error!("{S}: {:?}", u);
-                        return Err(DidntRead);
-                    } else {
-                        #[cfg(feature = "std")]
-                        log::debug!("{S}: {:?}", u);
-                    }
-                    has_ext = ext;
+                    has_ext = extension::skip(reader, "OAM", ext)?;
                 }
             }
         }

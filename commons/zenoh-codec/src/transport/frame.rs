@@ -11,14 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Reliability};
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Reliability};
 use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::{iext, imsg, ZExtUnknown, ZExtZ64},
+    common::{iext, imsg, ZExtZ64},
     core::Reliability,
     transport::{
         frame::{ext, flag, Frame, FrameHeader},
@@ -104,17 +104,7 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    const S: &str = "Unknown Frame ext";
-                    let (u, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
-                    if u.is_mandatory() {
-                        #[cfg(feature = "std")]
-                        log::error!("{S}: {:?}", u);
-                        return Err(DidntRead);
-                    } else {
-                        #[cfg(feature = "std")]
-                        log::debug!("{S}: {:?}", u);
-                    }
-                    has_ext = ext;
+                    has_ext = extension::skip(reader, "Frame", ext)?;
                 }
             }
         }

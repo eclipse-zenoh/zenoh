@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use core::time::Duration;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -19,7 +19,7 @@ use zenoh_buffers::{
     ZSlice,
 };
 use zenoh_protocol::{
-    common::{iext, imsg, ZExtUnknown},
+    common::{iext, imsg},
     transport::{
         id,
         open::{ext, flag, OpenAck, OpenSyn},
@@ -146,17 +146,7 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    const S: &str = "Unknown OpenSyn ext";
-                    let (u, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
-                    if u.is_mandatory() {
-                        #[cfg(feature = "std")]
-                        log::error!("{S}: {:?}", u);
-                        return Err(DidntRead);
-                    } else {
-                        #[cfg(feature = "std")]
-                        log::debug!("{S}: {:?}", u);
-                    }
-                    has_ext = ext;
+                    has_ext = extension::skip(reader, "OpenSyn", ext)?;
                 }
             }
         }
@@ -292,17 +282,7 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    const S: &str = "Unknown OpenAck ext";
-                    let (u, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
-                    if u.is_mandatory() {
-                        #[cfg(feature = "std")]
-                        log::error!("{S}: {:?}", u);
-                        return Err(DidntRead);
-                    } else {
-                        #[cfg(feature = "std")]
-                        log::debug!("{S}: {:?}", u);
-                    }
-                    has_ext = ext;
+                    has_ext = extension::skip(reader, "OpenAck", ext)?;
                 }
             }
         }

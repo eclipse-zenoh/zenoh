@@ -11,13 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::{iext, imsg, ZExtUnknown},
+    common::{iext, imsg},
     core::Reliability,
     transport::{
         fragment::{ext, flag, Fragment, FragmentHeader, TransportSn},
@@ -103,18 +103,7 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    const S: &str = "Unknown mandatory Fragment ext";
-                    let (u, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
-                    if u.is_mandatory() {
-                        #[cfg(feature = "std")]
-                        log::error!("{S}: {:?}", u);
-
-                        return Err(DidntRead);
-                    } else {
-                        #[cfg(feature = "std")]
-                        log::debug!("{S}: {:?}", u);
-                    }
-                    has_ext = ext;
+                    has_ext = extension::skip(reader, "Fragment", ext)?;
                 }
             }
         }

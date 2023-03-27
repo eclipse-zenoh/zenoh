@@ -22,6 +22,47 @@ use zenoh_protocol::common::{
     iext, imsg::has_flag, ZExtBody, ZExtUnit, ZExtUnknown, ZExtZ64, ZExtZBuf, ZExtZBufHeader,
 };
 
+fn skip_inner<R>(reader: &mut R, _s: &str, header: u8) -> Result<bool, DidntRead>
+where
+    R: Reader,
+{
+    let codec = Zenoh080Header::new(header);
+    let (u, has_ext): (ZExtUnknown, bool) = codec.read(&mut *reader)?;
+    if u.is_mandatory() {
+        #[cfg(feature = "std")]
+        log::error!("Unknown {_s} ext: {u:?}");
+        return Err(DidntRead);
+    } else {
+        #[cfg(feature = "std")]
+        log::debug!("Unknown {_s} ext: {u:?}");
+    }
+    Ok(has_ext)
+}
+
+#[cold]
+#[inline(never)]
+pub(crate) fn skip<R>(reader: &mut R, s: &str, header: u8) -> Result<bool, DidntRead>
+where
+    R: Reader,
+{
+    skip_inner(reader, s, header)
+}
+
+#[cold]
+#[inline(never)]
+pub(crate) fn skip_all<R>(reader: &mut R, s: &str) -> Result<(), DidntRead>
+where
+    R: Reader,
+{
+    let codec = Zenoh080::new();
+    let mut has_ext = true;
+    while has_ext {
+        let header: u8 = codec.read(&mut *reader)?;
+        has_ext = skip_inner(reader, s, header)?;
+    }
+    Ok(())
+}
+
 // ZExtUnit
 impl<const ID: u8, W> WCodec<(&ZExtUnit<{ ID }>, bool), &mut W> for Zenoh080
 where

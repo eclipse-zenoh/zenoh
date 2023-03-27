@@ -11,14 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header, Zenoh080Length};
+use crate::{
+    common::extension, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header, Zenoh080Length,
+};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
     ZSlice,
 };
 use zenoh_protocol::{
-    common::{iext, imsg, ZExtUnknown},
+    common::{iext, imsg},
     core::{Resolution, WhatAmI, ZenohId},
     transport::{
         id,
@@ -169,17 +171,7 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    const S: &str = "Unknown InitSyn ext";
-                    let (u, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
-                    if u.is_mandatory() {
-                        #[cfg(feature = "std")]
-                        log::error!("{S}: {:?}", u);
-                        return Err(DidntRead);
-                    } else {
-                        #[cfg(feature = "std")]
-                        log::debug!("{S}: {:?}", u);
-                    }
-                    has_ext = ext;
+                    has_ext = extension::skip(reader, "InitSyn", ext)?;
                 }
             }
         }
@@ -346,17 +338,7 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    const S: &str = "Unknown InitAck ext";
-                    let (u, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
-                    if u.is_mandatory() {
-                        #[cfg(feature = "std")]
-                        log::error!("{S}: {:?}", u);
-                        return Err(DidntRead);
-                    } else {
-                        #[cfg(feature = "std")]
-                        log::debug!("{S}: {:?}", u);
-                    }
-                    has_ext = ext;
+                    has_ext = extension::skip(reader, "InitAck", ext)?;
                 }
             }
         }
