@@ -103,7 +103,7 @@ jobs:
           ASYNC_STD_THREAD_COUNT: 4
 
   nostd:
-    name: Run no_std-ness checks
+    name: Run no_std checks
     runs-on: ubuntu-latest
     needs: check
     strategy:
@@ -112,41 +112,15 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - name: Install latest Rust toolchain
+      - name: Install nightly Rust toolchain
         uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly
+          target: x86_64-unknown-none # Generic no_std target architecture
+          override: true
       
-      - name: Install cargo-nono
-        run: cargo install cargo-nono
-      
-      - name: Install cargo-no-dev-deps
-        run: cargo install cargo-no-dev-deps --locked
-      
-      - name: Check zenoh-collections
+      - name: Perform no_std checks
         uses: actions-rs/cargo@v1
         with:
-          command: nono
-          args: check --package zenoh-collections --no-default-features
-      
-      - name: Check zenoh-result
-        uses: actions-rs/cargo@v1
-        with:
-          command: nono
-          args: check --package zenoh-result --no-default-features
-      
-      - name: Check zenoh-buffers
-        uses: actions-rs/cargo@v1
-        with:
-          command: nono
-          args: check --package zenoh-buffers
-      
-      - name: Check zenoh-protocol
-        uses: actions-rs/cargo@v1
-        with:
-          command: no-dev-deps
-          args: nono check --package zenoh-protocol --no-default-features
-      
-      - name: Check zenoh-codec
-        uses: actions-rs/cargo@v1
-        with:
-          command: no-dev-deps
-          args: nono check --package zenoh-codec --no-default-features
+          command: check
+          args: --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml

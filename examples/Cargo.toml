@@ -82,6 +82,10 @@ name = "z_delete"
 path = "examples/z_delete.rs"
 
 [[example]]
+name = "z_formats"
+path = "examples/z_formats.rs"
+
+[[example]]
 name = "z_pub"
 path = "examples/z_pub.rs"
 

@@ -72,18 +72,13 @@ pub struct Property {
 
 /// The kind of a `Sample`.
 #[repr(u8)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub enum SampleKind {
     /// if the `Sample` was issued by a `put` operation.
+    #[default]
     Put = 0,
     /// if the `Sample` was issued by a `delete` operation.
     Delete = 1,
-}
-
-impl Default for SampleKind {
-    fn default() -> Self {
-        SampleKind::Put
-    }
 }
 
 impl fmt::Display for SampleKind {
@@ -327,7 +322,7 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
+#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
 #[repr(u8)]
 pub enum Priority {
     Control = 0,
@@ -335,6 +330,7 @@ pub enum Priority {
     InteractiveHigh = 2,
     InteractiveLow = 3,
     DataHigh = 4,
+    #[default]
     Data = 5,
     DataLow = 6,
     Background = 7,
@@ -347,12 +343,6 @@ impl Priority {
     pub const MAX: Self = Self::Control;
     /// The number of available priorities
     pub const NUM: usize = 1 + Self::MIN as usize - Self::MAX as usize;
-}
-
-impl Default for Priority {
-    fn default() -> Priority {
-        Priority::Data
-    }
 }
 
 impl TryFrom<u8> for Priority {
@@ -378,17 +368,12 @@ impl TryFrom<u8> for Priority {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Reliability {
+    #[default]
     BestEffort,
     Reliable,
-}
-
-impl Default for Reliability {
-    fn default() -> Reliability {
-        Reliability::BestEffort
-    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
@@ -442,32 +427,21 @@ pub struct ConduitSn {
 }
 
 /// The kind of congestion control.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CongestionControl {
     Block,
+    #[default]
     Drop,
 }
 
-impl Default for CongestionControl {
-    fn default() -> CongestionControl {
-        CongestionControl::Drop
-    }
-}
-
 /// The subscription mode.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum SubMode {
+    #[default]
     Push,
     Pull,
-}
-
-impl Default for SubMode {
-    #[inline]
-    fn default() -> Self {
-        SubMode::Push
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -500,19 +474,14 @@ pub enum ConsolidationMode {
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum QueryTarget {
+    #[default]
     BestMatching,
     All,
     AllComplete,
     #[cfg(feature = "complete_n")]
     Complete(ZInt),
-}
-
-impl Default for QueryTarget {
-    fn default() -> Self {
-        QueryTarget::BestMatching
-    }
 }
 
 pub(crate) fn split_once(s: &str, c: char) -> (&str, &str) {

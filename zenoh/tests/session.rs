@@ -164,6 +164,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session) {
 fn zenoh_session() {
     task::block_on(async {
         zasync_executor_init!();
+        let _ = env_logger::try_init();
 
         let (peer01, peer02) = open_session(&["tcp/127.0.0.1:17447"]).await;
         test_session_pubsub(&peer01, &peer02).await;

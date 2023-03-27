@@ -134,7 +134,6 @@ impl BBuf {
 
         let mut rng = rand::thread_rng();
         let buffer = (0..len)
-            .into_iter()
             .map(|_| rng.gen())
             .collect::<Vec<u8>>()
             .into_boxed_slice();

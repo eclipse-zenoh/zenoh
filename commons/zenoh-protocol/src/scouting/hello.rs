@@ -79,7 +79,7 @@ impl Hello {
         };
         let whatami = WhatAmI::rand();
         let locators = if rng.gen_bool(0.5) {
-            Vec::from_iter((1..5).into_iter().map(|_| Locator::rand()))
+            Vec::from_iter((1..5).map(|_| Locator::rand()))
         } else {
             vec![]
         };
