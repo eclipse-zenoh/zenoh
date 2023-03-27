@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::face::FaceState;
-use super::router::Tables;
+use super::router::{Tables, TablesLock};
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
@@ -47,6 +47,21 @@ pub(super) struct SessionContext {
     pub(super) last_values: HashMap<String, (Option<DataInfo>, ZBuf)>,
 }
 
+pub(super) struct DataRoutes {
+    pub(super) matching_pulls: Option<Arc<PullCaches>>,
+    pub(super) routers_data_routes: Vec<Arc<Route>>,
+    pub(super) peers_data_routes: Vec<Arc<Route>>,
+    pub(super) peer_data_route: Option<Arc<Route>>,
+    pub(super) client_data_route: Option<Arc<Route>>,
+}
+
+pub(super) struct QueryRoutes {
+    pub(super) routers_query_routes: Vec<Arc<QueryTargetQablSet>>,
+    pub(super) peers_query_routes: Vec<Arc<QueryTargetQablSet>>,
+    pub(super) peer_query_route: Option<Arc<QueryTargetQablSet>>,
+    pub(super) client_query_route: Option<Arc<QueryTargetQablSet>>,
+}
+
 pub(super) struct ResourceContext {
     pub(super) router_subs: HashSet<ZenohId>,
     pub(super) peer_subs: HashSet<ZenohId>,
@@ -54,10 +69,12 @@ pub(super) struct ResourceContext {
     pub(super) peer_qabls: HashMap<ZenohId, QueryableInfo>,
     pub(super) matches: Vec<Weak<Resource>>,
     pub(super) matching_pulls: Arc<PullCaches>,
+    pub(super) valid_data_routes: bool,
     pub(super) routers_data_routes: Vec<Arc<Route>>,
     pub(super) peers_data_routes: Vec<Arc<Route>>,
     pub(super) peer_data_route: Option<Arc<Route>>,
     pub(super) client_data_route: Option<Arc<Route>>,
+    pub(super) valid_query_routes: bool,
     pub(super) routers_query_routes: Vec<Arc<QueryTargetQablSet>>,
     pub(super) peers_query_routes: Vec<Arc<QueryTargetQablSet>>,
     pub(super) peer_query_route: Option<Arc<QueryTargetQablSet>>,
@@ -73,15 +90,36 @@ impl ResourceContext {
             peer_qabls: HashMap::new(),
             matches: Vec::new(),
             matching_pulls: Arc::new(Vec::new()),
+            valid_data_routes: false,
             routers_data_routes: Vec::new(),
             peers_data_routes: Vec::new(),
             peer_data_route: None,
             client_data_route: None,
+            valid_query_routes: false,
             routers_query_routes: Vec::new(),
             peers_query_routes: Vec::new(),
             peer_query_route: None,
             client_query_route: None,
         }
+    }
+
+    pub(super) fn update_data_routes(&mut self, data_routes: DataRoutes) {
+        self.valid_data_routes = true;
+        if let Some(matching_pulls) = data_routes.matching_pulls {
+            self.matching_pulls = matching_pulls;
+        }
+        self.routers_data_routes = data_routes.routers_data_routes;
+        self.peers_data_routes = data_routes.peers_data_routes;
+        self.peer_data_route = data_routes.peer_data_route;
+        self.client_data_route = data_routes.client_data_route;
+    }
+
+    pub(super) fn update_query_routes(&mut self, query_routes: QueryRoutes) {
+        self.valid_query_routes = true;
+        self.routers_query_routes = query_routes.routers_query_routes;
+        self.peers_query_routes = query_routes.peers_query_routes;
+        self.peer_query_route = query_routes.peer_query_route;
+        self.client_query_route = query_routes.client_query_route;
     }
 }
 
@@ -163,8 +201,15 @@ impl Resource {
     #[inline(always)]
     pub fn routers_data_route(&self, context: usize) -> Option<Arc<Route>> {
         match &self.context {
-            Some(ctx) => (ctx.routers_data_routes.len() > context)
-                .then(|| ctx.routers_data_routes[context].clone()),
+            Some(ctx) => {
+                if ctx.valid_data_routes {
+                    (ctx.routers_data_routes.len() > context)
+                        .then(|| ctx.routers_data_routes[context].clone())
+                } else {
+                    None
+                }
+            }
+
             None => None,
         }
     }
@@ -172,8 +217,14 @@ impl Resource {
     #[inline(always)]
     pub fn peers_data_route(&self, context: usize) -> Option<Arc<Route>> {
         match &self.context {
-            Some(ctx) => (ctx.peers_data_routes.len() > context)
-                .then(|| ctx.peers_data_routes[context].clone()),
+            Some(ctx) => {
+                if ctx.valid_data_routes {
+                    (ctx.peers_data_routes.len() > context)
+                        .then(|| ctx.peers_data_routes[context].clone())
+                } else {
+                    None
+                }
+            }
             None => None,
         }
     }
@@ -181,7 +232,13 @@ impl Resource {
     #[inline(always)]
     pub fn peer_data_route(&self) -> Option<Arc<Route>> {
         match &self.context {
-            Some(ctx) => ctx.peer_data_route.clone(),
+            Some(ctx) => {
+                if ctx.valid_data_routes {
+                    ctx.peer_data_route.clone()
+                } else {
+                    None
+                }
+            }
             None => None,
         }
     }
@@ -189,7 +246,13 @@ impl Resource {
     #[inline(always)]
     pub fn client_data_route(&self) -> Option<Arc<Route>> {
         match &self.context {
-            Some(ctx) => ctx.client_data_route.clone(),
+            Some(ctx) => {
+                if ctx.valid_data_routes {
+                    ctx.client_data_route.clone()
+                } else {
+                    None
+                }
+            }
             None => None,
         }
     }
@@ -543,31 +606,16 @@ impl Resource {
         matches
     }
 
-    pub fn match_resource(tables: &Tables, res: &mut Arc<Resource>) {
+    pub fn match_resource(_tables: &Tables, res: &mut Arc<Resource>, matches: Vec<Weak<Resource>>) {
         if res.context.is_some() {
-            if let Ok(ke) = keyexpr::new(res.expr().as_str()) {
-                let mut matches = Resource::get_matches(tables, ke);
-
-                fn matches_contain(matches: &[Weak<Resource>], res: &Arc<Resource>) -> bool {
-                    for match_ in matches {
-                        if Arc::ptr_eq(&match_.upgrade().unwrap(), res) {
-                            return true;
-                        }
-                    }
-                    false
-                }
-
-                for match_ in &mut matches {
-                    let mut match_ = match_.upgrade().unwrap();
-                    if !matches_contain(&match_.context().matches, res) {
-                        get_mut_unchecked(&mut match_)
-                            .context_mut()
-                            .matches
-                            .push(Arc::downgrade(res));
-                    }
-                }
-                get_mut_unchecked(res).context_mut().matches = matches;
+            for match_ in &matches {
+                let mut match_ = match_.upgrade().unwrap();
+                get_mut_unchecked(&mut match_)
+                    .context_mut()
+                    .matches
+                    .push(Arc::downgrade(res));
             }
+            get_mut_unchecked(res).context_mut().matches = matches;
         } else {
             log::error!("Call match_resource() on context less res {}", res.expr());
         }
@@ -581,21 +629,33 @@ impl Resource {
 }
 
 pub fn register_expr(
-    tables: &mut Tables,
+    tables: &TablesLock,
     face: &mut Arc<FaceState>,
     expr_id: ZInt,
     expr: &WireExpr,
 ) {
-    match tables.get_mapping(face, &expr.scope).cloned() {
+    let ctrl_lock = zlock!(tables.ctrl_lock);
+    let rtables = zread!(tables.tables);
+    match rtables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => match face.remote_mappings.get(&expr_id) {
             Some(res) => {
-                if res.expr() != format!("{}{}", prefix.expr(), expr.suffix) {
+                let mut fullexpr = prefix.expr();
+                fullexpr.push_str(expr.suffix.as_ref());
+                if res.expr() != fullexpr {
                     log::error!("Resource {} remapped. Remapping unsupported!", expr_id);
                 }
             }
             None => {
-                let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
-                Resource::match_resource(tables, &mut res);
+                let mut fullexpr = prefix.expr();
+                fullexpr.push_str(expr.suffix.as_ref());
+                let matches = keyexpr::new(fullexpr.as_str())
+                    .map(|ke| Resource::get_matches(&rtables, ke))
+                    .unwrap_or_default();
+                drop(rtables);
+                let mut wtables = zwrite!(tables.tables);
+                let mut res =
+                    Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+                Resource::match_resource(&wtables, &mut res, matches);
                 let mut ctx = get_mut_unchecked(&mut res)
                     .session_ctxs
                     .entry(face.id)
@@ -626,16 +686,22 @@ pub fn register_expr(
                 get_mut_unchecked(face)
                     .remote_mappings
                     .insert(expr_id, res.clone());
-                tables.compute_matches_routes(&mut res);
+                wtables.compute_matches_routes(&mut res);
+                drop(wtables);
             }
         },
         None => log::error!("Declare resource with unknown scope {}!", expr.scope),
     }
+    drop(ctrl_lock);
 }
 
-pub fn unregister_expr(_tables: &mut Tables, face: &mut Arc<FaceState>, expr_id: ZInt) {
+pub fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: ZInt) {
+    let ctrl_lock = zlock!(tables.ctrl_lock);
+    let wtables = zwrite!(tables.tables);
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),
         None => log::error!("Undeclare unknown resource!"),
     }
+    drop(wtables);
+    drop(ctrl_lock);
 }

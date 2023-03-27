@@ -15,7 +15,6 @@ use super::router::*;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
-use std::sync::RwLock;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
     core::{
@@ -161,19 +160,17 @@ impl fmt::Display for FaceState {
 
 #[derive(Clone)]
 pub struct Face {
-    pub(crate) tables: Arc<RwLock<Tables>>,
+    pub(crate) tables: Arc<TablesLock>,
     pub(crate) state: Arc<FaceState>,
 }
 
 impl Primitives for Face {
     fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
-        let mut tables = zwrite!(self.tables);
-        register_expr(&mut tables, &mut self.state.clone(), expr_id, key_expr);
+        register_expr(&self.tables, &mut self.state.clone(), expr_id, key_expr);
     }
 
     fn forget_resource(&self, expr_id: ZInt) {
-        let mut tables = zwrite!(self.tables);
-        unregister_expr(&mut tables, &mut self.state.clone(), expr_id);
+        unregister_expr(&self.tables, &mut self.state.clone(), expr_id);
     }
 
     fn decl_subscriber(
@@ -182,57 +179,64 @@ impl Primitives for Face {
         sub_info: &SubInfo,
         routing_context: Option<RoutingContext>,
     ) {
-        let mut tables = zwrite!(self.tables);
-        match (tables.whatami, self.state.whatami) {
+        let rtables = zread!(self.tables.tables);
+        match (rtables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
-                if let Some(router) = self.state.get_router(&tables, routing_context) {
+                if let Some(router) = self.state.get_router(&rtables, routing_context) {
                     declare_router_subscription(
-                        &mut tables,
+                        &self.tables,
+                        rtables,
                         &mut self.state.clone(),
                         key_expr,
                         sub_info,
                         router,
-                    )
+                    );
                 }
             }
             (WhatAmI::Router, WhatAmI::Peer)
             | (WhatAmI::Peer, WhatAmI::Router)
             | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if tables.full_net(WhatAmI::Peer) {
-                    if let Some(peer) = self.state.get_peer(&tables, routing_context) {
+                if rtables.full_net(WhatAmI::Peer) {
+                    if let Some(peer) = self.state.get_peer(&rtables, routing_context) {
                         declare_peer_subscription(
-                            &mut tables,
+                            &self.tables,
+                            rtables,
                             &mut self.state.clone(),
                             key_expr,
                             sub_info,
                             peer,
-                        )
+                        );
                     }
                 } else {
                     declare_client_subscription(
-                        &mut tables,
+                        &self.tables,
+                        rtables,
                         &mut self.state.clone(),
                         key_expr,
                         sub_info,
-                    )
+                    );
                 }
             }
-            _ => declare_client_subscription(
-                &mut tables,
-                &mut self.state.clone(),
-                key_expr,
-                sub_info,
-            ),
+            _ => {
+                declare_client_subscription(
+                    &self.tables,
+                    rtables,
+                    &mut self.state.clone(),
+                    key_expr,
+                    sub_info,
+                );
+            }
         }
     }
 
     fn forget_subscriber(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
-        let mut tables = zwrite!(self.tables);
-        match (tables.whatami, self.state.whatami) {
+        let rtables = zread!(self.tables.tables);
+        match (rtables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
-                if let Some(router) = self.state.get_router(&tables, routing_context) {
+                if let Some(router) = self.state.get_router(&rtables, routing_context) {
                     forget_router_subscription(
-                        &mut tables,
+                        &self.tables,
+                        rtables,
                         &mut self.state.clone(),
                         key_expr,
                         &router,
@@ -242,20 +246,28 @@ impl Primitives for Face {
             (WhatAmI::Router, WhatAmI::Peer)
             | (WhatAmI::Peer, WhatAmI::Router)
             | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if tables.full_net(WhatAmI::Peer) {
-                    if let Some(peer) = self.state.get_peer(&tables, routing_context) {
+                if rtables.full_net(WhatAmI::Peer) {
+                    if let Some(peer) = self.state.get_peer(&rtables, routing_context) {
                         forget_peer_subscription(
-                            &mut tables,
+                            &self.tables,
+                            rtables,
                             &mut self.state.clone(),
                             key_expr,
                             &peer,
                         )
                     }
                 } else {
-                    forget_client_subscription(&mut tables, &mut self.state.clone(), key_expr)
+                    forget_client_subscription(
+                        &self.tables,
+                        rtables,
+                        &mut self.state.clone(),
+                        key_expr,
+                    )
                 }
             }
-            _ => forget_client_subscription(&mut tables, &mut self.state.clone(), key_expr),
+            _ => {
+                forget_client_subscription(&self.tables, rtables, &mut self.state.clone(), key_expr)
+            }
         }
     }
 
@@ -269,12 +281,13 @@ impl Primitives for Face {
         qabl_info: &QueryableInfo,
         routing_context: Option<RoutingContext>,
     ) {
-        let mut tables = zwrite!(self.tables);
-        match (tables.whatami, self.state.whatami) {
+        let rtables = zread!(self.tables.tables);
+        match (rtables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
-                if let Some(router) = self.state.get_router(&tables, routing_context) {
+                if let Some(router) = self.state.get_router(&rtables, routing_context) {
                     declare_router_queryable(
-                        &mut tables,
+                        &self.tables,
+                        rtables,
                         &mut self.state.clone(),
                         key_expr,
                         qabl_info,
@@ -285,10 +298,11 @@ impl Primitives for Face {
             (WhatAmI::Router, WhatAmI::Peer)
             | (WhatAmI::Peer, WhatAmI::Router)
             | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if tables.full_net(WhatAmI::Peer) {
-                    if let Some(peer) = self.state.get_peer(&tables, routing_context) {
+                if rtables.full_net(WhatAmI::Peer) {
+                    if let Some(peer) = self.state.get_peer(&rtables, routing_context) {
                         declare_peer_queryable(
-                            &mut tables,
+                            &self.tables,
+                            rtables,
                             &mut self.state.clone(),
                             key_expr,
                             qabl_info,
@@ -297,39 +311,61 @@ impl Primitives for Face {
                     }
                 } else {
                     declare_client_queryable(
-                        &mut tables,
+                        &self.tables,
+                        rtables,
                         &mut self.state.clone(),
                         key_expr,
                         qabl_info,
                     )
                 }
             }
-            _ => {
-                declare_client_queryable(&mut tables, &mut self.state.clone(), key_expr, qabl_info)
-            }
+            _ => declare_client_queryable(
+                &self.tables,
+                rtables,
+                &mut self.state.clone(),
+                key_expr,
+                qabl_info,
+            ),
         }
     }
 
     fn forget_queryable(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
-        let mut tables = zwrite!(self.tables);
-        match (tables.whatami, self.state.whatami) {
+        let rtables = zread!(self.tables.tables);
+        match (rtables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
-                if let Some(router) = self.state.get_router(&tables, routing_context) {
-                    forget_router_queryable(&mut tables, &mut self.state.clone(), key_expr, &router)
+                if let Some(router) = self.state.get_router(&rtables, routing_context) {
+                    forget_router_queryable(
+                        &self.tables,
+                        rtables,
+                        &mut self.state.clone(),
+                        key_expr,
+                        &router,
+                    )
                 }
             }
             (WhatAmI::Router, WhatAmI::Peer)
             | (WhatAmI::Peer, WhatAmI::Router)
             | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if tables.full_net(WhatAmI::Peer) {
-                    if let Some(peer) = self.state.get_peer(&tables, routing_context) {
-                        forget_peer_queryable(&mut tables, &mut self.state.clone(), key_expr, &peer)
+                if rtables.full_net(WhatAmI::Peer) {
+                    if let Some(peer) = self.state.get_peer(&rtables, routing_context) {
+                        forget_peer_queryable(
+                            &self.tables,
+                            rtables,
+                            &mut self.state.clone(),
+                            key_expr,
+                            &peer,
+                        )
                     }
                 } else {
-                    forget_client_queryable(&mut tables, &mut self.state.clone(), key_expr)
+                    forget_client_queryable(
+                        &self.tables,
+                        rtables,
+                        &mut self.state.clone(),
+                        key_expr,
+                    )
                 }
             }
-            _ => forget_client_queryable(&mut tables, &mut self.state.clone(), key_expr),
+            _ => forget_client_queryable(&self.tables, rtables, &mut self.state.clone(), key_expr),
         }
     }
 
@@ -343,7 +379,7 @@ impl Primitives for Face {
         routing_context: Option<RoutingContext>,
     ) {
         full_reentrant_route_data(
-            &self.tables,
+            &self.tables.tables,
             &self.state,
             key_expr,
             channel,
@@ -386,7 +422,7 @@ impl Primitives for Face {
         payload: ZBuf,
     ) {
         route_send_reply_data(
-            &self.tables,
+            &self.tables.tables,
             &mut self.state.clone(),
             qid,
             replier_id,
@@ -408,7 +444,7 @@ impl Primitives for Face {
         max_samples: &Option<ZInt>,
     ) {
         pull_data(
-            &self.tables,
+            &self.tables.tables,
             &self.state.clone(),
             is_final,
             key_expr,
@@ -418,7 +454,7 @@ impl Primitives for Face {
     }
 
     fn send_close(&self) {
-        zwrite!(self.tables).close_face(&Arc::downgrade(&self.state));
+        super::router::close_face(&self.tables, &Arc::downgrade(&self.state));
     }
 }
 

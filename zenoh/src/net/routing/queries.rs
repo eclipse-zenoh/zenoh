@@ -13,17 +13,20 @@
 //
 use super::face::FaceState;
 use super::network::Network;
-use super::resource::{QueryRoute, QueryTargetQabl, QueryTargetQablSet, Resource, SessionContext};
-use super::router::{RoutingExpr, Tables};
+use super::resource::{
+    QueryRoute, QueryRoutes, QueryTargetQabl, QueryTargetQablSet, Resource, SessionContext,
+};
+use super::router::{RoutingExpr, Tables, TablesLock};
 use async_trait::async_trait;
 use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::sync::Arc;
+use std::sync::{Arc, RwLockReadGuard};
 use std::sync::{RwLock, Weak};
 use zenoh_buffers::ZBuf;
+use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
     core::{
         key_expr::{
@@ -356,19 +359,41 @@ fn register_router_queryable(
 }
 
 pub fn declare_router_queryable(
-    tables: &mut Tables,
+    tables: &TablesLock,
+    rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
     qabl_info: &QueryableInfo,
     router: ZenohId,
 ) {
-    match tables.get_mapping(face, &expr.scope).cloned() {
+    match rtables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
-            let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
-            Resource::match_resource(tables, &mut res);
-            register_router_queryable(tables, Some(face), &mut res, qabl_info, router);
+            let mut fullexpr = prefix.expr();
+            fullexpr.push_str(expr.suffix.as_ref());
+            let ctrl_lock = zlock!(tables.ctrl_lock);
+            let matches = keyexpr::new(fullexpr.as_str())
+                .map(|ke| Resource::get_matches(&rtables, ke))
+                .unwrap_or_default();
+            drop(rtables);
+            let mut wtables = zwrite!(tables.tables);
+            let mut res = Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+            Resource::match_resource(&wtables, &mut res, matches);
+            register_router_queryable(&mut wtables, Some(face), &mut res, qabl_info, router);
+            disable_matches_query_routes(&mut wtables, &mut res);
+            drop(wtables);
 
-            compute_matches_query_routes(tables, &mut res);
+            let rtables = zread!(tables.tables);
+            let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+            drop(rtables);
+
+            let wtables = zwrite!(tables.tables);
+            for (mut res, query_routes) in matches_query_routes {
+                get_mut_unchecked(&mut res)
+                    .context_mut()
+                    .update_query_routes(query_routes);
+            }
+            drop(wtables);
+            drop(ctrl_lock);
         }
         None => log::error!("Declare router queryable for unknown scope {}!", expr.scope),
     }
@@ -411,25 +436,47 @@ fn register_peer_queryable(
 }
 
 pub fn declare_peer_queryable(
-    tables: &mut Tables,
+    tables: &TablesLock,
+    rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
     qabl_info: &QueryableInfo,
     peer: ZenohId,
 ) {
-    match tables.get_mapping(face, &expr.scope).cloned() {
+    match rtables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
+            let mut fullexpr = prefix.expr();
+            fullexpr.push_str(expr.suffix.as_ref());
+            let ctrl_lock = zlock!(tables.ctrl_lock);
+            let matches = keyexpr::new(fullexpr.as_str())
+                .map(|ke| Resource::get_matches(&rtables, ke))
+                .unwrap_or_default();
+            drop(rtables);
+            let mut wtables = zwrite!(tables.tables);
+            let mut res = Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+            Resource::match_resource(&wtables, &mut res, matches);
             let mut face = Some(face);
-            let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
-            Resource::match_resource(tables, &mut res);
-            register_peer_queryable(tables, face.as_deref_mut(), &mut res, qabl_info, peer);
-
-            if tables.whatami == WhatAmI::Router {
-                let local_info = local_router_qabl_info(tables, &res);
-                register_router_queryable(tables, face, &mut res, &local_info, tables.zid);
+            register_peer_queryable(&mut wtables, face.as_deref_mut(), &mut res, qabl_info, peer);
+            if wtables.whatami == WhatAmI::Router {
+                let local_info = local_router_qabl_info(&wtables, &res);
+                let zid = wtables.zid;
+                register_router_queryable(&mut wtables, face, &mut res, &local_info, zid);
             }
+            disable_matches_query_routes(&mut wtables, &mut res);
+            drop(wtables);
 
-            compute_matches_query_routes(tables, &mut res);
+            let rtables = zread!(tables.tables);
+            let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+            drop(rtables);
+
+            let wtables = zwrite!(tables.tables);
+            for (mut res, query_routes) in matches_query_routes {
+                get_mut_unchecked(&mut res)
+                    .context_mut()
+                    .update_query_routes(query_routes);
+            }
+            drop(wtables);
+            drop(ctrl_lock);
         }
         None => log::error!("Declare router queryable for unknown scope {}!", expr.scope),
     }
@@ -461,49 +508,73 @@ fn register_client_queryable(
 }
 
 pub fn declare_client_queryable(
-    tables: &mut Tables,
+    tables: &TablesLock,
+    rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
     qabl_info: &QueryableInfo,
 ) {
-    match tables.get_mapping(face, &expr.scope).cloned() {
+    match rtables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
-            let mut res = Resource::make_resource(tables, &mut prefix, expr.suffix.as_ref());
-            Resource::match_resource(tables, &mut res);
+            let mut fullexpr = prefix.expr();
+            fullexpr.push_str(expr.suffix.as_ref());
+            let ctrl_lock = zlock!(tables.ctrl_lock);
+            let matches = keyexpr::new(fullexpr.as_str())
+                .map(|ke| Resource::get_matches(&rtables, ke))
+                .unwrap_or_default();
+            drop(rtables);
+            let mut wtables = zwrite!(tables.tables);
+            let mut res = Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+            Resource::match_resource(&wtables, &mut res, matches);
 
-            register_client_queryable(tables, face, &mut res, qabl_info);
+            register_client_queryable(&mut wtables, face, &mut res, qabl_info);
 
-            match tables.whatami {
+            match wtables.whatami {
                 WhatAmI::Router => {
-                    let local_details = local_router_qabl_info(tables, &res);
+                    let local_details = local_router_qabl_info(&wtables, &res);
+                    let zid = wtables.zid;
                     register_router_queryable(
-                        tables,
+                        &mut wtables,
                         Some(face),
                         &mut res,
                         &local_details,
-                        tables.zid,
+                        zid,
                     );
                 }
                 WhatAmI::Peer => {
-                    if tables.full_net(WhatAmI::Peer) {
-                        let local_details = local_peer_qabl_info(tables, &res);
+                    if wtables.full_net(WhatAmI::Peer) {
+                        let local_details = local_peer_qabl_info(&wtables, &res);
+                        let zid = wtables.zid;
                         register_peer_queryable(
-                            tables,
+                            &mut wtables,
                             Some(face),
                             &mut res,
                             &local_details,
-                            tables.zid,
+                            zid,
                         );
                     } else {
-                        propagate_simple_queryable(tables, &res, Some(face));
+                        propagate_simple_queryable(&mut wtables, &res, Some(face));
                     }
                 }
                 _ => {
-                    propagate_simple_queryable(tables, &res, Some(face));
+                    propagate_simple_queryable(&mut wtables, &res, Some(face));
                 }
             }
+            disable_matches_query_routes(&mut wtables, &mut res);
+            drop(wtables);
 
-            compute_matches_query_routes(tables, &mut res);
+            let rtables = zread!(tables.tables);
+            let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+            drop(rtables);
+
+            let wtables = zwrite!(tables.tables);
+            for (mut res, query_routes) in matches_query_routes {
+                get_mut_unchecked(&mut res)
+                    .context_mut()
+                    .update_query_routes(query_routes);
+            }
+            drop(wtables);
+            drop(ctrl_lock);
         }
         None => log::error!("Declare queryable for unknown scope {}!", expr.scope),
     }
@@ -685,18 +756,35 @@ fn undeclare_router_queryable(
 }
 
 pub fn forget_router_queryable(
-    tables: &mut Tables,
+    tables: &TablesLock,
+    rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
     router: &ZenohId,
 ) {
-    match tables.get_mapping(face, &expr.scope) {
+    match rtables.get_mapping(face, &expr.scope) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
-                undeclare_router_queryable(tables, Some(face), &mut res, router);
+                drop(rtables);
+                let ctrl_lock = zlock!(tables.ctrl_lock);
+                let mut wtables = zwrite!(tables.tables);
+                undeclare_router_queryable(&mut wtables, Some(face), &mut res, router);
+                disable_matches_query_routes(&mut wtables, &mut res);
+                drop(wtables);
 
-                compute_matches_query_routes(tables, &mut res);
-                Resource::clean(&mut res)
+                let rtables = zread!(tables.tables);
+                let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+                drop(rtables);
+
+                let wtables = zwrite!(tables.tables);
+                for (mut res, query_routes) in matches_query_routes {
+                    get_mut_unchecked(&mut res)
+                        .context_mut()
+                        .update_query_routes(query_routes);
+                }
+                Resource::clean(&mut res);
+                drop(wtables);
+                drop(ctrl_lock);
             }
             None => log::error!("Undeclare unknown router queryable!"),
         },
@@ -730,29 +818,46 @@ fn undeclare_peer_queryable(
 }
 
 pub fn forget_peer_queryable(
-    tables: &mut Tables,
+    tables: &TablesLock,
+    rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
     peer: &ZenohId,
 ) {
-    match tables.get_mapping(face, &expr.scope) {
+    match rtables.get_mapping(face, &expr.scope) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
-                undeclare_peer_queryable(tables, Some(face), &mut res, peer);
+                drop(rtables);
+                let ctrl_lock = zlock!(tables.ctrl_lock);
+                let mut wtables = zwrite!(tables.tables);
+                undeclare_peer_queryable(&mut wtables, Some(face), &mut res, peer);
 
-                if tables.whatami == WhatAmI::Router {
+                if wtables.whatami == WhatAmI::Router {
                     let client_qabls = res.session_ctxs.values().any(|ctx| ctx.qabl.is_some());
-                    let peer_qabls = remote_peer_qabls(tables, &res);
+                    let peer_qabls = remote_peer_qabls(&wtables, &res);
+                    let zid = wtables.zid;
                     if !client_qabls && !peer_qabls {
-                        undeclare_router_queryable(tables, None, &mut res, &tables.zid.clone());
+                        undeclare_router_queryable(&mut wtables, None, &mut res, &zid);
                     } else {
-                        let local_info = local_router_qabl_info(tables, &res);
-                        register_router_queryable(tables, None, &mut res, &local_info, tables.zid);
+                        let local_info = local_router_qabl_info(&wtables, &res);
+                        register_router_queryable(&mut wtables, None, &mut res, &local_info, zid);
                     }
                 }
+                drop(wtables);
 
-                compute_matches_query_routes(tables, &mut res);
-                Resource::clean(&mut res)
+                let rtables = zread!(tables.tables);
+                let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+                drop(rtables);
+
+                let wtables = zwrite!(tables.tables);
+                for (mut res, query_routes) in matches_query_routes {
+                    get_mut_unchecked(&mut res)
+                        .context_mut()
+                        .update_query_routes(query_routes);
+                }
+                Resource::clean(&mut res);
+                drop(wtables);
+                drop(ctrl_lock);
             }
             None => log::error!("Undeclare unknown peer queryable!"),
         },
@@ -819,16 +924,37 @@ pub(crate) fn undeclare_client_queryable(
             get_mut_unchecked(face).local_qabls.remove(res);
         }
     }
-
-    compute_matches_query_routes(tables, res);
-    Resource::clean(res)
 }
 
-pub fn forget_client_queryable(tables: &mut Tables, face: &mut Arc<FaceState>, expr: &WireExpr) {
-    match tables.get_mapping(face, &expr.scope) {
+pub fn forget_client_queryable(
+    tables: &TablesLock,
+    rtables: RwLockReadGuard<Tables>,
+    face: &mut Arc<FaceState>,
+    expr: &WireExpr,
+) {
+    match rtables.get_mapping(face, &expr.scope) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
-                undeclare_client_queryable(tables, face, &mut res);
+                drop(rtables);
+                let ctrl_lock = zlock!(tables.ctrl_lock);
+                let mut wtables = zwrite!(tables.tables);
+                undeclare_client_queryable(&mut wtables, face, &mut res);
+                disable_matches_query_routes(&mut wtables, &mut res);
+                drop(wtables);
+
+                let rtables = zread!(tables.tables);
+                let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+                drop(rtables);
+
+                let wtables = zwrite!(tables.tables);
+                for (mut res, query_routes) in matches_query_routes {
+                    get_mut_unchecked(&mut res)
+                        .context_mut()
+                        .update_query_routes(query_routes);
+                }
+                Resource::clean(&mut res);
+                drop(wtables);
+                drop(ctrl_lock);
             }
             None => log::error!("Undeclare unknown queryable!"),
         },
@@ -927,7 +1053,12 @@ pub(crate) fn queries_remove_node(tables: &mut Tables, node: &ZenohId, net_type:
             for mut res in qabls {
                 unregister_router_queryable(tables, &mut res, node);
 
-                compute_matches_query_routes(tables, &mut res);
+                let matches_query_routes = compute_matches_query_routes_(tables, &res);
+                for (mut res, query_routes) in matches_query_routes {
+                    get_mut_unchecked(&mut res)
+                        .context_mut()
+                        .update_query_routes(query_routes);
+                }
                 Resource::clean(&mut res);
             }
         }
@@ -954,7 +1085,12 @@ pub(crate) fn queries_remove_node(tables: &mut Tables, node: &ZenohId, net_type:
                     }
                 }
 
-                compute_matches_query_routes(tables, &mut res);
+                let matches_query_routes = compute_matches_query_routes_(tables, &res);
+                for (mut res, query_routes) in matches_query_routes {
+                    get_mut_unchecked(&mut res)
+                        .context_mut()
+                        .update_query_routes(query_routes);
+                }
                 Resource::clean(&mut res)
             }
         }
@@ -1225,6 +1361,74 @@ fn compute_query_route(
     Arc::new(route)
 }
 
+pub(super) fn compute_query_routes_(tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
+    let mut routes = QueryRoutes {
+        routers_query_routes: vec![],
+        peers_query_routes: vec![],
+        peer_query_route: None,
+        client_query_route: None,
+    };
+    let mut expr = RoutingExpr::new(res, "");
+    if tables.whatami == WhatAmI::Router {
+        let indexes = tables
+            .routers_net
+            .as_ref()
+            .unwrap()
+            .graph
+            .node_indices()
+            .collect::<Vec<NodeIndex>>();
+        let max_idx = indexes.iter().max().unwrap();
+        routes
+            .routers_query_routes
+            .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
+
+        for idx in &indexes {
+            routes.routers_query_routes[idx.index()] =
+                compute_query_route(tables, &mut expr, Some(idx.index()), WhatAmI::Router);
+        }
+
+        routes.peer_query_route = Some(compute_query_route(tables, &mut expr, None, WhatAmI::Peer));
+    }
+    if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
+        && tables.full_net(WhatAmI::Peer)
+    {
+        let indexes = tables
+            .peers_net
+            .as_ref()
+            .unwrap()
+            .graph
+            .node_indices()
+            .collect::<Vec<NodeIndex>>();
+        let max_idx = indexes.iter().max().unwrap();
+        routes
+            .peers_query_routes
+            .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
+
+        for idx in &indexes {
+            routes.peers_query_routes[idx.index()] =
+                compute_query_route(tables, &mut expr, Some(idx.index()), WhatAmI::Peer);
+        }
+    }
+    if tables.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer) {
+        routes.client_query_route = Some(compute_query_route(
+            tables,
+            &mut expr,
+            None,
+            WhatAmI::Client,
+        ));
+        routes.peer_query_route = Some(compute_query_route(tables, &mut expr, None, WhatAmI::Peer));
+    }
+    if tables.whatami == WhatAmI::Client {
+        routes.client_query_route = Some(compute_query_route(
+            tables,
+            &mut expr,
+            None,
+            WhatAmI::Client,
+        ));
+    }
+    routes
+}
+
 pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
     if res.context.is_some() {
         let mut res_mut = res.clone();
@@ -1302,17 +1506,22 @@ fn compute_query_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
     }
 }
 
-pub(crate) fn compute_matches_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(super) fn compute_matches_query_routes_(
+    tables: &Tables,
+    res: &Arc<Resource>,
+) -> Vec<(Arc<Resource>, QueryRoutes)> {
+    let mut routes = vec![];
     if res.context.is_some() {
-        compute_query_routes(tables, res);
-
-        let resclone = res.clone();
-        for match_ in &mut get_mut_unchecked(res).context_mut().matches {
-            if !Arc::ptr_eq(&match_.upgrade().unwrap(), &resclone) {
-                compute_query_routes(tables, &mut match_.upgrade().unwrap());
+        routes.push((res.clone(), compute_query_routes_(tables, res)));
+        for match_ in &res.context().matches {
+            let match_ = match_.upgrade().unwrap();
+            if !Arc::ptr_eq(&match_, res) {
+                let match_routes = compute_query_routes_(tables, &match_);
+                routes.push((match_, match_routes));
             }
         }
     }
+    routes
 }
 
 #[inline]
@@ -1349,7 +1558,7 @@ fn should_route(
 
 #[inline]
 fn compute_final_route(
-    tables: &Tables,
+    tables: &mut Tables,
     qabls: &Arc<QueryTargetQablSet>,
     src_face: &Arc<FaceState>,
     expr: &mut RoutingExpr,
@@ -1483,7 +1692,7 @@ fn compute_final_route(
 
 #[derive(Clone)]
 struct QueryCleanup {
-    tables: Arc<RwLock<Tables>>,
+    tables: Arc<TablesLock>,
     face: Weak<FaceState>,
     qid: ZInt,
 }
@@ -1492,7 +1701,7 @@ struct QueryCleanup {
 impl Timed for QueryCleanup {
     async fn run(&mut self) {
         if let Some(mut face) = self.face.upgrade() {
-            let tables_lock = zwrite!(self.tables);
+            let tables_lock = zwrite!(self.tables.tables);
             if let Some(query) = get_mut_unchecked(&mut face)
                 .pending_queries
                 .remove(&self.qid)
@@ -1505,6 +1714,20 @@ impl Timed for QueryCleanup {
                     face
                 );
                 finalize_pending_query(query);
+            }
+        }
+    }
+}
+
+pub(super) fn disable_matches_query_routes(_tables: &mut Tables, res: &mut Arc<Resource>) {
+    if res.context.is_some() {
+        get_mut_unchecked(res).context_mut().valid_query_routes = false;
+        for match_ in &res.context().matches {
+            let mut match_ = match_.upgrade().unwrap();
+            if !Arc::ptr_eq(&match_, res) {
+                get_mut_unchecked(&mut match_)
+                    .context_mut()
+                    .valid_query_routes = false;
             }
         }
     }
@@ -1587,7 +1810,7 @@ fn get_query_route(
 
 #[allow(clippy::too_many_arguments)]
 pub fn route_query(
-    tables_ref: &Arc<RwLock<Tables>>,
+    tables_ref: &Arc<TablesLock>,
     face: &Arc<FaceState>,
     expr: &WireExpr,
     parameters: &str,
@@ -1597,8 +1820,9 @@ pub fn route_query(
     body: Option<QueryBody>,
     routing_context: Option<RoutingContext>,
 ) {
-    let tables = zwrite!(tables_ref);
-    match tables.get_mapping(face, &expr.scope) {
+    let ctrl_lock = zlock!(tables_ref.ctrl_lock);
+    let rtables = zread!(tables_ref.tables);
+    match rtables.get_mapping(face, &expr.scope) {
         Some(prefix) => {
             log::debug!(
                 "Route query {}:{} for res {}{}",
@@ -1607,25 +1831,29 @@ pub fn route_query(
                 prefix.expr(),
                 expr.suffix.as_ref(),
             );
-            let mut expr = RoutingExpr::new(prefix, expr.suffix.as_ref());
+            let prefix = prefix.clone();
+            let mut expr = RoutingExpr::new(&prefix, expr.suffix.as_ref());
 
-            if tables.whatami != WhatAmI::Router
+            if rtables.whatami != WhatAmI::Router
                 || face.whatami != WhatAmI::Peer
-                || tables.peers_net.is_none()
-                || tables.zid
-                    == *tables.elect_router(expr.full_expr(), tables.get_router_links(face.zid))
+                || rtables.peers_net.is_none()
+                || rtables.zid
+                    == *rtables.elect_router(expr.full_expr(), rtables.get_router_links(face.zid))
             {
-                let res = Resource::get_resource(prefix, expr.suffix);
-                let route = get_query_route(&tables, face, &res, &mut expr, routing_context);
+                let res = Resource::get_resource(&prefix, expr.suffix);
+                let route = get_query_route(&rtables, face, &res, &mut expr, routing_context);
 
                 let query = Arc::new(Query {
                     src_face: face.clone(),
                     src_qid: qid,
                 });
+                drop(rtables);
 
-                let route = compute_final_route(&tables, &route, face, &mut expr, &target, query);
+                let mut wtables = zwrite!(tables_ref.tables);
+                let route =
+                    compute_final_route(&mut wtables, &route, face, &mut expr, &target, query);
+                drop(wtables);
 
-                drop(tables);
                 if route.is_empty() {
                     log::debug!(
                         "Send final reply {}:{} (no matching queryables or not master)",
@@ -1686,7 +1914,7 @@ pub fn route_query(
                 }
             } else {
                 log::debug!("Send final reply {}:{} (not master)", face, qid);
-                drop(tables);
+                drop(rtables);
                 face.primitives.clone().send_reply_final(qid)
             }
         }
@@ -1695,10 +1923,11 @@ pub fn route_query(
                 "Route query with unknown scope {}! Send final reply.",
                 expr.scope
             );
-            drop(tables);
+            drop(rtables);
             face.primitives.clone().send_reply_final(qid)
         }
     }
+    drop(ctrl_lock);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1733,14 +1962,16 @@ pub(crate) fn route_send_reply_data(
 }
 
 pub(crate) fn route_send_reply_final(
-    tables_ref: &RwLock<Tables>,
+    tables_ref: &Arc<TablesLock>,
     face: &mut Arc<FaceState>,
     qid: ZInt,
 ) {
-    let tables_lock = zwrite!(tables_ref);
+    let ctrl_lock = zlock!(tables_ref.ctrl_lock);
+    let tables_lock = zwrite!(tables_ref.tables);
     match get_mut_unchecked(face).pending_queries.remove(&qid) {
         Some(query) => {
             drop(tables_lock);
+            drop(ctrl_lock);
             log::debug!(
                 "Received final reply {}:{} from {}",
                 query.src_face,
