@@ -17,7 +17,7 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::{iext, imsg, },
+    common::{iext, imsg},
     core::WireExpr,
     network::{
         id,
