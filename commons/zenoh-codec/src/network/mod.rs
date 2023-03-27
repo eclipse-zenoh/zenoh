@@ -19,7 +19,7 @@ mod response;
 
 use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
-    reader::{BacktrackableReader, DidntRead, Reader},
+    reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
@@ -37,14 +37,18 @@ where
     fn write(self, writer: &mut W, x: &NetworkMessage) -> Self::Output {
         match &x.body {
             NetworkBody::Push(b) => self.write(&mut *writer, b),
-            _ => Ok(()), //TODO
+            NetworkBody::Request(b) => self.write(&mut *writer, b),
+            NetworkBody::Response(b) => self.write(&mut *writer, b),
+            NetworkBody::ResponseFinal(b) => self.write(&mut *writer, b),
+            NetworkBody::Declare(b) => self.write(&mut *writer, b),
+            NetworkBody::OAM(b) => self.write(&mut *writer, b),
         }
     }
 }
 
 impl<R> RCodec<NetworkMessage, &mut R> for Zenoh080
 where
-    R: Reader + BacktrackableReader,
+    R: Reader,
 {
     type Error = DidntRead;
 
@@ -54,24 +58,11 @@ where
         let codec = Zenoh080Header::new(header);
         let body = match imsg::mid(codec.header) {
             id::PUSH => NetworkBody::Push(codec.read(&mut *reader)?),
-            // id::FRAGMENT => NetworkBody::Fragment(codec.read(&mut *reader)?),
-            // id::KEEP_ALIVE => NetworkBody::KeepAlive(codec.read(&mut *reader)?),
-            // id::INIT => {
-            //     if !imsg::has_flag(codec.header, zenoh_protocol::transport::init::flag::A) {
-            //         NetworkBody::InitSyn(codec.read(&mut *reader)?)
-            //     } else {
-            //         NetworkBody::InitAck(codec.read(&mut *reader)?)
-            //     }
-            // }
-            // id::OPEN => {
-            //     if !imsg::has_flag(codec.header, zenoh_protocol::transport::open::flag::A) {
-            //         NetworkBody::OpenSyn(codec.read(&mut *reader)?)
-            //     } else {
-            //         NetworkBody::OpenAck(codec.read(&mut *reader)?)
-            //     }
-            // }
-            // // id::JOIN => NetworkBody::Join(codec.read(&mut *reader)?),
-            // id::CLOSE => NetworkBody::Close(codec.read(&mut *reader)?),
+            id::REQUEST => NetworkBody::Request(codec.read(&mut *reader)?),
+            id::RESPONSE => NetworkBody::Response(codec.read(&mut *reader)?),
+            id::RESPONSE_FINAL => NetworkBody::ResponseFinal(codec.read(&mut *reader)?),
+            id::DECLARE => NetworkBody::Declare(codec.read(&mut *reader)?),
+            id::OAM => NetworkBody::OAM(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 

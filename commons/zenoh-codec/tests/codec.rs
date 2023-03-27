@@ -522,6 +522,11 @@ fn codec_network_oam() {
     run!(network::Oam, network::Oam::rand());
 }
 
+#[test]
+fn codec_network() {
+    run!(NetworkMessage, NetworkMessage::rand());
+}
+
 // Zenoh
 #[test]
 fn codec_routing_context_old() {
