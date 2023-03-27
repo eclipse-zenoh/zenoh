@@ -114,13 +114,14 @@ impl Runtime {
             let guard = &self.config.lock();
             let listeners = if guard.listen().endpoints().is_empty() {
                 let endpoint: EndPoint = PEER_DEFAULT_LISTENER.parse().unwrap();
+                let protocol = endpoint.protocol();
                 let mut listeners = vec![];
                 if self
                     .manager
                     .config
                     .protocols
                     .iter()
-                    .any(|p| p.as_str() == endpoint.as_str())
+                    .any(|p| p.as_str() == protocol.as_str())
                 {
                     listeners.push(endpoint)
                 }
@@ -159,13 +160,14 @@ impl Runtime {
             let guard = self.config.lock();
             let listeners = if guard.listen().endpoints().is_empty() {
                 let endpoint: EndPoint = ROUTER_DEFAULT_LISTENER.parse().unwrap();
+                let protocol = endpoint.protocol();
                 let mut listeners = vec![];
                 if self
                     .manager
                     .config
                     .protocols
                     .iter()
-                    .any(|p| p.as_str() == endpoint.as_str())
+                    .any(|p| p.as_str() == protocol.as_str())
                 {
                     listeners.push(endpoint)
                 }
