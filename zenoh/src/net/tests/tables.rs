@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::net::routing::router::{*, self};
+use crate::net::routing::router::{self, *};
 use std::convert::{TryFrom, TryInto};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
@@ -44,8 +44,11 @@ fn base_test() {
     };
 
     let primitives = Arc::new(DummyPrimitives::new());
-    let face =
-        zwrite!(tables.tables).open_face(ZenohId::try_from([1]).unwrap(), WhatAmI::Client, primitives);
+    let face = zwrite!(tables.tables).open_face(
+        ZenohId::try_from([1]).unwrap(),
+        WhatAmI::Client,
+        primitives,
+    );
     register_expr(
         &tables,
         &mut face.upgrade().unwrap(),
@@ -140,7 +143,11 @@ fn match_test() {
         ctrl_lock: Mutex::new(()),
     };
     let primitives = Arc::new(DummyPrimitives::new());
-    let face = zwrite!(tables.tables).open_face(ZenohId::try_from([1]).unwrap(), WhatAmI::Client, primitives);
+    let face = zwrite!(tables.tables).open_face(
+        ZenohId::try_from([1]).unwrap(),
+        WhatAmI::Client,
+        primitives,
+    );
     for (i, key_expr) in key_exprs.iter().enumerate() {
         register_expr(
             &tables,
@@ -182,18 +189,17 @@ fn clean_test() {
     };
 
     let primitives = Arc::new(DummyPrimitives::new());
-    let face0 = zwrite!(tables.tables).open_face(ZenohId::try_from([1]).unwrap(), WhatAmI::Client, primitives);
+    let face0 = zwrite!(tables.tables).open_face(
+        ZenohId::try_from([1]).unwrap(),
+        WhatAmI::Client,
+        primitives,
+    );
     assert!(face0.upgrade().is_some());
 
     // --------------
-    register_expr(
-        &tables,
-        &mut face0.upgrade().unwrap(),
-        1,
-        &"todrop1".into(),
-    );
-    let optres1 =
-        Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1").map(|res| Arc::downgrade(&res));
+    register_expr(&tables, &mut face0.upgrade().unwrap(), 1, &"todrop1".into());
+    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1")
+        .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
@@ -211,7 +217,8 @@ fn clean_test() {
     assert!(res2.upgrade().is_some());
 
     register_expr(&tables, &mut face0.upgrade().unwrap(), 3, &"**".into());
-    let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "**").map(|res| Arc::downgrade(&res));
+    let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "**")
+        .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
     assert!(res3.upgrade().is_some());
@@ -232,14 +239,9 @@ fn clean_test() {
     assert!(res3.upgrade().is_none());
 
     // --------------
-    register_expr(
-        &tables,
-        &mut face0.upgrade().unwrap(),
-        1,
-        &"todrop1".into(),
-    );
-    let optres1 =
-        Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1").map(|res| Arc::downgrade(&res));
+    register_expr(&tables, &mut face0.upgrade().unwrap(), 1, &"todrop1".into());
+    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1")
+        .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
@@ -301,12 +303,7 @@ fn clean_test() {
     assert!(res3.upgrade().is_none());
 
     // --------------
-    register_expr(
-        &tables,
-        &mut face0.upgrade().unwrap(),
-        2,
-        &"todrop3".into(),
-    );
+    register_expr(&tables, &mut face0.upgrade().unwrap(), 2, &"todrop3".into());
     declare_client_subscription(
         &tables,
         zread!(tables.tables),
@@ -314,8 +311,8 @@ fn clean_test() {
         &"todrop3".into(),
         &sub_info,
     );
-    let optres1 =
-        Resource::get_resource(zread!(tables.tables)._get_root(), "todrop3").map(|res| Arc::downgrade(&res));
+    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop3")
+        .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
@@ -332,18 +329,8 @@ fn clean_test() {
     assert!(res1.upgrade().is_none());
 
     // --------------
-    register_expr(
-        &tables,
-        &mut face0.upgrade().unwrap(),
-        3,
-        &"todrop4".into(),
-    );
-    register_expr(
-        &tables,
-        &mut face0.upgrade().unwrap(),
-        4,
-        &"todrop5".into(),
-    );
+    register_expr(&tables, &mut face0.upgrade().unwrap(), 3, &"todrop4".into());
+    register_expr(&tables, &mut face0.upgrade().unwrap(), 4, &"todrop5".into());
     declare_client_subscription(
         &tables,
         zread!(tables.tables),
@@ -359,16 +346,16 @@ fn clean_test() {
         &sub_info,
     );
 
-    let optres1 =
-        Resource::get_resource(zread!(tables.tables)._get_root(), "todrop4").map(|res| Arc::downgrade(&res));
+    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop4")
+        .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
-    let optres2 =
-        Resource::get_resource(zread!(tables.tables)._get_root(), "todrop5").map(|res| Arc::downgrade(&res));
+    let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop5")
+        .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
-    let optres3 =
-        Resource::get_resource(zread!(tables.tables)._get_root(), "todrop6").map(|res| Arc::downgrade(&res));
+    let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop6")
+        .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
 
