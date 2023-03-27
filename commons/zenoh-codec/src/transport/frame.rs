@@ -91,7 +91,7 @@ where
         let sn: TransportSn = self.codec.read(&mut *reader)?;
 
         // Extensions
-        let mut qos = ext::QoSType::default();
+        let mut ext_qos = ext::QoSType::default();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -100,11 +100,20 @@ where
             match iext::eid(ext) {
                 ext::QoS::ID => {
                     let (q, ext): (ext::QoSType, bool) = eodec.read(&mut *reader)?;
-                    qos = q;
+                    ext_qos = q;
                     has_ext = ext;
                 }
                 _ => {
-                    let (_, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    const S: &str = "Unknown Frame ext";
+                    let (u, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    if u.is_mandatory() {
+                        #[cfg(feature = "std")]
+                        log::error!("{S}: {:?}", u);
+                        return Err(DidntRead);
+                    } else {
+                        #[cfg(feature = "std")]
+                        log::debug!("{S}: {:?}", u);
+                    }
                     has_ext = ext;
                 }
             }
@@ -113,7 +122,7 @@ where
         Ok(FrameHeader {
             reliability,
             sn,
-            ext_qos: qos,
+            ext_qos,
         })
     }
 }

@@ -146,7 +146,16 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    let (_, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    const S: &str = "Unknown OpenSyn ext";
+                    let (u, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    if u.is_mandatory() {
+                        #[cfg(feature = "std")]
+                        log::error!("{S}: {:?}", u);
+                        return Err(DidntRead);
+                    } else {
+                        #[cfg(feature = "std")]
+                        log::debug!("{S}: {:?}", u);
+                    }
                     has_ext = ext;
                 }
             }
@@ -283,7 +292,16 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    let (_, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    const S: &str = "Unknown OpenAck ext";
+                    let (u, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    if u.is_mandatory() {
+                        #[cfg(feature = "std")]
+                        log::error!("{S}: {:?}", u);
+                        return Err(DidntRead);
+                    } else {
+                        #[cfg(feature = "std")]
+                        log::debug!("{S}: {:?}", u);
+                    }
                     has_ext = ext;
                 }
             }

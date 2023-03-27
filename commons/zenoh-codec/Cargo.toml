@@ -31,6 +31,7 @@ description = "Internal crate for zenoh."
 [features]
 default = ["std"]
 std = [
+    "log",
     "serde/std",
     "uhlc/std",
     "zenoh-protocol/std"
@@ -43,6 +44,7 @@ shared-memory = [
 complete_n = ["zenoh-protocol/complete_n"]
 
 [dependencies]
+log = { workspace = true, optional = true }
 serde = { workspace = true, features = ["alloc"] }
 uhlc = { workspace = true }
 zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }

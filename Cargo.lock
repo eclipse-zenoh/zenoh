@@ -3839,6 +3839,7 @@ name = "zenoh-codec"
 version = "0.8.0-rc"
 dependencies = [
  "criterion",
+ "log",
  "rand 0.8.5",
  "serde",
  "uhlc",

@@ -154,7 +154,16 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    let (_, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    const S: &str = "Unknown Declare ext";
+                    let (u, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    if u.is_mandatory() {
+                        #[cfg(feature = "std")]
+                        log::error!("{S}: {:?}", u);
+                        return Err(DidntRead);
+                    } else {
+                        #[cfg(feature = "std")]
+                        log::debug!("{S}: {:?}", u);
+                    }
                     has_ext = ext;
                 }
             }
@@ -226,6 +235,22 @@ where
         };
         let wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
 
+        // Extensions
+        let mut has_ext = imsg::has_flag(self.header, keyexpr::flag::Z);
+        while has_ext {
+            const S: &str = "Unknown DeclareKeyExpr ext";
+            let (u, ext): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+            if u.is_mandatory() {
+                #[cfg(feature = "std")]
+                log::error!("{S}: {:?}", u);
+                return Err(DidntRead);
+            } else {
+                #[cfg(feature = "std")]
+                log::debug!("{S}: {:?}", u);
+            }
+            has_ext = ext;
+        }
+
         Ok(keyexpr::DeclareKeyExpr { id, wire_expr })
     }
 }
@@ -275,6 +300,22 @@ where
         }
 
         let id: ExprId = self.codec.read(&mut *reader)?;
+
+        // Extensions
+        let mut has_ext = imsg::has_flag(self.header, keyexpr::flag::Z);
+        while has_ext {
+            const S: &str = "Unknown ForgetKeyExpr ext";
+            let (u, ext): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+            if u.is_mandatory() {
+                #[cfg(feature = "std")]
+                log::error!("{S}: {:?}", u);
+                return Err(DidntRead);
+            } else {
+                #[cfg(feature = "std")]
+                log::debug!("{S}: {:?}", u);
+            }
+            has_ext = ext;
+        }
 
         Ok(keyexpr::ForgetKeyExpr { id })
     }
@@ -369,7 +410,16 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    let (_, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    const S: &str = "Unknown DeclareSubscriber ext";
+                    let (u, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    if u.is_mandatory() {
+                        #[cfg(feature = "std")]
+                        log::error!("{S}: {:?}", u);
+                        return Err(DidntRead);
+                    } else {
+                        #[cfg(feature = "std")]
+                        log::debug!("{S}: {:?}", u);
+                    }
                     has_ext = ext;
                 }
             }
@@ -430,6 +480,22 @@ where
 
         // Body
         let id: subscriber::SubscriberId = self.codec.read(&mut *reader)?;
+
+        // Extensions
+        let mut has_ext = imsg::has_flag(self.header, subscriber::flag::Z);
+        while has_ext {
+            const S: &str = "Unknown ForgetSubscriber ext";
+            let (u, ext): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+            if u.is_mandatory() {
+                #[cfg(feature = "std")]
+                log::error!("{S}: {:?}", u);
+                return Err(DidntRead);
+            } else {
+                #[cfg(feature = "std")]
+                log::debug!("{S}: {:?}", u);
+            }
+            has_ext = ext;
+        }
 
         Ok(subscriber::ForgetSubscriber { id })
     }
@@ -522,7 +588,16 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    let (_, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    const S: &str = "Unknown DeclareQueryable ext";
+                    let (u, ext): (ZExtUnknown, bool) = eodec.read(&mut *reader)?;
+                    if u.is_mandatory() {
+                        #[cfg(feature = "std")]
+                        log::error!("{S}: {:?}", u);
+                        return Err(DidntRead);
+                    } else {
+                        #[cfg(feature = "std")]
+                        log::debug!("{S}: {:?}", u);
+                    }
                     has_ext = ext;
                 }
             }
@@ -582,7 +657,23 @@ where
         }
 
         // Body
-        let id: subscriber::SubscriberId = self.codec.read(&mut *reader)?;
+        let id: queryable::QueryableId = self.codec.read(&mut *reader)?;
+
+        // Extensions
+        let mut has_ext = imsg::has_flag(self.header, queryable::flag::Z);
+        while has_ext {
+            const S: &str = "Unknown ForgetQueryable ext";
+            let (u, ext): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+            if u.is_mandatory() {
+                #[cfg(feature = "std")]
+                log::error!("{S}: {:?}", u);
+                return Err(DidntRead);
+            } else {
+                #[cfg(feature = "std")]
+                log::debug!("{S}: {:?}", u);
+            }
+            has_ext = ext;
+        }
 
         Ok(queryable::ForgetQueryable { id })
     }
@@ -649,9 +740,18 @@ where
         };
 
         // Extensions
-        let mut has_ext = imsg::has_flag(self.header, subscriber::flag::Z);
+        let mut has_ext = imsg::has_flag(self.header, token::flag::Z);
         while has_ext {
-            let (_, ext): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+            const S: &str = "Unknown DeclareToken ext";
+            let (u, ext): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+            if u.is_mandatory() {
+                #[cfg(feature = "std")]
+                log::error!("{S}: {:?}", u);
+                return Err(DidntRead);
+            } else {
+                #[cfg(feature = "std")]
+                log::debug!("{S}: {:?}", u);
+            }
             has_ext = ext;
         }
 
@@ -709,6 +809,22 @@ where
 
         // Body
         let id: token::TokenId = self.codec.read(&mut *reader)?;
+
+        // Extensions
+        let mut has_ext = imsg::has_flag(self.header, token::flag::Z);
+        while has_ext {
+            const S: &str = "Unknown ForgetToken ext";
+            let (u, ext): (ZExtUnknown, bool) = self.codec.read(&mut *reader)?;
+            if u.is_mandatory() {
+                #[cfg(feature = "std")]
+                log::error!("{S}: {:?}", u);
+                return Err(DidntRead);
+            } else {
+                #[cfg(feature = "std")]
+                log::debug!("{S}: {:?}", u);
+            }
+            has_ext = ext;
+        }
 
         Ok(token::ForgetToken { id })
     }
