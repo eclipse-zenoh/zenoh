@@ -334,10 +334,10 @@ pub fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
     match face.upgrade() {
         Some(mut face) => {
             log::debug!("Close {}", face);
+            finalize_pending_queries(tables, &mut face);
+
             let ctrl_lock = zlock!(tables.ctrl_lock);
             let mut wtables = zwrite!(tables.tables);
-            finalize_pending_queries(&mut wtables, &mut face);
-
             let mut face_clone = face.clone();
             let face = get_mut_unchecked(&mut face);
             for res in face.remote_mappings.values_mut() {
@@ -428,6 +428,7 @@ pub fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
 pub struct TablesLock {
     pub tables: RwLock<Tables>,
     pub ctrl_lock: Mutex<()>,
+    pub queries_lock: RwLock<()>,
 }
 
 pub struct Router {
@@ -456,6 +457,7 @@ impl Router {
                     queries_default_timeout,
                 )),
                 ctrl_lock: Mutex::new(()),
+                queries_lock: RwLock::new(()),
             }),
         }
     }

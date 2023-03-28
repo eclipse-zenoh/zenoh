@@ -41,6 +41,7 @@ fn base_test() {
             Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
         )),
         ctrl_lock: Mutex::new(()),
+        queries_lock: RwLock::new(()),
     };
 
     let primitives = Arc::new(DummyPrimitives::new());
@@ -141,6 +142,7 @@ fn match_test() {
             Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
         )),
         ctrl_lock: Mutex::new(()),
+        queries_lock: RwLock::new(()),
     };
     let primitives = Arc::new(DummyPrimitives::new());
     let face = zwrite!(tables.tables).open_face(
@@ -186,6 +188,7 @@ fn clean_test() {
             Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
         )),
         ctrl_lock: Mutex::new(()),
+        queries_lock: RwLock::new(()),
     };
 
     let primitives = Arc::new(DummyPrimitives::new());
@@ -511,6 +514,7 @@ fn client_test() {
             Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
         )),
         ctrl_lock: Mutex::new(()),
+        queries_lock: RwLock::new(()),
     };
 
     let sub_info = SubInfo {

@@ -434,7 +434,7 @@ impl Primitives for Face {
         payload: ZBuf,
     ) {
         route_send_reply_data(
-            &self.tables.tables,
+            &self.tables,
             &mut self.state.clone(),
             qid,
             replier_id,

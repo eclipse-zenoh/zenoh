@@ -23,8 +23,7 @@ use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::sync::{Arc, RwLockReadGuard};
-use std::sync::{RwLock, Weak};
+use std::sync::{Arc, RwLockReadGuard, Weak};
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
@@ -1546,7 +1545,7 @@ fn should_route(
 
 #[inline]
 fn compute_final_route(
-    tables: &mut Tables,
+    tables: &Tables,
     qabls: &Arc<QueryTargetQablSet>,
     src_face: &Arc<FaceState>,
     expr: &mut RoutingExpr,
@@ -1808,7 +1807,6 @@ pub fn route_query(
     body: Option<QueryBody>,
     routing_context: Option<RoutingContext>,
 ) {
-    let ctrl_lock = zlock!(tables_ref.ctrl_lock);
     let rtables = zread!(tables_ref.tables);
     match rtables.get_mapping(face, &expr.scope) {
         Some(prefix) => {
@@ -1835,13 +1833,11 @@ pub fn route_query(
                     src_face: face.clone(),
                     src_qid: qid,
                 });
-                drop(rtables);
 
-                let mut wtables = zwrite!(tables_ref.tables);
-                let route =
-                    compute_final_route(&mut wtables, &route, face, &mut expr, &target, query);
-                drop(wtables);
-                drop(ctrl_lock);
+                let queries_lock = zwrite!(tables_ref.queries_lock);
+                let route = compute_final_route(&rtables, &route, face, &mut expr, &target, query);
+                drop(queries_lock);
+                drop(rtables);
 
                 if route.is_empty() {
                     log::debug!(
@@ -1904,7 +1900,6 @@ pub fn route_query(
             } else {
                 log::debug!("Send final reply {}:{} (not master)", face, qid);
                 drop(rtables);
-                drop(ctrl_lock);
                 face.primitives.clone().send_reply_final(qid)
             }
         }
@@ -1914,7 +1909,6 @@ pub fn route_query(
                 expr.scope
             );
             drop(rtables);
-            drop(ctrl_lock);
             face.primitives.clone().send_reply_final(qid)
         }
     }
@@ -1922,7 +1916,7 @@ pub fn route_query(
 
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn route_send_reply_data(
-    tables_ref: &RwLock<Tables>,
+    tables_ref: &Arc<TablesLock>,
     face: &mut Arc<FaceState>,
     qid: ZInt,
     replier_id: ZenohId,
@@ -1930,10 +1924,10 @@ pub(crate) fn route_send_reply_data(
     info: Option<DataInfo>,
     payload: ZBuf,
 ) {
-    let tables_lock = zread!(tables_ref);
+    let queries_lock = zread!(tables_ref.queries_lock);
     match face.pending_queries.get(&qid) {
         Some(query) => {
-            drop(tables_lock);
+            drop(queries_lock);
             query.src_face.primitives.clone().send_reply_data(
                 query.src_qid,
                 replier_id,
@@ -1956,10 +1950,10 @@ pub(crate) fn route_send_reply_final(
     face: &mut Arc<FaceState>,
     qid: ZInt,
 ) {
-    let tables_lock = zwrite!(tables_ref.tables);
+    let queries_lock = zwrite!(tables_ref.queries_lock);
     match get_mut_unchecked(face).pending_queries.remove(&qid) {
         Some(query) => {
-            drop(tables_lock);
+            drop(queries_lock);
             log::debug!(
                 "Received final reply {}:{} from {}",
                 query.src_face,
@@ -1977,10 +1971,12 @@ pub(crate) fn route_send_reply_final(
     }
 }
 
-pub(crate) fn finalize_pending_queries(_tables: &mut Tables, face: &mut Arc<FaceState>) {
+pub(crate) fn finalize_pending_queries(tables_ref: &TablesLock, face: &mut Arc<FaceState>) {
+    let queries_lock = zwrite!(tables_ref.queries_lock);
     for (_, query) in get_mut_unchecked(face).pending_queries.drain() {
         finalize_pending_query(query);
     }
+    drop(queries_lock);
 }
 
 pub(crate) fn finalize_pending_query(query: Arc<Query>) {
