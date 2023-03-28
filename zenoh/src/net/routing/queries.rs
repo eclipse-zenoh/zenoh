@@ -1841,6 +1841,7 @@ pub fn route_query(
                 let route =
                     compute_final_route(&mut wtables, &route, face, &mut expr, &target, query);
                 drop(wtables);
+                drop(ctrl_lock);
 
                 if route.is_empty() {
                     log::debug!(
@@ -1903,6 +1904,7 @@ pub fn route_query(
             } else {
                 log::debug!("Send final reply {}:{} (not master)", face, qid);
                 drop(rtables);
+                drop(ctrl_lock);
                 face.primitives.clone().send_reply_final(qid)
             }
         }
@@ -1912,10 +1914,10 @@ pub fn route_query(
                 expr.scope
             );
             drop(rtables);
+            drop(ctrl_lock);
             face.primitives.clone().send_reply_final(qid)
         }
     }
-    drop(ctrl_lock);
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1954,12 +1956,10 @@ pub(crate) fn route_send_reply_final(
     face: &mut Arc<FaceState>,
     qid: ZInt,
 ) {
-    let ctrl_lock = zlock!(tables_ref.ctrl_lock);
     let tables_lock = zwrite!(tables_ref.tables);
     match get_mut_unchecked(face).pending_queries.remove(&qid) {
         Some(query) => {
             drop(tables_lock);
-            drop(ctrl_lock);
             log::debug!(
                 "Received final reply {}:{} from {}",
                 query.src_face,
