@@ -81,13 +81,14 @@ extern crate zenoh_result;
 
 use git_version::git_version;
 use handlers::DefaultHandler;
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 use net::runtime::Runtime;
 use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
 use scouting::ScoutBuilder;
 use std::future::Ready;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+pub use zenoh_macros::{kedefine, keformat, kewrite};
 use zenoh_result::{zerror, ZResult};
 
 /// A zenoh error.
@@ -296,7 +297,7 @@ where
 /// Initialize a Session with an existing Runtime.
 /// This operation is used by the plugins to share the same Runtime as the router.
 #[doc(hidden)]
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 pub fn init(runtime: Runtime) -> InitBuilder {
     InitBuilder {
         runtime,
@@ -307,14 +308,14 @@ pub fn init(runtime: Runtime) -> InitBuilder {
 
 /// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
 #[doc(hidden)]
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 pub struct InitBuilder {
     runtime: Runtime,
     aggregated_subscribers: Vec<OwnedKeyExpr>,
     aggregated_publishers: Vec<OwnedKeyExpr>,
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl InitBuilder {
     #[inline]
     pub fn aggregated_subscribers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
@@ -329,12 +330,12 @@ impl InitBuilder {
     }
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl Resolvable for InitBuilder {
     type To = ZResult<Session>;
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl SyncResolve for InitBuilder {
     fn res_sync(self) -> <Self as Resolvable>::To {
         Ok(Session::init(
@@ -346,7 +347,7 @@ impl SyncResolve for InitBuilder {
     }
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl AsyncResolve for InitBuilder {
     type Future = Ready<Self::To>;
 

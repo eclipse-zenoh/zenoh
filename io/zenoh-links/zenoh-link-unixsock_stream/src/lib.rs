@@ -17,8 +17,11 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+use async_trait::async_trait;
 use zenoh_core::zconfigurable;
-use zenoh_protocol::core::endpoint::Address;
+use zenoh_link_commons::LocatorInspector;
+use zenoh_protocol::core::{endpoint::Address, Locator};
+use zenoh_result::ZResult;
 #[cfg(target_family = "unix")]
 mod unicast;
 #[cfg(target_family = "unix")]
@@ -40,6 +43,19 @@ zconfigurable! {
     // Amount of time in microseconds to throttle the accept loop upon an error.
     // Default set to 100 ms.
     static ref UNIXSOCKSTREAM_ACCEPT_THROTTLE_TIME: u64 = 100_000;
+}
+
+#[derive(Default, Clone, Copy)]
+pub struct UnixSockStreamLocatorInspector;
+#[async_trait]
+impl LocatorInspector for UnixSockStreamLocatorInspector {
+    fn protocol(&self) -> &str {
+        UNIXSOCKSTREAM_LOCATOR_PREFIX
+    }
+
+    async fn is_multicast(&self, _locator: &Locator) -> ZResult<bool> {
+        Ok(false)
+    }
 }
 
 pub fn get_unix_path_as_string(address: Address<'_>) -> String {

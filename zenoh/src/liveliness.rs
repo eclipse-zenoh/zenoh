@@ -16,7 +16,7 @@
 //!
 //! see [`Liveliness`](Liveliness)
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 use {
     crate::{
         handlers::locked,
@@ -38,10 +38,10 @@ use {
     zenoh_protocol::core::SubInfo,
 };
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 pub(crate) static PREFIX_LIVELINESS: &str = crate::net::routing::PREFIX_LIVELINESS;
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 lazy_static::lazy_static!(
     pub(crate) static ref KE_PREFIX_LIVELINESS: &'static keyexpr = unsafe { keyexpr::from_str_unchecked(PREFIX_LIVELINESS) };
 );
@@ -75,12 +75,12 @@ lazy_static::lazy_static!(
 ///     .unwrap();
 /// # })
 /// ```
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 pub struct Liveliness<'a> {
     pub(crate) session: SessionRef<'a>,
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl<'a> Liveliness<'a> {
     /// Create a [`LivelinessToken`](LivelinessToken) for the given key expression.
     ///
@@ -102,7 +102,7 @@ impl<'a> Liveliness<'a> {
     ///     .unwrap();
     /// # })
     /// ```
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     pub fn declare_token<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
@@ -138,7 +138,7 @@ impl<'a> Liveliness<'a> {
     /// }
     /// # })
     /// ```
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     pub fn declare_subscriber<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
@@ -174,7 +174,7 @@ impl<'a> Liveliness<'a> {
     /// }
     /// # })
     /// ```
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     pub fn get<'b: 'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -215,19 +215,19 @@ impl<'a> Liveliness<'a> {
 ///     .unwrap();
 /// # })
 /// ```
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct LivelinessTokenBuilder<'a, 'b> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl<'a> Resolvable for LivelinessTokenBuilder<'a, '_> {
     type To = ZResult<LivelinessToken<'a>>;
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl SyncResolve for LivelinessTokenBuilder<'_, '_> {
     #[inline]
     fn res_sync(self) -> <Self as Resolvable>::To {
@@ -243,7 +243,7 @@ impl SyncResolve for LivelinessTokenBuilder<'_, '_> {
     }
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl AsyncResolve for LivelinessTokenBuilder<'_, '_> {
     type Future = Ready<Self::To>;
 
@@ -252,7 +252,7 @@ impl AsyncResolve for LivelinessTokenBuilder<'_, '_> {
     }
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 #[derive(Debug)]
 pub(crate) struct LivelinessTokenState {
     pub(crate) id: Id,
@@ -288,7 +288,7 @@ pub(crate) struct LivelinessTokenState {
 ///     .unwrap();
 /// # })
 /// ```
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct LivelinessToken<'a> {
     pub(crate) session: SessionRef<'a>,
@@ -314,17 +314,17 @@ pub struct LivelinessToken<'a> {
 /// liveliness.undeclare().res().await.unwrap();
 /// # })
 /// ```
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 pub struct LivelinessTokenUndeclaration<'a> {
     token: LivelinessToken<'a>,
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl Resolvable for LivelinessTokenUndeclaration<'_> {
     type To = ZResult<()>;
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl SyncResolve for LivelinessTokenUndeclaration<'_> {
     fn res_sync(mut self) -> <Self as Resolvable>::To {
         self.token.alive = false;
@@ -332,7 +332,7 @@ impl SyncResolve for LivelinessTokenUndeclaration<'_> {
     }
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl<'a> AsyncResolve for LivelinessTokenUndeclaration<'a> {
     type Future = Ready<Self::To>;
 
@@ -341,7 +341,7 @@ impl<'a> AsyncResolve for LivelinessTokenUndeclaration<'a> {
     }
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl<'a> LivelinessToken<'a> {
     /// Undeclare a [`LivelinessToken`](LivelinessToken).
     ///
@@ -371,14 +371,14 @@ impl<'a> LivelinessToken<'a> {
     }
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl<'a> Undeclarable<(), LivelinessTokenUndeclaration<'a>> for LivelinessToken<'a> {
     fn undeclare_inner(self, _: ()) -> LivelinessTokenUndeclaration<'a> {
         LivelinessTokenUndeclaration { token: self }
     }
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl Drop for LivelinessToken<'_> {
     fn drop(&mut self) {
         if self.alive {
@@ -405,7 +405,7 @@ impl Drop for LivelinessToken<'_> {
 /// # })
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct LivelinessSubscriberBuilder<'a, 'b, Handler> {
     pub session: SessionRef<'a>,
@@ -413,7 +413,7 @@ pub struct LivelinessSubscriberBuilder<'a, 'b, Handler> {
     pub handler: Handler,
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// Receive the samples for this subscription with a callback.
     ///
@@ -432,7 +432,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     pub fn callback<Callback>(
         self,
         callback: Callback,
@@ -473,7 +473,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
@@ -504,7 +504,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> LivelinessSubscriberBuilder<'a, 'b, Handler>
     where
         Handler: crate::prelude::IntoCallbackReceiverPair<'static, Sample>,
@@ -522,7 +522,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     }
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl<'a, Handler> Resolvable for LivelinessSubscriberBuilder<'a, '_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
@@ -531,13 +531,13 @@ where
     type To = ZResult<Subscriber<'a, Handler::Receiver>>;
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl<'a, Handler> SyncResolve for LivelinessSubscriberBuilder<'a, '_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     fn res_sync(self) -> <Self as Resolvable>::To {
         let key_expr = self.key_expr?;
         let session = self.session;
@@ -561,7 +561,7 @@ where
     }
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl<'a, Handler> AsyncResolve for LivelinessSubscriberBuilder<'a, '_, Handler>
 where
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
@@ -569,7 +569,7 @@ where
 {
     type Future = Ready<Self::To>;
 
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     fn res_async(self) -> Self::Future {
         std::future::ready(self.res_sync())
     }

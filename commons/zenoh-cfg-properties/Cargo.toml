@@ -28,5 +28,4 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-zenoh-macros = { path = "../zenoh-macros/" }
 zenoh-result = { path = "../zenoh-result/" }

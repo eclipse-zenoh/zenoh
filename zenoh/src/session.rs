@@ -18,7 +18,7 @@ use crate::config::Notifier;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
 use crate::key_expr::KeyExprInner;
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 use crate::liveliness::{Liveliness, LivelinessTokenState};
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
@@ -794,7 +794,7 @@ impl Session {
     ///     .unwrap();
     /// # })
     /// ```
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     pub fn liveliness(&self) -> Liveliness {
         Liveliness {
             session: SessionRef::Borrow(self),
@@ -1267,7 +1267,7 @@ impl Session {
         }
     }
 
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     pub(crate) fn declare_liveliness_inner(
         &self,
         key_expr: &KeyExpr,
@@ -1289,7 +1289,7 @@ impl Session {
         Ok(tok_state)
     }
 
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     pub(crate) fn undeclare_liveliness(&self, tid: usize) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(tok_state) = state.tokens.remove(&tid) {
@@ -1794,7 +1794,7 @@ impl SessionDeclarations for Arc<Session> {
     ///     .unwrap();
     /// # })
     /// ```
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     fn liveliness(&self) -> Liveliness<'static> {
         Liveliness {
             session: SessionRef::Shared(self.clone()),
@@ -2285,6 +2285,6 @@ pub trait SessionDeclarations {
     ///     .unwrap();
     /// # })
     /// ```
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     fn liveliness(&self) -> Liveliness<'static>;
 }

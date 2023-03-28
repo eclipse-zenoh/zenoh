@@ -269,7 +269,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
 
     /// Restrict the matching queryables that will receive the query
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
         self.destination = destination;
@@ -284,7 +284,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     }
 
     /// Set query value.
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     #[inline]
     pub fn with_value<IntoValue>(mut self, value: IntoValue) -> Self
     where
@@ -299,7 +299,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     ///
     /// If allowed to through `accept_replies(ReplyKeyExpr::Any)`, queryables may also reply on key
     /// expressions that don't intersect with the query's.
-    #[zenoh_core::unstable]
+    #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         let Self {
             session,
@@ -327,17 +327,17 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
 }
 
 pub(crate) const _REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = _REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ReplyKeyExpr {
     Any,
     MatchingQuery,
 }
 
-#[zenoh_core::unstable]
+#[zenoh_macros::unstable]
 impl Default for ReplyKeyExpr {
     fn default() -> Self {
         ReplyKeyExpr::MatchingQuery
