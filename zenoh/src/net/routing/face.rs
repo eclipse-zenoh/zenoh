@@ -166,11 +166,15 @@ pub struct Face {
 
 impl Primitives for Face {
     fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
+        let ctrl_lock = zlock!(self.tables.ctrl_lock);
         register_expr(&self.tables, &mut self.state.clone(), expr_id, key_expr);
+        drop(ctrl_lock);
     }
 
     fn forget_resource(&self, expr_id: ZInt) {
+        let ctrl_lock = zlock!(self.tables.ctrl_lock);
         unregister_expr(&self.tables, &mut self.state.clone(), expr_id);
+        drop(ctrl_lock);
     }
 
     fn decl_subscriber(
@@ -179,6 +183,7 @@ impl Primitives for Face {
         sub_info: &SubInfo,
         routing_context: Option<RoutingContext>,
     ) {
+        let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let rtables = zread!(self.tables.tables);
         match (rtables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
@@ -227,9 +232,11 @@ impl Primitives for Face {
                 );
             }
         }
+        drop(ctrl_lock);
     }
 
     fn forget_subscriber(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
+        let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let rtables = zread!(self.tables.tables);
         match (rtables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
@@ -269,6 +276,7 @@ impl Primitives for Face {
                 forget_client_subscription(&self.tables, rtables, &mut self.state.clone(), key_expr)
             }
         }
+        drop(ctrl_lock);
     }
 
     fn decl_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
@@ -281,6 +289,7 @@ impl Primitives for Face {
         qabl_info: &QueryableInfo,
         routing_context: Option<RoutingContext>,
     ) {
+        let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let rtables = zread!(self.tables.tables);
         match (rtables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
@@ -327,9 +336,11 @@ impl Primitives for Face {
                 qabl_info,
             ),
         }
+        drop(ctrl_lock);
     }
 
     fn forget_queryable(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
+        let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let rtables = zread!(self.tables.tables);
         match (rtables.whatami, self.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
@@ -367,6 +378,7 @@ impl Primitives for Face {
             }
             _ => forget_client_queryable(&self.tables, rtables, &mut self.state.clone(), key_expr),
         }
+        drop(ctrl_lock);
     }
 
     fn send_data(

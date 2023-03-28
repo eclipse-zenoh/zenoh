@@ -211,7 +211,6 @@ pub fn declare_router_subscription(
         Some(mut prefix) => {
             let mut fullexpr = prefix.expr();
             fullexpr.push_str(expr.suffix.as_ref());
-            let ctrl_lock = zlock!(tables.ctrl_lock);
             let matches = keyexpr::new(fullexpr.as_str())
                 .map(|ke| Resource::get_matches(&rtables, ke))
                 .unwrap_or_default();
@@ -234,7 +233,6 @@ pub fn declare_router_subscription(
                     .update_data_routes(data_routes);
             }
             drop(wtables);
-            drop(ctrl_lock);
         }
         None => log::error!(
             "Declare router subscription for unknown scope {}!",
@@ -280,7 +278,6 @@ pub fn declare_peer_subscription(
         Some(mut prefix) => {
             let mut fullexpr = prefix.expr();
             fullexpr.push_str(expr.suffix.as_ref());
-            let ctrl_lock = zlock!(tables.ctrl_lock);
             let matches = keyexpr::new(fullexpr.as_str())
                 .map(|ke| Resource::get_matches(&rtables, ke))
                 .unwrap_or_default();
@@ -309,7 +306,6 @@ pub fn declare_peer_subscription(
                     .update_data_routes(data_routes);
             }
             drop(wtables);
-            drop(ctrl_lock);
         }
         None => log::error!(
             "Declare router subscription for unknown scope {}!",
@@ -370,7 +366,6 @@ pub fn declare_client_subscription(
             let mut fullexpr = prefix.expr();
             fullexpr.push_str(expr.suffix.as_ref());
             log::debug!("Register client subscription {}", fullexpr);
-            let ctrl_lock = zlock!(tables.ctrl_lock);
             let matches = keyexpr::new(fullexpr.as_str())
                 .map(|ke| Resource::get_matches(&rtables, ke))
                 .unwrap_or_default();
@@ -425,7 +420,6 @@ pub fn declare_client_subscription(
                     .update_data_routes(data_routes);
             }
             drop(wtables);
-            drop(ctrl_lock);
         }
         None => log::error!("Declare subscription for unknown scope {}!", expr.scope),
     }
@@ -617,7 +611,6 @@ pub fn forget_router_subscription(
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
-                let ctrl_lock = zlock!(tables.ctrl_lock);
                 let mut wtables = zwrite!(tables.tables);
                 undeclare_router_subscription(&mut wtables, Some(face), &mut res, router);
                 disable_matches_data_routes(&mut wtables, &mut res);
@@ -634,7 +627,6 @@ pub fn forget_router_subscription(
                 }
                 Resource::clean(&mut res);
                 drop(wtables);
-                drop(ctrl_lock);
             }
             None => log::error!("Undeclare unknown router subscription!"),
         },
@@ -685,7 +677,6 @@ pub fn forget_peer_subscription(
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
-                let ctrl_lock = zlock!(tables.ctrl_lock);
                 let mut wtables = zwrite!(tables.tables);
                 undeclare_peer_subscription(&mut wtables, Some(face), &mut res, peer);
                 if wtables.whatami == WhatAmI::Router {
@@ -710,7 +701,6 @@ pub fn forget_peer_subscription(
                 }
                 Resource::clean(&mut res);
                 drop(wtables);
-                drop(ctrl_lock);
             }
             None => log::error!("Undeclare unknown peer subscription!"),
         },
@@ -776,7 +766,6 @@ pub fn forget_client_subscription(
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
-                let ctrl_lock = zlock!(tables.ctrl_lock);
                 let mut wtables = zwrite!(tables.tables);
                 undeclare_client_subscription(&mut wtables, face, &mut res);
                 disable_matches_data_routes(&mut wtables, &mut res);
@@ -794,7 +783,6 @@ pub fn forget_client_subscription(
                 }
                 Resource::clean(&mut res);
                 drop(wtables);
-                drop(ctrl_lock);
             }
             None => log::error!("Undeclare unknown subscription!"),
         },

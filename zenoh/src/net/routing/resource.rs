@@ -634,7 +634,6 @@ pub fn register_expr(
     expr_id: ZInt,
     expr: &WireExpr,
 ) {
-    let ctrl_lock = zlock!(tables.ctrl_lock);
     let rtables = zread!(tables.tables);
     match rtables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => match face.remote_mappings.get(&expr_id) {
@@ -692,16 +691,13 @@ pub fn register_expr(
         },
         None => log::error!("Declare resource with unknown scope {}!", expr.scope),
     }
-    drop(ctrl_lock);
 }
 
 pub fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: ZInt) {
-    let ctrl_lock = zlock!(tables.ctrl_lock);
     let wtables = zwrite!(tables.tables);
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),
         None => log::error!("Undeclare unknown resource!"),
     }
     drop(wtables);
-    drop(ctrl_lock);
 }

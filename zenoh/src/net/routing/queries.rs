@@ -370,7 +370,6 @@ pub fn declare_router_queryable(
         Some(mut prefix) => {
             let mut fullexpr = prefix.expr();
             fullexpr.push_str(expr.suffix.as_ref());
-            let ctrl_lock = zlock!(tables.ctrl_lock);
             let matches = keyexpr::new(fullexpr.as_str())
                 .map(|ke| Resource::get_matches(&rtables, ke))
                 .unwrap_or_default();
@@ -393,7 +392,6 @@ pub fn declare_router_queryable(
                     .update_query_routes(query_routes);
             }
             drop(wtables);
-            drop(ctrl_lock);
         }
         None => log::error!("Declare router queryable for unknown scope {}!", expr.scope),
     }
@@ -447,7 +445,6 @@ pub fn declare_peer_queryable(
         Some(mut prefix) => {
             let mut fullexpr = prefix.expr();
             fullexpr.push_str(expr.suffix.as_ref());
-            let ctrl_lock = zlock!(tables.ctrl_lock);
             let matches = keyexpr::new(fullexpr.as_str())
                 .map(|ke| Resource::get_matches(&rtables, ke))
                 .unwrap_or_default();
@@ -476,7 +473,6 @@ pub fn declare_peer_queryable(
                     .update_query_routes(query_routes);
             }
             drop(wtables);
-            drop(ctrl_lock);
         }
         None => log::error!("Declare router queryable for unknown scope {}!", expr.scope),
     }
@@ -518,7 +514,6 @@ pub fn declare_client_queryable(
         Some(mut prefix) => {
             let mut fullexpr = prefix.expr();
             fullexpr.push_str(expr.suffix.as_ref());
-            let ctrl_lock = zlock!(tables.ctrl_lock);
             let matches = keyexpr::new(fullexpr.as_str())
                 .map(|ke| Resource::get_matches(&rtables, ke))
                 .unwrap_or_default();
@@ -574,7 +569,6 @@ pub fn declare_client_queryable(
                     .update_query_routes(query_routes);
             }
             drop(wtables);
-            drop(ctrl_lock);
         }
         None => log::error!("Declare queryable for unknown scope {}!", expr.scope),
     }
@@ -766,7 +760,6 @@ pub fn forget_router_queryable(
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
-                let ctrl_lock = zlock!(tables.ctrl_lock);
                 let mut wtables = zwrite!(tables.tables);
                 undeclare_router_queryable(&mut wtables, Some(face), &mut res, router);
                 disable_matches_query_routes(&mut wtables, &mut res);
@@ -784,7 +777,6 @@ pub fn forget_router_queryable(
                 }
                 Resource::clean(&mut res);
                 drop(wtables);
-                drop(ctrl_lock);
             }
             None => log::error!("Undeclare unknown router queryable!"),
         },
@@ -828,7 +820,6 @@ pub fn forget_peer_queryable(
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
-                let ctrl_lock = zlock!(tables.ctrl_lock);
                 let mut wtables = zwrite!(tables.tables);
                 undeclare_peer_queryable(&mut wtables, Some(face), &mut res, peer);
 
@@ -857,7 +848,6 @@ pub fn forget_peer_queryable(
                 }
                 Resource::clean(&mut res);
                 drop(wtables);
-                drop(ctrl_lock);
             }
             None => log::error!("Undeclare unknown peer queryable!"),
         },
@@ -936,7 +926,6 @@ pub fn forget_client_queryable(
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
-                let ctrl_lock = zlock!(tables.ctrl_lock);
                 let mut wtables = zwrite!(tables.tables);
                 undeclare_client_queryable(&mut wtables, face, &mut res);
                 disable_matches_query_routes(&mut wtables, &mut res);
@@ -954,7 +943,6 @@ pub fn forget_client_queryable(
                 }
                 Resource::clean(&mut res);
                 drop(wtables);
-                drop(ctrl_lock);
             }
             None => log::error!("Undeclare unknown queryable!"),
         },
