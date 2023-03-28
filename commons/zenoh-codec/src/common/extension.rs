@@ -41,7 +41,7 @@ where
 
 #[cold]
 #[inline(never)]
-pub(crate) fn skip<R>(reader: &mut R, s: &str, header: u8) -> Result<bool, DidntRead>
+pub fn skip<R>(reader: &mut R, s: &str, header: u8) -> Result<bool, DidntRead>
 where
     R: Reader,
 {
@@ -50,7 +50,7 @@ where
 
 #[cold]
 #[inline(never)]
-pub(crate) fn skip_all<R>(reader: &mut R, s: &str) -> Result<(), DidntRead>
+pub fn skip_all<R>(reader: &mut R, s: &str) -> Result<(), DidntRead>
 where
     R: Reader,
 {

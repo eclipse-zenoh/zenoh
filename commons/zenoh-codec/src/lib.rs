@@ -14,12 +14,12 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
-mod common;
-mod core;
-mod network;
-mod scouting;
-mod transport;
-mod zenoh;
+pub mod common;
+pub mod core;
+pub mod network;
+pub mod scouting;
+pub mod transport;
+pub mod zenoh;
 
 use ::core::marker::PhantomData;
 use zenoh_protocol::{core::Reliability, zenoh::ReplyContext};

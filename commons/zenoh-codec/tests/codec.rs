@@ -29,7 +29,7 @@ use zenoh_protocol::{
     network::{self, *},
     scouting::*,
     transport::{self, *},
-    zenoh,
+    zenoh, zextunit, zextz64, zextzbuf,
 };
 
 const NUM_ITER: usize = 100;
@@ -320,6 +320,8 @@ fn codec_shm_info() {
 // Common
 #[test]
 fn codec_extension() {
+    let _ = env_logger::try_init();
+
     macro_rules! run_extension_single {
         ($ext:ty, $buff:expr) => {
             let codec = Zenoh080::new();
@@ -337,6 +339,9 @@ fn codec_extension() {
 
                 assert_eq!(x.0, &y.0);
                 assert_eq!(x.1, y.1);
+
+                let mut reader = $buff.reader();
+                let _ = zenoh_codec::common::extension::skip_all(&mut reader, "Test");
             }
         };
     }
@@ -357,10 +362,12 @@ fn codec_extension() {
         };
     }
 
-    run_extension!(ZExtUnit::<0>);
-    run_extension!(ZExtZ64<1>);
-    run_extension!(ZExtZBuf<2>);
-    run_extension!(ZExtZBuf<3>);
+    run_extension!(zextunit!(0x00, true));
+    run_extension!(zextunit!(0x00, false));
+    run_extension!(zextz64!(0x01, true));
+    run_extension!(zextz64!(0x01, false));
+    run_extension!(zextzbuf!(0x02, true));
+    run_extension!(zextzbuf!(0x02, false));
     run_extension!(ZExtUnknown);
 }
 
