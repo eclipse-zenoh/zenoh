@@ -151,7 +151,7 @@ fn inclusions() {
 #[test]
 fn fuzz() {
     const FUZZ_ROUNDS: usize = 100_000;
-    let rng = rand::rngs::OsRng::default();
+    let rng = rand::thread_rng();
     let mut fuzzer = fuzzer::KeyExprFuzzer(rng);
     let mut ke1 = fuzzer.next().unwrap();
     for ke2 in fuzzer.take(FUZZ_ROUNDS) {
