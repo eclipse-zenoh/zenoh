@@ -31,6 +31,7 @@ linked_list_allocator = "0.10.4" # Needs nightly toolchain
 zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
 zenoh-codec = { path = "../../commons/zenoh-codec/", default-features = false }
 zenoh-protocol = { path = "../../commons/zenoh-protocol/", default-features = false }
+zenoh-util = { path = "../../commons/zenoh-util/", default-features = false } # KeyExpr-Tree
 
 [[bin]]
 name = "nostd_check"
