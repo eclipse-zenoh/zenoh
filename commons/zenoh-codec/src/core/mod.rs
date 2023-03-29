@@ -215,6 +215,18 @@ str_impl!(u64);
 str_impl!(usize);
 
 // &str / String
+impl LCodec<&str> for Zenoh080 {
+    fn w_len(self, x: &str) -> usize {
+        self.w_len(x.as_bytes())
+    }
+}
+
+impl LCodec<&String> for Zenoh080 {
+    fn w_len(self, x: &String) -> usize {
+        self.w_len(x.as_bytes())
+    }
+}
+
 impl<W> WCodec<&str, &mut W> for Zenoh080
 where
     W: Writer,

@@ -1,3 +1,4 @@
+use crate::zenoh_new::RequestBody;
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -55,7 +56,7 @@ pub struct Request {
     pub id: RequestId,
     pub wire_expr: WireExpr<'static>,
     pub mapping: Mapping,
-    pub payload: u8, // @TODO
+    pub payload: RequestBody,
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
     pub ext_dst: ext::DestinationType,
@@ -145,8 +146,7 @@ impl Request {
         let wire_expr = WireExpr::rand();
         let mapping = Mapping::rand();
         let id: RequestId = rng.gen();
-        // let payload = ZenohMessage::rand();
-        let payload: u8 = rng.gen(); // @TODO
+        let payload = RequestBody::rand();
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
         let ext_dst = ext::DestinationType::rand();

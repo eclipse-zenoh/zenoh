@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
+use crate::{
+    common::extension, LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header,
+    Zenoh080Length,
+};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -39,19 +42,18 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: (&ext::SourceInfoType, bool)) -> Self::Output {
-        let (sinfo, more) = x;
-        let header: ZExtZBufHeader<{ ext::SourceInfo::ID }> =
-            ZExtZBufHeader::new(self.w_len(sinfo));
+        let (x, more) = x;
+        let header: ZExtZBufHeader<{ ext::SourceInfo::ID }> = ZExtZBufHeader::new(self.w_len(x));
         self.write(&mut *writer, (&header, more))?;
 
-        let flags: u8 = (sinfo.zid.size() as u8 - 1) << 4;
+        let flags: u8 = (x.zid.size() as u8 - 1) << 4;
         self.write(&mut *writer, flags)?;
 
-        let lodec = Zenoh080Length::new(sinfo.zid.size());
-        lodec.write(&mut *writer, &sinfo.zid)?;
+        let lodec = Zenoh080Length::new(x.zid.size());
+        lodec.write(&mut *writer, &x.zid)?;
 
-        self.write(&mut *writer, sinfo.eid)?;
-        self.write(&mut *writer, sinfo.sn)?;
+        self.write(&mut *writer, x.eid)?;
+        self.write(&mut *writer, x.sn)?;
         Ok(())
     }
 }
@@ -114,7 +116,8 @@ where
         }
 
         // Payload
-        self.write(&mut *writer, &x.payload)?;
+        let bodec = Zenoh080Bounded::<u32>::new();
+        bodec.write(&mut *writer, &x.payload)?;
 
         Ok(())
     }
@@ -175,7 +178,8 @@ where
         }
 
         // Payload
-        let payload: ZBuf = self.codec.read(&mut *reader)?;
+        let bodec = Zenoh080Bounded::<u32>::new();
+        let payload: ZBuf = bodec.read(&mut *reader)?;
 
         Ok(Put {
             timestamp,

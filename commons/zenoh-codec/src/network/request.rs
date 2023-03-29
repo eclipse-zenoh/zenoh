@@ -24,6 +24,7 @@ use zenoh_protocol::{
         request::{ext, flag},
         Mapping, Request, RequestId,
     },
+    zenoh_new::RequestBody,
 };
 
 // Destination
@@ -218,8 +219,7 @@ where
         }
 
         // Payload
-        // let payload: ZenohMessage = self.codec.read(&mut *reader)?;
-        let payload: u8 = self.codec.read(&mut *reader)?; // @TODO
+        let payload: RequestBody = self.codec.read(&mut *reader)?;
 
         Ok(Request {
             id,

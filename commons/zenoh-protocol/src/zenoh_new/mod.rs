@@ -13,16 +13,20 @@
 //
 pub mod del;
 pub mod put;
+pub mod query;
 
 pub use del::*;
 pub use put::*;
+pub use query::*;
 
 pub mod id {
     pub const OAM: u8 = 0x00;
     pub const PUT: u8 = 0x01;
     pub const DEL: u8 = 0x02;
+    pub const QUERY: u8 = 0x03;
 }
 
+// Push
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PushBody {
     Put(Put),
@@ -53,5 +57,47 @@ impl From<Put> for PushBody {
 impl From<Del> for PushBody {
     fn from(d: Del) -> PushBody {
         PushBody::Del(d)
+    }
+}
+
+// Request
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RequestBody {
+    Query(Query),
+    Put(Put),
+    Del(Del),
+}
+
+impl RequestBody {
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        match rng.gen_range(0..3) {
+            0 => RequestBody::Query(Query::rand()),
+            1 => RequestBody::Put(Put::rand()),
+            2 => RequestBody::Del(Del::rand()),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl From<Query> for RequestBody {
+    fn from(q: Query) -> RequestBody {
+        RequestBody::Query(q)
+    }
+}
+
+impl From<Put> for RequestBody {
+    fn from(p: Put) -> RequestBody {
+        RequestBody::Put(p)
+    }
+}
+
+impl From<Del> for RequestBody {
+    fn from(d: Del) -> RequestBody {
+        RequestBody::Del(d)
     }
 }

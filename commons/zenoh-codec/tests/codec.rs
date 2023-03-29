@@ -130,6 +130,31 @@ fn codec_zint() {
 }
 
 #[test]
+fn codec_zint_len() {
+    let codec = Zenoh080::new();
+
+    let mut buff = vec![];
+    let mut writer = buff.writer();
+    let n: u64 = 0;
+    codec.write(&mut writer, n).unwrap();
+    assert_eq!(codec.w_len(n), buff.len());
+
+    for i in 1..=9 {
+        let mut buff = vec![];
+        let mut writer = buff.writer();
+        let n: u64 = 1 << (7 * i);
+        codec.write(&mut writer, n).unwrap();
+        assert_eq!(codec.w_len(n), buff.len());
+    }
+
+    let mut buff = vec![];
+    let mut writer = buff.writer();
+    let n = u64::MAX;
+    codec.write(&mut writer, n).unwrap();
+    assert_eq!(codec.w_len(n), buff.len());
+}
+
+#[test]
 fn codec_zint_bounded() {
     use crate::Zenoh080Bounded;
 
@@ -540,6 +565,11 @@ fn codec_put() {
 #[test]
 fn codec_del() {
     run!(zenoh_new::Del, zenoh_new::Del::rand());
+}
+
+#[test]
+fn codec_query() {
+    run!(zenoh_new::Query, zenoh_new::Query::rand());
 }
 
 // Zenoh

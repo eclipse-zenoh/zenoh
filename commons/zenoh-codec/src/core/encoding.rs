@@ -11,13 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded};
+use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use alloc::string::String;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::core::Encoding;
+
+impl LCodec<&Encoding> for Zenoh080 {
+    fn w_len(self, x: &Encoding) -> usize {
+        1 + self.w_len(x.suffix())
+    }
+}
 
 impl<W> WCodec<&Encoding, &mut W> for Zenoh080
 where

@@ -22,15 +22,15 @@ const VLE_LEN: usize = 10;
 
 impl LCodec<u64> for Zenoh080 {
     fn w_len(self, x: u64) -> usize {
-        const B1: u64 = !(u64::MAX << 7);
-        const B2: u64 = !(u64::MAX << (7 * 2));
-        const B3: u64 = !(u64::MAX << (7 * 3));
-        const B4: u64 = !(u64::MAX << (7 * 4));
-        const B5: u64 = !(u64::MAX << (7 * 5));
-        const B6: u64 = !(u64::MAX << (7 * 6));
-        const B7: u64 = !(u64::MAX << (7 * 7));
-        const B8: u64 = !(u64::MAX << (7 * 8));
-        const B9: u64 = !(u64::MAX << (7 * 9));
+        const B1: u64 = u64::MAX << 7;
+        const B2: u64 = u64::MAX << (7 * 2);
+        const B3: u64 = u64::MAX << (7 * 3);
+        const B4: u64 = u64::MAX << (7 * 4);
+        const B5: u64 = u64::MAX << (7 * 5);
+        const B6: u64 = u64::MAX << (7 * 6);
+        const B7: u64 = u64::MAX << (7 * 7);
+        const B8: u64 = u64::MAX << (7 * 8);
+        const B9: u64 = u64::MAX << (7 * 9);
 
         if (x & B1) == 0 {
             1
