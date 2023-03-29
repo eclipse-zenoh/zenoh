@@ -14,6 +14,7 @@
 pub mod del;
 pub mod put;
 pub mod query;
+pub mod reply;
 
 use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
@@ -22,7 +23,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    zenoh_new::{id, PushBody, RequestBody},
+    zenoh_new::{id, PushBody, RequestBody, ResponseBody},
 };
 
 // Push
@@ -90,6 +91,39 @@ where
             id::QUERY => RequestBody::Query(codec.read(&mut *reader)?),
             id::PUT => RequestBody::Put(codec.read(&mut *reader)?),
             id::DEL => RequestBody::Del(codec.read(&mut *reader)?),
+            _ => return Err(DidntRead),
+        };
+
+        Ok(body)
+    }
+}
+
+// Response
+impl<W> WCodec<&ResponseBody, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &ResponseBody) -> Self::Output {
+        match x {
+            ResponseBody::Reply(b) => self.write(&mut *writer, b),
+        }
+    }
+}
+
+impl<R> RCodec<ResponseBody, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<ResponseBody, Self::Error> {
+        let header: u8 = self.read(&mut *reader)?;
+
+        let codec = Zenoh080Header::new(header);
+        let body = match imsg::mid(codec.header) {
+            id::REPLY => ResponseBody::Reply(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 

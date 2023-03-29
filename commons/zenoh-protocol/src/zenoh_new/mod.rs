@@ -14,16 +14,19 @@
 pub mod del;
 pub mod put;
 pub mod query;
+pub mod reply;
 
 pub use del::*;
 pub use put::*;
 pub use query::*;
+pub use reply::*;
 
 pub mod id {
     pub const OAM: u8 = 0x00;
     pub const PUT: u8 = 0x01;
     pub const DEL: u8 = 0x02;
     pub const QUERY: u8 = 0x03;
+    pub const REPLY: u8 = 0x04;
 }
 
 // Push
@@ -99,5 +102,31 @@ impl From<Put> for RequestBody {
 impl From<Del> for RequestBody {
     fn from(d: Del) -> RequestBody {
         RequestBody::Del(d)
+    }
+}
+
+// Response
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResponseBody {
+    Reply(Reply),
+}
+
+impl ResponseBody {
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        match rng.gen_range(0..1) {
+            0 => ResponseBody::Reply(Reply::rand()),
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl From<Reply> for ResponseBody {
+    fn from(r: Reply) -> ResponseBody {
+        ResponseBody::Reply(r)
     }
 }

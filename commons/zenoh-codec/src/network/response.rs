@@ -24,6 +24,7 @@ use zenoh_protocol::{
         response::{ext, flag},
         Mapping, RequestId, Response, ResponseFinal,
     },
+    zenoh_new::ResponseBody,
 };
 
 // Response
@@ -130,8 +131,7 @@ where
         }
 
         // Payload
-        // let payload: ZenohMessage = self.codec.read(&mut *reader)?;
-        let payload: u8 = self.codec.read(&mut *reader)?; // @TODO
+        let payload: ResponseBody = self.codec.read(&mut *reader)?;
 
         Ok(Response {
             rid,

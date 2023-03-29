@@ -1,4 +1,3 @@
-use crate::network::Mapping;
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -12,13 +11,11 @@ use crate::network::Mapping;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, network::RequestId};
-
-pub mod flag {
-    pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix
-    pub const M: u8 = 1 << 6; // 0x40 Mapping       if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
-    pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
-}
+use crate::{
+    core::WireExpr,
+    network::{Mapping, RequestId},
+    zenoh_new::ResponseBody,
+};
 
 /// # Response message
 ///
@@ -46,12 +43,18 @@ pub mod flag {
 /// (*) The resolution of the request id is negotiated during the session establishment.
 ///     This implementation limits the resolution to 32bit.
 /// ```
+pub mod flag {
+    pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix
+    pub const M: u8 = 1 << 6; // 0x40 Mapping       if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
+    pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Response {
     pub rid: RequestId,
     pub wire_expr: WireExpr<'static>,
     pub mapping: Mapping,
-    pub payload: u8, // @TODO
+    pub payload: ResponseBody,
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
 }
@@ -73,8 +76,7 @@ impl Response {
         let rid: RequestId = rng.gen();
         let wire_expr = WireExpr::rand();
         let mapping = Mapping::rand();
-        // let payload = ZenohMessage::rand();
-        let payload: u8 = rng.gen(); // @TODO
+        let payload = ResponseBody::rand();
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
 

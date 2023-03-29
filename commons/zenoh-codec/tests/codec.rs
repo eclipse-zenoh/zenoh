@@ -572,6 +572,11 @@ fn codec_query() {
     run!(zenoh_new::Query, zenoh_new::Query::rand());
 }
 
+#[test]
+fn codec_reply() {
+    run!(zenoh_new::Reply, zenoh_new::Reply::rand());
+}
+
 // Zenoh
 #[test]
 fn codec_routing_context_old() {
