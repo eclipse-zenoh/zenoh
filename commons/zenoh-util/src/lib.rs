@@ -20,7 +20,8 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
-#[cfg_attr(feature = "std", macro_use)]
+#[cfg(feature = "std")]
+#[macro_use]
 extern crate lazy_static;
 
 #[deprecated = "This module is now a separate crate. Use the `zenoh_core` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
