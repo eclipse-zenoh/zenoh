@@ -55,6 +55,7 @@ impl LCodec<u64> for Zenoh080 {
         }
     }
 }
+
 impl LCodec<usize> for Zenoh080 {
     fn w_len(self, x: usize) -> usize {
         self.w_len(x as u64)

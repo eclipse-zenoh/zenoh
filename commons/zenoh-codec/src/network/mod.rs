@@ -109,9 +109,8 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<(ext::TimestampType, bool), Self::Error> {
-        let codec = Zenoh080::new();
         let (_, more): (ZExtZBufHeader<{ ext::Timestamp::ID }>, bool) = self.read(&mut *reader)?;
-        let timestamp: uhlc::Timestamp = codec.read(&mut *reader)?;
+        let timestamp: uhlc::Timestamp = self.codec.read(&mut *reader)?;
         Ok((ext::TimestampType { timestamp }, more))
     }
 }

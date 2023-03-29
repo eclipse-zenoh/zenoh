@@ -102,6 +102,7 @@ pub mod iext {
 
 pub struct DidntConvert;
 
+#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ZExtUnit<const ID: u8>;
 
@@ -152,6 +153,7 @@ impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtUnit<{ ID }> {
     }
 }
 
+#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ZExtZ64<const ID: u8> {
     pub value: u64,
@@ -208,6 +210,7 @@ impl<const ID: u8> TryFrom<ZExtUnknown> for ZExtZ64<{ ID }> {
     }
 }
 
+#[repr(transparent)]
 #[derive(Clone, PartialEq, Eq)]
 pub struct ZExtZBuf<const ID: u8> {
     pub value: ZBuf,

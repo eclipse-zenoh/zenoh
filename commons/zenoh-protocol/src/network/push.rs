@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, network::Mapping};
+use crate::{core::WireExpr, network::Mapping, zenoh_new::PushBody};
 
 pub mod flag {
     pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix
@@ -42,7 +42,7 @@ pub mod flag {
 pub struct Push {
     pub wire_expr: WireExpr<'static>,
     pub mapping: Mapping,
-    pub payload: u8, // @TODO
+    pub payload: PushBody, // @TODO
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
     pub ext_dst: ext::DestinationType,
@@ -90,8 +90,7 @@ impl Push {
         let mut rng = rand::thread_rng();
         let wire_expr = WireExpr::rand();
         let mapping = Mapping::rand();
-        // let payload = ZenohMessage::rand();
-        let payload: u8 = rng.gen(); // @TODO
+        let payload = PushBody::rand();
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
         let ext_dst = ext::DestinationType::rand();

@@ -29,7 +29,7 @@ use zenoh_protocol::{
     network::{self, *},
     scouting::*,
     transport::{self, *},
-    zenoh, zextunit, zextz64, zextzbuf,
+    zenoh, zenoh_new, zextunit, zextz64, zextzbuf,
 };
 
 const NUM_ITER: usize = 100;
@@ -46,9 +46,8 @@ macro_rules! run_single {
 
             let mut reader = $buff.reader();
             let y: $type = $rcode.read(&mut reader).unwrap();
-            assert!(!reader.can_read());
-
             assert_eq!(x, y);
+            assert!(!reader.can_read());
         }
     };
 }
@@ -70,9 +69,8 @@ macro_rules! run_fragmented {
 
             let mut reader = zbuf.reader();
             let y: $type = $rcode.read(&mut reader).unwrap();
-            assert!(!reader.can_read());
-
             assert_eq!(x, y);
+            assert!(!reader.can_read());
         }
     };
 }
@@ -102,9 +100,8 @@ macro_rules! run_buffers {
             let mut zslice = ZSlice::from(Arc::new(buffer));
             let mut reader = zslice.reader();
             let y: $type = $rcode.read(&mut reader).unwrap();
-            assert!(!reader.can_read());
-
             assert_eq!(x, y);
+            assert!(!reader.can_read());
         }
 
         println!("Fragmented: codec {}", std::any::type_name::<$type>());
@@ -532,6 +529,12 @@ fn codec_network_oam() {
 #[test]
 fn codec_network() {
     run!(NetworkMessage, NetworkMessage::rand());
+}
+
+// Zenoh new
+#[test]
+fn codec_put() {
+    run!(zenoh_new::Put, zenoh_new::Put::rand());
 }
 
 // Zenoh

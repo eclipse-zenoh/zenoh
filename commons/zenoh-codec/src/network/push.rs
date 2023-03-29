@@ -24,6 +24,7 @@ use zenoh_protocol::{
         push::{ext, flag},
         Mapping, Push,
     },
+    zenoh_new::PushBody,
 };
 
 impl<W> WCodec<(ext::DestinationType, bool), &mut W> for Zenoh080
@@ -162,8 +163,7 @@ where
         }
 
         // Payload
-        // let payload: ZenohMessage = self.codec.read(&mut *reader)?;
-        let payload: u8 = self.codec.read(&mut *reader)?; // @TODO
+        let payload: PushBody = self.codec.read(&mut *reader)?;
 
         Ok(Push {
             wire_expr,

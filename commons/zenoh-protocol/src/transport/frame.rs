@@ -82,14 +82,11 @@ pub mod ext {
 
     pub type QoS = zextz64!(0x1, true);
 
-    ///      7 6 5 4 3 2 1 0
-    ///     +-+-+-+-+-+-+-+-+
-    ///     |Z|0_1|   QoS   |
-    ///     +-+-+-+---------+
-    ///     %0|  rsv  |prio %
-    ///     +---------------+
-    ///
-    ///     - prio: Priority class
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// %0|  rsv  |prio %
+    /// +---------------+
+    /// - prio: Priority class
     #[repr(transparent)]
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub struct QoSType {

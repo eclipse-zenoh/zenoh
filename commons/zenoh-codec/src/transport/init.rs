@@ -59,7 +59,7 @@ where
             WhatAmI::Peer => 0b01,
             WhatAmI::Client => 0b10,
         };
-        let flags = ((x.zid.size() as u8 - 1) << 4) | whatami;
+        let flags: u8 = ((x.zid.size() as u8 - 1) << 4) | whatami;
         self.write(&mut *writer, flags)?;
 
         let lodec = Zenoh080Length::new(x.zid.size());
@@ -220,7 +220,7 @@ where
             WhatAmI::Peer => 0b01,
             WhatAmI::Client => 0b10,
         };
-        let flags = ((x.zid.size() as u8 - 1) << 4) | whatami;
+        let flags: u8 = ((x.zid.size() as u8 - 1) << 4) | whatami;
         self.write(&mut *writer, flags)?;
 
         let lodec = Zenoh080Length::new(x.zid.size());
