@@ -75,10 +75,10 @@ libc = { workspace = true }
 pnet = { workspace = true }
 pnet_datalink = { workspace = true }
 
-# [dev-dependencies]
-# criterion = { workspace = true }
-# rand = { workspace = true }
-# zenoh-protocol = { path = "../zenoh-protocol/", features = ["test"] }
+[dev-dependencies]
+criterion = { workspace = true }
+rand = { workspace = true }
+zenoh-protocol = { path = "../zenoh-protocol/", features = ["test"] }
 
 [[bench]]
 name = "keyexpr_tree"
