@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use core::future::{Future, Ready};
 pub use lazy_static::lazy_static;
 pub mod macros;
 pub use macros::*;
-use core::future::{Future, Ready};
 
 pub trait Resolvable {
     type To: Sized + Send;
