@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::core::key_expr::{fuzzer, intersect::*, keyexpr};
+use crate::key_expr::{fuzzer, intersect::*, keyexpr};
 use std::{convert::TryInto, fmt::Debug};
 
 type BoxedIntersectors = Vec<Box<dyn for<'a> Intersector<&'a keyexpr, &'a keyexpr> + Send + Sync>>;
@@ -151,7 +151,7 @@ fn inclusions() {
 #[test]
 fn fuzz() {
     const FUZZ_ROUNDS: usize = 100_000;
-    let rng = rand::thread_rng();
+    let rng = rand::rngs::OsRng::default();
     let mut fuzzer = fuzzer::KeyExprFuzzer(rng);
     let mut ke1 = fuzzer.next().unwrap();
     for ke2 in fuzzer.take(FUZZ_ROUNDS) {

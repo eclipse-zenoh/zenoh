@@ -18,12 +18,12 @@ use std::{
 };
 
 use rand::SeedableRng;
-use zenoh_protocol::core::key_expr::{fuzzer::KeyExprFuzzer, OwnedKeyExpr};
-use zenoh_util::keyexpr_tree::{
+use zenoh_keyexpr::keyexpr_tree::{
     impls::{HashMapProvider, VecSetProvider},
     traits::*,
     KeArcTree, KeBoxTree,
 };
+use zenoh_keyexpr::{fuzzer::KeyExprFuzzer, OwnedKeyExpr};
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Averager {

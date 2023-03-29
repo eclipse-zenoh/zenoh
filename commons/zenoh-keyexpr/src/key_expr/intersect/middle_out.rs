@@ -15,7 +15,7 @@
 //     restiction::{NoBigWilds, NoSubWilds},
 //     Intersector,
 // };
-// use crate::core::key_expr::{utils::Split, DELIMITER, DOUBLE_WILD};
+// use crate::key_expr::{utils::Split, DELIMITER, DOUBLE_WILD};
 
 // pub struct MiddleOutIntersector<ChunkIntersector>(pub ChunkIntersector);
 // impl<ChunkIntersector: for<'a> Intersector<NoBigWilds<&'a [u8]>, NoBigWilds<&'a [u8]>>>

@@ -13,7 +13,7 @@
 //
 
 use alloc::vec::Vec;
-use zenoh_core::unlikely;
+use zenoh_result::unlikely;
 
 use crate::keyexpr_tree::*;
 

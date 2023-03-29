@@ -20,8 +20,8 @@ use core::{
     ptr::NonNull,
 };
 
+use crate::keyexpr;
 use crate::keyexpr_tree::*;
-use zenoh_protocol::core::key_expr::keyexpr;
 
 use super::impls::KeyedSetProvider;
 

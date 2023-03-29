@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::key_expr::{
+use crate::key_expr::{
     utils::{Split, Writer},
     DELIMITER, DOUBLE_WILD, SINGLE_WILD,
 };
