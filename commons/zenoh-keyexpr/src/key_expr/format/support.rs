@@ -17,7 +17,7 @@ use core::convert::{TryFrom, TryInto};
 
 use zenoh_result::{bail, zerror, Error};
 
-use crate::core::key_expr::keyexpr;
+use crate::key_expr::keyexpr;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Spec<'a> {

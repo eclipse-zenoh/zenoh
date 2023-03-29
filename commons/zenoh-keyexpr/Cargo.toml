@@ -13,25 +13,39 @@
 #
 [package]
 rust-version = { workspace = true }
-name = "zenoh-core"
+name = "zenoh-keyexpr"
 version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
-authors = [
-	"kydos <angelo@icorsaro.net>",
-	"Luca Cominardi <luca.cominardi@zettascale.tech>",
-	"Pierre Avital <pierre.avital@zettascale.tech>",
-]
+authors = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 categories = { workspace = true }
 description = "Internal crate for zenoh."
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
 [features]
-std = []
 default = ["std"]
+std = ["zenoh-result/std", "rand?/std", "rand?/std_rng"]
+test = ["rand"]
 
 [dependencies]
-async-std = { workspace = true, features = ["default"] }
+keyed-set = { workspace = true }
+rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
+serde = { workspace = true, features = ["alloc"] }
+token-cell = { workspace = true }
+zenoh-result = { path = "../zenoh-result/", default-features = false }
+
+
+[target.'cfg(not(features = "std"))'.dependencies]
+hashbrown = { workspace = true }
+
+# NOTE: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0
+[dev-dependencies]
+criterion = { workspace = true }
 lazy_static = { workspace = true }
-zenoh-result = { path = "../zenoh-result/" }
+rand = { workspace = true }
+zenoh-keyexpr = { path = "../zenoh-keyexpr/", features = ["test"] }
+
+[[bench]]
+name = "keyexpr_tree"
+harness = false

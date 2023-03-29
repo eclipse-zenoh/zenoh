@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::{canon::Canonizable, OwnedKeyExpr, FORBIDDEN_CHARS};
-use crate::core::WireExpr;
+// use crate::core::WireExpr;
 use alloc::{
-    borrow::{Borrow, Cow, ToOwned},
+    borrow::{Borrow, ToOwned},
     format,
     string::String,
     vec,
@@ -113,7 +113,7 @@ impl keyexpr {
     /// This is notably useful for workspaces:
     /// ```rust
     /// # use core::convert::TryFrom;
-    /// # use zenoh_protocol::core::key_expr::OwnedKeyExpr;
+    /// # use zenoh_keyexpr::OwnedKeyExpr;
     /// # let get_workspace = || OwnedKeyExpr::try_from("some/workspace").unwrap();
     /// let workspace: OwnedKeyExpr = get_workspace();
     /// let topic = workspace.join("some/topic").unwrap();
@@ -137,7 +137,7 @@ impl keyexpr {
     ///
     /// # Examples:
     /// ```
-    /// # use zenoh_protocol::core::key_expr::keyexpr;
+    /// # use zenoh_keyexpr::keyexpr;
     /// assert_eq!(
     ///     Some(keyexpr::new("demo/example").unwrap()),
     ///     keyexpr::new("demo/example/**").unwrap().get_nonwild_prefix());
@@ -184,7 +184,7 @@ impl keyexpr {
     /// # Examples:
     /// ```
     /// # use core::convert::{TryFrom, TryInto};
-    /// # use zenoh_protocol::core::key_expr::keyexpr;
+    /// # use zenoh_keyexpr::keyexpr;
     /// assert_eq!(
     ///     ["abc"],
     ///     keyexpr::new("demo/example/test/abc").unwrap().strip_prefix(keyexpr::new("demo/example/test").unwrap()).as_slice()
@@ -493,15 +493,6 @@ impl ToOwned for keyexpr {
     type Owned = OwnedKeyExpr;
     fn to_owned(&self) -> Self::Owned {
         OwnedKeyExpr::from(self)
-    }
-}
-
-impl<'a> From<&'a keyexpr> for WireExpr<'a> {
-    fn from(val: &'a keyexpr) -> Self {
-        WireExpr {
-            scope: 0,
-            suffix: Cow::Borrowed(val.as_str()),
-        }
     }
 }
 

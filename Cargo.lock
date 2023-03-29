@@ -1581,9 +1581,9 @@ dependencies = [
 
 [[package]]
 name = "keyed-set"
-version = "0.4.4"
+version = "0.4.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e4be799ab6c1006138054745f5043b726d8bbb526ebaa7f15d44ff4d399d71c"
+checksum = "b79e110283e09081809ca488cf3a9709270c6d4d4c4a32674c39cc438366615a"
 dependencies = [
  "hashbrown 0.13.2",
 ]
@@ -3134,9 +3134,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "token-cell"
-version = "1.4.2"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59a3bf80fcc7b38f8fe4032a779e5bb31daff5edbab41d37954c2ef44d35f81b"
+checksum = "f4a2b964fdb303b08a4eab04d7c1bad2bca33f8eee334ccd28802f1041c6eb87"
 dependencies = [
  "paste",
 ]
@@ -3900,6 +3900,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-keyexpr"
+version = "0.7.0-rc"
+dependencies = [
+ "criterion",
+ "hashbrown 0.13.2",
+ "keyed-set",
+ "lazy_static",
+ "rand 0.8.5",
+ "serde",
+ "token-cell",
+ "zenoh-keyexpr",
+ "zenoh-result",
+]
+
+[[package]]
 name = "zenoh-link"
 version = "0.7.0-rc"
 dependencies = [
@@ -4081,7 +4096,7 @@ dependencies = [
  "rustc_version 0.4.0",
  "syn",
  "unzip-n",
- "zenoh-protocol",
+ "zenoh-keyexpr",
 ]
 
 [[package]]
@@ -4163,6 +4178,7 @@ dependencies = [
  "uhlc",
  "uuid",
  "zenoh-buffers",
+ "zenoh-keyexpr",
  "zenoh-result",
 ]
 
@@ -4238,23 +4254,18 @@ dependencies = [
  "async-std",
  "async-trait",
  "clap",
- "criterion",
  "flume",
  "futures",
- "hashbrown 0.13.2",
  "hex",
  "home",
  "humantime",
- "keyed-set",
  "lazy_static",
  "libc",
  "libloading",
  "log",
  "pnet",
  "pnet_datalink",
- "rand 0.8.5",
  "shellexpand",
- "token-cell",
  "winapi",
  "zenoh-core",
  "zenoh-protocol",

@@ -14,7 +14,7 @@
 
 use crate::keyexpr_tree::*;
 use alloc::vec::Vec;
-use zenoh_core::unlikely;
+use zenoh_result::unlikely;
 
 struct StackFrame<'a, Children: IChildrenProvider<Node>, Node: UIKeyExprTreeNode<Weight>, Weight>
 where
