@@ -43,6 +43,7 @@ std = [
     "libloading",
     "log",
     "shellexpand",
+    "zenoh-core/std",
     "zenoh-protocol/std",
     "zenoh-result/std",
 ]
@@ -59,7 +60,7 @@ libloading = { workspace = true, optional = true }
 log = { workspace = true, optional = true }
 token-cell = { workspace = true } # FEATURE (it's 'reversed' though, which means that we can ONLY use the no_std version)
 shellexpand = { workspace = true, optional = true }
-zenoh-core = { path = "../zenoh-core/" } # NOT no_std
+zenoh-core = { path = "../zenoh-core/", default-features = false }
 zenoh-protocol = { path = "../zenoh-protocol/", default-features = false }
 zenoh-result = { path = "../zenoh-result/", default-features = false }
 
@@ -74,10 +75,10 @@ libc = { workspace = true }
 pnet = { workspace = true }
 pnet_datalink = { workspace = true }
 
-[dev-dependencies]
-criterion = { workspace = true }
-rand = { workspace = true }
-zenoh-protocol = { path = "../zenoh-protocol/", features = ["test"] }
+# [dev-dependencies]
+# criterion = { workspace = true }
+# rand = { workspace = true }
+# zenoh-protocol = { path = "../zenoh-protocol/", features = ["test"] }
 
 [[bench]]
 name = "keyexpr_tree"

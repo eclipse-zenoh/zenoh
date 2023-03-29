@@ -28,7 +28,15 @@ categories = { workspace = true }
 description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["std"]
+std = [
+    "async-std",
+    "lazy_static",
+    "zenoh-result/std",
+]
+
 [dependencies]
-async-std = { workspace = true, features = ["default"] }
-lazy_static = { workspace = true }
-zenoh-result = { path = "../zenoh-result/" }
+async-std = { workspace = true, features = ["default"], optional = true }
+lazy_static = { workspace = true, optional = true }
+zenoh-result = { path = "../zenoh-result/", default-features = false }

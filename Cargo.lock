@@ -4257,7 +4257,6 @@ version = "0.7.0-rc"
 dependencies = [
  "async-std",
  "async-trait",
- "criterion",
  "flume",
  "hashbrown 0.13.2",
  "home",
@@ -4269,7 +4268,6 @@ dependencies = [
  "log",
  "pnet",
  "pnet_datalink",
- "rand 0.8.5",
  "shellexpand",
  "token-cell",
  "winapi",
