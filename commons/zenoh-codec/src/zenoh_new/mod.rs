@@ -11,13 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+pub mod del;
 pub mod put;
-use zenoh_buffers::reader::{DidntRead, Reader};
-use zenoh_buffers::writer::{DidntWrite, Writer};
-use zenoh_protocol::common::imsg;
-use zenoh_protocol::zenoh_new::{id, PushBody};
 
 use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
+use zenoh_buffers::{
+    reader::{DidntRead, Reader},
+    writer::{DidntWrite, Writer},
+};
+use zenoh_protocol::{
+    common::imsg,
+    zenoh_new::{id, PushBody},
+};
 
 // PushBody
 impl<W> WCodec<&PushBody, &mut W> for Zenoh080
@@ -29,6 +34,7 @@ where
     fn write(self, writer: &mut W, x: &PushBody) -> Self::Output {
         match x {
             PushBody::Put(b) => self.write(&mut *writer, b),
+            PushBody::Del(b) => self.write(&mut *writer, b),
         }
     }
 }
@@ -45,6 +51,7 @@ where
         let codec = Zenoh080Header::new(header);
         let body = match imsg::mid(codec.header) {
             id::PUT => PushBody::Put(codec.read(&mut *reader)?),
+            id::DEL => PushBody::Del(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 

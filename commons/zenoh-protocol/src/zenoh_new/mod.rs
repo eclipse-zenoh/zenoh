@@ -11,8 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+pub mod del;
 pub mod put;
 
+pub use del::*;
 pub use put::*;
 
 pub mod id {
@@ -24,6 +26,7 @@ pub mod id {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PushBody {
     Put(Put),
+    Del(Del),
 }
 
 impl PushBody {
@@ -33,8 +36,9 @@ impl PushBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..1) {
+        match rng.gen_range(0..2) {
             0 => PushBody::Put(Put::rand()),
+            1 => PushBody::Del(Del::rand()),
             _ => unreachable!(),
         }
     }
@@ -43,5 +47,11 @@ impl PushBody {
 impl From<Put> for PushBody {
     fn from(p: Put) -> PushBody {
         PushBody::Put(p)
+    }
+}
+
+impl From<Del> for PushBody {
+    fn from(d: Del) -> PushBody {
+        PushBody::Del(d)
     }
 }

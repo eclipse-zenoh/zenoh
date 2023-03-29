@@ -537,6 +537,11 @@ fn codec_put() {
     run!(zenoh_new::Put, zenoh_new::Put::rand());
 }
 
+#[test]
+fn codec_del() {
+    run!(zenoh_new::Del, zenoh_new::Del::rand());
+}
+
 // Zenoh
 #[test]
 fn codec_routing_context_old() {
