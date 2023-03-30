@@ -512,9 +512,9 @@ impl StorageService {
         match storage.get_all_entries().await {
             Ok(entries) => {
                 for (k, _ts) in entries {
-                    if k.is_none() || key_expr.intersects(&k.clone().unwrap()) {
-                        let full_key =
-                            StorageService::get_prefixed(&self.strip_prefix, &k.unwrap().into());
+                    let full_key =
+                        StorageService::get_prefixed(&self.strip_prefix, &k.unwrap().into());
+                    if key_expr.intersects(&full_key.clone()) {
                         result.push(full_key);
                     }
                 }
