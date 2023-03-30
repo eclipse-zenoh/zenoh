@@ -11,7 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header};
+use crate::{
+    common::extension, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Condition, Zenoh080Header,
+};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -96,7 +98,8 @@ where
         }
 
         // Body
-        let rid: RequestId = self.codec.read(&mut *reader)?;
+        let bodec = Zenoh080Bounded::<RequestId>::new();
+        let rid: RequestId = bodec.read(&mut *reader)?;
         let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, flag::N));
         let wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
         let mapping = if imsg::has_flag(self.header, flag::M) {
@@ -203,7 +206,8 @@ where
         }
 
         // Body
-        let rid: RequestId = self.codec.read(&mut *reader)?;
+        let bodec = Zenoh080Bounded::<RequestId>::new();
+        let rid: RequestId = bodec.read(&mut *reader)?;
 
         // Extensions
         let mut ext_qos = ext::QoSType::default();

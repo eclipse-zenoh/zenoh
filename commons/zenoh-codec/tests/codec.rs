@@ -492,7 +492,7 @@ fn codec_declare_keyexpr() {
 }
 
 #[test]
-fn codec_forget_keyexpr() {
+fn codec_undeclare_keyexpr() {
     run!(UndeclareKeyExpr, UndeclareKeyExpr::rand());
 }
 
@@ -502,7 +502,7 @@ fn codec_declare_subscriber() {
 }
 
 #[test]
-fn codec_forget_subscriber() {
+fn codec_undeclare_subscriber() {
     run!(UndeclareSubscriber, UndeclareSubscriber::rand());
 }
 
@@ -512,7 +512,7 @@ fn codec_declare_queryable() {
 }
 
 #[test]
-fn codec_forget_queryable() {
+fn codec_undeclare_queryable() {
     run!(UndeclareQueryable, UndeclareQueryable::rand());
 }
 
@@ -522,7 +522,7 @@ fn codec_declare_token() {
 }
 
 #[test]
-fn codec_forget_token() {
+fn codec_undeclare_token() {
     run!(UndeclareToken, UndeclareToken::rand());
 }
 
@@ -629,7 +629,7 @@ fn codec_declaration_resource_old() {
 }
 
 #[test]
-fn codec_declaration_forget_resource_old() {
+fn codec_declaration_undeclare_resource_old() {
     run!(zenoh::ForgetResource, zenoh::ForgetResource::rand());
 }
 
@@ -639,7 +639,7 @@ fn codec_declaration_publisher_old() {
 }
 
 #[test]
-fn codec_declaration_forget_publisher_old() {
+fn codec_declaration_undeclare_publisher_old() {
     run!(zenoh::ForgetPublisher, zenoh::ForgetPublisher::rand());
 }
 
@@ -649,7 +649,7 @@ fn codec_declaration_subscriber_old() {
 }
 
 #[test]
-fn codec_declaration_forget_subscriber_old() {
+fn codec_declaration_undeclare_subscriber_old() {
     run!(zenoh::ForgetSubscriber, zenoh::ForgetSubscriber::rand());
 }
 
@@ -659,7 +659,7 @@ fn codec_declaration_queryable_old() {
 }
 
 #[test]
-fn codec_declaration_forget_queryable_old() {
+fn codec_declaration_undeclare_queryable_old() {
     run!(UndeclareQueryable, UndeclareQueryable::rand());
 }
 

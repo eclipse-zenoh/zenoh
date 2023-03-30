@@ -11,7 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header};
+use crate::{
+    common::extension, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Condition, Zenoh080Header,
+};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -79,7 +81,9 @@ where
         let mut header = id::REQUEST;
         let mut n_exts = ((x.ext_qos != ext::QoSType::default()) as u8)
             + (x.ext_tstamp.is_some() as u8)
-            + ((x.ext_target != ext::TargetType::default()) as u8);
+            + ((x.ext_target != ext::TargetType::default()) as u8)
+            + (x.ext_limit.is_some() as u8)
+            + (x.ext_timeout.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -107,6 +111,16 @@ where
         if x.ext_target != ext::TargetType::default() {
             n_exts -= 1;
             self.write(&mut *writer, (&x.ext_target, n_exts != 0))?;
+        }
+        if let Some(l) = x.ext_limit.as_ref() {
+            n_exts -= 1;
+            let e = ext::Limit::new(l.get() as u64);
+            self.write(&mut *writer, (&e, n_exts != 0))?;
+        }
+        if let Some(to) = x.ext_timeout.as_ref() {
+            n_exts -= 1;
+            let e = ext::Timeout::new(to.as_millis() as u64);
+            self.write(&mut *writer, (&e, n_exts != 0))?;
         }
 
         // Payload
@@ -141,7 +155,8 @@ where
         }
 
         // Body
-        let id: RequestId = self.codec.read(&mut *reader)?;
+        let bodec = Zenoh080Bounded::<RequestId>::new();
+        let id: RequestId = bodec.read(&mut *reader)?;
         let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, flag::N));
         let wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
         let mapping = if imsg::has_flag(self.header, flag::M) {
@@ -154,6 +169,8 @@ where
         let mut ext_qos = ext::QoSType::default();
         let mut ext_tstamp = None;
         let mut ext_target = ext::TargetType::default();
+        let mut ext_limit = None;
+        let mut ext_timeout = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -175,6 +192,16 @@ where
                     ext_target = rt;
                     has_ext = ext;
                 }
+                ext::Limit::ID => {
+                    let (l, ext): (ext::Limit, bool) = eodec.read(&mut *reader)?;
+                    ext_limit = ext::LimitType::new(l.value as u32);
+                    has_ext = ext;
+                }
+                ext::Timeout::ID => {
+                    let (to, ext): (ext::Timeout, bool) = eodec.read(&mut *reader)?;
+                    ext_timeout = Some(ext::TimeoutType::from_millis(to.value));
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "Request", ext)?;
                 }
@@ -192,6 +219,8 @@ where
             ext_qos,
             ext_tstamp,
             ext_target,
+            ext_limit,
+            ext_timeout,
         })
     }
 }

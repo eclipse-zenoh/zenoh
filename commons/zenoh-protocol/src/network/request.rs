@@ -1,4 +1,3 @@
-use crate::zenoh_new::RequestBody;
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -12,7 +11,7 @@ use crate::zenoh_new::RequestBody;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, network::Mapping};
+use crate::{core::WireExpr, network::Mapping, zenoh_new::RequestBody};
 use core::sync::atomic::AtomicU32;
 
 /// The resolution of a RequestId
@@ -59,11 +58,14 @@ pub struct Request {
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
     pub ext_target: ext::TargetType,
+    pub ext_limit: Option<ext::LimitType>,
+    pub ext_timeout: Option<ext::TimeoutType>,
     pub payload: RequestBody,
 }
 
 pub mod ext {
     use crate::{common::ZExtZ64, zextz64};
+    use core::{num::NonZeroU32, time::Duration};
 
     pub type QoS = crate::network::ext::QoS;
     pub type QoSType = crate::network::ext::QoSType;
@@ -107,11 +109,19 @@ pub mod ext {
             .unwrap()
         }
     }
+
+    pub type Limit = zextz64!(0x4, false);
+    pub type LimitType = NonZeroU32;
+
+    pub type Timeout = zextz64!(0x5, false);
+    pub type TimeoutType = Duration;
 }
 
 impl Request {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use core::num::NonZeroU32;
+
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
@@ -122,6 +132,16 @@ impl Request {
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
         let ext_target = ext::TargetType::rand();
+        let ext_limit = if rng.gen_bool(0.5) {
+            NonZeroU32::new(rng.gen())
+        } else {
+            None
+        };
+        let ext_timeout = if rng.gen_bool(0.5) {
+            Some(ext::TimeoutType::from_millis(rng.gen()))
+        } else {
+            None
+        };
 
         Self {
             wire_expr,
@@ -131,6 +151,8 @@ impl Request {
             ext_qos,
             ext_tstamp,
             ext_target,
+            ext_limit,
+            ext_timeout,
         }
     }
 }
