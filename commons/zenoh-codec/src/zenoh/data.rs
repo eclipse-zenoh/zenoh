@@ -268,11 +268,7 @@ where
             CongestionControl::Block
         };
 
-        let ccond = Zenoh080Condition {
-            condition: imsg::has_flag(self.header, zmsg::flag::K),
-            codec: self.codec,
-        };
-
+        let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, zmsg::flag::K));
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
 
         #[cfg(feature = "shared-memory")]

@@ -185,10 +185,7 @@ where
         }
 
         let expr_id: ExprId = self.codec.read(&mut *reader)?;
-        let ccond = Zenoh080Condition {
-            condition: imsg::has_flag(self.header, zmsg::flag::K),
-            codec: self.codec,
-        };
+        let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, zmsg::flag::K));
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
 
         Ok(Resource { expr_id, key })
@@ -292,10 +289,7 @@ where
             return Err(DidntRead);
         }
 
-        let ccond = Zenoh080Condition {
-            condition: imsg::has_flag(self.header, zmsg::flag::K),
-            codec: self.codec,
-        };
+        let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, zmsg::flag::K));
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
 
         Ok(Publisher { key })
@@ -349,10 +343,7 @@ where
             return Err(DidntRead);
         }
 
-        let ccond = Zenoh080Condition {
-            condition: imsg::has_flag(self.header, zmsg::flag::K),
-            codec: self.codec,
-        };
+        let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, zmsg::flag::K));
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
 
         Ok(ForgetPublisher { key })
@@ -461,10 +452,7 @@ where
             Reliability::BestEffort
         };
 
-        let ccond = Zenoh080Condition {
-            condition: imsg::has_flag(self.header, zmsg::flag::K),
-            codec: self.codec,
-        };
+        let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, zmsg::flag::K));
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
 
         let mode: SubMode = if imsg::has_flag(self.header, zmsg::flag::S) {
@@ -527,10 +515,7 @@ where
             return Err(DidntRead);
         }
 
-        let ccond = Zenoh080Condition {
-            condition: imsg::has_flag(self.header, zmsg::flag::K),
-            codec: self.codec,
-        };
+        let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, zmsg::flag::K));
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
 
         Ok(ForgetSubscriber { key })
@@ -619,10 +604,7 @@ where
             return Err(DidntRead);
         }
 
-        let ccond = Zenoh080Condition {
-            condition: imsg::has_flag(self.header, zmsg::flag::K),
-            codec: self.codec,
-        };
+        let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, zmsg::flag::K));
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
 
         let info: QueryableInfo = if imsg::has_flag(self.header, zmsg::flag::Q) {
@@ -682,10 +664,7 @@ where
             return Err(DidntRead);
         }
 
-        let ccond = Zenoh080Condition {
-            condition: imsg::has_flag(self.header, zmsg::flag::K),
-            codec: self.codec,
-        };
+        let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, zmsg::flag::K));
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
 
         Ok(ForgetQueryable { key })

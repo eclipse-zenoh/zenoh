@@ -219,10 +219,7 @@ where
         }
 
         let id: ExprId = self.codec.read(&mut *reader)?;
-        let ccond = Zenoh080Condition {
-            condition: imsg::has_flag(self.header, keyexpr::flag::N),
-            codec: self.codec,
-        };
+        let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, keyexpr::flag::N));
         let wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
 
         // Extensions

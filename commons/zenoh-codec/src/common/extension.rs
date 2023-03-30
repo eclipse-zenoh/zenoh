@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header};
 use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -170,7 +170,8 @@ where
             header |= iext::FLAG_Z;
         }
         self.write(&mut *writer, header)?;
-        self.write(&mut *writer, &x.value)?;
+        let bodec = Zenoh080Bounded::<u32>::new();
+        bodec.write(&mut *writer, &x.value)?;
         Ok(())
     }
 }
@@ -198,7 +199,8 @@ where
         if iext::eid(self.header) != ID {
             return Err(DidntRead);
         }
-        let value: ZBuf = self.codec.read(&mut *reader)?;
+        let bodec = Zenoh080Bounded::<u32>::new();
+        let value: ZBuf = bodec.read(&mut *reader)?;
         Ok((ZExtZBuf::new(value), has_flag(self.header, iext::FLAG_Z)))
     }
 }
@@ -217,7 +219,8 @@ where
             header |= iext::FLAG_Z;
         }
         self.write(&mut *writer, header)?;
-        self.write(&mut *writer, x.len)?;
+        let bodec = Zenoh080Bounded::<u32>::new();
+        bodec.write(&mut *writer, x.len)?;
         Ok(())
     }
 }
@@ -246,7 +249,8 @@ where
             return Err(DidntRead);
         }
 
-        let len: usize = self.codec.read(&mut *reader)?;
+        let bodec = Zenoh080Bounded::<u32>::new();
+        let len: usize = bodec.read(&mut *reader)?;
         Ok((
             ZExtZBufHeader::new(len),
             has_flag(self.header, iext::FLAG_Z),
@@ -275,7 +279,8 @@ where
             }
             ZExtBody::ZBuf(zbuf) => {
                 self.write(&mut *writer, header)?;
-                self.write(&mut *writer, zbuf)?
+                let bodec = Zenoh080Bounded::<u32>::new();
+                bodec.write(&mut *writer, zbuf)?
             }
         }
         Ok(())
@@ -309,7 +314,8 @@ where
                 ZExtBody::Z64(u64)
             }
             iext::ENC_ZBUF => {
-                let zbuf: ZBuf = self.codec.read(&mut *reader)?;
+                let bodec = Zenoh080Bounded::<u32>::new();
+                let zbuf: ZBuf = bodec.read(&mut *reader)?;
                 ZExtBody::ZBuf(zbuf)
             }
             _ => {
