@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use alloc::string::String;
 
 /// The kind of consolidation.
 #[repr(u8)]
