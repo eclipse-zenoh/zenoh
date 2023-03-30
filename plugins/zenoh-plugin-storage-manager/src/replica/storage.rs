@@ -19,12 +19,12 @@ use flume::{Receiver, Sender};
 use futures::select;
 use log::{error, info, trace, warn};
 use std::str;
-use zenoh::key_expr::OwnedKeyExpr;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::{Result as ZResult, Session};
 use zenoh_backend_traits::config::StorageConfig;
 use zenoh_backend_traits::{Capability, History, StorageInsertionResult};
+use zenoh_keyexpr::key_expr::OwnedKeyExpr;
 use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
 use zenoh_keyexpr::keyexpr_tree::{
     IKeyExprTreeExt, IKeyExprTreeExtMut, KeBoxTree, NonWild, UnknownWildness,
