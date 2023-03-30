@@ -45,7 +45,7 @@ pub mod flag {
 /// +---------------+
 /// ~   [req_exts]  ~  if Z==1
 /// +---------------+
-/// ~  ZenohMessage ~ -- Payload
+/// ~  RequestBody  ~  -- Payload
 /// +---------------+
 ///
 /// (*) The resolution of the request id is negotiated during the session establishment.
@@ -56,18 +56,14 @@ pub struct Request {
     pub id: RequestId,
     pub wire_expr: WireExpr<'static>,
     pub mapping: Mapping,
-    pub payload: RequestBody,
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
-    pub ext_dst: ext::DestinationType,
     pub ext_target: ext::TargetType,
+    pub payload: RequestBody,
 }
 
 pub mod ext {
-    use crate::{
-        common::{ZExtUnit, ZExtZ64},
-        zextunit, zextz64,
-    };
+    use crate::{common::ZExtZ64, zextz64};
 
     pub type QoS = crate::network::ext::QoS;
     pub type QoSType = crate::network::ext::QoSType;
@@ -75,31 +71,7 @@ pub mod ext {
     pub type Timestamp = crate::network::ext::Timestamp;
     pub type TimestampType = crate::network::ext::TimestampType;
 
-    pub type Destination = zextunit!(0x03, true);
-
-    #[repr(u8)]
-    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-    pub enum DestinationType {
-        Subscribers = 0x00,
-        #[default]
-        Queryables = 0x01,
-    }
-
-    impl DestinationType {
-        #[cfg(feature = "test")]
-        pub fn rand() -> Self {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-
-            match rng.gen_range(0..2) {
-                0 => DestinationType::Subscribers,
-                1 => DestinationType::Queryables,
-                _ => unreachable!(),
-            }
-        }
-    }
-
-    pub type Target = zextz64!(0x4, true);
+    pub type Target = zextz64!(0x3, true);
 
     /// - Target (0x03)
     ///     7 6 5 4 3 2 1 0
@@ -149,7 +121,6 @@ impl Request {
         let payload = RequestBody::rand();
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
-        let ext_dst = ext::DestinationType::rand();
         let ext_target = ext::TargetType::rand();
 
         Self {
@@ -159,7 +130,6 @@ impl Request {
             payload,
             ext_qos,
             ext_tstamp,
-            ext_dst,
             ext_target,
         }
     }
