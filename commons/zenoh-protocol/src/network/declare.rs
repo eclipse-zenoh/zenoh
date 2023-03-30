@@ -59,28 +59,28 @@ pub mod ext {
 
 pub mod id {
     pub const D_KEYEXPR: u8 = 0x00;
-    pub const F_KEYEXPR: u8 = 0x01;
+    pub const U_KEYEXPR: u8 = 0x01;
 
     pub const D_SUBSCRIBER: u8 = 0x02;
-    pub const F_SUBSCRIBER: u8 = 0x03;
+    pub const U_SUBSCRIBER: u8 = 0x03;
 
     pub const D_QUERYABLE: u8 = 0x04;
-    pub const F_QUERYABLE: u8 = 0x05;
+    pub const U_QUERYABLE: u8 = 0x05;
 
     pub const D_TOKEN: u8 = 0x06;
-    pub const F_TOKEN: u8 = 0x07;
+    pub const U_TOKEN: u8 = 0x07;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeclareBody {
     DeclareKeyExpr(DeclareKeyExpr),
-    ForgetKeyExpr(ForgetKeyExpr),
+    UndeclareKeyExpr(UndeclareKeyExpr),
     DeclareSubscriber(DeclareSubscriber),
-    ForgetSubscriber(ForgetSubscriber),
+    UndeclareSubscriber(UndeclareSubscriber),
     DeclareQueryable(DeclareQueryable),
-    ForgetQueryable(ForgetQueryable),
+    UndeclareQueryable(UndeclareQueryable),
     DeclareToken(DeclareToken),
-    ForgetToken(ForgetToken),
+    UndeclareToken(UndeclareToken),
 }
 
 impl DeclareBody {
@@ -92,13 +92,13 @@ impl DeclareBody {
 
         match rng.gen_range(0..8) {
             0 => DeclareBody::DeclareKeyExpr(DeclareKeyExpr::rand()),
-            1 => DeclareBody::ForgetKeyExpr(ForgetKeyExpr::rand()),
+            1 => DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr::rand()),
             2 => DeclareBody::DeclareSubscriber(DeclareSubscriber::rand()),
-            3 => DeclareBody::ForgetSubscriber(ForgetSubscriber::rand()),
+            3 => DeclareBody::UndeclareSubscriber(UndeclareSubscriber::rand()),
             4 => DeclareBody::DeclareQueryable(DeclareQueryable::rand()),
-            5 => DeclareBody::ForgetQueryable(ForgetQueryable::rand()),
+            5 => DeclareBody::UndeclareQueryable(UndeclareQueryable::rand()),
             6 => DeclareBody::DeclareToken(DeclareToken::rand()),
-            7 => DeclareBody::ForgetToken(ForgetToken::rand()),
+            7 => DeclareBody::UndeclareToken(UndeclareToken::rand()),
             _ => unreachable!(),
         }
     }
@@ -201,7 +201,7 @@ pub mod keyexpr {
     ///
     /// 7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
-    /// |Z|X|X| F_KEXPR |
+    /// |Z|X|X| U_KEXPR |
     /// +---------------+
     /// ~  expr_id:z16  ~
     /// +---------------+
@@ -209,11 +209,11 @@ pub mod keyexpr {
     /// +---------------+
     /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct ForgetKeyExpr {
+    pub struct UndeclareKeyExpr {
         pub id: ExprId,
     }
 
-    impl ForgetKeyExpr {
+    impl UndeclareKeyExpr {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::Rng;
@@ -364,7 +364,7 @@ pub mod subscriber {
     ///
     /// 7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
-    /// |Z|X|X|  F_SUB  |
+    /// |Z|X|X|  U_SUB  |
     /// +---------------+
     /// ~  subs_id:z32  ~
     /// +---------------+
@@ -372,11 +372,11 @@ pub mod subscriber {
     /// +---------------+
     /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct ForgetSubscriber {
+    pub struct UndeclareSubscriber {
         pub id: SubscriberId,
     }
 
-    impl ForgetSubscriber {
+    impl UndeclareSubscriber {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::Rng;
@@ -509,7 +509,7 @@ pub mod queryable {
     ///
     /// 7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
-    /// |Z|X|X|  F_QBL  |
+    /// |Z|X|X|  U_QBL  |
     /// +---------------+
     /// ~  qbls_id:z32  ~
     /// +---------------+
@@ -517,11 +517,11 @@ pub mod queryable {
     /// +---------------+
     /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct ForgetQueryable {
+    pub struct UndeclareQueryable {
         pub id: QueryableId,
     }
 
-    impl ForgetQueryable {
+    impl UndeclareQueryable {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::Rng;
@@ -598,7 +598,7 @@ pub mod token {
     ///
     /// 7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
-    /// |Z|X|X|  F_TKN  |
+    /// |Z|X|X|  U_TKN  |
     /// +---------------+
     /// ~ token_id:z32  ~  
     /// +---------------+
@@ -606,11 +606,11 @@ pub mod token {
     /// +---------------+
     /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct ForgetToken {
+    pub struct UndeclareToken {
         pub id: TokenId,
     }
 
-    impl ForgetToken {
+    impl UndeclareToken {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::Rng;

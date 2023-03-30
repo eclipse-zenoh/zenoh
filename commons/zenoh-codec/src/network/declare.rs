@@ -35,13 +35,13 @@ where
     fn write(self, writer: &mut W, x: &DeclareBody) -> Self::Output {
         match x {
             DeclareBody::DeclareKeyExpr(r) => self.write(&mut *writer, r)?,
-            DeclareBody::ForgetKeyExpr(r) => self.write(&mut *writer, r)?,
+            DeclareBody::UndeclareKeyExpr(r) => self.write(&mut *writer, r)?,
             DeclareBody::DeclareSubscriber(r) => self.write(&mut *writer, r)?,
-            DeclareBody::ForgetSubscriber(r) => self.write(&mut *writer, r)?,
+            DeclareBody::UndeclareSubscriber(r) => self.write(&mut *writer, r)?,
             DeclareBody::DeclareQueryable(r) => self.write(&mut *writer, r)?,
-            DeclareBody::ForgetQueryable(r) => self.write(&mut *writer, r)?,
+            DeclareBody::UndeclareQueryable(r) => self.write(&mut *writer, r)?,
             DeclareBody::DeclareToken(r) => self.write(&mut *writer, r)?,
-            DeclareBody::ForgetToken(r) => self.write(&mut *writer, r)?,
+            DeclareBody::UndeclareToken(r) => self.write(&mut *writer, r)?,
         }
 
         Ok(())
@@ -61,13 +61,13 @@ where
         use declare::id::*;
         let d = match imsg::mid(codec.header) {
             D_KEYEXPR => DeclareBody::DeclareKeyExpr(codec.read(&mut *reader)?),
-            F_KEYEXPR => DeclareBody::ForgetKeyExpr(codec.read(&mut *reader)?),
+            U_KEYEXPR => DeclareBody::UndeclareKeyExpr(codec.read(&mut *reader)?),
             D_SUBSCRIBER => DeclareBody::DeclareSubscriber(codec.read(&mut *reader)?),
-            F_SUBSCRIBER => DeclareBody::ForgetSubscriber(codec.read(&mut *reader)?),
+            U_SUBSCRIBER => DeclareBody::UndeclareSubscriber(codec.read(&mut *reader)?),
             D_QUERYABLE => DeclareBody::DeclareQueryable(codec.read(&mut *reader)?),
-            F_QUERYABLE => DeclareBody::ForgetQueryable(codec.read(&mut *reader)?),
+            U_QUERYABLE => DeclareBody::UndeclareQueryable(codec.read(&mut *reader)?),
             D_TOKEN => DeclareBody::DeclareToken(codec.read(&mut *reader)?),
-            F_TOKEN => DeclareBody::ForgetToken(codec.read(&mut *reader)?),
+            U_TOKEN => DeclareBody::UndeclareToken(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 
@@ -236,15 +236,15 @@ where
 }
 
 // ForgetKeyExpr
-impl<W> WCodec<&keyexpr::ForgetKeyExpr, &mut W> for Zenoh080
+impl<W> WCodec<&keyexpr::UndeclareKeyExpr, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &keyexpr::ForgetKeyExpr) -> Self::Output {
+    fn write(self, writer: &mut W, x: &keyexpr::UndeclareKeyExpr) -> Self::Output {
         // Header
-        let header = declare::id::F_KEYEXPR;
+        let header = declare::id::U_KEYEXPR;
         self.write(&mut *writer, header)?;
 
         // Body
@@ -254,13 +254,13 @@ where
     }
 }
 
-impl<R> RCodec<keyexpr::ForgetKeyExpr, &mut R> for Zenoh080
+impl<R> RCodec<keyexpr::UndeclareKeyExpr, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<keyexpr::ForgetKeyExpr, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<keyexpr::UndeclareKeyExpr, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
 
@@ -268,14 +268,14 @@ where
     }
 }
 
-impl<R> RCodec<keyexpr::ForgetKeyExpr, &mut R> for Zenoh080Header
+impl<R> RCodec<keyexpr::UndeclareKeyExpr, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<keyexpr::ForgetKeyExpr, Self::Error> {
-        if imsg::mid(self.header) != declare::id::F_KEYEXPR {
+    fn read(self, reader: &mut R) -> Result<keyexpr::UndeclareKeyExpr, Self::Error> {
+        if imsg::mid(self.header) != declare::id::U_KEYEXPR {
             return Err(DidntRead);
         }
 
@@ -287,7 +287,7 @@ where
             extension::skip_all(reader, "ForgetKeyExpr")?;
         }
 
-        Ok(keyexpr::ForgetKeyExpr { id })
+        Ok(keyexpr::UndeclareKeyExpr { id })
     }
 }
 
@@ -395,15 +395,15 @@ where
 }
 
 // ForgetSubscriber
-impl<W> WCodec<&subscriber::ForgetSubscriber, &mut W> for Zenoh080
+impl<W> WCodec<&subscriber::UndeclareSubscriber, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &subscriber::ForgetSubscriber) -> Self::Output {
+    fn write(self, writer: &mut W, x: &subscriber::UndeclareSubscriber) -> Self::Output {
         // Header
-        let header = declare::id::F_SUBSCRIBER;
+        let header = declare::id::U_SUBSCRIBER;
         self.write(&mut *writer, header)?;
 
         // Body
@@ -413,13 +413,13 @@ where
     }
 }
 
-impl<R> RCodec<subscriber::ForgetSubscriber, &mut R> for Zenoh080
+impl<R> RCodec<subscriber::UndeclareSubscriber, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<subscriber::ForgetSubscriber, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<subscriber::UndeclareSubscriber, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
 
@@ -427,14 +427,14 @@ where
     }
 }
 
-impl<R> RCodec<subscriber::ForgetSubscriber, &mut R> for Zenoh080Header
+impl<R> RCodec<subscriber::UndeclareSubscriber, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<subscriber::ForgetSubscriber, Self::Error> {
-        if imsg::mid(self.header) != declare::id::F_SUBSCRIBER {
+    fn read(self, reader: &mut R) -> Result<subscriber::UndeclareSubscriber, Self::Error> {
+        if imsg::mid(self.header) != declare::id::U_SUBSCRIBER {
             return Err(DidntRead);
         }
 
@@ -447,7 +447,7 @@ where
             extension::skip_all(reader, "ForgetSubscriber")?;
         }
 
-        Ok(subscriber::ForgetSubscriber { id })
+        Ok(subscriber::UndeclareSubscriber { id })
     }
 }
 
@@ -553,15 +553,15 @@ where
 }
 
 // ForgetQueryable
-impl<W> WCodec<&queryable::ForgetQueryable, &mut W> for Zenoh080
+impl<W> WCodec<&queryable::UndeclareQueryable, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &queryable::ForgetQueryable) -> Self::Output {
+    fn write(self, writer: &mut W, x: &queryable::UndeclareQueryable) -> Self::Output {
         // Header
-        let header = declare::id::F_QUERYABLE;
+        let header = declare::id::U_QUERYABLE;
         self.write(&mut *writer, header)?;
 
         // Body
@@ -571,13 +571,13 @@ where
     }
 }
 
-impl<R> RCodec<queryable::ForgetQueryable, &mut R> for Zenoh080
+impl<R> RCodec<queryable::UndeclareQueryable, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<queryable::ForgetQueryable, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<queryable::UndeclareQueryable, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
 
@@ -585,14 +585,14 @@ where
     }
 }
 
-impl<R> RCodec<queryable::ForgetQueryable, &mut R> for Zenoh080Header
+impl<R> RCodec<queryable::UndeclareQueryable, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<queryable::ForgetQueryable, Self::Error> {
-        if imsg::mid(self.header) != declare::id::F_QUERYABLE {
+    fn read(self, reader: &mut R) -> Result<queryable::UndeclareQueryable, Self::Error> {
+        if imsg::mid(self.header) != declare::id::U_QUERYABLE {
             return Err(DidntRead);
         }
 
@@ -605,7 +605,7 @@ where
             extension::skip_all(reader, "ForgetQueryable")?;
         }
 
-        Ok(queryable::ForgetQueryable { id })
+        Ok(queryable::UndeclareQueryable { id })
     }
 }
 
@@ -684,15 +684,15 @@ where
 }
 
 // ForgetToken
-impl<W> WCodec<&token::ForgetToken, &mut W> for Zenoh080
+impl<W> WCodec<&token::UndeclareToken, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &token::ForgetToken) -> Self::Output {
+    fn write(self, writer: &mut W, x: &token::UndeclareToken) -> Self::Output {
         // Header
-        let header = declare::id::F_TOKEN;
+        let header = declare::id::U_TOKEN;
         self.write(&mut *writer, header)?;
 
         // Body
@@ -702,13 +702,13 @@ where
     }
 }
 
-impl<R> RCodec<token::ForgetToken, &mut R> for Zenoh080
+impl<R> RCodec<token::UndeclareToken, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<token::ForgetToken, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<token::UndeclareToken, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
 
@@ -716,14 +716,14 @@ where
     }
 }
 
-impl<R> RCodec<token::ForgetToken, &mut R> for Zenoh080Header
+impl<R> RCodec<token::UndeclareToken, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<token::ForgetToken, Self::Error> {
-        if imsg::mid(self.header) != declare::id::F_TOKEN {
+    fn read(self, reader: &mut R) -> Result<token::UndeclareToken, Self::Error> {
+        if imsg::mid(self.header) != declare::id::U_TOKEN {
             return Err(DidntRead);
         }
 
@@ -736,6 +736,6 @@ where
             extension::skip_all(reader, "ForgetToken")?;
         }
 
-        Ok(token::ForgetToken { id })
+        Ok(token::UndeclareToken { id })
     }
 }

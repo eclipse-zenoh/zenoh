@@ -493,7 +493,7 @@ fn codec_declare_keyexpr() {
 
 #[test]
 fn codec_forget_keyexpr() {
-    run!(ForgetKeyExpr, ForgetKeyExpr::rand());
+    run!(UndeclareKeyExpr, UndeclareKeyExpr::rand());
 }
 
 #[test]
@@ -503,7 +503,7 @@ fn codec_declare_subscriber() {
 
 #[test]
 fn codec_forget_subscriber() {
-    run!(ForgetSubscriber, ForgetSubscriber::rand());
+    run!(UndeclareSubscriber, UndeclareSubscriber::rand());
 }
 
 #[test]
@@ -513,7 +513,7 @@ fn codec_declare_queryable() {
 
 #[test]
 fn codec_forget_queryable() {
-    run!(ForgetQueryable, ForgetQueryable::rand());
+    run!(UndeclareQueryable, UndeclareQueryable::rand());
 }
 
 #[test]
@@ -523,7 +523,7 @@ fn codec_declare_token() {
 
 #[test]
 fn codec_forget_token() {
-    run!(ForgetToken, ForgetToken::rand());
+    run!(UndeclareToken, UndeclareToken::rand());
 }
 
 #[test]
@@ -660,7 +660,7 @@ fn codec_declaration_queryable_old() {
 
 #[test]
 fn codec_declaration_forget_queryable_old() {
-    run!(ForgetQueryable, ForgetQueryable::rand());
+    run!(UndeclareQueryable, UndeclareQueryable::rand());
 }
 
 #[test]
