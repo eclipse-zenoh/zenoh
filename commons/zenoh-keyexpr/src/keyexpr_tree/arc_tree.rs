@@ -20,10 +20,10 @@ use core::fmt::Debug;
 
 use token_cell::prelude::*;
 
+use super::box_tree::PruneResult;
+use super::support::IterOrOption;
 use crate::keyexpr;
-use crate::keyexpr_tree::*;
-
-use super::box_tree::{IterOrOption, PruneResult};
+use crate::keyexpr_tree::{support::IWildness, *};
 
 pub struct KeArcTreeInner<
     Weight,
@@ -53,6 +53,10 @@ fn ketree_borrow_mut<'a, T, Token: TokenTrait>(
         .unwrap_or_else(|_| panic!("Attempted to mutably use KeArcTree with the wrong Token"))
 }
 
+/// A shared KeTree.
+///
+/// The tree and its nodes have shared ownership, while their mutability is managed through the `Token`.
+/// The `(node, &token)` tuple implements [`core::ops::Deref`], while `(node, &mut token)` implements [`core::ops::DerefMut`].
 pub struct KeArcTree<
     Weight,
     Token: TokenTrait = DefaultToken,
@@ -77,6 +81,7 @@ impl<
         >,
     > KeArcTree<Weight, DefaultToken, Wildness, Children>
 {
+    /// Constructs the KeArcTree, returning it and its token, unless constructing the Token failed.
     pub fn new() -> Result<(Self, DefaultToken), <DefaultToken as TokenTrait>::ConstructionError> {
         let token = DefaultToken::new()?;
         Ok((Self::with_token(&token), token))
@@ -92,6 +97,7 @@ impl<
         Token: TokenTrait,
     > KeArcTree<Weight, Token, Wildness, Children>
 {
+    /// Constructs the KeArcTree with a specific token.
     pub fn with_token(token: &Token) -> Self {
         Self {
             inner: TokenCell::new(
