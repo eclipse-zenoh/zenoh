@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+pub mod ack;
 pub mod del;
 pub mod err;
 pub mod put;
@@ -110,6 +111,7 @@ where
         match x {
             ResponseBody::Reply(b) => self.write(&mut *writer, b),
             ResponseBody::Err(b) => self.write(&mut *writer, b),
+            ResponseBody::Ack(b) => self.write(&mut *writer, b),
         }
     }
 }
@@ -127,6 +129,7 @@ where
         let body = match imsg::mid(codec.header) {
             id::REPLY => ResponseBody::Reply(codec.read(&mut *reader)?),
             id::ERR => ResponseBody::Err(codec.read(&mut *reader)?),
+            id::ACK => ResponseBody::Ack(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 
