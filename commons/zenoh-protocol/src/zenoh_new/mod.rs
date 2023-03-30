@@ -12,11 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod del;
+pub mod err;
 pub mod put;
 pub mod query;
 pub mod reply;
 
 pub use del::*;
+pub use err::*;
 pub use put::*;
 pub use query::*;
 pub use reply::*;
@@ -27,6 +29,7 @@ pub mod id {
     pub const DEL: u8 = 0x02;
     pub const QUERY: u8 = 0x03;
     pub const REPLY: u8 = 0x04;
+    pub const ERR: u8 = 0x05;
 }
 
 // Push
@@ -109,6 +112,7 @@ impl From<Del> for RequestBody {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResponseBody {
     Reply(Reply),
+    Err(Err),
 }
 
 impl ResponseBody {
@@ -118,8 +122,9 @@ impl ResponseBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..1) {
+        match rng.gen_range(0..2) {
             0 => ResponseBody::Reply(Reply::rand()),
+            1 => ResponseBody::Err(Err::rand()),
             _ => unreachable!(),
         }
     }
@@ -128,5 +133,11 @@ impl ResponseBody {
 impl From<Reply> for ResponseBody {
     fn from(r: Reply) -> ResponseBody {
         ResponseBody::Reply(r)
+    }
+}
+
+impl From<Err> for ResponseBody {
+    fn from(r: Err) -> ResponseBody {
+        ResponseBody::Err(r)
     }
 }

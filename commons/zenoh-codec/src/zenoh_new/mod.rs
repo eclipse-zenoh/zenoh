@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod del;
+pub mod err;
 pub mod put;
 pub mod query;
 pub mod reply;
@@ -108,6 +109,7 @@ where
     fn write(self, writer: &mut W, x: &ResponseBody) -> Self::Output {
         match x {
             ResponseBody::Reply(b) => self.write(&mut *writer, b),
+            ResponseBody::Err(b) => self.write(&mut *writer, b),
         }
     }
 }
@@ -124,6 +126,7 @@ where
         let codec = Zenoh080Header::new(header);
         let body = match imsg::mid(codec.header) {
             id::REPLY => ResponseBody::Reply(codec.read(&mut *reader)?),
+            id::ERR => ResponseBody::Err(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 

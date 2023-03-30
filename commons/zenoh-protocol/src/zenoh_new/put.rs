@@ -33,7 +33,7 @@ use zenoh_buffers::ZBuf;
 ///  +---------------+
 ///  ~  [put_exts]   ~  if Z==1
 ///  +---------------+
-///  ~ pl: <u8;z32>  ~ -- Payload
+///  ~ pl: <u8;z32>  ~  -- Payload
 ///  +---------------+
 /// ```
 pub mod flag {

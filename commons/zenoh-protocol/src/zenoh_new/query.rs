@@ -93,7 +93,7 @@ pub mod ext {
     ///  +-+-+-+-+-+-+-+-+
     ///  ~   encoding    ~
     ///  +---------------+
-    ///  ~ pl: [u8;z32]  ~ -- Payload
+    ///  ~ pl: [u8;z32]  ~  -- Payload
     ///  +---------------+
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct QueryBodyType {
