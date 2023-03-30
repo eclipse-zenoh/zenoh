@@ -283,6 +283,10 @@ validated_struct::validator! {
                     client_private_key: Option<String>,
                     client_certificate: Option<String>,
                 },
+                pub compression: #[derive(Default)]
+                Compression {
+                    is_enabled: bool,
+                }
             },
             pub shared_memory: SharedMemoryConf {
                 /// Whether shared memory is enabled or not.

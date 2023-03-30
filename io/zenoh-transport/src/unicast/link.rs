@@ -23,11 +23,20 @@ use crate::TransportExecutor;
 use async_std::prelude::FutureExt;
 use async_std::task;
 use async_std::task::JoinHandle;
+
+#[cfg(feature = "transport_compression")]
+use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::reader::{HasReader, Reader};
+#[cfg(feature = "transport_compression")]
+use zenoh_buffers::writer::HasWriter;
 use zenoh_buffers::ZSlice;
+#[cfg(feature = "transport_compression")]
+use zenoh_codec::WCodec;
 use zenoh_codec::{RCodec, Zenoh060};
+#[cfg(feature = "transport_compression")]
+use zenoh_compression::ZenohCompress;
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::transport::TransportMessage;
 use zenoh_result::{bail, zerror, ZResult};
@@ -82,6 +91,10 @@ impl TransportLinkUnicast {
                 queue_size: self.transport.config.manager.config.queue_size,
                 backoff: self.transport.config.manager.config.queue_backoff,
             };
+
+            #[cfg(feature = "transport_compression")]
+            let compression_enabled = self.transport.config.manager.config.compression_enabled;
+
             // The pipeline
             let (producer, consumer) = TransmissionPipeline::make(config, conduit_tx);
             self.pipeline = Some(producer);
@@ -96,6 +109,8 @@ impl TransportLinkUnicast {
                     keep_alive,
                     #[cfg(feature = "stats")]
                     c_transport.stats.clone(),
+                    #[cfg(feature = "transport_compression")]
+                    compression_enabled,
                 )
                 .await;
                 if let Err(e) = res {
@@ -122,6 +137,8 @@ impl TransportLinkUnicast {
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
             let c_rx_buffer_size = self.transport.config.manager.config.link_rx_buffer_size;
+
+            // let compression_enabled = self.transport.config.manager.config.compression_enabled;
 
             let handle = task::spawn(async move {
                 // Start the consume task
@@ -169,6 +186,41 @@ impl TransportLinkUnicast {
     }
 }
 
+#[cfg(feature = "transport_compression")]
+fn compress_bytes(
+    bytes: &[u8],
+    mut compression_aux_buff: &mut Box<[u8]>,
+    is_streamed: bool,
+) -> ZResult<Vec<u8>> {
+    let zenoh_compress = ZenohCompress::default();
+    let mut compressed_batch_buff: Vec<u8> = vec![];
+    let compression_size = zenoh_compress
+        .write(
+            &mut compressed_batch_buff.writer(),
+            (&bytes, &mut compression_aux_buff),
+        )
+        .map_err(|e| zerror!("Compression error: {:?}", e))?;
+
+    let bytes = if is_streamed {
+        let compression_size_u16: u16 = compression_size.try_into().map_err(|e| {
+            zerror!(
+                "Compression error: unable to convert compression size into u16: {}",
+                e
+            )
+        })?;
+        let mut buff: Vec<u8> = compression_size_u16.to_le_bytes().to_vec();
+        buff.push(true as u8);
+        buff.append(&mut compressed_batch_buff);
+        buff.as_slice().to_owned()
+    } else {
+        let mut buff: Vec<u8> = vec![];
+        buff.push(true as u8);
+        buff.append(&mut compressed_batch_buff);
+        buff.as_slice().to_owned()
+    };
+    Ok(bytes)
+}
+
 /*************************************/
 /*              TASKS                */
 /*************************************/
@@ -177,14 +229,35 @@ async fn tx_task(
     link: LinkUnicast,
     keep_alive: Duration,
     #[cfg(feature = "stats")] stats: Arc<TransportUnicastStatsAtomic>,
+    #[cfg(feature = "transport_compression")] compression_enabled: bool,
 ) -> ZResult<()> {
+    #[cfg(feature = "transport_compression")]
+    let mut compression_aux_buff: Box<[u8]> = vec![0; usize::pow(2, 16)].into_boxed_slice();
+
     loop {
         match pipeline.pull().timeout(keep_alive).await {
             Ok(res) => match res {
                 Some((batch, priority)) => {
                     // Send the buffer on the link
-                    let bytes = batch.as_bytes();
-                    link.write_all(bytes).await?;
+                    let mut bytes = batch.as_bytes();
+
+                    #[cfg(feature = "transport_compression")]
+                    let mut compression = vec![];
+
+                    #[cfg(feature = "transport_compression")]
+                    {
+                        if compression_enabled {
+                            compression = compress_bytes(
+                                &bytes,
+                                &mut compression_aux_buff,
+                                link.is_streamed(),
+                            )
+                            .map_err(|e| zerror!("Error in tx_task: {}", e))?;
+                            bytes = compression.as_slice();
+                        }
+                    }
+
+                    link.write_all(&bytes).await?;
 
                     #[cfg(feature = "stats")]
                     {
@@ -257,6 +330,9 @@ async fn rx_task_stream(
         Ok(Action::Stop)
     }
 
+    #[cfg(feature = "transport_compression")]
+    let zenoh_compress = ZenohCompress::default();
+
     let codec = Zenoh060::default();
 
     // The pool of buffers
@@ -265,6 +341,7 @@ async fn rx_task_stream(
     if rx_buffer_size % mtu != 0 {
         n += 1;
     }
+
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Retrieve one buffer
@@ -282,8 +359,38 @@ async fn rx_task_stream(
                     transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
                 }
 
+                let mut start_pos = 0;
+                let mut end_pos = n;
+                #[cfg(feature = "transport_compression")]
+                {
+                    // Decompress
+                    let mut reader = buffer[..n].reader();
+                    let first_byte = reader
+                        .read_u8()
+                        .map_err(|e| {
+                            zerror!(
+                                "Decompression error {:?}. Unable to retrieve if the batch is compressed.",
+                                e
+                            )
+                        })?;
+
+                    let is_compressed: bool = first_byte != 0_u8;
+                    if is_compressed {
+                        let mut buffer2 = pool.try_take().unwrap_or_else(|| pool.alloc());
+                        let decompression_size = zenoh_compress
+                            .read((&reader, &mut buffer2))
+                            .map_err(|e| {
+                                zerror!("Decompression error {:?}. Unable to decompress batch.", e)
+                            })
+                            .unwrap();
+                        start_pos += 3;
+                        end_pos = decompression_size;
+                        buffer = buffer2;
+                    }
+                }
+
                 // Deserialize all the messages from the current ZBuf
-                let mut zslice = ZSlice::make(Arc::new(buffer), 0, n).unwrap();
+                let mut zslice = ZSlice::make(Arc::new(buffer), start_pos, end_pos).unwrap();
                 let mut reader = zslice.reader();
                 while reader.can_read() {
                     let msg: TransportMessage = codec
@@ -328,6 +435,9 @@ async fn rx_task_dgram(
 
     let codec = Zenoh060::default();
 
+    #[cfg(feature = "transport_compression")]
+    let zenoh_compress = ZenohCompress::default();
+
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
     let mut n = rx_buffer_size / mtu;
@@ -335,6 +445,7 @@ async fn rx_task_dgram(
         n += 1;
     }
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
+
     while !signal.is_triggered() {
         // Retrieve one buffer
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
@@ -356,8 +467,35 @@ async fn rx_task_dgram(
                     transport.stats.inc_rx_bytes(n);
                 }
 
+                let mut start_pos = 0;
+                let mut end_pos = n;
+                #[cfg(feature = "transport_compression")]
+                {
+                    // Decompress
+                    let mut reader = buffer[..].reader();
+                    let is_compressed: bool = reader
+                        .read_u8()
+                        .map_err(|e| {
+                            zerror!(
+                                "Decompression error {:?}. Unable to retrieve if the batch is compressed.",
+                                e
+                            )
+                        })?
+                        != 0_u8;
+                    if is_compressed {
+                        let mut buffer2 = pool.try_take().unwrap_or_else(|| pool.alloc());
+                        let decompression_size =
+                            zenoh_compress.read((&reader, &mut buffer2)).map_err(|e| {
+                                zerror!("Decompression error {:?}. Unable to decompress batch.", e)
+                            })?;
+                        start_pos += 1;
+                        end_pos = decompression_size;
+                        buffer = buffer2
+                    }
+                }
+
                 // Deserialize all the messages from the current ZBuf
-                let mut zslice = ZSlice::make(Arc::new(buffer), 0, n).unwrap();
+                let mut zslice = ZSlice::make(Arc::new(buffer), start_pos, end_pos).unwrap();
                 let mut reader = zslice.reader();
                 while reader.can_read() {
                     let msg: TransportMessage = codec

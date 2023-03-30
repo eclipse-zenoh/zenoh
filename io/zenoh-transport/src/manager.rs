@@ -107,6 +107,8 @@ pub struct TransportManagerConfig {
     pub handler: Arc<dyn TransportEventHandler>,
     pub tx_threads: usize,
     pub protocols: Vec<String>,
+    #[cfg(feature = "transport_compression")]
+    pub compression_enabled: bool,
 }
 
 pub struct TransportManagerState {
@@ -134,6 +136,8 @@ pub struct TransportManagerBuilder {
     endpoint: HashMap<String, Properties>,
     tx_threads: usize,
     protocols: Option<Vec<String>>,
+    #[cfg(feature = "transport_compression")]
+    compression_enabled: bool,
 }
 
 impl TransportManagerBuilder {
@@ -202,6 +206,12 @@ impl TransportManagerBuilder {
         self
     }
 
+    #[cfg(feature = "transport_compression")]
+    pub fn compression(mut self, is_enabled: bool) -> Self {
+        self.compression_enabled = is_enabled;
+        self
+    }
+
     pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilder> {
         self = self.zid(*config.id());
         if let Some(v) = config.mode() {
@@ -222,6 +232,16 @@ impl TransportManagerBuilder {
         self = self.queue_size(config.transport().link().tx().queue().size().clone());
         self = self.tx_threads(config.transport().link().tx().threads().unwrap());
         self = self.protocols(config.transport().link().protocols().clone());
+
+        #[cfg(feature = "transport_compression")] { 
+            self = self.compression(
+                *config
+                    .transport()
+                    .link()
+                    .compression()
+                    .is_enabled(),
+            );
+        }
 
         let (c, errors) = zenoh_link::LinkConfigurator::default()
             .configurations(config)
@@ -284,6 +304,8 @@ impl TransportManagerBuilder {
                     .map(|x| x.to_string())
                     .collect()
             }),
+            #[cfg(feature = "transport_compression")]
+            compression_enabled: self.compression_enabled,
         };
 
         let state = TransportManagerState {
@@ -316,6 +338,8 @@ impl Default for TransportManagerBuilder {
             multicast: TransportManagerBuilderMulticast::default(),
             tx_threads: 1,
             protocols: None,
+            #[cfg(feature = "transport_compression")]
+            compression_enabled: false,
         }
     }
 }
