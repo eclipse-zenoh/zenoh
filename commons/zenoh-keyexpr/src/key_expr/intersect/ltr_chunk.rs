@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// use crate::core::key_expr::SINGLE_WILD;
+// use crate::key_expr::SINGLE_WILD;
 
 // use super::{restiction::NoBigWilds, Intersector};
 

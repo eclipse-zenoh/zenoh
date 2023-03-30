@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use crate::fuzzer::KeyExprFuzzer;
 use alloc::vec::Vec;
 use rand::Rng;
-use zenoh_protocol::core::key_expr::fuzzer::KeyExprFuzzer;
 
 use super::{
     impls::{KeyedSetProvider, VecSetProvider},

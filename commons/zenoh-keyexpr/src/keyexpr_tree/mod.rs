@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
+use crate::{keyexpr, OwnedKeyExpr};
 pub mod traits;
 pub use traits::*;
 

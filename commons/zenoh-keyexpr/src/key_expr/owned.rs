@@ -14,13 +14,8 @@
 extern crate alloc;
 
 use super::{canon::Canonizable, keyexpr};
-use crate::core::WireExpr;
-use alloc::{
-    borrow::{Cow, ToOwned},
-    boxed::Box,
-    string::String,
-    sync::Arc,
-};
+// use crate::core::WireExpr;
+use alloc::{borrow::ToOwned, boxed::Box, string::String, sync::Arc};
 use core::{
     convert::TryFrom,
     fmt,
@@ -166,14 +161,5 @@ impl From<OwnedKeyExpr> for Arc<str> {
 impl From<OwnedKeyExpr> for String {
     fn from(ke: OwnedKeyExpr) -> Self {
         ke.as_str().to_owned()
-    }
-}
-
-impl<'a> From<&'a OwnedKeyExpr> for WireExpr<'a> {
-    fn from(val: &'a OwnedKeyExpr) -> Self {
-        WireExpr {
-            scope: 0,
-            suffix: Cow::Borrowed(val.as_str()),
-        }
     }
 }

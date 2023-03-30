@@ -25,7 +25,7 @@ extern crate lazy_static;
 
 #[deprecated = "This module is now a separate crate. Use the `zenoh_core` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_core as core;
-pub mod keyexpr_tree;
+
 #[cfg(feature = "std")]
 mod std_only;
 

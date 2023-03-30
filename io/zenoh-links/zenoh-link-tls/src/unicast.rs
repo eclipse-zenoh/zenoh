@@ -624,6 +624,17 @@ impl TlsClientConfig {
                     .map_err(|e| zerror!(e))
                     .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
 
+            if keys.is_empty() {
+                keys =
+                    rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_client_private_key))
+                        .map_err(|e| zerror!(e))
+                        .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
+            }
+
+            if keys.is_empty() {
+                bail!("No private key found");
+            }
+
             ClientConfig::builder()
                 .with_safe_default_cipher_suites()
                 .with_safe_default_kx_groups()
