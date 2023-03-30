@@ -35,51 +35,24 @@ pub mod flag {
 /// +---------------+
 /// ~  [push_exts]  ~  if Z==1
 /// +---------------+
-/// ~ ZenohMessage  ~
+/// ~   PushBody    ~
 /// +---------------+
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Push {
     pub wire_expr: WireExpr<'static>,
     pub mapping: Mapping,
-    pub payload: PushBody, // @TODO
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
-    pub ext_dst: ext::DestinationType,
+    pub payload: PushBody,
 }
 
 pub mod ext {
-    use crate::{common::ZExtUnit, zextunit};
-
     pub type QoS = crate::network::ext::QoS;
     pub type QoSType = crate::network::ext::QoSType;
 
     pub type Timestamp = crate::network::ext::Timestamp;
     pub type TimestampType = crate::network::ext::TimestampType;
-
-    pub type Destination = zextunit!(0x03, true);
-
-    #[repr(u8)]
-    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-    pub enum DestinationType {
-        #[default]
-        Subscribers = 0x00,
-        Queryables = 0x01,
-    }
-
-    impl DestinationType {
-        #[cfg(feature = "test")]
-        pub fn rand() -> Self {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-
-            match rng.gen_range(0..2) {
-                0 => DestinationType::Subscribers,
-                1 => DestinationType::Queryables,
-                _ => unreachable!(),
-            }
-        }
-    }
 }
 
 impl Push {
@@ -93,7 +66,6 @@ impl Push {
         let payload = PushBody::rand();
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
-        let ext_dst = ext::DestinationType::rand();
 
         Self {
             wire_expr,
@@ -101,7 +73,6 @@ impl Push {
             payload,
             ext_tstamp,
             ext_qos,
-            ext_dst,
         }
     }
 }

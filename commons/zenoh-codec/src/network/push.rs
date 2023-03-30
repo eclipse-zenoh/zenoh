@@ -27,31 +27,6 @@ use zenoh_protocol::{
     zenoh_new::PushBody,
 };
 
-impl<W> WCodec<(ext::DestinationType, bool), &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: (ext::DestinationType, bool)) -> Self::Output {
-        let (_, more) = x;
-        let ext = ext::Destination::new();
-        self.write(&mut *writer, (&ext, more))
-    }
-}
-
-impl<R> RCodec<(ext::DestinationType, bool), &mut R> for Zenoh080Header
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<(ext::DestinationType, bool), Self::Error> {
-        let (_, more): (ext::Destination, bool) = self.read(&mut *reader)?;
-        Ok((ext::DestinationType::Queryables, more))
-    }
-}
-
 impl<W> WCodec<&Push, &mut W> for Zenoh080
 where
     W: Writer,
@@ -61,8 +36,8 @@ where
     fn write(self, writer: &mut W, x: &Push) -> Self::Output {
         // Header
         let mut header = id::PUSH;
-        let mut n_exts = ((x.ext_qos != ext::QoSType::default()) as u8)
-            + (x.ext_tstamp.is_some() as u8 + (x.ext_dst != ext::DestinationType::default()) as u8);
+        let mut n_exts =
+            ((x.ext_qos != ext::QoSType::default()) as u8) + (x.ext_tstamp.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -85,10 +60,6 @@ where
         if let Some(ts) = x.ext_tstamp.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
-        }
-        if x.ext_dst != ext::DestinationType::default() {
-            n_exts -= 1;
-            self.write(&mut *writer, (x.ext_dst, n_exts != 0))?;
         }
 
         // Payload
@@ -134,7 +105,6 @@ where
         // Extensions
         let mut ext_qos = ext::QoSType::default();
         let mut ext_tstamp = None;
-        let mut ext_dst = ext::DestinationType::default();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -149,11 +119,6 @@ where
                 ext::Timestamp::ID => {
                     let (t, ext): (ext::TimestampType, bool) = eodec.read(&mut *reader)?;
                     ext_tstamp = Some(t);
-                    has_ext = ext;
-                }
-                ext::Destination::ID => {
-                    let (d, ext): (ext::DestinationType, bool) = eodec.read(&mut *reader)?;
-                    ext_dst = d;
                     has_ext = ext;
                 }
                 _ => {
@@ -171,7 +136,6 @@ where
             payload,
             ext_qos,
             ext_tstamp,
-            ext_dst,
         })
     }
 }
