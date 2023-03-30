@@ -25,11 +25,11 @@ use zenoh::time::Timestamp;
 use zenoh::{Result as ZResult, Session};
 use zenoh_backend_traits::config::StorageConfig;
 use zenoh_backend_traits::{Capability, History, StorageInsertionResult};
-use zenoh_result::bail;
-use zenoh_util::keyexpr_tree::impls::KeyedSetProvider;
-use zenoh_util::keyexpr_tree::{
+use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
+use zenoh_keyexpr::keyexpr_tree::{
     IKeyExprTreeExt, IKeyExprTreeExtMut, KeBoxTree, NonWild, UnknownWildness,
 };
+use zenoh_result::bail;
 
 pub struct ReplicationService {
     pub empty_start: bool,
