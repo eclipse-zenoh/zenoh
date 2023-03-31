@@ -40,7 +40,7 @@ where
     fn write(self, output_writer: &mut W, input: (&[u8], &mut [u8])) -> Self::Output {
         let (slice, buffer) = input;
         let compressed_bytes = lz4_flex::block::compress_into(slice, buffer).map_err(|e| {
-            log::debug!("Compression error: {:?}", e);
+            log::error!("Compression error: {:?}", e);
             DidntWrite
         })?;
         output_writer.write(&buffer[0..compressed_bytes])?;
@@ -60,7 +60,7 @@ impl RCodec<usize, (&[u8], &mut [u8])> for ZenohCompress {
         let (compression, buffer) = input;
         Ok(
             lz4_flex::block::decompress_into(compression, buffer).map_err(|e| {
-                log::debug!("Decompression error: {:?}", e);
+                log::error!("Decompression error: {:?}", e);
                 DidntRead
             })?,
         )

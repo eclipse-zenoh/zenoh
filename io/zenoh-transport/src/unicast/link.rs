@@ -28,6 +28,7 @@ use async_std::task::JoinHandle;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::Duration;
+use std::vec;
 use zenoh_buffers::reader::{HasReader, Reader};
 #[cfg(feature = "transport_compression")]
 use zenoh_buffers::writer::HasWriter;
@@ -186,41 +187,6 @@ impl TransportLinkUnicast {
     }
 }
 
-#[cfg(feature = "transport_compression")]
-fn compress_bytes(
-    bytes: &[u8],
-    mut compression_aux_buff: &mut Box<[u8]>,
-    is_streamed: bool,
-) -> ZResult<Vec<u8>> {
-    let zenoh_compress = ZenohCompress::default();
-    let mut compressed_batch_buff: Vec<u8> = vec![];
-    let compression_size = zenoh_compress
-        .write(
-            &mut compressed_batch_buff.writer(),
-            (&bytes, &mut compression_aux_buff),
-        )
-        .map_err(|e| zerror!("Compression error: {:?}", e))?;
-
-    let bytes = if is_streamed {
-        let compression_size_u16: u16 = compression_size.try_into().map_err(|e| {
-            zerror!(
-                "Compression error: unable to convert compression size into u16: {}",
-                e
-            )
-        })?;
-        let mut buff: Vec<u8> = compression_size_u16.to_le_bytes().to_vec();
-        buff.push(true as u8);
-        buff.append(&mut compressed_batch_buff);
-        buff.as_slice().to_owned()
-    } else {
-        let mut buff: Vec<u8> = vec![];
-        buff.push(true as u8);
-        buff.append(&mut compressed_batch_buff);
-        buff.as_slice().to_owned()
-    };
-    Ok(bytes)
-}
-
 /*************************************/
 /*              TASKS                */
 /*************************************/
@@ -240,20 +206,46 @@ async fn tx_task(
                 Some((batch, priority)) => {
                     // Send the buffer on the link
                     let mut bytes = batch.as_bytes();
-
+                    log::debug!("Tx task original bytes: {:?}", bytes.to_vec());
                     #[cfg(feature = "transport_compression")]
-                    let mut compression = vec![];
+                    let mut buff = vec![];
 
                     #[cfg(feature = "transport_compression")]
                     {
                         if compression_enabled {
-                            compression = compress_bytes(
-                                &bytes,
-                                &mut compression_aux_buff,
-                                link.is_streamed(),
-                            )
-                            .map_err(|e| zerror!("Error in tx_task: {}", e))?;
-                            bytes = compression.as_slice();
+                            let zenoh_compress = ZenohCompress::default();
+                            let compression_size = zenoh_compress
+                                .write(&mut buff.writer(), (&bytes, &mut compression_aux_buff))
+                                .map_err(|e| zerror!("Compression error: {:?}", e))?;
+                            let mut compressed_batch: Vec<u8> = vec![];
+                            if link.is_streamed() {
+                                let compression_size_u16: u16 = compression_size.try_into().map_err(|e| {
+                                        zerror!(
+                                            "Compression error: unable to convert compression size into u16: {}",
+                                            e
+                                        )
+                                    })?;
+                                // including is compressed byte
+                                let batch_size_le = (compression_size_u16 + 1).to_le_bytes();
+                                compressed_batch.append(&mut batch_size_le.to_vec());
+                                compressed_batch.push(true as u8);
+                                compressed_batch.append(&mut buff);
+                            } else {
+                                compressed_batch.push(true as u8);
+                                compressed_batch.append(&mut buff);
+                            }
+                        } else {
+                            // Add compression byte as false
+                            // Increment the batch size number from the 2 initial bytes
+
+                            buff = bytes.to_vec();
+                            buff.insert(2, false as u8);
+                            let (batch_size, batch_payload) = buff.split_at_mut(2);
+                            let batch_size = u16::from_le_bytes(batch_size.try_into().unwrap()) + 1;
+                            buff = [batch_size.to_le_bytes().to_vec(), batch_payload.to_vec()]
+                                .concat();
+                            bytes = buff.as_slice();
+                            log::debug!("Tx task non compressed final bytes: {:?}", bytes.to_vec());
                         }
                     }
 
@@ -363,6 +355,7 @@ async fn rx_task_stream(
                 let mut end_pos = n;
                 #[cfg(feature = "transport_compression")]
                 {
+                    log::debug!("Rx task bytes: {:?}", buffer[..n].to_vec());
                     // Decompress
                     let mut reader = buffer[..n].reader();
                     let first_byte = reader
@@ -380,12 +373,26 @@ async fn rx_task_stream(
                         let decompression_size = zenoh_compress
                             .read((&reader, &mut buffer2))
                             .map_err(|e| {
-                                zerror!("Decompression error {:?}. Unable to decompress batch.", e)
+                                zerror!(
+                                    "Decompression error {:?}. Unable to decompress batch. {:?}",
+                                    e,
+                                    buffer[..n].to_vec()
+                                )
                             })
                             .unwrap();
-                        start_pos += 3;
+                        log::debug!(
+                            "Rx task DECOMPRESSED bytes: {:?}",
+                            buffer2[..decompression_size].to_vec()
+                        );
+                        // start_pos += 3;
                         end_pos = decompression_size;
                         buffer = buffer2;
+                    } else {
+                        log::debug!(
+                            "Batch was not compressed, will work with: {:?}",
+                            buffer[1..n].reader()
+                        );
+                        start_pos = 1; //Original batch but ignoring compression byte.
                     }
                 }
 
