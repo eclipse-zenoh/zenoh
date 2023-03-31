@@ -473,21 +473,21 @@ impl Group {
         ms.len() + 1 // with +1 being the local member
     }
 
-    /// Returns the evental leader for this group. Notice that a view change may cause 
+    /// Returns the evental leader for this group. Notice that a view change may cause
     /// a change on leader. Thus it is wise to always get the leader after a view change.
     pub async fn leader(&self) -> Member {
         use std::cmp::Ordering;
         use std::str::FromStr;
-        let group = self.view().await;        
+        let group = self.view().await;
         let mut max_id = String::from_str("").unwrap();
-        let mut leader = None;         
+        let mut leader = None;
         for m in group {
             let mid = String::from_str(m.mid.as_str()).unwrap();
             if max_id.cmp(&mid) == Ordering::Less {
-                max_id = max_id.max(mid);            
+                max_id = max_id.max(mid);
                 leader = Some(m)
-            }        
+            }
         }
-        leader.unwrap()        
+        leader.unwrap()
     }
 }
