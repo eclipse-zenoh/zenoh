@@ -37,7 +37,7 @@ use crate::{
 /// +---------------+
 /// ~  [reply_exts] ~  if Z==1
 /// +---------------+
-/// ~  ZenohMessage ~ -- Payload
+/// ~  ResponseBody ~ -- Payload
 /// +---------------+
 ///
 /// (*) The resolution of the request id is negotiated during the session establishment.

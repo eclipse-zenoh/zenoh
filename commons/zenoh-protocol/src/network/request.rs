@@ -110,9 +110,11 @@ pub mod ext {
         }
     }
 
+    // The maximum number of responses
     pub type Limit = zextz64!(0x4, false);
     pub type LimitType = NonZeroU32;
 
+    // The timeout of the request
     pub type Timeout = zextz64!(0x5, false);
     pub type TimeoutType = Duration;
 }
