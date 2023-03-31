@@ -44,7 +44,7 @@ pub mod flag {
 /// - 0b01: u64
 /// - 0b10: ZBuf
 /// - 0b11: Reserved
-///
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Oam {
     pub id: OamId,

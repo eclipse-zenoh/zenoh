@@ -24,10 +24,51 @@ use zenoh_protocol::{
     zenoh_new::{
         id,
         query::{ext, flag, Query},
-        ConsolidationMode,
     },
 };
 
+// Extension Consolidation
+impl<W> WCodec<(ext::ConsolidationType, bool), &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: (ext::ConsolidationType, bool)) -> Self::Output {
+        let (x, more) = x;
+        let v: u64 = match x {
+            ext::ConsolidationType::Auto => 0,
+            ext::ConsolidationType::None => 1,
+            ext::ConsolidationType::Monotonic => 2,
+            ext::ConsolidationType::Latest => 3,
+            ext::ConsolidationType::Unique => 4,
+        };
+        let v = ext::Consolidation::new(v);
+        self.write(&mut *writer, (&v, more))
+    }
+}
+
+impl<R> RCodec<(ext::ConsolidationType, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::ConsolidationType, bool), Self::Error> {
+        let (ext, more): (ext::Consolidation, bool) = self.read(&mut *reader)?;
+        let c = match ext.value {
+            0 => ext::ConsolidationType::Auto,
+            1 => ext::ConsolidationType::None,
+            2 => ext::ConsolidationType::Monotonic,
+            3 => ext::ConsolidationType::Latest,
+            4 => ext::ConsolidationType::Unique,
+            _ => return Err(DidntRead),
+        };
+        Ok((c, more))
+    }
+}
+
+// Extension QueryBody
 impl LCodec<&ext::QueryBodyType> for Zenoh080 {
     fn w_len(self, x: &ext::QueryBodyType) -> usize {
         self.w_len(&x.encoding) + x.payload.len()
@@ -77,41 +118,6 @@ where
     }
 }
 
-// Consolidation
-impl<W> WCodec<ConsolidationMode, &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: ConsolidationMode) -> Self::Output {
-        let v: u8 = match x {
-            ConsolidationMode::None => 0,
-            ConsolidationMode::Monotonic => 1,
-            ConsolidationMode::Latest => 2,
-        };
-        self.write(&mut *writer, v)
-    }
-}
-
-impl<R> RCodec<ConsolidationMode, &mut R> for Zenoh080
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<ConsolidationMode, Self::Error> {
-        let v: u8 = self.read(&mut *reader)?;
-        let c = match v {
-            0 => ConsolidationMode::None,
-            1 => ConsolidationMode::Monotonic,
-            2 => ConsolidationMode::Latest,
-            _ => return Err(DidntRead),
-        };
-        Ok(c)
-    }
-}
-
 impl<W> WCodec<&Query, &mut W> for Zenoh080
 where
     W: Writer,
@@ -124,10 +130,9 @@ where
         if !x.parameters.is_empty() {
             header |= flag::P;
         }
-        if x.consolidation != ConsolidationMode::default() {
-            header |= flag::C;
-        }
-        let mut n_exts = (x.ext_sinfo.is_some() as u8) + (x.ext_body.is_some() as u8);
+        let mut n_exts = (x.ext_sinfo.is_some() as u8)
+            + ((x.ext_consolidation != ext::ConsolidationType::default()) as u8)
+            + (x.ext_body.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -137,14 +142,15 @@ where
         if !x.parameters.is_empty() {
             self.write(&mut *writer, &x.parameters)?;
         }
-        if x.consolidation != ConsolidationMode::default() {
-            self.write(&mut *writer, x.consolidation)?;
-        }
 
         // Extensions
         if let Some(sinfo) = x.ext_sinfo.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
+        }
+        if x.ext_consolidation != ext::ConsolidationType::default() {
+            n_exts -= 1;
+            self.write(&mut *writer, (x.ext_consolidation, n_exts != 0))?;
         }
         if let Some(body) = x.ext_body.as_ref() {
             n_exts -= 1;
@@ -185,13 +191,9 @@ where
             parameters = self.codec.read(&mut *reader)?;
         }
 
-        let mut consolidation = ConsolidationMode::default();
-        if imsg::has_flag(self.header, flag::C) {
-            consolidation = self.codec.read(&mut *reader)?;
-        }
-
         // Extensions
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
+        let mut ext_consolidation = ext::ConsolidationType::default();
         let mut ext_body: Option<ext::QueryBodyType> = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
@@ -202,6 +204,11 @@ where
                 ext::SourceInfo::ID => {
                     let (s, ext): (ext::SourceInfoType, bool) = eodec.read(&mut *reader)?;
                     ext_sinfo = Some(s);
+                    has_ext = ext;
+                }
+                ext::Consolidation::ID => {
+                    let (c, ext): (ext::ConsolidationType, bool) = eodec.read(&mut *reader)?;
+                    ext_consolidation = c;
                     has_ext = ext;
                 }
                 ext::QueryBody::ID => {
@@ -217,8 +224,8 @@ where
 
         Ok(Query {
             parameters,
-            consolidation,
             ext_sinfo,
+            ext_consolidation,
             ext_body,
         })
     }

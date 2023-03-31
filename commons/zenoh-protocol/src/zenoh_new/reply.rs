@@ -47,6 +47,7 @@ pub struct Reply {
     pub timestamp: Option<Timestamp>,
     pub encoding: Encoding,
     pub ext_sinfo: Option<ext::SourceInfoType>,
+    pub ext_consolidation: ext::ConsolidationType,
     pub payload: ZBuf,
 }
 
@@ -55,12 +56,17 @@ pub mod ext {
     /// Used to carry additional information about the source of data
     pub type SourceInfo = crate::zenoh_new::put::ext::SourceInfo;
     pub type SourceInfoType = crate::zenoh_new::put::ext::SourceInfoType;
+
+    /// # Consolidation extension
+    pub type Consolidation = crate::zenoh_new::query::ext::Consolidation;
+    pub type ConsolidationType = crate::zenoh_new::query::ext::ConsolidationType;
 }
 
 impl Reply {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use crate::core::ZenohId;
+        use crate::zenoh_new::Consolidation;
         use core::convert::TryFrom;
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -72,12 +78,14 @@ impl Reply {
         });
         let encoding = Encoding::rand();
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
+        let ext_consolidation = Consolidation::rand();
         let payload = ZBuf::rand(rng.gen_range(1..=64));
 
         Self {
             timestamp,
             encoding,
             ext_sinfo,
+            ext_consolidation,
             payload,
         }
     }

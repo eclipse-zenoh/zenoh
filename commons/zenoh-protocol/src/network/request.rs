@@ -28,9 +28,9 @@ pub mod flag {
 ///
 /// ```text
 /// Flags:
-/// - N: Named          If N==1 then the key expr has name/suffix
+/// - N: Named          if N==1 then the key expr has name/suffix
 /// - M: Mapping        if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
-/// - Z: Extension      If Z==1 then at least one extension is present
+/// - Z: Extension      if Z==1 then at least one extension is present
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
@@ -58,7 +58,7 @@ pub struct Request {
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
     pub ext_target: ext::TargetType,
-    pub ext_limit: Option<ext::LimitType>,
+    pub ext_budget: Option<ext::BudgetType>,
     pub ext_timeout: Option<ext::TimeoutType>,
     pub payload: RequestBody,
 }
@@ -74,12 +74,11 @@ pub mod ext {
     pub type TimestampType = crate::network::ext::TimestampType;
 
     pub type Target = zextz64!(0x3, true);
-
     /// - Target (0x03)
-    ///     7 6 5 4 3 2 1 0
-    ///    +-+-+-+-+-+-+-+-+
-    ///    %     target    %
-    ///    +---------------+
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// %     target    %
+    /// +---------------+
     ///
     /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
     #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -111,8 +110,8 @@ pub mod ext {
     }
 
     // The maximum number of responses
-    pub type Limit = zextz64!(0x4, false);
-    pub type LimitType = NonZeroU32;
+    pub type Budget = zextz64!(0x4, false);
+    pub type BudgetType = NonZeroU32;
 
     // The timeout of the request
     pub type Timeout = zextz64!(0x5, false);
@@ -134,7 +133,7 @@ impl Request {
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
         let ext_target = ext::TargetType::rand();
-        let ext_limit = if rng.gen_bool(0.5) {
+        let ext_budget = if rng.gen_bool(0.5) {
             NonZeroU32::new(rng.gen())
         } else {
             None
@@ -153,7 +152,7 @@ impl Request {
             ext_qos,
             ext_tstamp,
             ext_target,
-            ext_limit,
+            ext_budget,
             ext_timeout,
         }
     }

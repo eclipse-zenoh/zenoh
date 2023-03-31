@@ -82,7 +82,7 @@ where
         let mut n_exts = ((x.ext_qos != ext::QoSType::default()) as u8)
             + (x.ext_tstamp.is_some() as u8)
             + ((x.ext_target != ext::TargetType::default()) as u8)
-            + (x.ext_limit.is_some() as u8)
+            + (x.ext_budget.is_some() as u8)
             + (x.ext_timeout.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
@@ -112,9 +112,9 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (&x.ext_target, n_exts != 0))?;
         }
-        if let Some(l) = x.ext_limit.as_ref() {
+        if let Some(l) = x.ext_budget.as_ref() {
             n_exts -= 1;
-            let e = ext::Limit::new(l.get() as u64);
+            let e = ext::Budget::new(l.get() as u64);
             self.write(&mut *writer, (&e, n_exts != 0))?;
         }
         if let Some(to) = x.ext_timeout.as_ref() {
@@ -192,9 +192,9 @@ where
                     ext_target = rt;
                     has_ext = ext;
                 }
-                ext::Limit::ID => {
-                    let (l, ext): (ext::Limit, bool) = eodec.read(&mut *reader)?;
-                    ext_limit = ext::LimitType::new(l.value as u32);
+                ext::Budget::ID => {
+                    let (l, ext): (ext::Budget, bool) = eodec.read(&mut *reader)?;
+                    ext_limit = ext::BudgetType::new(l.value as u32);
                     has_ext = ext;
                 }
                 ext::Timeout::ID => {
@@ -219,7 +219,7 @@ where
             ext_qos,
             ext_tstamp,
             ext_target,
-            ext_limit,
+            ext_budget: ext_limit,
             ext_timeout,
         })
     }

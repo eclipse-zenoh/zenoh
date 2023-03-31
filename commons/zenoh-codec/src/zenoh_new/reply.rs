@@ -41,7 +41,8 @@ where
         if x.encoding != Encoding::default() {
             header |= flag::E;
         }
-        let mut n_exts = (x.ext_sinfo.is_some()) as u8;
+        let mut n_exts = (x.ext_sinfo.is_some()) as u8
+            + ((x.ext_consolidation != ext::ConsolidationType::default()) as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -59,6 +60,10 @@ where
         if let Some(sinfo) = x.ext_sinfo.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
+        }
+        if x.ext_consolidation != ext::ConsolidationType::default() {
+            n_exts -= 1;
+            self.write(&mut *writer, (x.ext_consolidation, n_exts != 0))?;
         }
 
         // Payload
@@ -106,6 +111,7 @@ where
 
         // Extensions
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
+        let mut ext_consolidation = ext::ConsolidationType::default();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -115,6 +121,11 @@ where
                 ext::SourceInfo::ID => {
                     let (s, ext): (ext::SourceInfoType, bool) = eodec.read(&mut *reader)?;
                     ext_sinfo = Some(s);
+                    has_ext = ext;
+                }
+                ext::Consolidation::ID => {
+                    let (c, ext): (ext::ConsolidationType, bool) = eodec.read(&mut *reader)?;
+                    ext_consolidation = c;
                     has_ext = ext;
                 }
                 _ => {
@@ -131,6 +142,7 @@ where
             timestamp,
             encoding,
             ext_sinfo,
+            ext_consolidation,
             payload,
         })
     }
