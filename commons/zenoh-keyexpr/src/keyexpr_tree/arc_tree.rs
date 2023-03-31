@@ -241,7 +241,7 @@ where
     >;
     fn intersecting_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Intersection {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() {
+        if inner.wildness.get() || key.is_wild() {
             IterOrOption::Iter(TokenPacker {
                 iter: Intersection::new(&inner.children, key),
                 token,
@@ -269,7 +269,7 @@ where
         key: &'a keyexpr,
     ) -> Self::IntersectionMut {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() {
+        if inner.wildness.get() || key.is_wild() {
             IterOrOption::Iter(TokenPacker {
                 iter: Intersection::new(unsafe { core::mem::transmute(&inner.children) }, key),
                 token,
@@ -294,7 +294,7 @@ where
     >;
     fn included_nodes(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Inclusion {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() {
+        if inner.wildness.get() || key.is_wild() {
             IterOrOption::Iter(TokenPacker {
                 iter: Inclusion::new(&inner.children, key),
                 token,
@@ -318,7 +318,7 @@ where
     >;
     fn included_nodes_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::InclusionMut {
         let inner = ketree_borrow(&self.inner, token);
-        if inner.wildness.get() {
+        if inner.wildness.get() || key.is_wild() {
             unsafe {
                 IterOrOption::Iter(TokenPacker {
                     iter: Inclusion::new(core::mem::transmute(&inner.children), key),
