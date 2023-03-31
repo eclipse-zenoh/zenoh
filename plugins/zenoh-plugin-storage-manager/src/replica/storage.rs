@@ -529,14 +529,20 @@ impl StorageService {
 
     fn strip_prefix(&self, key_expr: &KeyExpr<'_>) -> ZResult<Option<OwnedKeyExpr>> {
         let key = match &self.strip_prefix {
-            Some(prefix) => match key_expr.strip_prefix(prefix).as_slice() {
-                [ke] => ke.as_str(),
-                _ => bail!(
-                    "Keyexpr doesn't start with prefix '{}': '{}'",
-                    prefix,
-                    key_expr
-                ),
-            },
+            Some(prefix) => {
+                if key_expr.as_str().eq(prefix.as_str()) {
+                    ""
+                } else {
+                    match key_expr.strip_prefix(prefix).as_slice() {
+                        [ke] => ke.as_str(),
+                        _ => bail!(
+                            "Keyexpr doesn't start with prefix '{}': '{}'",
+                            prefix,
+                            key_expr
+                        ),
+                    }
+                }
+            }
             None => key_expr.as_str(),
         };
         if key.is_empty() {
