@@ -234,19 +234,19 @@ async fn tx_task(
                                 compressed_batch.push(true as u8);
                                 compressed_batch.append(&mut buff);
                             }
+                            buff = compressed_batch;
+                            log::debug!("Tx task COMPRESSED batch: {:?}", buff);
                         } else {
                             // Add compression byte as false
                             // Increment the batch size number from the 2 initial bytes
-
                             buff = bytes.to_vec();
                             buff.insert(2, false as u8);
                             let (batch_size, batch_payload) = buff.split_at_mut(2);
                             let batch_size = u16::from_le_bytes(batch_size.try_into().unwrap()) + 1;
                             buff = [batch_size.to_le_bytes().to_vec(), batch_payload.to_vec()]
                                 .concat();
-                            bytes = buff.as_slice();
-                            log::debug!("Tx task non compressed final bytes: {:?}", bytes.to_vec());
                         }
+                        bytes = buff.as_slice();
                     }
 
                     link.write_all(&bytes).await?;
@@ -357,42 +357,33 @@ async fn rx_task_stream(
                 {
                     log::debug!("Rx task bytes: {:?}", buffer[..n].to_vec());
                     // Decompress
-                    let mut reader = buffer[..n].reader();
-                    let first_byte = reader
-                        .read_u8()
-                        .map_err(|e| {
-                            zerror!(
-                                "Decompression error {:?}. Unable to retrieve if the batch is compressed.",
-                                e
-                            )
-                        })?;
-
-                    let is_compressed: bool = first_byte != 0_u8;
+                    let is_compressed: bool = buffer[0] == 1_u8;
                     if is_compressed {
                         let mut buffer2 = pool.try_take().unwrap_or_else(|| pool.alloc());
+                        let compression = &buffer[1..n];
                         let decompression_size = zenoh_compress
-                            .read((&reader, &mut buffer2))
+                            .read((&compression, &mut buffer2))
                             .map_err(|e| {
                                 zerror!(
                                     "Decompression error {:?}. Unable to decompress batch. {:?}",
                                     e,
-                                    buffer[..n].to_vec()
+                                    compression.to_vec()
                                 )
                             })
                             .unwrap();
                         log::debug!(
-                            "Rx task DECOMPRESSED bytes: {:?}",
+                            "Rx task stream DECOMPRESSED bytes: {:?}",
                             buffer2[..decompression_size].to_vec()
                         );
-                        // start_pos += 3;
                         end_pos = decompression_size;
                         buffer = buffer2;
+                        start_pos += 2;
                     } else {
                         log::debug!(
                             "Batch was not compressed, will work with: {:?}",
-                            buffer[1..n].reader()
+                            buffer[0..n].reader()
                         );
-                        start_pos = 1; //Original batch but ignoring compression byte.
+                        start_pos = 0; //BUG HERE, SHOULD START AT 1 IF BATCH HAD COMPRESSION BYTE
                     }
                 }
 
@@ -479,25 +470,31 @@ async fn rx_task_dgram(
                 #[cfg(feature = "transport_compression")]
                 {
                     // Decompress
-                    let mut reader = buffer[..].reader();
-                    let is_compressed: bool = reader
-                        .read_u8()
-                        .map_err(|e| {
-                            zerror!(
-                                "Decompression error {:?}. Unable to retrieve if the batch is compressed.",
-                                e
-                            )
-                        })?
-                        != 0_u8;
+                    let is_compressed: bool = buffer[0] == 1_u8; // BUG: what if the received first byte was no intended to express compression?
                     if is_compressed {
                         let mut buffer2 = pool.try_take().unwrap_or_else(|| pool.alloc());
-                        let decompression_size =
-                            zenoh_compress.read((&reader, &mut buffer2)).map_err(|e| {
-                                zerror!("Decompression error {:?}. Unable to decompress batch.", e)
+                        let compression = &buffer[1..n];
+                        let decompression_size = zenoh_compress
+                            .read((&compression, &mut buffer2))
+                            .map_err(|e| {
+                                zerror!(
+                                    "Decompression error {:?}. Unable to decompress batch. {:?}",
+                                    e,
+                                    compression.to_vec()
+                                )
                             })?;
-                        start_pos += 1;
+                        log::debug!(
+                            "Rx task dgram DECOMPRESSED bytes: {:?}",
+                            buffer2[..decompression_size].to_vec()
+                        );
                         end_pos = decompression_size;
-                        buffer = buffer2
+                        buffer = buffer2;
+                    } else {
+                        log::debug!(
+                            "Batch was not compressed, will work with: {:?}",
+                            buffer[0..n].reader()
+                        );
+                        start_pos = 0; //BUG HERE, SHOULD START AT 1 IF BATCH HAD COMPRESSION BYTE
                     }
                 }
 
