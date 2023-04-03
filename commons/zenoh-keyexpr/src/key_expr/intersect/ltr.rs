@@ -15,7 +15,7 @@
 //     restiction::{NoBigWilds, NoSubWilds},
 //     Intersector,
 // };
-// use crate::core::key_expr::{utils::Split, DELIMITER};
+// use crate::key_expr::{utils::Split, DELIMITER};
 
 // #[derive(Debug, Clone, Copy)]
 // pub struct LeftToRightIntersector<ChunkIntersector>(pub ChunkIntersector);

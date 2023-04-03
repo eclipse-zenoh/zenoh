@@ -165,17 +165,4 @@ where
     }
 }
 
-#[cold]
-pub const fn cold() {}
-pub const fn likely(b: bool) -> bool {
-    if !b {
-        cold()
-    }
-    b
-}
-pub const fn unlikely(b: bool) -> bool {
-    if b {
-        cold()
-    }
-    b
-}
+pub use zenoh_result::{likely, unlikely};

@@ -24,6 +24,21 @@ use alloc::boxed::Box;
 use anyhow::Error as AnyError;
 use core::fmt;
 
+#[cold]
+pub const fn cold() {}
+pub const fn likely(b: bool) -> bool {
+    if !b {
+        cold()
+    }
+    b
+}
+pub const fn unlikely(b: bool) -> bool {
+    if b {
+        cold()
+    }
+    b
+}
+
 #[cfg(not(feature = "std"))]
 use core::any::Any;
 
