@@ -81,11 +81,9 @@ impl RCodec<usize, (&[u8], &mut [u8])> for ZenohCompress {
         args: (/*input=*/ &[u8], /*output_buffer=*/ &mut [u8]),
     ) -> Result<usize, DidntRead> {
         let (compression, buffer) = args;
-        Ok(
-            lz4_flex::block::decompress_into(compression, buffer).map_err(|e| {
-                log::error!("Decompression error: {:}", e);
-                DidntRead
-            })?,
-        )
+        lz4_flex::block::decompress_into(compression, buffer).map_err(|e| {
+            log::error!("Decompression error: {:}", e);
+            DidntRead
+        })
     }
 }

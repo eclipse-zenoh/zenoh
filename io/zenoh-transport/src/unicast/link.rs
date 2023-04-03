@@ -222,7 +222,7 @@ async fn tx_task(
                         bytes = &compression;
                     }
 
-                    link.write_all(&bytes).await?;
+                    link.write_all(bytes).await?;
 
                     #[cfg(feature = "stats")]
                     {

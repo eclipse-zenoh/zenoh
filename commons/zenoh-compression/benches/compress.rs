@@ -26,12 +26,15 @@
 /// [get_stats] bench which (although is not a proper bench) generates a csv file with the
 /// compression sizes that allows us to perform a data analysis.
 /// 
-/// The sizes correspond to 8, 16, 32, 64, 128, 256, 512 bytes and 1, 2, 4, 8, 16, 24, 32, 40, 56, 64 kilobytes (the max size of a zenoh batch)
+/// The sizes correspond to 8, 16, 32, 64, 128, 256, 512 bytes and 1, 2, 4, 8, 16, 24, 32, 40, 56, 
+/// 64 kilobytes (the max size of a zenoh batch)
 /// 
 /// The batches are filled with data from files whose entropy/complexity varies. 
 /// 
-/// The **LOW** complexity source file consists of a series 20 of quotes that are repeated throughout the file until completition of the 64KB file size.
-/// > Noble dragons don't have friends. The closest thing they can get is an enemy who is still alive.
+/// The **LOW** complexity source file consists of a series 20 of quotes that are repeated 
+/// throughout the file until completition of the 64KB file size.
+/// > Noble dragons don't have friends. The closest thing they can get is an enemy who is still 
+///   alive.
 /// > Come not between the dragon, and his wrath.
 /// > If the skies were able to dream, they would dream of dragons.
 /// > An adventure isn't worth telling if there aren’t any dragons in it.
@@ -39,9 +42,11 @@
 /// > People who do not believe in the existence of dragons are often eaten by dragons.
 /// > ...
 /// 
-/// Due to the repetitions, the compression ratio of the batches generated from this file should be pretty low.
+/// Due to the repetitions, the compression ratio of the batches generated from this file should be 
+/// pretty low.
 /// 
-/// The **MIDDLE** complexity source file consists of lorem ipsum dolor text, with pseudo latin text with words that are repeated a considerable amount of times throughout the whole text:
+/// The **MIDDLE** complexity source file consists of lorem ipsum dolor text, with pseudo latin
+/// text with words that are repeated a considerable amount of times throughout the whole text:
 /// > Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut 
 /// > labore et dolore magna aliqua. Eget gravida cum sociis natoque. Velit aliquet sagittis id 
 /// > consectetur purus ut faucibus pulvinar elementum. Neque gravida in fermentum et sollicitudin 
