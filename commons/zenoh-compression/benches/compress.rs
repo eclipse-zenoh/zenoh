@@ -11,6 +11,54 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+/// Zenoh Compression benches
+/// 
+/// These benches have the purpose of providing data regarding the performance of the compression
+/// algorithm in terms of execution time and compression ratio (what's the gain in terms of memory
+/// saved). Compression results vary depending on the size of the original message as well as its 
+/// complexity; a series of bytes with high entropy or complexity is hard to compress, and the gain
+/// in size may not justify the time penalty the compression induces, in fact the size of the 
+/// compression result may even be bigger than its input. 
+/// 
+/// Criterion is used for measuring the performance of the compressions in terms of time while in 
+/// order to measure the performance of the compressions in terms of compression ratio, we run the
+/// [get_stats] bench which (although is not a proper bench) generates a csv file with the
+/// compression sizes that allows us to perform a data analysis.
+/// 
+/// The sizes correspond to 8, 16, 32, 64, 128, 256, 512 bytes and 1, 2, 4, 8, 16, 24, 32, 40, 56, 64 kilobytes (the max size of a zenoh batch)
+/// 
+/// The batches are filled with data from files whose entropy/complexity varies. 
+/// 
+/// The **LOW** complexity source file consists of a series 20 of quotes that are repeated throughout the file until completition of the 64KB file size.
+/// > Noble dragons don't have friends. The closest thing they can get is an enemy who is still alive.
+/// > Come not between the dragon, and his wrath.
+/// > If the skies were able to dream, they would dream of dragons.
+/// > An adventure isn't worth telling if there aren’t any dragons in it.
+/// > The hunger of dragons is slow to wake, but hard to sate.
+/// > People who do not believe in the existence of dragons are often eaten by dragons.
+/// > ...
+/// 
+/// Due to the repetitions, the compression ratio of the batches generated from this file should be pretty low.
+/// 
+/// The **MIDDLE** complexity source file consists of lorem ipsum dolor text, with pseudo latin text with words that are repeated a considerable amount of times throughout the whole text:
+/// > Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut 
+/// > labore et dolore magna aliqua. Eget gravida cum sociis natoque. Velit aliquet sagittis id 
+/// > consectetur purus ut faucibus pulvinar elementum. Neque gravida in fermentum et sollicitudin 
+/// > ac orci. Nunc mi ipsum faucibus vitae aliquet nec ullamcorper sit. Morbi non arcu risus quis 
+/// > varius quam quisque id diam. Justo nec ultrices dui sapien eget mi proin sed libero. Pulvinar 
+/// > neque laoreet suspendisse interdum consectetur libero id. Nec ultrices dui sapien eget mi 
+/// > proin.
+/// 
+/// The compression ratio for this case is expected to be somewhere between 0.3 and 0.6.
+/// 
+/// Finally, the **HIGH** entropy source file consists of random chars:
+/// > r82or7491oh6Ld4pTdOu
+/// > BUIj1tLoQfDZgWjHxBzF
+/// > PkCRI0ktlexzW5O4bVcG
+/// > xmlmZbcG7iJXPjTjcphB
+/// > boe5nPy9TnBqxj52SfFq
+///
 #[macro_use]
 extern crate criterion;
 
@@ -56,6 +104,13 @@ impl fmt::Display for EntropyLevel {
 
 static KB: usize = 1024;
 static BATCH_SIZES: &'static [usize] = &[
+    8,
+    16,
+    32,
+    64,
+    128,
+    256,
+    512,
     KB,
     2 * KB,
     4 * KB,
@@ -229,6 +284,5 @@ fn get_stats(_: &mut Criterion) {
 }
 
 // Run benches with cargo bench --bench compress -- --plotting-backend gnuplot
-// criterion_group!(benches, compression_bench);
 criterion_group!(benches, compression_bench, get_stats);
 criterion_main!(benches);

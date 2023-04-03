@@ -381,9 +381,9 @@ async fn rx_task_stream(
                     } else {
                         log::debug!(
                             "Batch was not compressed, will work with: {:?}",
-                            buffer[0..n].reader()
+                            buffer[1..n].reader()
                         );
-                        start_pos = 0; //BUG HERE, SHOULD START AT 1 IF BATCH HAD COMPRESSION BYTE
+                        start_pos = 1;
                     }
                 }
 
@@ -492,9 +492,9 @@ async fn rx_task_dgram(
                     } else {
                         log::debug!(
                             "Batch was not compressed, will work with: {:?}",
-                            buffer[0..n].reader()
+                            buffer[1..n].reader()
                         );
-                        start_pos = 0; //BUG HERE, SHOULD START AT 1 IF BATCH HAD COMPRESSION BYTE
+                        start_pos = 1;
                     }
                 }
 

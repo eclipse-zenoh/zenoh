@@ -40,7 +40,6 @@ uhlc = { workspace = true, default-features = false }
 rand = { workspace = true }
 zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
 zenoh-codec = { path = "../zenoh-codec/", default-features = false }
-zenoh-crypto = { path = "../zenoh-crypto", default-features = false }
 
 [dev-dependencies]
 criterion = { workspace = true, features = [ "html_reports" ] }
