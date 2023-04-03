@@ -38,6 +38,9 @@ async fn main() {
             v.iter()
                 .fold(String::from("\n"), |a, b| format!("\t{a} \n\t{b:?}")),
         );
+        println!(">>>>>>> Eventual Leader <<<<<<<<<");
+        let m = group.leader().await;
+        println!("Leader mid = {m:?}");
         println!(">>>>>>><<<<<<<<<");
     }
 }
