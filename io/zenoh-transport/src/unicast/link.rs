@@ -473,9 +473,8 @@ async fn rx_task(
     }
 }
 
-
 #[cfg(feature = "transport_compression")]
-fn tx_compressed<'a>(
+fn tx_compressed(
     compression_enabled: bool,
     bytes: &[u8],
     compression_aux_buff: &mut Box<[u8]>,
