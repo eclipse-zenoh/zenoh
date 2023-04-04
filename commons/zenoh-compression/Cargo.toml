@@ -18,7 +18,7 @@ version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
 authors = [
-    "Darius Maitia <darius.maitia@zettascale.tech>",
+	"Darius Maitia <darius.maitia@zettascale.tech>",
 	"kydos <angelo@icorsaro.net>",
 	"Luca Cominardi <luca.cominardi@zettascale.tech>",
 ]
@@ -33,8 +33,7 @@ std = ["uhlc/std"]
 shared-memory = ["std"]
 
 [dependencies]
-csv = "1.2.0"
-lz4_flex = "0.10.0"
+lz4_flex = { workspace = true }
 log = { workspace = true }
 uhlc = { workspace = true, default-features = false }
 rand = { workspace = true }
@@ -44,7 +43,3 @@ zenoh-codec = { path = "../zenoh-codec/", default-features = false }
 [dev-dependencies]
 criterion = { workspace = true, features = [ "html_reports" ] }
 zenoh-protocol = { path = "../zenoh-protocol/", features = ["test"] }
-
-[[bench]]
-name = "compress"
-harness = false
