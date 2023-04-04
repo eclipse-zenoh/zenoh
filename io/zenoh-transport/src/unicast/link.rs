@@ -139,8 +139,6 @@ impl TransportLinkUnicast {
             let c_signal = self.signal_rx.clone();
             let c_rx_buffer_size = self.transport.config.manager.config.link_rx_buffer_size;
 
-            // let compression_enabled = self.transport.config.manager.config.compression_enabled;
-
             let handle = task::spawn(async move {
                 // Start the consume task
                 let res = rx_task(

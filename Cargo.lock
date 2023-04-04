@@ -3850,7 +3850,6 @@ name = "zenoh-codec"
 version = "0.7.0-rc"
 dependencies = [
  "criterion",
- "lz4_flex",
  "rand 0.8.5",
  "uhlc",
  "uuid",
@@ -3875,7 +3874,6 @@ dependencies = [
  "uhlc",
  "zenoh-buffers",
  "zenoh-codec",
- "zenoh-crypto",
  "zenoh-protocol",
 ]
 
@@ -4293,6 +4291,7 @@ dependencies = [
  "zenoh-cfg-properties",
  "zenoh-codec",
  "zenoh-collections",
+ "zenoh-compression",
  "zenoh-config",
  "zenoh-core",
  "zenoh-crypto",
