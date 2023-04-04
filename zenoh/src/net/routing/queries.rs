@@ -1677,6 +1677,47 @@ fn compute_final_route(
     }
 }
 
+#[inline]
+fn compute_local_replies(
+    tables: &Tables,
+    prefix: &Arc<Resource>,
+    suffix: &str,
+    face: &Arc<FaceState>,
+) -> Vec<(WireExpr<'static>, ZBuf)> {
+    let mut result = vec![];
+    // Only the first routing point in the query route
+    // should return the liveliness tokens
+    if face.whatami == WhatAmI::Client {
+        let key_expr = prefix.expr() + suffix;
+        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
+            Ok(ke) => ke,
+            Err(e) => {
+                log::warn!("Invalid KE reached the system: {}", e);
+                return result;
+            }
+        };
+        if key_expr.starts_with(super::PREFIX_LIVELINESS) {
+            let res = Resource::get_resource(prefix, suffix);
+            let matches = res
+                .as_ref()
+                .and_then(|res| res.context.as_ref())
+                .map(|ctx| Cow::from(&ctx.matches))
+                .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+            for mres in matches.iter() {
+                let mres = mres.upgrade().unwrap();
+                if (mres.context.is_some()
+                    && (!mres.context().router_subs.is_empty()
+                        || !mres.context().peer_subs.is_empty()))
+                    || mres.session_ctxs.values().any(|ctx| ctx.subs.is_some())
+                {
+                    result.push((Resource::get_best_key(&mres, "", face.id), ZBuf::default()));
+                }
+            }
+        }
+    }
+    result
+}
+
 #[derive(Clone)]
 struct QueryCleanup {
     tables: Arc<TablesLock>,
@@ -1836,8 +1877,17 @@ pub fn route_query(
 
                 let queries_lock = zwrite!(tables_ref.queries_lock);
                 let route = compute_final_route(&rtables, &route, face, &mut expr, &target, query);
+                let local_replies = compute_local_replies(&rtables, &prefix, expr.suffix, face);
+                let zid = rtables.zid;
+
                 drop(queries_lock);
                 drop(rtables);
+
+                for (expr, payload) in local_replies {
+                    face.primitives
+                        .clone()
+                        .send_reply_data(qid, zid, expr, None, payload);
+                }
 
                 if route.is_empty() {
                     log::debug!(

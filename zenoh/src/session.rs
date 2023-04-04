@@ -18,6 +18,8 @@ use crate::config::Notifier;
 use crate::handlers::{Callback, DefaultHandler};
 use crate::info::*;
 use crate::key_expr::KeyExprInner;
+#[zenoh_macros::unstable]
+use crate::liveliness::{Liveliness, LivelinessTokenState};
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
@@ -39,6 +41,7 @@ use flume::bounded;
 use futures::StreamExt;
 use log::{error, trace, warn};
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fmt;
 use std::ops::Deref;
@@ -82,6 +85,8 @@ pub(crate) struct SessionState {
     pub(crate) publications: Vec<OwnedKeyExpr>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
+    #[cfg(feature = "unstable")]
+    pub(crate) tokens: HashMap<Id, Arc<LivelinessTokenState>>,
     pub(crate) queries: HashMap<ZInt, QueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
@@ -102,6 +107,8 @@ impl SessionState {
             publications: Vec::new(),
             subscribers: HashMap::new(),
             queryables: HashMap::new(),
+            #[cfg(feature = "unstable")]
+            tokens: HashMap::new(),
             queries: HashMap::new(),
             aggregated_subscribers,
             aggregated_publishers,
@@ -252,7 +259,7 @@ impl Resource {
 }
 
 #[derive(Clone)]
-pub(crate) enum SessionRef<'a> {
+pub enum SessionRef<'a> {
     Borrow(&'a Session),
     Shared(Arc<Session>),
 }
@@ -761,12 +768,36 @@ impl Session {
         GetBuilder {
             session: self,
             selector,
+            scope: Ok(None),
             target: QueryTarget::default(),
             consolidation: QueryConsolidation::default(),
             destination: Locality::default(),
             timeout: Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout())),
             value: None,
             handler: DefaultHandler,
+        }
+    }
+
+    /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let liveliness = session
+    ///     .liveliness()
+    ///     .declare_token("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn liveliness(&self) -> Liveliness {
+        Liveliness {
+            session: SessionRef::Borrow(self),
         }
     }
 }
@@ -934,6 +965,7 @@ impl Session {
     pub(crate) fn declare_subscriber_inner(
         &self,
         key_expr: &KeyExpr,
+        scope: &Option<KeyExpr>,
         origin: Locality,
         callback: Callback<'static, Sample>,
         info: &SubInfo,
@@ -941,19 +973,33 @@ impl Session {
         let mut state = zwrite!(self.state);
         log::trace!("subscribe({:?})", key_expr);
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let key_expr = match scope {
+            Some(scope) => scope / key_expr,
+            None => key_expr.clone(),
+        };
+
         let sub_state = Arc::new(SubscriberState {
             id,
             key_expr: key_expr.clone().into_owned(),
+            scope: scope.clone().map(|e| e.into_owned()),
             origin,
             callback,
         });
 
-        let declared_sub = (origin != Locality::SessionLocal)
+        #[cfg(not(feature = "unstable"))]
+        let declared_sub = origin != Locality::SessionLocal;
+        #[cfg(feature = "unstable")]
+        let declared_sub = origin != Locality::SessionLocal
+            && !key_expr
+                .as_str()
+                .starts_with(crate::liveliness::PREFIX_LIVELINESS);
+
+        let declared_sub = declared_sub
             .then(|| {
                 match state
                 .aggregated_subscribers // TODO: can this be an OwnedKeyExpr?
                 .iter()
-                .find(|s| s.includes( key_expr))
+                .find(|s| s.includes( &key_expr))
                 {
                     Some(join_sub) => {
                         let joined_sub = state.subscribers.values().any(|s| {
@@ -965,7 +1011,7 @@ impl Session {
                         let twin_sub = state
                             .subscribers
                             .values()
-                            .any(|s| s.origin != Locality::SessionLocal && s.key_expr == *key_expr);
+                            .any(|s| s.origin != Locality::SessionLocal && s.key_expr == key_expr);
                         (!twin_sub).then(|| key_expr.clone())
                     }
                 }
@@ -1044,7 +1090,15 @@ impl Session {
                 res.subscribers.retain(|sub| sub.id != sub_state.id);
             }
 
-            if sub_state.origin != Locality::SessionLocal {
+            #[cfg(not(feature = "unstable"))]
+            let send_forget = sub_state.origin != Locality::SessionLocal;
+            #[cfg(feature = "unstable")]
+            let send_forget = sub_state.origin != Locality::SessionLocal
+                && !sub_state
+                    .key_expr
+                    .as_str()
+                    .starts_with(crate::liveliness::PREFIX_LIVELINESS);
+            if send_forget {
                 // Note: there might be several Subscribers on the same KeyExpr.
                 // Before calling forget_subscriber(key_expr), check if this was the last one.
                 let key_expr = &sub_state.key_expr;
@@ -1168,6 +1222,7 @@ impl Session {
             })
             .count() as ZInt
     }
+
     pub(crate) fn close_queryable(&self, qid: usize) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(qable_state) = state.queryables.remove(&qid) {
@@ -1211,6 +1266,48 @@ impl Session {
             Err(zerror!("Unable to find queryable").into())
         }
     }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn declare_liveliness_inner(
+        &self,
+        key_expr: &KeyExpr,
+    ) -> ZResult<Arc<LivelinessTokenState>> {
+        let mut state = zwrite!(self.state);
+        log::trace!("declare_liveliness({:?})", key_expr);
+        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let key_expr = KeyExpr::from(*crate::liveliness::KE_PREFIX_LIVELINESS / key_expr);
+        let tok_state = Arc::new(LivelinessTokenState {
+            id,
+            key_expr: key_expr.clone().into_owned(),
+        });
+
+        state.tokens.insert(tok_state.id, tok_state.clone());
+        let primitives = state.primitives.as_ref().unwrap().clone();
+        drop(state);
+        let sub_info = SubInfo::default();
+        primitives.decl_subscriber(&key_expr.to_wire(self), &sub_info, None);
+        Ok(tok_state)
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn undeclare_liveliness(&self, tid: usize) -> ZResult<()> {
+        let mut state = zwrite!(self.state);
+        if let Some(tok_state) = state.tokens.remove(&tid) {
+            trace!("undeclare_liveliness({:?})", tok_state);
+            // Note: there might be several Tokens on the same KeyExpr.
+            let key_expr = &tok_state.key_expr;
+            let twin_tok = state.tokens.values().any(|s| s.key_expr == *key_expr);
+            if !twin_tok {
+                let primitives = state.primitives.as_ref().unwrap().clone();
+                drop(state);
+                primitives.forget_subscriber(&key_expr.to_wire(self), None);
+            }
+            Ok(())
+        } else {
+            Err(zerror!("Unable to find liveliness token").into())
+        }
+    }
+
     pub(crate) fn handle_data(
         &self,
         local: bool,
@@ -1219,59 +1316,108 @@ impl Session {
         payload: ZBuf,
     ) {
         let mut callbacks = SingleOrVec::default();
-        let sample = {
-            let state = zread!(self.state);
-            let sample = if key_expr.suffix.is_empty() {
-                match state.get_res(&key_expr.scope, local) {
-                    Some(Resource::Node(res)) => {
-                        for sub in &res.subscribers {
-                            if sub.origin == Locality::Any
-                                || (local == (sub.origin == Locality::SessionLocal))
-                            {
-                                callbacks.push(sub.callback.clone());
-                            }
+        let state = zread!(self.state);
+        if key_expr.suffix.is_empty() {
+            match state.get_res(&key_expr.scope, local) {
+                Some(Resource::Node(res)) => {
+                    for sub in &res.subscribers {
+                        if sub.origin == Locality::Any
+                            || (local == (sub.origin == Locality::SessionLocal))
+                        {
+                            match &sub.scope {
+                                Some(scope) => {
+                                    if !res.key_expr.starts_with(&***scope) {
+                                        log::warn!(
+                                            "Received Data for `{}`, which didn't start with scope `{}`: don't deliver to scoped Subscriber.",
+                                            res.key_expr,
+                                            scope,
+                                        );
+                                    } else {
+                                        match KeyExpr::try_from(&res.key_expr[(scope.len() + 1)..])
+                                        {
+                                            Ok(key_expr) => callbacks.push((
+                                                sub.callback.clone(),
+                                                key_expr.into_owned(),
+                                            )),
+                                            Err(e) => {
+                                                log::warn!(
+                                                    "Error unscoping received Data for `{}`: {}",
+                                                    res.key_expr,
+                                                    e,
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                                None => callbacks
+                                    .push((sub.callback.clone(), res.key_expr.clone().into())),
+                            };
                         }
-                        Sample::with_info(res.key_expr.clone().into(), payload, info)
-                    }
-                    Some(Resource::Prefix { prefix }) => {
-                        log::error!(
-                            "Received Data for `{}`, which isn't a key expression",
-                            prefix
-                        );
-                        return;
-                    }
-                    None => {
-                        log::error!("Received Data for unknown expr_id: {}", key_expr.scope);
-                        return;
                     }
                 }
-            } else {
-                match state.wireexpr_to_keyexpr(key_expr, local) {
-                    Ok(key_expr) => {
-                        for sub in state.subscribers.values() {
-                            if (sub.origin == Locality::Any
-                                || (local == (sub.origin == Locality::SessionLocal)))
-                                && key_expr.intersects(&sub.key_expr)
-                            {
-                                callbacks.push(sub.callback.clone());
-                            }
+                Some(Resource::Prefix { prefix }) => {
+                    log::error!(
+                        "Received Data for `{}`, which isn't a key expression",
+                        prefix
+                    );
+                    return;
+                }
+                None => {
+                    log::error!("Received Data for unknown expr_id: {}", key_expr.scope);
+                    return;
+                }
+            }
+        } else {
+            match state.wireexpr_to_keyexpr(key_expr, local) {
+                Ok(key_expr) => {
+                    for sub in state.subscribers.values() {
+                        if (sub.origin == Locality::Any
+                            || (local == (sub.origin == Locality::SessionLocal)))
+                            && key_expr.intersects(&sub.key_expr)
+                        {
+                            match &sub.scope {
+                                Some(scope) => {
+                                    if !key_expr.starts_with(&***scope) {
+                                        log::warn!(
+                                            "Received Data for `{}`, which didn't start with scope `{}`: don't deliver to scoped Subscriber.",
+                                            key_expr,
+                                            scope,
+                                        );
+                                    } else {
+                                        match KeyExpr::try_from(&key_expr[(scope.len() + 1)..]) {
+                                            Ok(key_expr) => callbacks.push((
+                                                sub.callback.clone(),
+                                                key_expr.into_owned(),
+                                            )),
+                                            Err(e) => {
+                                                log::warn!(
+                                                    "Error unscoping received Data for `{}`: {}",
+                                                    key_expr,
+                                                    e,
+                                                );
+                                            }
+                                        }
+                                    }
+                                }
+                                None => callbacks
+                                    .push((sub.callback.clone(), key_expr.clone().into_owned())),
+                            };
                         }
-                        Sample::with_info(key_expr.clone().into_owned(), payload, info)
-                    }
-                    Err(err) => {
-                        log::error!("Received Data for unkown key_expr: {}", err);
-                        return;
                     }
                 }
-            };
-            sample
+                Err(err) => {
+                    log::error!("Received Data for unkown key_expr: {}", err);
+                    return;
+                }
+            }
         };
+        drop(state);
         let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
-        for cb in drain {
-            cb(sample.clone());
+        for (cb, key_expr) in drain {
+            cb(Sample::with_info(key_expr, payload.clone(), info.clone()));
         }
-        if let Some(cb) = last {
-            cb(sample);
+        if let Some((cb, key_expr)) = last {
+            cb(Sample::with_info(key_expr, payload, info));
         }
     }
 
@@ -1290,6 +1436,7 @@ impl Session {
     pub(crate) fn query(
         &self,
         selector: &Selector<'_>,
+        scope: &Option<KeyExpr<'_>>,
         target: QueryTarget,
         consolidation: QueryConsolidation,
         destination: Locality,
@@ -1336,6 +1483,14 @@ impl Session {
             }
         });
 
+        let selector = match scope {
+            Some(scope) => Selector {
+                key_expr: scope / &*selector.key_expr,
+                parameters: selector.parameters.clone(),
+            },
+            None => selector.clone(),
+        };
+
         log::trace!("Register query {} (nb_final = {})", qid, nb_final);
         let wexpr = selector.key_expr.to_wire(self);
         state.queries.insert(
@@ -1343,6 +1498,7 @@ impl Session {
             QueryState {
                 nb_final,
                 selector: selector.clone().into_owned(),
+                scope: scope.clone().map(|e| e.into_owned()),
                 reception_mode: consolidation,
                 replies: (consolidation != ConsolidationMode::None).then(HashMap::new),
                 callback,
@@ -1354,7 +1510,7 @@ impl Session {
         drop(state);
         if destination != Locality::SessionLocal {
             primitives.send_query(
-                &selector.key_expr.to_wire(self),
+                &wexpr,
                 selector.parameters(),
                 qid,
                 target,
@@ -1621,6 +1777,29 @@ impl SessionDeclarations for Arc<Session> {
             destination: Locality::default(),
         }
     }
+
+    /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let liveliness = session
+    ///     .liveliness()
+    ///     .declare_token("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    fn liveliness(&self) -> Liveliness<'static> {
+        Liveliness {
+            session: SessionRef::Shared(self.clone()),
+        }
+    }
 }
 
 impl Primitives for Session {
@@ -1663,15 +1842,51 @@ impl Primitives for Session {
 
     fn decl_subscriber(
         &self,
-        _key_expr: &WireExpr,
+        key_expr: &WireExpr,
         _sub_info: &SubInfo,
         _routing_context: Option<RoutingContext>,
     ) {
-        trace!("recv Decl Subscriber {:?} , {:?}", _key_expr, _sub_info);
+        trace!("recv Decl Subscriber {:?} , {:?}", key_expr, _sub_info);
+        #[cfg(feature = "unstable")]
+        {
+            let state = zread!(self.state);
+            match state.wireexpr_to_keyexpr(key_expr, false) {
+                Ok(expr) => {
+                    if expr
+                        .as_str()
+                        .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                    {
+                        drop(state);
+                        self.handle_data(false, key_expr, None, ZBuf::default());
+                    }
+                }
+                Err(err) => log::error!("Received Forget Subscriber for unkown key_expr: {}", err),
+            }
+        }
     }
 
-    fn forget_subscriber(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
-        trace!("recv Forget Subscriber {:?}", _key_expr);
+    fn forget_subscriber(&self, key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
+        trace!("recv Forget Subscriber {:?}", key_expr);
+        #[cfg(feature = "unstable")]
+        {
+            let state = zread!(self.state);
+            match state.wireexpr_to_keyexpr(key_expr, false) {
+                Ok(expr) => {
+                    if expr
+                        .as_str()
+                        .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                    {
+                        drop(state);
+                        let data_info = DataInfo {
+                            kind: SampleKind::Delete,
+                            ..Default::default()
+                        };
+                        self.handle_data(false, key_expr, Some(data_info), ZBuf::default());
+                    }
+                }
+                Err(err) => log::error!("Received Forget Subscriber for unkown key_expr: {}", err),
+            }
+        }
     }
 
     fn decl_queryable(
@@ -1777,6 +1992,32 @@ impl Primitives for Session {
                     );
                     return;
                 }
+                let key_expr = match &query.scope {
+                    Some(scope) => {
+                        if !key_expr.starts_with(&***scope) {
+                            log::warn!(
+                                "Received ReplyData for `{}` from `{:?}, which didn't start with scope `{}`: dropping ReplyData.",
+                                key_expr,
+                                replier_id,
+                                scope,
+                            );
+                            return;
+                        }
+                        match KeyExpr::try_from(&key_expr[(scope.len() + 1)..]) {
+                            Ok(key_expr) => key_expr,
+                            Err(e) => {
+                                log::warn!(
+                                    "Error unscoping received ReplyData for `{}` from `{:?}: {}",
+                                    key_expr,
+                                    replier_id,
+                                    e,
+                                );
+                                return;
+                            }
+                        }
+                    }
+                    None => key_expr,
+                };
                 let new_reply = Reply {
                     sample: Ok(Sample::with_info(key_expr.into_owned(), payload, data_info)),
                     replier_id,
@@ -2027,4 +2268,23 @@ pub trait SessionDeclarations {
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_result::Error>;
+
+    /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let liveliness = session
+    ///     .liveliness()
+    ///     .declare_token("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    fn liveliness(&self) -> Liveliness<'static>;
 }

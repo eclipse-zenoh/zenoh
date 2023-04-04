@@ -85,6 +85,8 @@ impl std::fmt::Display for Value {
     }
 }
 
+impl std::error::Error for Value {}
+
 // Shared memory conversion
 #[cfg(feature = "shared-memory")]
 impl From<Arc<SharedMemoryBuf>> for Value {

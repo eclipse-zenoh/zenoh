@@ -15,44 +15,29 @@ use async_std::task::sleep;
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
+use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh::query::ReplyKeyExpr;
-use zenoh_ext::*;
 
 #[async_std::main]
 async fn main() {
     // Initiate logging
     env_logger::init();
 
-    let (config, key_expr, query) = parse_args();
+    let (config, key_expr) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!(
-        "Declaring QueryingSubscriber on {} with an initial query on {}",
-        key_expr,
-        query.as_ref().unwrap_or(&key_expr)
-    );
-    let subscriber = if let Some(selector) = query {
-        session
-            .declare_subscriber(key_expr)
-            .querying()
-            .query_selector(&selector)
-            .query_accept_replies(ReplyKeyExpr::Any)
-            .res()
-            .await
-            .unwrap()
-    } else {
-        session
-            .declare_subscriber(key_expr)
-            .querying()
-            .res()
-            .await
-            .unwrap()
-    };
+    println!("Declaring Liveliness Subscriber on '{}'...", &key_expr);
+
+    let subscriber = session
+        .liveliness()
+        .declare_subscriber(&key_expr)
+        .res()
+        .await
+        .unwrap();
 
     println!("Enter 'q' to quit...");
     let mut stdin = async_std::io::stdin();
@@ -61,8 +46,14 @@ async fn main() {
         select!(
             sample = subscriber.recv_async() => {
                 let sample = sample.unwrap();
-                println!(">> [Subscriber] Received {} ('{}': '{}')",
-                    sample.kind, sample.key_expr.as_str(), sample.value);
+                match sample.kind {
+                    SampleKind::Put => println!(
+                        ">> [LivelinessSubscriber] New alive token ('{}')",
+                        sample.key_expr.as_str()),
+                    SampleKind::Delete => println!(
+                        ">> [LivelinessSubscriber] Dropped token ('{}')",
+                        sample.key_expr.as_str()),
+                }
             },
 
             _ = stdin.read_exact(&mut input).fuse() => {
@@ -76,8 +67,8 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Config, String, Option<String>) {
-    let args = App::new("zenoh-ext query sub example")
+fn parse_args() -> (Config, KeyExpr<'static>) {
+    let args = App::new("zenoh liveliness sub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
                 .possible_values(["peer", "client"]),
@@ -89,11 +80,8 @@ fn parse_args() -> (Config, String, Option<String>) {
             "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
         ))
         .arg(
-            Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression to subscribe onto'")
-                .default_value("demo/example/**"),
-        )
-        .arg(
-            Arg::from_usage("-q, --query=[SELECTOR] 'The selector to use for queries (by default it's same than 'selector' option)'"),
+            Arg::from_usage("-k, --key=[KEYEXPR] 'The key expression mathing liveliness changes to subscribe to.'")
+                .default_value("group1/**"),
         )
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
@@ -127,8 +115,9 @@ fn parse_args() -> (Config, String, Option<String>) {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
-    let key_expr = args.value_of("key").unwrap().to_string();
-    let query = args.value_of("query").map(ToString::to_string);
+    let key_expr = KeyExpr::try_from(args.value_of("key").unwrap())
+        .unwrap()
+        .into_owned();
 
-    (config, key_expr, query)
+    (config, key_expr)
 }
