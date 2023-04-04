@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::common::ZExtUnknown;
 use uhlc::Timestamp;
 
 /// # Err message
@@ -45,6 +46,7 @@ pub struct Err {
     pub timestamp: Option<Timestamp>,
     pub ext_sinfo: Option<ext::SourceInfoType>,
     pub ext_body: Option<ext::ErrBodyType>,
+    pub ext_unknown: Vec<ZExtUnknown>,
 }
 
 pub mod ext {
@@ -89,7 +91,7 @@ pub mod ext {
 impl Err {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::core::ZenohId;
+        use crate::{common::iext, core::ZenohId};
         use core::convert::TryFrom;
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -103,6 +105,10 @@ impl Err {
         });
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
         let ext_body = rng.gen_bool(0.5).then_some(ext::ErrBodyType::rand());
+        let mut ext_unknown = Vec::new();
+        for _ in 0..rng.gen_range(0..4) {
+            ext_unknown.push(ZExtUnknown::rand2(iext::mid(ext::ErrBody::ID) + 1, false));
+        }
 
         Self {
             code,
@@ -110,6 +116,7 @@ impl Err {
             timestamp,
             ext_sinfo,
             ext_body,
+            ext_unknown,
         }
     }
 }

@@ -22,7 +22,7 @@ use zenoh_protocol::common::{
     iext, imsg::has_flag, ZExtBody, ZExtUnit, ZExtUnknown, ZExtZ64, ZExtZBuf, ZExtZBufHeader,
 };
 
-fn skip_inner<R>(reader: &mut R, _s: &str, header: u8) -> Result<bool, DidntRead>
+fn read_inner<R>(reader: &mut R, _s: &str, header: u8) -> Result<(ZExtUnknown, bool), DidntRead>
 where
     R: Reader,
 {
@@ -36,6 +36,23 @@ where
         #[cfg(feature = "std")]
         log::debug!("Unknown {_s} ext: {u:?}");
     }
+    Ok((u, has_ext))
+}
+
+#[cold]
+#[inline(never)]
+pub fn read<R>(reader: &mut R, s: &str, header: u8) -> Result<(ZExtUnknown, bool), DidntRead>
+where
+    R: Reader,
+{
+    read_inner(&mut *reader, s, header)
+}
+
+fn skip_inner<R>(reader: &mut R, s: &str, header: u8) -> Result<bool, DidntRead>
+where
+    R: Reader,
+{
+    let (_, has_ext): (ZExtUnknown, bool) = read_inner(&mut *reader, s, header)?;
     Ok(has_ext)
 }
 

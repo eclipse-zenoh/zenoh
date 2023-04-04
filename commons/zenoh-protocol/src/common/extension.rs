@@ -38,14 +38,14 @@ use zenoh_buffers::ZBuf;
 /// +-+-+-+-+-+-+-+-+
 /// |Z|ENC|M|   ID  |
 /// +-+---+-+-------+
-/// %    length     % -- If ENC == u64 || ENC == ZBuf
+/// %    length     % -- If ENC == Z64 || ENC == ZBuf (z32)
 /// +---------------+
 /// ~     [u8]      ~ -- If ENC == ZBuf
 /// +---------------+
 ///
 /// Encoding:
 /// - 0b00: Unit
-/// - 0b01: u64
+/// - 0b01: Z64
 /// - 0b10: ZBuf
 /// - 0b11: Reserved
 ///
@@ -68,6 +68,10 @@ pub mod iext {
 
     pub const fn eid(header: u8) -> u8 {
         header & !FLAG_Z
+    }
+
+    pub const fn mid(header: u8) -> u8 {
+        header & ID_MASK
     }
 
     pub(super) const fn id(id: u8, mandatory: bool, encoding: u8) -> u8 {
@@ -346,7 +350,17 @@ impl ZExtUnknown {
         let mut rng = rand::thread_rng();
 
         let id: u8 = rng.gen_range(0x00..=iext::ID_MASK);
-        let mandatory: bool = rng.gen_bool(0.5);
+        let mandatory = rng.gen_bool(0.5);
+        let body = ZExtBody::rand();
+        Self::new(id, mandatory, body)
+    }
+
+    #[cfg(feature = "test")]
+    pub fn rand2(start: u8, mandatory: bool) -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        let id: u8 = rng.gen_range(start..=iext::ID_MASK);
         let body = ZExtBody::rand();
         Self::new(id, mandatory, body)
     }

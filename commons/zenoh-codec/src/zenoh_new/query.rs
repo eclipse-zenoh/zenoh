@@ -12,12 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{common::extension, LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header};
-use alloc::string::String;
+use alloc::{string::String, vec::Vec};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
     SplitBuffer, ZBuf,
 };
+
 use zenoh_protocol::{
     common::{iext, imsg, ZExtZBufHeader},
     core::Encoding,
@@ -132,7 +133,8 @@ where
         }
         let mut n_exts = (x.ext_sinfo.is_some() as u8)
             + ((x.ext_consolidation != ext::ConsolidationType::default()) as u8)
-            + (x.ext_body.is_some() as u8);
+            + (x.ext_body.is_some() as u8)
+            + (x.ext_unknown.len() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -155,6 +157,10 @@ where
         if let Some(body) = x.ext_body.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (body, n_exts != 0))?;
+        }
+        for u in x.ext_unknown.iter() {
+            n_exts -= 1;
+            self.write(&mut *writer, (u, n_exts != 0))?;
         }
 
         Ok(())
@@ -195,6 +201,7 @@ where
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
         let mut ext_consolidation = ext::ConsolidationType::default();
         let mut ext_body: Option<ext::QueryBodyType> = None;
+        let mut ext_unknown = Vec::new();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -217,7 +224,9 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    has_ext = extension::skip(reader, "Put", ext)?;
+                    let (u, ext) = extension::read(reader, "Query", ext)?;
+                    ext_unknown.push(u);
+                    has_ext = ext;
                 }
             }
         }
@@ -227,6 +236,7 @@ where
             ext_sinfo,
             ext_consolidation,
             ext_body,
+            ext_unknown,
         })
     }
 }

@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::common::ZExtUnknown;
+use alloc::vec::Vec;
 use uhlc::Timestamp;
 
 /// # Ack message
@@ -40,6 +42,7 @@ pub mod flag {
 pub struct Ack {
     pub timestamp: Option<Timestamp>,
     pub ext_sinfo: Option<ext::SourceInfoType>,
+    pub ext_unknown: Vec<ZExtUnknown>,
 }
 
 pub mod ext {
@@ -52,7 +55,7 @@ pub mod ext {
 impl Ack {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::core::ZenohId;
+        use crate::{common::iext, core::ZenohId};
         use core::convert::TryFrom;
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -63,10 +66,18 @@ impl Ack {
             Timestamp::new(time, id)
         });
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
+        let mut ext_unknown = Vec::new();
+        for _ in 0..rng.gen_range(0..4) {
+            ext_unknown.push(ZExtUnknown::rand2(
+                iext::mid(ext::SourceInfo::ID) + 1,
+                false,
+            ));
+        }
 
         Self {
             timestamp,
             ext_sinfo,
+            ext_unknown,
         }
     }
 }

@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::Encoding;
+use crate::{common::ZExtUnknown, core::Encoding};
 use uhlc::Timestamp;
 use zenoh_buffers::ZBuf;
 
@@ -47,6 +47,7 @@ pub struct Put {
     pub timestamp: Option<Timestamp>,
     pub encoding: Encoding,
     pub ext_sinfo: Option<ext::SourceInfoType>,
+    pub ext_unknown: Vec<ZExtUnknown>,
     pub payload: ZBuf,
 }
 
@@ -92,7 +93,7 @@ pub mod ext {
 impl Put {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::core::ZenohId;
+        use crate::{common::iext, core::ZenohId};
         use core::convert::TryFrom;
         use rand::Rng;
         let mut rng = rand::thread_rng();
@@ -105,11 +106,19 @@ impl Put {
         let encoding = Encoding::rand();
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
         let payload = ZBuf::rand(rng.gen_range(1..=64));
+        let mut ext_unknown = Vec::new();
+        for _ in 0..rng.gen_range(0..4) {
+            ext_unknown.push(ZExtUnknown::rand2(
+                iext::mid(ext::SourceInfo::ID) + 1,
+                false,
+            ));
+        }
 
         Self {
             timestamp,
             encoding,
             ext_sinfo,
+            ext_unknown,
             payload,
         }
     }

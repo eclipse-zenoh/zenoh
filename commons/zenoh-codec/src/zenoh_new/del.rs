@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
+use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -36,7 +37,7 @@ where
         if x.timestamp.is_some() {
             header |= flag::T;
         }
-        let mut n_exts = (x.ext_sinfo.is_some()) as u8;
+        let mut n_exts = (x.ext_sinfo.is_some()) as u8 + (x.ext_unknown.len() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -51,6 +52,10 @@ where
         if let Some(sinfo) = x.ext_sinfo.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
+        }
+        for u in x.ext_unknown.iter() {
+            n_exts -= 1;
+            self.write(&mut *writer, (u, n_exts != 0))?;
         }
 
         Ok(())
@@ -89,6 +94,7 @@ where
 
         // Extensions
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
+        let mut ext_unknown = Vec::new();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -101,7 +107,9 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    has_ext = extension::skip(reader, "Del", ext)?;
+                    let (u, ext) = extension::read(reader, "Del", ext)?;
+                    ext_unknown.push(u);
+                    has_ext = ext;
                 }
             }
         }
@@ -109,6 +117,7 @@ where
         Ok(Del {
             timestamp,
             ext_sinfo,
+            ext_unknown,
         })
     }
 }

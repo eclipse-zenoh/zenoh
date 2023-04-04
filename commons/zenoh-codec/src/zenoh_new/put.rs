@@ -15,6 +15,7 @@ use crate::{
     common::extension, LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header,
     Zenoh080Length,
 };
+use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -95,7 +96,7 @@ where
         if x.encoding != Encoding::default() {
             header |= flag::E;
         }
-        let mut n_exts = (x.ext_sinfo.is_some()) as u8;
+        let mut n_exts = (x.ext_sinfo.is_some()) as u8 + (x.ext_unknown.len() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -113,6 +114,10 @@ where
         if let Some(sinfo) = x.ext_sinfo.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
+        }
+        for u in x.ext_unknown.iter() {
+            n_exts -= 1;
+            self.write(&mut *writer, (u, n_exts != 0))?;
         }
 
         // Payload
@@ -160,6 +165,7 @@ where
 
         // Extensions
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
+        let mut ext_unknown = Vec::new();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -172,7 +178,9 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    has_ext = extension::skip(reader, "Put", ext)?;
+                    let (u, ext) = extension::read(reader, "Put", ext)?;
+                    ext_unknown.push(u);
+                    has_ext = ext;
                 }
             }
         }
@@ -185,6 +193,7 @@ where
             timestamp,
             encoding,
             ext_sinfo,
+            ext_unknown,
             payload,
         })
     }

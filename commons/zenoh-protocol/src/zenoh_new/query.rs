@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::common::ZExtUnknown;
 use alloc::string::String;
 
 /// The kind of consolidation.
@@ -83,6 +84,7 @@ pub struct Query {
     pub ext_sinfo: Option<ext::SourceInfoType>,
     pub ext_consolidation: Consolidation,
     pub ext_body: Option<ext::QueryBodyType>,
+    pub ext_unknown: Vec<ZExtUnknown>,
 }
 
 pub mod ext {
@@ -99,7 +101,7 @@ pub mod ext {
     pub type SourceInfoType = crate::zenoh_new::put::ext::SourceInfoType;
 
     /// # Consolidation extension
-    pub type Consolidation = zextz64!(0x2, false);
+    pub type Consolidation = zextz64!(0x2, true);
     pub type ConsolidationType = crate::zenoh_new::query::Consolidation;
 
     /// # QueryBody extension
@@ -135,6 +137,7 @@ pub mod ext {
 impl Query {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use crate::common::iext;
         use rand::{
             distributions::{Alphanumeric, DistString},
             Rng,
@@ -153,12 +156,17 @@ impl Query {
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
         let ext_consolidation = Consolidation::rand();
         let ext_body = rng.gen_bool(0.5).then_some(ext::QueryBodyType::rand());
+        let mut ext_unknown = Vec::new();
+        for _ in 0..rng.gen_range(0..4) {
+            ext_unknown.push(ZExtUnknown::rand2(iext::mid(ext::QueryBody::ID) + 1, false));
+        }
 
         Self {
             parameters,
             ext_sinfo,
             ext_consolidation,
             ext_body,
+            ext_unknown,
         }
     }
 }
