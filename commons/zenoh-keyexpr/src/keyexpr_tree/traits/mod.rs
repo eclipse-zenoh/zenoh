@@ -277,7 +277,7 @@ pub trait IKeyExprTreeExt<'a, Weight>: IKeyExprTree<'a, Weight> {
         fn(Self::TreeIterItem) -> Option<(OwnedKeyExpr, &'a Weight)>,
     >
     where
-        Self::TreeIterItem: AsNode<Self::Node>,
+        Self::TreeIterItem: AsNode<Box<Self::Node>>,
     {
         self.tree_iter().filter_map(|node| {
             unsafe { core::mem::transmute::<_, Option<&Weight>>(node.as_node().weight()) }
