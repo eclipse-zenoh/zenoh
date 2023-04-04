@@ -15,7 +15,7 @@
 use zenoh_result::{bail, ZResult};
 
 use super::{support::trim_suffix_slash, IKeFormatStorage, KeFormat, Segment};
-use crate::core::key_expr::{format::support::trim_prefix_slash, keyexpr};
+use crate::key_expr::{format::support::trim_prefix_slash, keyexpr};
 
 pub struct Parsed<'s, Storage: IKeFormatStorage<'s>> {
     format: &'s KeFormat<'s, Storage>,
@@ -221,7 +221,7 @@ fn do_parse_doublewild<'s>(
 
 #[test]
 fn parsing() {
-    use crate::core::key_expr::OwnedKeyExpr;
+    use crate::key_expr::OwnedKeyExpr;
     use core::convert::TryFrom;
     for a_spec in ["${a:*}", "a/${a:*}", "a/${a:*/**}"] {
         for b_spec in ["b/${b:**}", "${b:**}"] {

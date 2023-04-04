@@ -15,16 +15,18 @@
 #[cfg(not(feature = "std"))]
 use alloc::boxed::Box;
 use alloc::string::String;
-use core::{
-    ops::{Deref, DerefMut},
-    ptr::NonNull,
+use core::ptr::NonNull;
+
+use crate::keyexpr;
+use crate::keyexpr_tree::{
+    support::{IWildness, NonWild, UnknownWildness},
+    *,
 };
 
-use crate::keyexpr_tree::*;
-use zenoh_protocol::core::key_expr::keyexpr;
-
 use super::impls::KeyedSetProvider;
+use super::support::IterOrOption;
 
+/// A fully owned KeTree.
 #[repr(C)]
 pub struct KeBoxTree<
     Weight,
@@ -229,69 +231,6 @@ where
                 }
             });
         self.wildness.set(wild);
-    }
-}
-pub enum IterOrOption<Iter: Iterator, Item> {
-    Opt(Option<Item>),
-    Iter(Iter),
-}
-impl<Iter: Iterator, Item> Iterator for IterOrOption<Iter, Item>
-where
-    Iter::Item: Coerce<Item>,
-{
-    type Item = Item;
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            IterOrOption::Opt(v) => v.take(),
-            IterOrOption::Iter(it) => it.next().map(Coerce::coerce),
-        }
-    }
-}
-pub struct Coerced<Iter: Iterator, Item> {
-    iter: Iter,
-    _item: core::marker::PhantomData<Item>,
-}
-
-impl<Iter: Iterator, Item> Coerced<Iter, Item> {
-    pub fn new(iter: Iter) -> Self {
-        Self {
-            iter,
-            _item: Default::default(),
-        }
-    }
-}
-impl<Iter: Iterator, Item> Iterator for Coerced<Iter, Item>
-where
-    Iter::Item: Coerce<Item>,
-{
-    type Item = Item;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(Coerce::coerce)
-    }
-}
-
-trait Coerce<Into> {
-    fn coerce(self) -> Into;
-}
-impl<T> Coerce<T> for T {
-    fn coerce(self) -> T {
-        self
-    }
-}
-impl<'a, T> Coerce<&'a T> for &'a Box<T> {
-    fn coerce(self) -> &'a T {
-        self.deref()
-    }
-}
-impl<'a, T> Coerce<&'a mut T> for &'a mut Box<T> {
-    fn coerce(self) -> &'a mut T {
-        self.deref_mut()
-    }
-}
-impl<Iter: Iterator, Item> From<Iter> for IterOrOption<Iter, Item> {
-    fn from(it: Iter) -> Self {
-        Self::Iter(it)
     }
 }
 

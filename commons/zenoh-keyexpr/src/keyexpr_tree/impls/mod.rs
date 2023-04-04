@@ -12,14 +12,15 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use crate::keyexpr;
 pub use hashmap_impl::HashMapProvider;
 pub use keyed_set_impl::KeyedSetProvider;
 pub use vec_set_impl::VecSetProvider;
-use zenoh_protocol::core::key_expr::keyexpr;
 mod hashmap_impl;
 mod keyed_set_impl;
 mod vec_set_impl;
 
+/// The advised way of storing children in KeTrees, based on benchmarks.
 pub type DefaultChildrenProvider = KeyedSetProvider;
 pub struct FilterMap<I, F> {
     iter: I,

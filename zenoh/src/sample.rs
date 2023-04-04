@@ -36,10 +36,11 @@ pub enum Locality {
     Any,
 }
 #[cfg(not(feature = "unstable"))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Locality {
     SessionLocal,
     Remote,
+    #[default]
     Any,
 }
 
