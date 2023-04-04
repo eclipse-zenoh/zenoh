@@ -13,7 +13,7 @@
 //
 
 use crate::{keyexpr, OwnedKeyExpr};
-
+use alloc::boxed::Box;
 pub mod default_impls;
 
 /// The basic immutable methods of all all KeTrees
