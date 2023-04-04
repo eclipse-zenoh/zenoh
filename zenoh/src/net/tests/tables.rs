@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::net::routing::router::*;
+use crate::net::routing::router::{self, *};
 use std::convert::{TryFrom, TryInto};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
@@ -31,24 +31,33 @@ use zenoh_transport::{DummyPrimitives, Primitives};
 
 #[test]
 fn base_test() {
-    let mut tables = Tables::new(
+    let tables = TablesLock {
+        tables: RwLock::new(Tables::new(
+            ZenohId::try_from([1]).unwrap(),
+            WhatAmI::Client,
+            Some(Arc::new(HLC::default())),
+            false,
+            true,
+            Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+        )),
+        ctrl_lock: Mutex::new(()),
+        queries_lock: RwLock::new(()),
+    };
+
+    let primitives = Arc::new(DummyPrimitives::new());
+    let face = zwrite!(tables.tables).open_face(
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
-        Some(Arc::new(HLC::default())),
-        false,
-        true,
-        Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+        primitives,
     );
-    let primitives = Arc::new(DummyPrimitives::new());
-    let face = tables.open_face(ZenohId::try_from([1]).unwrap(), WhatAmI::Client, primitives);
     register_expr(
-        &mut tables,
+        &tables,
         &mut face.upgrade().unwrap(),
         1,
         &"one/two/three".into(),
     );
     register_expr(
-        &mut tables,
+        &tables,
         &mut face.upgrade().unwrap(),
         2,
         &"one/deux/trois".into(),
@@ -59,13 +68,14 @@ fn base_test() {
         mode: SubMode::Push,
     };
     declare_client_subscription(
-        &mut tables,
+        &tables,
+        zread!(tables.tables),
         &mut face.upgrade().unwrap(),
         &WireExpr::from(1).with_suffix("four/five"),
         &sub_info,
     );
 
-    Tables::print(&tables);
+    Tables::print(&zread!(tables.tables));
 }
 
 #[test]
@@ -122,19 +132,27 @@ fn match_test() {
     ]
     .map(|s| keyexpr::new(s).unwrap());
 
-    let mut tables = Tables::new(
+    let tables = TablesLock {
+        tables: RwLock::new(Tables::new(
+            ZenohId::try_from([1]).unwrap(),
+            WhatAmI::Client,
+            Some(Arc::new(HLC::default())),
+            false,
+            true,
+            Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+        )),
+        ctrl_lock: Mutex::new(()),
+        queries_lock: RwLock::new(()),
+    };
+    let primitives = Arc::new(DummyPrimitives::new());
+    let face = zwrite!(tables.tables).open_face(
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
-        Some(Arc::new(HLC::default())),
-        false,
-        true,
-        Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+        primitives,
     );
-    let primitives = Arc::new(DummyPrimitives::new());
-    let face = tables.open_face(ZenohId::try_from([1]).unwrap(), WhatAmI::Client, primitives);
     for (i, key_expr) in key_exprs.iter().enumerate() {
         register_expr(
-            &mut tables,
+            &tables,
             &mut face.upgrade().unwrap(),
             i.try_into().unwrap(),
             &(*key_expr).into(),
@@ -142,7 +160,7 @@ fn match_test() {
     }
 
     for key_expr1 in key_exprs.iter() {
-        let res_matches = Resource::get_matches(&tables, key_expr1);
+        let res_matches = Resource::get_matches(&zread!(tables.tables), key_expr1);
         dbg!(res_matches.len());
         for key_expr2 in key_exprs.iter() {
             if res_matches
@@ -160,74 +178,73 @@ fn match_test() {
 
 #[test]
 fn clean_test() {
-    let mut tables = Tables::new(
-        ZenohId::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        Some(Arc::new(HLC::default())),
-        false,
-        true,
-        Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
-    );
+    let tables = TablesLock {
+        tables: RwLock::new(Tables::new(
+            ZenohId::try_from([1]).unwrap(),
+            WhatAmI::Client,
+            Some(Arc::new(HLC::default())),
+            false,
+            true,
+            Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+        )),
+        ctrl_lock: Mutex::new(()),
+        queries_lock: RwLock::new(()),
+    };
 
     let primitives = Arc::new(DummyPrimitives::new());
-    let face0 = tables.open_face(ZenohId::try_from([1]).unwrap(), WhatAmI::Client, primitives);
+    let face0 = zwrite!(tables.tables).open_face(
+        ZenohId::try_from([1]).unwrap(),
+        WhatAmI::Client,
+        primitives,
+    );
     assert!(face0.upgrade().is_some());
 
     // --------------
-    register_expr(
-        &mut tables,
-        &mut face0.upgrade().unwrap(),
-        1,
-        &"todrop1".into(),
-    );
-    let optres1 =
-        Resource::get_resource(tables._get_root(), "todrop1").map(|res| Arc::downgrade(&res));
+    register_expr(&tables, &mut face0.upgrade().unwrap(), 1, &"todrop1".into());
+    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1")
+        .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
 
     register_expr(
-        &mut tables,
+        &tables,
         &mut face0.upgrade().unwrap(),
         2,
         &"todrop1/todrop11".into(),
     );
-    let optres2 = Resource::get_resource(tables._get_root(), "todrop1/todrop11")
+    let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop11")
         .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
     assert!(res2.upgrade().is_some());
 
-    register_expr(&mut tables, &mut face0.upgrade().unwrap(), 3, &"**".into());
-    let optres3 = Resource::get_resource(tables._get_root(), "**").map(|res| Arc::downgrade(&res));
+    register_expr(&tables, &mut face0.upgrade().unwrap(), 3, &"**".into());
+    let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "**")
+        .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
     assert!(res3.upgrade().is_some());
 
-    unregister_expr(&mut tables, &mut face0.upgrade().unwrap(), 1);
+    unregister_expr(&tables, &mut face0.upgrade().unwrap(), 1);
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_some());
     assert!(res3.upgrade().is_some());
 
-    unregister_expr(&mut tables, &mut face0.upgrade().unwrap(), 2);
+    unregister_expr(&tables, &mut face0.upgrade().unwrap(), 2);
     assert!(res1.upgrade().is_none());
     assert!(res2.upgrade().is_none());
     assert!(res3.upgrade().is_some());
 
-    unregister_expr(&mut tables, &mut face0.upgrade().unwrap(), 3);
+    unregister_expr(&tables, &mut face0.upgrade().unwrap(), 3);
     assert!(res1.upgrade().is_none());
     assert!(res2.upgrade().is_none());
     assert!(res3.upgrade().is_none());
 
     // --------------
-    register_expr(
-        &mut tables,
-        &mut face0.upgrade().unwrap(),
-        1,
-        &"todrop1".into(),
-    );
-    let optres1 =
-        Resource::get_resource(tables._get_root(), "todrop1").map(|res| Arc::downgrade(&res));
+    register_expr(&tables, &mut face0.upgrade().unwrap(), 1, &"todrop1".into());
+    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1")
+        .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
@@ -238,31 +255,34 @@ fn clean_test() {
     };
 
     declare_client_subscription(
-        &mut tables,
+        &tables,
+        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &"todrop1/todrop11".into(),
         &sub_info,
     );
-    let optres2 = Resource::get_resource(tables._get_root(), "todrop1/todrop11")
+    let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop11")
         .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
     assert!(res2.upgrade().is_some());
 
     declare_client_subscription(
-        &mut tables,
+        &tables,
+        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &WireExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
     );
-    let optres3 = Resource::get_resource(tables._get_root(), "todrop1/todrop12")
+    let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop12")
         .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
     assert!(res3.upgrade().is_some());
 
     forget_client_subscription(
-        &mut tables,
+        &tables,
+        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &WireExpr::from(1).with_suffix("/todrop12"),
     );
@@ -271,7 +291,8 @@ fn clean_test() {
     assert!(res3.upgrade().is_none());
 
     forget_client_subscription(
-        &mut tables,
+        &tables,
+        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &"todrop1/todrop11".into(),
     );
@@ -279,76 +300,65 @@ fn clean_test() {
     assert!(res2.upgrade().is_none());
     assert!(res3.upgrade().is_none());
 
-    unregister_expr(&mut tables, &mut face0.upgrade().unwrap(), 1);
+    unregister_expr(&tables, &mut face0.upgrade().unwrap(), 1);
     assert!(res1.upgrade().is_none());
     assert!(res2.upgrade().is_none());
     assert!(res3.upgrade().is_none());
 
     // --------------
-    register_expr(
-        &mut tables,
-        &mut face0.upgrade().unwrap(),
-        2,
-        &"todrop3".into(),
-    );
+    register_expr(&tables, &mut face0.upgrade().unwrap(), 2, &"todrop3".into());
     declare_client_subscription(
-        &mut tables,
+        &tables,
+        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &"todrop3".into(),
         &sub_info,
     );
-    let optres1 =
-        Resource::get_resource(tables._get_root(), "todrop3").map(|res| Arc::downgrade(&res));
+    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop3")
+        .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
 
     forget_client_subscription(
-        &mut tables,
+        &tables,
+        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &"todrop3".into(),
     );
     assert!(res1.upgrade().is_some());
 
-    unregister_expr(&mut tables, &mut face0.upgrade().unwrap(), 2);
+    unregister_expr(&tables, &mut face0.upgrade().unwrap(), 2);
     assert!(res1.upgrade().is_none());
 
     // --------------
-    register_expr(
-        &mut tables,
-        &mut face0.upgrade().unwrap(),
-        3,
-        &"todrop4".into(),
-    );
-    register_expr(
-        &mut tables,
-        &mut face0.upgrade().unwrap(),
-        4,
-        &"todrop5".into(),
-    );
+    register_expr(&tables, &mut face0.upgrade().unwrap(), 3, &"todrop4".into());
+    register_expr(&tables, &mut face0.upgrade().unwrap(), 4, &"todrop5".into());
     declare_client_subscription(
-        &mut tables,
+        &tables,
+        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &"todrop5".into(),
         &sub_info,
     );
     declare_client_subscription(
-        &mut tables,
+        &tables,
+        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &"todrop6".into(),
         &sub_info,
     );
 
-    let optres1 =
-        Resource::get_resource(tables._get_root(), "todrop4").map(|res| Arc::downgrade(&res));
+    let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop4")
+        .map(|res| Arc::downgrade(&res));
     assert!(optres1.is_some());
     let res1 = optres1.unwrap();
-    let optres2 =
-        Resource::get_resource(tables._get_root(), "todrop5").map(|res| Arc::downgrade(&res));
+    let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop5")
+        .map(|res| Arc::downgrade(&res));
     assert!(optres2.is_some());
     let res2 = optres2.unwrap();
-    let optres3 =
-        Resource::get_resource(tables._get_root(), "todrop6").map(|res| Arc::downgrade(&res));
+    let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop6")
+        .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
 
@@ -356,7 +366,7 @@ fn clean_test() {
     assert!(res2.upgrade().is_some());
     assert!(res3.upgrade().is_some());
 
-    tables.close_face(&face0);
+    router::close_face(&tables, &face0);
     assert!(face0.upgrade().is_none());
     assert!(res1.upgrade().is_none());
     assert!(res2.upgrade().is_none());
@@ -494,14 +504,18 @@ impl Primitives for ClientPrimitives {
 
 #[test]
 fn client_test() {
-    let mut tables = RwLock::new(Tables::new(
-        ZenohId::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        Some(Arc::new(HLC::default())),
-        false,
-        true,
-        Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
-    ));
+    let tables = TablesLock {
+        tables: RwLock::new(Tables::new(
+            ZenohId::try_from([1]).unwrap(),
+            WhatAmI::Client,
+            Some(Arc::new(HLC::default())),
+            false,
+            true,
+            Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+        )),
+        ctrl_lock: Mutex::new(()),
+        queries_lock: RwLock::new(()),
+    };
 
     let sub_info = SubInfo {
         reliability: Reliability::Reliable,
@@ -510,27 +524,27 @@ fn client_test() {
 
     let primitives0 = Arc::new(ClientPrimitives::new());
 
-    let tables_mutref = tables.get_mut().unwrap();
-    let face0 = tables_mutref.open_face(
+    let face0 = zwrite!(tables.tables).open_face(
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         primitives0.clone(),
     );
     register_expr(
-        tables_mutref,
+        &tables,
         &mut face0.upgrade().unwrap(),
         11,
         &"test/client".into(),
     );
     primitives0.decl_resource(11, &"test/client".into());
     declare_client_subscription(
-        tables_mutref,
+        &tables,
+        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &WireExpr::from(11).with_suffix("/**"),
         &sub_info,
     );
     register_expr(
-        tables_mutref,
+        &tables,
         &mut face0.upgrade().unwrap(),
         12,
         &WireExpr::from(11).with_suffix("/z1_pub1"),
@@ -538,26 +552,27 @@ fn client_test() {
     primitives0.decl_resource(12, &WireExpr::from(11).with_suffix("/z1_pub1"));
 
     let primitives1 = Arc::new(ClientPrimitives::new());
-    let face1 = tables_mutref.open_face(
+    let face1 = zwrite!(tables.tables).open_face(
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         primitives1.clone(),
     );
     register_expr(
-        tables_mutref,
+        &tables,
         &mut face1.upgrade().unwrap(),
         21,
         &"test/client".into(),
     );
     primitives1.decl_resource(21, &"test/client".into());
     declare_client_subscription(
-        tables_mutref,
+        &tables,
+        zread!(tables.tables),
         &mut face1.upgrade().unwrap(),
         &WireExpr::from(21).with_suffix("/**"),
         &sub_info,
     );
     register_expr(
-        tables_mutref,
+        &tables,
         &mut face1.upgrade().unwrap(),
         22,
         &WireExpr::from(21).with_suffix("/z2_pub1"),
@@ -565,20 +580,21 @@ fn client_test() {
     primitives1.decl_resource(22, &WireExpr::from(21).with_suffix("/z2_pub1"));
 
     let primitives2 = Arc::new(ClientPrimitives::new());
-    let face2 = tables_mutref.open_face(
+    let face2 = zwrite!(tables.tables).open_face(
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
         primitives2.clone(),
     );
     register_expr(
-        tables_mutref,
+        &tables,
         &mut face2.upgrade().unwrap(),
         31,
         &"test/client".into(),
     );
     primitives2.decl_resource(31, &"test/client".into());
     declare_client_subscription(
-        tables_mutref,
+        &tables,
+        zread!(tables.tables),
         &mut face2.upgrade().unwrap(),
         &WireExpr::from(31).with_suffix("/**"),
         &sub_info,
@@ -588,7 +604,7 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
     full_reentrant_route_data(
-        &tables,
+        &tables.tables,
         &face0.upgrade().unwrap(),
         &"test/client/z1_wr1".into(),
         Channel::default(),
@@ -614,7 +630,7 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
     full_reentrant_route_data(
-        &tables,
+        &tables.tables,
         &face0.upgrade().unwrap(),
         &WireExpr::from(11).with_suffix("/z1_wr2"),
         Channel::default(),
@@ -640,7 +656,7 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
     full_reentrant_route_data(
-        &tables,
+        &tables.tables,
         &face1.upgrade().unwrap(),
         &"test/client/**".into(),
         Channel::default(),
@@ -666,7 +682,7 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
     full_reentrant_route_data(
-        &tables,
+        &tables.tables,
         &face0.upgrade().unwrap(),
         &12.into(),
         Channel::default(),
@@ -692,7 +708,7 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
     full_reentrant_route_data(
-        &tables,
+        &tables.tables,
         &face1.upgrade().unwrap(),
         &22.into(),
         Channel::default(),
