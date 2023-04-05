@@ -109,7 +109,7 @@ impl StorageService {
                 wildcard_updates: self.wildcard_updates.clone(),
             },
         );
-        let _ = t.add_async(gc).await;
+        t.add_async(gc).await;
 
         // subscribe on key_expr
         let storage_sub = match self.session.declare_subscriber(&self.key_expr).res().await {
@@ -641,15 +641,15 @@ impl StorageService {
     }
 }
 
-async fn deserialize(file: &str) -> ZResult<KeBoxTree<Timestamp>> {
-    let data = std::fs::read_to_string(zenoh_home().join(file)).unwrap();
-    let data: HashMap<OwnedKeyExpr, Timestamp> = serde_json::from_str(&data).unwrap();
-    let mut result = KeBoxTree::new();
-    for (k, ts) in data {
-        result.insert(&k, ts);
-    }
-    Ok(result)
-}
+// async fn deserialize(file: &str) -> ZResult<KeBoxTree<Timestamp>> {
+//     let data = std::fs::read_to_string(zenoh_home().join(file)).unwrap();
+//     let data: HashMap<OwnedKeyExpr, Timestamp> = serde_json::from_str(&data).unwrap();
+//     let mut result = KeBoxTree::new();
+//     for (k, ts) in data {
+//         result.insert(&k, ts);
+//     }
+//     Ok(result)
+// }
 
 // Periodic event cleaning-up data info for old metadata
 struct GarbageCollectionEvent {
@@ -669,13 +669,13 @@ impl Timed for GarbageCollectionEvent {
         let wildcard_updates = self.wildcard_updates.write().await;
         // let db = db_cell.as_ref().unwrap();
 
-        for (k, ts) in tombstones.key_value_pairs() {
+        for (_k, ts) in tombstones.key_value_pairs() {
             if ts.get_time() < &time_limit {
                 // mark key to be removed
             }
         }
 
-        for (k, sample) in wildcard_updates.key_value_pairs() {
+        for (_k, sample) in wildcard_updates.key_value_pairs() {
             let ts = sample.get_timestamp().unwrap();
             if ts.get_time() < &time_limit {
                 // mark key to be removed
