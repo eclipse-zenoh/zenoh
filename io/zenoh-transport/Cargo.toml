@@ -49,6 +49,7 @@ async-std = { workspace = true }
 async-trait = { workspace = true }
 flume = { workspace = true }
 log = { workspace = true }
+lz4_flex = { workspace = true }
 paste = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 ringbuffer-spsc = { workspace = true }

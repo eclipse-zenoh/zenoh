@@ -30,14 +30,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::vec;
 use zenoh_buffers::reader::{HasReader, Reader};
-#[cfg(feature = "transport_compression")]
-use zenoh_buffers::writer::HasWriter;
 use zenoh_buffers::ZSlice;
-#[cfg(feature = "transport_compression")]
-use zenoh_codec::WCodec;
 use zenoh_codec::{RCodec, Zenoh060};
-#[cfg(feature = "transport_compression")]
-use zenoh_compression::ZenohCompress;
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::transport::TransportMessage;
 use zenoh_result::{bail, zerror, ZResult};
@@ -196,7 +190,7 @@ async fn tx_task(
     #[cfg(feature = "transport_compression")] compression_enabled: bool,
 ) -> ZResult<()> {
     #[cfg(feature = "transport_compression")]
-    let mut compression_aux_buff: Box<[u8]> = vec![0; usize::pow(2, 16)].into_boxed_slice();
+    let mut compression_aux_buff: Box<[u8]> = vec![0; u16::MAX.into()].into_boxed_slice();
 
     loop {
         match pipeline.pull().timeout(keep_alive).await {
@@ -207,18 +201,17 @@ async fn tx_task(
                     let mut bytes = batch.as_bytes();
 
                     #[cfg(feature = "transport_compression")]
-                    let compression: Vec<u8>;
-
-                    #[cfg(feature = "transport_compression")]
                     {
-                        compression = tx_compressed(
+                        let compressed_batch_size = tx_compressed(
                             compression_enabled,
+                            link.is_streamed(),
                             &bytes,
                             &mut compression_aux_buff,
-                            &link,
                         )?;
-                        bytes = &compression;
+                        // considering header size
+                        bytes = &compression_aux_buff[..compressed_batch_size + 2];
                     }
+                    log::debug!("SENT: {:02?}.", &bytes[..]);
 
                     link.write_all(bytes).await?;
 
@@ -293,9 +286,6 @@ async fn rx_task_stream(
         Ok(Action::Stop)
     }
 
-    #[cfg(feature = "transport_compression")]
-    let zenoh_compress = ZenohCompress::default();
-
     let codec = Zenoh060::default();
 
     // The pool of buffers
@@ -323,25 +313,20 @@ async fn rx_task_stream(
                 }
 
                 #[allow(unused_mut)]
-                let mut start_pos = 0;
-                #[allow(unused_mut)]
                 let mut end_pos = n;
                 #[cfg(feature = "transport_compression")]
                 {
                     let is_compressed: bool = buffer[0] == 1_u8;
                     if is_compressed {
                         let mut aux_buff = pool.try_take().unwrap_or_else(|| pool.alloc());
-                        let compression = &buffer[1..n];
-                        end_pos = rx_decompress(&zenoh_compress, compression, &mut aux_buff)?;
+                        end_pos = lz4_flex::block::decompress_into(&buffer[1..n], &mut aux_buff)
+                            .map_err(|e| zerror!("Decompression error: {:}", e))?;
                         buffer = aux_buff;
-                        start_pos += 2;
-                    } else {
-                        start_pos = 1;
                     }
                 }
 
                 // Deserialize all the messages from the current ZBuf
-                let mut zslice = ZSlice::make(Arc::new(buffer), start_pos, end_pos).unwrap();
+                let mut zslice = ZSlice::make(Arc::new(buffer), 0, end_pos).unwrap();
                 let mut reader = zslice.reader();
                 while reader.can_read() {
                     let msg: TransportMessage = codec
@@ -386,9 +371,6 @@ async fn rx_task_dgram(
 
     let codec = Zenoh060::default();
 
-    #[cfg(feature = "transport_compression")]
-    let zenoh_compress = ZenohCompress::default();
-
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
     let mut n = rx_buffer_size / mtu;
@@ -419,24 +401,20 @@ async fn rx_task_dgram(
                 }
 
                 #[allow(unused_mut)]
-                let mut start_pos = 0;
-                #[allow(unused_mut)]
                 let mut end_pos = n;
                 #[cfg(feature = "transport_compression")]
                 {
                     let is_compressed: bool = buffer[0] == 1_u8;
                     if is_compressed {
-                        let mut aux_buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
-                        let compression = &buffer[1..n];
-                        end_pos = rx_decompress(&zenoh_compress, compression, &mut aux_buffer)?;
-                        buffer = aux_buffer;
-                    } else {
-                        start_pos = 1;
+                        let mut aux_buff = pool.try_take().unwrap_or_else(|| pool.alloc());
+                        end_pos = lz4_flex::block::decompress_into(&buffer[1..n], &mut aux_buff)
+                            .map_err(|e| zerror!("Decompression error: {:}", e))?;
+                        buffer = aux_buff;
                     }
                 }
 
                 // Deserialize all the messages from the current ZBuf
-                let mut zslice = ZSlice::make(Arc::new(buffer), start_pos, end_pos).unwrap();
+                let mut zslice = ZSlice::make(Arc::new(buffer), 0, end_pos).unwrap();
                 let mut reader = zslice.reader();
                 while reader.can_read() {
                     let msg: TransportMessage = codec
@@ -474,59 +452,58 @@ async fn rx_task(
 #[cfg(feature = "transport_compression")]
 fn tx_compressed(
     compression_enabled: bool,
+    is_streamed: bool,
     bytes: &[u8],
-    compression_aux_buff: &mut Box<[u8]>,
-    link: &LinkUnicast,
-) -> ZResult<Vec<u8>> {
-    let mut buff = vec![];
+    buff: &mut [u8],
+) -> ZResult<usize> {
     if compression_enabled {
-        let zenoh_compress = ZenohCompress::default();
-        let compression_size = zenoh_compress
-            .write(&mut buff.writer(), (&bytes, compression_aux_buff))
-            .map_err(|e| zerror!("Compression error: {:?}", e))?;
-        let mut compressed_batch: Vec<u8> = vec![];
-        if link.is_streamed() {
-            let compression_size_u16: u16 = compression_size.try_into().map_err(|e| {
+        let s_pos = if is_streamed { 3 } else { 1 };
+        log::debug!("Before compression: {:02?}", &bytes[..]);
+        log::debug!("Compression input: {:02?}", &bytes[s_pos - 1..]);
+        let compressed_bytes =
+            lz4_flex::block::compress_into(&bytes[s_pos - 1..], &mut buff[s_pos..])
+                .map_err(|e| zerror!("Compression error: {:}", e))?;
+
+        log::debug!(
+            "After compression: {:02?}. Size: {}",
+            &buff[..compressed_bytes + s_pos],
+            compressed_bytes
+        );
+
+        let batch_size = 1 + compressed_bytes;
+        if is_streamed {
+            let batch_size_u16: u16 = batch_size.try_into().map_err(|e| {
+                zerror!(
+                    "Compression error: unable to convert batch size into u16: {}",
+                    e
+                )
+            })?;
+            buff[0..2].copy_from_slice(&batch_size_u16.to_le_bytes());
+            buff[2] = 1_u8;
+        } else {
+            buff[0] = 1_u8;
+        }
+        Ok(batch_size)
+    } else {
+        if is_streamed {
+            let mut header = [0_u8, 0_u8];
+            header[0..2].copy_from_slice(&bytes[0..2]);
+            let mut batch_size = u16::from_le_bytes(header);
+            batch_size += 1;
+            let batch_size: u16 = batch_size.try_into().map_err(|e| {
                 zerror!(
                     "Compression error: unable to convert compression size into u16: {}",
                     e
                 )
             })?;
-            // including is compressed byte
-            let batch_size_le = (compression_size_u16 + 1).to_le_bytes();
-            compressed_batch.append(&mut batch_size_le.to_vec());
-            compressed_batch.push(true as u8);
-            compressed_batch.append(&mut buff);
+            buff[0..2].copy_from_slice(&batch_size.to_le_bytes());
+            buff[2] = 0_u8;
+            Ok(batch_size.into())
         } else {
-            compressed_batch.push(true as u8);
-            compressed_batch.append(&mut buff);
+            buff[0] = 0_u8;
+            let len = 1 + bytes.len();
+            buff[1..1 + bytes.len()].copy_from_slice(bytes);
+            Ok(len)
         }
-        buff = compressed_batch;
-    } else {
-        // Add compression byte as false
-        // Increment the batch size number from the 2 initial bytes
-        buff = bytes.to_vec();
-        buff.insert(2, false as u8);
-        let (batch_size, batch_payload) = buff.split_at_mut(2);
-        let batch_size = u16::from_le_bytes(batch_size.try_into().unwrap()) + 1;
-        buff = [batch_size.to_le_bytes().to_vec(), batch_payload.to_vec()].concat();
     }
-    Ok(buff)
-}
-
-#[cfg(feature = "transport_compression")]
-fn rx_decompress(
-    zenoh_compress: &ZenohCompress,
-    compression: &[u8],
-    aux_buffer: &mut [u8],
-) -> ZResult<usize> {
-    Ok(zenoh_compress
-        .read((&compression, aux_buffer))
-        .map_err(|e| {
-            zerror!(
-                "Decompression error {:?}. Unable to decompress batch. {:?}",
-                e,
-                compression.to_vec()
-            )
-        })?)
 }
