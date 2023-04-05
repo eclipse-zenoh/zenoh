@@ -137,6 +137,7 @@ where
         // Extensions
         let mut ext_qos = declare::ext::QoSType::default();
         let mut ext_tstamp = None;
+        let mut ext_nodeid = declare::ext::NodeIdType::default();
 
         let mut has_ext = imsg::has_flag(self.header, declare::flag::Z);
         while has_ext {
@@ -153,6 +154,11 @@ where
                     ext_tstamp = Some(t);
                     has_ext = ext;
                 }
+                declare::ext::NodeId::ID => {
+                    let (nid, ext): (declare::ext::NodeIdType, bool) = eodec.read(&mut *reader)?;
+                    ext_nodeid = nid;
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "Declare", ext)?;
                 }
@@ -166,6 +172,7 @@ where
             body,
             ext_qos,
             ext_tstamp,
+            ext_nodeid,
         })
     }
 }

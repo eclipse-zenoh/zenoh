@@ -44,6 +44,7 @@ pub struct Push {
     pub mapping: Mapping,
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
+    pub ext_nodeid: ext::NodeIdType,
     pub payload: PushBody,
 }
 
@@ -53,6 +54,9 @@ pub mod ext {
 
     pub type Timestamp = crate::network::ext::Timestamp;
     pub type TimestampType = crate::network::ext::TimestampType;
+
+    pub type NodeId = crate::network::ext::NodeId;
+    pub type NodeIdType = crate::network::ext::NodeIdType;
 }
 
 impl Push {
@@ -66,6 +70,7 @@ impl Push {
         let payload = PushBody::rand();
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
+        let ext_nodeid = ext::NodeIdType::rand();
 
         Self {
             wire_expr,
@@ -73,6 +78,7 @@ impl Push {
             payload,
             ext_tstamp,
             ext_qos,
+            ext_nodeid,
         }
     }
 }

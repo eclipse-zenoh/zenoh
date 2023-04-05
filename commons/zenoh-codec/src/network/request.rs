@@ -168,6 +168,7 @@ where
         // Extensions
         let mut ext_qos = ext::QoSType::default();
         let mut ext_tstamp = None;
+        let mut ext_nodeid = ext::NodeIdType::default();
         let mut ext_target = ext::TargetType::default();
         let mut ext_limit = None;
         let mut ext_timeout = None;
@@ -185,6 +186,11 @@ where
                 ext::Timestamp::ID => {
                     let (t, ext): (ext::TimestampType, bool) = eodec.read(&mut *reader)?;
                     ext_tstamp = Some(t);
+                    has_ext = ext;
+                }
+                ext::NodeId::ID => {
+                    let (nid, ext): (ext::NodeIdType, bool) = eodec.read(&mut *reader)?;
+                    ext_nodeid = nid;
                     has_ext = ext;
                 }
                 ext::Target::ID => {
@@ -218,6 +224,7 @@ where
             payload,
             ext_qos,
             ext_tstamp,
+            ext_nodeid,
             ext_target,
             ext_budget: ext_limit,
             ext_timeout,
