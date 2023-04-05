@@ -15,12 +15,16 @@ use crate::backends_mgt::StoreIntercept;
 use crate::storages_mgt::StorageMessage;
 use async_std::sync::Arc;
 use async_std::sync::{Mutex, RwLock};
+use async_trait::async_trait;
 use flume::{Receiver, Sender};
 use futures::select;
 use log::{error, info, trace, warn};
+use std::collections::HashMap;
+use std::iter::FromIterator;
 use std::str;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use zenoh::prelude::r#async::*;
-use zenoh::time::Timestamp;
+use zenoh::time::{NTP64,Timestamp};
 use zenoh::{Result as ZResult, Session};
 use zenoh_backend_traits::config::StorageConfig;
 use zenoh_backend_traits::{Capability, History, StorageInsertionResult};
@@ -30,6 +34,10 @@ use zenoh_keyexpr::keyexpr_tree::{
     IKeyExprTreeExt, IKeyExprTreeExtMut, KeBoxTree, NonWild, UnknownWildness,
 };
 use zenoh_result::bail;
+use zenoh_util::{zenoh_home, Timed, TimedEvent, Timer};
+
+pub const GC_PERIOD: Duration = Duration::new(30, 0);
+pub const MIN_DELAY_BEFORE_REMOVAL: NTP64 = NTP64::from(Duration::new(86400, 0));
 
 pub struct ReplicationService {
     pub empty_start: bool,
@@ -45,8 +53,8 @@ pub struct StorageService {
     strip_prefix: Option<OwnedKeyExpr>,
     storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
     capability: Capability,
-    tombstones: RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>,
-    wildcard_updates: RwLock<KeBoxTree<Sample, UnknownWildness, KeyedSetProvider>>,
+    tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
+    wildcard_updates: Arc<RwLock<KeBoxTree<Sample, UnknownWildness, KeyedSetProvider>>>,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     replication: Option<ReplicationService>,
@@ -71,8 +79,8 @@ impl StorageService {
             strip_prefix: config.strip_prefix,
             storage: Mutex::new(store_intercept.storage),
             capability: store_intercept.capability,
-            tombstones: RwLock::new(KeBoxTree::new()),
-            wildcard_updates: RwLock::new(KeBoxTree::new()),
+            tombstones: Arc::new(RwLock::new(KeBoxTree::new())),
+            wildcard_updates: Arc::new(RwLock::new(KeBoxTree::new())),
             in_interceptor: store_intercept.in_interceptor,
             out_interceptor: store_intercept.out_interceptor,
             replication,
@@ -82,6 +90,11 @@ impl StorageService {
 
     async fn start_storage_queryable_subscriber(&mut self, rx: Receiver<StorageMessage>) {
         self.initialize_if_empty().await;
+
+        // start periodic GC event
+        let t = Timer::default();
+        let gc = TimedEvent::periodic(GC_PERIOD, GarbageCollectionEvent { tombstones: self.tombstones.clone(), wildcard_updates: self.wildcard_updates.clone() });
+        let _ = t.add_async(gc).await;
 
         // subscribe on key_expr
         let storage_sub = match self.session.declare_subscriber(&self.key_expr).res().await {
@@ -481,7 +494,6 @@ impl StorageService {
                         } else {
                             sample
                         };
-                        // @TODO: if strip_prefix present, add back the prefix
                         if let Err(e) = q.reply(Ok(sample)).res().await {
                             warn!(
                                 "Storage {} raised an error replying a query: {}",
@@ -594,5 +606,61 @@ impl StorageService {
                 }
             }
         }
+    }
+}
+
+async fn serialize(data: KeBoxTree<Timestamp>, file: &str) -> ZResult<()> {
+    let mut serialized_data = HashMap::new();
+    for (k, ts) in data.key_value_pairs(){
+        serialized_data.insert(k, ts);
+    }
+    // serde_json::to_writer(file, &serialized_data)
+    Ok(())
+}
+
+// async fn deserialize(file: &str) -> ZResult<KeBoxTree<Timestamp>> {
+
+// }
+
+
+
+// Periodic event cleaning-up data info for old metadata
+struct GarbageCollectionEvent {
+    tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
+    wildcard_updates: Arc<RwLock<KeBoxTree<Sample, UnknownWildness, KeyedSetProvider>>>,
+}
+
+#[async_trait]
+impl Timed for GarbageCollectionEvent {
+    async fn run(&mut self) {
+        trace!("Start garbage collection");
+        let time_limit = NTP64::from(SystemTime::now().duration_since(UNIX_EPOCH).unwrap())
+            - MIN_DELAY_BEFORE_REMOVAL;
+
+        // Get lock on fields
+        let tombstones = self.tombstones.write().await;
+        let wildcard_updates = self.wildcard_updates.write().await;
+        // let db = db_cell.as_ref().unwrap();
+
+        // for (k, ts) in tombstones.key_value_pairs() {
+        //     if ts.get_time() < &time_limit {
+        //         // mark key to be removed
+        //     }
+        // }
+
+        // for (k, sample) in wildcard_updates.key_value_pairs() {
+        //     let ts = sample.get_timestamp().unwrap();
+        //     if ts.get_time() < &time_limit {
+        //         // mark key to be removed
+        //     }
+        // }
+
+        // remove the keys from tombstones and wildcard_updates
+
+
+        drop(wildcard_updates);
+        drop(tombstones);
+
+        trace!("End garbage collection of obsolete data-infos");
     }
 }
