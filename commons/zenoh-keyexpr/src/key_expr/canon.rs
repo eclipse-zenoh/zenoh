@@ -78,7 +78,6 @@ impl Canonizable for &mut str {
             }
         }
         for chunk in ke {
-            println!("{}", unsafe { core::str::from_utf8_unchecked(chunk) });
             if chunk.is_empty() {
                 writer.write_byte(b'/');
                 continue;
