@@ -472,4 +472,18 @@ impl Group {
         let ms = self.state.members.lock().await;
         ms.len() + 1 // with +1 being the local member
     }
+
+    /// Returns the evental leader for this group. Notice that a view change may cause
+    /// a change on leader. Thus it is wise to always get the leader after a view change.
+    pub async fn leader(&self) -> Member {
+        use std::cmp::Ordering;
+        let group = self.view().await;
+        let mut leader = self.state.local_member.clone();
+        for m in group {
+            if leader.id().as_str().cmp(m.id().as_str()) == Ordering::Less {
+                leader = m
+            }
+        }
+        leader
+    }
 }

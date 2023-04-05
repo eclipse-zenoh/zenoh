@@ -587,7 +587,7 @@ pub async fn linkstate_data(
     _key: &KeyExpr<'_>,
     _args: &str,
 ) -> (ZBuf, Encoding) {
-    let tables = zread!(context.runtime.router.tables);
+    let tables = zread!(context.runtime.router.tables.tables);
     let net = match net_type {
         WhatAmI::Router => tables.routers_net.as_ref(),
         _ => tables.peers_net.as_ref(),

@@ -103,6 +103,9 @@ zenoh-util = { path = "../commons/zenoh-util/" }
 [build-dependencies]
 rustc_version = { workspace = true }
 
+[dev-dependencies]
+zenoh = { path = ".", features = ["unstable"] }
+
 [lib]
 name = "zenoh"
 

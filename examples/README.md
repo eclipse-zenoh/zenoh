@@ -204,3 +204,51 @@
    ```bash
       z_pub_shm_thr
    ```
+
+### z_liveliness
+
+   Declares a liveliness token on a given key expression (`group1/zenoh-rs` by default).
+   This token will be seen alive byt the `z_get_liveliness` and `z_sub_liveliness` until
+   user explicitely drops the token by pressing `'d'` or implicitely dropped by terminating
+   or killing the `z_liveliness` example.
+
+   Typical usage:
+   ```bash
+      z_liveliness
+   ```
+   or
+   ```bash
+      z_liveliness -k group1/member1
+   ```
+
+### z_get_liveliness
+
+   Queries all the currently alive liveliness tokens that match a given key expression
+   (`group1/**` by default). Those tokens could be declared by the `z_liveliness` example.
+
+   Typical usage:
+   ```bash
+      z_get_liveliness
+   ```
+   or
+   ```bash
+      z_get_liveliness -k group1/**
+   ```
+
+### z_sub_liveliness
+
+   Subscribe to all liveliness changes (liveliness tokens getting alive or
+   liveliness tokens being dropped) that match a given key expression
+   (`group1/**` by default). Those tokens could be declared by the `z_liveliness`
+   example.
+   Note: the `z_sub_liveliness` example will not receive informations about
+   matching liveliness tokens that were alive before it's start.
+
+   Typical usage:
+   ```bash
+      z_sub_liveliness
+   ```
+   or
+   ```bash
+      z_sub_liveliness -k group1/**
+   ```

@@ -20,6 +20,7 @@ mod hashmap_impl;
 mod keyed_set_impl;
 mod vec_set_impl;
 
+/// The advised way of storing children in KeTrees, based on benchmarks.
 pub type DefaultChildrenProvider = KeyedSetProvider;
 pub struct FilterMap<I, F> {
     iter: I,

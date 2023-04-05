@@ -13,44 +13,70 @@
 //
 
 use crate::{keyexpr, OwnedKeyExpr};
-
+use alloc::boxed::Box;
 pub mod default_impls;
 
+/// The basic immutable methods of all all KeTrees
 pub trait IKeyExprTree<'a, Weight> {
     type Node: IKeyExprTreeNodeMut<Weight>;
-    fn node(&'a self, at: &keyexpr) -> Option<&Self::Node>;
+    /// Accesses the node at `key` if it exists, treating KEs as if they were litteral keys.
+    fn node(&'a self, key: &keyexpr) -> Option<&Self::Node>;
     type TreeIterItem;
     type TreeIter: Iterator<Item = Self::TreeIterItem>;
+    /// Iterates over the whole tree, including nodes with no  weight.
     fn tree_iter(&'a self) -> Self::TreeIter;
     type IntersectionItem;
     type Intersection: Iterator<Item = Self::IntersectionItem>;
+    /// Iterates over all nodes of the tree whose KE intersects with the given `key`.
+    ///
+    /// Note that nodes without a `Weight` will also be yielded by the iterator.
     fn intersecting_nodes(&'a self, key: &'a keyexpr) -> Self::Intersection;
     type InclusionItem;
     type Inclusion: Iterator<Item = Self::InclusionItem>;
+    /// Iterates over all nodes of the tree whose KE is included by the given `key`.
+    ///
+    /// Note that nodes without a `Weight` will also be yielded by the iterator.
     fn included_nodes(&'a self, key: &'a keyexpr) -> Self::Inclusion;
 }
 
+/// The basic mutable methods of all all KeTrees
 pub trait IKeyExprTreeMut<'a, Weight>: IKeyExprTree<'a, Weight> {
-    fn node_mut<'b>(&'b mut self, at: &keyexpr) -> Option<&'b mut Self::Node>;
-    fn remove(&mut self, at: &keyexpr) -> Option<Weight>;
-    fn node_mut_or_create<'b>(&'b mut self, at: &keyexpr) -> &'b mut Self::Node;
+    /// Mutably accesses the node at `key` if it exists, treating KEs as if they were litteral keys.
+    fn node_mut<'b>(&'b mut self, key: &keyexpr) -> Option<&'b mut Self::Node>;
+    /// Clears the weight of the node at `key`.
+    ///
+    /// To actually destroy nodes, [`IKeyExprTreeMut::prune_where`] or [`IKeyExprTreeExtMut::prune`] must be called.
+    fn remove(&mut self, key: &keyexpr) -> Option<Weight>;
+    /// Mutably accesses the node at `key`, creating it if necessary.
+    fn node_mut_or_create<'b>(&'b mut self, key: &keyexpr) -> &'b mut Self::Node;
     type TreeIterItemMut;
     type TreeIterMut: Iterator<Item = Self::TreeIterItemMut>;
+    /// Iterates over the whole tree, including nodes with no  weight.
     fn tree_iter_mut(&'a mut self) -> Self::TreeIterMut;
     type IntersectionItemMut;
     type IntersectionMut: Iterator<Item = Self::IntersectionItemMut>;
+    /// Iterates over all nodes of the tree whose KE intersects with the given `key`.
+    ///
+    /// Note that nodes without a `Weight` will also be yielded by the iterator.
     fn intersecting_nodes_mut(&'a mut self, key: &'a keyexpr) -> Self::IntersectionMut;
     type InclusionItemMut;
     type InclusionMut: Iterator<Item = Self::InclusionItemMut>;
+    /// Iterates over all nodes of the tree whose KE is included by the given `key`.
+    ///
+    /// Note that nodes without a `Weight` will also be yielded by the iterator.
     fn included_nodes_mut(&'a mut self, key: &'a keyexpr) -> Self::InclusionMut;
+    /// Prunes node from the tree where the predicate returns `true`.
+    ///
+    /// Note that nodes that still have children will not be pruned.
     fn prune_where<F: FnMut(&mut Self::Node) -> bool>(&mut self, predicate: F);
 }
+/// The basic operations of a KeTree when a Token is necessary to acess data.
 pub trait ITokenKeyExprTree<'a, Weight, Token> {
     type Node: IKeyExprTreeNode<Weight>;
     type NodeMut: IKeyExprTreeNodeMut<Weight>;
-    fn node(&'a self, token: &'a Token, at: &keyexpr) -> Option<Self::Node>;
-    fn node_mut(&'a self, token: &'a mut Token, at: &keyexpr) -> Option<Self::NodeMut>;
-    fn node_or_create(&'a self, token: &'a mut Token, at: &keyexpr) -> Self::NodeMut;
+    fn node(&'a self, token: &'a Token, key: &keyexpr) -> Option<Self::Node>;
+    fn node_mut(&'a self, token: &'a mut Token, key: &keyexpr) -> Option<Self::NodeMut>;
+    fn node_or_create(&'a self, token: &'a mut Token, key: &keyexpr) -> Self::NodeMut;
     type TreeIterItem;
     type TreeIter: Iterator<Item = Self::TreeIterItem>;
     fn tree_iter(&'a self, token: &'a Token) -> Self::TreeIter;
@@ -131,6 +157,7 @@ where
     }
 }
 
+/// Provides a data-structure to store children to the KeTree.
 pub trait IChildrenProvider<T> {
     type Assoc: Default + 'static;
 }
@@ -212,11 +239,15 @@ fn filter_map_weighted_node_to_key<N: IKeyExprTreeNodeMut<W>, I: AsNode<N>, W>(
     let node: &N = item.as_node();
     node.weight().is_some().then(|| node.keyexpr())
 }
+
+/// Extension methods for KeTrees
 pub trait IKeyExprTreeExt<'a, Weight>: IKeyExprTree<'a, Weight> {
-    fn weight_at(&'a self, at: &keyexpr) -> Option<&'a Weight> {
-        self.node(at)
+    /// Returns a reference to the weight of the node at `key`
+    fn weight_at(&'a self, key: &keyexpr) -> Option<&'a Weight> {
+        self.node(key)
             .and_then(<Self::Node as IKeyExprTreeNode<Weight>>::weight)
     }
+    /// Returns an iterator over the KEs contained in the tree that intersect with `key`
     fn intersecting_keys(
         &'a self,
         key: &'a keyexpr,
@@ -228,6 +259,7 @@ pub trait IKeyExprTreeExt<'a, Weight>: IKeyExprTree<'a, Weight> {
         self.intersecting_nodes(key)
             .filter_map(filter_map_weighted_node_to_key)
     }
+    /// Returns an iterator over the KEs contained in the tree that are included by `key`
     fn included_keys(&'a self, key: &'a keyexpr) -> Keys<Self::Inclusion, Self::InclusionItem>
     where
         Self::InclusionItem: AsNode<Self::Node>,
@@ -236,6 +268,7 @@ pub trait IKeyExprTreeExt<'a, Weight>: IKeyExprTree<'a, Weight> {
         self.included_nodes(key)
             .filter_map(filter_map_weighted_node_to_key)
     }
+    /// Iterates through weighted nodes, yielding their KE and Weight.
     #[allow(clippy::type_complexity)]
     fn key_value_pairs(
         &'a self,
@@ -244,7 +277,7 @@ pub trait IKeyExprTreeExt<'a, Weight>: IKeyExprTree<'a, Weight> {
         fn(Self::TreeIterItem) -> Option<(OwnedKeyExpr, &'a Weight)>,
     >
     where
-        Self::TreeIterItem: AsNode<Self::Node>,
+        Self::TreeIterItem: AsNode<Box<Self::Node>>,
     {
         self.tree_iter().filter_map(|node| {
             unsafe { core::mem::transmute::<_, Option<&Weight>>(node.as_node().weight()) }
@@ -253,14 +286,18 @@ pub trait IKeyExprTreeExt<'a, Weight>: IKeyExprTree<'a, Weight> {
     }
 }
 
+/// Extension methods for mutable KeTrees.
 pub trait IKeyExprTreeExtMut<'a, Weight>: IKeyExprTreeMut<'a, Weight> {
-    fn weight_at_mut(&'a mut self, at: &keyexpr) -> Option<&'a mut Weight> {
-        self.node_mut(at)
+    /// Returns a mutable reference to the weight of the node at `key`.
+    fn weight_at_mut(&'a mut self, key: &keyexpr) -> Option<&'a mut Weight> {
+        self.node_mut(key)
             .and_then(<Self::Node as IKeyExprTreeNodeMut<Weight>>::weight_mut)
     }
-    fn insert(&mut self, at: &keyexpr, weight: Weight) -> Option<Weight> {
-        self.node_mut_or_create(at).insert_weight(weight)
+    /// Inserts a weight at `key`, returning the previous weight if it existed.
+    fn insert(&mut self, key: &keyexpr, weight: Weight) -> Option<Weight> {
+        self.node_mut_or_create(key).insert_weight(weight)
     }
+    /// Prunes empty nodes from the tree, unless they have at least one non-empty descendent.
     fn prune(&mut self) {
         self.prune_where(|node| node.weight().is_none())
     }

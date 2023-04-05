@@ -12,14 +12,24 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! KeTrees are specialized data structures to work with sets of values addressed by key expressions.
+
 use crate::{keyexpr, OwnedKeyExpr};
+/// Allows importing all of the KeTree traits at once.
 pub mod traits;
 pub use traits::*;
 
+/// An implementation of a KeTree with shared-ownership of nodes, using [`token_cell`] to allow safe access to the tree's data.
+///
+/// This implementation allows sharing references to members of the KeTree.
 pub mod arc_tree;
 pub use arc_tree::{DefaultToken, KeArcTree};
+/// An implementation of a KeTree that owns all of its nodes.
 pub mod box_tree;
 pub use box_tree::KeBoxTree;
+/// KeTrees can store their children in different manners.
+///
+/// This module contains a few implementations.
 pub mod impls;
 pub use impls::DefaultChildrenProvider;
 mod iters;
@@ -28,48 +38,4 @@ pub use iters::*;
 #[cfg(test)]
 mod test;
 
-pub trait IWildness: 'static {
-    fn non_wild() -> Self;
-    fn get(&self) -> bool;
-    fn set(&mut self, wildness: bool) -> bool;
-}
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct NonWild;
-impl IWildness for NonWild {
-    fn non_wild() -> Self {
-        NonWild
-    }
-    fn get(&self) -> bool {
-        false
-    }
-    fn set(&mut self, wildness: bool) -> bool {
-        if wildness {
-            panic!("Attempted to set NonWild to wild, which breaks its contract. You likely attempted to insert a wild key into a `NonWild` tree. Use `bool` instead to make wildness determined at runtime.")
-        }
-        false
-    }
-}
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct UnknownWildness;
-impl IWildness for UnknownWildness {
-    fn non_wild() -> Self {
-        UnknownWildness
-    }
-    fn get(&self) -> bool {
-        true
-    }
-    fn set(&mut self, _wildness: bool) -> bool {
-        true
-    }
-}
-impl IWildness for bool {
-    fn non_wild() -> Self {
-        false
-    }
-    fn get(&self) -> bool {
-        *self
-    }
-    fn set(&mut self, wildness: bool) -> bool {
-        core::mem::replace(self, wildness)
-    }
-}
+pub mod support;
