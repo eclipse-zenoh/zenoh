@@ -32,11 +32,16 @@ impl Canonizable for &mut str {
         };
         if let Some(position) = self.find("$*$*") {
             writer.len = position;
+            let mut need_final_write = true;
             for between_dollarstar in self.as_bytes()[(position + 4)..].splitter(DOLLAR_STAR) {
-                if !between_dollarstar.is_empty() {
+                need_final_write = between_dollarstar.is_empty();
+                if !need_final_write {
                     writer.write(DOLLAR_STAR.as_ref());
                     writer.write(between_dollarstar);
                 }
+            }
+            if need_final_write {
+                writer.write(DOLLAR_STAR.as_ref())
             }
             *self = unsafe {
                 str::from_utf8_unchecked_mut(slice::from_raw_parts_mut(writer.ptr, writer.len))
@@ -68,11 +73,12 @@ impl Canonizable for &mut str {
                 in_big_wild = true;
                 continue;
             } else {
-                writer.write(chunk);
+                writer.write(if chunk == b"$*" { b"*" } else { chunk });
                 break;
             }
         }
         for chunk in ke {
+            println!("{}", unsafe { core::str::from_utf8_unchecked(chunk) });
             if chunk.is_empty() {
                 writer.write_byte(b'/');
                 continue;
@@ -93,7 +99,7 @@ impl Canonizable for &mut str {
                 in_big_wild = true;
             } else {
                 writer.write_byte(DELIMITER);
-                writer.write(chunk);
+                writer.write(if chunk == b"$*" { b"*" } else { chunk });
             }
         }
         if in_big_wild {
@@ -123,6 +129,13 @@ fn canonizer() {
     dbg!(OwnedKeyExpr::autocanonize(String::from("/a/b/")).unwrap_err());
     dbg!(OwnedKeyExpr::autocanonize(String::from("/a/b")).unwrap_err());
     dbg!(OwnedKeyExpr::autocanonize(String::from("a/b/")).unwrap_err());
+    dbg!(OwnedKeyExpr::autocanonize(String::from("a/b/*$*")).unwrap_err());
+    dbg!(OwnedKeyExpr::autocanonize(String::from("a/b/$**")).unwrap_err());
+    dbg!(OwnedKeyExpr::autocanonize(String::from("a/b/**$*")).unwrap_err());
+    dbg!(OwnedKeyExpr::autocanonize(String::from("a/b/*$**")).unwrap_err());
+    dbg!(OwnedKeyExpr::autocanonize(String::from("a/b/*$***")).unwrap_err());
+    dbg!(OwnedKeyExpr::autocanonize(String::from("a/b/**$**")).unwrap_err());
+    dbg!(OwnedKeyExpr::autocanonize(String::from("a/b/**$***")).unwrap_err());
 
     //
     // Check statements declared in https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Key%20Expressions.md
@@ -138,9 +151,21 @@ fn canonizer() {
     assert_eq!(s, "hello/**/bye");
 
     // Any $* chunk is replaced by a * chunk
-    // let mut s = String::from("hello/$*/bye");
-    // s.canonize();
-    // assert_eq!(s, "hello/*/bye");
+    let mut s = String::from("hello/$*/bye");
+    s.canonize();
+    assert_eq!(s, "hello/*/bye");
+    let mut s = String::from("hello/$*$*/bye");
+    s.canonize();
+    assert_eq!(s, "hello/*/bye");
+    let mut s = String::from("$*/hello/$*/bye");
+    s.canonize();
+    assert_eq!(s, "*/hello/*/bye");
+    let mut s = String::from("$*$*$*/hello/$*/bye/$*");
+    s.canonize();
+    assert_eq!(s, "*/hello/*/bye/*");
+    let mut s = String::from("$*$*$*/hello/$*$*/bye/$*$*");
+    s.canonize();
+    assert_eq!(s, "*/hello/*/bye/*");
 
     // **/* is replaced by */**
     let mut s = String::from("hello/**/*");
