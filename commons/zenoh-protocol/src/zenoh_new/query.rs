@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::common::ZExtUnknown;
-use alloc::string::String;
+use alloc::{string::String, vec::Vec};
 
 /// The kind of consolidation.
 #[repr(u8)]

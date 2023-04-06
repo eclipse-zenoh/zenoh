@@ -115,5 +115,5 @@ where
     }
 }
 
-// Extensions: QoS
+// Extensions: NodeId
 crate::impl_zextz64!(ext::NodeIdType, ext::NodeId::ID);

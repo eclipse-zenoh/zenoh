@@ -86,7 +86,8 @@ where
         // Header
         let mut header = id::DECLARE;
         let mut n_exts = ((x.ext_qos != declare::ext::QoSType::default()) as u8)
-            + (x.ext_tstamp.is_some() as u8);
+            + (x.ext_tstamp.is_some() as u8)
+            + ((x.ext_nodeid != declare::ext::NodeIdType::default()) as u8);
         if n_exts != 0 {
             header |= declare::flag::Z;
         }
@@ -100,6 +101,10 @@ where
         if let Some(ts) = x.ext_tstamp.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
+        }
+        if x.ext_nodeid != declare::ext::NodeIdType::default() {
+            n_exts -= 1;
+            self.write(&mut *writer, (x.ext_nodeid, n_exts != 0))?;
         }
 
         // Body

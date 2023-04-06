@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::common::ZExtUnknown;
+use alloc::vec::Vec;
 use uhlc::Timestamp;
 
 /// # Err message

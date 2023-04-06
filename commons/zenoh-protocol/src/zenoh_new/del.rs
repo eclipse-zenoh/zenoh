@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use uhlc::Timestamp;
-
 use crate::common::ZExtUnknown;
+use alloc::vec::Vec;
+use uhlc::Timestamp;
 
 /// # Put message
 ///

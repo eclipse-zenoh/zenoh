@@ -83,7 +83,8 @@ where
             + (x.ext_tstamp.is_some() as u8)
             + ((x.ext_target != ext::TargetType::default()) as u8)
             + (x.ext_budget.is_some() as u8)
-            + (x.ext_timeout.is_some() as u8);
+            + (x.ext_timeout.is_some() as u8)
+            + ((x.ext_nodeid != ext::NodeIdType::default()) as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -121,6 +122,10 @@ where
             n_exts -= 1;
             let e = ext::Timeout::new(to.as_millis() as u64);
             self.write(&mut *writer, (&e, n_exts != 0))?;
+        }
+        if x.ext_nodeid != ext::NodeIdType::default() {
+            n_exts -= 1;
+            self.write(&mut *writer, (x.ext_nodeid, n_exts != 0))?;
         }
 
         // Payload

@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{common::ZExtUnknown, core::Encoding};
+use alloc::vec::Vec;
 use uhlc::Timestamp;
 use zenoh_buffers::ZBuf;
 
