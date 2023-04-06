@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use flume::{Receiver, Sender};
 use futures::select;
 use log::{error, info, trace, warn};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use zenoh::prelude::r#async::*;
@@ -92,7 +92,25 @@ impl StorageService {
             .persistence
             .eq(&Persistence::Durable)
         {
-            // @TODO: update tombstones and wild card updates from persisted file if it exists
+            // update tombstones and wild card updates from persisted file if it exists
+            if zenoh_home().join(TOMBSTONE_FILENAME).exists() {
+                let saved_ts =
+                    std::fs::read_to_string(zenoh_home().join(TOMBSTONE_FILENAME)).unwrap();
+                let saved_ts: HashMap<OwnedKeyExpr, Timestamp> =
+                    serde_json::from_str(&saved_ts).unwrap();
+                let mut tombstones = storage_service.tombstones.write().await;
+                for (k, ts) in saved_ts {
+                    tombstones.insert(&k, ts);
+                }
+            }
+            // if zenoh_home().join(WILDCARD_UPDATES_FILENAME).exists() {
+            //     let saved_wc = std::fs::read_to_string(zenoh_home().join(WILDCARD_UPDATES_FILENAME)).unwrap();
+            //     let saved_wc: HashMap<OwnedKeyExpr, Sample> = serde_json::from_str(&saved_wc).unwrap();
+            //     let wildcard_updates = storage_service.wildcard_updates.write().await;
+            //     for (k, sample) in saved_wc {
+            //         wildcard_updates.insert(&k, sample);
+            //     }
+            // }
         }
         storage_service.start_storage_queryable_subscriber(rx).await
     }
@@ -101,15 +119,15 @@ impl StorageService {
         self.initialize_if_empty().await;
 
         // start periodic GC event
-        let t = Timer::default();
-        let gc = TimedEvent::periodic(
-            GC_PERIOD,
-            GarbageCollectionEvent {
-                tombstones: self.tombstones.clone(),
-                wildcard_updates: self.wildcard_updates.clone(),
-            },
-        );
-        t.add_async(gc).await;
+        // let t = Timer::default();
+        // let gc = TimedEvent::periodic(
+        //     GC_PERIOD,
+        //     GarbageCollectionEvent {
+        //         tombstones: self.tombstones.clone(),
+        //         wildcard_updates: self.wildcard_updates.clone(),
+        //     },
+        // );
+        // t.add_async(gc).await;
 
         // subscribe on key_expr
         let storage_sub = match self.session.declare_subscriber(&self.key_expr).res().await {
@@ -641,52 +659,43 @@ impl StorageService {
     }
 }
 
-// async fn deserialize(file: &str) -> ZResult<KeBoxTree<Timestamp>> {
-//     let data = std::fs::read_to_string(zenoh_home().join(file)).unwrap();
-//     let data: HashMap<OwnedKeyExpr, Timestamp> = serde_json::from_str(&data).unwrap();
-//     let mut result = KeBoxTree::new();
-//     for (k, ts) in data {
-//         result.insert(&k, ts);
-//     }
-//     Ok(result)
+// // Periodic event cleaning-up data info for old metadata
+// struct GarbageCollectionEvent {
+//     tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
+//     wildcard_updates: Arc<RwLock<KeBoxTree<Sample, UnknownWildness, KeyedSetProvider>>>,
 // }
 
-// Periodic event cleaning-up data info for old metadata
-struct GarbageCollectionEvent {
-    tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
-    wildcard_updates: Arc<RwLock<KeBoxTree<Sample, UnknownWildness, KeyedSetProvider>>>,
-}
+// #[async_trait]
+// impl Timed for GarbageCollectionEvent {
+//     async fn run(&mut self) {
+//         trace!("Start garbage collection");
+//         let time_limit = NTP64::from(SystemTime::now().duration_since(UNIX_EPOCH).unwrap())
+//             - *MIN_DELAY_BEFORE_REMOVAL;
 
-#[async_trait]
-impl Timed for GarbageCollectionEvent {
-    async fn run(&mut self) {
-        trace!("Start garbage collection");
-        let time_limit = NTP64::from(SystemTime::now().duration_since(UNIX_EPOCH).unwrap())
-            - *MIN_DELAY_BEFORE_REMOVAL;
+//         // Get lock on fields
+//         let tombstones = self.tombstones.write().await;
+//         let wildcard_updates = self.wildcard_updates.write().await;
 
-        // Get lock on fields
-        let tombstones = self.tombstones.write().await;
-        let wildcard_updates = self.wildcard_updates.write().await;
-        // let db = db_cell.as_ref().unwrap();
+//         let mut to_be_removed = HashSet::new();
+//         for (k, ts) in tombstones.key_value_pairs() {
+//             if ts.get_time() < &time_limit {
+//                 // mark key to be removed
+//                 to_be_removed.insert(k);
+//             }
+//         }
 
-        for (_k, ts) in tombstones.key_value_pairs() {
-            if ts.get_time() < &time_limit {
-                // mark key to be removed
-            }
-        }
+//         for (_k, sample) in wildcard_updates.key_value_pairs() {
+//             let ts = sample.get_timestamp().unwrap();
+//             if ts.get_time() < &time_limit {
+//                 // mark key to be removed
+//             }
+//         }
 
-        for (_k, sample) in wildcard_updates.key_value_pairs() {
-            let ts = sample.get_timestamp().unwrap();
-            if ts.get_time() < &time_limit {
-                // mark key to be removed
-            }
-        }
+//         // remove the keys from tombstones and wildcard_updates
 
-        // remove the keys from tombstones and wildcard_updates
+//         drop(wildcard_updates);
+//         drop(tombstones);
 
-        drop(wildcard_updates);
-        drop(tombstones);
-
-        trace!("End garbage collection of obsolete data-infos");
-    }
-}
+//         trace!("End garbage collection of obsolete data-infos");
+//     }
+// }
