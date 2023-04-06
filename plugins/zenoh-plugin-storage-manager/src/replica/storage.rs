@@ -29,6 +29,7 @@ use zenoh_backend_traits::config::StorageConfig;
 use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult};
 use zenoh_keyexpr::key_expr::OwnedKeyExpr;
 use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
+use zenoh_keyexpr::keyexpr_tree::IKeyExprTreeMut;
 use zenoh_keyexpr::keyexpr_tree::{
     support::NonWild, support::UnknownWildness, IKeyExprTreeExt, IKeyExprTreeExtMut, KeBoxTree,
 };
@@ -119,15 +120,15 @@ impl StorageService {
         self.initialize_if_empty().await;
 
         // start periodic GC event
-        // let t = Timer::default();
-        // let gc = TimedEvent::periodic(
-        //     GC_PERIOD,
-        //     GarbageCollectionEvent {
-        //         tombstones: self.tombstones.clone(),
-        //         wildcard_updates: self.wildcard_updates.clone(),
-        //     },
-        // );
-        // t.add_async(gc).await;
+        let t = Timer::default();
+        let gc = TimedEvent::periodic(
+            GC_PERIOD,
+            GarbageCollectionEvent {
+                tombstones: self.tombstones.clone(),
+                wildcard_updates: self.wildcard_updates.clone(),
+            },
+        );
+        t.add_async(gc).await;
 
         // subscribe on key_expr
         let storage_sub = match self.session.declare_subscriber(&self.key_expr).res().await {
@@ -659,43 +660,49 @@ impl StorageService {
     }
 }
 
-// // Periodic event cleaning-up data info for old metadata
-// struct GarbageCollectionEvent {
-//     tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
-//     wildcard_updates: Arc<RwLock<KeBoxTree<Sample, UnknownWildness, KeyedSetProvider>>>,
-// }
+// Periodic event cleaning-up data info for old metadata
+struct GarbageCollectionEvent {
+    tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
+    wildcard_updates: Arc<RwLock<KeBoxTree<Sample, UnknownWildness, KeyedSetProvider>>>,
+}
 
-// #[async_trait]
-// impl Timed for GarbageCollectionEvent {
-//     async fn run(&mut self) {
-//         trace!("Start garbage collection");
-//         let time_limit = NTP64::from(SystemTime::now().duration_since(UNIX_EPOCH).unwrap())
-//             - *MIN_DELAY_BEFORE_REMOVAL;
+#[async_trait]
+impl Timed for GarbageCollectionEvent {
+    async fn run(&mut self) {
+        trace!("Start garbage collection");
+        let time_limit = NTP64::from(SystemTime::now().duration_since(UNIX_EPOCH).unwrap())
+            - *MIN_DELAY_BEFORE_REMOVAL;
 
-//         // Get lock on fields
-//         let tombstones = self.tombstones.write().await;
-//         let wildcard_updates = self.wildcard_updates.write().await;
+        // Get lock on fields
+        let mut tombstones = self.tombstones.write().await;
+        let mut wildcard_updates = self.wildcard_updates.write().await;
 
-//         let mut to_be_removed = HashSet::new();
-//         for (k, ts) in tombstones.key_value_pairs() {
-//             if ts.get_time() < &time_limit {
-//                 // mark key to be removed
-//                 to_be_removed.insert(k);
-//             }
-//         }
+        let mut to_be_removed = HashSet::new();
+        for (k, ts) in tombstones.key_value_pairs() {
+            if ts.get_time() < &time_limit {
+                // mark key to be removed
+                to_be_removed.insert(k);
+            }
+        }
+        for k in to_be_removed {
+            tombstones.remove(&k);
+        }
 
-//         for (_k, sample) in wildcard_updates.key_value_pairs() {
-//             let ts = sample.get_timestamp().unwrap();
-//             if ts.get_time() < &time_limit {
-//                 // mark key to be removed
-//             }
-//         }
+        let mut to_be_removed = HashSet::new();
+        for (k, sample) in wildcard_updates.key_value_pairs() {
+            let ts = sample.get_timestamp().unwrap();
+            if ts.get_time() < &time_limit {
+                // mark key to be removed
+                to_be_removed.insert(k);
+            }
+        }
+        for k in to_be_removed {
+            wildcard_updates.remove(&k);
+        }
 
-//         // remove the keys from tombstones and wildcard_updates
+        drop(wildcard_updates);
+        drop(tombstones);
 
-//         drop(wildcard_updates);
-//         drop(tombstones);
-
-//         trace!("End garbage collection of obsolete data-infos");
-//     }
-// }
+        trace!("End garbage collection of obsolete data-infos");
+    }
+}
