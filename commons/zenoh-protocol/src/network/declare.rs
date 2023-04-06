@@ -17,6 +17,7 @@ use crate::{
     network::Mapping,
     zextz64,
 };
+pub use interest::*;
 pub use keyexpr::*;
 pub use queryable::*;
 pub use subscriber::*;
@@ -73,6 +74,10 @@ pub mod id {
 
     pub const D_TOKEN: u8 = 0x06;
     pub const U_TOKEN: u8 = 0x07;
+
+    pub const D_INTEREST: u8 = 0x08;
+    pub const F_INTEREST: u8 = 0x09;
+    pub const U_INTEREST: u8 = 0x10;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,6 +90,9 @@ pub enum DeclareBody {
     UndeclareQueryable(UndeclareQueryable),
     DeclareToken(DeclareToken),
     UndeclareToken(UndeclareToken),
+    DeclareInterest(DeclareInterest),
+    FinalInterest(FinalInterest),
+    UndeclareInterest(UndeclareInterest),
 }
 
 impl DeclareBody {
@@ -94,7 +102,7 @@ impl DeclareBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..8) {
+        match rng.gen_range(0..11) {
             0 => DeclareBody::DeclareKeyExpr(DeclareKeyExpr::rand()),
             1 => DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr::rand()),
             2 => DeclareBody::DeclareSubscriber(DeclareSubscriber::rand()),
@@ -103,6 +111,9 @@ impl DeclareBody {
             5 => DeclareBody::UndeclareQueryable(UndeclareQueryable::rand()),
             6 => DeclareBody::DeclareToken(DeclareToken::rand()),
             7 => DeclareBody::UndeclareToken(UndeclareToken::rand()),
+            8 => DeclareBody::DeclareInterest(DeclareInterest::rand()),
+            9 => DeclareBody::FinalInterest(FinalInterest::rand()),
+            10 => DeclareBody::UndeclareInterest(UndeclareInterest::rand()),
             _ => unreachable!(),
         }
     }
@@ -623,6 +634,176 @@ pub mod token {
             let mut rng = rand::thread_rng();
 
             let id: TokenId = rng.gen();
+
+            Self { id }
+        }
+    }
+}
+
+pub mod interest {
+    use super::*;
+
+    pub type InterestId = u32;
+
+    pub mod flag {
+        pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix
+        pub const M: u8 = 1 << 6; // 0x40 Mapping       if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
+        pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
+
+        pub const A: u8 = 1 << 5; // 0x20 Aggregate     if A==1 then the replies should be aggregated
+    }
+
+    /// # Init message
+    ///
+    /// The DECLARE INTEREST message is sent to request the transmission of existing and future
+    /// declarations of a given kind matching a target keyexpr. E.g., a declare interest could be sent to
+    /// request the transmisison of all existing subscriptions matching `a/*`. A FINAL INTEREST is used to
+    /// mark the end of the transmission of exisiting matching declarations.
+    ///
+    /// E.g., the [`DeclareInterest`]/[`FinalInterest`]/[`UndeclareInterest`] message flow is the following:
+    ///
+    /// ```text
+    ///     A                   B
+    ///     |   DECL INTEREST   |
+    ///     |------------------>| -- This is a DeclareInterest e.g. for subscriber declarations/undeclarations.
+    ///     |                   |
+    ///     |  DECL SUBSCRIBER  |
+    ///     |<------------------|
+    ///     |  DECL SUBSCRIBER  |
+    ///     |<------------------|
+    ///     |  DECL SUBSCRIBER  |
+    ///     |<------------------|
+    ///     |                   |
+    ///     |   FINAL INTEREST  |
+    ///     |<------------------|  -- The FinalInterest signals that all known subscribers have been transmitted.
+    ///     |                   |
+    ///     |  DECL SUBSCRIBER  |
+    ///     |<------------------|  -- This is a new subscriber declaration.
+    ///     | UNDECL SUBSCRIBER |
+    ///     |<------------------|  -- This is a new subscriber undeclaration.
+    ///     |                   |
+    ///     |        ...        |
+    ///     |                   |
+    ///     |  UNDECL INTEREST  |
+    ///     |------------------>|  -- This is an UndeclareInterest to stop receiving subscriber declarations/undeclarations.
+    ///     |                   |
+    /// ```
+    ///
+    /// The DECLARE INTEREST message structure is defined as follows:
+    ///
+    /// ```text
+    /// Flags:
+    /// - N: Named          If N==1 then the key expr has name/suffix
+    /// - M: Mapping        if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
+    /// - Z: Extension      If Z==1 then at least one extension is present
+    ///
+    /// 7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|M|N|  D_INT  |
+    /// +---------------+
+    /// ~ intst_id:z32  ~
+    /// +---------------+
+    /// ~ key_scope:z16 ~
+    /// +---------------+
+    /// ~  key_suffix   ~  if N==1 -- <u8;z16>
+    /// +---------------+
+    /// |X|X|A|   ID    |  (*) if A==1 then the replies should be aggregated
+    /// +---------------+
+    /// ~  [decl_exts]  ~  if Z==1
+    /// +---------------+
+    ///
+    /// (*) ID: the ID of the declaration interest (i.e. keyexpr, subscriber, queryable, token)
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct DeclareInterest {
+        pub id: InterestId,
+        pub wire_expr: WireExpr<'static>,
+        pub mapping: Mapping,
+        pub kind: u8,
+        pub aggregate: bool,
+    }
+
+    impl DeclareInterest {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let id: InterestId = rng.gen();
+            let wire_expr = WireExpr::rand();
+            let mapping = Mapping::rand();
+            let kind = imsg::mid(rng.gen());
+            let aggregate: bool = rng.gen();
+
+            Self {
+                id,
+                wire_expr,
+                mapping,
+                kind,
+                aggregate,
+            }
+        }
+    }
+
+    /// ```text
+    /// Flags:
+    /// - X: Reserved
+    /// - X: Reserved
+    /// - Z: Extension      If Z==1 then at least one extension is present
+    ///
+    /// 7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|X|X|  F_INT  |
+    /// +---------------+
+    /// ~ intst_id:z32  ~  
+    /// +---------------+
+    /// ~  [decl_exts]  ~  if Z==1
+    /// +---------------+
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct FinalInterest {
+        pub id: InterestId,
+    }
+
+    impl FinalInterest {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let id: InterestId = rng.gen();
+
+            Self { id }
+        }
+    }
+
+    /// ```text
+    /// Flags:
+    /// - X: Reserved
+    /// - X: Reserved
+    /// - Z: Extension      If Z==1 then at least one extension is present
+    ///
+    /// 7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|X|X|  U_INT  |
+    /// +---------------+
+    /// ~ intst_id:z32  ~  
+    /// +---------------+
+    /// ~  [decl_exts]  ~  if Z==1
+    /// +---------------+
+    /// ```
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct UndeclareInterest {
+        pub id: InterestId,
+    }
+
+    impl UndeclareInterest {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let id: InterestId = rng.gen();
 
             Self { id }
         }
