@@ -146,6 +146,7 @@ pub mod ext {
 
     pub type QoS = zextz64!(0x1, false);
     pub type Timestamp = zextzbuf!(0x2, false);
+    pub type NodeId = zextz64!(0x3, true);
 
     /// ```text
     ///  7 6 5 4 3 2 1 0
@@ -266,6 +267,43 @@ pub mod ext {
             let id = uhlc::ID::try_from(ZenohId::rand().as_slice()).unwrap();
             let timestamp = uhlc::Timestamp::new(time, id);
             Self { timestamp }
+        }
+    }
+
+    /// ```text
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |Z|0_1|    ID   |
+    /// +-+-+-+---------+
+    /// % source_id     %
+    /// +---------------+
+    /// ```
+    #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct NodeIdType {
+        pub node_id: u16,
+    }
+
+    impl NodeIdType {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+            let node_id = rng.gen_range(1..20);
+            Self { node_id }
+        }
+    }
+
+    impl From<NodeId> for NodeIdType {
+        fn from(ext: NodeId) -> Self {
+            Self {
+                node_id: ext.value as u16,
+            }
+        }
+    }
+
+    impl From<NodeIdType> for NodeId {
+        fn from(ext: NodeIdType) -> Self {
+            NodeId::new(ext.node_id as u64)
         }
     }
 }

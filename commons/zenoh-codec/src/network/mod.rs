@@ -114,3 +114,6 @@ where
         Ok((ext::TimestampType { timestamp }, more))
     }
 }
+
+// Extensions: QoS
+crate::impl_zextz64!(ext::NodeIdType, ext::NodeId::ID);

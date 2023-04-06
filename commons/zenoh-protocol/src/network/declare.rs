@@ -46,6 +46,7 @@ pub mod flag {
 pub struct Declare {
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
+    pub ext_nodeid: ext::NodeIdType,
     pub body: DeclareBody,
 }
 
@@ -55,6 +56,9 @@ pub mod ext {
 
     pub type Timestamp = crate::network::ext::Timestamp;
     pub type TimestampType = crate::network::ext::TimestampType;
+
+    pub type NodeId = crate::network::ext::NodeId;
+    pub type NodeIdType = crate::network::ext::NodeIdType;
 }
 
 pub mod id {
@@ -114,11 +118,13 @@ impl Declare {
         let body = DeclareBody::rand();
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
+        let ext_nodeid = ext::NodeIdType::rand();
 
         Self {
             body,
             ext_qos,
             ext_tstamp,
+            ext_nodeid,
         }
     }
 }

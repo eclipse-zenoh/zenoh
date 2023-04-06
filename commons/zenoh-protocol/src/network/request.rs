@@ -57,6 +57,7 @@ pub struct Request {
     pub mapping: Mapping,
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
+    pub ext_nodeid: ext::NodeIdType,
     pub ext_target: ext::TargetType,
     pub ext_budget: Option<ext::BudgetType>,
     pub ext_timeout: Option<ext::TimeoutType>,
@@ -73,7 +74,10 @@ pub mod ext {
     pub type Timestamp = crate::network::ext::Timestamp;
     pub type TimestampType = crate::network::ext::TimestampType;
 
-    pub type Target = zextz64!(0x3, true);
+    pub type NodeId = crate::network::ext::NodeId;
+    pub type NodeIdType = crate::network::ext::NodeIdType;
+
+    pub type Target = zextz64!(0x4, true);
     /// - Target (0x03)
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
@@ -110,11 +114,11 @@ pub mod ext {
     }
 
     // The maximum number of responses
-    pub type Budget = zextz64!(0x4, false);
+    pub type Budget = zextz64!(0x5, false);
     pub type BudgetType = NonZeroU32;
 
     // The timeout of the request
-    pub type Timeout = zextz64!(0x5, false);
+    pub type Timeout = zextz64!(0x6, false);
     pub type TimeoutType = Duration;
 }
 
@@ -132,6 +136,7 @@ impl Request {
         let payload = RequestBody::rand();
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
+        let ext_nodeid = ext::NodeIdType::rand();
         let ext_target = ext::TargetType::rand();
         let ext_budget = if rng.gen_bool(0.5) {
             NonZeroU32::new(rng.gen())
@@ -151,6 +156,7 @@ impl Request {
             payload,
             ext_qos,
             ext_tstamp,
+            ext_nodeid,
             ext_target,
             ext_budget,
             ext_timeout,
