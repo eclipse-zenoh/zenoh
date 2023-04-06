@@ -219,13 +219,14 @@ where
 
 impl<KeySpace, Handler> SyncResolve for QueryingSubscriberBuilder<'_, '_, KeySpace, Handler>
 where
-    KeySpace: Into<crate::KeySpace>,
+    KeySpace: Into<crate::KeySpace> + Clone,
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
         let session = self.session.clone();
         let key_expr = self.key_expr?;
+        let key_space = self.key_space.clone().into();
         let query_selector = match self.query_selector {
             Some(s) => Some(s?),
             None => None,
@@ -240,8 +241,8 @@ where
             key_space: self.key_space,
             reliability: self.reliability,
             origin: self.origin,
-            fetch: |cb| {
-                match query_selector {
+            fetch: |cb| match key_space {
+                crate::KeySpace::User => match query_selector {
                     Some(s) => session.get(s),
                     None => session.get(key_expr),
                 }
@@ -250,7 +251,16 @@ where
                 .consolidation(query_consolidation)
                 .accept_replies(query_accept_replies)
                 .timeout(query_timeout)
-                .res_sync()
+                .res_sync(),
+                crate::KeySpace::Liveliness => session
+                    .liveliness()
+                    .get(key_expr)
+                    .callback(cb)
+                    .target(query_target)
+                    .consolidation(query_consolidation)
+                    .accept_replies(query_accept_replies)
+                    .timeout(query_timeout)
+                    .res_sync(),
             },
             handler: self.handler,
             phantom: std::marker::PhantomData,
@@ -261,7 +271,7 @@ where
 
 impl<'a, KeySpace, Handler> AsyncResolve for QueryingSubscriberBuilder<'a, '_, KeySpace, Handler>
 where
-    KeySpace: Into<crate::KeySpace>,
+    KeySpace: Into<crate::KeySpace> + Clone,
     Handler: IntoCallbackReceiverPair<'static, Sample> + Send,
     Handler::Receiver: Send,
 {
