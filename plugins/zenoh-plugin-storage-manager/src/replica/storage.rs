@@ -20,13 +20,14 @@ use flume::{Receiver, Sender};
 use futures::select;
 use log::{error, info, trace, warn};
 use std::collections::{HashMap, HashSet};
-use std::str;
+use std::str::{self, FromStr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use zenoh::buffers::ZBuf;
 use zenoh::prelude::r#async::*;
 use zenoh::time::{Timestamp, NTP64};
 use zenoh::{Result as ZResult, Session};
 use zenoh_backend_traits::config::StorageConfig;
-use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult};
+use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
 use zenoh_keyexpr::key_expr::OwnedKeyExpr;
 use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
 use zenoh_keyexpr::keyexpr_tree::IKeyExprTreeMut;
@@ -41,6 +42,12 @@ pub const TOMBSTONE_FILENAME: &str = "tombstones";
 pub const GC_PERIOD: Duration = Duration::new(30, 0);
 lazy_static::lazy_static! {
     static ref MIN_DELAY_BEFORE_REMOVAL: NTP64 = NTP64::from(Duration::new(86400, 0));
+}
+
+#[derive(Clone)]
+struct Update {
+    kind: SampleKind,
+    data: StoredData,
 }
 
 pub struct ReplicationService {
@@ -58,7 +65,7 @@ pub struct StorageService {
     storage: Mutex<Box<dyn zenoh_backend_traits::Storage>>,
     capability: Capability,
     tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
-    wildcard_updates: Arc<RwLock<KeBoxTree<Sample, UnknownWildness, KeyedSetProvider>>>,
+    wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     replication: Option<ReplicationService>,
@@ -104,14 +111,16 @@ impl StorageService {
                     tombstones.insert(&k, ts);
                 }
             }
-            // if zenoh_home().join(WILDCARD_UPDATES_FILENAME).exists() {
-            //     let saved_wc = std::fs::read_to_string(zenoh_home().join(WILDCARD_UPDATES_FILENAME)).unwrap();
-            //     let saved_wc: HashMap<OwnedKeyExpr, Sample> = serde_json::from_str(&saved_wc).unwrap();
-            //     let wildcard_updates = storage_service.wildcard_updates.write().await;
-            //     for (k, sample) in saved_wc {
-            //         wildcard_updates.insert(&k, sample);
-            //     }
-            // }
+            if zenoh_home().join(WILDCARD_UPDATES_FILENAME).exists() {
+                let saved_wc =
+                    std::fs::read_to_string(zenoh_home().join(WILDCARD_UPDATES_FILENAME)).unwrap();
+                let saved_wc: HashMap<OwnedKeyExpr, String> =
+                    serde_json::from_str(&saved_wc).unwrap();
+                let mut wildcard_updates = storage_service.wildcard_updates.write().await;
+                for (k, data) in saved_wc {
+                    wildcard_updates.insert(&k, construct_update(data));
+                }
+            }
         }
         storage_service.start_storage_queryable_subscriber(rx).await
     }
@@ -295,11 +304,11 @@ impl StorageService {
                     .ovderriding_wild_update(&k, sample.get_timestamp().unwrap())
                     .await
                 {
-                    Some(overriding_sample) => {
+                    Some(overriding_update) => {
                         let mut sample_to_store =
-                            Sample::new(KeyExpr::from(k.clone()), overriding_sample.value)
-                                .with_timestamp(overriding_sample.timestamp.unwrap());
-                        sample_to_store.kind = overriding_sample.kind;
+                            Sample::new(KeyExpr::from(k.clone()), overriding_update.data.value)
+                                .with_timestamp(overriding_update.data.timestamp);
+                        sample_to_store.kind = overriding_update.kind;
                         sample_to_store
                     }
                     None => {
@@ -383,13 +392,21 @@ impl StorageService {
         // @TODO: change into a better store that does incremental writes
         let key = sample.clone().key_expr;
         let mut wildcards = self.wildcard_updates.write().await;
-        wildcards.insert(&key, sample);
+        wildcards.insert(
+            &key,
+            Update {
+                kind: sample.kind,
+                data: StoredData {
+                    value: sample.value,
+                    timestamp: sample.timestamp.unwrap(),
+                },
+            },
+        );
         if self.capability.persistence.eq(&Persistence::Durable) {
             // flush to disk to makeit durable
             let mut serialized_data = HashMap::new();
-            for (k, sample) in wildcards.key_value_pairs() {
-                //@TODO: serialize the entire sample, not only the timestamp
-                serialized_data.insert(k, sample.timestamp);
+            for (k, update) in wildcards.key_value_pairs() {
+                serialized_data.insert(k, serialize_update(update));
             }
             if let Err(e) = std::fs::write(
                 zenoh_home().join(WILDCARD_UPDATES_FILENAME),
@@ -412,12 +429,12 @@ impl StorageService {
         &self,
         key_expr: &OwnedKeyExpr,
         timestamp: &Timestamp,
-    ) -> Option<Sample> {
+    ) -> Option<Update> {
         // check wild card store for any futuristic update
         let wildcards = self.wildcard_updates.read().await;
         for node in wildcards.intersecting_keys(key_expr) {
             let weight = wildcards.weight_at(&node);
-            if weight.is_some() && weight.unwrap().timestamp.unwrap() > *timestamp {
+            if weight.is_some() && weight.unwrap().data.timestamp > *timestamp {
                 // if the key matches a wild card update, check whether it was saved in storage
                 // remember that wild card updates change only existing keys
                 let mut storage = self.storage.lock().await;
@@ -660,10 +677,39 @@ impl StorageService {
     }
 }
 
+fn serialize_update(update: &Update) -> String {
+    let result = (
+        update.kind.to_string(),
+        update.data.timestamp.to_string(),
+        update.data.value.encoding.to_string(),
+        update.data.value.payload.slices().collect::<Vec<&[u8]>>(),
+    );
+    serde_json::to_string_pretty(&result).unwrap()
+}
+
+fn construct_update(data: String) -> Update {
+    let result: (String, String, String, Vec<&[u8]>) = serde_json::from_str(&data).unwrap();
+    let mut payload = ZBuf::default();
+    for slice in result.3 {
+        payload.push_zslice(slice.to_vec().into());
+    }
+    let value = Value::new(payload).encoding(Encoding::from(result.2));
+    let data = StoredData {
+        value,
+        timestamp: Timestamp::from_str(&result.1).unwrap(),
+    };
+    let kind = if result.0.eq(&(SampleKind::Put).to_string()) {
+        SampleKind::Put
+    } else {
+        SampleKind::Delete
+    };
+    Update { kind, data }
+}
+
 // Periodic event cleaning-up data info for old metadata
 struct GarbageCollectionEvent {
     tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
-    wildcard_updates: Arc<RwLock<KeBoxTree<Sample, UnknownWildness, KeyedSetProvider>>>,
+    wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
 }
 
 #[async_trait]
@@ -689,8 +735,8 @@ impl Timed for GarbageCollectionEvent {
         }
 
         let mut to_be_removed = HashSet::new();
-        for (k, sample) in wildcard_updates.key_value_pairs() {
-            let ts = sample.get_timestamp().unwrap();
+        for (k, update) in wildcard_updates.key_value_pairs() {
+            let ts = update.data.timestamp;
             if ts.get_time() < &time_limit {
                 // mark key to be removed
                 to_be_removed.insert(k);
