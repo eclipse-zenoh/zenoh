@@ -434,9 +434,11 @@ impl StorageService {
     ) -> Option<Update> {
         // check wild card store for any futuristic update
         let wildcards = self.wildcard_updates.read().await;
+        let mut ts = timestamp;
+        let mut update = None;
         for node in wildcards.intersecting_keys(key_expr) {
             let weight = wildcards.weight_at(&node);
-            if weight.is_some() && weight.unwrap().data.timestamp > *timestamp {
+            if weight.is_some() && weight.unwrap().data.timestamp > *ts {
                 // if the key matches a wild card update, check whether it was saved in storage
                 // remember that wild card updates change only existing keys
                 let mut storage = self.storage.lock().await;
@@ -444,13 +446,13 @@ impl StorageService {
                     Ok(stripped) => stripped,
                     Err(e) => {
                         error!("{}", e);
-                        return None;
+                        break;
                     }
                 };
                 match storage.get(stripped_key, "").await {
                     Ok(stored_data) => {
                         for entry in stored_data {
-                            if entry.timestamp > *timestamp {
+                            if entry.timestamp > *ts {
                                 return None;
                             }
                         }
@@ -460,12 +462,13 @@ impl StorageService {
                             "Storage {} raised an error fetching a query on key {} : {}",
                             self.name, key_expr, e
                         );
-                        return Some(weight.unwrap().clone());
+                        ts = &weight.unwrap().data.timestamp;
+                        update = Some(weight.unwrap().clone());
                     }
                 }
             }
         }
-        None
+        update
     }
 
     async fn is_latest(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
