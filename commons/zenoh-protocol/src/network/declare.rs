@@ -651,6 +651,7 @@ pub mod interest {
         pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
 
         pub const A: u8 = 1 << 5; // 0x20 Aggregate     if A==1 then the replies should be aggregated
+        pub const O: u8 = 1 << 6; // 0x40 Oneshot       if O==1 should be oneshot and no replies should be sent after the FinalInterest
     }
 
     /// # Init message
@@ -707,12 +708,14 @@ pub mod interest {
     /// +---------------+
     /// ~  key_suffix   ~  if N==1 -- <u8;z16>
     /// +---------------+
-    /// |X|X|A|   ID    |  (*) if A==1 then the replies should be aggregated
+    /// |X|O|A|   ID    |  (*)
     /// +---------------+
     /// ~  [decl_exts]  ~  if Z==1
     /// +---------------+
     ///
-    /// (*) ID: the ID of the declaration interest (i.e. keyexpr, subscriber, queryable, token)
+    /// (*) - ID: the ID of the declaration interest (i.e. keyexpr, subscriber, queryable, token)
+    ///     - if A==1 then the replies should be aggregated
+    ///     - if O==1 then the replies should be oneshot and no replies should be sent after the FinalInterest
     /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct DeclareInterest {
@@ -721,6 +724,7 @@ pub mod interest {
         pub mapping: Mapping,
         pub kind: u8,
         pub aggregate: bool,
+        pub oneshot: bool,
     }
 
     impl DeclareInterest {
@@ -734,6 +738,7 @@ pub mod interest {
             let mapping = Mapping::rand();
             let kind = imsg::mid(rng.gen());
             let aggregate: bool = rng.gen();
+            let oneshot: bool = rng.gen();
 
             Self {
                 id,
@@ -741,6 +746,7 @@ pub mod interest {
                 mapping,
                 kind,
                 aggregate,
+                oneshot,
             }
         }
     }

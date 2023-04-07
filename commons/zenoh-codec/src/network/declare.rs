@@ -780,6 +780,9 @@ where
         if x.aggregate {
             b |= interest::flag::A;
         }
+        if x.oneshot {
+            b |= interest::flag::O;
+        }
         self.write(&mut *writer, b)?;
 
         Ok(())
@@ -833,6 +836,7 @@ where
             mapping,
             kind: imsg::mid(kind),
             aggregate: imsg::has_flag(kind, interest::flag::A),
+            oneshot: imsg::has_flag(kind, interest::flag::O),
         })
     }
 }
