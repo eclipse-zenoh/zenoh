@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! [Warning:] This crate should be considered unstable, as in we might change the APIs anytime.
 //! This crate provides the traits to be implemented by a zenoh backend library:
 //!  - [`Volume`]
 //!  - [`Storage`]
@@ -139,16 +140,31 @@ pub use zenoh::Result as ZResult;
 pub mod config;
 use config::{StorageConfig, VolumeConfig};
 
+/// Capability of a storage indicates the guarantees of the storage
+/// It is used by the storage manager to take decisions on the trade-offs to ensure correct performance
 pub struct Capability {
     pub persistence: Persistence,
     pub history: History,
+    /// `read_cost` is a parameter that hels the storage manager take a decision on optimizing database roundtrips
+    /// If the `read_cost` is higher than a given threshold, the storage manger will maintain a cache with the keys present in the database
+    /// This is a placeholder, not actually utilised in the current implementation
     pub read_cost: u32,
 }
+
+/// Persistence is the guarantee expected from a storage in case of failures
+/// If a storage is marked Persistent::Durable, if it restarts after a crash, it will still have all the values that were saved.
+/// This will include also persisting the metadata that Zenoh stores for the updates.
+/// If a storage is marked Persistent::Volatile, the storage will not have any guarantees on its content after a crash.
+/// This option should be used only if the storage is considered to function as a cache.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Persistence {
     Volatile, //default
     Durable,
 }
+
+/// History is the number of values that the backend is expected to save per key
+/// History::Latest saves only the latest value per key
+/// History::All saves all the values including historical values
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum History {
     Latest, //default
@@ -204,6 +220,9 @@ pub trait Storage: Send + Sync {
     fn get_admin_status(&self) -> serde_json::Value;
 
     /// Function called for each incoming data ([`Sample`]) to be stored in this storage.
+    /// A key can be `None` if it matches the `strip_prefix` exactly.
+    /// In order to avoid data loss, the storage must store the `value` and `timestamp` associated with the `None` key
+    /// in a manner suitable for the given backend technology
     async fn put(
         &mut self,
         key: Option<OwnedKeyExpr>,
@@ -212,6 +231,9 @@ pub trait Storage: Send + Sync {
     ) -> ZResult<StorageInsertionResult>;
 
     /// Function called for each incoming delete request to this storage.
+    /// A key can be `None` if it matches the `strip_prefix` exactly.
+    /// In order to avoid data loss, the storage must delete the entry corresponding to the `None` key
+    /// in a manner suitable for the given backend technology
     async fn delete(
         &mut self,
         key: Option<OwnedKeyExpr>,
@@ -219,6 +241,9 @@ pub trait Storage: Send + Sync {
     ) -> ZResult<StorageInsertionResult>;
 
     /// Function to retrieve the sample associated with a single key.
+    /// A key can be `None` if it matches the `strip_prefix` exactly.
+    /// In order to avoid data loss, the storage must retrieve the `value` and `timestamp` associated with the `None` key
+    /// in a manner suitable for the given backend technology
     async fn get(
         &mut self,
         key: Option<OwnedKeyExpr>,
@@ -227,6 +252,7 @@ pub trait Storage: Send + Sync {
 
     /// Function called to get the list of all storage content (key, timestamp)
     /// The latest Timestamp corresponding to each key is either the timestamp of the delete or put whichever is the latest.
+    /// Remember to fetch the entry corresponding to the `None` key
     async fn get_all_entries(&self) -> ZResult<Vec<(Option<OwnedKeyExpr>, Timestamp)>>;
 }
 

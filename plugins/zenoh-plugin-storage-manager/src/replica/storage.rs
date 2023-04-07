@@ -39,6 +39,8 @@ use zenoh_util::{zenoh_home, Timed, TimedEvent, Timer};
 
 pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";
+
+// The default values for garbage collection
 pub const GC_PERIOD: Duration = Duration::new(30, 0);
 lazy_static::lazy_static! {
     static ref MIN_DELAY_BEFORE_REMOVAL: NTP64 = NTP64::from(Duration::new(86400, 0));
@@ -592,6 +594,7 @@ impl StorageService {
         match storage.get_all_entries().await {
             Ok(entries) => {
                 for (k, _ts) in entries {
+                    // @TODO: optimize adding back the prefix
                     let full_key = match k {
                         Some(key) => StorageService::get_prefixed(&self.strip_prefix, &key.into()),
                         None => self.strip_prefix.clone().unwrap(),
