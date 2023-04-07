@@ -496,6 +496,7 @@ impl StorageService {
                 return;
             }
         };
+        trace!("[STORAGE] Processing query on key_expr: {}", q.key_expr());
         if q.key_expr().is_wild() {
             // resolve key expr into individual keys
             let matching_keys = self.get_matching_keys(q.key_expr()).await;
