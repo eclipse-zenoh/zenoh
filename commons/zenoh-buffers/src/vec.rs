@@ -60,7 +60,7 @@ impl Writer for &mut Vec<u8> {
         usize::MAX
     }
 
-    fn with_slot<F>(&mut self, mut len: usize, f: F) -> Result<(), DidntWrite>
+    fn with_slot<F>(&mut self, mut len: usize, f: F) -> Result<NonZeroUsize, DidntWrite>
     where
         F: FnOnce(&mut [u8]) -> usize,
     {
@@ -69,7 +69,7 @@ impl Writer for &mut Vec<u8> {
             len = f(mem::transmute(&mut self.spare_capacity_mut()[..len]));
             self.set_len(self.len() + len);
         }
-        Ok(())
+        NonZeroUsize::new(len).ok_or(DidntWrite)
     }
 }
 
