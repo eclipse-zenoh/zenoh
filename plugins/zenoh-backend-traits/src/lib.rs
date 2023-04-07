@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-//! [Warning:] This crate should be considered unstable, as in we might change the APIs anytime.
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate should be considered unstable, as in we might change the APIs anytime.
+//!
 //! This crate provides the traits to be implemented by a zenoh backend library:
 //!  - [`Volume`]
 //!  - [`Storage`]
