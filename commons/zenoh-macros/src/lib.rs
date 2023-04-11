@@ -19,7 +19,7 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use proc_macro::TokenStream;
 use quote::quote;
-use zenoh_protocol::core::key_expr::format::{
+use zenoh_keyexpr::format::{
     macro_support::{self, SegmentBuilder},
     KeFormat,
 };

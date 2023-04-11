@@ -122,7 +122,8 @@ where
             }
             buffer[len] = b;
             len + 1
-        })
+        })?;
+        Ok(())
     }
 }
 

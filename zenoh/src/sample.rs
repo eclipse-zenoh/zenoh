@@ -17,10 +17,11 @@ use crate::buffers::ZBuf;
 #[zenoh_macros::unstable]
 use crate::prelude::ZenohId;
 use crate::prelude::{KeyExpr, SampleKind, Value};
+use crate::query::Reply;
 use crate::time::{new_reception_timestamp, Timestamp};
 #[zenoh_macros::unstable]
 use serde::Serialize;
-use std::convert::TryInto;
+use std::convert::{TryFrom, TryInto};
 use zenoh_protocol::zenoh::{DataInfo, SourceSn};
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
@@ -33,10 +34,11 @@ pub enum Locality {
     Any,
 }
 #[cfg(not(feature = "unstable"))]
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum Locality {
     SessionLocal,
     Remote,
+    #[default]
     Any,
 }
 
@@ -256,5 +258,13 @@ impl std::fmt::Display for Sample {
             SampleKind::Delete => write!(f, "{}({})", self.kind, self.key_expr),
             _ => write!(f, "{}({}: {})", self.kind, self.key_expr, self.value),
         }
+    }
+}
+
+impl TryFrom<Reply> for Sample {
+    type Error = Value;
+
+    fn try_from(value: Reply) -> Result<Self, Self::Error> {
+        value.sample
     }
 }

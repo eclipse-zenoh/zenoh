@@ -258,7 +258,7 @@ impl TransportPeerEventHandler for RuntimeSession {
             if data.reply_context.is_none() {
                 let face = &self.main_handler.face.state;
                 full_reentrant_route_data(
-                    &self.main_handler.tables,
+                    &self.main_handler.tables.tables,
                     face,
                     &data.key,
                     msg.channel,

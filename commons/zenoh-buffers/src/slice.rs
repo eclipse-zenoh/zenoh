@@ -61,7 +61,7 @@ impl Writer for &mut [u8] {
         self.len()
     }
 
-    fn with_slot<F>(&mut self, mut len: usize, f: F) -> Result<(), DidntWrite>
+    fn with_slot<F>(&mut self, mut len: usize, f: F) -> Result<NonZeroUsize, DidntWrite>
     where
         F: FnOnce(&mut [u8]) -> usize,
     {
@@ -73,7 +73,8 @@ impl Writer for &mut [u8] {
         // doesn't believe that the subslice has the same lifetime as the original slice,
         // so we transmute to assure it that it does.
         *self = unsafe { mem::transmute(&mut self[len..]) };
-        Ok(())
+
+        NonZeroUsize::new(len).ok_or(DidntWrite)
     }
 }
 

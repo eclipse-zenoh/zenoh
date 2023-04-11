@@ -113,7 +113,19 @@ impl Runtime {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
             let guard = &self.config.lock();
             let listeners = if guard.listen().endpoints().is_empty() {
-                vec![PEER_DEFAULT_LISTENER.parse().unwrap()]
+                let endpoint: EndPoint = PEER_DEFAULT_LISTENER.parse().unwrap();
+                let protocol = endpoint.protocol();
+                let mut listeners = vec![];
+                if self
+                    .manager
+                    .config
+                    .protocols
+                    .iter()
+                    .any(|p| p.as_str() == protocol.as_str())
+                {
+                    listeners.push(endpoint)
+                }
+                listeners
             } else {
                 guard.listen().endpoints().clone()
             };
@@ -147,7 +159,19 @@ impl Runtime {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces) = {
             let guard = self.config.lock();
             let listeners = if guard.listen().endpoints().is_empty() {
-                vec![ROUTER_DEFAULT_LISTENER.parse().unwrap()]
+                let endpoint: EndPoint = ROUTER_DEFAULT_LISTENER.parse().unwrap();
+                let protocol = endpoint.protocol();
+                let mut listeners = vec![];
+                if self
+                    .manager
+                    .config
+                    .protocols
+                    .iter()
+                    .any(|p| p.as_str() == protocol.as_str())
+                {
+                    listeners.push(endpoint)
+                }
+                listeners
             } else {
                 guard.listen().endpoints().clone()
             };
@@ -273,17 +297,18 @@ impl Runtime {
         for listener in listeners {
             let endpoint = listener.clone();
             match self.manager().add_listener(endpoint).await {
-                Ok(listener) => log::debug!("Listener {} added", listener),
+                Ok(listener) => log::debug!("Listener added: {}", listener),
                 Err(err) => {
                     log::error!("Unable to open listener {}: {}", listener, err);
                     return Err(err);
                 }
             }
         }
+
         let mut locators = self.locators.write().unwrap();
         *locators = self.manager().get_locators();
         for locator in &*locators {
-            log::info!("zenohd can be reached at {}", locator);
+            log::info!("Zenoh can be reached at: {}", locator);
         }
         Ok(())
     }

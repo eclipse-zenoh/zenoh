@@ -430,7 +430,7 @@ impl Writer for ZBufWriter<'_> {
         Ok(())
     }
 
-    fn with_slot<F>(&mut self, mut len: usize, f: F) -> Result<(), DidntWrite>
+    fn with_slot<F>(&mut self, mut len: usize, f: F) -> Result<NonZeroUsize, DidntWrite>
     where
         F: FnOnce(&mut [u8]) -> usize,
     {
@@ -456,7 +456,7 @@ impl Writer for ZBufWriter<'_> {
                     if core::ptr::eq(cache.as_ptr(), b.as_ptr()) {
                         // Simply update the slice length
                         *end = cache_len;
-                        return Ok(());
+                        return NonZeroUsize::new(len).ok_or(DidntWrite);
                     }
                 }
             }
@@ -467,7 +467,7 @@ impl Writer for ZBufWriter<'_> {
             start: prev_cache_len,
             end: cache_len,
         });
-        Ok(())
+        NonZeroUsize::new(len).ok_or(DidntWrite)
     }
 }
 

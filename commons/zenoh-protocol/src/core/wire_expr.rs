@@ -18,6 +18,7 @@ use alloc::{
     string::{String, ToString},
 };
 use core::{convert::TryInto, fmt, sync::atomic::AtomicU16};
+use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_result::{bail, ZResult};
 
 /// A numerical Id mapped to a key expression.
@@ -127,6 +128,24 @@ impl TryInto<ExprId> for WireExpr<'_> {
     type Error = zenoh_result::Error;
     fn try_into(self) -> Result<ExprId, Self::Error> {
         self.try_as_id()
+    }
+}
+
+impl<'a> From<&'a OwnedKeyExpr> for WireExpr<'a> {
+    fn from(val: &'a OwnedKeyExpr) -> Self {
+        WireExpr {
+            scope: 0,
+            suffix: Cow::Borrowed(val.as_str()),
+        }
+    }
+}
+
+impl<'a> From<&'a keyexpr> for WireExpr<'a> {
+    fn from(val: &'a keyexpr) -> Self {
+        WireExpr {
+            scope: 0,
+            suffix: Cow::Borrowed(val.as_str()),
+        }
     }
 }
 

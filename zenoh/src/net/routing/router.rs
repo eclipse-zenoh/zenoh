@@ -272,40 +272,6 @@ impl Tables {
         self.open_net_face(zid, whatami, primitives, 0)
     }
 
-    pub fn close_face(&mut self, face: &Weak<FaceState>) {
-        match face.upgrade() {
-            Some(mut face) => {
-                log::debug!("Close {}", face);
-                finalize_pending_queries(self, &mut face);
-
-                let mut face_clone = face.clone();
-                let face = get_mut_unchecked(&mut face);
-                for res in face.remote_mappings.values_mut() {
-                    get_mut_unchecked(res).session_ctxs.remove(&face.id);
-                    Resource::clean(res);
-                }
-                face.remote_mappings.clear();
-                for res in face.local_mappings.values_mut() {
-                    get_mut_unchecked(res).session_ctxs.remove(&face.id);
-                    Resource::clean(res);
-                }
-                face.local_mappings.clear();
-                for mut res in face.remote_subs.drain() {
-                    get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-                    undeclare_client_subscription(self, &mut face_clone, &mut res);
-                    Resource::clean(&mut res);
-                }
-                for mut res in face.remote_qabls.drain() {
-                    get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-                    undeclare_client_queryable(self, &mut face_clone, &mut res);
-                    Resource::clean(&mut res);
-                }
-                self.faces.remove(&face.id);
-            }
-            None => log::error!("Face already closed!"),
-        }
-    }
-
     fn compute_routes(&mut self, res: &mut Arc<Resource>) {
         compute_data_routes(self, res);
         compute_query_routes(self, res);
@@ -327,7 +293,7 @@ impl Tables {
 
     pub(crate) fn schedule_compute_trees(
         &mut self,
-        tables_ref: Arc<RwLock<Tables>>,
+        tables_ref: Arc<TablesLock>,
         net_type: WhatAmI,
     ) {
         log::trace!("Schedule computations");
@@ -337,7 +303,7 @@ impl Tables {
             let task = Some(async_std::task::spawn(async move {
                 async_std::task::sleep(std::time::Duration::from_millis(*TREES_COMPUTATION_DELAY))
                     .await;
-                let mut tables = zwrite!(tables_ref);
+                let mut tables = zwrite!(tables_ref.tables);
 
                 log::trace!("Compute trees");
                 let new_childs = match net_type {
@@ -363,9 +329,110 @@ impl Tables {
     }
 }
 
+pub fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
+    match face.upgrade() {
+        Some(mut face) => {
+            log::debug!("Close {}", face);
+            finalize_pending_queries(tables, &mut face);
+
+            let ctrl_lock = zlock!(tables.ctrl_lock);
+            let mut wtables = zwrite!(tables.tables);
+            let mut face_clone = face.clone();
+            let face = get_mut_unchecked(&mut face);
+            for res in face.remote_mappings.values_mut() {
+                get_mut_unchecked(res).session_ctxs.remove(&face.id);
+                Resource::clean(res);
+            }
+            face.remote_mappings.clear();
+            for res in face.local_mappings.values_mut() {
+                get_mut_unchecked(res).session_ctxs.remove(&face.id);
+                Resource::clean(res);
+            }
+            face.local_mappings.clear();
+
+            let mut subs_matches = vec![];
+            for mut res in face.remote_subs.drain() {
+                get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
+                undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res);
+
+                if res.context.is_some() {
+                    for match_ in &res.context().matches {
+                        let mut match_ = match_.upgrade().unwrap();
+                        if !Arc::ptr_eq(&match_, &res) {
+                            get_mut_unchecked(&mut match_)
+                                .context_mut()
+                                .valid_data_routes = false;
+                            subs_matches.push(match_);
+                        }
+                    }
+                    get_mut_unchecked(&mut res).context_mut().valid_data_routes = false;
+                    subs_matches.push(res);
+                }
+            }
+
+            let mut qabls_matches = vec![];
+            for mut res in face.remote_qabls.drain() {
+                get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
+                undeclare_client_queryable(&mut wtables, &mut face_clone, &mut res);
+
+                if res.context.is_some() {
+                    for match_ in &res.context().matches {
+                        let mut match_ = match_.upgrade().unwrap();
+                        if !Arc::ptr_eq(&match_, &res) {
+                            get_mut_unchecked(&mut match_)
+                                .context_mut()
+                                .valid_query_routes = false;
+                            qabls_matches.push(match_);
+                        }
+                    }
+                    get_mut_unchecked(&mut res).context_mut().valid_query_routes = false;
+                    qabls_matches.push(res);
+                }
+            }
+            drop(wtables);
+
+            let mut matches_data_routes = vec![];
+            let mut matches_query_routes = vec![];
+            let rtables = zread!(tables.tables);
+            for _match in subs_matches.drain(..) {
+                matches_data_routes.push((_match.clone(), compute_data_routes_(&rtables, &_match)));
+            }
+            for _match in qabls_matches.drain(..) {
+                matches_query_routes
+                    .push((_match.clone(), compute_query_routes_(&rtables, &_match)));
+            }
+            drop(rtables);
+
+            let mut wtables = zwrite!(tables.tables);
+            for (mut res, data_routes) in matches_data_routes {
+                get_mut_unchecked(&mut res)
+                    .context_mut()
+                    .update_data_routes(data_routes);
+                Resource::clean(&mut res);
+            }
+            for (mut res, query_routes) in matches_query_routes {
+                get_mut_unchecked(&mut res)
+                    .context_mut()
+                    .update_query_routes(query_routes);
+                Resource::clean(&mut res);
+            }
+            wtables.faces.remove(&face.id);
+            drop(wtables);
+            drop(ctrl_lock);
+        }
+        None => log::error!("Face already closed!"),
+    }
+}
+
+pub struct TablesLock {
+    pub tables: RwLock<Tables>,
+    pub ctrl_lock: Mutex<()>,
+    pub queries_lock: RwLock<()>,
+}
+
 pub struct Router {
     whatami: WhatAmI,
-    pub tables: Arc<RwLock<Tables>>,
+    pub tables: Arc<TablesLock>,
 }
 
 impl Router {
@@ -379,14 +446,18 @@ impl Router {
     ) -> Self {
         Router {
             whatami,
-            tables: Arc::new(RwLock::new(Tables::new(
-                zid,
-                whatami,
-                hlc,
-                drop_future_timestamp,
-                router_peers_failover_brokering,
-                queries_default_timeout,
-            ))),
+            tables: Arc::new(TablesLock {
+                tables: RwLock::new(Tables::new(
+                    zid,
+                    whatami,
+                    hlc,
+                    drop_future_timestamp,
+                    router_peers_failover_brokering,
+                    queries_default_timeout,
+                )),
+                ctrl_lock: Mutex::new(()),
+                queries_lock: RwLock::new(()),
+            }),
         }
     }
 
@@ -401,7 +472,7 @@ impl Router {
         gossip_multihop: bool,
         autoconnect: WhatAmIMatcher,
     ) {
-        let mut tables = zwrite!(self.tables);
+        let mut tables = zwrite!(self.tables.tables);
         if router_full_linkstate | gossip {
             tables.routers_net = Some(Network::new(
                 "[Routers network]".to_string(),
@@ -438,12 +509,16 @@ impl Router {
         Arc::new(Face {
             tables: self.tables.clone(),
             state: {
-                let mut tables = zwrite!(self.tables);
+                let ctrl_lock = zlock!(self.tables.ctrl_lock);
+                let mut tables = zwrite!(self.tables.tables);
                 let zid = tables.zid;
-                tables
+                let face = tables
                     .open_face(zid, WhatAmI::Client, primitives)
                     .upgrade()
-                    .unwrap()
+                    .unwrap();
+                drop(tables);
+                drop(ctrl_lock);
+                face
             },
         })
     }
@@ -452,7 +527,8 @@ impl Router {
         &self,
         transport: TransportUnicast,
     ) -> ZResult<Arc<LinkStateInterceptor>> {
-        let mut tables = zwrite!(self.tables);
+        let ctrl_lock = zlock!(self.tables.ctrl_lock);
+        let mut tables = zwrite!(self.tables.tables);
         let whatami = transport.get_whatami()?;
 
         let link_id = match (self.whatami, whatami) {
@@ -510,19 +586,21 @@ impl Router {
             }
             _ => (),
         }
+        drop(tables);
+        drop(ctrl_lock);
         Ok(handler)
     }
 }
 
 pub struct LinkStateInterceptor {
     pub(crate) transport: TransportUnicast,
-    pub(crate) tables: Arc<RwLock<Tables>>,
+    pub(crate) tables: Arc<TablesLock>,
     pub(crate) face: Face,
     pub(crate) demux: DeMux<Face>,
 }
 
 impl LinkStateInterceptor {
-    fn new(transport: TransportUnicast, tables: Arc<RwLock<Tables>>, face: Face) -> Self {
+    fn new(transport: TransportUnicast, tables: Arc<TablesLock>, face: Face) -> Self {
         LinkStateInterceptor {
             transport,
             tables,
@@ -538,7 +616,8 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
         match msg.body {
             ZenohBody::LinkStateList(list) => {
                 if let Ok(zid) = self.transport.get_zid() {
-                    let mut tables = zwrite!(self.tables);
+                    let ctrl_lock = zlock!(self.tables.ctrl_lock);
+                    let mut tables = zwrite!(self.tables.tables);
                     let whatami = self.transport.get_whatami()?;
                     match (tables.whatami, whatami) {
                         (WhatAmI::Router, WhatAmI::Router) => {
@@ -612,6 +691,8 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
                         }
                         _ => (),
                     };
+                    drop(tables);
+                    drop(ctrl_lock);
                 }
 
                 Ok(())
@@ -629,7 +710,8 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
         let tables_ref = self.tables.clone();
         match (self.transport.get_zid(), self.transport.get_whatami()) {
             (Ok(zid), Ok(whatami)) => {
-                let mut tables = zwrite!(tables_ref);
+                let ctrl_lock = zlock!(tables_ref.ctrl_lock);
+                let mut tables = zwrite!(tables_ref.tables);
                 match (tables.whatami, whatami) {
                     (WhatAmI::Router, WhatAmI::Router) => {
                         for (_, removed_node) in
@@ -673,6 +755,8 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
                     }
                     _ => (),
                 };
+                drop(tables);
+                drop(ctrl_lock);
             }
             (_, _) => log::error!("Closed transport in session closing!"),
         }

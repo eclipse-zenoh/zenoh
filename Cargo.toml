@@ -19,6 +19,7 @@ members = [
   "commons/zenoh-config",
   "commons/zenoh-core",
   "commons/zenoh-crypto",
+  "commons/zenoh-keyexpr",
   "commons/zenoh-macros",
   "commons/zenoh-protocol",
   "commons/zenoh-result",
@@ -45,9 +46,7 @@ members = [
   "zenoh-ext",
   "zenohd",
 ]
-exclude = [
-  "ci/nostd-check",
-]
+exclude = ["ci/nostd-check"]
 
 [workspace.package]
 rust-version = "1.62.1"
@@ -136,7 +135,7 @@ socket2 = "0.5.1"
 stop-token = "0.7.0"
 syn = "1.0.105"
 tide = "0.16.0"
-token-cell = "1.4.2"
+token-cell = { version = "1.5.0", default-features = false }
 tokio = { version = "1.23.1", default-features = false } # Default features are disabled due to some crates' requirements
 tokio-tungstenite = "0.18.0"
 typenum = "1.15.0"

@@ -25,3 +25,5 @@ pub mod resource;
 pub mod router;
 
 use super::runtime;
+
+pub(crate) static PREFIX_LIVELINESS: &str = "@/liveliness";

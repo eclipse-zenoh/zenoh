@@ -32,6 +32,7 @@ std = [
     "serde/std",
     "uhlc/std",
     "uuid/std",
+    "zenoh-keyexpr/std",
     "zenoh-result/std",
 ]
 test = ["rand", "zenoh-buffers/test"]
@@ -46,7 +47,7 @@ serde = { workspace = true, features = ["alloc"] }
 uhlc = { workspace = true }
 uuid = { workspace = true }                                                     # Needs a getrandom::getrandom() custom implementation on embedded (in root crate)
 zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
-zenoh-collections = { path = "../zenoh-collections/", default-features = false }
+zenoh-keyexpr = { path = "../zenoh-keyexpr/", default-features = false }
 zenoh-result = { path = "../zenoh-result/", default-features = false }
 
 # NOTE: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0

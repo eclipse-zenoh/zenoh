@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub mod key_expr;
 
 use alloc::{
     boxed::Box,
@@ -25,9 +24,9 @@ use core::{
     hash::{Hash, Hasher},
     str::FromStr,
 };
-use key_expr::OwnedKeyExpr;
 pub use uhlc::{Timestamp, NTP64};
 use uuid::Uuid;
+use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::{bail, zerror};
 
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
@@ -36,6 +35,8 @@ pub type TimestampId = uhlc::ID;
 /// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami;
 pub use whatami::*;
+
+pub use zenoh_keyexpr::key_expr;
 
 pub mod wire_expr;
 pub use wire_expr::*;
