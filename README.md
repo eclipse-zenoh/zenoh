@@ -165,7 +165,7 @@ See other examples of Zenoh usage in [examples/](examples)
 -------------------------------
 ## Plugins
 
-> :warning: **WARNING** :warning: : Zenoh and its plugins are developed in Rust. Unfortunately, Rust does not guarantee any ABI stability while using different versions of the build toolchain, libraries, etc. For that reason, make sure that Zenoh router and its plugins are built using the same version of the compiler.
+> :warning: **WARNING** :warning: : Zenoh and its plugins are developed in Rust. Unfortunately, Rust does not guarantee any ABI stability when using different versions of the build toolchain, libraries, etc. For that reason, make sure that Zenoh router and its plugins are built using the same version of the compiler.
 
 By default the Zenoh router is delivered or built with 2 plugins. These may be configured through a configuration file, or through individual changes to the configuration via the `--cfg` CLI option or via zenoh puts on individual parts of the configuration.
 
