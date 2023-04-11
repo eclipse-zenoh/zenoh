@@ -598,7 +598,7 @@ impl StorageService {
         match storage.get_all_entries().await {
             Ok(entries) => {
                 for (k, _ts) in entries {
-                    // @TODO: optimize adding back the prefix
+                    // @TODO: optimize adding back the prefix (possible inspiration from https://github.com/eclipse-zenoh/zenoh/blob/0.5.0-beta.9/backends/traits/src/utils.rs#L79)
                     let full_key = match k {
                         Some(key) => StorageService::get_prefixed(&self.strip_prefix, &key.into()),
                         None => self.strip_prefix.clone().unwrap(),
