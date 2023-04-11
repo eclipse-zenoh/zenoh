@@ -39,8 +39,6 @@ pub struct Query {
     /// This Query's selector parameters.
     pub(crate) parameters: String,
     /// This Query's body.
-    #[allow(unused_variables)]
-    #[allow(dead_code)]
     pub(crate) value: Option<Value>,
     /// The sender to use to send replies to this query.
     /// When this sender is dropped, the reply is finalized.
@@ -70,7 +68,6 @@ impl Query {
     }
 
     /// This Query's value.
-    #[zenoh_macros::unstable]
     #[inline(always)]
     pub fn value(&self) -> Option<&Value> {
         self.value.as_ref()

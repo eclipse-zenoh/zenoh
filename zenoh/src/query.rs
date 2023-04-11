@@ -284,7 +284,6 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     }
 
     /// Set query value.
-    #[zenoh_macros::unstable]
     #[inline]
     pub fn with_value<IntoValue>(mut self, value: IntoValue) -> Self
     where
