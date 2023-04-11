@@ -41,6 +41,7 @@ pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";
 
 // The default values for garbage collection
+// @TODO: have configurable parameters while having the current ones as default
 pub const GC_PERIOD: Duration = Duration::new(30, 0);
 lazy_static::lazy_static! {
     static ref MIN_DELAY_BEFORE_REMOVAL: NTP64 = NTP64::from(Duration::new(86400, 0));
