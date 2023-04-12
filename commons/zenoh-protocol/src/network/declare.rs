@@ -17,6 +17,7 @@ use crate::{
     network::Mapping,
     zextz64,
 };
+use core::ops::BitOr;
 pub use interest::*;
 pub use keyexpr::*;
 pub use queryable::*;
@@ -649,12 +650,9 @@ pub mod interest {
         pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix
         pub const M: u8 = 1 << 6; // 0x40 Mapping       if M==1 then key expr mapping is the one declared by the sender, else it is the one declared by the receiver
         pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
-
-        pub const A: u8 = 1 << 5; // 0x20 Aggregate     if A==1 then the replies should be aggregated
-        pub const O: u8 = 1 << 6; // 0x40 Oneshot       if O==1 should be oneshot and no replies should be sent after the FinalInterest
     }
 
-    /// # Init message
+    /// # DeclareInterest message
     ///
     /// The DECLARE INTEREST message is sent to request the transmission of existing and future
     /// declarations of a given kind matching a target keyexpr. E.g., a declare interest could be sent to
@@ -708,23 +706,92 @@ pub mod interest {
     /// +---------------+
     /// ~  key_suffix   ~  if N==1 -- <u8;z16>
     /// +---------------+
-    /// |X|O|A|   ID    |  (*)
+    /// |O|A|X|X|T|Q|S|K|  (*)
     /// +---------------+
     /// ~  [decl_exts]  ~  if Z==1
     /// +---------------+
     ///
-    /// (*) - ID: the ID of the declaration interest (i.e. keyexpr, subscriber, queryable, token)
-    ///     - if A==1 then the replies should be aggregated
-    ///     - if O==1 then the replies should be oneshot and no replies should be sent after the FinalInterest
+    /// (*) - if K==1 then the interest refers to key expressions
+    ///     - if S==1 then the interest refers to subscribers
+    ///     - if Q==1 then the interest refers to queryables
+    ///     - if T==1 then the interest refers to tokens
+    ///     - if A==1 then the replies SHOULD be aggregated
+    ///     - if O==1 then the replies are oneshot and no replies SHOULD be sent after the FinalInterest.
+    ///               Moreover, no UndeclareInterest SHOULD be sent after the FinalInterest.
     /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct DeclareInterest {
         pub id: InterestId,
         pub wire_expr: WireExpr<'static>,
         pub mapping: Mapping,
-        pub kind: u8,
-        pub aggregate: bool,
-        pub oneshot: bool,
+        pub interest: Interest,
+    }
+
+    #[repr(transparent)]
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct Interest(u8);
+
+    impl Interest {
+        pub const KEYEXPRS: Interest = Interest(1);
+        pub const SUBSCRIBERS: Interest = Interest(1 << 1);
+        pub const QUERYABLES: Interest = Interest(1 << 2);
+        pub const TOKENS: Interest = Interest(1 << 3);
+        // pub const X: Interest = Interest(1 << 4);
+        // pub const X: Interest = Interest(1 << 5);
+        pub const AGGREGATED: Interest = Interest(1 << 6);
+        pub const ONESHOT: Interest = Interest(1 << 7);
+
+        pub const fn keyexprs(&self) -> bool {
+            imsg::has_flag(self.0, Self::KEYEXPRS.0)
+        }
+
+        pub const fn subscribers(&self) -> bool {
+            imsg::has_flag(self.0, Self::SUBSCRIBERS.0)
+        }
+
+        pub const fn queryables(&self) -> bool {
+            imsg::has_flag(self.0, Self::QUERYABLES.0)
+        }
+
+        pub const fn tokens(&self) -> bool {
+            imsg::has_flag(self.0, Self::TOKENS.0)
+        }
+
+        pub const fn aggregated(&self) -> bool {
+            imsg::has_flag(self.0, Self::AGGREGATED.0)
+        }
+
+        pub const fn oneshot(&self) -> bool {
+            imsg::has_flag(self.0, Self::ONESHOT.0)
+        }
+
+        pub const fn as_u8(&self) -> u8 {
+            self.0
+        }
+
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let inner: u8 = rng.gen();
+
+            Self(inner)
+        }
+    }
+
+    impl BitOr for Interest {
+        type Output = Self;
+
+        fn bitor(self, rhs: Self) -> Self::Output {
+            Self(self.0 | rhs.0)
+        }
+    }
+
+    impl From<u8> for Interest {
+        fn from(v: u8) -> Self {
+            Self(v)
+        }
     }
 
     impl DeclareInterest {
@@ -736,17 +803,13 @@ pub mod interest {
             let id: InterestId = rng.gen();
             let wire_expr = WireExpr::rand();
             let mapping = Mapping::rand();
-            let kind = imsg::mid(rng.gen());
-            let aggregate: bool = rng.gen();
-            let oneshot: bool = rng.gen();
+            let interest = Interest::rand();
 
             Self {
                 id,
                 wire_expr,
                 mapping,
-                kind,
-                aggregate,
-                oneshot,
+                interest,
             }
         }
     }

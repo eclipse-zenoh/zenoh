@@ -776,14 +776,7 @@ where
         // Body
         self.write(&mut *writer, x.id)?;
         self.write(&mut *writer, &x.wire_expr)?;
-        let mut b = imsg::mid(x.kind);
-        if x.aggregate {
-            b |= interest::flag::A;
-        }
-        if x.oneshot {
-            b |= interest::flag::O;
-        }
-        self.write(&mut *writer, b)?;
+        self.write(&mut *writer, x.interest.as_u8())?;
 
         Ok(())
     }
@@ -822,7 +815,7 @@ where
         } else {
             Mapping::Receiver
         };
-        let kind: u8 = self.codec.read(&mut *reader)?;
+        let interest: u8 = self.codec.read(&mut *reader)?;
 
         // Extensions
         let has_ext = imsg::has_flag(self.header, token::flag::Z);
@@ -834,9 +827,7 @@ where
             id,
             wire_expr,
             mapping,
-            kind: imsg::mid(kind),
-            aggregate: imsg::has_flag(kind, interest::flag::A),
-            oneshot: imsg::has_flag(kind, interest::flag::O),
+            interest: interest.into(),
         })
     }
 }
