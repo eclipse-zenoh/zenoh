@@ -706,7 +706,7 @@ pub mod interest {
     /// +---------------+
     /// ~  key_suffix   ~  if N==1 -- <u8;z16>
     /// +---------------+
-    /// |O|A|X|X|T|Q|S|K|  (*)
+    /// |A|F|C|X|T|Q|S|K|  (*)
     /// +---------------+
     /// ~  [decl_exts]  ~  if Z==1
     /// +---------------+
@@ -715,9 +715,11 @@ pub mod interest {
     ///     - if S==1 then the interest refers to subscribers
     ///     - if Q==1 then the interest refers to queryables
     ///     - if T==1 then the interest refers to tokens
+    ///     - if C==1 then the interest refers to the current declarations.
+    ///     - if F==1 then the interest refers to the future declarations. Note that if F==0 then:
+    ///               - replies SHOULD NOT be sent after the FinalInterest
+    ///               - UndeclareInterest SHOULD NOT be sent after the FinalInterest.
     ///     - if A==1 then the replies SHOULD be aggregated
-    ///     - if O==1 then the replies are oneshot and no replies SHOULD be sent after the FinalInterest.
-    ///               Moreover, no UndeclareInterest SHOULD be sent after the FinalInterest.
     /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct DeclareInterest {
@@ -737,9 +739,9 @@ pub mod interest {
         pub const QUERYABLES: Interest = Interest(1 << 2);
         pub const TOKENS: Interest = Interest(1 << 3);
         // pub const X: Interest = Interest(1 << 4);
-        // pub const X: Interest = Interest(1 << 5);
-        pub const AGGREGATED: Interest = Interest(1 << 6);
-        pub const ONESHOT: Interest = Interest(1 << 7);
+        pub const CURRENT: Interest = Interest(1 << 5);
+        pub const FUTURE: Interest = Interest(1 << 6);
+        pub const AGGREGATE: Interest = Interest(1 << 7);
 
         pub const fn keyexprs(&self) -> bool {
             imsg::has_flag(self.0, Self::KEYEXPRS.0)
@@ -757,12 +759,16 @@ pub mod interest {
             imsg::has_flag(self.0, Self::TOKENS.0)
         }
 
-        pub const fn aggregated(&self) -> bool {
-            imsg::has_flag(self.0, Self::AGGREGATED.0)
+        pub const fn current(&self) -> bool {
+            imsg::has_flag(self.0, Self::CURRENT.0)
         }
 
-        pub const fn oneshot(&self) -> bool {
-            imsg::has_flag(self.0, Self::ONESHOT.0)
+        pub const fn future(&self) -> bool {
+            imsg::has_flag(self.0, Self::FUTURE.0)
+        }
+
+        pub const fn aggregate(&self) -> bool {
+            imsg::has_flag(self.0, Self::AGGREGATE.0)
         }
 
         pub const fn as_u8(&self) -> u8 {
