@@ -13,7 +13,6 @@
 //
 use async_std::sync::RwLock;
 use async_trait::async_trait;
-use log::{debug, trace};
 use std::collections::HashMap;
 use std::sync::Arc;
 use zenoh::prelude::r#async::*;
@@ -45,7 +44,7 @@ impl Volume for MemoryBackend {
     }
 
     async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
-        debug!("Create Memory Storage with configuration: {:?}", properties);
+        log::debug!("Create Memory Storage with configuration: {:?}", properties);
         Ok(Box::new(MemoryStorage::new(properties).await?))
     }
 
@@ -73,7 +72,7 @@ impl Volume for MemoryBackend {
 impl Drop for MemoryBackend {
     fn drop(&mut self) {
         // nothing to do in case of memory backend
-        trace!("MemoryBackend::drop()");
+        log::trace!("MemoryBackend::drop()");
     }
 }
 
@@ -103,7 +102,7 @@ impl Storage for MemoryStorage {
         value: Value,
         timestamp: Timestamp,
     ) -> ZResult<StorageInsertionResult> {
-        trace!("put for {:?}", key);
+        log::trace!("put for {:?}", key);
         let mut map = self.map.write().await;
         match map.entry(key) {
             std::collections::hash_map::Entry::Occupied(mut e) => {
@@ -122,7 +121,7 @@ impl Storage for MemoryStorage {
         key: Option<OwnedKeyExpr>,
         _timestamp: Timestamp,
     ) -> ZResult<StorageInsertionResult> {
-        trace!("delete for {:?}", key);
+        log::trace!("delete for {:?}", key);
         self.map.write().await.remove_entry(&key);
         return Ok(StorageInsertionResult::Deleted);
     }
@@ -132,7 +131,7 @@ impl Storage for MemoryStorage {
         key: Option<OwnedKeyExpr>,
         _parameters: &str,
     ) -> ZResult<Vec<StoredData>> {
-        trace!("get for {:?}", key);
+        log::trace!("get for {:?}", key);
         // @TODO: use parameters???
         match self.map.read().await.get(&key) {
             Some(v) => Ok(vec![v.clone()]),
@@ -153,6 +152,6 @@ impl Storage for MemoryStorage {
 impl Drop for MemoryStorage {
     fn drop(&mut self) {
         // nothing to do in case of memory backend
-        trace!("MemoryStorage::drop()");
+        log::trace!("MemoryStorage::drop()");
     }
 }

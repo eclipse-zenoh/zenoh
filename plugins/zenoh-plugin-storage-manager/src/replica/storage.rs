@@ -18,7 +18,6 @@ use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
 use flume::{Receiver, Sender};
 use futures::select;
-use log::{error, info, trace, warn};
 use std::collections::{HashMap, HashSet};
 use std::str::{self, FromStr};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -146,7 +145,7 @@ impl StorageService {
         let storage_sub = match self.session.declare_subscriber(&self.key_expr).res().await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
-                error!("Error starting storage {}: {}", self.name, e);
+                log::error!("Error starting storage {}: {}", self.name, e);
                 return;
             }
         };
@@ -161,7 +160,7 @@ impl StorageService {
         {
             Ok(storage_queryable) => storage_queryable,
             Err(e) => {
-                error!("Error starting storage {}: {}", self.name, e);
+                log::error!("Error starting storage {}: {}", self.name, e);
                 return;
             }
         };
@@ -175,14 +174,14 @@ impl StorageService {
                         let sample = match sample {
                             Ok(sample) => sample,
                             Err(e) => {
-                                error!("Error in sample: {}", e);
+                                log::error!("Error in sample: {}", e);
                                 continue;
                             }
                         };
                         // log error if the sample is not timestamped
                         // This is to reduce down the line inconsistencies of having duplicate samples stored
                         if sample.get_timestamp().is_none() {
-                            error!("Sample {} is not timestamped. Please timestamp samples meant for replicated storage.", sample);
+                            log::error!("Sample {} is not timestamped. Please timestamp samples meant for replicated storage.", sample);
                         }
                         else {
                             self.process_sample(sample).await;
@@ -197,7 +196,7 @@ impl StorageService {
                         match update {
                             Ok(sample) => self.process_sample(sample).await,
                             Err(e) => {
-                                error!("Error in receiving aligner update: {}", e);
+                                log::error!("Error in receiving aligner update: {}", e);
                             }
                         }
                     },
@@ -205,7 +204,7 @@ impl StorageService {
                     message = rx.recv_async() => {
                         match message {
                             Ok(StorageMessage::Stop) => {
-                                trace!("Dropping storage {}", self.name);
+                                log::trace!("Dropping storage {}", self.name);
                                 return
                             },
                             Ok(StorageMessage::GetStatus(tx)) => {
@@ -214,7 +213,7 @@ impl StorageService {
                                 drop(storage);
                             }
                             Err(e) => {
-                                error!("Storage Message Channel Error: {}", e);
+                                log::error!("Storage Message Channel Error: {}", e);
                             },
                         };
                     }
@@ -228,7 +227,7 @@ impl StorageService {
                         let mut sample = match sample {
                             Ok(sample) => sample,
                             Err(e) => {
-                                error!("Error in sample: {}", e);
+                                log::error!("Error in sample: {}", e);
                                 continue;
                             }
                         };
@@ -243,7 +242,7 @@ impl StorageService {
                     message = rx.recv_async() => {
                         match message {
                             Ok(StorageMessage::Stop) => {
-                                trace!("Dropping storage {}", self.name);
+                                log::trace!("Dropping storage {}", self.name);
                                 return
                             },
                             Ok(StorageMessage::GetStatus(tx)) => {
@@ -252,7 +251,7 @@ impl StorageService {
                                 drop(storage);
                             }
                             Err(e) => {
-                                error!("Storage Message Channel Error: {}", e);
+                                log::error!("Storage Message Channel Error: {}", e);
                             },
                         };
                     },
@@ -264,7 +263,7 @@ impl StorageService {
     // The storage should only simply save the key, sample pair while put and retrieve the same during get
     // the trimming during PUT and GET should be handled by the plugin
     async fn process_sample(&self, sample: Sample) {
-        trace!("[STORAGE] Processing sample: {}", sample);
+        log::trace!("[STORAGE] Processing sample: {}", sample);
         // Call incoming data interceptor (if any)
         let sample = if let Some(ref interceptor) = self.in_interceptor {
             interceptor(sample)
@@ -282,7 +281,7 @@ impl StorageService {
         } else {
             vec![sample.key_expr.clone().into()]
         };
-        trace!(
+        log::trace!(
             "The list of keys matching `{}` is : {:?}",
             sample.key_expr,
             matching_keys
@@ -296,7 +295,7 @@ impl StorageService {
                     || (self.capability.history.eq(&History::Latest)
                         && self.is_latest(&k, sample.get_timestamp().unwrap()).await))
             {
-                trace!(
+                log::trace!(
                     "Sample `{}` identified as neded processing for key {}",
                     sample,
                     k
@@ -326,7 +325,7 @@ impl StorageService {
                 let stripped_key = match self.strip_prefix(&sample_to_store.key_expr) {
                     Ok(stripped) => stripped,
                     Err(e) => {
-                        error!("{}", e);
+                        log::error!("{}", e);
                         return;
                     }
                 };
@@ -349,6 +348,7 @@ impl StorageService {
                 } else {
                     Err("sample kind not implemented".into())
                 };
+                drop(storage);
                 if self.replication.is_some()
                     && result.is_ok()
                     && !matches!(result.unwrap(), StorageInsertionResult::Outdated)
@@ -362,11 +362,10 @@ impl StorageService {
                     match sending {
                         Ok(_) => (),
                         Err(e) => {
-                            error!("Error in sending the sample to the log: {}", e);
+                            log::error!("Error in sending the sample to the log: {}", e);
                         }
                     }
                 }
-                drop(storage);
             }
         }
     }
@@ -385,10 +384,9 @@ impl StorageService {
                 zenoh_home().join(TOMBSTONE_FILENAME),
                 serde_json::to_string_pretty(&serialized_data).unwrap(),
             ) {
-                error!("Saving tombstones failed: {}", e);
+                log::error!("Saving tombstones failed: {}", e);
             }
         }
-        drop(tombstones);
     }
 
     async fn register_wildcard_update(&self, sample: Sample) {
@@ -415,10 +413,9 @@ impl StorageService {
                 zenoh_home().join(WILDCARD_UPDATES_FILENAME),
                 serde_json::to_string_pretty(&serialized_data).unwrap(),
             ) {
-                error!("Saving wildcard updates failed: {}", e);
+                log::error!("Saving wildcard updates failed: {}", e);
             }
         }
-        drop(wildcards);
     }
 
     async fn is_deleted(&self, key_expr: &OwnedKeyExpr, timestamp: &Timestamp) -> bool {
@@ -442,14 +439,14 @@ impl StorageService {
             if weight.is_some() && weight.unwrap().data.timestamp > *ts {
                 // if the key matches a wild card update, check whether it was saved in storage
                 // remember that wild card updates change only existing keys
-                let mut storage = self.storage.lock().await;
                 let stripped_key = match self.strip_prefix(&key_expr.into()) {
                     Ok(stripped) => stripped,
                     Err(e) => {
-                        error!("{}", e);
+                        log::error!("{}", e);
                         break;
                     }
                 };
+                let mut storage = self.storage.lock().await;
                 match storage.get(stripped_key, "").await {
                     Ok(stored_data) => {
                         for entry in stored_data {
@@ -459,9 +456,11 @@ impl StorageService {
                         }
                     }
                     Err(e) => {
-                        warn!(
+                        log::warn!(
                             "Storage {} raised an error fetching a query on key {} : {}",
-                            self.name, key_expr, e
+                            self.name,
+                            key_expr,
+                            e
                         );
                         ts = &weight.unwrap().data.timestamp;
                         update = Some(weight.unwrap().clone());
@@ -478,7 +477,7 @@ impl StorageService {
         let stripped_key = match self.strip_prefix(&key_expr.into()) {
             Ok(stripped) => stripped,
             Err(e) => {
-                error!("{}", e);
+                log::error!("{}", e);
                 return false;
             }
         };
@@ -496,11 +495,11 @@ impl StorageService {
         let q = match query {
             Ok(q) => q,
             Err(e) => {
-                error!("Error in query: {}", e);
+                log::error!("Error in query: {}", e);
                 return;
             }
         };
-        trace!("[STORAGE] Processing query on key_expr: {}", q.key_expr());
+        log::trace!("[STORAGE] Processing query on key_expr: {}", q.key_expr());
         if q.key_expr().is_wild() {
             // resolve key expr into individual keys
             let matching_keys = self.get_matching_keys(q.key_expr()).await;
@@ -509,7 +508,7 @@ impl StorageService {
                 let stripped_key = match self.strip_prefix(&key.clone().into()) {
                     Ok(k) => k,
                     Err(e) => {
-                        error!("{}", e);
+                        log::error!("{}", e);
                         // @TODO: return error when it is supported
                         return;
                     }
@@ -526,14 +525,15 @@ impl StorageService {
                                 sample
                             };
                             if let Err(e) = q.reply(Ok(sample)).res().await {
-                                warn!(
+                                log::warn!(
                                     "Storage {} raised an error replying a query: {}",
-                                    self.name, e
+                                    self.name,
+                                    e
                                 )
                             }
                         }
                     }
-                    Err(e) => warn!("Storage {} raised an error on query: {}", self.name, e),
+                    Err(e) => log::warn!("Storage {} raised an error on query: {}", self.name, e),
                 };
             }
             drop(storage);
@@ -541,7 +541,7 @@ impl StorageService {
             let stripped_key = match self.strip_prefix(q.key_expr()) {
                 Ok(k) => k,
                 Err(e) => {
-                    error!("{}", e);
+                    log::error!("{}", e);
                     // @TODO: return error when it is supported
                     return;
                 }
@@ -551,11 +551,12 @@ impl StorageService {
                 Ok(stored_data) => {
                     // if key is not available, return Error
                     if stored_data.is_empty() {
-                        info!("Requested key `{}` not found", q.key_expr());
+                        log::info!("Requested key `{}` not found", q.key_expr());
                         if let Err(e) = q.reply(Err("Key not found".into())).res().await {
-                            warn!(
+                            log::warn!(
                                 "Storage {} raised an error replying a query: {}",
-                                self.name, e
+                                self.name,
+                                e
                             )
                         }
                         return;
@@ -570,9 +571,10 @@ impl StorageService {
                             sample
                         };
                         if let Err(e) = q.reply(Ok(sample)).res().await {
-                            warn!(
+                            log::warn!(
                                 "Storage {} raised an error replying a query: {}",
-                                self.name, e
+                                self.name,
+                                e
                             )
                         }
                     }
@@ -580,11 +582,12 @@ impl StorageService {
                 Err(e) => {
                     let err_message =
                         format!("Storage {} raised an error on query: {}", self.name, e);
-                    warn!("{}", err_message);
+                    log::warn!("{}", err_message);
                     if let Err(e) = q.reply(Err(err_message.into())).res().await {
-                        warn!(
+                        log::warn!(
                             "Storage {} raised an error replying a query: {}",
-                            self.name, e
+                            self.name,
+                            e
                         )
                     }
                 }
@@ -609,9 +612,10 @@ impl StorageService {
                     }
                 }
             }
-            Err(e) => warn!(
+            Err(e) => log::warn!(
                 "Storage {} raised an error while retrieving keys: {}",
-                self.name, e
+                self.name,
+                e
             ),
         }
         result
@@ -666,7 +670,7 @@ impl StorageService {
             {
                 Ok(replies) => replies,
                 Err(e) => {
-                    error!("Error aligning storage {}: {}", self.name, e);
+                    log::error!("Error aligning storage {}: {}", self.name, e);
                     return;
                 }
             };
@@ -675,9 +679,10 @@ impl StorageService {
                     Ok(sample) => {
                         self.process_sample(sample).await;
                     }
-                    Err(e) => warn!(
+                    Err(e) => log::warn!(
                         "Storage {} received an error to align query: {}",
-                        self.name, e
+                        self.name,
+                        e
                     ),
                 }
             }
@@ -723,7 +728,7 @@ struct GarbageCollectionEvent {
 #[async_trait]
 impl Timed for GarbageCollectionEvent {
     async fn run(&mut self) {
-        trace!("Start garbage collection");
+        log::trace!("Start garbage collection");
         let time_limit = NTP64::from(SystemTime::now().duration_since(UNIX_EPOCH).unwrap())
             - *MIN_DELAY_BEFORE_REMOVAL;
 
@@ -754,9 +759,6 @@ impl Timed for GarbageCollectionEvent {
             wildcard_updates.remove(&k);
         }
 
-        drop(wildcard_updates);
-        drop(tombstones);
-
-        trace!("End garbage collection of obsolete data-infos");
+        log::trace!("End garbage collection of obsolete data-infos");
     }
 }

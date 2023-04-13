@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::sync::Arc;
-use log::trace;
 use zenoh::Session;
 use zenoh_backend_traits::config::StorageConfig;
 use zenoh_result::ZResult;
@@ -36,7 +35,7 @@ pub(crate) async fn start_storage(
     let storage_name = parts[7];
     let name = format!("{uuid}/{storage_name}");
 
-    trace!("Start storage {} on {}", name, config.key_expr);
+    log::trace!("Start storage {} on {}", name, config.key_expr);
 
     let (tx, rx) = flume::bounded(1);
 

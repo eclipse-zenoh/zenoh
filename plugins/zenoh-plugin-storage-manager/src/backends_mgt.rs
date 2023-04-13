@@ -13,7 +13,6 @@
 //
 use super::storages_mgt::*;
 use flume::Sender;
-use log::trace;
 use std::sync::Arc;
 use zenoh::prelude::r#async::*;
 use zenoh::Session;
@@ -36,7 +35,7 @@ pub(crate) async fn create_and_start_storage(
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
 ) -> ZResult<Sender<StorageMessage>> {
-    trace!("Create storage {}", &admin_key);
+    log::trace!("Create storage {}", &admin_key);
     let capability = backend.get_capability();
     let storage = backend.create_storage(config.clone()).await?;
     let store_intercept = StoreIntercept {
