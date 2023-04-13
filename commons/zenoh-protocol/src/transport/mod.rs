@@ -168,3 +168,61 @@ impl From<Fragment> for TransportMessage {
 //         TransportBody::Join(join).into()
 //     }
 // }
+
+pub mod ext {
+    use crate::{common::ZExtZ64, core::Priority};
+
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// %0|  rsv  |prio %
+    /// +---------------+
+    /// - prio: Priority class
+    #[repr(transparent)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct QoSType<const ID: u8> {
+        inner: u8,
+    }
+
+    impl<const ID: u8> QoSType<{ ID }> {
+        pub const P_MASK: u8 = 0b00000111;
+
+        pub const fn new(priority: Priority) -> Self {
+            Self {
+                inner: priority as u8,
+            }
+        }
+
+        pub const fn priority(&self) -> Priority {
+            unsafe { core::mem::transmute(self.inner & Self::P_MASK) }
+        }
+
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let inner: u8 = rng.gen();
+            Self { inner }
+        }
+    }
+
+    impl<const ID: u8> Default for QoSType<{ ID }> {
+        fn default() -> Self {
+            Self::new(Priority::default())
+        }
+    }
+
+    impl<const ID: u8> From<ZExtZ64<{ ID }>> for QoSType<{ ID }> {
+        fn from(ext: ZExtZ64<{ ID }>) -> Self {
+            Self {
+                inner: ext.value as u8,
+            }
+        }
+    }
+
+    impl<const ID: u8> From<QoSType<{ ID }>> for ZExtZ64<{ ID }> {
+        fn from(ext: QoSType<{ ID }>) -> Self {
+            ZExtZ64::new(ext.inner as u64)
+        }
+    }
+}

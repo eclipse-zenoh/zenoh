@@ -55,9 +55,10 @@ pub struct Oam {
 }
 
 pub mod ext {
-    pub type QoS = crate::transport::frame::ext::QoS;
+    use crate::{common::ZExtZ64, zextz64};
 
-    pub type QoSType = crate::transport::frame::ext::QoSType;
+    pub type QoS = zextz64!(0x1, true);
+    pub type QoSType = crate::transport::ext::QoSType<{ QoS::ID }>;
 }
 
 impl Oam {

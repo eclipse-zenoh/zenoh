@@ -152,3 +152,37 @@ impl From<Ack> for ResponseBody {
         ResponseBody::Ack(r)
     }
 }
+
+pub mod ext {
+    use crate::core::ZenohId;
+
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |zid_len|X|X|X|X|
+    /// +-------+-+-+---+
+    /// ~      zid      ~
+    /// +---------------+
+    /// %      eid      %  -- Counter decided by the Zenoh Node
+    /// +---------------+
+    /// %      sn       %
+    /// +---------------+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct SourceInfoType<const ID: u8> {
+        pub zid: ZenohId,
+        pub eid: u32,
+        pub sn: u32,
+    }
+
+    impl<const ID: u8> SourceInfoType<{ ID }> {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let zid = ZenohId::rand();
+            let eid: u32 = rng.gen();
+            let sn: u32 = rng.gen();
+            Self { zid, eid, sn }
+        }
+    }
+}

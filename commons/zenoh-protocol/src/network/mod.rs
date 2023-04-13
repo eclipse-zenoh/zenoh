@@ -138,15 +138,10 @@ impl From<ResponseFinal> for NetworkMessage {
 // Extensions
 pub mod ext {
     use crate::{
-        common::{imsg, ZExtZ64, ZExtZBuf},
+        common::{imsg, ZExtZ64},
         core::{CongestionControl, Priority},
-        zextz64, zextzbuf,
     };
     use core::fmt;
-
-    pub type QoS = zextz64!(0x1, false);
-    pub type Timestamp = zextzbuf!(0x2, false);
-    pub type NodeId = zextz64!(0x3, true);
 
     /// ```text
     ///  7 6 5 4 3 2 1 0
@@ -163,11 +158,11 @@ pub mod ext {
     /// ```
     #[repr(transparent)]
     #[derive(Clone, Copy, PartialEq, Eq)]
-    pub struct QoSType {
+    pub struct QoSType<const ID: u8> {
         inner: u8,
     }
 
-    impl QoSType {
+    impl<const ID: u8> QoSType<{ ID }> {
         const P_MASK: u8 = 0b00000111;
         const D_FLAG: u8 = 0b00001000;
         const E_FLAG: u8 = 0b00010000;
@@ -212,27 +207,27 @@ pub mod ext {
         }
     }
 
-    impl Default for QoSType {
+    impl<const ID: u8> Default for QoSType<{ ID }> {
         fn default() -> Self {
             Self::new(Priority::default(), CongestionControl::default(), false)
         }
     }
 
-    impl From<QoS> for QoSType {
-        fn from(ext: QoS) -> Self {
+    impl<const ID: u8> From<ZExtZ64<{ ID }>> for QoSType<{ ID }> {
+        fn from(ext: ZExtZ64<{ ID }>) -> Self {
             Self {
                 inner: ext.value as u8,
             }
         }
     }
 
-    impl From<QoSType> for QoS {
-        fn from(ext: QoSType) -> Self {
-            QoS::new(ext.inner as u64)
+    impl<const ID: u8> From<QoSType<{ ID }>> for ZExtZ64<{ ID }> {
+        fn from(ext: QoSType<{ ID }>) -> Self {
+            ZExtZ64::new(ext.inner as u64)
         }
     }
 
-    impl fmt::Debug for QoSType {
+    impl<const ID: u8> fmt::Debug for QoSType<{ ID }> {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             f.debug_struct("QoS")
                 .field("priority", &self.priority())
@@ -251,11 +246,11 @@ pub mod ext {
     /// +---------------+
     /// ```
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct TimestampType {
+    pub struct TimestampType<const ID: u8> {
         pub timestamp: uhlc::Timestamp,
     }
 
-    impl TimestampType {
+    impl<const ID: u8> TimestampType<{ ID }> {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use crate::core::ZenohId;
@@ -279,11 +274,11 @@ pub mod ext {
     /// +---------------+
     /// ```
     #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct NodeIdType {
+    pub struct NodeIdType<const ID: u8> {
         pub node_id: u16,
     }
 
-    impl NodeIdType {
+    impl<const ID: u8> NodeIdType<{ ID }> {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::Rng;
@@ -293,17 +288,17 @@ pub mod ext {
         }
     }
 
-    impl From<NodeId> for NodeIdType {
-        fn from(ext: NodeId) -> Self {
+    impl<const ID: u8> From<ZExtZ64<{ ID }>> for NodeIdType<{ ID }> {
+        fn from(ext: ZExtZ64<{ ID }>) -> Self {
             Self {
                 node_id: ext.value as u16,
             }
         }
     }
 
-    impl From<NodeIdType> for NodeId {
-        fn from(ext: NodeIdType) -> Self {
-            NodeId::new(ext.node_id as u64)
+    impl<const ID: u8> From<NodeIdType<{ ID }>> for ZExtZ64<{ ID }> {
+        fn from(ext: NodeIdType<{ ID }>) -> Self {
+            ZExtZ64::new(ext.node_id as u64)
         }
     }
 }

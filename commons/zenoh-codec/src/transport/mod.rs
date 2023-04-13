@@ -25,7 +25,10 @@ use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::{common::imsg, transport::*};
+use zenoh_protocol::{
+    common::{imsg, ZExtZ64},
+    transport::*,
+};
 
 // TransportMessage
 impl<W> WCodec<&TransportMessage, &mut W> for Zenoh080
@@ -85,5 +88,44 @@ where
         };
 
         Ok(TransportMessage { body })
+    }
+}
+
+// Extensions: QoS
+impl<W, const ID: u8> WCodec<(ext::QoSType<{ ID }>, bool), &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: (ext::QoSType<{ ID }>, bool)) -> Self::Output {
+        let (x, more) = x;
+        let ext: ZExtZ64<{ ID }> = x.into();
+        self.write(&mut *writer, (&ext, more))
+    }
+}
+
+impl<R, const ID: u8> RCodec<(ext::QoSType<{ ID }>, bool), &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::QoSType<{ ID }>, bool), Self::Error> {
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+        codec.read(reader)
+    }
+}
+
+impl<R, const ID: u8> RCodec<(ext::QoSType<{ ID }>, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::QoSType<{ ID }>, bool), Self::Error> {
+        let (ext, more): (ZExtZ64<{ ID }>, bool) = self.read(&mut *reader)?;
+        Ok((ext.into(), more))
     }
 }

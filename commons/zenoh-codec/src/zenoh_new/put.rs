@@ -11,10 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    common::extension, LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header,
-    Zenoh080Length,
-};
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header};
 use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -22,64 +19,13 @@ use zenoh_buffers::{
     ZBuf,
 };
 use zenoh_protocol::{
-    common::{iext, imsg, ZExtZBufHeader},
-    core::{Encoding, ZenohId},
+    common::{iext, imsg},
+    core::Encoding,
     zenoh_new::{
         id,
         put::{ext, flag, Put},
     },
 };
-
-impl LCodec<&ext::SourceInfoType> for Zenoh080 {
-    fn w_len(self, x: &ext::SourceInfoType) -> usize {
-        1 + self.w_len(&x.zid) + self.w_len(x.eid) + self.w_len(x.sn)
-    }
-}
-
-impl<W> WCodec<(&ext::SourceInfoType, bool), &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: (&ext::SourceInfoType, bool)) -> Self::Output {
-        let (x, more) = x;
-        let header: ZExtZBufHeader<{ ext::SourceInfo::ID }> = ZExtZBufHeader::new(self.w_len(x));
-        self.write(&mut *writer, (&header, more))?;
-
-        let flags: u8 = (x.zid.size() as u8 - 1) << 4;
-        self.write(&mut *writer, flags)?;
-
-        let lodec = Zenoh080Length::new(x.zid.size());
-        lodec.write(&mut *writer, &x.zid)?;
-
-        self.write(&mut *writer, x.eid)?;
-        self.write(&mut *writer, x.sn)?;
-        Ok(())
-    }
-}
-
-impl<R> RCodec<(ext::SourceInfoType, bool), &mut R> for Zenoh080Header
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<(ext::SourceInfoType, bool), Self::Error> {
-        let (_, more): (ZExtZBufHeader<{ ext::SourceInfo::ID }>, bool) = self.read(&mut *reader)?;
-
-        let flags: u8 = self.codec.read(&mut *reader)?;
-        let length = 1 + ((flags >> 4) as usize);
-
-        let lodec = Zenoh080Length::new(length);
-        let zid: ZenohId = lodec.read(&mut *reader)?;
-
-        let eid: u32 = self.codec.read(&mut *reader)?;
-        let sn: u32 = self.codec.read(&mut *reader)?;
-
-        Ok((ext::SourceInfoType { zid, eid, sn }, more))
-    }
-}
 
 impl<W> WCodec<&Put, &mut W> for Zenoh080
 where

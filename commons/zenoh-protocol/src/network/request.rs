@@ -65,17 +65,20 @@ pub struct Request {
 }
 
 pub mod ext {
-    use crate::{common::ZExtZ64, zextz64};
+    use crate::{
+        common::{ZExtZ64, ZExtZBuf},
+        zextz64, zextzbuf,
+    };
     use core::{num::NonZeroU32, time::Duration};
 
-    pub type QoS = crate::network::ext::QoS;
-    pub type QoSType = crate::network::ext::QoSType;
+    pub type QoS = zextz64!(0x1, false);
+    pub type QoSType = crate::network::ext::QoSType<{ QoS::ID }>;
 
-    pub type Timestamp = crate::network::ext::Timestamp;
-    pub type TimestampType = crate::network::ext::TimestampType;
+    pub type Timestamp = zextzbuf!(0x2, false);
+    pub type TimestampType = crate::network::ext::TimestampType<{ Timestamp::ID }>;
 
-    pub type NodeId = crate::network::ext::NodeId;
-    pub type NodeIdType = crate::network::ext::NodeIdType;
+    pub type NodeId = zextz64!(0x3, true);
+    pub type NodeIdType = crate::network::ext::NodeIdType<{ NodeId::ID }>;
 
     pub type Target = zextz64!(0x4, true);
     /// - Target (0x03)

@@ -49,14 +49,19 @@ pub struct Push {
 }
 
 pub mod ext {
-    pub type QoS = crate::network::ext::QoS;
-    pub type QoSType = crate::network::ext::QoSType;
+    use crate::{
+        common::{ZExtZ64, ZExtZBuf},
+        zextz64, zextzbuf,
+    };
 
-    pub type Timestamp = crate::network::ext::Timestamp;
-    pub type TimestampType = crate::network::ext::TimestampType;
+    pub type QoS = zextz64!(0x1, false);
+    pub type QoSType = crate::network::ext::QoSType<{ QoS::ID }>;
 
-    pub type NodeId = crate::network::ext::NodeId;
-    pub type NodeIdType = crate::network::ext::NodeIdType;
+    pub type Timestamp = zextzbuf!(0x2, false);
+    pub type TimestampType = crate::network::ext::TimestampType<{ Timestamp::ID }>;
+
+    pub type NodeId = zextz64!(0x3, true);
+    pub type NodeIdType = crate::network::ext::NodeIdType<{ NodeId::ID }>;
 }
 
 impl Push {

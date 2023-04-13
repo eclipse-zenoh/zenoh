@@ -46,10 +46,12 @@ pub struct Del {
 }
 
 pub mod ext {
+    use crate::{common::ZExtZBuf, zextzbuf};
+
     /// # SourceInfo extension
     /// Used to carry additional information about the source of data
-    pub type SourceInfo = crate::zenoh_new::put::ext::SourceInfo;
-    pub type SourceInfoType = crate::zenoh_new::put::ext::SourceInfoType;
+    pub type SourceInfo = zextzbuf!(0x1, false);
+    pub type SourceInfoType = crate::zenoh_new::ext::SourceInfoType<{ SourceInfo::ID }>;
 }
 
 impl Del {

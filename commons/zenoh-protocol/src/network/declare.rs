@@ -53,14 +53,19 @@ pub struct Declare {
 }
 
 pub mod ext {
-    pub type QoS = crate::network::ext::QoS;
-    pub type QoSType = crate::network::ext::QoSType;
+    use crate::{
+        common::{ZExtZ64, ZExtZBuf},
+        zextz64, zextzbuf,
+    };
 
-    pub type Timestamp = crate::network::ext::Timestamp;
-    pub type TimestampType = crate::network::ext::TimestampType;
+    pub type QoS = zextz64!(0x1, false);
+    pub type QoSType = crate::network::ext::QoSType<{ QoS::ID }>;
 
-    pub type NodeId = crate::network::ext::NodeId;
-    pub type NodeIdType = crate::network::ext::NodeIdType;
+    pub type Timestamp = zextzbuf!(0x2, false);
+    pub type TimestampType = crate::network::ext::TimestampType<{ Timestamp::ID }>;
+
+    pub type NodeId = zextz64!(0x3, true);
+    pub type NodeIdType = crate::network::ext::NodeIdType<{ NodeId::ID }>;
 }
 
 pub mod id {
@@ -717,7 +722,7 @@ pub mod interest {
     ///     - if T==1 then the interest refers to tokens
     ///     - if C==1 then the interest refers to the current declarations.
     ///     - if F==1 then the interest refers to the future declarations. Note that if F==0 then:
-    ///               - replies SHOULD NOT be sent after the FinalInterest
+    ///               - replies SHOULD NOT be sent after the FinalInterest;
     ///               - UndeclareInterest SHOULD NOT be sent after the FinalInterest.
     ///     - if A==1 then the replies SHOULD be aggregated
     /// ```

@@ -60,11 +60,15 @@ pub struct Response {
 }
 
 pub mod ext {
-    pub type QoS = crate::network::ext::QoS;
-    pub type QoSType = crate::network::ext::QoSType;
+    use crate::{
+        common::{ZExtZ64, ZExtZBuf},
+        zextz64, zextzbuf,
+    };
+    pub type QoS = zextz64!(0x1, false);
+    pub type QoSType = crate::network::ext::QoSType<{ QoS::ID }>;
 
-    pub type Timestamp = crate::network::ext::Timestamp;
-    pub type TimestampType = crate::network::ext::TimestampType;
+    pub type Timestamp = zextzbuf!(0x2, false);
+    pub type TimestampType = crate::network::ext::TimestampType<{ Timestamp::ID }>;
 }
 
 impl Response {

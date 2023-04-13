@@ -18,7 +18,7 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::{iext, imsg, ZExtZ64},
+    common::{iext, imsg},
     core::Reliability,
     transport::{
         frame::{ext, flag, Frame, FrameHeader},
@@ -26,9 +26,6 @@ use zenoh_protocol::{
     },
     zenoh::ZenohMessage,
 };
-
-// Extensions: QoS
-crate::impl_zextz64!(ext::QoSType, ext::QoS::ID);
 
 // FrameHeader
 impl<W> WCodec<&FrameHeader, &mut W> for Zenoh080

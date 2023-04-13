@@ -394,8 +394,8 @@ macro_rules! impl_zextz64 {
             type Output = Result<(), DidntWrite>;
 
             fn write(self, writer: &mut W, x: ($ext, bool)) -> Self::Output {
-                let (qos, more) = x;
-                let ext: ZExtZ64<{ $id }> = qos.into();
+                let (x, more) = x;
+                let ext: ZExtZ64<{ $id }> = x.into();
                 self.write(&mut *writer, (&ext, more))
             }
         }

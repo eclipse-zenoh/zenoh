@@ -56,8 +56,8 @@ pub mod ext {
 
     /// # SourceInfo extension
     /// Used to carry additional information about the source of data
-    pub type SourceInfo = crate::zenoh_new::put::ext::SourceInfo;
-    pub type SourceInfoType = crate::zenoh_new::put::ext::SourceInfoType;
+    pub type SourceInfo = zextzbuf!(0x1, false);
+    pub type SourceInfoType = crate::zenoh_new::ext::SourceInfoType<{ SourceInfo::ID }>;
 
     /// # ErrBody extension
     /// Used to carry a body attached to the error

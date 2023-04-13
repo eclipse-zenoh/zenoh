@@ -76,65 +76,10 @@ pub struct Frame {
 
 // Extensions
 pub mod ext {
-    use crate::common::ZExtZ64;
-    use crate::core::Priority;
-    use crate::zextz64;
+    use crate::{common::ZExtZ64, zextz64};
 
     pub type QoS = zextz64!(0x1, true);
-
-    ///  7 6 5 4 3 2 1 0
-    /// +-+-+-+-+-+-+-+-+
-    /// %0|  rsv  |prio %
-    /// +---------------+
-    /// - prio: Priority class
-    #[repr(transparent)]
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub struct QoSType {
-        inner: u8,
-    }
-
-    impl QoSType {
-        pub const P_MASK: u8 = 0b00000111;
-
-        pub const fn new(priority: Priority) -> Self {
-            Self {
-                inner: priority as u8,
-            }
-        }
-
-        pub const fn priority(&self) -> Priority {
-            unsafe { core::mem::transmute(self.inner & Self::P_MASK) }
-        }
-
-        #[cfg(feature = "test")]
-        pub fn rand() -> Self {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-
-            let inner: u8 = rng.gen();
-            Self { inner }
-        }
-    }
-
-    impl Default for QoSType {
-        fn default() -> Self {
-            Self::new(Priority::default())
-        }
-    }
-
-    impl From<QoS> for QoSType {
-        fn from(ext: QoS) -> Self {
-            Self {
-                inner: ext.value as u8,
-            }
-        }
-    }
-
-    impl From<QoSType> for QoS {
-        fn from(ext: QoSType) -> Self {
-            QoS::new(ext.inner as u64)
-        }
-    }
+    pub type QoSType = crate::transport::ext::QoSType<{ QoS::ID }>;
 }
 
 impl Frame {

@@ -71,49 +71,120 @@ where
 }
 
 // Extensions: QoS
-crate::impl_zextz64!(ext::QoSType, ext::QoS::ID);
-
-// Extensions: Timestamp
-impl<W> WCodec<(&ext::TimestampType, bool), &mut W> for Zenoh080
+impl<W, const ID: u8> WCodec<(ext::QoSType<{ ID }>, bool), &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: (&ext::TimestampType, bool)) -> Self::Output {
-        let (tstamp, more) = x;
-        let header: ZExtZBufHeader<{ ext::Timestamp::ID }> =
-            ZExtZBufHeader::new(self.w_len(&tstamp.timestamp));
-        self.write(&mut *writer, (&header, more))?;
-        self.write(&mut *writer, &tstamp.timestamp)
+    fn write(self, writer: &mut W, x: (ext::QoSType<{ ID }>, bool)) -> Self::Output {
+        let (x, more) = x;
+        let ext: ZExtZ64<{ ID }> = x.into();
+        self.write(&mut *writer, (&ext, more))
     }
 }
 
-impl<R> RCodec<(ext::TimestampType, bool), &mut R> for Zenoh080
+impl<R, const ID: u8> RCodec<(ext::QoSType<{ ID }>, bool), &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<(ext::TimestampType, bool), Self::Error> {
+    fn read(self, reader: &mut R) -> Result<(ext::QoSType<{ ID }>, bool), Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<(ext::TimestampType, bool), &mut R> for Zenoh080Header
+impl<R, const ID: u8> RCodec<(ext::QoSType<{ ID }>, bool), &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<(ext::TimestampType, bool), Self::Error> {
-        let (_, more): (ZExtZBufHeader<{ ext::Timestamp::ID }>, bool) = self.read(&mut *reader)?;
+    fn read(self, reader: &mut R) -> Result<(ext::QoSType<{ ID }>, bool), Self::Error> {
+        let (ext, more): (ZExtZ64<{ ID }>, bool) = self.read(&mut *reader)?;
+        Ok((ext.into(), more))
+    }
+}
+
+// Extensions: Timestamp
+impl<W, const ID: u8> WCodec<(&ext::TimestampType<{ ID }>, bool), &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: (&ext::TimestampType<{ ID }>, bool)) -> Self::Output {
+        let (tstamp, more) = x;
+        let header: ZExtZBufHeader<{ ID }> = ZExtZBufHeader::new(self.w_len(&tstamp.timestamp));
+        self.write(&mut *writer, (&header, more))?;
+        self.write(&mut *writer, &tstamp.timestamp)
+    }
+}
+
+impl<R, const ID: u8> RCodec<(ext::TimestampType<{ ID }>, bool), &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::TimestampType<{ ID }>, bool), Self::Error> {
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+        codec.read(reader)
+    }
+}
+
+impl<R, const ID: u8> RCodec<(ext::TimestampType<{ ID }>, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::TimestampType<{ ID }>, bool), Self::Error> {
+        let (_, more): (ZExtZBufHeader<{ ID }>, bool) = self.read(&mut *reader)?;
         let timestamp: uhlc::Timestamp = self.codec.read(&mut *reader)?;
         Ok((ext::TimestampType { timestamp }, more))
     }
 }
 
 // Extensions: NodeId
-crate::impl_zextz64!(ext::NodeIdType, ext::NodeId::ID);
+impl<W, const ID: u8> WCodec<(ext::NodeIdType<{ ID }>, bool), &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: (ext::NodeIdType<{ ID }>, bool)) -> Self::Output {
+        let (x, more) = x;
+        let ext: ZExtZ64<{ ID }> = x.into();
+        self.write(&mut *writer, (&ext, more))
+    }
+}
+
+impl<R, const ID: u8> RCodec<(ext::NodeIdType<{ ID }>, bool), &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::NodeIdType<{ ID }>, bool), Self::Error> {
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+        codec.read(reader)
+    }
+}
+
+impl<R, const ID: u8> RCodec<(ext::NodeIdType<{ ID }>, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::NodeIdType<{ ID }>, bool), Self::Error> {
+        let (ext, more): (ZExtZ64<{ ID }>, bool) = self.read(&mut *reader)?;
+        Ok((ext.into(), more))
+    }
+}

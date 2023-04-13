@@ -53,42 +53,12 @@ pub struct Put {
 }
 
 pub mod ext {
-    use crate::core::ZenohId;
     use crate::{common::ZExtZBuf, zextzbuf};
 
     /// # SourceInfo extension
     /// Used to carry additional information about the source of data
     pub type SourceInfo = zextzbuf!(0x1, false);
-
-    ///  7 6 5 4 3 2 1 0
-    /// +-+-+-+-+-+-+-+-+
-    /// |zid_len|X|X|X|X|
-    /// +-------+-+-+---+
-    /// ~      zid      ~
-    /// +---------------+
-    /// %      eid      %  -- Counter decided by the Zenoh Node
-    /// +---------------+
-    /// %      sn       %
-    /// +---------------+
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct SourceInfoType {
-        pub zid: ZenohId,
-        pub eid: u32,
-        pub sn: u32,
-    }
-
-    impl SourceInfoType {
-        #[cfg(feature = "test")]
-        pub fn rand() -> Self {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-
-            let zid = ZenohId::rand();
-            let eid: u32 = rng.gen();
-            let sn: u32 = rng.gen();
-            Self { zid, eid, sn }
-        }
-    }
+    pub type SourceInfoType = crate::zenoh_new::ext::SourceInfoType<{ SourceInfo::ID }>;
 }
 
 impl Put {
