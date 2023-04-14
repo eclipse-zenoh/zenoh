@@ -1603,24 +1603,9 @@ impl Session {
         };
 
         let parameters = parameters.to_owned();
-        let (rep_sender, rep_receiver) = bounded(*API_REPLY_EMISSION_CHANNEL_SIZE);
+        let (rep_sender, rep_receiver) = bounded::<Sample>(*API_REPLY_EMISSION_CHANNEL_SIZE);
 
         let zid = self.runtime.zid; // @TODO build/use prebuilt specific zid
-
-        for req_sender in senders.iter() {
-            req_sender(Query {
-                key_expr: key_expr.clone().into_owned(),
-                parameters: parameters.clone(),
-                replies_sender: rep_sender.clone(),
-                value: body.as_ref().map(|b| Value {
-                    payload: b.payload.clone(),
-                    encoding: b.data_info.encoding.as_ref().cloned().unwrap_or_default(),
-                }),
-            });
-        }
-        drop(rep_sender); // all senders need to be dropped for the channel to close
-
-        // router is not re-entrant
 
         if local {
             let this = self.clone();
@@ -1653,6 +1638,19 @@ impl Session {
                 primitives.send_reply_final(qid);
             });
         }
+
+        for req_sender in senders.iter() {
+            req_sender(Query {
+                key_expr: key_expr.clone().into_owned(),
+                parameters: parameters.clone(),
+                replies_sender: rep_sender.clone(),
+                value: body.as_ref().map(|b| Value {
+                    payload: b.payload.clone(),
+                    encoding: b.data_info.encoding.as_ref().cloned().unwrap_or_default(),
+                }),
+            });
+        }
+        drop(rep_sender); // all senders need to be dropped for the channel to close
     }
 }
 
