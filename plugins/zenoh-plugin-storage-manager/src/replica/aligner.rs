@@ -16,7 +16,6 @@ use super::{Digest, EraType, LogEntry, Snapshotter};
 use super::{CONTENTS, ERA, INTERVALS, SUBINTERVALS};
 use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
-use log::{debug, error, trace};
 use std::collections::{HashMap, HashSet};
 use std::str;
 use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
@@ -56,22 +55,23 @@ impl Aligner {
     pub async fn start(&self) {
         while let Ok((from, incoming_digest)) = self.rx_digest.recv_async().await {
             if self.in_processed(incoming_digest.checksum).await {
-                trace!(
+                log::trace!(
                     "[ALIGNER]Skipping already processed digest: {}",
                     incoming_digest.checksum
                 );
                 continue;
             } else if self.snapshotter.get_digest().await.checksum == incoming_digest.checksum {
-                trace!(
+                log::trace!(
                     "[ALIGNER]Skipping matching digest: {}",
                     incoming_digest.checksum
                 );
                 continue;
             } else {
                 // process this digest
-                debug!(
+                log::debug!(
                     "[ALIGNER]Processing digest: {:?} from {}",
-                    incoming_digest, from
+                    incoming_digest,
+                    from
                 );
                 self.process_incoming_digest(incoming_digest, &from).await;
             }
@@ -88,7 +88,7 @@ impl Aligner {
         let checksum = other.checksum;
         let timestamp = other.timestamp;
         let (missing_content, no_content_err) = self.get_missing_content(&other, from).await;
-        trace!("[ALIGNER] Missing content is {:?}", missing_content);
+        log::trace!("[ALIGNER] Missing content is {:?}", missing_content);
 
         // If missing content is not identified, it showcases some problem
         // The problem will be addressed in the future rounds, hence will not count as processed
@@ -98,15 +98,14 @@ impl Aligner {
                 .await;
 
             // Missing data might be empty since some samples in digest might be outdated
-            trace!("[ALIGNER] Missing data is {:?}", missing_data);
+            log::trace!("[ALIGNER] Missing data is {:?}", missing_data);
 
             for (key, (ts, value)) in missing_data {
                 let sample = Sample::new(key, value).with_timestamp(ts);
-                debug!("[ALIGNER] Adding sample {:?} to storage", sample);
-                self.tx_sample
-                    .send_async(sample)
-                    .await
-                    .unwrap_or_else(|e| error!("[ALIGNER] Error adding sample to storage: {}", e));
+                log::debug!("[ALIGNER] Adding sample {:?} to storage", sample);
+                self.tx_sample.send_async(sample).await.unwrap_or_else(|e| {
+                    log::error!("[ALIGNER] Error adding sample to storage: {}", e)
+                });
             }
 
             if no_content_err && no_data_err {
@@ -203,7 +202,7 @@ impl Aligner {
                         other_intervals.insert(i, c);
                     }
                     Err(e) => {
-                        error!("[ALIGNER] Error decoding reply: {}", e);
+                        log::error!("[ALIGNER] Error decoding reply: {}", e);
                         no_err = false;
                     }
                 };
@@ -249,7 +248,7 @@ impl Aligner {
                             other_subintervals.insert(i, c);
                         }
                         Err(e) => {
-                            error!("[ALIGNER] Error decoding reply: {}", e);
+                            log::error!("[ALIGNER] Error decoding reply: {}", e);
                             no_err = false;
                         }
                     };
@@ -290,7 +289,7 @@ impl Aligner {
                         other_content.insert(i, c);
                     }
                     Err(e) => {
-                        error!("[ALIGNER] Error decoding reply: {}", e);
+                        log::error!("[ALIGNER] Error decoding reply: {}", e);
                         no_err = false;
                     }
                 };
@@ -309,7 +308,7 @@ impl Aligner {
             .join(&from)
             .unwrap()
             .with_parameters(&properties);
-        trace!("[ALIGNER] Sending Query '{}'...", selector);
+        log::trace!("[ALIGNER] Sending Query '{}'...", selector);
         let mut return_val = Vec::new();
         match self
             .session
@@ -323,7 +322,7 @@ impl Aligner {
                 while let Ok(reply) = replies.recv_async().await {
                     match reply.sample {
                         Ok(sample) => {
-                            trace!(
+                            log::trace!(
                                 "[ALIGNER] Received ('{}': '{}')",
                                 sample.key_expr.as_str(),
                                 sample.value
@@ -331,9 +330,10 @@ impl Aligner {
                             return_val.push(sample);
                         }
                         Err(err) => {
-                            error!(
+                            log::error!(
                                 "[ALIGNER] Received error for query on selector {} :{}",
-                                selector, err
+                                selector,
+                                err
                             );
                             no_err = false;
                         }
@@ -341,7 +341,7 @@ impl Aligner {
                 }
             }
             Err(err) => {
-                error!("[ALIGNER] Query failed on selector `{}`: {}", selector, err);
+                log::error!("[ALIGNER] Query failed on selector `{}`: {}", selector, err);
                 no_err = false;
             }
         };

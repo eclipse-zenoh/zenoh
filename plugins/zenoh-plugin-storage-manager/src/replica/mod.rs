@@ -14,13 +14,13 @@
 
 // This module extends Storage with alignment protocol that aligns storages subscribing to the same key_expr
 
-use crate::storages_mgt::{StorageMessage, StoreIntercept};
+use crate::backends_mgt::StoreIntercept;
+use crate::storages_mgt::StorageMessage;
 use async_std::sync::Arc;
 use async_std::sync::RwLock;
 use async_std::task::sleep;
 use flume::{Receiver, Sender};
 use futures::{pin_mut, select, FutureExt};
-use log::{debug, error, trace};
 use std::collections::{HashMap, HashSet};
 use std::str;
 use std::str::FromStr;
@@ -29,7 +29,7 @@ use urlencoding::encode;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;
-use zenoh_backend_traits::config::ReplicaConfig;
+use zenoh_backend_traits::config::{ReplicaConfig, StorageConfig};
 
 pub mod align_queryable;
 pub mod aligner;
@@ -74,19 +74,37 @@ pub struct Replica {
 impl Replica {
     // This function starts the replica by initializing all the components
     pub async fn start(
-        config: ReplicaConfig,
         session: Arc<Session>,
         store_intercept: StoreIntercept,
-        key_expr: OwnedKeyExpr,
-        complete: bool,
+        storage_config: StorageConfig,
         name: &str,
         rx: Receiver<StorageMessage>,
     ) {
-        trace!("[REPLICA] Opening session...");
+        log::trace!("[REPLICA] Opening session...");
         let startup_entries = match store_intercept.storage.get_all_entries().await {
-            Ok(entries) => entries,
+            Ok(entries) => {
+                let mut result = Vec::new();
+                for entry in entries {
+                    if entry.0.is_none() {
+                        if let Some(prefix) = storage_config.clone().strip_prefix {
+                            result.push((prefix, entry.1));
+                        } else {
+                            log::error!("Empty key found with timestamp `{}`", entry.1);
+                        }
+                    } else {
+                        result.push((
+                            StorageService::get_prefixed(
+                                &storage_config.strip_prefix,
+                                &entry.0.unwrap().into(),
+                            ),
+                            entry.1,
+                        ));
+                    }
+                }
+                result
+            }
             Err(e) => {
-                error!("[REPLICA] Error fetching entries from storage: {}", e);
+                log::error!("[REPLICA] Error fetching entries from storage: {}", e);
                 return;
             }
         };
@@ -94,8 +112,8 @@ impl Replica {
         let replica = Replica {
             name: name.to_string(),
             session,
-            key_expr,
-            replica_config: config,
+            key_expr: storage_config.key_expr.clone(),
+            replica_config: storage_config.replica_config.clone().unwrap(),
             digests_published: RwLock::new(HashSet::new()),
         };
 
@@ -145,8 +163,7 @@ impl Replica {
         // channel to pipe the receiver to storage
         let storage_task = StorageService::start(
             replica.session.clone(),
-            replica.key_expr.clone(),
-            complete,
+            storage_config,
             &replica.name,
             store_intercept,
             rx,
@@ -164,12 +181,12 @@ impl Replica {
         );
 
         select!(
-            () = digest_sub => trace!("[REPLICA] Exiting digest subscriber"),
-            () = align_q => trace!("[REPLICA] Exiting align queryable"),
-            () = aligner => trace!("[REPLICA] Exiting aligner"),
-            () = digest_pub => trace!("[REPLICA] Exiting digest publisher"),
-            () = snapshot_task => trace!("[REPLICA] Exiting snapshot task"),
-            () = storage_task => trace!("[REPLICA] Exiting storage task"),
+            () = digest_sub => log::trace!("[REPLICA] Exiting digest subscriber"),
+            () = align_q => log::trace!("[REPLICA] Exiting align queryable"),
+            () = aligner => log::trace!("[REPLICA] Exiting aligner"),
+            () = digest_pub => log::trace!("[REPLICA] Exiting digest publisher"),
+            () = snapshot_task => log::trace!("[REPLICA] Exiting snapshot task"),
+            () = storage_task => log::trace!("[REPLICA] Exiting storage task"),
         )
     }
 
@@ -182,9 +199,10 @@ impl Replica {
             .join("**")
             .unwrap();
 
-        debug!(
+        log::debug!(
             "[DIGEST_SUB] Declaring Subscriber named {} on '{}'",
-            self.name, digest_key
+            self.name,
+            digest_key
         );
         let subscriber = self
             .session
@@ -197,13 +215,13 @@ impl Replica {
             let sample = match subscriber.recv_async().await {
                 Ok(sample) => sample,
                 Err(e) => {
-                    error!("[DIGEST_SUB] Error receiving sample: {}", e);
+                    log::error!("[DIGEST_SUB] Error receiving sample: {}", e);
                     continue;
                 }
             };
             let from = &sample.key_expr.as_str()
                 [Replica::get_digest_key(&self.key_expr, ALIGN_PREFIX).len() + 1..];
-            trace!(
+            log::trace!(
                 "[DIGEST_SUB] From {} Received {} ('{}': '{}')",
                 from,
                 sample.kind,
@@ -213,7 +231,7 @@ impl Replica {
             let digest: Digest = match serde_json::from_str(&format!("{}", sample.value)) {
                 Ok(digest) => digest,
                 Err(e) => {
-                    error!("[DIGEST_SUB] Error in decoding the digest: {}", e);
+                    log::error!("[DIGEST_SUB] Error in decoding the digest: {}", e);
                     continue;
                 }
             };
@@ -228,10 +246,10 @@ impl Replica {
                 )
                 .await;
             if to_be_processed {
-                trace!("[DIGEST_SUB] sending {} to aligner", digest.checksum);
+                log::trace!("[DIGEST_SUB] sending {} to aligner", digest.checksum);
                 match tx.send_async((from.to_string(), digest)).await {
                     Ok(()) => {}
-                    Err(e) => error!("[DIGEST_SUB] Error sending digest to aligner: {}", e),
+                    Err(e) => log::error!("[DIGEST_SUB] Error sending digest to aligner: {}", e),
                 }
             };
             received.insert(from.to_string(), ts);
@@ -245,7 +263,7 @@ impl Replica {
             .join(&self.name)
             .unwrap();
 
-        debug!("[DIGEST_PUB] Declaring Publisher on '{}'...", digest_key);
+        log::debug!("[DIGEST_PUB] Declaring Publisher on '{}'...", digest_key);
         let publisher = self
             .session
             .declare_publisher(digest_key)
@@ -264,10 +282,10 @@ impl Replica {
             drop(digests_published);
             drop(digest);
 
-            trace!("[DIGEST_PUB] Putting Digest: {} ...", digest_json);
+            log::trace!("[DIGEST_PUB] Putting Digest: {} ...", digest_json);
             match publisher.put(digest_json).res().await {
                 Ok(()) => {}
-                Err(e) => error!("[DIGEST_PUB] Digest publication failed: {}", e),
+                Err(e) => log::error!("[DIGEST_PUB] Digest publication failed: {}", e),
             }
         }
     }
@@ -286,13 +304,13 @@ impl Replica {
         }
         let digests_published = self.digests_published.read().await;
         if digests_published.contains(&checksum) {
-            trace!("[DIGEST_SUB] Dropping since matching digest already seen");
+            log::trace!("[DIGEST_SUB] Dropping since matching digest already seen");
             return false;
         }
         // TODO: test this part
         if received.contains_key(from) && *received.get(from).unwrap() > ts {
             // not the latest from that replica
-            trace!("[DIGEST_SUB] Dropping older digest at {} from {}", ts, from);
+            log::trace!("[DIGEST_SUB] Dropping older digest at {} from {}", ts, from);
             return false;
         }
         // TODO: test this part
@@ -303,7 +321,7 @@ impl Replica {
                     self.replica_config.delta,
                 )
         {
-            error!("[DIGEST_SUB] Mismatching digest configs, cannot be aligned");
+            log::error!("[DIGEST_SUB] Mismatching digest configs, cannot be aligned");
             return false;
         }
         true

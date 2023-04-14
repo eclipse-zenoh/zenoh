@@ -114,7 +114,7 @@ impl StorageRuntimeInner {
             storages: Default::default(),
         };
         new_self.spawn_volume(VolumeConfig {
-            name: "memory".into(),
+            name: MEMORY_BACKEND_NAME.into(),
             backend: None,
             paths: None,
             required: false,
@@ -272,7 +272,10 @@ impl StorageRuntimeInner {
                 .insert(storage_name, stopper);
             Ok(())
         } else {
-            bail!("`{}` volume not found", volume_id)
+            bail!(
+                "`{}` volume doesn't support the required storage configuration",
+                volume_id
+            )
         }
     }
 }

@@ -17,7 +17,6 @@ use async_std::sync::RwLock;
 use async_std::task::sleep;
 use flume::Receiver;
 use futures::join;
-use log::trace;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::time::Duration;
@@ -319,9 +318,9 @@ impl Snapshotter {
         let stable = replica_data.stable_log.read().await;
         let volatile = replica_data.volatile_log.read().await;
         let digest = replica_data.digest.read().await;
-        trace!("Stable log:: {:?}", stable);
-        trace!("Volatile log:: {:?}", volatile);
-        trace!("Digest:: {:?}", digest);
+        log::trace!("Stable log:: {:?}", stable);
+        log::trace!("Volatile log:: {:?}", volatile);
+        log::trace!("Digest:: {:?}", digest);
     }
 
     // Expose digest
