@@ -115,7 +115,6 @@ impl TransportEventHandler for SHClientAuthenticator {
 
 #[cfg(feature = "auth_pubkey")]
 async fn authenticator_multilink(endpoint: &EndPoint) {
-    use std::convert::TryFrom;
     use zenoh_transport::TransportManager;
 
     // Create the router transport manager
@@ -515,7 +514,6 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
 
 #[cfg(feature = "auth_usrpwd")]
 async fn authenticator_user_password(endpoint: &EndPoint) {
-    use std::convert::TryFrom;
     use zenoh_transport::TransportManager;
 
     /* [CLIENT] */

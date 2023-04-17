@@ -125,7 +125,6 @@ pub struct DataInfo {
 impl DataInfo {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use core::convert::TryFrom;
         use rand::Rng;
 
         let mut rng = rand::thread_rng();

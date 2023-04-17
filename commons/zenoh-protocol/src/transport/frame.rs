@@ -90,7 +90,6 @@ impl Frame {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use crate::core::{Priority, Reliability};
-        use core::convert::TryInto;
         use rand::Rng;
 
         const MIN: usize = 1;
@@ -157,7 +156,6 @@ impl FrameHeader {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use crate::core::{Priority, Reliability};
-        use core::convert::TryInto;
         use rand::{seq::SliceRandom, Rng};
 
         let mut rng = rand::thread_rng();
