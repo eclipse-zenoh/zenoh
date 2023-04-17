@@ -260,8 +260,14 @@ impl Resource {
     #[inline(always)]
     pub(super) fn routers_query_route(&self, context: usize) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
-            Some(ctx) => (ctx.routers_query_routes.len() > context)
-                .then(|| ctx.routers_query_routes[context].clone()),
+            Some(ctx) => {
+                if ctx.valid_query_routes {
+                    (ctx.routers_query_routes.len() > context)
+                        .then(|| ctx.routers_query_routes[context].clone())
+                } else {
+                    None
+                }
+            }
             None => None,
         }
     }
@@ -269,8 +275,14 @@ impl Resource {
     #[inline(always)]
     pub(super) fn peers_query_route(&self, context: usize) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
-            Some(ctx) => (ctx.peers_query_routes.len() > context)
-                .then(|| ctx.peers_query_routes[context].clone()),
+            Some(ctx) => {
+                if ctx.valid_query_routes {
+                    (ctx.peers_query_routes.len() > context)
+                        .then(|| ctx.peers_query_routes[context].clone())
+                } else {
+                    None
+                }
+            }
             None => None,
         }
     }
@@ -278,7 +290,13 @@ impl Resource {
     #[inline(always)]
     pub(super) fn peer_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
-            Some(ctx) => ctx.peer_query_route.clone(),
+            Some(ctx) => {
+                if ctx.valid_query_routes {
+                    ctx.peer_query_route.clone()
+                } else {
+                    None
+                }
+            }
             None => None,
         }
     }
@@ -286,7 +304,13 @@ impl Resource {
     #[inline(always)]
     pub(super) fn client_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
-            Some(ctx) => ctx.client_query_route.clone(),
+            Some(ctx) => {
+                if ctx.valid_query_routes {
+                    ctx.client_query_route.clone()
+                } else {
+                    None
+                }
+            }
             None => None,
         }
     }
