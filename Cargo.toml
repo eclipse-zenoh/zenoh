@@ -61,7 +61,7 @@ authors = [
   "Luca Cominardi <luca.cominardi@zettascale.tech>",
   "Pierre Avital <pierre.avital@zettascale.tech>",
 ]
-edition = "2018"
+edition = "2021"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
 description = "Zenoh: Zero Overhead Pub/sub, Store/Query and Compute."
