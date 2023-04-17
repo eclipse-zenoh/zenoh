@@ -645,16 +645,29 @@ pub fn register_expr(
                 }
             }
             None => {
-                let mut fullexpr = prefix.expr();
-                fullexpr.push_str(expr.suffix.as_ref());
-                let matches = keyexpr::new(fullexpr.as_str())
-                    .map(|ke| Resource::get_matches(&rtables, ke))
-                    .unwrap_or_default();
-                drop(rtables);
-                let mut wtables = zwrite!(tables.tables);
-                let mut res =
-                    Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-                Resource::match_resource(&wtables, &mut res, matches);
+                let res = Resource::get_resource(&prefix, &expr.suffix);
+                let (mut res, mut wtables) = if res
+                    .as_ref()
+                    .map(|r| r.context.is_some())
+                    .unwrap_or(false)
+                {
+                    drop(rtables);
+                    let wtables = zwrite!(tables.tables);
+                    (res.unwrap(), wtables)
+                } else {
+                    let mut fullexpr = prefix.expr();
+                    fullexpr.push_str(expr.suffix.as_ref());
+                    let mut matches = keyexpr::new(fullexpr.as_str())
+                        .map(|ke| Resource::get_matches(&rtables, ke))
+                        .unwrap_or_default();
+                    drop(rtables);
+                    let mut wtables = zwrite!(tables.tables);
+                    let mut res =
+                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+                    matches.push(Arc::downgrade(&res));
+                    Resource::match_resource(&wtables, &mut res, matches);
+                    (res, wtables)
+                };
                 let mut ctx = get_mut_unchecked(&mut res)
                     .session_ctxs
                     .entry(face.id)
