@@ -37,7 +37,6 @@ use zenoh_protocol::transport::TransportMessage;
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_sync::{RecyclingObjectPool, Signal};
 
-
 #[cfg(feature = "transport_compression")]
 const HEADER_BYTES_SIZE: usize = 2;
 
@@ -509,9 +508,9 @@ fn tx_compressed(
 
 #[cfg(feature = "transport_compression")]
 /// Inserts the compresion byte for batches WITH compression.
-/// The buffer is expected to contain the compression starting from byte 3 (if streamed) or 1 
+/// The buffer is expected to contain the compression starting from byte 3 (if streamed) or 1
 /// (if not streamed).
-/// 
+///
 /// Arguments:
 /// - buff: the buffer with the compression, with 3 or 1 bytes reserved at the beginning in case of
 ///     being streamed or not respectively.

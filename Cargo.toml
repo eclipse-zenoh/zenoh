@@ -17,7 +17,6 @@ members = [
   "commons/zenoh-cfg-properties",
   "commons/zenoh-codec",
   "commons/zenoh-collections",
-  "commons/zenoh-compression",
   "commons/zenoh-config",
   "commons/zenoh-core",
   "commons/zenoh-crypto",

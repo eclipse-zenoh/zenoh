@@ -233,14 +233,9 @@ impl TransportManagerBuilder {
         self = self.tx_threads(config.transport().link().tx().threads().unwrap());
         self = self.protocols(config.transport().link().protocols().clone());
 
-        #[cfg(feature = "transport_compression")] { 
-            self = self.compression(
-                *config
-                    .transport()
-                    .link()
-                    .compression()
-                    .is_enabled(),
-            );
+        #[cfg(feature = "transport_compression")]
+        {
+            self = self.compression(*config.transport().link().compression().is_enabled());
         }
 
         let (c, errors) = zenoh_link::LinkConfigurator::default()

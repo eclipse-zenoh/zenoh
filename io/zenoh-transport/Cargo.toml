@@ -68,7 +68,6 @@ zenoh-result = { path = "../../commons/zenoh-result/" }
 zenoh-shm = { path = "../../commons/zenoh-shm/", optional = true }
 zenoh-sync = { path = "../../commons/zenoh-sync/" }
 zenoh-util = { path = "../../commons/zenoh-util/" }
-zenoh-compression = { path = "../../commons/zenoh-compression/" }
 
 [dev-dependencies]
 env_logger = { workspace = true }
