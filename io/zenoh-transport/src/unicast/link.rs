@@ -202,14 +202,15 @@ async fn tx_task(
 
                     #[cfg(feature = "transport_compression")]
                     {
-                        let compressed_batch_size = tx_compressed(
+                        let batch_size = tx_compressed(
                             compression_enabled,
                             link.is_streamed(),
                             &bytes,
                             &mut compression_aux_buff,
                         )?;
                         // considering header size
-                        bytes = &compression_aux_buff[..compressed_batch_size + 2];
+                        // bytes = &compression_aux_buff[..compressed_batch_size + 2];
+                        bytes = &compression_aux_buff[..batch_size];
                     }
 
                     link.write_all(bytes).await?;
@@ -483,10 +484,11 @@ fn tx_compressed(
             })?;
             buff[0..2].copy_from_slice(&batch_size_u16.to_le_bytes());
             buff[2] = 1_u8;
+            Ok(batch_size + 2)
         } else {
             buff[0] = 1_u8;
+            Ok(batch_size)
         }
-        Ok(batch_size)
     } else {
         if is_streamed {
             let batch_size = insert_compression_byte(bytes, buff)?;
@@ -501,7 +503,8 @@ fn tx_compressed(
 }
 
 #[cfg(feature = "transport_compression")]
-/// Inserts the compression byte in the batch and returns the updated batch size.
+/// Inserts the compression byte in the streamed batch and returns the updated batch size
+/// considering the header.
 fn insert_compression_byte(bytes: &[u8], buff: &mut [u8]) -> ZResult<usize> {
     let mut header = [0_u8, 0_u8];
     header[0..2].copy_from_slice(&bytes[0..2]);
@@ -517,5 +520,5 @@ fn insert_compression_byte(bytes: &[u8], buff: &mut [u8]) -> ZResult<usize> {
     buff[2] = 0_u8;
     let batch_size: usize = batch_size.into();
     buff[3..batch_size + 2].copy_from_slice(&bytes[2..batch_size + 1]);
-    Ok(batch_size)
+    Ok(batch_size + 2)
 }
