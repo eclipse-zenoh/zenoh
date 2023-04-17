@@ -696,7 +696,6 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
 
 #[cfg(feature = "shared-memory")]
 async fn authenticator_shared_memory(endpoint: &EndPoint) {
-    use std::convert::TryFrom;
     use zenoh_transport::TransportManager;
 
     /* [CLIENT] */
