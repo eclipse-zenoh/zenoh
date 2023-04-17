@@ -12,6 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
+//!
 //! Provide different buffer implementations used for serialization and deserialization.
 #![no_std]
 extern crate alloc;
