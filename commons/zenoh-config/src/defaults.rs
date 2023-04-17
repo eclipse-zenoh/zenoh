@@ -176,8 +176,10 @@ impl Default for LinkRxConf {
     }
 }
 
+// Make explicit the value and ignore clippy warning
+#[allow(clippy::derivable_impls)]
 impl Default for SharedMemoryConf {
     fn default() -> Self {
-        Self { enabled: true }
+        Self { enabled: false }
     }
 }
