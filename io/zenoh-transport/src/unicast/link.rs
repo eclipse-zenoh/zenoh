@@ -37,6 +37,25 @@ use zenoh_protocol::transport::TransportMessage;
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_sync::{RecyclingObjectPool, Signal};
 
+
+#[cfg(feature = "transport_compression")]
+const HEADER_BYTES_SIZE: usize = 2;
+
+#[cfg(feature = "transport_compression")]
+const COMPRESSION_BYTE_INDEX_STREAMED: usize = 2;
+
+#[cfg(feature = "transport_compression")]
+const COMPRESSION_BYTE_INDEX: usize = 0;
+
+#[cfg(feature = "transport_compression")]
+const COMPRESSION_ENABLED: u8 = 1_u8;
+
+#[cfg(feature = "transport_compression")]
+const COMPRESSION_DISABLED: u8 = 0_u8;
+
+#[cfg(feature = "transport_compression")]
+const BATCH_PAYLOAD_START_INDEX: usize = 1;
+
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicast {
     // Inbound / outbound
@@ -208,8 +227,6 @@ async fn tx_task(
                             &bytes,
                             &mut compression_aux_buff,
                         )?;
-                        // considering header size
-                        // bytes = &compression_aux_buff[..compressed_batch_size + 2];
                         bytes = &compression_aux_buff[..batch_size];
                     }
 
@@ -320,14 +337,17 @@ async fn rx_task_stream(
 
                 #[cfg(feature = "transport_compression")]
                 {
-                    let is_compressed: bool = buffer[0] == 1_u8;
+                    let is_compressed: bool = buffer[COMPRESSION_BYTE_INDEX] == COMPRESSION_ENABLED;
                     if is_compressed {
                         let mut aux_buff = pool.try_take().unwrap_or_else(|| pool.alloc());
-                        end_pos = lz4_flex::block::decompress_into(&buffer[1..n], &mut aux_buff)
-                            .map_err(|e| zerror!("Decompression error: {:}", e))?;
+                        end_pos = lz4_flex::block::decompress_into(
+                            &buffer[BATCH_PAYLOAD_START_INDEX..n],
+                            &mut aux_buff,
+                        )
+                        .map_err(|e| zerror!("Decompression error: {:}", e))?;
                         buffer = aux_buff;
                     } else {
-                        start_pos = 1;
+                        start_pos = BATCH_PAYLOAD_START_INDEX;
                     }
                 }
 
@@ -414,14 +434,17 @@ async fn rx_task_dgram(
 
                 #[cfg(feature = "transport_compression")]
                 {
-                    let is_compressed: bool = buffer[0] == 1_u8;
+                    let is_compressed: bool = buffer[COMPRESSION_BYTE_INDEX] == COMPRESSION_ENABLED;
                     if is_compressed {
                         let mut aux_buff = pool.try_take().unwrap_or_else(|| pool.alloc());
-                        end_pos = lz4_flex::block::decompress_into(&buffer[1..n], &mut aux_buff)
-                            .map_err(|e| zerror!("Decompression error: {:}", e))?;
+                        end_pos = lz4_flex::block::decompress_into(
+                            &buffer[BATCH_PAYLOAD_START_INDEX..n],
+                            &mut aux_buff,
+                        )
+                        .map_err(|e| zerror!("Decompression error: {:}", e))?;
                         buffer = aux_buff;
                     } else {
-                        start_pos = 1;
+                        start_pos = BATCH_PAYLOAD_START_INDEX;
                     }
                 }
 
@@ -470,55 +493,86 @@ fn tx_compressed(
 ) -> ZResult<usize> {
     if compression_enabled {
         let s_pos = if is_streamed { 3 } else { 1 };
-        let compressed_bytes =
+        let compression_size =
             lz4_flex::block::compress_into(&bytes[s_pos - 1..], &mut buff[s_pos..])
                 .map_err(|e| zerror!("Compression error: {:}", e))?;
 
-        let batch_size = 1 + compressed_bytes;
-        if is_streamed {
-            let batch_size_u16: u16 = batch_size.try_into().map_err(|e| {
-                zerror!(
-                    "Compression error: unable to convert batch size into u16: {}",
-                    e
-                )
-            })?;
-            buff[0..2].copy_from_slice(&batch_size_u16.to_le_bytes());
-            buff[2] = 1_u8;
-            Ok(batch_size + 2)
-        } else {
-            buff[0] = 1_u8;
-            Ok(batch_size)
-        }
+        Ok(set_compressed_batch_header(
+            buff,
+            compression_size,
+            is_streamed,
+        )?)
     } else {
-        if is_streamed {
-            let batch_size = insert_compression_byte(bytes, buff)?;
-            Ok(batch_size)
-        } else {
-            buff[0] = 0_u8;
-            let len = 1 + bytes.len();
-            buff[1..1 + bytes.len()].copy_from_slice(bytes);
-            Ok(len)
-        }
+        Ok(set_uncompressed_batch_header(bytes, buff, is_streamed)?)
     }
 }
 
 #[cfg(feature = "transport_compression")]
-/// Inserts the compression byte in the streamed batch and returns the updated batch size
-/// considering the header.
-fn insert_compression_byte(bytes: &[u8], buff: &mut [u8]) -> ZResult<usize> {
-    let mut header = [0_u8, 0_u8];
-    header[0..2].copy_from_slice(&bytes[0..2]);
-    let mut batch_size = u16::from_le_bytes(header);
-    batch_size += 1;
-    let batch_size: u16 = batch_size.try_into().map_err(|e| {
-        zerror!(
-            "Compression error: unable to convert compression size into u16: {}",
-            e
-        )
-    })?;
-    buff[0..2].copy_from_slice(&batch_size.to_le_bytes());
-    buff[2] = 0_u8;
-    let batch_size: usize = batch_size.into();
-    buff[3..batch_size + 2].copy_from_slice(&bytes[2..batch_size + 1]);
-    Ok(batch_size + 2)
+/// Inserts the compresion byte for batches WITH compression.
+/// The buffer is expected to contain the compression starting from byte 3 (if streamed) or 1 
+/// (if not streamed).
+/// 
+/// Arguments:
+/// - buff: the buffer with the compression, with 3 or 1 bytes reserved at the beginning in case of
+///     being streamed or not respectively.
+/// - compression_size: the size of the compression
+/// - is_streamed: if the batch is intended to be streamed or not
+fn set_compressed_batch_header(
+    buff: &mut [u8],
+    compression_size: usize,
+    is_streamed: bool,
+) -> ZResult<usize> {
+    let payload_size = 1 + compression_size;
+    if is_streamed {
+        let payload_size_u16: u16 = payload_size.try_into().map_err(|e| {
+            zerror!(
+                "Compression error: unable to convert batch size into u16: {}",
+                e
+            )
+        })?;
+        buff[0..HEADER_BYTES_SIZE].copy_from_slice(&payload_size_u16.to_le_bytes());
+        buff[COMPRESSION_BYTE_INDEX_STREAMED] = COMPRESSION_ENABLED;
+        Ok(payload_size + HEADER_BYTES_SIZE)
+    } else {
+        buff[COMPRESSION_BYTE_INDEX] = COMPRESSION_ENABLED;
+        Ok(payload_size)
+    }
+}
+
+#[cfg(feature = "transport_compression")]
+/// Inserts the compression byte for batches without compression, that is inserting a 0 byte on the
+/// third position of the buffer and increasing the batch size from the header by 1.
+///
+/// Arguments:
+/// - bytes: the source slice
+/// - buff: the output slice
+/// - is_streamed: if the batch is meant to be streamed or not, thus considering or not the 2 bytes
+///     header specifying the size of the batch.
+fn set_uncompressed_batch_header(
+    bytes: &[u8],
+    buff: &mut [u8],
+    is_streamed: bool,
+) -> ZResult<usize> {
+    if is_streamed {
+        let mut header = [0_u8, 0_u8];
+        header[..HEADER_BYTES_SIZE].copy_from_slice(&bytes[..HEADER_BYTES_SIZE]);
+        let mut batch_size = u16::from_le_bytes(header);
+        batch_size += 1;
+        let batch_size: u16 = batch_size.try_into().map_err(|e| {
+            zerror!(
+                "Compression error: unable to convert compression size into u16: {}",
+                e
+            )
+        })?;
+        buff[0..HEADER_BYTES_SIZE].copy_from_slice(&batch_size.to_le_bytes());
+        buff[COMPRESSION_BYTE_INDEX_STREAMED] = COMPRESSION_DISABLED;
+        let batch_size: usize = batch_size.into();
+        buff[3..batch_size + 2].copy_from_slice(&bytes[2..batch_size + 1]);
+        Ok(batch_size + 2)
+    } else {
+        buff[COMPRESSION_BYTE_INDEX] = COMPRESSION_DISABLED;
+        let len = 1 + bytes.len();
+        buff[1..1 + bytes.len()].copy_from_slice(bytes);
+        Ok(len)
+    }
 }
