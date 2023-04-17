@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022 ZettaScale Technology
+# Copyright (c) 2023 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -22,6 +22,7 @@ authors = [
     "Julien Enoch <julien@enoch.fr>",
     "Olivier Hécart <olivier.hecart@zettascale.tech>",
     "Luca Cominardi <luca.cominardi@zettascale.tech>",
+    "Sreeja Nair <sreeja.nair@zettascale.tech>",
 ]
 edition = { workspace = true }
 license = { workspace = true }
@@ -58,13 +59,15 @@ zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait/", default-features = false }
 zenoh-result = { path = "../../commons/zenoh-result/" }
 zenoh-util = { path = "../../commons/zenoh-util/" }
+zenoh-keyexpr = { path = "../../commons/zenoh-keyexpr/" }
 zenoh_backend_traits = { path = "../zenoh-backend-traits/" }
-
-[dev-dependencies]
-async-global-executor = { workspace = true }
 
 [build-dependencies]
 rustc_version = { workspace = true }
+
+[dev-dependencies]
+async-global-executor = { workspace = true }
+zenoh = { version = "0.7.0-rc", path = "../../zenoh/", default-features = true, features = [ "unstable" ] }
 
 [package.metadata.deb]
 name = "zenoh-plugin-storage-manager"

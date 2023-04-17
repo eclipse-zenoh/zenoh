@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -38,6 +38,9 @@ async fn main() {
             v.iter()
                 .fold(String::from("\n"), |a, b| format!("\t{a} \n\t{b:?}")),
         );
+        println!(">>>>>>> Eventual Leader <<<<<<<<<");
+        let m = group.leader().await;
+        println!("Leader mid = {m:?}");
         println!(">>>>>>><<<<<<<<<");
     }
 }

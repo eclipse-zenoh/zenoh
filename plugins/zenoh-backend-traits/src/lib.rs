@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -12,6 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate should be considered unstable, as in we might change the APIs anytime.
+//!
 //! This crate provides the traits to be implemented by a zenoh backend library:
 //!  - [`Volume`]
 //!  - [`Storage`]
@@ -47,6 +51,16 @@
 //!         // Here we reply with a static status (containing the configuration properties).
 //!         // But we could add dynamic properties for Volume monitoring.
 //!         self.config.to_json_value()
+//!     }
+//!
+//!     fn get_capability(&self) -> Capability {
+//!         // This operation is used to confirm if the volume indeed supports  
+//!         // the capabilities requested by the configuration
+//!         Capability{
+//!             persistence: Persistence::Volatile,
+//!             history: History::Latest,
+//!             read_cost: 0,
+//!         }
 //!     }
 //!
 //!     async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
@@ -85,48 +99,33 @@
 //!         self.config.to_json_value()
 //!     }
 //!
-//!     async fn on_sample(&mut self, mut sample: Sample) -> ZResult<StorageInsertionResult> {
-//!         // When receiving a Sample (i.e. on PUT or DELETE operations)
-//!         // extract Timestamp from sample
-//!         sample.ensure_timestamp();
-//!         let timestamp = sample.timestamp.take().unwrap();
-//!         // Store or delete the sample depending the ChangeKind
-//!         match sample.kind {
-//!             SampleKind::Put => {
-//!                 let _key = sample.key_expr;
-//!                 // @TODO:
-//!                 //  - check if timestamp is newer than the stored one for the same key
-//!                 //  - if yes: store (key, sample)
-//!                 return Ok(StorageInsertionResult::Inserted);
-//!                 //  - if not: drop the sample
-//!                 // return Ok(StorageInsertionResult::Outdated);
-//!             }
-//!             SampleKind::Delete => {
-//!                 let _key = sample.key_expr;
-//!                 // @TODO:
-//!                 //  - check if timestamp is newer than the stored one for the same key
-//!                 //  - if yes: mark key as deleted (possibly scheduling definitive removal for later)
-//!                 return Ok(StorageInsertionResult::Deleted);
-//!                 //  - if not: drop the sample
-//!                 // return Ok(StorageInsertionResult::Outdated);
-//!             }
-//!         }
+//!     async fn put(&mut self, key: Option<OwnedKeyExpr>, value: Value, timestamp: Timestamp) -> ZResult<StorageInsertionResult> {
+//!         // the key will be None if it exactly matched with the strip_prefix
+//!         // create a storge specific special structure to store it
+//!         // Store the data with timestamp
+//!         // @TODO:
+//!         // store (key, value, timestamp)
+//!         return Ok(StorageInsertionResult::Inserted);
+//!         //  - if any issue: drop
+//!         // return Ok(StorageInsertionResult::Outdated);
 //!     }
 //!
-//!     // When receiving a Query (i.e. on GET operations)
-//!     async fn on_query(&mut self, query: Query) -> ZResult<()> {
-//!         let _key_elector = query.key_expr();
+//!     async fn delete(&mut self, key: Option<OwnedKeyExpr>, timestamp: Timestamp) -> ZResult<StorageInsertionResult> {
 //!         // @TODO:
-//!         //  - test if key selector contains *
-//!         //  - if not: just get the sample with key==key_selector and call: query.reply(sample.clone()).await;
-//!         //  - if yes: get all the samples with key matching key_selector and call for each: query.reply(sample.clone()).await;
-//!         //
-//!         // NOTE: in case query.parameters() is not empty something smarter should be done with returned samples...
-//!         Ok(())
+//!         // delete the actual entry from storage
+//!         return Ok(StorageInsertionResult::Deleted);
+//!     }
+//!
+//!     // When receiving a GET operation
+//!     async fn get(&mut self, key_expr: Option<OwnedKeyExpr>, parameters: &str) -> ZResult<Vec<StoredData>> {
+//!         // @TODO:
+//!         // get the data associated with key_expr and return it
+//!         // NOTE: in case parameters is not empty something smarter should be done with returned data...
+//!         Ok(Vec::new())
 //!     }
 //!
 //!     // To get all entries in the datastore
-//!     async fn get_all_entries(&self) -> ZResult<Vec<(OwnedKeyExpr, Timestamp)>> {
+//!     async fn get_all_entries(&self) -> ZResult<Vec<(Option<OwnedKeyExpr>, Timestamp)>> {
 //!         // @TODO: get the list of (key, timestamp) in the datastore
 //!         Ok(Vec::new())
 //!     }
@@ -138,10 +137,42 @@ use std::sync::Arc;
 use zenoh::prelude::{KeyExpr, OwnedKeyExpr, Sample, Selector};
 use zenoh::queryable::ReplyBuilder;
 use zenoh::time::Timestamp;
+use zenoh::value::Value;
 pub use zenoh::Result as ZResult;
 
 pub mod config;
 use config::{StorageConfig, VolumeConfig};
+
+/// Capability of a storage indicates the guarantees of the storage
+/// It is used by the storage manager to take decisions on the trade-offs to ensure correct performance
+pub struct Capability {
+    pub persistence: Persistence,
+    pub history: History,
+    /// `read_cost` is a parameter that hels the storage manager take a decision on optimizing database roundtrips
+    /// If the `read_cost` is higher than a given threshold, the storage manger will maintain a cache with the keys present in the database
+    /// This is a placeholder, not actually utilised in the current implementation
+    pub read_cost: u32,
+}
+
+/// Persistence is the guarantee expected from a storage in case of failures
+/// If a storage is marked Persistent::Durable, if it restarts after a crash, it will still have all the values that were saved.
+/// This will include also persisting the metadata that Zenoh stores for the updates.
+/// If a storage is marked Persistent::Volatile, the storage will not have any guarantees on its content after a crash.
+/// This option should be used only if the storage is considered to function as a cache.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Persistence {
+    Volatile, //default
+    Durable,
+}
+
+/// History is the number of values that the backend is expected to save per key
+/// History::Latest saves only the latest value per key
+/// History::All saves all the values including historical values
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum History {
+    Latest, //default
+    All,
+}
 
 /// Signature of the `create_volume` operation to be implemented in the library as an entrypoint.
 pub const CREATE_VOLUME_FN_NAME: &[u8] = b"create_volume";
@@ -155,6 +186,12 @@ pub enum StorageInsertionResult {
     Deleted,
 }
 
+#[derive(Debug, Clone)]
+pub struct StoredData {
+    pub value: Value,
+    pub timestamp: Timestamp,
+}
+
 /// Trait to be implemented by a Backend.
 ///
 #[async_trait]
@@ -162,6 +199,9 @@ pub trait Volume: Send + Sync {
     /// Returns the status that will be sent as a reply to a query
     /// on the administration space for this backend.
     fn get_admin_status(&self) -> serde_json::Value;
+
+    /// Returns the capability of this backend
+    fn get_capability(&self) -> Capability;
 
     /// Creates a storage configured with some properties.
     async fn create_storage(&mut self, props: StorageConfig) -> ZResult<Box<dyn Storage>>;
@@ -183,15 +223,40 @@ pub trait Storage: Send + Sync {
     fn get_admin_status(&self) -> serde_json::Value;
 
     /// Function called for each incoming data ([`Sample`]) to be stored in this storage.
-    async fn on_sample(&mut self, sample: Sample) -> ZResult<StorageInsertionResult>;
+    /// A key can be `None` if it matches the `strip_prefix` exactly.
+    /// In order to avoid data loss, the storage must store the `value` and `timestamp` associated with the `None` key
+    /// in a manner suitable for the given backend technology
+    async fn put(
+        &mut self,
+        key: Option<OwnedKeyExpr>,
+        value: Value,
+        timestamp: Timestamp,
+    ) -> ZResult<StorageInsertionResult>;
 
-    /// Function called for each incoming query matching this storage's keys exp.
-    /// This storage should reply with data matching the query calling [`Query::reply()`].
-    async fn on_query(&mut self, query: Query) -> ZResult<()>;
+    /// Function called for each incoming delete request to this storage.
+    /// A key can be `None` if it matches the `strip_prefix` exactly.
+    /// In order to avoid data loss, the storage must delete the entry corresponding to the `None` key
+    /// in a manner suitable for the given backend technology
+    async fn delete(
+        &mut self,
+        key: Option<OwnedKeyExpr>,
+        timestamp: Timestamp,
+    ) -> ZResult<StorageInsertionResult>;
+
+    /// Function to retrieve the sample associated with a single key.
+    /// A key can be `None` if it matches the `strip_prefix` exactly.
+    /// In order to avoid data loss, the storage must retrieve the `value` and `timestamp` associated with the `None` key
+    /// in a manner suitable for the given backend technology
+    async fn get(
+        &mut self,
+        key: Option<OwnedKeyExpr>,
+        parameters: &str,
+    ) -> ZResult<Vec<StoredData>>;
 
     /// Function called to get the list of all storage content (key, timestamp)
     /// The latest Timestamp corresponding to each key is either the timestamp of the delete or put whichever is the latest.
-    async fn get_all_entries(&self) -> ZResult<Vec<(OwnedKeyExpr, Timestamp)>>;
+    /// Remember to fetch the entry corresponding to the `None` key
+    async fn get_all_entries(&self) -> ZResult<Vec<(Option<OwnedKeyExpr>, Timestamp)>>;
 }
 
 /// A wrapper around the [`zenoh::queryable::Query`] allowing to call the

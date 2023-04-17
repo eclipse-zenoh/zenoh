@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -34,6 +34,7 @@ pub use zenoh_protocol::core::Reliability;
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) scope: Option<KeyExpr<'static>>,
     pub(crate) origin: Locality,
     pub(crate) callback: Callback<'static, Sample>,
 }
@@ -287,11 +288,34 @@ impl From<PushMode> for SubMode {
 #[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
+    #[cfg(feature = "unstable")]
+    pub session: SessionRef<'a>,
+    #[cfg(not(feature = "unstable"))]
     pub(crate) session: SessionRef<'a>,
+
+    #[cfg(feature = "unstable")]
+    pub key_expr: ZResult<KeyExpr<'b>>,
+    #[cfg(not(feature = "unstable"))]
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
+
+    #[cfg(feature = "unstable")]
+    pub reliability: Reliability,
+    #[cfg(not(feature = "unstable"))]
     pub(crate) reliability: Reliability,
+
+    #[cfg(feature = "unstable")]
+    pub mode: Mode,
+    #[cfg(not(feature = "unstable"))]
     pub(crate) mode: Mode,
+
+    #[cfg(feature = "unstable")]
+    pub origin: Locality,
+    #[cfg(not(feature = "unstable"))]
     pub(crate) origin: Locality,
+
+    #[cfg(feature = "unstable")]
+    pub handler: Handler,
+    #[cfg(not(feature = "unstable"))]
     pub(crate) handler: Handler,
 }
 
@@ -503,6 +527,7 @@ where
         session
             .declare_subscriber_inner(
                 &key_expr,
+                &None,
                 self.origin,
                 callback,
                 &SubInfo {
@@ -554,6 +579,7 @@ where
         session
             .declare_subscriber_inner(
                 &key_expr,
+                &None,
                 self.origin,
                 callback,
                 &SubInfo {

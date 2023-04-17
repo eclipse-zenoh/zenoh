@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -87,6 +87,7 @@ pub struct Reply {
 pub(crate) struct QueryState {
     pub(crate) nb_final: usize,
     pub(crate) selector: Selector<'static>,
+    pub(crate) scope: Option<KeyExpr<'static>>,
     pub(crate) reception_mode: ConsolidationMode,
     pub(crate) replies: Option<HashMap<OwnedKeyExpr, Reply>>,
     pub(crate) callback: Callback<'static, Reply>,
@@ -117,6 +118,7 @@ pub(crate) struct QueryState {
 pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) session: &'a Session,
     pub(crate) selector: ZResult<Selector<'b>>,
+    pub(crate) scope: ZResult<Option<KeyExpr<'b>>>,
     pub(crate) target: QueryTarget,
     pub(crate) consolidation: QueryConsolidation,
     pub(crate) destination: Locality,
@@ -150,6 +152,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
         let GetBuilder {
             session,
             selector,
+            scope,
             target,
             consolidation,
             destination,
@@ -160,6 +163,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
         GetBuilder {
             session,
             selector,
+            scope,
             target,
             consolidation,
             destination,
@@ -227,6 +231,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
         let GetBuilder {
             session,
             selector,
+            scope,
             target,
             consolidation,
             destination,
@@ -237,6 +242,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
         GetBuilder {
             session,
             selector,
+            scope,
             target,
             consolidation,
             destination,
@@ -278,7 +284,6 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     }
 
     /// Set query value.
-    #[zenoh_macros::unstable]
     #[inline]
     pub fn with_value<IntoValue>(mut self, value: IntoValue) -> Self
     where
@@ -298,6 +303,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         let Self {
             session,
             selector,
+            scope,
             target,
             consolidation,
             destination,
@@ -308,6 +314,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         Self {
             session,
             selector: selector.and_then(|s| s.accept_any_keyexpr(accept == ReplyKeyExpr::Any)),
+            scope,
             target,
             consolidation,
             destination,
@@ -355,6 +362,7 @@ where
         self.session
             .query(
                 &self.selector?,
+                &self.scope?,
                 self.target,
                 self.consolidation,
                 self.destination,

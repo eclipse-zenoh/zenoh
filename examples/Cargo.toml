@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022 ZettaScale Technology
+# Copyright (c) 2023 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -27,6 +27,7 @@ readme = "README.md"
 
 [features]
 shared-memory = ["zenoh/shared-memory"]
+unstable = ["zenoh/unstable"]
 
 [dependencies]
 async-std = { workspace = true, features = ["attributes"] }
@@ -117,6 +118,21 @@ path = "examples/z_get.rs"
 [[example]]
 name = "z_forward"
 path = "examples/z_forward.rs"
+
+[[example]]
+name = "z_liveliness"
+path = "examples/z_liveliness.rs"
+required-features = ["unstable"]
+
+[[example]]
+name = "z_sub_liveliness"
+path = "examples/z_sub_liveliness.rs"
+required-features = ["unstable"]
+
+[[example]]
+name = "z_get_liveliness"
+path = "examples/z_get_liveliness.rs"
+required-features = ["unstable"]
 
 [[example]]
 name = "z_pub_thr"

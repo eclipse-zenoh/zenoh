@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -266,7 +266,7 @@ impl TransportPeerEventHandler for RuntimeSession {
             if data.reply_context.is_none() {
                 let face = &self.main_handler.face.state;
                 full_reentrant_route_data(
-                    &self.main_handler.tables,
+                    &self.main_handler.tables.tables,
                     face,
                     &data.key,
                     msg.channel,

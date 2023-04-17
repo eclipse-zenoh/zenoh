@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -176,8 +176,10 @@ impl Default for LinkRxConf {
     }
 }
 
+// Make explicit the value and ignore clippy warning
+#[allow(clippy::derivable_impls)]
 impl Default for SharedMemoryConf {
     fn default() -> Self {
-        Self { enabled: true }
+        Self { enabled: false }
     }
 }

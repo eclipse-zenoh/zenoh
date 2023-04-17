@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::sync::Arc;
-use log::trace;
-use zenoh::prelude::r#async::*;
 use zenoh::Session;
 use zenoh_backend_traits::config::StorageConfig;
 use zenoh_result::ZResult;
@@ -25,18 +23,10 @@ pub enum StorageMessage {
     GetStatus(async_std::channel::Sender<serde_json::Value>),
 }
 
-pub struct StoreIntercept {
-    pub storage: Box<dyn zenoh_backend_traits::Storage>,
-    pub in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-    pub out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-}
-
 pub(crate) async fn start_storage(
-    storage: Box<dyn zenoh_backend_traits::Storage>,
+    store_intercept: super::StoreIntercept,
     config: StorageConfig,
     admin_key: String,
-    in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
-    out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
 ) -> ZResult<flume::Sender<StorageMessage>> {
     // Ex: @/router/390CEC11A1E34977A1C609A35BC015E6/status/plugins/storage_manager/storages/demo1 -> 390CEC11A1E34977A1C609A35BC015E6/demo1 (/<type> needed????)
@@ -45,44 +35,17 @@ pub(crate) async fn start_storage(
     let storage_name = parts[7];
     let name = format!("{uuid}/{storage_name}");
 
-    trace!("Start storage {} on {}", name, config.key_expr);
+    log::trace!("Start storage {} on {}", name, config.key_expr);
 
     let (tx, rx) = flume::bounded(1);
 
     async_std::task::spawn(async move {
-        let store_intercept = StoreIntercept {
-            storage,
-            in_interceptor,
-            out_interceptor,
-        };
-
         // If a configuration for replica is present, we initialize a replica, else only a storage service
         // A replica contains a storage service and all metadata required for anti-entropy
-        match config.replica_config {
-            Some(replica_config) => {
-                Replica::start(
-                    replica_config,
-                    zenoh.clone(),
-                    store_intercept,
-                    config.key_expr,
-                    config.complete,
-                    &name,
-                    rx,
-                )
-                .await
-            }
-            None => {
-                StorageService::start(
-                    zenoh.clone(),
-                    config.key_expr,
-                    config.complete,
-                    &name,
-                    store_intercept,
-                    rx,
-                    None,
-                )
-                .await
-            }
+        if config.replica_config.is_some() {
+            Replica::start(zenoh.clone(), store_intercept, config, &name, rx).await;
+        } else {
+            StorageService::start(zenoh.clone(), config, &name, store_intercept, rx, None).await;
         }
     });
 

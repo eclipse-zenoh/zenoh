@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -84,6 +84,8 @@ impl std::fmt::Display for Value {
         )
     }
 }
+
+impl std::error::Error for Value {}
 
 // Shared memory conversion
 #[cfg(feature = "shared-memory")]

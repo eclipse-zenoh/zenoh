@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -90,7 +90,7 @@ impl Writer for &mut BBuf {
         self.capacity() - self.len()
     }
 
-    fn with_slot<F>(&mut self, len: usize, f: F) -> Result<(), DidntWrite>
+    fn with_slot<F>(&mut self, len: usize, f: F) -> Result<NonZeroUsize, DidntWrite>
     where
         F: FnOnce(&mut [u8]) -> usize,
     {
@@ -98,9 +98,10 @@ impl Writer for &mut BBuf {
             return Err(DidntWrite);
         }
 
-        self.len += f(self.as_writable_slice());
+        let written = f(self.as_writable_slice());
+        self.len += written;
 
-        Ok(())
+        NonZeroUsize::new(written).ok_or(DidntWrite)
     }
 }
 

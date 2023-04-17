@@ -164,9 +164,14 @@ See other examples of Zenoh usage in [examples/](examples)
 
 -------------------------------
 ## Plugins
+
+> :warning: **WARNING** :warning: : As Rust doesn't have a stable ABI, the plugins should be
+built with the exact same Rust version than `zenohd`, and using for `zenoh` dependency the same version (or commit number) than 'zenohd'.
+Otherwise, incompatibilities in memory mapping of shared types between `zenohd` and the library can lead to a `"SIGSEV"` crash.
+
 By default the Zenoh router is delivered or built with 2 plugins. These may be configured through a configuration file, or through individual changes to the configuration via the `--cfg` CLI option or via zenoh puts on individual parts of the configuration.
 
-WARNING: since `v0.6`, `zenohd` no longer loads every available plugin at startup. Instead, only configured plugins are loaded (after processing `--cfg` and `--plugin` options). Once `zenohd` is running, plugins can be hot-loaded and, if they support it, reconfigured at runtime by editing their configuration through the adminspace.  
+> :warning: **WARNING** :warning: : since `v0.6`, `zenohd` no longer loads every available plugin at startup. Instead, only configured plugins are loaded (after processing `--cfg` and `--plugin` options). Once `zenohd` is running, plugins can be hot-loaded and, if they support it, reconfigured at runtime by editing their configuration through the adminspace.  
 
 Note that the REST plugin is added to the configuration by the default value of the `--rest-http-port` CLI argument.
 

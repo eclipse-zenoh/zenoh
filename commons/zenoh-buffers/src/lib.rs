@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -12,6 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
+//!
 //! Provide different buffer implementations used for serialization and deserialization.
 #![no_std]
 extern crate alloc;
@@ -50,7 +56,7 @@ pub mod writer {
         }
         /// Provides a buffer of exactly `len` uninitialized bytes to `f` to allow in-place writing.
         /// `f` must return the number of bytes it actually wrote.
-        fn with_slot<F>(&mut self, len: usize, f: F) -> Result<(), DidntWrite>
+        fn with_slot<F>(&mut self, len: usize, f: F) -> Result<NonZeroUsize, DidntWrite>
         where
             F: FnOnce(&mut [u8]) -> usize;
     }

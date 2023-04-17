@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022 ZettaScale Technology
+# Copyright (c) 2023 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -56,6 +56,12 @@ jobs:
           command: clippy
           args: --all-targets --features unstable -- -D warnings
 
+      - name: Clippy shared-memory
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --all-targets --features shared-memory -- -D warnings
+
   test:
     name: Run tests on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -81,7 +87,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --verbose --all-targets
+          args: --all-targets --features shared-memory --verbose
 
       - name: Install nextest
         run: cargo install cargo-nextest --locked

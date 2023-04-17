@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -587,7 +587,7 @@ pub async fn linkstate_data(
     _key: &KeyExpr<'_>,
     _args: &str,
 ) -> (ZBuf, Encoding) {
-    let tables = zread!(context.runtime.router.tables);
+    let tables = zread!(context.runtime.router.tables.tables);
     let net = match net_type {
         WhatAmI::Router => tables.routers_net.as_ref(),
         _ => tables.peers_net.as_ref(),

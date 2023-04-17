@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -298,7 +298,7 @@ validated_struct::validator! {
             },
             pub shared_memory: SharedMemoryConf {
                 /// Whether shared memory is enabled or not.
-                /// If set to `false`, the shared-memory transport will be disabled. (default `true`).
+                /// If set to `true`, the shared-memory transport will be enabled. (default `false`).
                 enabled: bool,
             },
             pub auth: #[derive(Default)]

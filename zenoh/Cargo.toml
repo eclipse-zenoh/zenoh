@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022 ZettaScale Technology
+# Copyright (c) 2023 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -55,7 +55,6 @@ default = [
     "transport_udp",
     "transport_unixsock-stream",
     "transport_ws",
-    "shared-memory",
 ]
 
 [dependencies]
@@ -102,6 +101,9 @@ zenoh-util = { path = "../commons/zenoh-util/" }
 
 [build-dependencies]
 rustc_version = { workspace = true }
+
+[dev-dependencies]
+zenoh = { path = ".", features = ["unstable"] }
 
 [lib]
 name = "zenoh"
