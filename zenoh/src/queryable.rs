@@ -32,8 +32,7 @@ use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::WireExpr;
 use zenoh_result::ZResult;
 
-/// Structs received by a [`Queryable`](Queryable).
-pub struct Query {
+pub(crate) struct QueryInner {
     /// The key expression of this Query.
     pub(crate) key_expr: KeyExpr<'static>,
     /// This Query's selector parameters.
@@ -45,32 +44,38 @@ pub struct Query {
     pub(crate) replies_sender: flume::Sender<Sample>,
 }
 
+/// Structs received by a [`Queryable`](Queryable).
+#[derive(Clone)]
+pub struct Query {
+    pub(crate) inner: Arc<QueryInner>,
+}
+
 impl Query {
     /// The full [`Selector`] of this Query.
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
         Selector {
-            key_expr: self.key_expr.clone(),
-            parameters: (&self.parameters).into(),
+            key_expr: self.inner.key_expr.clone(),
+            parameters: (&self.inner.parameters).into(),
         }
     }
 
     /// The key selector part of this Query.
     #[inline(always)]
     pub fn key_expr(&self) -> &KeyExpr<'static> {
-        &self.key_expr
+        &self.inner.key_expr
     }
 
     /// This Query's selector parameters.
     #[inline(always)]
     pub fn parameters(&self) -> &str {
-        &self.parameters
+        &self.inner.parameters
     }
 
     /// This Query's value.
     #[inline(always)]
     pub fn value(&self) -> Option<&Value> {
-        self.value.as_ref()
+        self.inner.value.as_ref()
     }
 
     /// Sends a reply to this Query.
@@ -108,8 +113,8 @@ impl Query {
 impl fmt::Debug for Query {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Query")
-            .field("key_selector", &self.key_expr)
-            .field("parameters", &self.parameters)
+            .field("key_selector", &self.inner.key_expr)
+            .field("parameters", &self.inner.parameters)
             .finish()
     }
 }
@@ -119,7 +124,7 @@ impl fmt::Display for Query {
         f.debug_struct("Query")
             .field(
                 "selector",
-                &format!("{}{}", &self.key_expr, &self.parameters),
+                &format!("{}{}", &self.inner.key_expr, &self.inner.parameters),
             )
             .finish()
     }
@@ -146,6 +151,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                     bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.query.key_expr())
                 }
                 self.query
+                    .inner
                     .replies_sender
                     .send(sample)
                     .map_err(|e| zerror!("{}", e).into())
@@ -185,7 +191,7 @@ impl<'a> AsyncResolve for ReplyBuilder<'a> {
                 {
                     Err(Some(zerror!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.query.key_expr()).into()))
                 } else {
-                    Ok(self.query.replies_sender.send_async(sample))
+                    Ok(self.query.inner.replies_sender.send_async(sample))
                 }
             }
             Err(_) => Err(Some(
