@@ -82,6 +82,18 @@ impl AdminSpace {
             Arc::new(peers_linkstate_data),
         );
         handlers.insert(
+            format!("@/router/{zid_str}/subscriber/**")
+                .try_into()
+                .unwrap(),
+            Arc::new(subscribers_data),
+        );
+        handlers.insert(
+            format!("@/router/{zid_str}/queryable/**")
+                .try_into()
+                .unwrap(),
+            Arc::new(queryables_data),
+        );
+        handlers.insert(
             format!("@/router/{zid_str}/status/plugins/**")
                 .try_into()
                 .unwrap(),
@@ -586,6 +598,40 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
         .res()
     {
         log::error!("Error sending AdminSpace reply: {:?}", e);
+    }
+}
+
+fn subscribers_data(context: &AdminContext, query: Query) {
+    let tables = zread!(context.runtime.router.tables.tables);
+    for sub in tables.router_subs.iter() {
+        let key = KeyExpr::try_from(format!(
+            "@/router/{}/subscriber/{}",
+            context.zid_str,
+            sub.expr()
+        ))
+        .unwrap();
+        if query.key_expr().intersects(&key) {
+            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
+                log::error!("Error sending AdminSpace reply: {:?}", e);
+            }
+        }
+    }
+}
+
+fn queryables_data(context: &AdminContext, query: Query) {
+    let tables = zread!(context.runtime.router.tables.tables);
+    for qabl in tables.router_qabls.iter() {
+        let key = KeyExpr::try_from(format!(
+            "@/router/{}/queryable/{}",
+            context.zid_str,
+            qabl.expr()
+        ))
+        .unwrap();
+        if query.key_expr().intersects(&key) {
+            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
+                log::error!("Error sending AdminSpace reply: {:?}", e);
+            }
+        }
     }
 }
 
