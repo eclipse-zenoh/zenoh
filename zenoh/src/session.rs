@@ -37,8 +37,6 @@ use crate::SampleKind;
 use crate::Selector;
 use crate::Value;
 use async_std::task;
-use flume::bounded;
-use futures::StreamExt;
 use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -1603,52 +1601,24 @@ impl Session {
         };
 
         let parameters = parameters.to_owned();
-        let (replies_sender, replies_receiver) =
-            bounded::<Sample>(*API_REPLY_EMISSION_CHANNEL_SIZE);
 
         let zid = self.runtime.zid; // @TODO build/use prebuilt specific zid
-
-        if local {
-            let this = self.clone();
-            task::spawn(async move {
-                while let Some(sample) = replies_receiver.stream().next().await {
-                    let (key_expr, payload, data_info) = sample.split();
-                    this.send_reply_data(
-                        qid,
-                        zid,
-                        key_expr.to_wire(&this).to_owned(),
-                        Some(data_info),
-                        payload,
-                    );
-                }
-                this.send_reply_final(qid);
-            });
-        } else {
-            let this = self.clone();
-            task::spawn(async move {
-                while let Some(sample) = replies_receiver.stream().next().await {
-                    let (key_expr, payload, data_info) = sample.split();
-                    primitives.send_reply_data(
-                        qid,
-                        zid,
-                        key_expr.to_wire(&this).to_owned(),
-                        Some(data_info),
-                        payload,
-                    );
-                }
-                primitives.send_reply_final(qid);
-            });
-        }
 
         let query = Query {
             inner: Arc::new(QueryInner {
                 key_expr,
                 parameters,
-                replies_sender,
                 value: body.map(|b| Value {
                     payload: b.payload,
                     encoding: b.data_info.encoding.unwrap_or_default(),
                 }),
+                qid,
+                zid,
+                primitives: if local {
+                    Arc::new(self.clone())
+                } else {
+                    primitives
+                },
             }),
         };
         for callback in callbacks.iter() {
