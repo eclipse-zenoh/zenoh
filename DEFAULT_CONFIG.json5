@@ -245,7 +245,7 @@
 //  /// Plugins are only loaded if present in the configuration. When starting
 //  /// Once loaded, they may react to changes in the configuration made through the zenoh instance's adminspace.
 //  plugins: {
-//    /// If no `__path__` is given to a plugin, zenohd will automatically search for a shared library matching the plugin's name (here, `libzplugin_rest.so` would be searched for on linux)
+//    /// If no `__path__` is given to a plugin, zenohd will automatically search for a shared library matching the plugin's name (here, `libzenoh_plugin_rest.so` would be searched for on linux)
 //
 //    /// Configure the REST API plugin
 //    rest: {
@@ -258,8 +258,8 @@
 //    storage_manager: {
 //      /// When a path is present, automatic search is disabled, and zenohd will instead select the first path which manages to load.
 //      __path__: [
-//        "./target/release/libzplugin_storage_manager.so",
-//        "./target/release/libzplugin_storage_manager.dylib",
+//        "./target/release/libzenoh_plugin_storage_manager.so",
+//        "./target/release/libzenoh_plugin_storage_manager.dylib",
 //      ],
 //      /// The "memory" volume is always available, but you may create other volumes here, with various backends to support the actual storing.
 //      volumes: {

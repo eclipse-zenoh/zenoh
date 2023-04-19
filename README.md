@@ -148,7 +148,7 @@ See other examples of Zenoh usage in [examples/](examples)
   * `--no-timestamp`: By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one.
     This option disables this feature.
   * `-P, --plugin [<PLUGIN_NAME> | <PLUGIN_NAME>:<LIBRARY_PATH>]...`: A [plugin](https://zenoh.io/docs/manual/plugins/) that must be loaded. Accepted values:
-     - a plugin name; zenohd will search for a library named `libzplugin_<name>.so` on Unix, `libzplugin_<PLUGIN_NAME>.dylib` on MacOS or `zplugin_<PLUGIN_NAME>.dll` on Windows.
+     - a plugin name; zenohd will search for a library named `libzenoh_plugin_<name>.so` on Unix, `libzenoh_plugin_<PLUGIN_NAME>.dylib` on MacOS or `zenoh_plugin_<PLUGIN_NAME>.dll` on Windows.
      - `"<PLUGIN_NAME>:<LIBRARY_PATH>"`; the plugin will be loaded from library file at `<LIBRARY_PATH>`.
 
     Repeat this option to load several plugins.
