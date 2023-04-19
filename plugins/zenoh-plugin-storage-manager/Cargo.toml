@@ -17,13 +17,7 @@ name = "zenoh-plugin-storage-manager"
 version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
-authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Julien Enoch <julien@enoch.fr>",
-    "Olivier Hécart <olivier.hecart@zettascale.tech>",
-    "Luca Cominardi <luca.cominardi@zettascale.tech>",
-    "Sreeja Nair <sreeja.nair@zettascale.tech>",
-]
+authors = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 categories = { workspace = true }
@@ -56,18 +50,14 @@ urlencoding = { workspace = true }
 zenoh = { path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
 zenoh-collections = { path = "../../commons/zenoh-collections/" }
 zenoh-core = { path = "../../commons/zenoh-core/" }
+zenoh-keyexpr = { path = "../../commons/zenoh-keyexpr/" }
 zenoh-plugin-trait = { path = "../zenoh-plugin-trait/", default-features = false }
 zenoh-result = { path = "../../commons/zenoh-result/" }
 zenoh-util = { path = "../../commons/zenoh-util/" }
-zenoh-keyexpr = { path = "../../commons/zenoh-keyexpr/" }
 zenoh_backend_traits = { path = "../zenoh-backend-traits/" }
 
 [build-dependencies]
 rustc_version = { workspace = true }
-
-[dev-dependencies]
-async-global-executor = { workspace = true }
-zenoh = { version = "0.7.0-rc", path = "../../zenoh/", default-features = true, features = [ "unstable" ] }
 
 [package.metadata.deb]
 name = "zenoh-plugin-storage-manager"
