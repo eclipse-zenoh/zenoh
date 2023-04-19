@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -21,28 +21,38 @@ use crate::query::ReplyKeyExpr;
 use crate::SessionRef;
 use crate::Undeclarable;
 
-use futures::FutureExt;
 use std::fmt;
-use std::future::{Future, Ready};
+use std::future::Ready;
 use std::ops::Deref;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::WireExpr;
 use zenoh_result::ZResult;
+use zenoh_transport::Primitives;
 
-/// Structs received by a [`Queryable`](Queryable).
-pub struct Query {
+pub(crate) struct QueryInner {
     /// The key expression of this Query.
     pub(crate) key_expr: KeyExpr<'static>,
     /// This Query's selector parameters.
     pub(crate) parameters: String,
     /// This Query's body.
     pub(crate) value: Option<Value>,
-    /// The sender to use to send replies to this query.
-    /// When this sender is dropped, the reply is finalized.
-    pub(crate) replies_sender: flume::Sender<Sample>,
+
+    pub(crate) qid: ZInt,
+    pub(crate) zid: ZenohId,
+    pub(crate) primitives: Arc<dyn Primitives>,
+}
+
+impl Drop for QueryInner {
+    fn drop(&mut self) {
+        self.primitives.send_reply_final(self.qid);
+    }
+}
+
+/// Structs received by a [`Queryable`](Queryable).
+#[derive(Clone)]
+pub struct Query {
+    pub(crate) inner: Arc<QueryInner>,
 }
 
 impl Query {
@@ -50,27 +60,27 @@ impl Query {
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
         Selector {
-            key_expr: self.key_expr.clone(),
-            parameters: (&self.parameters).into(),
+            key_expr: self.inner.key_expr.clone(),
+            parameters: (&self.inner.parameters).into(),
         }
     }
 
     /// The key selector part of this Query.
     #[inline(always)]
     pub fn key_expr(&self) -> &KeyExpr<'static> {
-        &self.key_expr
+        &self.inner.key_expr
     }
 
     /// This Query's selector parameters.
     #[inline(always)]
     pub fn parameters(&self) -> &str {
-        &self.parameters
+        &self.inner.parameters
     }
 
     /// This Query's value.
     #[inline(always)]
     pub fn value(&self) -> Option<&Value> {
-        self.value.as_ref()
+        self.inner.value.as_ref()
     }
 
     /// Sends a reply to this Query.
@@ -108,8 +118,8 @@ impl Query {
 impl fmt::Debug for Query {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("Query")
-            .field("key_selector", &self.key_expr)
-            .field("parameters", &self.parameters)
+            .field("key_selector", &self.inner.key_expr)
+            .field("parameters", &self.inner.parameters)
             .finish()
     }
 }
@@ -119,7 +129,7 @@ impl fmt::Display for Query {
         f.debug_struct("Query")
             .field(
                 "selector",
-                &format!("{}{}", &self.key_expr, &self.parameters),
+                &format!("{}{}", &self.inner.key_expr, &self.inner.parameters),
             )
             .finish()
     }
@@ -145,53 +155,29 @@ impl SyncResolve for ReplyBuilder<'_> {
                 {
                     bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.query.key_expr())
                 }
-                self.query
-                    .replies_sender
-                    .send(sample)
-                    .map_err(|e| zerror!("{}", e).into())
+                let (key_expr, payload, data_info) = sample.split();
+                self.query.inner.primitives.send_reply_data(
+                    self.query.inner.qid,
+                    self.query.inner.zid,
+                    WireExpr {
+                        scope: 0,
+                        suffix: std::borrow::Cow::Borrowed(key_expr.as_str()),
+                    },
+                    Some(data_info),
+                    payload,
+                );
+                Ok(())
             }
             Err(_) => Err(zerror!("Replying errors is not yet supported!").into()),
         }
     }
 }
 
-/// The future returned by a [`ReplyBuilder`] when using async.
-#[must_use = "futures do nothing unless you `.await` or poll them"]
-pub struct ReplyFuture<'a>(
-    Result<flume::r#async::SendFut<'a, Sample>, Option<zenoh_result::Error>>,
-);
-
-impl Future for ReplyFuture<'_> {
-    type Output = ZResult<()>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match &mut self.get_mut().0 {
-            Ok(sender) => sender.poll_unpin(cx).map_err(|e| zerror!(e).into()),
-            Err(e) => Poll::Ready(Err(e
-                .take()
-                .unwrap_or_else(|| zerror!("Overpolling of ReplyFuture detected").into()))),
-        }
-    }
-}
-
 impl<'a> AsyncResolve for ReplyBuilder<'a> {
-    type Future = ReplyFuture<'a>;
+    type Future = Ready<Self::To>;
 
     fn res_async(self) -> Self::Future {
-        ReplyFuture(match self.result {
-            Ok(sample) => {
-                if !self.query._accepts_any_replies().unwrap_or(false)
-                    && !self.query.key_expr().intersects(&sample.key_expr)
-                {
-                    Err(Some(zerror!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.query.key_expr()).into()))
-                } else {
-                    Ok(self.query.replies_sender.send_async(sample))
-                }
-            }
-            Err(_) => Err(Some(
-                zerror!("Replying errors is not yet supported!").into(),
-            )),
-        })
+        std::future::ready(self.res_sync())
     }
 }
 

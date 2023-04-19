@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -37,8 +37,6 @@ use crate::SampleKind;
 use crate::Selector;
 use crate::Value;
 use async_std::task;
-use flume::bounded;
-use futures::StreamExt;
 use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -1562,11 +1560,11 @@ impl Session {
         _consolidation: ConsolidationMode,
         body: Option<QueryBody>,
     ) {
-        let (primitives, key_expr, senders) = {
+        let (primitives, key_expr, callbacks) = {
             let state = zread!(self.state);
             match state.wireexpr_to_keyexpr(key_expr, local) {
                 Ok(key_expr) => {
-                    let senders = state
+                    let callbacks = state
                         .queryables
                         .values()
                         .filter(
@@ -1592,7 +1590,7 @@ impl Session {
                     (
                         state.primitives.as_ref().unwrap().clone(),
                         key_expr.into_owned(),
-                        senders,
+                        callbacks,
                     )
                 }
                 Err(err) => {
@@ -1603,54 +1601,29 @@ impl Session {
         };
 
         let parameters = parameters.to_owned();
-        let (rep_sender, rep_receiver) = bounded::<Sample>(*API_REPLY_EMISSION_CHANNEL_SIZE);
 
         let zid = self.runtime.zid; // @TODO build/use prebuilt specific zid
 
-        if local {
-            let this = self.clone();
-            task::spawn(async move {
-                while let Some(sample) = rep_receiver.stream().next().await {
-                    let (key_expr, payload, data_info) = sample.split();
-                    this.send_reply_data(
-                        qid,
-                        zid,
-                        key_expr.to_wire(&this).to_owned(),
-                        Some(data_info),
-                        payload,
-                    );
-                }
-                this.send_reply_final(qid);
-            });
-        } else {
-            let this = self.clone();
-            task::spawn(async move {
-                while let Some(sample) = rep_receiver.stream().next().await {
-                    let (key_expr, payload, data_info) = sample.split();
-                    primitives.send_reply_data(
-                        qid,
-                        zid,
-                        key_expr.to_wire(&this).to_owned(),
-                        Some(data_info),
-                        payload,
-                    );
-                }
-                primitives.send_reply_final(qid);
-            });
-        }
-
-        for req_sender in senders.iter() {
-            req_sender(Query {
-                key_expr: key_expr.clone().into_owned(),
-                parameters: parameters.clone(),
-                replies_sender: rep_sender.clone(),
-                value: body.as_ref().map(|b| Value {
-                    payload: b.payload.clone(),
-                    encoding: b.data_info.encoding.as_ref().cloned().unwrap_or_default(),
+        let query = Query {
+            inner: Arc::new(QueryInner {
+                key_expr,
+                parameters,
+                value: body.map(|b| Value {
+                    payload: b.payload,
+                    encoding: b.data_info.encoding.unwrap_or_default(),
                 }),
-            });
+                qid,
+                zid,
+                primitives: if local {
+                    Arc::new(self.clone())
+                } else {
+                    primitives
+                },
+            }),
+        };
+        for callback in callbacks.iter() {
+            callback(query.clone());
         }
-        drop(rep_sender); // all senders need to be dropped for the channel to close
     }
 }
 
