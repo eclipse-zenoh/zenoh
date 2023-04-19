@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -209,15 +209,26 @@ pub fn declare_router_subscription(
 ) {
     match rtables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
-            let mut fullexpr = prefix.expr();
-            fullexpr.push_str(expr.suffix.as_ref());
-            let matches = keyexpr::new(fullexpr.as_str())
-                .map(|ke| Resource::get_matches(&rtables, ke))
-                .unwrap_or_default();
-            drop(rtables);
-            let mut wtables = zwrite!(tables.tables);
-            let mut res = Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-            Resource::match_resource(&wtables, &mut res, matches);
+            let res = Resource::get_resource(&prefix, &expr.suffix);
+            let (mut res, mut wtables) =
+                if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
+                    drop(rtables);
+                    let wtables = zwrite!(tables.tables);
+                    (res.unwrap(), wtables)
+                } else {
+                    let mut fullexpr = prefix.expr();
+                    fullexpr.push_str(expr.suffix.as_ref());
+                    let mut matches = keyexpr::new(fullexpr.as_str())
+                        .map(|ke| Resource::get_matches(&rtables, ke))
+                        .unwrap_or_default();
+                    drop(rtables);
+                    let mut wtables = zwrite!(tables.tables);
+                    let mut res =
+                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+                    matches.push(Arc::downgrade(&res));
+                    Resource::match_resource(&wtables, &mut res, matches);
+                    (res, wtables)
+                };
             register_router_subscription(&mut wtables, face, &mut res, sub_info, router);
             disable_matches_data_routes(&mut wtables, &mut res);
             drop(wtables);
@@ -276,15 +287,26 @@ pub fn declare_peer_subscription(
 ) {
     match rtables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
-            let mut fullexpr = prefix.expr();
-            fullexpr.push_str(expr.suffix.as_ref());
-            let matches = keyexpr::new(fullexpr.as_str())
-                .map(|ke| Resource::get_matches(&rtables, ke))
-                .unwrap_or_default();
-            drop(rtables);
-            let mut wtables = zwrite!(tables.tables);
-            let mut res = Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-            Resource::match_resource(&wtables, &mut res, matches);
+            let res = Resource::get_resource(&prefix, &expr.suffix);
+            let (mut res, mut wtables) =
+                if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
+                    drop(rtables);
+                    let wtables = zwrite!(tables.tables);
+                    (res.unwrap(), wtables)
+                } else {
+                    let mut fullexpr = prefix.expr();
+                    fullexpr.push_str(expr.suffix.as_ref());
+                    let mut matches = keyexpr::new(fullexpr.as_str())
+                        .map(|ke| Resource::get_matches(&rtables, ke))
+                        .unwrap_or_default();
+                    drop(rtables);
+                    let mut wtables = zwrite!(tables.tables);
+                    let mut res =
+                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+                    matches.push(Arc::downgrade(&res));
+                    Resource::match_resource(&wtables, &mut res, matches);
+                    (res, wtables)
+                };
             register_peer_subscription(&mut wtables, face, &mut res, sub_info, peer);
             if wtables.whatami == WhatAmI::Router {
                 let mut propa_sub_info = sub_info.clone();
@@ -363,16 +385,26 @@ pub fn declare_client_subscription(
     log::debug!("Register client subscription");
     match rtables.get_mapping(face, &expr.scope).cloned() {
         Some(mut prefix) => {
-            let mut fullexpr = prefix.expr();
-            fullexpr.push_str(expr.suffix.as_ref());
-            log::debug!("Register client subscription {}", fullexpr);
-            let matches = keyexpr::new(fullexpr.as_str())
-                .map(|ke| Resource::get_matches(&rtables, ke))
-                .unwrap_or_default();
-            drop(rtables);
-            let mut wtables = zwrite!(tables.tables);
-            let mut res = Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-            Resource::match_resource(&wtables, &mut res, matches);
+            let res = Resource::get_resource(&prefix, &expr.suffix);
+            let (mut res, mut wtables) =
+                if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
+                    drop(rtables);
+                    let wtables = zwrite!(tables.tables);
+                    (res.unwrap(), wtables)
+                } else {
+                    let mut fullexpr = prefix.expr();
+                    fullexpr.push_str(expr.suffix.as_ref());
+                    let mut matches = keyexpr::new(fullexpr.as_str())
+                        .map(|ke| Resource::get_matches(&rtables, ke))
+                        .unwrap_or_default();
+                    drop(rtables);
+                    let mut wtables = zwrite!(tables.tables);
+                    let mut res =
+                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+                    matches.push(Arc::downgrade(&res));
+                    Resource::match_resource(&wtables, &mut res, matches);
+                    (res, wtables)
+                };
 
             register_client_subscription(&mut wtables, face, &mut res, sub_info);
             let mut propa_sub_info = sub_info.clone();
