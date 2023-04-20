@@ -12,7 +12,7 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = { workspace = true }
+rust-version = "1.65.0"
 name = "nostd-check"
 version = "0.1.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -20,8 +20,8 @@ homepage = "http://zenoh.io"
 authors = [
   "Davide Della Giustina <davide.dellagiustina@zettascale.tech>",
 ]
-edition = { workspace = true }
-license = { workspace = true }
+edition = "2021"
+license = "EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
 description = "Internal crate for zenoh."
 
