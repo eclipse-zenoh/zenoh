@@ -28,7 +28,7 @@ default = ["no_mangle"]
 no_mangle = ["zenoh-plugin-trait/no_mangle"]
 
 [lib]
-name = "zplugin_storage_manager"
+name = "zenoh_plugin_storage_manager"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]

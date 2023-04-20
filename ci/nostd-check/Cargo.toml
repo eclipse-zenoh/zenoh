@@ -20,7 +20,7 @@ homepage = "http://zenoh.io"
 authors = [
   "Davide Della Giustina <davide.dellagiustina@zettascale.tech>",
 ]
-edition = "2018"
+edition = "2021"
 license = " EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
 description = "Internal crate for zenoh."

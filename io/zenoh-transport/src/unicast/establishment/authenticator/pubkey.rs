@@ -18,8 +18,10 @@ use crate::unicast::establishment::Cookie;
 use async_std::sync::Mutex;
 use async_trait::async_trait;
 use rand::SeedableRng;
-use rsa::pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey};
-use rsa::{BigUint, PaddingScheme, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey};
+use rsa::{
+    pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey},
+    BigUint, Pkcs1v15Encrypt, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey,
+};
 use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
@@ -476,7 +478,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 let nonce_bytes = wbuf;
                 let nonce_encrypted_with_alice_pubkey = init_syn_property.alice_pubkey.encrypt(
                     &mut guard.prng,
-                    PaddingScheme::PKCS1v15Encrypt,
+                    Pkcs1v15Encrypt,
                     nonce_bytes.as_slice(),
                 )?;
 
@@ -542,7 +544,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
             )
         })?;
         let nonce = self.pri_key.decrypt(
-            PaddingScheme::PKCS1v15Encrypt,
+            Pkcs1v15Encrypt,
             init_ack_property
                 .nonce_encrypted_with_alice_pubkey
                 .as_slice(),
@@ -550,11 +552,10 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
 
         // Create the OpenSyn attachment
         let mut guard = zasynclock!(self.state);
-        let nonce_encrypted_with_bob_pubkey = init_ack_property.bob_pubkey.encrypt(
-            &mut guard.prng,
-            PaddingScheme::PKCS1v15Encrypt,
-            &nonce[..],
-        )?;
+        let nonce_encrypted_with_bob_pubkey =
+            init_ack_property
+                .bob_pubkey
+                .encrypt(&mut guard.prng, Pkcs1v15Encrypt, &nonce[..])?;
         drop(guard);
 
         let open_syn_property = OpenSynProperty {
@@ -591,7 +592,7 @@ impl PeerAuthenticatorTrait for PubKeyAuthenticator {
                 })?;
 
                 let nonce_bytes = self.pri_key.decrypt(
-                    PaddingScheme::PKCS1v15Encrypt,
+                    Pkcs1v15Encrypt,
                     open_syn_property.nonce_encrypted_with_bob_pubkey.as_slice(),
                 )?;
                 let mut reader = nonce_bytes.reader();

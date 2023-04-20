@@ -389,7 +389,6 @@ impl ZenohMessage {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use crate::core::Priority;
-        use core::convert::TryInto;
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
