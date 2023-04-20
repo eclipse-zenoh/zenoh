@@ -41,6 +41,7 @@ transport_ws = ["zenoh-link/transport_ws"]
 transport_serial = ["zenoh-link/transport_serial"]
 transport_compression = []
 stats = []
+unstable = []
 
 [dependencies]
 async-executor = { workspace = true }

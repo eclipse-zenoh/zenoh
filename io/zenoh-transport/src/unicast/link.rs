@@ -24,7 +24,7 @@ use async_std::prelude::FutureExt;
 use async_std::task;
 use async_std::task::JoinHandle;
 
-#[cfg(feature = "transport_compression")]
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::Duration;
@@ -37,22 +37,22 @@ use zenoh_protocol::transport::TransportMessage;
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_sync::{RecyclingObjectPool, Signal};
 
-#[cfg(feature = "transport_compression")]
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
 const HEADER_BYTES_SIZE: usize = 2;
 
-#[cfg(feature = "transport_compression")]
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
 const COMPRESSION_BYTE_INDEX_STREAMED: usize = 2;
 
-#[cfg(feature = "transport_compression")]
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
 const COMPRESSION_BYTE_INDEX: usize = 0;
 
-#[cfg(feature = "transport_compression")]
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
 const COMPRESSION_ENABLED: u8 = 1_u8;
 
-#[cfg(feature = "transport_compression")]
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
 const COMPRESSION_DISABLED: u8 = 0_u8;
 
-#[cfg(feature = "transport_compression")]
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
 const BATCH_PAYLOAD_START_INDEX: usize = 1;
 
 #[derive(Clone)]
@@ -105,8 +105,8 @@ impl TransportLinkUnicast {
                 backoff: self.transport.config.manager.config.queue_backoff,
             };
 
-            #[cfg(feature = "transport_compression")]
-            let compression_enabled = self.transport.config.manager.config.compression_enabled;
+            #[cfg(all(feature = "unstable", feature = "transport_compression"))]
+            let is_compressed = self.transport.config.manager.config.unicast.is_compressed;
 
             // The pipeline
             let (producer, consumer) = TransmissionPipeline::make(config, conduit_tx);
@@ -122,8 +122,8 @@ impl TransportLinkUnicast {
                     keep_alive,
                     #[cfg(feature = "stats")]
                     c_transport.stats.clone(),
-                    #[cfg(feature = "transport_compression")]
-                    compression_enabled,
+                    #[cfg(all(feature = "unstable", feature = "transport_compression"))]
+                    is_compressed,
                 )
                 .await;
                 if let Err(e) = res {
@@ -205,9 +205,9 @@ async fn tx_task(
     link: LinkUnicast,
     keep_alive: Duration,
     #[cfg(feature = "stats")] stats: Arc<TransportUnicastStatsAtomic>,
-    #[cfg(feature = "transport_compression")] compression_enabled: bool,
+    #[cfg(all(feature = "unstable", feature = "transport_compression"))] is_compressed: bool,
 ) -> ZResult<()> {
-    #[cfg(feature = "transport_compression")]
+    #[cfg(all(feature = "unstable", feature = "transport_compression"))]
     let mut compression_aux_buff: Box<[u8]> = vec![0; u16::MAX.into()].into_boxed_slice();
 
     loop {
@@ -218,10 +218,10 @@ async fn tx_task(
                     #[allow(unused_mut)]
                     let mut bytes = batch.as_bytes();
 
-                    #[cfg(feature = "transport_compression")]
+                    #[cfg(all(feature = "unstable", feature = "transport_compression"))]
                     {
                         let batch_size = tx_compressed(
-                            compression_enabled,
+                            is_compressed,
                             link.is_streamed(),
                             &bytes,
                             &mut compression_aux_buff,
@@ -334,7 +334,7 @@ async fn rx_task_stream(
                 #[allow(unused_mut)]
                 let mut start_pos = 0;
 
-                #[cfg(feature = "transport_compression")]
+                #[cfg(all(feature = "unstable", feature = "transport_compression"))]
                 {
                     let is_compressed: bool = buffer[COMPRESSION_BYTE_INDEX] == COMPRESSION_ENABLED;
                     if is_compressed {
@@ -431,7 +431,7 @@ async fn rx_task_dgram(
                 #[allow(unused_mut)]
                 let mut start_pos = 0;
 
-                #[cfg(feature = "transport_compression")]
+                #[cfg(all(feature = "unstable", feature = "transport_compression"))]
                 {
                     let is_compressed: bool = buffer[COMPRESSION_BYTE_INDEX] == COMPRESSION_ENABLED;
                     if is_compressed {
@@ -483,14 +483,14 @@ async fn rx_task(
     }
 }
 
-#[cfg(feature = "transport_compression")]
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
 fn tx_compressed(
-    compression_enabled: bool,
+    is_compressed: bool,
     is_streamed: bool,
     bytes: &[u8],
     buff: &mut [u8],
 ) -> ZResult<usize> {
-    if compression_enabled {
+    if is_compressed {
         let s_pos = if is_streamed { 3 } else { 1 };
         let compression_size =
             lz4_flex::block::compress_into(&bytes[s_pos - 1..], &mut buff[s_pos..])
@@ -506,7 +506,7 @@ fn tx_compressed(
     }
 }
 
-#[cfg(feature = "transport_compression")]
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
 /// Inserts the compresion byte for batches WITH compression.
 /// The buffer is expected to contain the compression starting from byte 3 (if streamed) or 1
 /// (if not streamed).
@@ -538,7 +538,7 @@ fn set_compressed_batch_header(
     }
 }
 
-#[cfg(feature = "transport_compression")]
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
 /// Inserts the compression byte for batches without compression, that is inserting a 0 byte on the
 /// third position of the buffer and increasing the batch size from the header by 1.
 ///
