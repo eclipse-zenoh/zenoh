@@ -59,6 +59,9 @@ zenoh_backend_traits = { path = "../zenoh-backend-traits/" }
 [build-dependencies]
 rustc_version = { workspace = true }
 
+[dev-dependencies]
+async-global-executor = { workspace = true }
+
 [package.metadata.deb]
 name = "zenoh-plugin-storage-manager"
 maintainer = "zenoh-dev@eclipse.org"
