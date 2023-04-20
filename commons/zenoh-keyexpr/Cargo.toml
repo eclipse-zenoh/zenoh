@@ -35,7 +35,6 @@ serde = { workspace = true, features = ["alloc"] }
 token-cell = { workspace = true }
 zenoh-result = { path = "../zenoh-result/", default-features = false }
 
-
 [target.'cfg(not(features = "std"))'.dependencies]
 hashbrown = { workspace = true }
 
