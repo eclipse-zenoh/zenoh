@@ -67,7 +67,6 @@ impl fmt::Display for Hello {
 impl Hello {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use core::iter::FromIterator;
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
