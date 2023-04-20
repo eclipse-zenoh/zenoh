@@ -82,16 +82,16 @@ impl Default for ReplicaConfig {
 pub struct GarbageCollectionConfig {
     // The duration between two garbage collection events
     // The garbage collection will be scheduled as a periodic event with this period
-    pub garbage_collection_period: Duration,
+    pub period: Duration,
     // The metadata older than this parameter will be garbage collected
-    pub garbage_collection_delay: Duration,
+    pub lifespan: Duration,
 }
 
 impl Default for GarbageCollectionConfig {
     fn default() -> Self {
         Self {
-            garbage_collection_period: Duration::from_secs(30),
-            garbage_collection_delay: Duration::from_secs(86400),
+            period: Duration::from_secs(30),
+            lifespan: Duration::from_secs(86400),
         }
     }
 }
@@ -403,25 +403,23 @@ impl StorageConfig {
             ),
             _ => bail!("Invalid type for field `volume` of storage `{}`. Only strings or objects with at least the `id` field are accepted.", storage_name)
         };
-        let garbage_collection_config = match config.get("garbage_collection_config") {
+        let garbage_collection_config = match config.get("garbage_collection") {
             Some(s) => {
                 let mut garbage_collection_config = GarbageCollectionConfig::default();
-                if let Some(period) = s.get("garbage_collection_period") {
+                if let Some(period) = s.get("period") {
                     let period = period.to_string().parse::<u64>();
                     if let Ok(period) = period {
-                        garbage_collection_config.garbage_collection_period =
-                            Duration::from_secs(period)
+                        garbage_collection_config.period = Duration::from_secs(period)
                     } else {
-                        bail!("Invalid type for field `garbage_collection_period` in `garbage_collection_config` of storage `{}`. Only integer values are accepted.", plugin_name)
+                        bail!("Invalid type for field `period` in `garbage_collection` of storage `{}`. Only integer values are accepted.", plugin_name)
                     }
                 }
-                if let Some(delay) = s.get("garbage_collection_delay") {
-                    let delay = delay.to_string().parse::<u64>();
-                    if let Ok(delay) = delay {
-                        garbage_collection_config.garbage_collection_delay =
-                            Duration::from_secs(delay)
+                if let Some(lifespan) = s.get("lifespan") {
+                    let lifespan = lifespan.to_string().parse::<u64>();
+                    if let Ok(lifespan) = lifespan {
+                        garbage_collection_config.lifespan = Duration::from_secs(lifespan)
                     } else {
-                        bail!("Invalid type for field `garbage_collection_delay` in `garbage_collection_config` of storage `{}`. Only integer values are accepted.", plugin_name)
+                        bail!("Invalid type for field `lifespan` in `garbage_collection` of storage `{}`. Only integer values are accepted.", plugin_name)
                     }
                 }
                 garbage_collection_config

@@ -132,7 +132,7 @@ impl StorageService {
         // start periodic GC event
         let t = Timer::default();
         let gc = TimedEvent::periodic(
-            gc_config.garbage_collection_period,
+            gc_config.period,
             GarbageCollectionEvent {
                 config: gc_config,
                 tombstones: self.tombstones.clone(),
@@ -731,7 +731,7 @@ impl Timed for GarbageCollectionEvent {
     async fn run(&mut self) {
         log::trace!("Start garbage collection");
         let time_limit = NTP64::from(SystemTime::now().duration_since(UNIX_EPOCH).unwrap())
-            - NTP64::from(self.config.garbage_collection_delay);
+            - NTP64::from(self.config.lifespan);
 
         // Get lock on fields
         let mut tombstones = self.tombstones.write().await;
