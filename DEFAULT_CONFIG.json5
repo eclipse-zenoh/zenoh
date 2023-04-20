@@ -210,7 +210,7 @@
         /// When is_enabled is true, batches will be sent compressed. It does not affect the
         /// reception, which always expects compressed batches when built with the feature
         /// "transport_compression".
-        is_enabled: true,
+        enabled: true,
       },
     },
     /// Shared memory configuration
@@ -251,104 +251,105 @@
   ///
   /// Plugins configurations
   ///
-  //  /// Directories where plugins configured by name should be looked for. PLugins configured by __path__ are not subject to lookup
-  //  plugins_search_dirs: [],
-  //  /// Plugins are only loaded if present in the configuration. When starting
-  //  /// Once loaded, they may react to changes in the configuration made through the zenoh instance's adminspace.
-  //  plugins: {
-  //    /// If no `__path__` is given to a plugin, zenohd will automatically search for a shared library matching the plugin's name (here, `libzplugin_rest.so` would be searched for on linux)
-  //
-  //    /// Configure the REST API plugin
-  //    rest: {
-  //      /// Setting this option to true allows zenohd to panic should it detect issues with this plugin. Setting it to false politely asks the plugin not to panic.
-  //      __required__: true, // defaults to false
-  //      http_port: 8000,
-  //    },
-  //
-  //    /// Configure the storage manager plugin
-  //    storage_manager: {
-  //      /// When a path is present, automatic search is disabled, and zenohd will instead select the first path which manages to load.
-  //      __path__: [
-  //        "./target/release/libzplugin_storage_manager.so",
-  //        "./target/release/libzplugin_storage_manager.dylib",
-  //      ],
-  //      /// The "memory" volume is always available, but you may create other volumes here, with various backends to support the actual storing.
-  //      volumes: {
-  //        /// An influxdb backend is also available at https://github.com/eclipse-zenoh/zenoh-backend-influxdb
-  //        influxdb: {
-  //          url: "https://myinfluxdb.example",
-  //          /// Some plugins may need passwords in their configuration.
-  //          /// To avoid leaking them through the adminspace, they may be masked behind a privacy barrier.
-  //          /// any value held at the key "private" will not be shown in the adminspace.
-  //          private: {
-  //            username: "user1",
-  //            password: "pw1",
-  //          },
-  //        },
-  //        influxdb2: {
-  //          /// A second backend of the same type can be spawned using `__path__`, for examples when different DBs are needed.
-  //          backend: "influxdb",
-  //          private: {
-  //            username: "user2",
-  //            password: "pw2",
-  //          },
-  //          url: "https://localhost:8086",
-  //        },
-  //      },
-  //
-  //      /// Configure the storages supported by the volumes
-  //      storages: {
-  //        demo: {
-  //          /// Storages always need to know what set of keys they must work with. These sets are defined by a key expression.
-  //          key_expr: "demo/memory/**",
-  //          /// Storages also need to know which volume will be used to actually store their key-value pairs.
-  //          /// The "memory" volume is always available, and doesn't require any per-storage options, so requesting "memory" by string is always sufficient.
-  //          volume: "memory",
-  //        },
-  //        demo2: {
-  //          key_expr: "demo/memory2/**",
-  //          volume: "memory",
-  //          /// If multiple storages subscribing to the same key_expr should be synchronized, declare them as replicas.
-  //          /// In the absence of this configuration, a normal storage is initialized
-  //          /// Note: all the samples to be stored in replicas should be timestamped
-  //          replica_config: {
-  //            /// Specifying the parameters is optional, by default the values provided will be used.
-  //            /// Time interval between different synchronization attempts in seconds
-  //            publication_interval: 5,
-  //            /// Expected propagation delay of the network in milliseconds
-  //            propagation_delay: 200,
-  //            /// This is the chunk that you would like your data to be divide into in time, in milliseconds.
-  //            /// Higher the frequency of updates, lower the delta should be chosen
-  //            /// To be efficient, delta should be the time containing no more than 100,000 samples
-  //            delta: 1000,
-  //          }
-  //        },
-  //        demo3: {
-  //          key_expr: "demo/memory3/**",
-  //          volume: "memory",
-  //          /// A complete storage advertises itself as containing all the known keys matching the configured key expression.
-  //          /// If not configured, complete defaults to false.
-  //          complete: "true",
-  //        },
-  //        influx_demo: {
-  //          key_expr: "demo/influxdb/**",
-  //          /// This prefix will be stripped of the received keys when storing.
-  //          strip_prefix: "demo/influxdb",
-  //          /// influxdb-backed volumes need a bit more configuration, which is passed like-so:
-  //          volume: {
-  //            id: "influxdb",
-  //            db: "example",
-  //          },
-  //        },
-  //        influx_demo2: {
-  //          key_expr: "demo/influxdb2/**",
-  //          strip_prefix: "demo/influxdb2",
-  //          volume: {
-  //            id: "influxdb2",
-  //            db: "example",
-  //          },
-  //        },
-  //      },
-  //    },
-  //  },
+//  /// Directories where plugins configured by name should be looked for. PLugins configured by __path__ are not subject to lookup
+//  plugins_search_dirs: [],
+//  /// Plugins are only loaded if present in the configuration. When starting
+//  /// Once loaded, they may react to changes in the configuration made through the zenoh instance's adminspace.
+//  plugins: {
+//    /// If no `__path__` is given to a plugin, zenohd will automatically search for a shared library matching the plugin's name (here, `libzenoh_plugin_rest.so` would be searched for on linux)
+//
+//    /// Configure the REST API plugin
+//    rest: {
+//      /// Setting this option to true allows zenohd to panic should it detect issues with this plugin. Setting it to false politely asks the plugin not to panic.
+//      __required__: true, // defaults to false
+//      http_port: 8000,
+//    },
+//
+//    /// Configure the storage manager plugin
+//    storage_manager: {
+//      /// When a path is present, automatic search is disabled, and zenohd will instead select the first path which manages to load.
+//      __path__: [
+//        "./target/release/libzenoh_plugin_storage_manager.so",
+//        "./target/release/libzenoh_plugin_storage_manager.dylib",
+//      ],
+//      /// The "memory" volume is always available, but you may create other volumes here, with various backends to support the actual storing.
+//      volumes: {
+//        /// An influxdb backend is also available at https://github.com/eclipse-zenoh/zenoh-backend-influxdb
+//        influxdb: {
+//          url: "https://myinfluxdb.example",
+//          /// Some plugins may need passwords in their configuration.
+//          /// To avoid leaking them through the adminspace, they may be masked behind a privacy barrier.
+//          /// any value held at the key "private" will not be shown in the adminspace.
+//          private: {
+//            username: "user1",
+//            password: "pw1",
+//          },
+//        },
+//        influxdb2: {
+//          /// A second backend of the same type can be spawned using `__path__`, for examples when different DBs are needed.
+//          backend: "influxdb",
+//          private: {
+//            username: "user2",
+//            password: "pw2",
+//          },
+//          url: "https://localhost:8086",
+//        },
+//      },
+//
+//      /// Configure the storages supported by the volumes
+//      storages: {
+//        demo: {
+//          /// Storages always need to know what set of keys they must work with. These sets are defined by a key expression.
+//          key_expr: "demo/memory/**",
+//          /// Storages also need to know which volume will be used to actually store their key-value pairs.
+//          /// The "memory" volume is always available, and doesn't require any per-storage options, so requesting "memory" by string is always sufficient.
+//          volume: "memory",
+//        },
+//        demo2: {
+//          key_expr: "demo/memory2/**",
+//          volume: "memory",
+//          /// If multiple storages subscribing to the same key_expr should be synchronized, declare them as replicas.
+//          /// In the absence of this configuration, a normal storage is initialized
+//          /// Note: all the samples to be stored in replicas should be timestamped
+//          replica_config: {
+//            /// Specifying the parameters is optional, by default the values provided will be used.
+//            /// Time interval between different synchronization attempts in seconds
+//            publication_interval: 5,
+//            /// Expected propagation delay of the network in milliseconds
+//            propagation_delay: 200,
+//            /// This is the chunk that you would like your data to be divide into in time, in milliseconds.
+//            /// Higher the frequency of updates, lower the delta should be chosen
+//            /// To be efficient, delta should be the time containing no more than 100,000 samples
+//            delta: 1000,
+//          }
+//        },
+//        demo3: {          
+//          key_expr: "demo/memory3/**",
+//          volume: "memory",
+//          /// A complete storage advertises itself as containing all the known keys matching the configured key expression.
+//          /// If not configured, complete defaults to false.
+//          complete: "true",
+//        },
+//        influx_demo: {
+//          key_expr: "demo/influxdb/**",
+//          /// This prefix will be stripped of the received keys when storing.
+//          strip_prefix: "demo/influxdb",
+//          /// influxdb-backed volumes need a bit more configuration, which is passed like-so:
+//          volume: {
+//            id: "influxdb",
+//            db: "example",
+//          },
+//        },
+//        influx_demo2: {
+//          key_expr: "demo/influxdb2/**",
+//          strip_prefix: "demo/influxdb2",
+//          volume: {
+//            id: "influxdb2",
+//            db: "example",
+//          },
+//        },
+//      },
+//    },
+//  },
+
 }

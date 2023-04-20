@@ -167,7 +167,7 @@ impl TransportManagerBuilderUnicast {
 
         #[cfg(all(feature = "unstable", feature = "transport_compression"))]
         {
-            self = self.compression(*config.transport().link().compression().is_enabled());
+            self = self.compression(*config.transport().link().compression().enabled());
         }
         self = self.peer_authenticator(PeerAuthenticator::from_config(config).await?);
         self = self.link_authenticator(LinkAuthenticator::from_config(config).await?);

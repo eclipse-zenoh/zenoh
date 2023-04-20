@@ -80,7 +80,7 @@ async fn test_updates_in_order() {
 
     let runtime = zenoh::runtime::Runtime::new(config).await.unwrap();
     let storage =
-        zplugin_storage_manager::StoragesPlugin::start("storage-manager", &runtime).unwrap();
+        zenoh_plugin_storage_manager::StoragesPlugin::start("storage-manager", &runtime).unwrap();
 
     let session = zenoh::init(runtime).res().await.unwrap();
 

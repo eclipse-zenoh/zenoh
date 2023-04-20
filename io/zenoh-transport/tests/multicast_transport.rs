@@ -136,7 +136,6 @@ mod tests {
     async fn open_transport(
         endpoint: &EndPoint,
     ) -> (TransportMulticastPeer, TransportMulticastPeer) {
-        use std::convert::TryFrom;
         // Define peer01 and peer02 IDs
         let peer01_id = ZenohId::try_from([1]).unwrap();
         let peer02_id = ZenohId::try_from([2]).unwrap();

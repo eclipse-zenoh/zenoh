@@ -20,7 +20,7 @@ pub use crate::Result as ZResult;
 use zenoh_core::zconfigurable;
 
 zconfigurable! {
-    pub static ref PLUGIN_PREFIX: String = "zplugin_".to_string();
+    pub static ref PLUGIN_PREFIX: String = "zenoh_plugin_".to_string();
 }
 
 /// Zenoh plugins should implement this trait to ensure type-safety, even if the starting arguments and expected plugin types change in a future release.

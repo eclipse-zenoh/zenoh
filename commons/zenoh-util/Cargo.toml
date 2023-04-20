@@ -52,7 +52,6 @@ zenoh-core = { path = "../zenoh-core/" }
 zenoh-protocol = { path = "../zenoh-protocol/" }
 zenoh-result = { path = "../zenoh-result/" }
 
-
 [target.'cfg(windows)'.dependencies]
 winapi = { workspace = true }
 

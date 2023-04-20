@@ -494,8 +494,8 @@ impl<'a> TryFrom<&'a String> for Selector<'a> {
 impl<'a> From<&'a Query> for Selector<'a> {
     fn from(q: &'a Query) -> Self {
         Selector {
-            key_expr: q.key_expr.clone(),
-            parameters: (&q.parameters).into(),
+            key_expr: q.inner.key_expr.clone(),
+            parameters: (&q.inner.parameters).into(),
         }
     }
 }
