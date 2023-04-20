@@ -47,6 +47,7 @@ pub struct StorageConfig {
     pub strip_prefix: Option<OwnedKeyExpr>,
     pub volume_id: String,
     pub volume_cfg: Value,
+    pub garbage_collection_config: GarbageCollectionConfig,
     // Note: ReplicaConfig is optional. Alignment will be performed only if it is a replica
     pub replica_config: Option<ReplicaConfig>,
 }
@@ -72,6 +73,25 @@ impl Default for ReplicaConfig {
             // Higher the frequency of updates, lower the delta should be chosen
             // To be efficient, delta should be the time containing no more than 100,000 samples
             delta: Duration::from_millis(1000),
+        }
+    }
+}
+
+// The configuration for periodic garbage collection of metadata in storage manager
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GarbageCollectionConfig {
+    // The duration between two garbage collection events
+    // The garbage collection will be scheduled as a periodic event with this period
+    pub garbage_collection_period: Duration,
+    // The metadata older than this parameter will be garbage collected
+    pub garbage_collection_delay: Duration,
+}
+
+impl Default for GarbageCollectionConfig {
+    fn default() -> Self {
+        Self {
+            garbage_collection_period: Duration::from_secs(30),
+            garbage_collection_delay: Duration::from_secs(86400),
         }
     }
 }
@@ -383,6 +403,31 @@ impl StorageConfig {
             ),
             _ => bail!("Invalid type for field `volume` of storage `{}`. Only strings or objects with at least the `id` field are accepted.", storage_name)
         };
+        let garbage_collection_config = match config.get("garbage_collection_config") {
+            Some(s) => {
+                let mut garbage_collection_config = GarbageCollectionConfig::default();
+                if let Some(period) = s.get("garbage_collection_period") {
+                    let period = period.to_string().parse::<u64>();
+                    if let Ok(period) = period {
+                        garbage_collection_config.garbage_collection_period =
+                            Duration::from_secs(period)
+                    } else {
+                        bail!("Invalid type for field `garbage_collection_period` in `garbage_collection_config` of storage `{}`. Only integer values are accepted.", plugin_name)
+                    }
+                }
+                if let Some(delay) = s.get("garbage_collection_delay") {
+                    let delay = delay.to_string().parse::<u64>();
+                    if let Ok(delay) = delay {
+                        garbage_collection_config.garbage_collection_delay =
+                            Duration::from_secs(delay)
+                    } else {
+                        bail!("Invalid type for field `garbage_collection_delay` in `garbage_collection_config` of storage `{}`. Only integer values are accepted.", plugin_name)
+                    }
+                }
+                garbage_collection_config
+            }
+            None => GarbageCollectionConfig::default(),
+        };
         let replica_config = match config.get("replica_config") {
             Some(s) => {
                 let mut replica_config = ReplicaConfig::default();
@@ -422,6 +467,7 @@ impl StorageConfig {
             strip_prefix,
             volume_id,
             volume_cfg,
+            garbage_collection_config,
             replica_config,
         })
     }
