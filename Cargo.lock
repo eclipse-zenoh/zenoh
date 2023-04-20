@@ -4199,6 +4199,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-plugin-example"
+version = "0.7.0-rc"
+dependencies = [
+ "async-std",
+ "clap",
+ "env_logger",
+ "futures",
+ "log",
+ "serde_json",
+ "zenoh",
+ "zenoh-core",
+ "zenoh-plugin-trait",
+ "zenoh-result",
+ "zenoh-util",
+]
+
+[[package]]
 name = "zenoh-plugin-rest"
 version = "0.7.0-rc"
 dependencies = [
@@ -4381,23 +4398,6 @@ dependencies = [
  "derive_more",
  "serde_json",
  "zenoh",
- "zenoh-result",
- "zenoh-util",
-]
-
-[[package]]
-name = "zenoh_plugin-example"
-version = "0.7.0-rc"
-dependencies = [
- "async-std",
- "clap",
- "env_logger",
- "futures",
- "log",
- "serde_json",
- "zenoh",
- "zenoh-core",
- "zenoh-plugin-trait",
  "zenoh-result",
  "zenoh-util",
 ]
