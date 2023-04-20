@@ -780,7 +780,7 @@ fn user_conf_validator(u: &UserConf) -> bool {
 ///         //   simply log them otherwise
 ///         __required__: bool,
 ///         // The path(s) where the plugin is expected to be located.
-///         // If none is specified, `zenohd` will search for a `<dylib_prefix>zplugin_<plugin_name>.<dylib_suffix>` file in the search directories.
+///         // If none is specified, `zenohd` will search for a `<dylib_prefix>zenoh_plugin_<plugin_name>.<dylib_suffix>` file in the search directories.
 ///         // If any path is specified, file-search will be disabled, and the first path leading to
 ///         // an existing file will be used
 ///         __path__: string | [string],

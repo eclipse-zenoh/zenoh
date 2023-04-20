@@ -182,7 +182,7 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
 
     pub fn load_plugin_by_name(&mut self, name: String) -> ZResult<String> {
         let (lib, p) = match &mut self.loader {
-            Some(l) => unsafe { l.search_and_load(&format!("zplugin_{}", &name))? },
+            Some(l) => unsafe { l.search_and_load(&format!("zenoh_plugin_{}", &name))? },
             None => bail!("Can't load dynamic plugin ` {}`, as dynamic loading is not enabled for this plugin manager.", name),
         };
         let plugin = match Self::load_plugin(&name, lib, p.clone()) {

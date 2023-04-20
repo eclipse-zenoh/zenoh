@@ -28,7 +28,7 @@ default = ["no_mangle"]
 no_mangle = ["zenoh-plugin-trait/no_mangle"]
 
 [lib]
-name = "zplugin_rest"
+name = "zenoh_plugin_rest"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
