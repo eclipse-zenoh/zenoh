@@ -392,7 +392,7 @@ impl RunningPluginTrait for StorageRuntime {
     }
 }
 
-const BACKEND_LIB_PREFIX: &str = "zbackend_";
+const BACKEND_LIB_PREFIX: &str = "zenoh_backend_";
 const MEMORY_BACKEND_NAME: &str = "memory";
 
 fn with_extended_string<R, F: FnMut(&mut String) -> R>(
