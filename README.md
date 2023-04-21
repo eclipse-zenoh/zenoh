@@ -73,12 +73,6 @@ $ cargo build --release --all-targets
 Zenoh's router is built as `target/release/zenohd`. All the examples are built into the `target/release/examples` directory. They can all work in peer-to-peer, or interconnected via the zenoh router.
 
 -------------------------------
-## Previous 0.5 API:
-The following documentation pertains to the v0.6 API, which comes many changes to the behaviour and configuration of Zenoh. 
-
-To access the v0.5 version of the code and matching README, please go to the [0.5.0-beta.9](https://github.com/eclipse-zenoh/zenoh/tree/0.5.0-beta.9) tagged version.
-
--------------------------------
 ## Quick tests of your build:
 
 **Peer-to-peer tests:**
@@ -161,6 +155,9 @@ See other examples of Zenoh usage in [examples/](examples)
       - `"None"` to desactivate the REST plugin
 
     If not specified, the REST plugin will be active on any interface (`[::]`) and port `8000`.
+
+> :warning: **WARNING** :warning: : The following documentation pertains to the v0.6+ API, which comes many changes to the behaviour and configuration of Zenoh.
+To access the v0.5 version of the code and matching README, please go to the [0.5.0-beta.9](https://github.com/eclipse-zenoh/zenoh/tree/0.5.0-beta.9) tagged version.
 
 -------------------------------
 ## Plugins
