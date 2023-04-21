@@ -240,7 +240,7 @@
   ///
   /// Plugins configurations
   ///
-//  /// Directories where plugins configured by name should be looked for. PLugins configured by __path__ are not subject to lookup
+//  /// Directories where plugins configured by name should be looked for. Plugins configured by __path__ are not subject to lookup
 //  plugins_search_dirs: [],
 //  /// Plugins are only loaded if present in the configuration. When starting
 //  /// Once loaded, they may react to changes in the configuration made through the zenoh instance's adminspace.
@@ -261,6 +261,8 @@
 //        "./target/release/libzenoh_plugin_storage_manager.so",
 //        "./target/release/libzenoh_plugin_storage_manager.dylib",
 //      ],
+//      /// Directories where plugins configured by name should be looked for. Plugins configured by __path__ are not subject to lookup
+//      backend_search_dirs: [],
 //      /// The "memory" volume is always available, but you may create other volumes here, with various backends to support the actual storing.
 //      volumes: {
 //        /// An influxdb backend is also available at https://github.com/eclipse-zenoh/zenoh-backend-influxdb
