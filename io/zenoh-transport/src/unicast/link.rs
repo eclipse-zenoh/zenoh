@@ -208,7 +208,8 @@ async fn tx_task(
     #[cfg(all(feature = "unstable", feature = "transport_compression"))] is_compressed: bool,
 ) -> ZResult<()> {
     #[cfg(all(feature = "unstable", feature = "transport_compression"))]
-    let mut compression_aux_buff: Box<[u8]> = vec![0; u16::MAX.into()].into_boxed_slice();
+    let mut compression_aux_buff: Box<[u8]> =
+        vec![0; lz4_flex::block::get_maximum_output_size(u16::MAX.into())].into_boxed_slice();
 
     loop {
         match pipeline.pull().timeout(keep_alive).await {
@@ -226,6 +227,9 @@ async fn tx_task(
                             &bytes,
                             &mut compression_aux_buff,
                         )?;
+                        if batch_size > u16::MAX.into() {
+                            Err(zerror!("Compression error: resulting batch size of the compression is bigger than the maximum allowed size of 65536 bytes."))?;
+                        }
                         bytes = &compression_aux_buff[..batch_size];
                     }
 
@@ -495,7 +499,6 @@ fn tx_compressed(
         let compression_size =
             lz4_flex::block::compress_into(&bytes[s_pos - 1..], &mut buff[s_pos..])
                 .map_err(|e| zerror!("Compression error: {:}", e))?;
-
         Ok(set_compressed_batch_header(
             buff,
             compression_size,
@@ -516,6 +519,8 @@ fn tx_compressed(
 ///     being streamed or not respectively.
 /// - compression_size: the size of the compression
 /// - is_streamed: if the batch is intended to be streamed or not
+///
+/// Returns: the size of the compressed batch considering the header.
 fn set_compressed_batch_header(
     buff: &mut [u8],
     compression_size: usize,
@@ -547,6 +552,8 @@ fn set_compressed_batch_header(
 /// - buff: the output slice
 /// - is_streamed: if the batch is meant to be streamed or not, thus considering or not the 2 bytes
 ///     header specifying the size of the batch.
+///
+/// Returns: the size of the batch considering the header.
 fn set_uncompressed_batch_header(
     bytes: &[u8],
     buff: &mut [u8],
