@@ -474,9 +474,9 @@ impl std::ops::Div<&keyexpr> for &KeyExpr<'_> {
 }
 
 impl<'a> KeyExpr<'a> {
-    pub(crate) fn is_optimized(&self, session: &Session) -> bool {
-        matches!(&self.0, KeyExprInner::Wire { expr_id, session_id, .. } | KeyExprInner::BorrowedWire { expr_id, session_id, .. } if *expr_id != 0 && session.id == *session_id)
-    }
+    //pub(crate) fn is_optimized(&self, session: &Session) -> bool {
+    //    matches!(&self.0, KeyExprInner::Wire { expr_id, session_id, .. } | KeyExprInner::BorrowedWire { expr_id, session_id, .. } if *expr_id != 0 && session.id == *session_id)
+    //}
     pub(crate) fn is_fully_optimized(&self, session: &Session) -> bool {
         match &self.0 {
             KeyExprInner::Wire {
