@@ -1039,7 +1039,6 @@ impl Session {
         if let Some(key_expr) = declared_sub {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-
             // If key_expr is a pure Expr, remap it to optimal Rid or RidWithSuffix
             // let key_expr = if !key_expr.is_optimized(self) {
             //     match key_expr.as_str().find('*') {
