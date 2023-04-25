@@ -298,6 +298,7 @@ impl Network {
     fn propagate_locators(&self, idx: NodeIndex) -> bool {
         self.gossip
             && (self.gossip_multihop
+                || idx == self.idx
                 || self.links.values().any(|link| {
                     self.graph
                         .node_weight(idx)
