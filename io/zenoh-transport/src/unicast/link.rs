@@ -56,7 +56,7 @@ const COMPRESSION_DISABLED: u8 = 0_u8;
 const BATCH_PAYLOAD_START_INDEX: usize = 1;
 
 #[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const MAX_BATCH_SIZE: usize = u16::MAX.into();
+const MAX_BATCH_SIZE: usize = u16::MAX as usize;
 
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicast {
@@ -549,7 +549,7 @@ fn set_compressed_batch_header(
     }
     if final_batch_size > MAX_BATCH_SIZE {
         // May happen when the payload size is itself the MTU and adding the header exceeds it.
-        Err(zerror!("Failed to send uncompressed batch, batch size ({}) exceeds the maximum batch size of {}.", batch_size, MAX_BATCH_SIZE))?
+        Err(zerror!("Failed to send uncompressed batch, batch size ({}) exceeds the maximum batch size of {}.", final_batch_size, MAX_BATCH_SIZE))?
     }
     Ok(final_batch_size)
 }
