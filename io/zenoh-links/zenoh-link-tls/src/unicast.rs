@@ -1,4 +1,3 @@
-use crate::TLS_LOCATOR_PREFIX;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -14,12 +13,11 @@ use crate::TLS_LOCATOR_PREFIX;
 //
 use crate::{
     config::*, get_tls_addr, get_tls_host, get_tls_server_name, TLS_ACCEPT_THROTTLE_TIME,
-    TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT,
+    TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
 use async_rustls::rustls::server::AllowAnyAuthenticatedClient;
 use async_rustls::rustls::version::TLS13;
 pub use async_rustls::rustls::*;
-pub use async_rustls::webpki::*;
 use async_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use async_std::fs;
 use async_std::net::{SocketAddr, TcpListener, TcpStream};
@@ -40,6 +38,7 @@ use std::net::{IpAddr, Shutdown};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+pub use webpki::*;
 use zenoh_core::{zasynclock, zread, zwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
@@ -561,7 +560,7 @@ impl TlsServerConfig {
                 .with_safe_default_kx_groups()
                 .with_protocol_versions(&[&TLS13]) // Force TLS 1.3
                 .map_err(|e| zerror!(e))?
-                .with_client_cert_verifier(AllowAnyAuthenticatedClient::new(root_cert_store))
+                .with_client_cert_verifier(Arc::new(AllowAnyAuthenticatedClient::new(root_cert_store)))
                 .with_single_cert(certs, keys.remove(0))
                 .map_err(|e| zerror!(e))?
         } else {
