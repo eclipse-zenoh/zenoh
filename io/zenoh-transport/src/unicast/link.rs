@@ -55,6 +55,9 @@ const COMPRESSION_DISABLED: u8 = 0_u8;
 #[cfg(all(feature = "unstable", feature = "transport_compression"))]
 const BATCH_PAYLOAD_START_INDEX: usize = 1;
 
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
+const MAX_BATCH_SIZE: usize = u16::MAX.into();
+
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicast {
     // Inbound / outbound
@@ -209,7 +212,7 @@ async fn tx_task(
 ) -> ZResult<()> {
     #[cfg(all(feature = "unstable", feature = "transport_compression"))]
     let mut compression_aux_buff: Box<[u8]> =
-        vec![0; lz4_flex::block::get_maximum_output_size(u16::MAX.into())].into_boxed_slice();
+        vec![0; lz4_flex::block::get_maximum_output_size(MAX_BATCH_SIZE)].into_boxed_slice();
 
     loop {
         match pipeline.pull().timeout(keep_alive).await {
@@ -227,9 +230,6 @@ async fn tx_task(
                             &bytes,
                             &mut compression_aux_buff,
                         )?;
-                        if batch_size > u16::MAX.into() {
-                            Err(zerror!("Compression error: resulting batch size of the compression is bigger than the maximum allowed size of 65536 bytes."))?;
-                        }
                         bytes = &compression_aux_buff[..batch_size];
                     }
 
@@ -499,11 +499,16 @@ fn tx_compressed(
         let compression_size =
             lz4_flex::block::compress_into(&bytes[s_pos - 1..], &mut buff[s_pos..])
                 .map_err(|e| zerror!("Compression error: {:}", e))?;
-        Ok(set_compressed_batch_header(
-            buff,
-            compression_size,
-            is_streamed,
-        )?)
+        let batch_size = set_compressed_batch_header(buff, compression_size, is_streamed)?;
+        if batch_size > MAX_BATCH_SIZE {
+            log::debug!(
+                "Compression error: resulting batch size of the compression is bigger than 
+                the maximum allowed size of {} bytes. Will send batch uncompressed.",
+                MAX_BATCH_SIZE
+            );
+            return Ok(set_uncompressed_batch_header(bytes, buff, is_streamed)?);
+        }
+        Ok(batch_size)
     } else {
         Ok(set_uncompressed_batch_header(bytes, buff, is_streamed)?)
     }
@@ -526,6 +531,7 @@ fn set_compressed_batch_header(
     compression_size: usize,
     is_streamed: bool,
 ) -> ZResult<usize> {
+    let final_batch_size: usize;
     let payload_size = 1 + compression_size;
     if is_streamed {
         let payload_size_u16: u16 = payload_size.try_into().map_err(|e| {
@@ -536,11 +542,16 @@ fn set_compressed_batch_header(
         })?;
         buff[0..HEADER_BYTES_SIZE].copy_from_slice(&payload_size_u16.to_le_bytes());
         buff[COMPRESSION_BYTE_INDEX_STREAMED] = COMPRESSION_ENABLED;
-        Ok(payload_size + HEADER_BYTES_SIZE)
+        final_batch_size = payload_size + HEADER_BYTES_SIZE;
     } else {
         buff[COMPRESSION_BYTE_INDEX] = COMPRESSION_ENABLED;
-        Ok(payload_size)
+        final_batch_size = payload_size;
     }
+    if final_batch_size > MAX_BATCH_SIZE {
+        // May happen when the payload size is itself the MTU and adding the header exceeds it.
+        Err(zerror!("Failed to send uncompressed batch, batch size ({}) exceeds the maximum batch size of {}.", batch_size, MAX_BATCH_SIZE))?
+    }
+    Ok(final_batch_size)
 }
 
 #[cfg(all(feature = "unstable", feature = "transport_compression"))]
@@ -559,6 +570,7 @@ fn set_uncompressed_batch_header(
     buff: &mut [u8],
     is_streamed: bool,
 ) -> ZResult<usize> {
+    let final_batch_size: usize;
     if is_streamed {
         let mut header = [0_u8, 0_u8];
         header[..HEADER_BYTES_SIZE].copy_from_slice(&bytes[..HEADER_BYTES_SIZE]);
@@ -574,11 +586,16 @@ fn set_uncompressed_batch_header(
         buff[COMPRESSION_BYTE_INDEX_STREAMED] = COMPRESSION_DISABLED;
         let batch_size: usize = batch_size.into();
         buff[3..batch_size + 2].copy_from_slice(&bytes[2..batch_size + 1]);
-        Ok(batch_size + 2)
+        final_batch_size = batch_size + 2;
     } else {
         buff[COMPRESSION_BYTE_INDEX] = COMPRESSION_DISABLED;
         let len = 1 + bytes.len();
         buff[1..1 + bytes.len()].copy_from_slice(bytes);
-        Ok(len)
+        final_batch_size = len;
     }
+    if final_batch_size > MAX_BATCH_SIZE {
+        // May happen when the payload size is itself the MTU and adding the header exceeds it.
+        Err(zerror!("Failed to send uncompressed batch, batch size ({}) exceeds the maximum batch size of {}.", final_batch_size, MAX_BATCH_SIZE))?;
+    }
+    return Ok(final_batch_size);
 }
