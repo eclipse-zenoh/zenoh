@@ -92,7 +92,7 @@ fn parse_args() -> (Config, String, Option<String>, usize, u64) {
             .endpoints
             .extend(values.map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listeners") {
+    if let Some(values) = args.values_of("listen") {
         config
             .listen
             .endpoints
