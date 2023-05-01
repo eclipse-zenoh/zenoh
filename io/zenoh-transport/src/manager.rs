@@ -333,7 +333,9 @@ impl TransportExecutor {
         for _ in 0..num_threads {
             let exec = executor.clone();
             let recv = receiver.clone();
-            std::thread::spawn(move || async_std::task::block_on(exec.run(recv.recv())));
+            std::thread::Builder::new()
+                .name(format!("zenoh-tx-{}", thread_idx))
+                .spawn(move || async_std::task::block_on(exec.run(recv.recv())));
         }
         Self { executor, sender }
     }
