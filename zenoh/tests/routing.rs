@@ -89,7 +89,8 @@ async fn run_recipe(receipe: impl IntoIterator<Item = Node>) -> Result<()> {
 
             // Each session spawns several given task(s)
             let c_session = session.clone();
-            let fut = match task {
+
+            match task {
 
                 // Subscription task
                 Task::Sub(topic, expected_size) => {
@@ -130,9 +131,8 @@ async fn run_recipe(receipe: impl IntoIterator<Item = Node>) -> Result<()> {
                 Task::Sleep(dur) => async_std::task::spawn(async move {
                     async_std::task::sleep(dur).await;
                     Ok(())
-                }),
-            };
-            fut
+                })
+            }
         });
 
         let (state, _, _) = select_all(futs).await;
@@ -140,9 +140,8 @@ async fn run_recipe(receipe: impl IntoIterator<Item = Node>) -> Result<()> {
     }.boxed());
 
     let (state, _, _) = select_all(futures).timeout(TIMEOUT).await?;
-    Ok(state?)
+    state
 }
-
 
 #[test]
 fn gossip() -> Result<()> {
