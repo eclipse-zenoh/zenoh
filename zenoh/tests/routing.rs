@@ -146,7 +146,7 @@ async fn run_recipe(receipe: impl IntoIterator<Item = Node>) -> Result<()> {
 #[test]
 fn gossip() -> Result<()> {
     async_std::task::block_on(async {
-        let locator = String::from("tcp/127.0.0.1:17447");
+        let locator = String::from("tcp/127.0.0.1:17448");
         let topic = String::from("testTopic");
 
         // Gossip test
