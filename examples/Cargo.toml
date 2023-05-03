@@ -38,7 +38,7 @@ futures = { workspace = true }
 git-version = { workspace = true }
 json5 = { workspace = true }
 log = { workspace = true }
-zenoh = { path = "../zenoh/", default-features = false }
+zenoh = { path = "../zenoh/" }
 zenoh-ext = { path = "../zenoh-ext/" }
 
 [dev-dependencies]
