@@ -51,7 +51,7 @@ exclude = ["ci/nostd-check"]
 
 [workspace.package]
 rust-version = "1.65.0"
-version = "0.7.0-rc" # Zenoh version
+version = "0.7.1-rc" # Zenoh version
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"
 authors = [
