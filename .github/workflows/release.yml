@@ -21,6 +21,14 @@ on:
   workflow_dispatch:
 
 jobs:
+  status:
+    name: Display status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git describe
+        shell: bash
+        run: git describe
+
   checks:
     name: Code checks
     runs-on: ubuntu-latest
