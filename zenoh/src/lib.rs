@@ -111,6 +111,7 @@ pub mod selector;
 pub use zenoh_config as config;
 pub mod handlers;
 pub mod info;
+#[cfg(feature = "unstable")]
 pub mod liveliness;
 pub mod plugins;
 pub mod prelude;
