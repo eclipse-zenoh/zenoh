@@ -19,6 +19,10 @@ on:
   schedule:
     - cron: "0 0 * * 1-5"
   workflow_dispatch:
+    inputs:
+      runtests:
+        description: 'run tests'
+        type: boolean
 
 jobs:
   checks:
@@ -101,6 +105,7 @@ jobs:
 
   tests:
     name: Tests
+    if: ${{ !(github.event.inputs.runtests == 'false') }}
     needs: checks
     runs-on: ubuntu-latest
     steps:
