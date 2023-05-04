@@ -154,17 +154,17 @@ winapi = { version = "0.3.9", features = ["iphlpapi"] }
 z-serial = "0.2.1"
 zenoh-ext = { version = "0.7.1-rc", path = "zenoh-ext" }
 zenoh-shm = { version = "0.7.1-rc", path = "commons/zenoh-shm" }
-zenoh-result = { version = "0.7.1-rc", path = "commons/zenoh-result" }
+zenoh-result = { version = "0.7.1-rc", path = "commons/zenoh-result", default-features = false }
 zenoh-config = { version = "0.7.1-rc", path = "commons/zenoh-config" }
-zenoh-protocol = { version = "0.7.1-rc", path = "commons/zenoh-protocol" }
-zenoh-keyexpr = { version = "0.7.1-rc", path = "commons/zenoh-keyexpr" }
+zenoh-protocol = { version = "0.7.1-rc", path = "commons/zenoh-protocol", default-features = false }
+zenoh-keyexpr = { version = "0.7.1-rc", path = "commons/zenoh-keyexpr", default-features = false }
 zenoh-core = { version = "0.7.1-rc", path = "commons/zenoh-core" }
 zenoh-buffers = { version = "0.7.1-rc", path = "commons/zenoh-buffers" }
 zenoh-util = { version = "0.7.1-rc", path = "commons/zenoh-util" }
 zenoh-crypto = { version = "0.7.1-rc", path = "commons/zenoh-crypto" }
 zenoh-codec = { version = "0.7.1-rc", path = "commons/zenoh-codec" }
 zenoh-sync = { version = "0.7.1-rc", path = "commons/zenoh-sync" }
-zenoh-collections = { version = "0.7.1-rc", path = "commons/zenoh-collections" }
+zenoh-collections = { version = "0.7.1-rc", path = "commons/zenoh-collections", default-features = false }
 zenoh-macros = { version = "0.7.1-rc", path = "commons/zenoh-macros" }
 zenoh-cfg-properties = { version = "0.7.1-rc", path = "commons/zenoh-cfg-properties" }
 zenoh-plugin-trait = { version = "0.7.1-rc", path = "plugins/zenoh-plugin-trait" }

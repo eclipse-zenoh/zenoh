@@ -28,9 +28,9 @@ description = "Internal crate for zenoh."
 [dependencies]
 getrandom = { version = "0.2.8", features = ["custom"] }
 linked_list_allocator = "0.10.4" # Needs nightly toolchain
-zenoh-buffers = { workspace = true }
-zenoh-codec = { workspace = true, default-features = false }
-zenoh-protocol = { workspace = true, default-features = false }
+zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
+zenoh-codec = { path = "../../commons/zenoh-codec/", default-features = false }
+zenoh-protocol = { path = "../../commons/zenoh-protocol/", default-features = false }
 
 [[bin]]
 name = "nostd_check"
