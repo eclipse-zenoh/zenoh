@@ -29,4 +29,4 @@ test = ["rand"]
 
 [dependencies]
 rand = { workspace = true, optional = true }
-zenoh-collections = { path = "../zenoh-collections/", default-features = false }
+zenoh-collections = { version = "0.7.1-rc", path = "../zenoh-collections/", default-features = false }

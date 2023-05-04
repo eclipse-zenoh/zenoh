@@ -38,7 +38,7 @@ flume = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["default"] }
-zenoh = { path = "../zenoh/", default-features = false, features = [
+zenoh = { version = "0.7.1-rc", path = "../zenoh/", default-features = false, features = [
     "unstable",
 ] }
 zenoh-core = { path = "../commons/zenoh-core/" }

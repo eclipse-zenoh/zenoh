@@ -60,7 +60,7 @@ zenoh-collections = { path = "../../commons/zenoh-collections/" }
 zenoh-config = { path = "../../commons/zenoh-config/" }
 zenoh-core = { path = "../../commons/zenoh-core/" }
 zenoh-crypto = { path = "../../commons/zenoh-crypto/" }
-zenoh-link = { path = "../zenoh-link/" }
+zenoh-link = { version = "0.7.1-rc", path = "../zenoh-link/" }
 zenoh-protocol = { path = "../../commons/zenoh-protocol/" }
 zenoh-result = { path = "../../commons/zenoh-result/" }
 zenoh-shm = { path = "../../commons/zenoh-shm/", optional = true }
