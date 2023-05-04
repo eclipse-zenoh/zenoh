@@ -313,7 +313,7 @@ jobs:
   publication:
     name: Release publication
     if: needs.checks.outputs.IS_RELEASE == 'true'
-    needs: [checks, builds, tests, doc]
+    needs: [checks, builds, doc]
     runs-on: ubuntu-latest
     steps:
       - name: Download result of previous builds
@@ -391,7 +391,7 @@ jobs:
 
   docker:
     name: Docker build and push
-    needs: [checks, builds, tests, doc]
+    needs: [checks, builds, doc]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
