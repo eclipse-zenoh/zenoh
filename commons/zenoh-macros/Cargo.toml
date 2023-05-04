@@ -30,7 +30,7 @@ quote = { workspace = true }
 rustc_version = { workspace = true }
 syn = { workspace = true, features = ["full"] }
 unzip-n = { workspace = true }
-zenoh-keyexpr = { version = "0.7.1-rc", path = "../zenoh-keyexpr/", features = ["std"] }
+zenoh-keyexpr = { workspace = true, features = ["std"] }
 
 [lib]
 proc-macro = true

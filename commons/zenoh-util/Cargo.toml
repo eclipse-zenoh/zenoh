@@ -48,9 +48,9 @@ lazy_static = { workspace = true }
 libloading = { workspace = true }
 log = { workspace = true }
 shellexpand = { workspace = true }
-zenoh-core = { version = "0.7.1-rc", path = "../zenoh-core/" }
-zenoh-protocol = { version = "0.7.1-rc", path = "../zenoh-protocol/" }
-zenoh-result = { version = "0.7.1-rc", path = "../zenoh-result/" }
+zenoh-core = { workspace = true }
+zenoh-protocol = { workspace = true }
+zenoh-result = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { workspace = true }

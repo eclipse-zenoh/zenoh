@@ -82,28 +82,28 @@ stop-token = { workspace = true }
 uhlc = { workspace = true, features = ["default"] }
 uuid = { workspace = true, features = ["default"] }
 vec_map = { workspace = true }
-zenoh-buffers = { path = "../commons/zenoh-buffers/" }
-zenoh-cfg-properties = { path = "../commons/zenoh-cfg-properties/" }
-zenoh-codec = { path = "../commons/zenoh-codec/" }
-zenoh-collections = { path = "../commons/zenoh-collections/" }
-zenoh-config = { path = "../commons/zenoh-config/" }
-zenoh-core = { path = "../commons/zenoh-core/" }
-zenoh-crypto = { path = "../commons/zenoh-crypto/" }
-zenoh-link = { path = "../io/zenoh-link/" }
-zenoh-macros = { path = "../commons/zenoh-macros/" }
-zenoh-plugin-trait = { path = "../plugins/zenoh-plugin-trait/", default-features = false }
-zenoh-protocol = { path = "../commons/zenoh-protocol/" }
-zenoh-result = { path = "../commons/zenoh-result/" }
-zenoh-shm = { path = "../commons/zenoh-shm/", optional = true }
-zenoh-sync = { path = "../commons/zenoh-sync/" }
-zenoh-transport = { path = "../io/zenoh-transport/" }
-zenoh-util = { path = "../commons/zenoh-util/" }
+zenoh-buffers = { workspace = true }
+zenoh-cfg-properties = { workspace = true }
+zenoh-codec = { workspace = true }
+zenoh-collections = { workspace = true }
+zenoh-config = { workspace = true }
+zenoh-core = { workspace = true }
+zenoh-crypto = { workspace = true }
+zenoh-link = { workspace = true }
+zenoh-macros = { workspace = true }
+zenoh-plugin-trait = { workspace = true }
+zenoh-protocol = { workspace = true }
+zenoh-result = { workspace = true }
+zenoh-shm = { workspace = true, optional = true }
+zenoh-sync = { workspace = true }
+zenoh-transport = { workspace = true }
+zenoh-util = { workspace = true }
 
 [build-dependencies]
 rustc_version = { workspace = true }
 
 [dev-dependencies]
-zenoh = { path = ".", features = ["unstable"] }
+zenoh = { workspace = true, features = ["unstable"] }
 
 [lib]
 name = "zenoh"

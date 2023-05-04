@@ -53,21 +53,21 @@ rand = { workspace = true, features = ["default"] }
 ringbuffer-spsc = { workspace = true }
 rsa = { workspace = true, optional = true }
 serde = { workspace = true, features = ["default"] }
-zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
-zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
-zenoh-codec = { path = "../../commons/zenoh-codec/" }
-zenoh-collections = { path = "../../commons/zenoh-collections/" }
-zenoh-config = { path = "../../commons/zenoh-config/" }
-zenoh-core = { path = "../../commons/zenoh-core/" }
-zenoh-crypto = { path = "../../commons/zenoh-crypto/" }
-zenoh-link = { version = "0.7.1-rc", path = "../zenoh-link/" }
-zenoh-protocol = { path = "../../commons/zenoh-protocol/" }
-zenoh-result = { path = "../../commons/zenoh-result/" }
-zenoh-shm = { path = "../../commons/zenoh-shm/", optional = true }
-zenoh-sync = { path = "../../commons/zenoh-sync/" }
-zenoh-util = { path = "../../commons/zenoh-util/" }
+zenoh-buffers = { workspace = true }
+zenoh-cfg-properties = { workspace = true }
+zenoh-codec = { workspace = true }
+zenoh-collections = { workspace = true }
+zenoh-config = { workspace = true }
+zenoh-core = { workspace = true }
+zenoh-crypto = { workspace = true }
+zenoh-link = { workspace = true }
+zenoh-protocol = { workspace = true }
+zenoh-result = { workspace = true }
+zenoh-shm = { workspace = true, optional = true }
+zenoh-sync = { workspace = true }
+zenoh-util = { workspace = true }
 
 [dev-dependencies]
 env_logger = { workspace = true }
 panic-message = { workspace = true }
-zenoh-protocol = { path = "../../commons/zenoh-protocol/", features = ["test"] }
+zenoh-protocol = { workspace = true, features = ["test"] }

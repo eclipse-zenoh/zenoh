@@ -45,9 +45,9 @@ rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
 serde = { workspace = true, features = ["alloc"] }
 uhlc = { workspace = true }
 uuid = { workspace = true }                                                     # Needs a getrandom::getrandom() custom implementation on embedded (in root crate)
-zenoh-buffers = { version = "0.7.1-rc", path = "../zenoh-buffers/", default-features = false }
-zenoh-keyexpr = { version = "0.7.1-rc", path = "../zenoh-keyexpr/", default-features = false }
-zenoh-result = { version = "0.7.1-rc", path = "../zenoh-result/", default-features = false }
+zenoh-buffers = { workspace = true }
+zenoh-keyexpr = { workspace = true }
+zenoh-result = { workspace = true }
 
 # NOTE: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0
 [dev-dependencies]

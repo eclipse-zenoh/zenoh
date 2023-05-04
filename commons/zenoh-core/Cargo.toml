@@ -34,4 +34,4 @@ default = ["std"]
 [dependencies]
 async-std = { workspace = true, features = ["default"] }
 lazy_static = { workspace = true }
-zenoh-result = { version = "0.7.1-rc", path = "../zenoh-result/" }
+zenoh-result = { workspace = true }
