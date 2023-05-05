@@ -49,8 +49,8 @@ libloading = { workspace = true }
 log = { workspace = true }
 shellexpand = { workspace = true }
 zenoh-core = { workspace = true }
-zenoh-protocol = { workspace = true }
-zenoh-result = { workspace = true }
+zenoh-protocol = { workspace = true, features = ["default"] }
+zenoh-result = { workspace = true, features = ["default"] }
 
 [target.'cfg(windows)'.dependencies]
 winapi = { workspace = true }

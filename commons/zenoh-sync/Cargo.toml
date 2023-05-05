@@ -35,7 +35,7 @@ flume = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true, features = ["default", "sync"] }
 zenoh-buffers = { workspace = true }
-zenoh-collections = { workspace = true }
+zenoh-collections = { workspace = true, features = ["default"] }
 zenoh-core = { workspace = true }
 
 [dev-dependencies]
