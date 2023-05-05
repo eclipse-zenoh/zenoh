@@ -354,13 +354,12 @@ jobs:
         shell: bash
         run: |
           cargo login ${{ secrets.CRATES_IO_TOKEN }}
-          (cd commons/zenoh-cfg-properties && cargo publish)
-          (cd commons/zenoh-sync && cargo publish)
           (cd commons/zenoh-collections && cargo publish)
           (cd commons/zenoh-crypto && cargo publish)
           (cd commons/zenoh-util && cargo publish)
           (cd commons/zenoh-buffers && cargo publish)
           (cd commons/zenoh-protocol && cargo publish)
+          (cd commons/zenoh-sync && cargo publish)
           (cd commons/zenoh-macros && cargo publish)
           (cd commons/zenoh-codec && cargo publish)
           (cd commons/zenoh-shm && cargo publish)
