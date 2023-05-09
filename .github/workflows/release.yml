@@ -354,20 +354,6 @@ jobs:
         shell: bash
         run: |
           cargo login ${{ secrets.CRATES_IO_TOKEN }}
-          (cd commons/zenoh-shm && cargo publish)
-          (cd commons/zenoh-codec && cargo publish)
-          (cd commons/zenoh-config && cargo publish)
-          (cd io/zenoh-link-commons && cargo publish)
-          (cd io/zenoh-links/zenoh-link-udp && cargo publish)
-          (cd io/zenoh-links/zenoh-link-tcp && cargo publish)
-          (cd io/zenoh-links/zenoh-link-tls && cargo publish)
-          (cd io/zenoh-links/zenoh-link-quic && cargo publish)
-          (cd io/zenoh-links/zenoh-link-unixsock_stream && cargo publish)
-          (cd io/zenoh-links/zenoh-link-serial && cargo publish)
-          (cd io/zenoh-links/zenoh-link-ws && cargo publish)
-          (cd io/zenoh-link && cargo publish)
-          (cd io/zenoh-transport && cargo publish)
-          (cd plugins/zenoh-plugin-trait && cargo publish)
           (cd zenoh && cargo publish)
           (cd zenoh-ext && cargo publish)
           (cd zenohd && cargo publish)
