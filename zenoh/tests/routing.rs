@@ -35,6 +35,7 @@ enum Task {
     Pub(String, usize),
     Sub(String, usize),
     Sleep(Duration),
+    EditConnection(Vec<String>),
 }
 
 #[derive(Debug)]
@@ -77,11 +78,11 @@ async fn run_recipe(receipe: impl IntoIterator<Item = Node>) -> Result<()> {
 
         // In case of client can't connect to some peers/routers
         let session = if let Ok(session) = zenoh::open(config.clone()).res_async().await {
-            Arc::new(session)
+            session.into_arc()
         } else {
             // Sleep one second and retry
             async_std::task::sleep(Duration::from_secs(1)).await;
-            Arc::new(zenoh::open(config).res_async().await?)
+            zenoh::open(config).res_async().await?.into_arc()
         };
 
         // Each node consists of a specified session associated with tasks to run
@@ -97,7 +98,6 @@ async fn run_recipe(receipe: impl IntoIterator<Item = Node>) -> Result<()> {
                     async_std::task::spawn(async move {
                         let sub =
                             ztimeout!(c_session.declare_subscriber(&topic).res_async())?;
-
                         let mut counter = 0;
                         while let Ok(sample) = sub.recv_async().await {
                             let recv_size = sample.value.payload.len();
@@ -131,7 +131,12 @@ async fn run_recipe(receipe: impl IntoIterator<Item = Node>) -> Result<()> {
                 Task::Sleep(dur) => async_std::task::spawn(async move {
                     async_std::task::sleep(dur).await;
                     Ok(())
-                })
+                }),
+
+                // Edit the connections after a while
+                Task::EditConnection(locators) => async_std::task::spawn(async move {
+                    todo!()
+                }),
             }
         });
 
@@ -178,4 +183,9 @@ fn gossip() -> Result<()> {
         Result::Ok(())
     })?;
     Ok(())
+}
+
+#[test]
+fn failover() -> Result<()> {
+    todo!()
 }
