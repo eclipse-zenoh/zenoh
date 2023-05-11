@@ -167,7 +167,7 @@ zenoh-sync = { version = "0.7.1-rc", path = "commons/zenoh-sync" }
 zenoh-collections = { version = "0.7.1-rc", path = "commons/zenoh-collections", default-features = false }
 zenoh-macros = { version = "0.7.1-rc", path = "commons/zenoh-macros" }
 zenoh-cfg-properties = { version = "0.7.1-rc", path = "commons/zenoh-cfg-properties" }
-zenoh-plugin-trait = { version = "0.7.1-rc", path = "plugins/zenoh-plugin-trait" }
+zenoh-plugin-trait = { version = "0.7.1-rc", path = "plugins/zenoh-plugin-trait", default-features = false }
 zenoh_backend_traits = { version = "0.7.1-rc", path = "plugins/zenoh-backend-traits" }
 zenoh-transport = { version = "0.7.1-rc", path = "io/zenoh-transport" }
 zenoh-link-tls = { version = "0.7.1-rc", path = "io/zenoh-links/zenoh-link-tls" }
