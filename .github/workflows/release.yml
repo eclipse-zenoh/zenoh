@@ -30,13 +30,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Git describe
-        id: ghd
-        uses: proudust/gh-describe@v1
-      - name: Show git describe
-        run: |
-          echo "describe: ${{ steps.ghd.outputs.describe }}"
-          echo "tag     : ${{ steps.ghd.outputs.tag }}"
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
