@@ -90,13 +90,12 @@ impl TransportUnicastInner {
         // Check if the PID is correct when provided
         if let Some(zid) = zid {
             if zid != self.config.zid {
-                log::debug!(
-                    "Received an invalid Close on link {} from peer {} with reason: {}. Ignoring.",
-                    link,
+                bail!(
+                    "Transport: {}. Invalid close zid: {} reason: {}.",
+                    self.config.zid,
                     zid,
-                    tmsg::close_reason_to_str(reason),
+                    tmsg::close_reason_to_str(reason)
                 );
-                return Ok(());
             }
         }
 
