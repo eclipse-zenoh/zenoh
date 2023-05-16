@@ -222,7 +222,11 @@ impl LinkManagerUnicastQuic {
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let epaddr = endpoint.address();
-        let host = epaddr.as_str().split(':').next().unwrap();
+        let host = epaddr
+            .as_str()
+            .split(':')
+            .next()
+            .ok_or("Endpoints must be of the form quic/<address>:<port>")?;
         let epconf = endpoint.config();
 
         let addr = get_quic_addr(&epaddr).await?;
