@@ -20,19 +20,12 @@ use zenoh::publication::CongestionControl;
 fn main() {
     // initiate logging
     env_logger::init();
-    let (config, size, prio, print, number, high_entropy) = parse_args();
+    let (config, size, prio, print, number) = parse_args();
 
-    let data: Value = if high_entropy {
-        (0usize..size)
-            .map(|_| rand::random::<u8>())
-            .collect::<Vec<u8>>()
-            .into()
-    } else {
-        (0usize..size)
-            .map(|i| (i % 10) as u8)
-            .collect::<Vec<u8>>()
-            .into()
-    };
+    let data: Value = (0usize..size)
+        .map(|i| (i % 10) as u8)
+        .collect::<Vec<u8>>()
+        .into();
 
     let session = zenoh::open(config).res().unwrap();
 
@@ -61,7 +54,7 @@ fn main() {
     }
 }
 
-fn parse_args() -> (Config, usize, Priority, bool, usize, bool) {
+fn parse_args() -> (Config, usize, Priority, bool, usize) {
     let args = App::new("zenoh throughput pub example")
         .arg(
             Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
@@ -88,9 +81,6 @@ fn parse_args() -> (Config, usize, Priority, bool, usize, bool) {
         )
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
-        ))
-        .arg(Arg::from_usage(
-            "--high-entropy 'High entropy payload composed by pseudorandom numbers.'",
         ))
         .arg(Arg::from_usage(
             "<PAYLOAD_SIZE>          'Sets the size of the payload to publish'",
@@ -126,8 +116,6 @@ fn parse_args() -> (Config, usize, Priority, bool, usize, bool) {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
-    let high_entropy = args.is_present("high-entropy");
-
     let number: usize = args.value_of("number").unwrap().parse().unwrap();
 
     let size = args
@@ -136,12 +124,5 @@ fn parse_args() -> (Config, usize, Priority, bool, usize, bool) {
         .parse::<usize>()
         .unwrap();
 
-    (
-        config,
-        size,
-        prio,
-        args.is_present("print"),
-        number,
-        high_entropy,
-    )
+    (config, size, prio, args.is_present("print"), number)
 }
