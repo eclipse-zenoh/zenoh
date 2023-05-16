@@ -13,16 +13,19 @@
 //
 use futures::future::select_all;
 use futures::FutureExt as _;
-use std::sync::Arc;
 use std::time::Duration;
 
 use async_std::prelude::FutureExt;
 use zenoh::config::{whatami::WhatAmI, Config};
 use zenoh::prelude::r#async::*;
 use zenoh::Result;
+use zenoh_core::zasync_executor_init;
 use zenoh_result::bail;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
+const MSG_COUNT: usize = 1_000;
+const MSG_SIZE: [usize; 2] = [1_024, 131_072];
+// const MSG_SIZE: [usize; 1] = [1_024];
 
 macro_rules! ztimeout {
     ($f:expr) => {
@@ -35,7 +38,6 @@ enum Task {
     Pub(String, usize),
     Sub(String, usize),
     Sleep(Duration),
-    EditConnection(Vec<String>),
 }
 
 #[derive(Debug)]
@@ -80,8 +82,8 @@ async fn run_recipe(receipe: impl IntoIterator<Item = Node>) -> Result<()> {
         let session = if let Ok(session) = zenoh::open(config.clone()).res_async().await {
             session.into_arc()
         } else {
-            // Sleep one second and retry
-            async_std::task::sleep(Duration::from_secs(1)).await;
+            log::info!("Sleep and retry to connect to the endpoint...");
+            async_std::task::sleep(Duration::from_secs(3)).await;
             zenoh::open(config).res_async().await?.into_arc()
         };
 
@@ -105,8 +107,8 @@ async fn run_recipe(receipe: impl IntoIterator<Item = Node>) -> Result<()> {
                                 bail!("Received payload size {recv_size} mismatches the expected {expected_size}");
                             }
                             counter += 1;
-                            println!("Received : {:?}", sample);
-                            if counter >= 5 {
+                            if counter >= MSG_COUNT {
+                                log::info!("Received sufficient amount of messages.");
                                 break;
                             }
                         }
@@ -118,7 +120,7 @@ async fn run_recipe(receipe: impl IntoIterator<Item = Node>) -> Result<()> {
                 Task::Pub(topic, payload_size) => {
                     async_std::task::spawn(async move {
                         loop {
-                            async_std::task::sleep(Duration::from_millis(300)).await;
+                            // async_std::task::sleep(Duration::from_millis(300)).await;
                             ztimeout!(c_session
                                 .put(&topic, vec![0u8; payload_size])
                                 .congestion_control(CongestionControl::Block)
@@ -131,11 +133,6 @@ async fn run_recipe(receipe: impl IntoIterator<Item = Node>) -> Result<()> {
                 Task::Sleep(dur) => async_std::task::spawn(async move {
                     async_std::task::sleep(dur).await;
                     Ok(())
-                }),
-
-                // Edit the connections after a while
-                Task::EditConnection(locators) => async_std::task::spawn(async move {
-                    todo!()
                 }),
             }
         });
@@ -151,27 +148,28 @@ async fn run_recipe(receipe: impl IntoIterator<Item = Node>) -> Result<()> {
 #[test]
 fn gossip() -> Result<()> {
     async_std::task::block_on(async {
+        zasync_executor_init!();
         let locator = String::from("tcp/127.0.0.1:17448");
         let topic = String::from("testTopic");
 
         // Gossip test
         let recipe = [
             Node {
-                name: "C".into(),
+                name: "Peer0".into(),
                 mode: WhatAmI::Peer,
                 listen: vec![locator.clone()],
-                task: vec![Task::Sleep(Duration::from_secs(30))],
+                task: vec![Task::Sleep(Duration::from_secs(2))],
                 ..Default::default()
             },
             Node {
-                name: "A".into(),
+                name: "Peer1".into(),
                 connect: vec![locator.clone()],
                 mode: WhatAmI::Peer,
                 task: vec![Task::Pub(topic.clone(), 8)],
                 ..Default::default()
             },
             Node {
-                name: "B".into(),
+                name: "Peer2".into(),
                 mode: WhatAmI::Peer,
                 connect: vec![locator.clone()],
                 task: vec![Task::Sub(topic.clone(), 8)],
@@ -186,6 +184,57 @@ fn gossip() -> Result<()> {
 }
 
 #[test]
-fn failover() -> Result<()> {
-    todo!()
+fn pubsub_combination() -> Result<()> {
+    async_std::task::block_on(async {
+        zasync_executor_init!();
+        env_logger::try_init()?;
+
+        let modes = [WhatAmI::Peer, WhatAmI::Client];
+
+        let mut idx = 0;
+        let base_port = 17450;
+        let recipe_list = modes
+            .map(|n1| modes.map(|n2| (n1, n2)))
+            .concat()
+            .into_iter()
+            .flat_map(|(n1, n2)| {
+                MSG_SIZE.map(|msg_size| {
+                    idx += 1;
+                    let topic = format!("pubsub_combination_topic_{idx}");
+                    let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
+
+                    [
+                        Node {
+                            name: "Router".into(),
+                            mode: WhatAmI::Router,
+                            listen: vec![locator.clone()],
+                            task: vec![Task::Sleep(Duration::from_secs(30))],
+                            ..Default::default()
+                        },
+                        Node {
+                            name: "Node1".into(),
+                            connect: vec![locator.clone()],
+                            mode: n1,
+                            task: vec![Task::Pub(topic.clone(), msg_size)],
+                            ..Default::default()
+                        },
+                        Node {
+                            name: "Node2".into(),
+                            mode: n2,
+                            connect: vec![locator],
+                            task: vec![Task::Sub(topic, msg_size)],
+                            ..Default::default()
+                        },
+                    ]
+                })
+            });
+
+        for recipe in recipe_list {
+            run_recipe(recipe).await?;
+        }
+
+        println!("Pub/sub combination test passed.");
+        Result::Ok(())
+    })?;
+    Ok(())
 }
