@@ -118,6 +118,11 @@ Zenoh's router is built as `target/release/zenohd`. All the examples are built i
     - check it has been created:  
       `curl 'http://localhost:8000/@/router/local/**/storages/*'`
 
+**Configuration options:**
+
+A Zenoh configuration file can be provided via CLI to all Zenoh examples and the Zenoh router.
+
+  * `-c, --config <FILE>`: a [JSON5](https://json5.org) configuration file. [DEFAULT_CONFIG.json5](DEFAULT_CONFIG.json5) shows the schema of this file and the available options.
 
 See other examples of Zenoh usage in [examples/](examples)
 
