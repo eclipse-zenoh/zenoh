@@ -160,6 +160,26 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session) {
     }
 }
 
+async fn test_session_double_pub_samekeyexpr(peer01: &Session) {
+    let key_expr = "test/session";
+
+    println!("[DP][01d] Creating publisher 1 with key_expr: {}", key_expr);
+    let pub01 = ztimeout!(peer01
+        .declare_publisher(key_expr)
+        .res_async()).unwrap();
+
+    println!("[DP][02d] Creating publisher 2 with key_expr: {}", key_expr);
+    let pub02 = ztimeout!(peer01
+        .declare_publisher(key_expr)
+        .res_async()).unwrap();
+
+    println!("[DP][03d] Dropping publisher 1");
+    ztimeout!(pub01.undeclare().res_async()).unwrap();
+
+    println!("[DP][04d] Dropping publisher 2");
+    ztimeout!(pub02.undeclare().res_async()).unwrap();
+}
+
 #[test]
 fn zenoh_session() {
     task::block_on(async {
@@ -169,6 +189,7 @@ fn zenoh_session() {
         let (peer01, peer02) = open_session(&["tcp/127.0.0.1:17447"]).await;
         test_session_pubsub(&peer01, &peer02).await;
         test_session_qryrep(&peer01, &peer02).await;
+        test_session_double_pub_samekeyexpr(&peer01).await;
         close_session(peer01, peer02).await;
     });
 }
