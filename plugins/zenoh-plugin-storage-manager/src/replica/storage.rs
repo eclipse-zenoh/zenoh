@@ -20,12 +20,12 @@ use flume::{Receiver, Sender};
 use futures::select;
 use std::collections::{HashMap, HashSet};
 use std::str::{self, FromStr};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use zenoh::buffers::ZBuf;
 use zenoh::prelude::r#async::*;
 use zenoh::time::{Timestamp, NTP64};
 use zenoh::{Result as ZResult, Session};
-use zenoh_backend_traits::config::StorageConfig;
+use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};
 use zenoh_backend_traits::{Capability, History, Persistence, StorageInsertionResult, StoredData};
 use zenoh_keyexpr::key_expr::OwnedKeyExpr;
 use zenoh_keyexpr::keyexpr_tree::impls::KeyedSetProvider;
@@ -38,13 +38,6 @@ use zenoh_util::{zenoh_home, Timed, TimedEvent, Timer};
 
 pub const WILDCARD_UPDATES_FILENAME: &str = "wildcard_updates";
 pub const TOMBSTONE_FILENAME: &str = "tombstones";
-
-// The default values for garbage collection
-// @TODO: have configurable parameters while having the current ones as default
-pub const GC_PERIOD: Duration = Duration::new(30, 0);
-lazy_static::lazy_static! {
-    static ref MIN_DELAY_BEFORE_REMOVAL: NTP64 = NTP64::from(Duration::new(86400, 0));
-}
 
 #[derive(Clone)]
 struct Update {
@@ -124,17 +117,24 @@ impl StorageService {
                 }
             }
         }
-        storage_service.start_storage_queryable_subscriber(rx).await
+        storage_service
+            .start_storage_queryable_subscriber(rx, config.garbage_collection_config)
+            .await
     }
 
-    async fn start_storage_queryable_subscriber(&mut self, rx: Receiver<StorageMessage>) {
+    async fn start_storage_queryable_subscriber(
+        &mut self,
+        rx: Receiver<StorageMessage>,
+        gc_config: GarbageCollectionConfig,
+    ) {
         self.initialize_if_empty().await;
 
         // start periodic GC event
         let t = Timer::default();
         let gc = TimedEvent::periodic(
-            GC_PERIOD,
+            gc_config.period,
             GarbageCollectionEvent {
+                config: gc_config,
                 tombstones: self.tombstones.clone(),
                 wildcard_updates: self.wildcard_updates.clone(),
             },
@@ -721,6 +721,7 @@ fn construct_update(data: String) -> Update {
 
 // Periodic event cleaning-up data info for old metadata
 struct GarbageCollectionEvent {
+    config: GarbageCollectionConfig,
     tombstones: Arc<RwLock<KeBoxTree<Timestamp, NonWild, KeyedSetProvider>>>,
     wildcard_updates: Arc<RwLock<KeBoxTree<Update, UnknownWildness, KeyedSetProvider>>>,
 }
@@ -730,7 +731,7 @@ impl Timed for GarbageCollectionEvent {
     async fn run(&mut self) {
         log::trace!("Start garbage collection");
         let time_limit = NTP64::from(SystemTime::now().duration_since(UNIX_EPOCH).unwrap())
-            - *MIN_DELAY_BEFORE_REMOVAL;
+            - NTP64::from(self.config.lifespan);
 
         // Get lock on fields
         let mut tombstones = self.tombstones.write().await;

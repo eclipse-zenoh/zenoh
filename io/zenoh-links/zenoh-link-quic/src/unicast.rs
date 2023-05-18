@@ -13,8 +13,8 @@
 //
 
 use crate::{
-    config::*, get_quic_addr, get_quic_dns, ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME,
-    QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
+    config::*, get_quic_addr, ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU,
+    QUIC_LOCATOR_PREFIX,
 };
 use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use async_std::prelude::FutureExt;
@@ -222,11 +222,14 @@ impl LinkManagerUnicastQuic {
 impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let epaddr = endpoint.address();
+        let host = epaddr
+            .as_str()
+            .split(':')
+            .next()
+            .ok_or("Endpoints must be of the form quic/<address>:<port>")?;
         let epconf = endpoint.config();
 
-        let domain = get_quic_dns(&epaddr).await?;
         let addr = get_quic_addr(&epaddr).await?;
-        let host: &str = domain.into();
 
         // Initialize the QUIC connection
         let mut root_cert_store = rustls::RootCertStore::empty();

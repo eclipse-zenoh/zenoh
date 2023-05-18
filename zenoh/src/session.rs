@@ -1039,31 +1039,30 @@ impl Session {
         if let Some(key_expr) = declared_sub {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-
             // If key_expr is a pure Expr, remap it to optimal Rid or RidWithSuffix
-            let key_expr = if !key_expr.is_optimized(self) {
-                match key_expr.as_str().find('*') {
-                    Some(0) => key_expr.to_wire(self),
-                    Some(pos) => {
-                        let expr_id = self.declare_prefix(&key_expr.as_str()[..pos]).res_sync();
-                        WireExpr {
-                            scope: expr_id,
-                            suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[pos..]),
-                        }
-                    }
-                    None => {
-                        let expr_id = self.declare_prefix(key_expr.as_str()).res_sync();
-                        WireExpr {
-                            scope: expr_id,
-                            suffix: std::borrow::Cow::Borrowed(""),
-                        }
-                    }
-                }
-            } else {
-                key_expr.to_wire(self)
-            };
+            // let key_expr = if !key_expr.is_optimized(self) {
+            //     match key_expr.as_str().find('*') {
+            //         Some(0) => key_expr.to_wire(self),
+            //         Some(pos) => {
+            //             let expr_id = self.declare_prefix(&key_expr.as_str()[..pos]).res_sync();
+            //             WireExpr {
+            //                 scope: expr_id,
+            //                 suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[pos..]),
+            //             }
+            //         }
+            //         None => {
+            //             let expr_id = self.declare_prefix(key_expr.as_str()).res_sync();
+            //             WireExpr {
+            //                 scope: expr_id,
+            //                 suffix: std::borrow::Cow::Borrowed(""),
+            //             }
+            //         }
+            //     }
+            // } else {
+            //     key_expr.to_wire(self)
+            // };
 
-            primitives.decl_subscriber(&key_expr, info, None);
+            primitives.decl_subscriber(&key_expr.to_wire(self), info, None);
         }
 
         Ok(sub_state)

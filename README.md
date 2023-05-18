@@ -39,7 +39,7 @@ Unzip it where you want, and run the extracted `zenohd` binary.
 Add Eclipse Zenoh private repository to the sources list, and install the `zenoh` package:
 
 ```bash
-echo "deb [trusted=yes] https://download.eclipse.org/zenoh/debian-repo/ /" | sudo tee -a /etc/apt/sources.list > /dev/null
+echo "deb [trusted=yes] https://download.eclipse.org/zenoh/debian-repo/ /" | sudo tee -a /etc/apt/sources.list.d/zenoh.list > /dev/null
 sudo apt update
 sudo apt install zenoh
 ```
@@ -63,7 +63,7 @@ Then you can start run `zenohd`.
 
 > :warning: **WARNING** :warning: : Zenoh and its ecosystem are under active development. When you build from git, make sure you also build from git any other Zenoh repository you plan to use (e.g. binding, plugin, backend, etc.). It may happen that some changes in git are not compatible with the most recent packaged Zenoh release (e.g. deb, docker, pip). We put particular effort in mantaining compatibility between the various git repositories in the Zenoh project.
 
-Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). Zenoh can be succesfully compiled with Rust stable (>= 1.62.1), so no special configuration is required from your side.  
+Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). Zenoh can be succesfully compiled with Rust stable (>= 1.65.0), so no special configuration is required from your side.  
 To build Zenoh, just type the following command after having followed the previous instructions:
 
 ```bash
@@ -71,12 +71,6 @@ $ cargo build --release --all-targets
 ```
 
 Zenoh's router is built as `target/release/zenohd`. All the examples are built into the `target/release/examples` directory. They can all work in peer-to-peer, or interconnected via the zenoh router.
-
--------------------------------
-## Previous 0.5 API:
-The following documentation pertains to the v0.6 API, which comes many changes to the behaviour and configuration of Zenoh. 
-
-To access the v0.5 version of the code and matching README, please go to the [0.5.0-beta.9](https://github.com/eclipse-zenoh/zenoh/tree/0.5.0-beta.9) tagged version.
 
 -------------------------------
 ## Quick tests of your build:
@@ -118,12 +112,17 @@ To access the v0.5 version of the code and matching README, please go to the [0.
     - get the volumes of the router (only memory by default):  
       `curl 'http://localhost:8000/@/router/local/**/volumes/*'`
     - get the storages of the local router (the memory storage configured at startup on '/demo/example/**' should be present):  
-     `curl 'http://localhost:8000/@/router/local/**/storages/*'`
+      `curl 'http://localhost:8000/@/router/local/**/storages/*'`
     - add another memory storage on `/demo/mystore/**`:  
       `curl -X PUT -H 'content-type:application/json' -d '{"key_expr":"demo/mystore/**","volume":"memory"}' http://localhost:8000/@/router/local/config/plugins/storage_manager/storages/mystore`
     - check it has been created:  
       `curl 'http://localhost:8000/@/router/local/**/storages/*'`
 
+**Configuration options:**
+
+A Zenoh configuration file can be provided via CLI to all Zenoh examples and the Zenoh router.
+
+  * `-c, --config <FILE>`: a [JSON5](https://json5.org) configuration file. [DEFAULT_CONFIG.json5](DEFAULT_CONFIG.json5) shows the schema of this file and the available options.
 
 See other examples of Zenoh usage in [examples/](examples)
 
@@ -161,6 +160,9 @@ See other examples of Zenoh usage in [examples/](examples)
       - `"None"` to desactivate the REST plugin
 
     If not specified, the REST plugin will be active on any interface (`[::]`) and port `8000`.
+
+> :warning: **WARNING** :warning: : The following documentation pertains to the v0.6+ API, which comes many changes to the behaviour and configuration of Zenoh.
+To access the v0.5 version of the code and matching README, please go to the [0.5.0-beta.9](https://github.com/eclipse-zenoh/zenoh/tree/0.5.0-beta.9) tagged version.
 
 -------------------------------
 ## Plugins

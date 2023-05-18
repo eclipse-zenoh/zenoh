@@ -330,10 +330,13 @@ impl TransportExecutor {
     fn new(num_threads: usize) -> Self {
         let (sender, receiver) = async_std::channel::bounded(1);
         let executor = Arc::new(async_executor::Executor::new());
-        for _ in 0..num_threads {
+        for i in 0..num_threads {
             let exec = executor.clone();
             let recv = receiver.clone();
-            std::thread::spawn(move || async_std::task::block_on(exec.run(recv.recv())));
+            std::thread::Builder::new()
+                .name(format!("zenoh-tx-{}", i))
+                .spawn(move || async_std::task::block_on(exec.run(recv.recv())))
+                .unwrap();
         }
         Self { executor, sender }
     }
