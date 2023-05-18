@@ -608,8 +608,10 @@ fn set_uncompressed_batch_header(
 fn tx_compression_test() {
     let payload: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
 
+    let mut buff: Box<[u8]> =
+        vec![0; lz4_flex::block::get_maximum_output_size(MAX_BATCH_SIZE) + 3].into_boxed_slice();
+
     // Compression done for the sake of comparing the result.
-    let mut buff: Vec<u8> = (0..126).collect();
     let payload_compression_size = lz4_flex::block::compress_into(&payload, &mut buff).unwrap();
 
     fn get_header_value(buff: &Box<[u8]>) -> u16 {
@@ -618,9 +620,6 @@ fn tx_compression_test() {
         let batch_size = u16::from_le_bytes(header);
         batch_size
     }
-
-    let mut buff: Box<[u8]> =
-        vec![0; lz4_flex::block::get_maximum_output_size(MAX_BATCH_SIZE)].into_boxed_slice();
 
     // Streamed with compression enabled
     let batch = [8, 0, 1, 2, 3, 4, 5, 6, 7, 8];
