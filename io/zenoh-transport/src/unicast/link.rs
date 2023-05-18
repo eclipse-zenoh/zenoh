@@ -297,6 +297,7 @@ async fn rx_task_stream(
         let mut length = [0_u8, 0_u8];
         link.read_exact(&mut length).await?;
         let n = u16::from_le_bytes(length) as usize;
+        println!("{n}");
         link.read_exact(&mut buffer[0..n]).await?;
         Ok(Action::Read(n))
     }
@@ -339,20 +340,7 @@ async fn rx_task_stream(
                 let mut start_pos = 0;
 
                 #[cfg(all(feature = "unstable", feature = "transport_compression"))]
-                {
-                    let is_compressed: bool = buffer[COMPRESSION_BYTE_INDEX] == COMPRESSION_ENABLED;
-                    if is_compressed {
-                        let mut aux_buff = pool.try_take().unwrap_or_else(|| pool.alloc());
-                        end_pos = lz4_flex::block::decompress_into(
-                            &buffer[BATCH_PAYLOAD_START_INDEX..n],
-                            &mut aux_buff,
-                        )
-                        .map_err(|e| zerror!("Decompression error: {:}", e))?;
-                        buffer = aux_buff;
-                    } else {
-                        start_pos = BATCH_PAYLOAD_START_INDEX;
-                    }
-                }
+                rx_decompress(&mut buffer, &pool, n, &mut start_pos, &mut end_pos)?;
 
                 // Deserialize all the messages from the current ZBuf
                 let mut zslice = ZSlice::make(Arc::new(buffer), start_pos, end_pos).unwrap();
@@ -436,20 +424,7 @@ async fn rx_task_dgram(
                 let mut start_pos = 0;
 
                 #[cfg(all(feature = "unstable", feature = "transport_compression"))]
-                {
-                    let is_compressed: bool = buffer[COMPRESSION_BYTE_INDEX] == COMPRESSION_ENABLED;
-                    if is_compressed {
-                        let mut aux_buff = pool.try_take().unwrap_or_else(|| pool.alloc());
-                        end_pos = lz4_flex::block::decompress_into(
-                            &buffer[BATCH_PAYLOAD_START_INDEX..n],
-                            &mut aux_buff,
-                        )
-                        .map_err(|e| zerror!("Decompression error: {:}", e))?;
-                        buffer = aux_buff;
-                    } else {
-                        start_pos = BATCH_PAYLOAD_START_INDEX;
-                    }
-                }
+                rx_decompress(&mut buffer, &pool, n, &mut start_pos, &mut end_pos)?;
 
                 // Deserialize all the messages from the current ZBuf
                 let mut zslice = ZSlice::make(Arc::new(buffer), start_pos, end_pos).unwrap();
@@ -488,29 +463,58 @@ async fn rx_task(
 }
 
 #[cfg(all(feature = "unstable", feature = "transport_compression"))]
+/// Decompresses the received contents contained in the buffer.
+fn rx_decompress(
+    buffer: &mut zenoh_sync::RecyclingObject<Box<[u8]>>,
+    pool: &RecyclingObjectPool<Box<[u8]>, impl Fn() -> Box<[u8]>>,
+    read_bytes: usize,
+    start_pos: &mut usize,
+    end_pos: &mut usize,
+) -> ZResult<()> {
+    let is_compressed: bool = buffer[COMPRESSION_BYTE_INDEX] == COMPRESSION_ENABLED;
+    Ok(if is_compressed {
+        let mut aux_buff = pool.try_take().unwrap_or_else(|| pool.alloc());
+        *end_pos = lz4_flex::block::decompress_into(
+            &buffer[BATCH_PAYLOAD_START_INDEX..read_bytes],
+            &mut aux_buff,
+        )
+        .map_err(|e| zerror!("Decompression error: {:}", e))?;
+        *buffer = aux_buff;
+    } else {
+        *start_pos = BATCH_PAYLOAD_START_INDEX;
+        *end_pos = read_bytes;
+    })
+}
+
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
+/// Compresses the batch into the output buffer.
+///
+/// If the batch is streamed, the output contains a header of two bytes representing the size of
+/// the resulting batch, otherwise it is not included. In any case, an extra byte is added (before
+/// the payload and considered in the header value) representing if the batch is compressed or not.
 fn tx_compressed(
     is_compressed: bool,
     is_streamed: bool,
-    bytes: &[u8],
-    buff: &mut [u8],
+    batch: &[u8],
+    output: &mut [u8],
 ) -> ZResult<usize> {
     if is_compressed {
         let s_pos = if is_streamed { 3 } else { 1 };
         let compression_size =
-            lz4_flex::block::compress_into(&bytes[s_pos - 1..], &mut buff[s_pos..])
+            lz4_flex::block::compress_into(&batch[s_pos - 1..], &mut output[s_pos..])
                 .map_err(|e| zerror!("Compression error: {:}", e))?;
-        let batch_size = set_compressed_batch_header(buff, compression_size, is_streamed)?;
+        let batch_size = set_compressed_batch_header(output, compression_size, is_streamed)?;
         if batch_size > MAX_BATCH_SIZE {
             log::debug!(
                 "Compression error: resulting batch size of the compression is bigger than 
                 the maximum allowed size of {} bytes. Will send batch uncompressed.",
                 MAX_BATCH_SIZE
             );
-            return Ok(set_uncompressed_batch_header(bytes, buff, is_streamed)?);
+            return Ok(set_uncompressed_batch_header(batch, output, is_streamed)?);
         }
         Ok(batch_size)
     } else {
-        Ok(set_uncompressed_batch_header(bytes, buff, is_streamed)?)
+        Ok(set_uncompressed_batch_header(batch, output, is_streamed)?)
     }
 }
 
@@ -598,4 +602,101 @@ fn set_uncompressed_batch_header(
         Err(zerror!("Failed to send uncompressed batch, batch size ({}) exceeds the maximum batch size of {}.", final_batch_size, MAX_BATCH_SIZE))?;
     }
     return Ok(final_batch_size);
+}
+
+#[cfg(all(feature = "transport_compression", feature = "unstable"))]
+#[test]
+fn tx_compression_test() {
+    let payload: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+
+    // Compression done for the sake of comparing the result.
+    let mut buff: Vec<u8> = (0..126).collect();
+    let payload_compression_size = lz4_flex::block::compress_into(&payload, &mut buff).unwrap();
+
+    fn get_header_value(buff: &Box<[u8]>) -> u16 {
+        let mut header = [0_u8, 0_u8];
+        header[..HEADER_BYTES_SIZE].copy_from_slice(&buff[..HEADER_BYTES_SIZE]);
+        let batch_size = u16::from_le_bytes(header);
+        batch_size
+    }
+
+    let mut buff: Box<[u8]> =
+        vec![0; lz4_flex::block::get_maximum_output_size(MAX_BATCH_SIZE)].into_boxed_slice();
+
+    // Streamed with compression enabled
+    let batch = [8, 0, 1, 2, 3, 4, 5, 6, 7, 8];
+    let result = tx_compressed(true, true, &batch, &mut buff).unwrap();
+
+    let batch_size = get_header_value(&buff);
+    assert_eq!(batch_size as usize, payload_compression_size + 1);
+
+    assert_eq!(result, payload_compression_size + 3);
+
+    // Not streamed with compression enabled
+    let batch = payload;
+    let result = tx_compressed(true, false, &batch, &mut buff).unwrap();
+
+    assert_eq!(result, payload_compression_size + 1);
+
+    // Streamed with compression disabled
+    let batch = [8, 0, 1, 2, 3, 4, 5, 6, 7, 8];
+    let result = tx_compressed(false, true, &batch, &mut buff).unwrap();
+
+    let batch_size = get_header_value(&buff);
+    assert_eq!(batch_size as usize, payload.len() + 1);
+
+    assert_eq!(result, payload.len() + 3);
+
+    // Not streamed and compression disabled
+    let batch = payload;
+    let result = tx_compressed(false, false, &batch, &mut buff).unwrap();
+
+    assert_eq!(result, payload.len() + 1);
+}
+
+#[cfg(all(feature = "transport_compression", feature = "unstable"))]
+#[test]
+fn rx_compression_test() {
+    let pool = RecyclingObjectPool::new(2, || vec![0_u8; MAX_BATCH_SIZE].into_boxed_slice());
+    let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
+
+    // Compressed batch
+    let payload: [u8; 8] = [1, 2, 3, 4, 5, 6, 7, 8];
+    let compression_size = lz4_flex::block::compress_into(&payload, &mut buffer[1..]).unwrap();
+    buffer[0] = 1; // is compressed byte
+
+    let mut start_pos: usize = 0;
+    let mut end_pos: usize = 0;
+
+    rx_decompress(
+        &mut buffer,
+        &pool,
+        compression_size + 1,
+        &mut start_pos,
+        &mut end_pos,
+    )
+    .unwrap();
+
+    assert_eq!(start_pos, 0);
+    assert_eq!(end_pos, payload.len());
+    assert_eq!(buffer[start_pos..end_pos], payload);
+
+    // Non compressed batch
+    let mut start_pos: usize = 0;
+    let mut end_pos: usize = 0;
+
+    buffer[0] = 0;
+    buffer[1..payload.len() + 1].copy_from_slice(&payload[..]);
+    rx_decompress(
+        &mut buffer,
+        &pool,
+        payload.len() + 1,
+        &mut start_pos,
+        &mut end_pos,
+    )
+    .unwrap();
+
+    assert_eq!(start_pos, 1);
+    assert_eq!(end_pos, payload.len() + 1);
+    assert_eq!(buffer[start_pos..end_pos], payload);
 }
