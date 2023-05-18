@@ -297,7 +297,6 @@ async fn rx_task_stream(
         let mut length = [0_u8, 0_u8];
         link.read_exact(&mut length).await?;
         let n = u16::from_le_bytes(length) as usize;
-        println!("{n}");
         link.read_exact(&mut buffer[0..n]).await?;
         Ok(Action::Read(n))
     }
