@@ -515,10 +515,17 @@ impl std::fmt::Display for ConfigOpenErr {
 }
 impl std::error::Error for ConfigOpenErr {}
 impl Config {
+    pub fn from_env() -> ZResult<Self> {
+        let path = std::env::var(defaults::ENV)
+            .map_err(|e| zerror!("Invalid ENV variable ({}): {}", defaults::ENV, e))?;
+        Self::from_file(path.as_str())
+    }
+
     pub fn from_file<P: AsRef<Path>>(path: P) -> ZResult<Self> {
         let path = path.as_ref();
         Self::_from_file(path)
     }
+
     fn _from_file(path: &Path) -> ZResult<Config> {
         match std::fs::File::open(path) {
             Ok(mut f) => {
@@ -548,6 +555,7 @@ impl Config {
             Err(e) => bail!(e),
         }
     }
+
     pub fn libloader(&self) -> LibLoader {
         if self.plugins_search_dirs.is_empty() {
             LibLoader::default()
