@@ -13,6 +13,8 @@
 //
 use super::*;
 
+pub const ENV: &str = "ZENOH_CONFIG";
+
 macro_rules! mode_accessor {
     ($type:ty) => {
         #[inline]
