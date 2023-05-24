@@ -2,10 +2,10 @@
 /// For a more complete view of the configuration's structure, check out `zenoh/src/config.rs`'s `Config` structure.
 /// Note that the values here are correctly typed, but may not be sensible, so copying this file to change only the parts that matter to you is not good practice.
 {
-  /// The identifier (as hex-string) that zenohd must use.
+  /// The identifier (as UUID) that zenoh runtime will use.
   /// If not set, a random UUIDv4 will be used.
   /// WARNING: this id must be unique in your zenoh network.
-  // id: "5975702c206974277320415343494921",
+  // id: "00000000-0000-0000-0000-000000000001",
 
   /// The node's mode (router, peer or client)
   mode: "peer",

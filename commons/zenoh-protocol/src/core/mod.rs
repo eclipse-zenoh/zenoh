@@ -226,22 +226,10 @@ impl FromStr for ZenohId {
     type Err = zenoh_result::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // filter-out '-' characters (in case s has UUID format)
-        match s.parse::<Uuid>() {
-            Ok(u) => Ok(ZenohId::from(u)),
-            Err(_) => {
-                // Handle odd-length string for the hex decode
-                let i = if s.len() % 2 != 0 {
-                    let mut t = String::from("0");
-                    t.push_str(s);
-                    hex::decode(t)
-                } else {
-                    hex::decode(s)
-                }
-                .map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
-                i.as_slice().try_into()
-            }
-        }
+        let u: Uuid = s
+            .parse()
+            .map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
+        Ok(ZenohId::from(u))
     }
 }
 
