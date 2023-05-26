@@ -68,7 +68,7 @@ fn parse_args() -> (Config, String, Option<String>, usize, u64) {
             "-g, --group=[STRING] 'The group name'",
         ).default_value("zgroup"))
         .arg(Arg::from_usage(
-            "-i, --id=[STRING] 'The group member id (default is the zenoh UUID)'",
+            "-i, --id=[STRING] 'The group member id (default is the zenoh ID)'",
         ))
         .arg(Arg::from_usage(
             "-s, --size=[INT] 'The expected group size. The example will wait for the group to reach this size'",

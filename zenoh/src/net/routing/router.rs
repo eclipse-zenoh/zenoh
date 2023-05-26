@@ -207,7 +207,7 @@ impl Tables {
                     for b in key_expr.as_bytes() {
                         hasher.write_u8(*b);
                     }
-                    for b in r.as_slice() {
+                    for b in &r.to_le_bytes()[..r.size()] {
                         hasher.write_u8(*b);
                     }
                     hasher.finish()
