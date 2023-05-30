@@ -362,6 +362,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         // Spawn the accept loop for the listener
         let active = Arc::new(AtomicBool::new(true));
         let signal = Signal::new();
+        let mut listeners = zwrite!(self.listeners);
 
         let c_active = active.clone();
         let c_signal = signal.clone();
@@ -377,7 +378,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
 
         let locator = endpoint.to_locator();
         let listener = ListenerUnixSocketStream::new(endpoint, active, signal, handle, lock_fd);
-        zwrite!(self.listeners).insert(local_path_str.to_owned(), listener);
+        listeners.insert(local_path_str.to_owned(), listener);
 
         Ok(locator)
     }
