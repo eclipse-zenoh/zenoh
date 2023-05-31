@@ -12,14 +12,15 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use futures::future::try_join_all;
+use futures::FutureExt as _;
 use std::sync::atomic::Ordering;
-use std::sync::{atomic::AtomicBool, Arc};
+use std::sync::{atomic::AtomicUsize, Arc};
 use std::time::Duration;
 
 use async_std::prelude::FutureExt;
 use zenoh::config::{whatami::WhatAmI, Config};
 use zenoh::prelude::r#async::*;
-use zenoh::Result;
+use zenoh::{value::Value, Result};
 use zenoh_config::whatami::WhatAmIMatcher;
 use zenoh_config::ModeDependentValue;
 use zenoh_core::zasync_executor_init;
@@ -35,17 +36,23 @@ macro_rules! ztimeout {
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Task {
     Pub(String, usize),
     Sub(String, usize),
+    Queryable(String, usize),
+    Get(String, usize),
     Sleep(Duration),
     Wait,
-    Terminate,
+    CheckPoint,
 }
 
 impl Task {
-    async fn run(&self, session: Arc<Session>, terminated: Arc<AtomicBool>) -> Result<()> {
+    async fn run(
+        &self,
+        session: Arc<Session>,
+        remaining_checkpoints: Arc<AtomicUsize>,
+    ) -> Result<()> {
         match self {
             Self::Sub(ke, expected_size) => {
                 let sub = ztimeout!(session.declare_subscriber(ke).res_async())?;
@@ -57,32 +64,73 @@ impl Task {
                     }
                     counter += 1;
                     if counter >= MSG_COUNT {
-                        log::info!("Received sufficient amount of messages.");
+                        println!("Sub received sufficient amount of messages.");
+                        println!("Sub task done.");
                         break;
                     }
                 }
             }
 
             Self::Pub(ke, payload_size) => {
-                while !terminated.load(Ordering::Relaxed) {
-                    // async_std::task::sleep(Duration::from_millis(300)).await;
+                let value: Value = vec![0u8; *payload_size].into();
+                // while !terminated.load(Ordering::Relaxed) {
+                while remaining_checkpoints.load(Ordering::Relaxed) > 0 {
                     ztimeout!(session
-                        .put(ke, vec![0u8; *payload_size])
+                        .put(ke, value.clone())
                         .congestion_control(CongestionControl::Block)
                         .res_async())?;
                 }
+                println!("Pub task done.");
+            }
+
+            Self::Get(ke, expected_size) => {
+                let mut counter = 0;
+                while counter < MSG_COUNT {
+                    let replies = ztimeout!(session.get(ke).res_async())?;
+                    while let Ok(reply) = replies.recv_async().await {
+                        let recv_size = reply.sample?.value.payload.len();
+                        if recv_size != *expected_size {
+                            bail!("Received payload size {recv_size} mismatches the expected {expected_size}");
+                        }
+                        counter += 1;
+                    }
+                }
+                println!("Get task done.");
+            }
+
+            Self::Queryable(ke, payload_size) => {
+                let queryable = session.declare_queryable(ke).res_async().await?;
+                let sample = Sample::try_from(ke.clone(), vec![0u8; *payload_size])?;
+
+                loop {
+                    futures::select! {
+                        query = queryable.recv_async() => {
+                            query?.reply(Ok(sample.clone())).res_async().await?;
+                        },
+
+                        _ = async_std::task::sleep(Duration::from_millis(300)).fuse() => {
+                            if remaining_checkpoints.load(Ordering::Relaxed) == 0 {
+                                break;
+                            }
+                        }
+                    }
+                }
+                println!("Queryable task done.");
             }
 
             Self::Sleep(dur) => {
                 async_std::task::sleep(*dur).await;
             }
 
-            Self::Terminate => {
-                terminated.store(true, Ordering::Relaxed);
+            Self::CheckPoint => {
+                if remaining_checkpoints.fetch_sub(1, Ordering::Relaxed) <= 1 {
+                    println!("The end of the recipe.");
+                }
             }
 
             Self::Wait => {
-                while !terminated.load(Ordering::Relaxed) {
+                // while !terminated.load(Ordering::Relaxed) {
+                while remaining_checkpoints.load(Ordering::Relaxed) > 0 {
                     async_std::task::sleep(Duration::from_millis(100)).await;
                 }
             }
@@ -103,6 +151,20 @@ struct Node {
     task: ConcurrentTask,
     config: Option<Config>,
     warmup: Duration,
+}
+
+impl Node {
+    fn num_checkpoints(&self) -> usize {
+        self.task
+            .iter()
+            .map(|seq_tasks| {
+                seq_tasks
+                    .iter()
+                    .filter(|task| **task == Task::CheckPoint)
+                    .count()
+            })
+            .sum()
+    }
 }
 
 impl Default for Node {
@@ -137,14 +199,21 @@ impl Recipe {
         Self { nodes }
     }
 
+    fn num_checkpoints(&self) -> usize {
+        self.nodes.iter().map(|node| node.num_checkpoints()).sum()
+    }
+
     async fn run(&self) -> Result<()> {
-        let terminated = Arc::new(AtomicBool::default());
+        // let terminated = Arc::new(AtomicBool::default());
+        let num_checkpoints = self.num_checkpoints();
+        let remaining_checkpoints = Arc::new(AtomicUsize::new(num_checkpoints));
+        println!("Recipe beging testing with {num_checkpoints} checkpoint(s).");
 
         let futures = self.nodes.clone().into_iter().map(|node| {
-            log::info!("Node: {} started.", &node.name);
+            println!("Node: {} started.", &node.name);
 
-            // Multiple nodes share the same terminated flag
-            let terminated = terminated.clone();
+            // // Multiple nodes share the same terminated flag
+            let remaining_checkpoints = remaining_checkpoints.clone();
 
             async move {
                 dbg!(&node.name);
@@ -171,7 +240,7 @@ impl Recipe {
                 let session = if let Ok(session) = zenoh::open(config.clone()).res_async().await {
                     session.into_arc()
                 } else {
-                    log::info!("Sleep and retry to connect to the endpoint...");
+                    println!("Sleep and retry to connect to the endpoint...");
                     async_std::task::sleep(Duration::from_secs(1)).await;
                     zenoh::open(config).res_async().await?.into_arc()
                 };
@@ -180,11 +249,13 @@ impl Recipe {
                 let futs = node.task.into_iter().map(|seq_tasks| {
                     // Multiple tasks share the session
                     let session = session.clone();
-                    let terminated = terminated.clone();
-
+                    // let terminated = seq_task_terminated.clone();
+                    let remaining_checkpoints = remaining_checkpoints.clone();
                     async_std::task::spawn(async move {
                         for t in seq_tasks {
-                            t.run(session.clone(), terminated.clone()).await?;
+                            // t.run(session.clone(), seq_task_terminated.clone()).await?;
+                            t.run(session.clone(), remaining_checkpoints.clone())
+                                .await?;
                         }
                         Result::Ok(())
                     })
@@ -198,7 +269,7 @@ impl Recipe {
                     .close()
                     .res_async()
                     .await?;
-                log::info!("Node: {} is closed.", &node.name);
+                println!("Node: {} is closed.", &node.name);
                 Result::Ok(())
             }
         });
@@ -232,29 +303,42 @@ fn gossip() -> Result<()> {
                 ..Default::default()
             },
             Node {
-                name: format!("Pub {}", WhatAmI::Peer),
+                name: format!("Pub & Queryable {}", WhatAmI::Peer),
                 connect: vec![locator.clone()],
                 mode: WhatAmI::Peer,
-                task: ConcurrentTask::from([SequentialTask::from([
-                    Task::Sleep(Duration::from_millis(2000)),
-                    Task::Pub(ke.clone(), msg_size),
-                ])]),
+                task: ConcurrentTask::from([
+                    SequentialTask::from([
+                        Task::Sleep(Duration::from_millis(2000)),
+                        Task::Pub(ke.clone(), msg_size),
+                    ]),
+                    SequentialTask::from([
+                        Task::Sleep(Duration::from_millis(2000)),
+                        Task::Queryable(ke.clone(), msg_size),
+                    ]),
+                ]),
                 ..Default::default()
             },
             Node {
-                name: format!("Sub {}", WhatAmI::Peer),
+                name: format!("Sub & Get {}", WhatAmI::Peer),
                 mode: WhatAmI::Peer,
                 connect: vec![locator.clone()],
-                task: ConcurrentTask::from([SequentialTask::from([
-                    Task::Sleep(Duration::from_millis(2000)),
-                    Task::Sub(ke, msg_size),
-                    Task::Terminate,
-                ])]),
+                task: ConcurrentTask::from([
+                    SequentialTask::from([
+                        Task::Sleep(Duration::from_millis(2000)),
+                        Task::Sub(ke.clone(), msg_size),
+                        Task::CheckPoint,
+                    ]),
+                    SequentialTask::from([
+                        Task::Sleep(Duration::from_millis(2000)),
+                        Task::Get(ke, msg_size),
+                        Task::CheckPoint,
+                    ]),
+                ]),
                 ..Default::default()
             },
         ]);
 
-        log::info!("[Recipe]: {}", &recipe);
+        println!("[Recipe]: {}", &recipe);
         recipe.run().await?;
         println!("Gossip test passed.");
         Result::Ok(())
@@ -297,10 +381,10 @@ fn static_failover_brokering() -> Result<()> {
                 mode: WhatAmI::Peer,
                 connect: vec![locator.clone()],
                 config: disable_autoconnect_config(),
-                task: ConcurrentTask::from([SequentialTask::from([Task::Pub(
-                    ke.clone(),
-                    msg_size,
-                )])]),
+                task: ConcurrentTask::from([
+                    SequentialTask::from([Task::Pub(ke.clone(), msg_size)]),
+                    SequentialTask::from([Task::Queryable(ke.clone(), msg_size)]),
+                ]),
                 ..Default::default()
             },
             Node {
@@ -308,14 +392,14 @@ fn static_failover_brokering() -> Result<()> {
                 mode: WhatAmI::Peer,
                 connect: vec![locator.clone()],
                 config: disable_autoconnect_config(),
-                task: ConcurrentTask::from([SequentialTask::from([
-                    Task::Sub(ke.clone(), msg_size),
-                    Task::Terminate,
-                ])]),
+                task: ConcurrentTask::from([
+                    SequentialTask::from([Task::Sub(ke.clone(), msg_size), Task::CheckPoint]),
+                    SequentialTask::from([Task::Get(ke.clone(), msg_size), Task::CheckPoint]),
+                ]),
                 ..Default::default()
             },
         ]);
-        log::info!("[Recipe]: {}", &recipe);
+        println!("[Recipe]: {}", &recipe);
         recipe.run().await?;
         println!("Static failover brokering test passed.");
         Result::Ok(())
@@ -355,25 +439,31 @@ fn pubsub_combination() -> Result<()> {
                         name: format!("Pub {node1_mode}"),
                         mode: node1_mode,
                         connect: vec![locator.clone()],
-                        task: ConcurrentTask::from([SequentialTask::from([Task::Pub(
-                            ke.clone(),
-                            msg_size,
-                        )])]),
+                        task: ConcurrentTask::from([
+                            SequentialTask::from([Task::Pub(ke.clone(), msg_size)]),
+                            SequentialTask::from([Task::Queryable(ke.clone(), msg_size)]),
+                        ]),
                         ..Default::default()
                     },
                     Node {
                         name: format!("Sub {node2_mode}"),
                         mode: node2_mode,
                         connect: vec![locator],
-                        task: ConcurrentTask::from([SequentialTask::from([
-                            Task::Sub(ke, msg_size),
-                            Task::Terminate,
-                        ])]),
+                        task: ConcurrentTask::from([
+                            SequentialTask::from([
+                                Task::Sub(ke.clone(), msg_size),
+                                Task::CheckPoint,
+                            ]),
+                            SequentialTask::from([
+                                Task::Get(ke, msg_size),
+                                Task::CheckPoint,
+                            ]),
+                        ]),
                         ..Default::default()
                     },
                 ];
 
-                // All permuations
+                // All permutations
                 vec![
                     Recipe::new([recipe[0].clone(), recipe[1].clone(), recipe[2].clone()]),
                     Recipe::new([recipe[0].clone(), recipe[2].clone(), recipe[1].clone()]),
@@ -385,11 +475,12 @@ fn pubsub_combination() -> Result<()> {
             });
 
         for recipe in recipe_list {
-            log::info!("[Recipe]: {}", &recipe);
+            println!("\n\n[Recipe]: {} begin running...", &recipe);
             recipe.run().await?;
+            println!("[Recipe]: {} finished", &recipe);
         }
 
-        // try_join_all(recipe_list.map(|r| run_recipe(r))).await?;
+        // try_join_all(recipe_list.map(|r| async move {r.run().await?; Result::Ok(())} )).await?;
 
         println!("Pub/sub combination test passed.");
         Result::Ok(())
@@ -440,10 +531,10 @@ fn p2p_combination() -> Result<()> {
                         mode: node1_mode,
                         listen: node1_listen_connect.0,
                         connect: node1_listen_connect.1,
-                        task: ConcurrentTask::from([SequentialTask::from([Task::Pub(
-                            ke.clone(),
-                            msg_size,
-                        )])]),
+                        task: ConcurrentTask::from([
+                            SequentialTask::from([Task::Pub(ke.clone(), msg_size)]),
+                            SequentialTask::from([Task::Queryable(ke.clone(), msg_size)]),
+                        ]),
                         ..Default::default()
                     },
                     Node {
@@ -451,17 +542,23 @@ fn p2p_combination() -> Result<()> {
                         mode: node2_mode,
                         listen: node2_listen_connect.0,
                         connect: node2_listen_connect.1,
-                        task: ConcurrentTask::from([SequentialTask::from([
-                            Task::Sub(ke, msg_size),
-                            Task::Terminate,
-                        ])]),
+                        task: ConcurrentTask::from([
+                            SequentialTask::from([
+                                Task::Sub(ke.clone(), msg_size),
+                                Task::CheckPoint,
+                            ]),
+                            SequentialTask::from([
+                                Task::Get(ke, msg_size),
+                                Task::CheckPoint,
+                            ]),
+                        ]),
                         ..Default::default()
                     },
                 ])
             });
 
         for recipe in recipe_list {
-            log::info!("[Recipe]: {}", &recipe);
+            println!("[Recipe]: {}", &recipe);
             recipe.run().await?;
         }
 
