@@ -2,7 +2,8 @@
 /// For a more complete view of the configuration's structure, check out `zenoh/src/config.rs`'s `Config` structure.
 /// Note that the values here are correctly typed, but may not be sensible, so copying this file to change only the parts that matter to you is not good practice.
 {
-  /// The identifier (as unsigned 128bit integer) that zenoh runtime will use.
+  /// The identifier (as unsigned 128bit integer in hexadecimal lowercase - leading zeros are not accepted)
+  /// that zenoh runtime will use.
   /// If not set, a random unsigned 128bit integer will be used.
   /// WARNING: this id must be unique in your zenoh network.
   // id: "1234567890abcdef",
