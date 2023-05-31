@@ -49,7 +49,7 @@ clap::Arg::new("listen").short('l').long("listen").value_name("ENDPOINT").help(r
 Repeat this option to open several listeners.").takes_value(true).multiple_occurrences(true),
 clap::Arg::new("connect").short('e').long("connect").value_name("ENDPOINT").help(r"A peer locator this router will try to connect to.
 Repeat this option to connect to several peers.").takes_value(true).multiple_occurrences(true),
-clap::Arg::new("id").short('i').long("id").value_name("HEX_STRING").help(r"The identifier (as an hexadecimal string, with odd number of chars - e.g.: 0A0B23...) that zenohd must use. If not set, a random UUIDv4 will be used.
+clap::Arg::new("id").short('i').long("id").value_name("HEX_STRING").help(r"The identifier (as an hexadecimal string, with odd number of chars - e.g.: A0B23...) that zenohd must use. If not set, a random unsigned 128bit integer will be used.
 WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!").multiple_values(false).multiple_occurrences(false),
 clap::Arg::new("plugin").short('P').long("plugin").value_name("PLUGIN").takes_value(true).multiple_occurrences(true).help(r#"A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library named 'libzenoh_plugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>".
 Repeat this option to load several plugins. If loading failed, zenohd will exit."#),
