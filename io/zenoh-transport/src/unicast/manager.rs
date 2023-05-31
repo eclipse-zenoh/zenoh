@@ -46,6 +46,8 @@ pub struct TransportManagerConfigUnicast {
     pub is_qos: bool,
     #[cfg(feature = "shared-memory")]
     pub is_shm: bool,
+    #[cfg(all(feature = "unstable", feature = "transport_compression"))]
+    pub is_compressed: bool,
 }
 
 pub struct TransportManagerStateUnicast {
@@ -81,6 +83,8 @@ pub struct TransportManagerBuilderUnicast {
     pub(super) is_qos: bool,
     #[cfg(feature = "shared-memory")]
     pub(super) is_shm: bool,
+    #[cfg(all(feature = "unstable", feature = "transport_compression"))]
+    pub(super) is_compressed: bool,
     pub(super) peer_authenticator: HashSet<PeerAuthenticator>,
     pub(super) link_authenticator: HashSet<LinkAuthenticator>,
 }
@@ -137,6 +141,12 @@ impl TransportManagerBuilderUnicast {
         self
     }
 
+    #[cfg(all(feature = "unstable", feature = "transport_compression"))]
+    pub fn compression(mut self, is_compressed: bool) -> Self {
+        self.is_compressed = is_compressed;
+        self
+    }
+
     pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilderUnicast> {
         self = self.lease(Duration::from_millis(
             config.transport().link().tx().lease().unwrap(),
@@ -153,6 +163,11 @@ impl TransportManagerBuilderUnicast {
         #[cfg(feature = "shared-memory")]
         {
             self = self.shm(*config.transport().shared_memory().enabled());
+        }
+
+        #[cfg(all(feature = "unstable", feature = "transport_compression"))]
+        {
+            self = self.compression(*config.transport().link().compression().enabled());
         }
         self = self.peer_authenticator(PeerAuthenticator::from_config(config).await?);
         self = self.link_authenticator(LinkAuthenticator::from_config(config).await?);
@@ -174,6 +189,8 @@ impl TransportManagerBuilderUnicast {
             is_qos: self.is_qos,
             #[cfg(feature = "shared-memory")]
             is_shm: self.is_shm,
+            #[cfg(all(feature = "unstable", feature = "transport_compression"))]
+            is_compressed: self.is_compressed,
         };
 
         // Enable pubkey authentication by default to avoid ZenohId spoofing
@@ -224,6 +241,8 @@ impl Default for TransportManagerBuilderUnicast {
             is_qos: zparse!(ZN_QOS_DEFAULT).unwrap(),
             #[cfg(feature = "shared-memory")]
             is_shm: zparse!(ZN_SHM_DEFAULT).unwrap(),
+            #[cfg(all(feature = "unstable", feature = "transport_compression"))]
+            is_compressed: false,
             peer_authenticator: HashSet::new(),
             link_authenticator: HashSet::new(),
         }
