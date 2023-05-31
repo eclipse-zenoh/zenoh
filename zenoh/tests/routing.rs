@@ -454,10 +454,7 @@ fn pubsub_combination() -> Result<()> {
                                 Task::Sub(ke.clone(), msg_size),
                                 Task::CheckPoint,
                             ]),
-                            SequentialTask::from([
-                                Task::Get(ke, msg_size),
-                                Task::CheckPoint,
-                            ]),
+                            SequentialTask::from([Task::Get(ke, msg_size), Task::CheckPoint]),
                         ]),
                         ..Default::default()
                     },
@@ -547,10 +544,7 @@ fn p2p_combination() -> Result<()> {
                                 Task::Sub(ke.clone(), msg_size),
                                 Task::CheckPoint,
                             ]),
-                            SequentialTask::from([
-                                Task::Get(ke, msg_size),
-                                Task::CheckPoint,
-                            ]),
+                            SequentialTask::from([Task::Get(ke, msg_size), Task::CheckPoint]),
                         ]),
                         ..Default::default()
                     },
