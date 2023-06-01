@@ -118,6 +118,11 @@ Zenoh's router is built as `target/release/zenohd`. All the examples are built i
     - check it has been created:  
       `curl 'http://localhost:8000/@/router/local/**/storages/*'`
 
+**Configuration options:**
+
+A Zenoh configuration file can be provided via CLI to all Zenoh examples and the Zenoh router.
+
+  * `-c, --config <FILE>`: a [JSON5](https://json5.org) configuration file. [DEFAULT_CONFIG.json5](DEFAULT_CONFIG.json5) shows the schema of this file and the available options.
 
 See other examples of Zenoh usage in [examples/](examples)
 
@@ -137,8 +142,8 @@ See other examples of Zenoh usage in [examples/](examples)
   * `-e, --connect <ENDPOINT>...`: An endpoint this router will try to connect to. Repeat this option to connect to several peers or routers.
   * `--no-multicast-scouting`: By default zenohd replies to multicast scouting messages for being discovered by peers and clients.
     This option disables this feature.
-  * `-i, --id <hex_string>`: The identifier (as an hexadecimal string - e.g.: 0A0B23...) that zenohd must use.
-     **WARNING**: this identifier must be unique in the system! If not set, a random UUIDv4 will be used.
+  * `-i, --id <hex_string>`: The identifier (as an hexadecimal string - e.g.: A0B23...) that zenohd must use.
+     **WARNING**: this identifier must be unique in the system! If not set, a random unsigned 128bit integer will be used.
   * `--no-timestamp`: By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one.
     This option disables this feature.
   * `-P, --plugin [<PLUGIN_NAME> | <PLUGIN_NAME>:<LIBRARY_PATH>]...`: A [plugin](https://zenoh.io/docs/manual/plugins/) that must be loaded. Accepted values:

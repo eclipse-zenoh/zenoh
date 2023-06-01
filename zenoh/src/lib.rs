@@ -228,7 +228,7 @@ where
 /// use zenoh::prelude::r#async::*;
 ///
 /// let mut config = config::peer();
-/// config.set_id(ZenohId::from_str("F000").unwrap());
+/// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
 /// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
 ///
 /// let session = zenoh::open(config).res().await.unwrap();

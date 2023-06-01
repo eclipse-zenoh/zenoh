@@ -222,7 +222,7 @@ pub const ZN_OPEN_INCOMING_PENDING_DEFAULT: &str = "100";
 
 /// Configures the peer ID.
 /// String key: `"peer_id"`.
-/// Accepted values: `<UUID>`.
+/// Accepted values: `<hex u128>`.
 pub const ZN_PEER_ID_KEY: u64 = 0x68;
 pub const ZN_PEER_ID_STR: &str = "peer_id";
 

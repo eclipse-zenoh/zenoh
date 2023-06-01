@@ -26,7 +26,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &ZenohId) -> Self::Output {
-        self.write(&mut *writer, x.as_slice())
+        self.write(&mut *writer, &x.to_le_bytes()[..x.size()])
     }
 }
 

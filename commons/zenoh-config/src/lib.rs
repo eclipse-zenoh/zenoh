@@ -108,7 +108,7 @@ validated_struct::validator! {
     #[serde(default)]
     #[serde(deny_unknown_fields)]
     Config {
-        /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random UUIDv4 will be generated.
+        /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random u128 will be generated.
         id: ZenohId,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
@@ -283,6 +283,18 @@ validated_struct::validator! {
                     client_private_key: Option<String>,
                     client_certificate: Option<String>,
                 },
+                pub compression: #[derive(Default)]
+                /// **Experimental** compression feature.
+                /// Will compress the batches hop to hop (as opposed to end to end). May cause errors when
+                /// the batches's complexity is too high, causing the resulting compression to be bigger in
+                /// size than the MTU.
+                /// You must use the features "transport_compression" and "unstable" to enable this.
+                CompressionConf {
+                    /// When enabled is true, batches will be sent compressed. It does not affect the
+                    /// reception, which always expects compressed batches when built with thes features
+                    /// "transport_compression" and "unstable".
+                    enabled: bool,
+                }
             },
             pub shared_memory: SharedMemoryConf {
                 /// Whether shared memory is enabled or not.
@@ -503,10 +515,17 @@ impl std::fmt::Display for ConfigOpenErr {
 }
 impl std::error::Error for ConfigOpenErr {}
 impl Config {
+    pub fn from_env() -> ZResult<Self> {
+        let path = std::env::var(defaults::ENV)
+            .map_err(|e| zerror!("Invalid ENV variable ({}): {}", defaults::ENV, e))?;
+        Self::from_file(path.as_str())
+    }
+
     pub fn from_file<P: AsRef<Path>>(path: P) -> ZResult<Self> {
         let path = path.as_ref();
         Self::_from_file(path)
     }
+
     fn _from_file(path: &Path) -> ZResult<Config> {
         match std::fs::File::open(path) {
             Ok(mut f) => {
@@ -536,6 +555,7 @@ impl Config {
             Err(e) => bail!(e),
         }
     }
+
     pub fn libloader(&self) -> LibLoader {
         if self.plugins_search_dirs.is_empty() {
             LibLoader::default()

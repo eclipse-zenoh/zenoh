@@ -157,7 +157,7 @@ fn codec_locator() {
 fn codec_timestamp() {
     run!(Timestamp, {
         let time = uhlc::NTP64(thread_rng().gen());
-        let id = uhlc::ID::try_from(ZenohId::rand().as_slice()).unwrap();
+        let id = uhlc::ID::try_from(ZenohId::rand().to_le_bytes()).unwrap();
         Timestamp::new(time, id)
     });
 }

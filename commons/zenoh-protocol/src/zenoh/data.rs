@@ -135,7 +135,7 @@ impl DataInfo {
         let encoding = rng.gen_bool(0.5).then(Encoding::rand);
         let timestamp = rng.gen_bool(0.5).then(|| {
             let time = uhlc::NTP64(rng.gen());
-            let id = uhlc::ID::try_from(ZenohId::rand().as_slice()).unwrap();
+            let id = uhlc::ID::try_from(ZenohId::rand().to_le_bytes()).unwrap();
             Timestamp::new(time, id)
         });
         let source_id = rng.gen_bool(0.5).then(ZenohId::rand);

@@ -7,10 +7,10 @@
 {
   /**
    * The identifier (as hex-string) that zenohd must use.
-   * If not set, a random UUIDv4 will be used.
+   * If not set, a random unsigned 128bit integer will be used.
    * WARNING: this id must be unique in your zenoh network.
    */
-  // id: "0123456789ABCDEF",
+  // id: "123456789ABCDEF",
 
   /**
    * Which endpoints to listen on. E.g. tcp/localhost:7447.

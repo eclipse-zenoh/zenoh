@@ -64,7 +64,7 @@ pub const SUBINTERVAL_CHUNKS: usize = 10;
 
 pub struct Replica {
     // TODO: Discuss if we need to add -<storage_type> for uniqueness
-    name: String, // name of replica  -- UUID(zenoh)-<storage_name>
+    name: String, // name of replica  -- ID(zenoh)-<storage_name>
     session: Arc<Session>,
     key_expr: OwnedKeyExpr,
     replica_config: ReplicaConfig,

@@ -27,7 +27,8 @@ where
 
     fn write(self, writer: &mut W, x: &Timestamp) -> Self::Output {
         self.write(&mut *writer, x.get_time().as_u64())?;
-        self.write(&mut *writer, x.get_id().as_slice())?;
+        let id = x.get_id();
+        self.write(&mut *writer, &id.to_le_bytes()[..id.size()])?;
         Ok(())
     }
 }
