@@ -34,4 +34,4 @@ hmac = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 rand_chacha = { workspace = true }
 sha3 = { workspace = true }
-zenoh-result = { path = "../zenoh-result/" }
+zenoh-result = { workspace = true, features = ["default"] }

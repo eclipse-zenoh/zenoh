@@ -34,9 +34,9 @@ event-listener = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true, features = ["default", "sync"] }
-zenoh-buffers = { path = "../zenoh-buffers/" }
-zenoh-collections = { path = "../zenoh-collections/" }
-zenoh-core = { path = "../zenoh-core/" }
+zenoh-buffers = { workspace = true }
+zenoh-collections = { workspace = true, features = ["default"] }
+zenoh-core = { workspace = true }
 
 [dev-dependencies]
 async-std = { workspace = true, features = ["default", "unstable", "attributes"] }

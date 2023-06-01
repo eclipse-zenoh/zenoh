@@ -19,6 +19,10 @@ on:
   schedule:
     - cron: "0 0 * * 1-5"
   workflow_dispatch:
+    inputs:
+      runtests:
+        description: 'run tests'
+        type: boolean
 
 jobs:
   checks:
@@ -94,6 +98,7 @@ jobs:
 
   tests:
     name: Tests
+    if: ${{ !(github.event.inputs.runtests == 'false') }}
     needs: checks
     runs-on: ubuntu-latest
     steps:
@@ -125,6 +130,8 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
       - name: generate doc
         env:
           RUSTDOCFLAGS: -Dwarnings
@@ -300,7 +307,7 @@ jobs:
 
   publication:
     name: Release publication
-    if: needs.checks.outputs.IS_RELEASE == 'true'
+    if: ${{ needs.checks.outputs.IS_RELEASE == 'true' && !failure() }}
     needs: [checks, builds, tests, doc]
     runs-on: ubuntu-latest
     steps:
@@ -338,47 +345,19 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
+      - name: Check crates
+        shell: bash
+        run: .github/workflows/crates_check.sh
       - name: Publish to crates.io
         shell: bash
-        run: |
-          cargo login ${{ secrets.CRATES_IO_TOKEN }}
-          cd commons/zenoh-result && cargo publish && cd -
-          cd commons/zenoh-core && cargo publish && cd -
-          cd commons/zenoh-keyexpr && cargo publish && cd -
-          cd commons/zenoh-cfg-properties && cargo publish && cd -
-          cd commons/zenoh-sync && cargo publish && cd -
-          cd commons/zenoh-collections && cargo publish && cd -
-          cd commons/zenoh-crypto && cargo publish && cd -
-          cd commons/zenoh-util && cargo publish && cd -
-          cd commons/zenoh-buffers && cargo publish && cd -
-          cd commons/zenoh-protocol && cargo publish && cd -
-          cd commons/zenoh-macros && cargo publish && cd -
-          cd commons/zenoh-codec && cargo publish && cd -
-          cd commons/zenoh-shm && cargo publish && cd -
-          cd commons/zenoh-config && cargo publish && cd -
-          cd io/zenoh-link-commons && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-udp && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-tcp && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-tls && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-quic && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-unixsock_stream && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-serial && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-ws && cargo publish && cd -
-          cd io/zenoh-link && cargo publish && cd -
-          cd io/zenoh-transport && cargo publish && cd -
-          cd plugins/zenoh-plugin-trait && cargo publish && cd -
-          cd zenoh && cargo publish && cd -
-          cd zenoh-ext && cargo publish && cd -
-          cd zenohd && cargo publish && cd -
-          cd plugins/zenoh-plugin-rest && cargo publish && cd -
-          cd plugins/zenoh-backend-traits && cargo publish && cd -
-          cd plugins/zenoh-plugin-storage-manager && cargo publish && cd -
+        run: .github/workflows/crates_publish.sh ${{ secrets.CRATES_IO_TOKEN }}
       - name: Cancel workflow if fail # thus Docker job be interrupted
         if: failure()
         uses: andymckay/cancel-action@0.2
 
   docker:
     name: Docker build and push
+    if: ${{ !failure() }}
     needs: [checks, builds, tests, doc]
     runs-on: ubuntu-latest
     steps:

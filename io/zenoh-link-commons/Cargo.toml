@@ -30,8 +30,8 @@ async-trait = { workspace = true }
 flume = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 typenum = { workspace = true }
-zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
-zenoh-cfg-properties = { path = "../../commons/zenoh-cfg-properties/" }
-zenoh-codec = { path = "../../commons/zenoh-codec/" }
-zenoh-protocol = { path = "../../commons/zenoh-protocol/" }
-zenoh-result = { path = "../../commons/zenoh-result/" }
+zenoh-buffers = { workspace = true }
+zenoh-cfg-properties = { workspace = true }
+zenoh-codec = { workspace = true }
+zenoh-protocol = { workspace = true }
+zenoh-result = { workspace = true }
