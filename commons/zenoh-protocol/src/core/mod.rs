@@ -213,7 +213,10 @@ impl FromStr for ZenohId {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.contains(|c: char| c.is_ascii_uppercase()) {
-            bail!("Invalid id: {} - uppercase hexadecimal is not accepted, use lowercase", s);
+            bail!(
+                "Invalid id: {} - uppercase hexadecimal is not accepted, use lowercase",
+                s
+            );
         }
         let u: uhlc::ID = s
             .parse()
