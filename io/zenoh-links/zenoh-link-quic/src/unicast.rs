@@ -389,6 +389,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         // Spawn the accept loop for the listener
         let active = Arc::new(AtomicBool::new(true));
         let signal = Signal::new();
+        let mut listeners = zwrite!(self.listeners);
 
         let c_active = active.clone();
         let c_signal = signal.clone();
@@ -406,7 +407,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let locator = endpoint.to_locator();
         let listener = ListenerUnicastQuic::new(endpoint, active, signal, handle);
         // Update the list of active listeners on the manager
-        zwrite!(self.listeners).insert(local_addr, listener);
+        listeners.insert(local_addr, listener);
 
         Ok(locator)
     }
