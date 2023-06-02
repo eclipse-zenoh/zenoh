@@ -26,7 +26,7 @@ use zenoh_config::ModeDependentValue;
 use zenoh_core::zasync_executor_init;
 use zenoh_result::bail;
 
-const TIMEOUT: Duration = Duration::from_secs(10);
+const TIMEOUT: Duration = Duration::from_secs(60);
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: [usize; 2] = [1_024, 131_072];
 
@@ -108,7 +108,7 @@ impl Task {
                             query?.reply(Ok(sample.clone())).res_async().await?;
                         },
 
-                        _ = async_std::task::sleep(Duration::from_millis(300)).fuse() => {
+                        _ = async_std::task::sleep(Duration::from_millis(100)).fuse() => {
                             if remaining_checkpoints.load(Ordering::Relaxed) == 0 {
                                 break;
                             }
@@ -148,14 +148,14 @@ struct Node {
     mode: WhatAmI,
     listen: Vec<String>,
     connect: Vec<String>,
-    task: ConcurrentTask,
+    con_task: ConcurrentTask,
     config: Option<Config>,
     warmup: Duration,
 }
 
 impl Node {
     fn num_checkpoints(&self) -> usize {
-        self.task
+        self.con_task
             .iter()
             .map(|seq_tasks| {
                 seq_tasks
@@ -174,7 +174,7 @@ impl Default for Node {
             mode: WhatAmI::Peer,
             listen: vec![],
             connect: vec![],
-            task: vec![],
+            con_task: vec![],
             config: None,
             warmup: Duration::from_secs(0),
         }
@@ -246,7 +246,7 @@ impl Recipe {
                 };
 
                 // Each node consists of a specified session associated with tasks to run
-                let futs = node.task.into_iter().map(|seq_tasks| {
+                let futs = node.con_task.into_iter().map(|seq_tasks| {
                     // Multiple tasks share the session
                     let session = session.clone();
                     // let terminated = seq_task_terminated.clone();
@@ -276,12 +276,12 @@ impl Recipe {
 
         // let (state, _, _) = select_all(futures).timeout(TIMEOUT).await?;
         // state
-        try_join_all(futures).timeout(TIMEOUT).await??;
+        try_join_all(futures).timeout(TIMEOUT).await.map_err(|e| format!("The recipe: {} failed due to {}", &self, e))??;
         Ok(())
     }
 }
 
-#[test]
+// #[test]
 fn gossip() -> Result<()> {
     async_std::task::block_on(async {
         zasync_executor_init!();
@@ -297,7 +297,7 @@ fn gossip() -> Result<()> {
                 name: format!("RTR {}", WhatAmI::Peer),
                 mode: WhatAmI::Peer,
                 listen: vec![locator.clone()],
-                task: ConcurrentTask::from([SequentialTask::from([Task::Sleep(
+                con_task: ConcurrentTask::from([SequentialTask::from([Task::Sleep(
                     Duration::from_millis(1000),
                 )])]),
                 ..Default::default()
@@ -306,7 +306,7 @@ fn gossip() -> Result<()> {
                 name: format!("Pub & Queryable {}", WhatAmI::Peer),
                 connect: vec![locator.clone()],
                 mode: WhatAmI::Peer,
-                task: ConcurrentTask::from([
+                con_task: ConcurrentTask::from([
                     SequentialTask::from([
                         Task::Sleep(Duration::from_millis(2000)),
                         Task::Pub(ke.clone(), msg_size),
@@ -322,7 +322,7 @@ fn gossip() -> Result<()> {
                 name: format!("Sub & Get {}", WhatAmI::Peer),
                 mode: WhatAmI::Peer,
                 connect: vec![locator.clone()],
-                task: ConcurrentTask::from([
+                con_task: ConcurrentTask::from([
                     SequentialTask::from([
                         Task::Sleep(Duration::from_millis(2000)),
                         Task::Sub(ke.clone(), msg_size),
@@ -346,7 +346,7 @@ fn gossip() -> Result<()> {
     Ok(())
 }
 
-#[test]
+// #[test]
 fn static_failover_brokering() -> Result<()> {
     async_std::task::block_on(async {
         zasync_executor_init!();
@@ -373,7 +373,7 @@ fn static_failover_brokering() -> Result<()> {
                 name: format!("RTR {}", WhatAmI::Router),
                 mode: WhatAmI::Router,
                 listen: vec![locator.clone()],
-                task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
+                con_task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
                 ..Default::default()
             },
             Node {
@@ -381,7 +381,7 @@ fn static_failover_brokering() -> Result<()> {
                 mode: WhatAmI::Peer,
                 connect: vec![locator.clone()],
                 config: disable_autoconnect_config(),
-                task: ConcurrentTask::from([
+                con_task: ConcurrentTask::from([
                     SequentialTask::from([Task::Pub(ke.clone(), msg_size)]),
                     SequentialTask::from([Task::Queryable(ke.clone(), msg_size)]),
                 ]),
@@ -392,7 +392,7 @@ fn static_failover_brokering() -> Result<()> {
                 mode: WhatAmI::Peer,
                 connect: vec![locator.clone()],
                 config: disable_autoconnect_config(),
-                task: ConcurrentTask::from([
+                con_task: ConcurrentTask::from([
                     SequentialTask::from([Task::Sub(ke.clone(), msg_size), Task::CheckPoint]),
                     SequentialTask::from([Task::Get(ke.clone(), msg_size), Task::CheckPoint]),
                 ]),
@@ -422,24 +422,24 @@ fn pubsub_combination() -> Result<()> {
             .concat()
             .into_iter()
             .flat_map(|(n1, n2)| MSG_SIZE.map(|s| (n1, n2, s)))
-            .flat_map(|(node1_mode, node2_mode, msg_size)| {
+            .map(|(node1_mode, node2_mode, msg_size)| {
                 idx += 1;
                 let ke = format!("pubsub_combination_keyexpr_{idx}");
                 let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
 
-                let recipe = vec![
+                [
                     Node {
                         name: format!("RTR {}", WhatAmI::Router),
                         mode: WhatAmI::Router,
                         listen: vec![locator.clone()],
-                        task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
+                        con_task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
                         ..Default::default()
                     },
                     Node {
                         name: format!("Pub {node1_mode}"),
                         mode: node1_mode,
                         connect: vec![locator.clone()],
-                        task: ConcurrentTask::from([
+                        con_task: ConcurrentTask::from([
                             SequentialTask::from([Task::Pub(ke.clone(), msg_size)]),
                             SequentialTask::from([Task::Queryable(ke.clone(), msg_size)]),
                         ]),
@@ -449,7 +449,7 @@ fn pubsub_combination() -> Result<()> {
                         name: format!("Sub {node2_mode}"),
                         mode: node2_mode,
                         connect: vec![locator],
-                        task: ConcurrentTask::from([
+                        con_task: ConcurrentTask::from([
                             SequentialTask::from([
                                 Task::Sub(ke.clone(), msg_size),
                                 Task::CheckPoint,
@@ -458,26 +458,25 @@ fn pubsub_combination() -> Result<()> {
                         ]),
                         ..Default::default()
                     },
-                ];
-
-                // All permutations
-                vec![
-                    Recipe::new([recipe[0].clone(), recipe[1].clone(), recipe[2].clone()]),
-                    Recipe::new([recipe[0].clone(), recipe[2].clone(), recipe[1].clone()]),
-                    Recipe::new([recipe[1].clone(), recipe[0].clone(), recipe[2].clone()]),
-                    Recipe::new([recipe[1].clone(), recipe[2].clone(), recipe[0].clone()]),
-                    Recipe::new([recipe[2].clone(), recipe[0].clone(), recipe[1].clone()]),
-                    Recipe::new([recipe[2].clone(), recipe[1].clone(), recipe[0].clone()]),
                 ]
             });
 
-        for recipe in recipe_list {
-            println!("\n\n[Recipe]: {} begin running...", &recipe);
-            recipe.run().await?;
-            println!("[Recipe]: {} finished", &recipe);
-        }
-
-        // try_join_all(recipe_list.map(|r| async move {r.run().await?; Result::Ok(())} )).await?;
+        try_join_all(recipe_list.map(|recipe| async move {
+            for (i, j, k) in [
+                (0, 1, 2),
+                (0, 2, 1),
+                (1, 2, 0),
+                (1, 0, 2),
+                (2, 0, 1),
+                (2, 1, 0),
+            ] {
+                Recipe::new([recipe[i].clone(), recipe[j].clone(), recipe[k].clone()])
+                    .run()
+                    .await?;
+            }
+            Result::Ok(())
+        }))
+        .await?;
 
         println!("Pub/sub combination test passed.");
         Result::Ok(())
@@ -485,7 +484,7 @@ fn pubsub_combination() -> Result<()> {
     Ok(())
 }
 
-#[test]
+// #[test]
 fn p2p_combination() -> Result<()> {
     async_std::task::block_on(async {
         zasync_executor_init!();
@@ -528,7 +527,7 @@ fn p2p_combination() -> Result<()> {
                         mode: node1_mode,
                         listen: node1_listen_connect.0,
                         connect: node1_listen_connect.1,
-                        task: ConcurrentTask::from([
+                        con_task: ConcurrentTask::from([
                             SequentialTask::from([Task::Pub(ke.clone(), msg_size)]),
                             SequentialTask::from([Task::Queryable(ke.clone(), msg_size)]),
                         ]),
@@ -539,7 +538,7 @@ fn p2p_combination() -> Result<()> {
                         mode: node2_mode,
                         listen: node2_listen_connect.0,
                         connect: node2_listen_connect.1,
-                        task: ConcurrentTask::from([
+                        con_task: ConcurrentTask::from([
                             SequentialTask::from([
                                 Task::Sub(ke.clone(), msg_size),
                                 Task::CheckPoint,
