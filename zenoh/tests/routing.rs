@@ -44,7 +44,7 @@ enum Task {
     Get(String, usize),
     Sleep(Duration),
     Wait,
-    CheckPoint,
+    Checkpoint,
 }
 
 impl Task {
@@ -54,6 +54,7 @@ impl Task {
         remaining_checkpoints: Arc<AtomicUsize>,
     ) -> Result<()> {
         match self {
+            // The Sub task checks if the incoming message matches the expected size until it receives enough counts.
             Self::Sub(ke, expected_size) => {
                 let sub = ztimeout!(session.declare_subscriber(ke).res_async())?;
                 let mut counter = 0;
@@ -64,16 +65,15 @@ impl Task {
                     }
                     counter += 1;
                     if counter >= MSG_COUNT {
-                        println!("Sub received sufficient amount of messages.");
-                        println!("Sub task done.");
+                        println!("Sub received sufficient amount of messages. Done.");
                         break;
                     }
                 }
             }
 
+            // The Pub task keeps putting messages until all checkpoints are finished.
             Self::Pub(ke, payload_size) => {
                 let value: Value = vec![0u8; *payload_size].into();
-                // while !terminated.load(Ordering::Relaxed) {
                 while remaining_checkpoints.load(Ordering::Relaxed) > 0 {
                     ztimeout!(session
                         .put(ke, value.clone())
@@ -83,6 +83,7 @@ impl Task {
                 println!("Pub task done.");
             }
 
+            // The Get task gets and checks if the incoming message matches the expected size until it receives enough counts.
             Self::Get(ke, expected_size) => {
                 let mut counter = 0;
                 while counter < MSG_COUNT {
@@ -95,9 +96,10 @@ impl Task {
                         counter += 1;
                     }
                 }
-                println!("Get task done.");
+                println!("Get got sufficient amount of messages. Done.");
             }
 
+            // The Queryable task keeps replying to requested messages until all checkpoints are finished.
             Self::Queryable(ke, payload_size) => {
                 let queryable = session.declare_queryable(ke).res_async().await?;
                 let sample = Sample::try_from(ke.clone(), vec![0u8; *payload_size])?;
@@ -118,18 +120,20 @@ impl Task {
                 println!("Queryable task done.");
             }
 
+            // Make the zenoh session sleep for a while.
             Self::Sleep(dur) => {
                 async_std::task::sleep(*dur).await;
             }
 
-            Self::CheckPoint => {
+            // Mark one checkpoint is finished.
+            Self::Checkpoint => {
                 if remaining_checkpoints.fetch_sub(1, Ordering::Relaxed) <= 1 {
                     println!("The end of the recipe.");
                 }
             }
 
+            // Wait until all checkpoints are done
             Self::Wait => {
-                // while !terminated.load(Ordering::Relaxed) {
                 while remaining_checkpoints.load(Ordering::Relaxed) > 0 {
                     async_std::task::sleep(Duration::from_millis(100)).await;
                 }
@@ -139,9 +143,12 @@ impl Task {
     }
 }
 
+// A sequential task consists of several tasks
 type SequentialTask = Vec<Task>;
+// A concurrent task consists of several sequential tasks
 type ConcurrentTask = Vec<SequentialTask>;
 
+// Each node represents one zenoh session
 #[derive(Debug, Clone)]
 struct Node {
     name: String,
@@ -160,7 +167,7 @@ impl Node {
             .map(|seq_tasks| {
                 seq_tasks
                     .iter()
-                    .filter(|task| **task == Task::CheckPoint)
+                    .filter(|task| **task == Task::Checkpoint)
                     .count()
             })
             .sum()
@@ -181,11 +188,13 @@ impl Default for Node {
     }
 }
 
+// A recipe consists of several nodes (zenoh sessions) assigned with corresponding tasks
 #[derive(Debug, Clone)]
 struct Recipe {
     nodes: Vec<Node>,
 }
 
+// Display the Recipe as [NodeName1, NodeName2, ...]
 impl std::fmt::Display for Recipe {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         let names: Vec<_> = self.nodes.iter().map(|node| node.name.clone()).collect();
@@ -204,19 +213,22 @@ impl Recipe {
     }
 
     async fn run(&self) -> Result<()> {
-        // let terminated = Arc::new(AtomicBool::default());
         let num_checkpoints = self.num_checkpoints();
         let remaining_checkpoints = Arc::new(AtomicUsize::new(num_checkpoints));
-        println!("Recipe beging testing with {num_checkpoints} checkpoint(s).");
+        println!(
+            "Recipe {} beging testing with {} checkpoint(s).",
+            &self, &num_checkpoints
+        );
 
+        // All concurrent tasks to run
         let futures = self.nodes.clone().into_iter().map(|node| {
             println!("Node: {} started.", &node.name);
 
-            // // Multiple nodes share the same terminated flag
+            // All nodes share the same checkpoint counter
             let remaining_checkpoints = remaining_checkpoints.clone();
 
             async move {
-                dbg!(&node.name);
+                println!("Node: {} begin running.", &node.name);
 
                 // Load the config and build up a session
                 let config = {
@@ -234,6 +246,7 @@ impl Recipe {
                     config
                 };
 
+                // Warmup before the session starts
                 async_std::task::sleep(node.warmup).await;
 
                 // In case of client can't connect to some peers/routers
@@ -246,14 +259,14 @@ impl Recipe {
                 };
 
                 // Each node consists of a specified session associated with tasks to run
-                let futs = node.con_task.into_iter().map(|seq_tasks| {
-                    // Multiple tasks share the session
+                let node_tasks = node.con_task.into_iter().map(|seq_tasks| {
+                    // The tasks share the same session and checkpoint counter
                     let session = session.clone();
-                    // let terminated = seq_task_terminated.clone();
                     let remaining_checkpoints = remaining_checkpoints.clone();
+
                     async_std::task::spawn(async move {
+                        // Tasks in seq_tasks would execute serially
                         for t in seq_tasks {
-                            // t.run(session.clone(), seq_task_terminated.clone()).await?;
                             t.run(session.clone(), remaining_checkpoints.clone())
                                 .await?;
                         }
@@ -261,96 +274,108 @@ impl Recipe {
                     })
                 });
 
-                // let (state, _, _) = select_all(futs).await;
-                // state
-                try_join_all(futs).await?;
+                // All tasks of the node run together
+                try_join_all(node_tasks).await?;
+
+                // Close the session once all the task assoicated with the node are done.
                 Arc::try_unwrap(session)
                     .unwrap()
                     .close()
                     .res_async()
                     .await?;
+
                 println!("Node: {} is closed.", &node.name);
                 Result::Ok(())
             }
         });
 
-        // let (state, _, _) = select_all(futures).timeout(TIMEOUT).await?;
-        // state
-        try_join_all(futures).timeout(TIMEOUT).await.map_err(|e| format!("The recipe: {} failed due to {}", &self, e))??;
+        // All tasks of the recipe run together
+        try_join_all(futures)
+            .timeout(TIMEOUT)
+            .await
+            .map_err(|e| format!("The recipe: {} failed due to {}", &self, e))??;
         Ok(())
     }
 }
 
-// #[test]
+// Two peers connecting to a common node (either in router or peer mode) can discover each other.
+// And the message transmission should work even if the common node disappears after a while.
+#[test]
 fn gossip() -> Result<()> {
     async_std::task::block_on(async {
         zasync_executor_init!();
+
+        // env_logger should be activated only once across all the tests. Otherwise, it fails the tests below.
         env_logger::try_init()?;
 
         let locator = String::from("tcp/127.0.0.1:17448");
         let ke = String::from("testKeyExprGossip");
         let msg_size = 8;
 
-        // Gossip test
-        let recipe = Recipe::new([
-            Node {
-                name: format!("RTR {}", WhatAmI::Peer),
-                mode: WhatAmI::Peer,
-                listen: vec![locator.clone()],
-                con_task: ConcurrentTask::from([SequentialTask::from([Task::Sleep(
-                    Duration::from_millis(1000),
-                )])]),
-                ..Default::default()
-            },
-            Node {
-                name: format!("Pub & Queryable {}", WhatAmI::Peer),
-                connect: vec![locator.clone()],
-                mode: WhatAmI::Peer,
-                con_task: ConcurrentTask::from([
-                    SequentialTask::from([
-                        Task::Sleep(Duration::from_millis(2000)),
-                        Task::Pub(ke.clone(), msg_size),
-                    ]),
-                    SequentialTask::from([
-                        Task::Sleep(Duration::from_millis(2000)),
-                        Task::Queryable(ke.clone(), msg_size),
-                    ]),
+        let peer1 = Node {
+            name: format!("Pub & Queryable {}", WhatAmI::Peer),
+            connect: vec![locator.clone()],
+            mode: WhatAmI::Peer,
+            con_task: ConcurrentTask::from([
+                SequentialTask::from([
+                    Task::Sleep(Duration::from_millis(2000)),
+                    Task::Pub(ke.clone(), msg_size),
                 ]),
-                ..Default::default()
-            },
-            Node {
-                name: format!("Sub & Get {}", WhatAmI::Peer),
-                mode: WhatAmI::Peer,
-                connect: vec![locator.clone()],
-                con_task: ConcurrentTask::from([
-                    SequentialTask::from([
-                        Task::Sleep(Duration::from_millis(2000)),
-                        Task::Sub(ke.clone(), msg_size),
-                        Task::CheckPoint,
-                    ]),
-                    SequentialTask::from([
-                        Task::Sleep(Duration::from_millis(2000)),
-                        Task::Get(ke, msg_size),
-                        Task::CheckPoint,
-                    ]),
+                SequentialTask::from([
+                    Task::Sleep(Duration::from_millis(2000)),
+                    Task::Queryable(ke.clone(), msg_size),
                 ]),
-                ..Default::default()
-            },
-        ]);
+            ]),
+            ..Default::default()
+        };
+        let peer2 = Node {
+            name: format!("Sub & Get {}", WhatAmI::Peer),
+            mode: WhatAmI::Peer,
+            connect: vec![locator.clone()],
+            con_task: ConcurrentTask::from([
+                SequentialTask::from([
+                    Task::Sleep(Duration::from_millis(2000)),
+                    Task::Sub(ke.clone(), msg_size),
+                    Task::Checkpoint,
+                ]),
+                SequentialTask::from([
+                    Task::Sleep(Duration::from_millis(2000)),
+                    Task::Get(ke, msg_size),
+                    Task::Checkpoint,
+                ]),
+            ]),
+            ..Default::default()
+        };
 
-        println!("[Recipe]: {}", &recipe);
-        recipe.run().await?;
+        for mode in [WhatAmI::Peer, WhatAmI::Router] {
+            Recipe::new([
+                Node {
+                    name: format!("RTR {}", mode),
+                    mode: WhatAmI::Peer,
+                    listen: vec![locator.clone()],
+                    con_task: ConcurrentTask::from([SequentialTask::from([Task::Sleep(
+                        Duration::from_millis(1000),
+                    )])]),
+                    ..Default::default()
+                },
+                peer1.clone(),
+                peer2.clone(),
+            ])
+            .run()
+            .await?;
+        }
+
         println!("Gossip test passed.");
         Result::Ok(())
     })?;
     Ok(())
 }
 
-// #[test]
+// Simulate two peers connecting to a router but not directly reachable to each other can exchange messages via the brokering by the router.
+#[test]
 fn static_failover_brokering() -> Result<()> {
     async_std::task::block_on(async {
         zasync_executor_init!();
-        // env_logger::try_init()?;
 
         let locator = String::from("tcp/127.0.0.1:17449");
         let ke = String::from("testKeyExprStaticFailoverBrokering");
@@ -393,13 +418,12 @@ fn static_failover_brokering() -> Result<()> {
                 connect: vec![locator.clone()],
                 config: disable_autoconnect_config(),
                 con_task: ConcurrentTask::from([
-                    SequentialTask::from([Task::Sub(ke.clone(), msg_size), Task::CheckPoint]),
-                    SequentialTask::from([Task::Get(ke.clone(), msg_size), Task::CheckPoint]),
+                    SequentialTask::from([Task::Sub(ke.clone(), msg_size), Task::Checkpoint]),
+                    SequentialTask::from([Task::Get(ke.clone(), msg_size), Task::Checkpoint]),
                 ]),
                 ..Default::default()
             },
         ]);
-        println!("[Recipe]: {}", &recipe);
         recipe.run().await?;
         println!("Static failover brokering test passed.");
         Result::Ok(())
@@ -407,11 +431,14 @@ fn static_failover_brokering() -> Result<()> {
     Ok(())
 }
 
+// All test cases varying in
+// 1. Message size
+// 2. Mode: peer or client
+// 3. Spawning order
 #[test]
-fn pubsub_combination() -> Result<()> {
+fn three_node_combination() -> Result<()> {
     async_std::task::block_on(async {
         zasync_executor_init!();
-        // env_logger::try_init()?;
 
         let modes = [WhatAmI::Peer, WhatAmI::Client];
 
@@ -424,7 +451,7 @@ fn pubsub_combination() -> Result<()> {
             .flat_map(|(n1, n2)| MSG_SIZE.map(|s| (n1, n2, s)))
             .map(|(node1_mode, node2_mode, msg_size)| {
                 idx += 1;
-                let ke = format!("pubsub_combination_keyexpr_{idx}");
+                let ke = format!("three_node_combination_keyexpr_{idx}");
                 let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
 
                 [
@@ -436,7 +463,7 @@ fn pubsub_combination() -> Result<()> {
                         ..Default::default()
                     },
                     Node {
-                        name: format!("Pub {node1_mode}"),
+                        name: format!("Pub & Queryable {node1_mode}"),
                         mode: node1_mode,
                         connect: vec![locator.clone()],
                         con_task: ConcurrentTask::from([
@@ -446,21 +473,22 @@ fn pubsub_combination() -> Result<()> {
                         ..Default::default()
                     },
                     Node {
-                        name: format!("Sub {node2_mode}"),
+                        name: format!("Sub & Get {node2_mode}"),
                         mode: node2_mode,
                         connect: vec![locator],
                         con_task: ConcurrentTask::from([
                             SequentialTask::from([
                                 Task::Sub(ke.clone(), msg_size),
-                                Task::CheckPoint,
+                                Task::Checkpoint,
                             ]),
-                            SequentialTask::from([Task::Get(ke, msg_size), Task::CheckPoint]),
+                            SequentialTask::from([Task::Get(ke, msg_size), Task::Checkpoint]),
                         ]),
                         ..Default::default()
                     },
                 ]
             });
 
+        // Permutate the spawning order
         try_join_all(recipe_list.map(|recipe| async move {
             for (i, j, k) in [
                 (0, 1, 2),
@@ -478,17 +506,19 @@ fn pubsub_combination() -> Result<()> {
         }))
         .await?;
 
-        println!("Pub/sub combination test passed.");
+        println!("Three-node combination test passed.");
         Result::Ok(())
     })?;
     Ok(())
 }
 
-// #[test]
-fn p2p_combination() -> Result<()> {
+// All test cases varying in
+// 1. Message size
+// 2. Mode
+#[test]
+fn two_node_combination() -> Result<()> {
     async_std::task::block_on(async {
         zasync_executor_init!();
-        // env_logger::try_init()?;
 
         #[derive(Clone, Copy)]
         struct IsFirstListen(bool);
@@ -507,7 +537,7 @@ fn p2p_combination() -> Result<()> {
             .flat_map(|(n1, n2, who)| MSG_SIZE.map(|s| (n1, n2, who, s)))
             .map(|(node1_mode, node2_mode, who, msg_size)| {
                 idx += 1;
-                let ke = format!("p2p_combination_keyexpr_{idx}");
+                let ke = format!("two_node_combination_keyexpr_{idx}");
 
                 let (node1_listen_connect, node2_listen_connect) = {
                     let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
@@ -523,7 +553,7 @@ fn p2p_combination() -> Result<()> {
 
                 Recipe::new([
                     Node {
-                        name: format!("Pub {node1_mode}"),
+                        name: format!("Pub & Queryable {node1_mode}"),
                         mode: node1_mode,
                         listen: node1_listen_connect.0,
                         connect: node1_listen_connect.1,
@@ -534,16 +564,16 @@ fn p2p_combination() -> Result<()> {
                         ..Default::default()
                     },
                     Node {
-                        name: format!("Sub {node2_mode}"),
+                        name: format!("Sub & Get {node2_mode}"),
                         mode: node2_mode,
                         listen: node2_listen_connect.0,
                         connect: node2_listen_connect.1,
                         con_task: ConcurrentTask::from([
                             SequentialTask::from([
                                 Task::Sub(ke.clone(), msg_size),
-                                Task::CheckPoint,
+                                Task::Checkpoint,
                             ]),
-                            SequentialTask::from([Task::Get(ke, msg_size), Task::CheckPoint]),
+                            SequentialTask::from([Task::Get(ke, msg_size), Task::Checkpoint]),
                         ]),
                         ..Default::default()
                     },
@@ -551,11 +581,10 @@ fn p2p_combination() -> Result<()> {
             });
 
         for recipe in recipe_list {
-            println!("[Recipe]: {}", &recipe);
             recipe.run().await?;
         }
 
-        println!("P2P pub/sub combination test passed.");
+        println!("Two-node combination test passed.");
         Result::Ok(())
     })?;
     Ok(())
