@@ -118,7 +118,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --doc
+          args: --release --doc
         env:
           ASYNC_STD_THREAD_COUNT: 4
 
