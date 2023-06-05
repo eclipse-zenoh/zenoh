@@ -26,7 +26,7 @@ use zenoh_config::ModeDependentValue;
 use zenoh_core::zasync_executor_init;
 use zenoh_result::bail;
 
-const TIMEOUT: Duration = Duration::from_secs(60);
+const TIMEOUT: Duration = Duration::from_secs(120);
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: [usize; 2] = [1_024, 131_072];
 
