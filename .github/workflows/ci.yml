@@ -87,7 +87,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --all-targets --features shared-memory --verbose
+          args:  --release --all-targets --features shared-memory --verbose
 
       - name: Install nextest
         run: cargo install cargo-nextest --locked
@@ -96,7 +96,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: nextest
-          args: run
+          args: run --release
         env:
           ASYNC_STD_THREAD_COUNT: 4
 
@@ -104,7 +104,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --doc
+          args: --release --doc
         env:
           ASYNC_STD_THREAD_COUNT: 4
 
