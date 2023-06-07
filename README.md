@@ -100,7 +100,7 @@ Zenoh's router is built as `target/release/zenohd`. All the examples are built i
     - run the Zenoh router with a memory storage:  
       `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
     - in another shell, do a publication via the REST API:  
-      `curl -X PUT -d 'Hello World!' http://localhost:8000/demo/example/test`
+      `curl -X PUT -d '"Hello World!"' http://localhost:8000/demo/example/test`
     - get it back via the REST API:  
       `curl http://localhost:8000/demo/example/test`
 
