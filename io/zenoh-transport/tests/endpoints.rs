@@ -179,6 +179,24 @@ fn endpoint_ws() {
     task::block_on(run(&endpoints));
 }
 
+#[cfg(feature = "transport_shm")]
+#[test]
+fn endpoint_shm() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locators
+    let endpoints: Vec<EndPoint> = vec![
+        "shm//tmp/endpoint_shm".parse().unwrap(),
+        "shm//tmp/endpoint_shm2".parse().unwrap(),
+        "shm//tmp/endpoint_shm3".parse().unwrap(),
+        "shm//tmp/endpoint_shm4".parse().unwrap(),
+    ];
+    task::block_on(run(&endpoints));
+}
+
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
 fn endpoint_tcp_udp() {

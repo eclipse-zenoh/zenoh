@@ -364,6 +364,7 @@ jobs:
           cd io/zenoh-links/zenoh-link-unixsock_stream && cargo publish && cd -
           cd io/zenoh-links/zenoh-link-serial && cargo publish && cd -
           cd io/zenoh-links/zenoh-link-ws && cargo publish && cd -
+          cd io/zenoh-links/zenoh-link-shm && cargo publish && cd -
           cd io/zenoh-link && cargo publish && cd -
           cd io/zenoh-transport && cargo publish && cd -
           cd plugins/zenoh-plugin-trait && cargo publish && cd -

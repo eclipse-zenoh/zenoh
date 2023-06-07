@@ -32,6 +32,7 @@ transport_udp = ["zenoh-link-udp"]
 transport_unixsock-stream = ["zenoh-link-unixsock_stream"]
 transport_ws = ["zenoh-link-ws"]
 transport_serial = ["zenoh-link-serial"]
+transport_shm = ["zenoh-link-shm"]
 
 [dependencies]
 async-std = { workspace = true }
@@ -47,5 +48,6 @@ zenoh-link-tls = { path = "../zenoh-links/zenoh-link-tls/", optional = true }
 zenoh-link-udp = { path = "../zenoh-links/zenoh-link-udp/", optional = true }
 zenoh-link-unixsock_stream = { path = "../zenoh-links/zenoh-link-unixsock_stream/", optional = true }
 zenoh-link-ws = { path = "../zenoh-links/zenoh-link-ws/", optional = true }
+zenoh-link-shm = { path = "../zenoh-links/zenoh-link-shm/", optional = true }
 zenoh-protocol = { path = "../../commons/zenoh-protocol/" }
 zenoh-result = { path = "../../commons/zenoh-result/" }

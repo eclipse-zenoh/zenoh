@@ -331,6 +331,26 @@ fn conduits_tcp_only() {
     task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
 }
 
+#[cfg(feature = "transport_shm")]
+#[test]
+fn conduits_shm_only() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+    let mut channel = vec![];
+    for p in PRIORITY_ALL.iter() {
+        channel.push(Channel {
+            priority: *p,
+            reliability: Reliability::Reliable,
+        });
+    }
+    // Define the locators
+    let endpoints: Vec<EndPoint> = vec!["shm//tmp/conduits_shm_only".to_string().parse().unwrap()];
+    // Run
+    task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
+}
+
 #[cfg(feature = "transport_ws")]
 #[test]
 fn conduits_ws_only() {

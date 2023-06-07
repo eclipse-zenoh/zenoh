@@ -1,0 +1,45 @@
+#
+# Copyright (c) 2023 ZettaScale Technology
+#
+# This program and the accompanying materials are made available under the
+# terms of the Eclipse Public License 2.0 which is available at
+# http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+# which is available at https://www.apache.org/licenses/LICENSE-2.0.
+#
+# SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+#
+# Contributors:
+#   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+#
+[package]
+rust-version = { workspace = true }
+name = "zenoh-link-shm"
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
+description = "Internal crate for zenoh."
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+advisory-lock = ">= 0.3.0"
+async-std = { workspace = true }
+async-trait = { workspace = true }
+async-io = ">= 1.13.0"
+unix-named-pipe = ">= 0.2.0"
+nix = ">=0.26.2"
+log = { workspace = true }
+socket2 = { workspace = true }
+zenoh-buffers = { path = "../../../commons/zenoh-buffers/" }
+zenoh-cfg-properties = { path = "../../../commons/zenoh-cfg-properties/" }
+zenoh-collections = { path = "../../../commons/zenoh-collections/" }
+zenoh-core = { path = "../../../commons/zenoh-core/" }
+zenoh-config = { path = "../../../commons/zenoh-config/" }
+zenoh-link-commons = { path = "../../zenoh-link-commons/" }
+zenoh-protocol = { path = "../../../commons/zenoh-protocol/" }
+zenoh-result = { path = "../../../commons/zenoh-result/" }
+zenoh-sync = { path = "../../../commons/zenoh-sync/" }
+zenoh-util = { path = "../../../commons/zenoh-util/" }

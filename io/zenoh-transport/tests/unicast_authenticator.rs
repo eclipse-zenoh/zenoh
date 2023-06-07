@@ -808,6 +808,18 @@ fn authenticator_udp() {
     task::block_on(run(&endpoint));
 }
 
+#[cfg(feature = "transport_shm")]
+#[test]
+fn authenticator_shm() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let endpoint: EndPoint = "shm//tmp/authenticator_shm_test".to_string().parse().unwrap();
+    task::block_on(run(&endpoint));
+}
+
 #[cfg(feature = "transport_ws")]
 #[test]
 fn authenticator_ws() {

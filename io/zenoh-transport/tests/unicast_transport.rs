@@ -657,6 +657,34 @@ fn transport_unicast_ws_only() {
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
 }
 
+#[cfg(feature = "transport_shm")]
+#[test]
+fn transport_unicast_shm_only() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locator
+    let endpoints: Vec<EndPoint> = vec![
+        "shm//tmp/transport_unicast_shm_only".parse().unwrap(),
+        "shm//tmp/transport_unicast_shm_only2".parse().unwrap(),
+    ];
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+}
+
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
 #[test]
 fn transport_unicast_tcp_udp() {

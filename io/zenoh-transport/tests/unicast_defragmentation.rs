@@ -195,3 +195,40 @@ fn transport_unicast_defragmentation_ws_only() {
         }
     });
 }
+
+#[cfg(feature = "transport_shm")]
+#[test]
+fn transport_unicast_defragmentation_shm_only() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locators
+    let endpoint: EndPoint = "shm//tmp/transport_unicast_defragmentation_shm_only".parse().unwrap();
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    task::block_on(async {
+        for ch in channel.iter() {
+            run(&endpoint, *ch, MSG_SIZE).await;
+        }
+    });
+}

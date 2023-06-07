@@ -331,6 +331,32 @@ mod tests {
         });
     }
 
+    #[cfg(feature = "transport_shm")]
+    #[test]
+    fn transport_shm_simultaneous() {
+        let _ = env_logger::try_init();
+        task::block_on(async {
+            zasync_executor_init!();
+        });
+
+        let endpoint01: Vec<EndPoint> = vec![
+            "shm//tmp/transport_shm_simultaneous".parse().unwrap(),
+            "shm//tmp/transport_shm_simultaneous2".parse().unwrap(),
+            "shm//tmp/transport_shm_simultaneous3".parse().unwrap(),
+            "shm//tmp/transport_shm_simultaneous4".parse().unwrap(),
+        ];
+        let endpoint02: Vec<EndPoint> = vec![
+            "shm//tmp/transport_shm_simultaneous5".parse().unwrap(),
+            "shm//tmp/transport_shm_simultaneous6".parse().unwrap(),
+            "shm//tmp/transport_shm_simultaneous7".parse().unwrap(),
+            "shm//tmp/transport_shm_simultaneous8".parse().unwrap(),
+        ];
+
+        task::block_on(async {
+            transport_simultaneous(endpoint01, endpoint02).await;
+        });
+    }
+
     #[cfg(feature = "transport_ws")]
     #[test]
     fn transport_ws_simultaneous() {

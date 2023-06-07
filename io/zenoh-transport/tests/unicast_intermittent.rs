@@ -407,3 +407,15 @@ fn transport_ws_intermittent() {
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12010).parse().unwrap();
     task::block_on(transport_intermittent(&endpoint));
 }
+
+#[cfg(feature = "transport_shm")]
+#[test]
+fn transport_shm_intermittent() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let endpoint: EndPoint = "shm//tmp/transport_shm_intermittent".parse().unwrap();
+    task::block_on(transport_intermittent(&endpoint));
+}
