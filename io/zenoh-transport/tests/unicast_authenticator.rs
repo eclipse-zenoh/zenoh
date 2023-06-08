@@ -816,7 +816,7 @@ fn authenticator_shm() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "shm//tmp/authenticator_shm_test".to_string().parse().unwrap();
+    let endpoint: EndPoint = "shm//tmp/authenticator_shm_test".parse().unwrap();
     task::block_on(run(&endpoint));
 }
 

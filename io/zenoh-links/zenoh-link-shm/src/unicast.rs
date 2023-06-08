@@ -14,8 +14,7 @@ use crate::config;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use advisory_lock::{AdvisoryFileLock, FileLockMode};
-use async_io::Async;
-use async_std::io::WriteExt;
+use async_io::Async; 
 use async_std::task::JoinHandle;
 use async_std::fs::remove_file;
 use async_trait::async_trait;
@@ -246,7 +245,7 @@ impl LinkUnicastTrait for UnicastPipe {
         Ok(())
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
+    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {        
         //todo: I completely don't like the idea of locking reader\writer each time, but LinkUnicastTrait requires self.r and self.w to be Sync
         self.w
             .write()

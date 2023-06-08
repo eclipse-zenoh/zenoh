@@ -56,6 +56,7 @@ pub(crate) struct TransportUnicastConfig {
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
     pub(crate) initial_sn_tx: ZInt,
+    #[cfg(feature = "shared-memory")]
     pub(crate) is_shm: bool,
     pub(crate) is_qos: bool,
 }
@@ -374,6 +375,7 @@ impl TransportUnicastInner {
         self.config.sn_resolution
     }
 
+    #[cfg(feature = "shared-memory")]
     pub(crate) fn is_shm(&self) -> bool {
         self.config.is_shm
     }
