@@ -26,6 +26,9 @@ on:
       dockerhub:
         description: 'publish to dockerhub'
         type: boolean
+      doc:
+        description: 'generate doc'
+        type: boolean
 
 jobs:
   checks:
@@ -127,6 +130,7 @@ jobs:
 
   doc:
     name: Doc generation
+    if: ${{ !(github.event.inputs.doc == 'false') }}
     needs: checks
     runs-on: ubuntu-latest
     steps:
