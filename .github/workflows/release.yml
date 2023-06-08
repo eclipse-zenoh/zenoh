@@ -29,6 +29,9 @@ on:
       doc:
         description: 'generate doc'
         type: boolean
+      features:
+        description: 'build with specified features'
+        type: string
 
 jobs:
   checks:
@@ -49,7 +52,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets -- -D warnings
+          args: --all-targets --features="${{ github.event.inputs.features}}" -- -D warnings
       - name: Clippy unstable check
         uses: actions-rs/cargo@v1
         with:
@@ -117,14 +120,14 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: nextest
-          args: run --release --verbose
+          args: run --release --features="${{ github.event.inputs.features}}" --verbose
         env:
           ASYNC_STD_THREAD_COUNT: 4
       - name: Run doctests
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release --doc
+          args: --release --features="${{ github.event.inputs.features}}" --doc
         env:
           ASYNC_STD_THREAD_COUNT: 4
 
@@ -145,7 +148,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: doc
-          args: --no-deps
+          args: --no-deps --features="${{ github.event.inputs.features}}"
 
   builds:
     name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
@@ -239,28 +242,28 @@ jobs:
         with:
           use-cross: ${{ matrix.job.use-cross }}
           command: build
-          args: --release --bins --lib --target=${{ matrix.job.target }}
+          args: --release --bins --lib --features="${{ github.event.inputs.features}}" --target=${{ matrix.job.target }}
 
       - name: Debian package - zenohd
         if: contains(matrix.job.target, '-linux-gnu')
         uses: actions-rs/cargo@v1
         with:
           command: deb
-          args: --no-build --target=${{ matrix.job.target }} -p zenohd
+          args: --no-build --features="${{ github.event.inputs.features}}" --target=${{ matrix.job.target }} -p zenohd
 
       - name: Debian package - zenoh-plugin-storage-manager
         if: contains(matrix.job.target, '-linux-gnu')
         uses: actions-rs/cargo@v1
         with:
           command: deb
-          args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-storage-manager
+          args: --no-build --features="${{ github.event.inputs.features}}" --target=${{ matrix.job.target }} -p zenoh-plugin-storage-manager
 
       - name: Debian package - zenoh-plugin-rest
         if: contains(matrix.job.target, '-linux-gnu')
         uses: actions-rs/cargo@v1
         with:
           command: deb
-          args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-rest
+          args: --no-build --features="${{ github.event.inputs.features}}" --target=${{ matrix.job.target }} -p zenoh-plugin-rest
 
       - name: Packaging
         id: package
