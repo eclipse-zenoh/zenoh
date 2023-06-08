@@ -19,7 +19,7 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 //!
 //! Provide different buffer implementations used for serialization and deserialization.
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
 mod bbuf;

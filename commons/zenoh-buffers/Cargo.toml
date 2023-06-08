@@ -25,7 +25,9 @@ description = "Internal crate for zenoh."
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
+std = []
 test = ["rand"]
+default = ["std"]
 
 [dependencies]
 rand = { workspace = true, optional = true }

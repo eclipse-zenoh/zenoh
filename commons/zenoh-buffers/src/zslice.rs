@@ -303,6 +303,19 @@ impl BacktrackableReader for &mut ZSlice {
     }
 }
 
+#[cfg(feature = "std")]
+impl std::io::Read for &mut ZSlice {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match <Self as Reader>::read(self, buf) {
+            Ok(n) => Ok(n.get()),
+            Err(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "UnexpectedEof",
+            )),
+        }
+    }
+}
+
 impl ZSlice {
     #[cfg(feature = "test")]
     pub fn rand(len: usize) -> Self {
