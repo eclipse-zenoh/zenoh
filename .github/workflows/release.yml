@@ -23,6 +23,9 @@ on:
       runtests:
         description: 'run tests'
         type: boolean
+      dockerhub:
+        description: 'publish to dockerhub'
+        type: boolean
 
 jobs:
   checks:
@@ -357,7 +360,7 @@ jobs:
 
   docker:
     name: Docker build and push
-    if: ${{ !failure() }}
+    if: ${{ !(github.event.inputs.dockerhub == 'false') && !failure() }}
     needs: [checks, builds, tests, doc]
     runs-on: ubuntu-latest
     steps:
