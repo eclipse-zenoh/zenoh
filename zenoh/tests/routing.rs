@@ -13,6 +13,7 @@
 //
 use futures::future::try_join_all;
 use futures::FutureExt as _;
+use std::str::FromStr;
 use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicUsize, Arc};
 use std::time::Duration;
@@ -386,9 +387,9 @@ fn static_failover_brokering() -> Result<()> {
             config
                 .scouting
                 .gossip
-                .set_autoconnect(Some(ModeDependentValue::Unique(WhatAmIMatcher::try_from(
-                    128,
-                )?)))
+                .set_autoconnect(Some(ModeDependentValue::Unique(
+                    WhatAmIMatcher::from_str("").unwrap(),
+                )))
                 .unwrap();
             Some(config)
         };
@@ -402,7 +403,7 @@ fn static_failover_brokering() -> Result<()> {
                 ..Default::default()
             },
             Node {
-                name: format!("Pub {}", WhatAmI::Peer),
+                name: format!("Pub & Queryable {}", WhatAmI::Peer),
                 mode: WhatAmI::Peer,
                 connect: vec![locator.clone()],
                 config: disable_autoconnect_config(),
@@ -413,7 +414,7 @@ fn static_failover_brokering() -> Result<()> {
                 ..Default::default()
             },
             Node {
-                name: format!("Sub {}", WhatAmI::Peer),
+                name: format!("Sub & Get {}", WhatAmI::Peer),
                 mode: WhatAmI::Peer,
                 connect: vec![locator.clone()],
                 config: disable_autoconnect_config(),
