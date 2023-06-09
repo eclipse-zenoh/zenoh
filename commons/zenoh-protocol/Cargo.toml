@@ -43,9 +43,9 @@ complete_n = []
 hex = { workspace = true, features = ["alloc"] }
 rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
 serde = { workspace = true, features = ["alloc"] }
-uhlc = { workspace = true }
+uhlc = { workspace = true, default-features = false }
 uuid = { workspace = true }                                                     # Needs a getrandom::getrandom() custom implementation on embedded (in root crate)
-zenoh-buffers = { workspace = true }
+zenoh-buffers = { workspace = true, default-features = false  }
 zenoh-keyexpr = { workspace = true }
 zenoh-result = { workspace = true }
 

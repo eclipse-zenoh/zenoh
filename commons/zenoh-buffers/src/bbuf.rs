@@ -118,6 +118,23 @@ impl BacktrackableWriter for &mut BBuf {
     }
 }
 
+#[cfg(feature = "std")]
+impl std::io::Write for &mut BBuf {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match <Self as Writer>::write(self, buf) {
+            Ok(n) => Ok(n.get()),
+            Err(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "UnexpectedEof",
+            )),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 // Reader
 impl<'a> HasReader for &'a BBuf {
     type Reader = &'a [u8];
@@ -130,6 +147,7 @@ impl<'a> HasReader for &'a BBuf {
 #[cfg(feature = "test")]
 impl BBuf {
     pub fn rand(len: usize) -> Self {
+        #[cfg(not(feature = "std"))]
         use alloc::vec::Vec;
         use rand::Rng;
 
