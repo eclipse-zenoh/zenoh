@@ -347,6 +347,7 @@ impl TransportMulticastInner {
             zid: join.zid,
             whatami: join.whatami,
             is_qos: join.is_qos(),
+            #[cfg(feature = "shared-memory")]
             is_shm: self.is_shm(),
             links: vec![link],
         };
@@ -455,6 +456,7 @@ impl TransportMulticastInner {
                     zid: p.zid,
                     whatami: p.whatami,
                     is_qos: p.is_qos(),
+                    #[cfg(feature = "shared-memory")]
                     is_shm: self.is_shm(),
                     links: vec![link],
                 }

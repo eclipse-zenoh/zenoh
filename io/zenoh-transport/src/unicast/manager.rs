@@ -443,6 +443,7 @@ impl TransportManager {
                     whatami: config.whatami,
                     sn_resolution: config.sn_resolution,
                     initial_sn_tx: config.initial_sn_tx,
+                    #[cfg(feature = "shared-memory")]
                     is_shm: config.is_shm,
                     is_qos: config.is_qos,
                 };
@@ -452,6 +453,7 @@ impl TransportManager {
                 let transport: TransportUnicast = (&a_t).into();
                 guard.insert(config.peer, a_t);
 
+                #[cfg(feature = "shared-memory")]
                 log::debug!(
                     "New transport opened with {}: whatami {}, sn resolution {}, initial sn {:?}, shm: {}, qos: {}",
                     config.peer,
@@ -459,6 +461,15 @@ impl TransportManager {
                     config.sn_resolution,
                     config.initial_sn_tx,
                     config.is_shm,
+                    config.is_qos
+                );
+                #[cfg(not(feature = "shared-memory"))]
+                log::debug!(
+                    "New transport opened with {}: whatami {}, sn resolution {}, initial sn {:?}, qos: {}",
+                    config.peer,
+                    config.whatami,
+                    config.sn_resolution,
+                    config.initial_sn_tx,
                     config.is_qos
                 );
 

@@ -65,6 +65,7 @@ pub(crate) async fn open_link(
         zid,
         whatami: output.whatami,
         sn_resolution: output.sn_resolution,
+        #[cfg(feature = "shared-memory")]
         is_shm: output.is_shm,
         is_qos: output.is_qos,
     };

@@ -39,6 +39,7 @@ pub(super) struct Output {
     pub(super) cookie: Cookie,
     pub(super) initial_sn: ZInt,
     pub(super) lease: Duration,
+    #[cfg(feature = "shared-memory")]
     pub(super) is_shm: bool,
     pub(super) open_ack_attachment: Option<Attachment>,
 }
@@ -117,6 +118,7 @@ pub(super) async fn recv(
         None => EstablishmentProperties::new(),
     };
 
+    #[cfg(feature = "shared-memory")]
     let mut is_shm = false;
     let mut ps_attachment = EstablishmentProperties::new();
     for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
@@ -168,6 +170,7 @@ pub(super) async fn recv(
         cookie,
         initial_sn: open_syn.initial_sn,
         lease: open_syn.lease,
+        #[cfg(feature = "shared-memory")]
         is_shm,
         open_ack_attachment,
     };

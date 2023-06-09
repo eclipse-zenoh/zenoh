@@ -21,12 +21,12 @@ mod unicast;
 
 use async_trait::async_trait;
 pub use unicast::*;
+use zenoh_cfg_properties::Properties;
+use zenoh_config::Config;
 use zenoh_core::zconfigurable;
-use zenoh_link_commons::{LocatorInspector, ConfigurationInspector};
+use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
 use zenoh_protocol::core::Locator;
 use zenoh_result::ZResult;
-use zenoh_config::Config;
-use zenoh_cfg_properties::Properties;
 
 pub const SHM_LOCATOR_PREFIX: &str = "shm";
 
@@ -43,7 +43,6 @@ impl LocatorInspector for ShmLocatorInspector {
     }
 }
 
-
 #[derive(Default, Clone, Copy, Debug)]
 pub struct ShmConfigurator;
 #[async_trait]
@@ -53,10 +52,7 @@ impl ConfigurationInspector<Config> for ShmConfigurator {
 
         let c = config.transport().link().shared_memory();
         if let Some(shm_access_mask) = c.shm_access_mask() {
-            properties.insert(
-                config::SHM_ACCESS_MASK.into(),
-                shm_access_mask.to_string(),
-            );
+            properties.insert(config::SHM_ACCESS_MASK.into(), shm_access_mask.to_string());
         }
 
         Ok(properties)

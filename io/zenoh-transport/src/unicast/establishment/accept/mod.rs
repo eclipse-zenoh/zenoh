@@ -57,6 +57,7 @@ pub(crate) async fn accept_link(
         zid: output.cookie.zid,
         whatami: output.cookie.whatami,
         sn_resolution: output.cookie.sn_resolution,
+        #[cfg(feature = "shared-memory")]
         is_shm: output.is_shm,
         is_qos: output.cookie.is_qos,
     };

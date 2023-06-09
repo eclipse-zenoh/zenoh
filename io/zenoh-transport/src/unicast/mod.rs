@@ -84,6 +84,7 @@ pub(crate) struct TransportConfigUnicast {
     pub(crate) whatami: WhatAmI,
     pub(crate) sn_resolution: ZInt,
     pub(crate) initial_sn_tx: ZInt,
+    #[cfg(feature = "shared-memory")]
     pub(crate) is_shm: bool,
     pub(crate) is_qos: bool,
 }
@@ -119,6 +120,7 @@ impl TransportUnicast {
         Ok(transport.get_sn_resolution())
     }
 
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub fn is_shm(&self) -> ZResult<bool> {
         let transport = self.get_inner()?;
@@ -143,6 +145,7 @@ impl TransportUnicast {
             zid: transport.get_zid(),
             whatami: transport.get_whatami(),
             is_qos: transport.is_qos(),
+            #[cfg(feature = "shared-memory")]
             is_shm: transport.is_shm(),
             links: transport
                 .get_links()
@@ -221,6 +224,7 @@ impl PartialEq for TransportUnicast {
 impl fmt::Debug for TransportUnicast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.get_inner() {
+            #[cfg(feature = "shared-memory")]
             Ok(transport) => f
                 .debug_struct("Transport Unicast")
                 .field("zid", &transport.get_zid())
@@ -228,6 +232,15 @@ impl fmt::Debug for TransportUnicast {
                 .field("sn_resolution", &transport.get_sn_resolution())
                 .field("is_qos", &transport.is_qos())
                 .field("is_shm", &transport.is_shm())
+                .field("links", &transport.get_links())
+                .finish(),
+            #[cfg(not(feature = "shared-memory"))]
+            Ok(transport) => f
+                .debug_struct("Transport Unicast")
+                .field("zid", &transport.get_zid())
+                .field("whatami", &transport.get_whatami())
+                .field("sn_resolution", &transport.get_sn_resolution())
+                .field("is_qos", &transport.is_qos())
                 .field("links", &transport.get_links())
                 .finish(),
             Err(e) => {

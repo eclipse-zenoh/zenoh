@@ -178,6 +178,7 @@ zenoh-link-unixsock_stream = { version = "0.7.2-dev", path = "io/zenoh-links/zen
 zenoh-link-quic = { version = "0.7.2-dev", path = "io/zenoh-links/zenoh-link-quic" }
 zenoh-link-udp = { version = "0.7.2-dev", path = "io/zenoh-links/zenoh-link-udp" }
 zenoh-link-ws = { version = "0.7.2-dev", path = "io/zenoh-links/zenoh-link-ws" }
+zenoh-link-shm = { version = "0.7.2-dev", path = "io/zenoh-links/zenoh-link-shm" }
 zenoh-link-serial = { version = "0.7.2-dev", path = "io/zenoh-links/zenoh-link-serial" }
 zenoh-link = { version = "0.7.2-dev", path = "io/zenoh-link" }
 zenoh-link-commons = { version = "0.7.2-dev", path = "io/zenoh-link-commons" }

@@ -107,6 +107,7 @@ pub struct TransportPeer {
     pub zid: ZenohId,
     pub whatami: WhatAmI,
     pub is_qos: bool,
+    #[cfg(feature = "shared-memory")]
     pub is_shm: bool,
     #[serde(skip)]
     pub links: Vec<Link>,

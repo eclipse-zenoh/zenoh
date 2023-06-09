@@ -31,7 +31,7 @@ pub use zenoh_link_tcp as tcp;
 use zenoh_link_tcp::{LinkManagerUnicastTcp, TcpLocatorInspector, TCP_LOCATOR_PREFIX};
 
 #[cfg(feature = "transport_udp")]
-pub use zenoh_link_udp as udp; 
+pub use zenoh_link_udp as udp;
 #[cfg(feature = "transport_udp")]
 use zenoh_link_udp::{
     LinkManagerMulticastUdp, LinkManagerUnicastUdp, UdpLocatorInspector, UDP_LOCATOR_PREFIX,
@@ -73,7 +73,7 @@ use zenoh_link_serial::{LinkManagerUnicastSerial, SerialLocatorInspector, SERIAL
 pub use zenoh_link_shm as shm;
 #[cfg(feature = "transport_shm")]
 use zenoh_link_shm::{
-    LinkManagerUnicastPipe, ShmLocatorInspector, ShmConfigurator, SHM_LOCATOR_PREFIX,
+    LinkManagerUnicastPipe, ShmConfigurator, ShmLocatorInspector, SHM_LOCATOR_PREFIX,
 };
 
 pub use zenoh_link_commons::*;

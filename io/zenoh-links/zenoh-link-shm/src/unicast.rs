@@ -14,9 +14,9 @@ use crate::config;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use advisory_lock::{AdvisoryFileLock, FileLockMode};
-use async_io::Async; 
-use async_std::task::JoinHandle;
+use async_io::Async;
 use async_std::fs::remove_file;
+use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::fmt;
@@ -50,12 +50,11 @@ impl PipeR {
     }
 
     async fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> ZResult<usize> {
-        let result = self.pipe
+        let result = self
+            .pipe
             .read_with_mut(|pipe| match pipe.read(&mut buf[..]) {
                 Ok(0) => Err(async_std::io::ErrorKind::WouldBlock.into()),
-                Ok(val) => {
-                    Ok(val)
-                }
+                Ok(val) => Ok(val),
                 Err(e) => Err(e),
             })
             .await?;
@@ -94,12 +93,11 @@ impl PipeW {
     }
 
     async fn write<'a>(&'a mut self, buf: &'a [u8]) -> ZResult<usize> {
-        let result = self.pipe
+        let result = self
+            .pipe
             .write_with_mut(|pipe| match pipe.write(buf) {
                 Ok(0) => Err(async_std::io::ErrorKind::WouldBlock.into()),
-                Ok(val) => {
-                    Ok(val)
-                } 
+                Ok(val) => Ok(val),
                 Err(e) => Err(e),
             })
             .await?;
@@ -245,40 +243,24 @@ impl LinkUnicastTrait for UnicastPipe {
         Ok(())
     }
 
-    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {        
+    async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
         //todo: I completely don't like the idea of locking reader\writer each time, but LinkUnicastTrait requires self.r and self.w to be Sync
-        self.w
-            .write()
-            .await
-            .write(buffer)
-            .await
+        self.w.write().await.write(buffer).await
     }
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
         //todo: I completely don't like the idea of locking reader\writer each time, but LinkUnicastTrait requires self.r and self.w to be Sync
-        self.w
-            .write()
-            .await
-            .write_all(buffer)
-            .await
+        self.w.write().await.write_all(buffer).await
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
         //todo: I completely don't like the idea of locking reader\writer each time, but LinkUnicastTrait requires self.r and self.w to be Sync
-        self.r
-            .write()
-            .await
-            .read(buffer)
-            .await
+        self.r.write().await.read(buffer).await
     }
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
         //todo: I completely don't like the idea of locking reader\writer each time, but LinkUnicastTrait requires self.r and self.w to be Sync
-        self.r
-            .write()
-            .await
-            .read_exact(buffer)
-            .await
+        self.r.write().await.read_exact(buffer).await
     }
 
     #[inline(always)]

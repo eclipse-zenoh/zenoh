@@ -36,6 +36,7 @@ shared-memory = [
     "zenoh-shm",
     "zenoh-protocol/shared-memory",
     "zenoh-transport/shared-memory",
+    "zenoh-cfg-properties/shared-memory",
 ]
 stats = ["zenoh-transport/stats"]
 transport_quic = ["zenoh-transport/transport_quic"]

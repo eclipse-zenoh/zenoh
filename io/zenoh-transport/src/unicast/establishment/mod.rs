@@ -63,6 +63,7 @@ pub(super) struct InputInit {
     pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) sn_resolution: ZInt,
+    #[cfg(feature = "shared-memory")]
     pub(super) is_shm: bool,
     pub(super) is_qos: bool,
 }
@@ -77,6 +78,7 @@ async fn transport_init(
         peer: input.zid,
         whatami: input.whatami,
         sn_resolution: input.sn_resolution,
+        #[cfg(feature = "shared-memory")]
         is_shm: input.is_shm,
         is_qos: input.is_qos,
         initial_sn_tx,
@@ -115,6 +117,7 @@ pub(super) async fn transport_finalize(
             zid: transport.get_zid(),
             whatami: transport.get_whatami(),
             is_qos: transport.is_qos(),
+            #[cfg(feature = "shared-memory")]
             is_shm: transport.is_shm(),
             links: vec![Link::from(link)],
         };

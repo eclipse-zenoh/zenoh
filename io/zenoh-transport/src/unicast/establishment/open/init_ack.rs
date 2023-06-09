@@ -38,6 +38,7 @@ pub(super) struct Output {
     pub(super) whatami: WhatAmI,
     pub(super) sn_resolution: ZInt,
     pub(super) is_qos: bool,
+    #[cfg(feature = "shared-memory")]
     pub(super) is_shm: bool,
     pub(super) cookie: ZSlice,
     pub(super) open_syn_attachment: Option<Attachment>,
@@ -119,6 +120,7 @@ pub(super) async fn recv(
     };
 
     #[allow(unused_mut)]
+    #[cfg(feature = "shared-memory")]
     let mut is_shm = false;
     let mut ps_attachment = EstablishmentProperties::new();
     for pa in zasyncread!(manager.state.unicast.peer_authenticator).iter() {
@@ -175,6 +177,7 @@ pub(super) async fn recv(
         whatami: init_ack.whatami,
         sn_resolution,
         is_qos: init_ack.is_qos,
+        #[cfg(feature = "shared-memory")]
         is_shm,
         cookie: init_ack.cookie,
         open_syn_attachment,

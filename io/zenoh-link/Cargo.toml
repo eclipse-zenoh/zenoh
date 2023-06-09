@@ -48,5 +48,6 @@ zenoh-link-tls = { workspace = true, optional = true }
 zenoh-link-udp = { workspace = true, optional = true }
 zenoh-link-unixsock_stream = { workspace = true, optional = true }
 zenoh-link-ws = { workspace = true, optional = true }
+zenoh-link-shm = { workspace = true, optional = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }

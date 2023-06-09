@@ -152,8 +152,11 @@ pub const ZN_TLS_ROOT_CA_CERTIFICATE_STR: &str = "tls_root_ca_certificate";
 /// String key: `"shm"`.
 /// Accepted values: `"true"`, `"false"`.
 /// Default value: `"true"`.
+#[cfg(feature = "shared-memory")]
 pub const ZN_SHM_KEY: u64 = 0x51;
+#[cfg(feature = "shared-memory")]
 pub const ZN_SHM_STR: &str = "shm";
+#[cfg(feature = "shared-memory")]
 pub const ZN_SHM_DEFAULT: &str = ZN_TRUE;
 
 /// Indicates if routers should connect to each other
