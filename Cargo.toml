@@ -160,7 +160,7 @@ zenoh-config = { version = "0.7.2-dev", path = "commons/zenoh-config" }
 zenoh-protocol = { version = "0.7.2-dev", path = "commons/zenoh-protocol", default-features = false }
 zenoh-keyexpr = { version = "0.7.2-dev", path = "commons/zenoh-keyexpr", default-features = false }
 zenoh-core = { version = "0.7.2-dev", path = "commons/zenoh-core" }
-zenoh-buffers = { version = "0.7.2-dev", path = "commons/zenoh-buffers" }
+zenoh-buffers = { version = "0.7.2-dev", path = "commons/zenoh-buffers", default-features = false }
 zenoh-util = { version = "0.7.2-dev", path = "commons/zenoh-util" }
 zenoh-crypto = { version = "0.7.2-dev", path = "commons/zenoh-crypto" }
 zenoh-codec = { version = "0.7.2-dev", path = "commons/zenoh-codec" }
