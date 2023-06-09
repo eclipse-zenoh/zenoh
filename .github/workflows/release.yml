@@ -23,6 +23,15 @@ on:
       runtests:
         description: 'run tests'
         type: boolean
+      dockerhub:
+        description: 'publish to dockerhub'
+        type: boolean
+      doc:
+        description: 'generate doc'
+        type: boolean
+      features:
+        description: 'build with specified features (comma separated, no space)'
+        type: string
 
 jobs:
   checks:
@@ -43,7 +52,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets -- -D warnings
+          args: --all-targets --features=${{ github.event.inputs.features}} -- -D warnings
       - name: Clippy unstable check
         uses: actions-rs/cargo@v1
         with:
@@ -111,19 +120,20 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: nextest
-          args: run --release --verbose
+          args: run --release --features=${{ github.event.inputs.features}} --verbose
         env:
           ASYNC_STD_THREAD_COUNT: 4
       - name: Run doctests
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --release --doc
+          args: --release --features=${{ github.event.inputs.features}} --doc
         env:
           ASYNC_STD_THREAD_COUNT: 4
 
   doc:
     name: Doc generation
+    if: ${{ !(github.event.inputs.doc == 'false') }}
     needs: checks
     runs-on: ubuntu-latest
     steps:
@@ -138,7 +148,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: doc
-          args: --no-deps
+          args: --no-deps --features=${{ github.event.inputs.features}}
 
   builds:
     name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
@@ -232,7 +242,7 @@ jobs:
         with:
           use-cross: ${{ matrix.job.use-cross }}
           command: build
-          args: --release --bins --lib --target=${{ matrix.job.target }}
+          args: --release --bins --lib --features=${{ github.event.inputs.features}} --target=${{ matrix.job.target }}
 
       - name: Debian package - zenohd
         if: contains(matrix.job.target, '-linux-gnu')
@@ -357,7 +367,7 @@ jobs:
 
   docker:
     name: Docker build and push
-    if: ${{ !failure() }}
+    if: ${{ !(github.event.inputs.dockerhub == 'false') && !failure() }}
     needs: [checks, builds, tests, doc]
     runs-on: ubuntu-latest
     steps:
