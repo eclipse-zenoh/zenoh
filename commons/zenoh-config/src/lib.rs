@@ -287,6 +287,18 @@ validated_struct::validator! {
                 SHMConf {
                     shm_access_mask: Option<u32>
                 },
+                pub compression: #[derive(Default)]
+                /// **Experimental** compression feature.
+                /// Will compress the batches hop to hop (as opposed to end to end). May cause errors when
+                /// the batches's complexity is too high, causing the resulting compression to be bigger in
+                /// size than the MTU.
+                /// You must use the features "transport_compression" and "unstable" to enable this.
+                CompressionConf {
+                    /// When enabled is true, batches will be sent compressed. It does not affect the
+                    /// reception, which always expects compressed batches when built with thes features
+                    /// "transport_compression" and "unstable".
+                    enabled: bool,
+                }
             },
             pub shared_memory: SharedMemoryConf {
                 /// Whether shared memory is enabled or not.

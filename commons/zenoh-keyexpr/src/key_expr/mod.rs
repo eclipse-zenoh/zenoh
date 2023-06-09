@@ -38,10 +38,10 @@ pub mod intersect;
 pub(crate) mod utils;
 
 /// Exposes a random Key Expression generator to help with testing.
-#[cfg(any(test, feature = "test"))]
+#[cfg(feature = "std")]
 pub mod fuzzer;
 
 pub mod format;
 
-#[cfg(all(test, feature = "test"))]
+#[cfg(test)]
 mod tests;

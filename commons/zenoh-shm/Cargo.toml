@@ -33,5 +33,5 @@ bincode = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 shared_memory = { workspace = true }
-zenoh-buffers = { path = "../zenoh-buffers/" }
-zenoh-result = { path = "../zenoh-result/" }
+zenoh-buffers = { workspace = true }
+zenoh-result = { workspace = true }

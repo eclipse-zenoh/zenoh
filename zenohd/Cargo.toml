@@ -37,7 +37,7 @@ git-version = { workspace = true }
 json5 = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
-zenoh = { path = "../zenoh/", features = ["unstable"], default-features = false }
+zenoh = { workspace = true, features = ["unstable"] }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }

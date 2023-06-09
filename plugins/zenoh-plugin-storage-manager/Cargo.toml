@@ -47,14 +47,14 @@ log = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
-zenoh = { path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
-zenoh-collections = { path = "../../commons/zenoh-collections/" }
-zenoh-core = { path = "../../commons/zenoh-core/" }
-zenoh-keyexpr = { path = "../../commons/zenoh-keyexpr/" }
-zenoh-plugin-trait = { path = "../zenoh-plugin-trait/", default-features = false }
-zenoh-result = { path = "../../commons/zenoh-result/" }
-zenoh-util = { path = "../../commons/zenoh-util/" }
-zenoh_backend_traits = { path = "../zenoh-backend-traits/" }
+zenoh = { workspace = true, features = [ "unstable" ] }
+zenoh-collections = { workspace = true }
+zenoh-core = { workspace = true }
+zenoh-keyexpr = { workspace = true }
+zenoh-plugin-trait = { workspace = true }
+zenoh-result = { workspace = true }
+zenoh-util = { workspace = true }
+zenoh_backend_traits = { workspace = true }
 
 [build-dependencies]
 rustc_version = { workspace = true }

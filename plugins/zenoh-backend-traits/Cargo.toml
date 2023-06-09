@@ -31,6 +31,6 @@ async-std = { workspace = true, features = ["default"] }
 async-trait = { workspace = true }
 derive_more = { workspace = true }
 serde_json = { workspace = true }
-zenoh = { path = "../../zenoh/", default-features = false }
-zenoh-result = { path = "../../commons/zenoh-result/" }
-zenoh-util = { path = "../../commons/zenoh-util/" }
+zenoh = { workspace = true }
+zenoh-result = { workspace = true }
+zenoh-util = { workspace = true }

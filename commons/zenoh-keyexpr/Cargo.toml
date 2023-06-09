@@ -25,15 +25,14 @@ description = "Internal crate for zenoh."
 
 [features]
 default = ["std"]
-std = ["zenoh-result/std", "rand?/std", "rand?/std_rng"]
-test = ["rand"]
+std = ["zenoh-result/std"]
 
 [dependencies]
 keyed-set = { workspace = true }
-rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
+rand = { workspace = true, features = ["alloc", "getrandom"] }
 serde = { workspace = true, features = ["alloc"] }
 token-cell = { workspace = true }
-zenoh-result = { path = "../zenoh-result/", default-features = false }
+zenoh-result = { workspace = true }
 
 [target.'cfg(not(features = "std"))'.dependencies]
 hashbrown = { workspace = true }
@@ -42,8 +41,6 @@ hashbrown = { workspace = true }
 [dev-dependencies]
 criterion = { workspace = true }
 lazy_static = { workspace = true }
-rand = { workspace = true }
-zenoh-keyexpr = { path = "../zenoh-keyexpr/", features = ["test"] }
 
 [[bench]]
 name = "keyexpr_tree"
