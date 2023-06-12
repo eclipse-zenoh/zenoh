@@ -18,6 +18,7 @@ use async_io::Async;
 use async_std::fs::remove_file;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
+use rand::Rng;
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
@@ -36,6 +37,48 @@ use zenoh_result::{bail, ZResult};
 const LINUX_PIPE_MAX_MTU: u16 = 65_535;
 
 static PIPE_INVITATION: &[u8] = &[0xDE, 0xAD, 0xBE, 0xEF];
+
+struct Invitation;
+impl Invitation {
+    async fn send(suffix: u32, pipe: &mut PipeW) -> ZResult<()> {
+        let msg: [u8; 8] = {
+            let mut msg: [u8; 8] = [0; 8];
+            let (one, two) = msg.split_at_mut(PIPE_INVITATION.len());
+            one.copy_from_slice(PIPE_INVITATION);
+            two.copy_from_slice(&suffix.to_ne_bytes());
+            msg
+        };
+        pipe.write_all(&msg).await
+    }
+
+    async fn receive(pipe: &mut PipeR) -> ZResult<u32> {
+        let mut msg: [u8; 8] = [0; 8];
+        pipe.read_exact(&mut msg).await?;
+        if !msg.starts_with(PIPE_INVITATION) {
+            bail!("Unexpected invitation received during pipe handshake!")
+        }
+
+        let suffix_bytes: &[u8; 4] = &msg[4..].try_into()?;
+        let suffix = u32::from_ne_bytes(*suffix_bytes);
+        Ok(suffix)
+    }
+
+    async fn confirm(suffix: u32, pipe: &mut PipeW) -> ZResult<()> {
+        Self::send(suffix, pipe).await
+    }
+
+    async fn expect(expected_suffix: u32, pipe: &mut PipeR) -> ZResult<()> {
+        let recived_suffix = Self::receive(pipe).await?;
+        if recived_suffix != expected_suffix {
+            bail!(
+                "Suffix mismatch: expected {} gor {}",
+                expected_suffix,
+                recived_suffix
+            )
+        }
+        Ok(())
+    }
+}
 
 struct PipeR {
     pipe: Async<File>,
@@ -123,6 +166,56 @@ impl PipeW {
     }
 }
 
+async fn handle_incoming_connections(
+    endpoint: &EndPoint,
+    manager: &Arc<NewLinkChannelSender>,
+    request_channel: &mut PipeR,
+    path_downlink: &str,
+    path_uplink: &str,
+    access_mode: u32,
+) -> ZResult<()> {
+    // read invitation from the request channel
+    let suffix = Invitation::receive(request_channel).await?;
+
+    // gererate uplink and downlink names
+    let (dedicated_downlink_path, dedicated_uplink_path) =
+        get_dedicated_pipe_names(path_downlink, path_uplink, suffix);
+
+    // create dedicated downlink and uplink
+    let mut dedicated_downlink = PipeW::new(&dedicated_downlink_path).await?;
+    let mut dedicated_uplink = PipeR::new(&dedicated_uplink_path, access_mode).await?;
+
+    // confirm over the dedicated chanel
+    Invitation::confirm(suffix, &mut dedicated_downlink).await?;
+
+    // got confirmation over the dedicated chanel
+    Invitation::expect(suffix, &mut dedicated_uplink).await?;
+
+    // create Locators
+    let local = Locator::new(
+        endpoint.protocol(),
+        dedicated_uplink_path,
+        endpoint.metadata(),
+    )?;
+    let remote = Locator::new(
+        endpoint.protocol(),
+        dedicated_downlink_path,
+        endpoint.metadata(),
+    )?;
+
+    // send newly established link to manager
+    manager
+        .send_async(LinkUnicast(Arc::new(UnicastPipe {
+            r: async_std::sync::RwLock::new(dedicated_uplink),
+            w: async_std::sync::RwLock::new(dedicated_downlink),
+            local,
+            remote,
+        })))
+        .await?;
+
+    ZResult::Ok(())
+}
+
 struct UnicastPipeListener {
     listening_task_handle: JoinHandle<ZResult<()>>,
     uplink_locator: Locator,
@@ -130,53 +223,33 @@ struct UnicastPipeListener {
 impl UnicastPipeListener {
     async fn listen(endpoint: EndPoint, manager: Arc<NewLinkChannelSender>) -> ZResult<Self> {
         let (path_uplink, path_downlink, access_mode) = parse_pipe_endpoint(&endpoint);
-
-        // create Locators
         let local = Locator::new(
             endpoint.protocol(),
             path_uplink.as_str(),
             endpoint.metadata(),
         )?;
-        let c_local = local.clone();
-        let remote = Locator::new(
-            endpoint.protocol(),
-            path_downlink.as_str(),
-            endpoint.metadata(),
-        )?;
 
-        // create uplink
-        let mut uplink = PipeR::new(&path_uplink, access_mode).await?;
+        // create request channel
+        let mut request_channel = PipeR::new(&path_uplink, access_mode).await?;
 
         // create listening task
         let listening_task_handle = async_std::task::spawn(async move {
-            // read invitation from uplink pipe and check it's correctness
-            let mut invitation = [0; 4];
-            uplink.read_exact(&mut invitation).await?;
-            if invitation != PIPE_INVITATION {
-                bail!("Unexpected invitation received during pipe handshake!")
+            loop {
+                let _ = handle_incoming_connections(
+                    &endpoint,
+                    &manager,
+                    &mut request_channel,
+                    &path_downlink,
+                    &path_uplink,
+                    access_mode,
+                )
+                .await;
             }
-
-            // create downlink
-            let mut downlink = PipeW::new(&path_downlink).await?;
-            // echo invitation to other party
-            downlink.write_all(&invitation).await?;
-
-            // send newly established link to manager
-            manager
-                .send_async(LinkUnicast(Arc::new(UnicastPipe {
-                    r: async_std::sync::RwLock::new(uplink),
-                    w: async_std::sync::RwLock::new(downlink),
-                    local,
-                    remote,
-                })))
-                .await?;
-
-            ZResult::Ok(())
         });
 
         Ok(Self {
             listening_task_handle,
-            uplink_locator: c_local,
+            uplink_locator: local,
         })
     }
 
@@ -185,42 +258,97 @@ impl UnicastPipeListener {
     }
 }
 
+fn get_dedicated_pipe_names(
+    path_downlink: &str,
+    path_uplink: &str,
+    suffix: u32,
+) -> (String, String) {
+    let suffix_str = suffix.to_string();
+    let path_uplink = path_uplink.to_string() + &suffix_str;
+    let path_downlink = path_downlink.to_string() + &suffix_str;
+    (path_downlink, path_uplink)
+}
+
+async fn create_pipe(
+    path_uplink: &str,
+    path_downlink: &str,
+    access_mode: u32,
+) -> ZResult<(PipeR, u32, String, String)> {
+    // generate random suffix
+    let suffix: u32 = rand::thread_rng().gen();
+
+    // gererate uplink and downlink names
+    let (path_downlink, path_uplink) = get_dedicated_pipe_names(path_downlink, path_uplink, suffix);
+
+    // try create uplink and downlink pipes to ensure that the selected suffix is available
+    let downlink = PipeR::new(&path_downlink, access_mode).await?;
+    let _uplink = PipeR::new(&path_uplink, access_mode).await?; // uplink would be dropped, that is OK!
+
+    Ok((downlink, suffix, path_downlink, path_uplink))
+}
+
+async fn dedicate_pipe(
+    path_uplink: &str,
+    path_downlink: &str,
+    access_mode: u32,
+) -> ZResult<(PipeR, u32, String, String)> {
+    for _ in 0..100 {
+        match create_pipe(path_uplink, path_downlink, access_mode).await {
+            Err(_) => {}
+            val => {
+                return val;
+            }
+        }
+    }
+    bail!("Unabe to dedicate pipe!")
+}
+
 struct UnicastPipeClient;
 impl UnicastPipeClient {
     async fn connect_to(endpoint: EndPoint) -> ZResult<UnicastPipe> {
         let (path_uplink, path_downlink, access_mode) = parse_pipe_endpoint(&endpoint);
 
+        // open the request channel
+        // this channel would be used to invite listener to the dedicated channel
+        // listener owns the request channel, so failure of this call means that there is nobody listening on the provided endpoint
+        let mut request_channel = PipeW::new(&path_uplink).await?;
+
+        // create dedicated channel prerequisities. The creation code also ensures that nobody else would use the same channel concurrently
+        let (
+            mut dedicated_downlink,
+            dedicated_suffix,
+            dedicated_donlink_path,
+            dedicated_uplink_path,
+        ) = dedicate_pipe(&path_uplink, &path_downlink, access_mode).await?;
+
+        // invite the listener to our dedicated channel over the requet channel
+        Invitation::send(dedicated_suffix, &mut request_channel).await?;
+
+        // read responce that should be sent over the dedicated channel, confirming that everything is OK
+        // on the listener's side and it is already working with the dedicated channel
+        Invitation::expect(dedicated_suffix, &mut dedicated_downlink).await?;
+
+        // open dedicated uplink
+        let mut dedicated_uplink = PipeW::new(&dedicated_uplink_path).await?;
+
+        // final confirmation over the dedicated uplink
+        Invitation::confirm(dedicated_suffix, &mut dedicated_uplink).await?;
+
         // create Locators
         let local = Locator::new(
             endpoint.protocol(),
-            path_downlink.as_str(),
+            dedicated_donlink_path,
             endpoint.metadata(),
         )?;
         let remote = Locator::new(
             endpoint.protocol(),
-            path_uplink.as_str(),
+            dedicated_uplink_path,
             endpoint.metadata(),
         )?;
 
-        // create uplink
-        let mut uplink = PipeW::new(&path_uplink).await?;
-        // create downlink
-        let mut downlink = PipeR::new(&path_downlink, access_mode).await?;
-
-        // write invitation
-        uplink.write_all(PIPE_INVITATION).await?;
-
-        // read responce
-        let mut responce: [u8; 4] = [0, 0, 0, 0];
-        downlink.read_exact(&mut responce).await?;
-        // check responce
-        if responce != PIPE_INVITATION {
-            bail!("Unexpected responce received during pipe handshake!")
-        }
-
         Ok(UnicastPipe {
-            r: async_std::sync::RwLock::new(downlink),
-            w: async_std::sync::RwLock::new(uplink),
+            r: async_std::sync::RwLock::new(dedicated_downlink),
+            w: async_std::sync::RwLock::new(dedicated_uplink),
             local,
             remote,
         })
