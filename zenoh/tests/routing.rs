@@ -444,6 +444,7 @@ fn three_node_combination() -> Result<()> {
         let modes = [WhatAmI::Peer, WhatAmI::Client];
 
         let mut idx = 0;
+        // Ports going to be used: 17451 to 17474
         let base_port = 17450;
         let recipe_list = modes
             .map(|n1| modes.map(|n2| (n1, n2)))
@@ -532,7 +533,8 @@ fn two_node_combination() -> Result<()> {
         ];
 
         let mut idx = 0;
-        let base_port = 17470;
+        // Ports going to be used: 17481 to 17488
+        let base_port = 17480;
         let recipe_list = modes
             .into_iter()
             .flat_map(|(n1, n2, who)| MSG_SIZE.map(|s| (n1, n2, who, s)))
