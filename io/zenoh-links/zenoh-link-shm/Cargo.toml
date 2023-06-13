@@ -31,6 +31,7 @@ async-trait = { workspace = true }
 async-io = ">= 1.13.0"
 unix-named-pipe = ">= 0.2.0"
 nix = ">=0.26.2"
+filepath = ">=0.1.2"
 log = { workspace = true }
 rand = { workspace = true }
 socket2 = { workspace = true }

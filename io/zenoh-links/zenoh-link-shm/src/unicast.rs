@@ -18,6 +18,8 @@ use async_io::Async;
 use async_std::fs::remove_file;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
+use filepath::FilePath;
+use nix::unistd::unlink;
 use rand::Rng;
 use std::collections::HashMap;
 use std::fmt;
@@ -35,6 +37,7 @@ use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, ZResult};
 
 const LINUX_PIPE_MAX_MTU: u16 = 65_535;
+const LINUX_PIPE_DEDICATE_TRIES: usize = 100;
 
 static PIPE_INVITATION: &[u8] = &[0xDE, 0xAD, 0xBE, 0xEF];
 
@@ -83,10 +86,18 @@ impl Invitation {
 struct PipeR {
     pipe: Async<File>,
 }
+
+impl Drop for PipeR {
+    fn drop(&mut self) {
+        if let Ok(path) = self.pipe.as_mut().path() {
+            let _ = unlink(&path);
+        }
+    }
+}
 impl PipeR {
     async fn new(path: &str, access_mode: u32) -> ZResult<Self> {
         // create, open and lock named pipe
-        let pipe_file = create_and_open_unique_pipe_for_read(path, access_mode).await?;
+        let pipe_file = Self::create_and_open_unique_pipe_for_read(path, access_mode).await?;
         // create async_io wrapper for pipe's file descriptor
         let pipe = Async::new(pipe_file)?;
         Ok(Self { pipe })
@@ -121,6 +132,35 @@ impl PipeR {
             .await?;
         ZResult::Ok(())
     }
+
+    async fn create_and_open_unique_pipe_for_read(path_r: &str, access_mode: u32) -> ZResult<File> {
+        let r_was_created = create(path_r, Some(access_mode));
+        let open_result = Self::open_unique_pipe_for_read(path_r);
+        match (open_result.is_ok(), r_was_created.is_ok()) {
+            (false, true) => {
+                // clean-up in case of failure
+                let _ = remove_file(path_r).await;
+            }
+            (true, false) => {
+                // drop all the data from the pipe in case if it already exists
+                let mut buf: [u8; 1] = [0; 1];
+                while let Ok(val) = open_result.as_ref().unwrap().read(&mut buf) {
+                    if val == 0 {
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        open_result
+    }
+
+    fn open_unique_pipe_for_read(path: &str) -> ZResult<File> {
+        let read = open_read(path)?;
+        read.try_lock(FileLockMode::Exclusive)?;
+        Ok(read)
+    }
 }
 
 struct PipeW {
@@ -129,7 +169,7 @@ struct PipeW {
 impl PipeW {
     async fn new(path: &str) -> ZResult<Self> {
         // create, open and lock named pipe
-        let pipe_file = open_unique_pipe_for_write(path)?;
+        let pipe_file = Self::open_unique_pipe_for_write(path)?;
         // create async_io wrapper for pipe's file descriptor
         let pipe = Async::new(pipe_file)?;
         Ok(Self { pipe })
@@ -163,6 +203,18 @@ impl PipeW {
             })
             .await?;
         ZResult::Ok(())
+    }
+
+    fn open_unique_pipe_for_write(path: &str) -> ZResult<File> {
+        let write = open_write(path)?;
+        // the file must be already locked at the other side...
+        match write.try_lock(FileLockMode::Exclusive) {
+            Ok(_) => {
+                let _ = write.unlock();
+                bail!("no listener...")
+            }
+            Err(_) => Ok(write),
+        }
     }
 }
 
@@ -292,7 +344,7 @@ async fn dedicate_pipe(
     path_downlink: &str,
     access_mode: u32,
 ) -> ZResult<(PipeR, u32, String, String)> {
-    for _ in 0..100 {
+    for _ in 0..LINUX_PIPE_DEDICATE_TRIES {
         match create_pipe(path_uplink, path_downlink, access_mode).await {
             Err(_) => {}
             val => {
@@ -503,46 +555,4 @@ fn parse_pipe_endpoint(endpoint: &EndPoint) -> (String, String, u32) {
             val.parse().unwrap_or(*crate::SHM_ACCESS_MASK)
         });
     (path_uplink, path_downlink, access_mode)
-}
-
-async fn create_and_open_unique_pipe_for_read(path_r: &str, access_mode: u32) -> ZResult<File> {
-    let r_was_created = create(path_r, Some(access_mode));
-    let open_result = open_unique_pipe_for_read(path_r);
-    match (open_result.is_ok(), r_was_created.is_ok()) {
-        (false, true) => {
-            // clean-up in case of failure
-            let _ = remove_file(path_r).await;
-        }
-        (true, false) => {
-            // drop all the data from the pipe in case if it already exists
-            let mut buf: [u8; 1] = [0; 1];
-            while let Ok(val) = open_result.as_ref().unwrap().read(&mut buf) {
-                if val == 0 {
-                    break;
-                }
-            }
-        }
-        _ => {}
-    }
-
-    open_result
-}
-
-fn open_unique_pipe_for_read(path: &str) -> ZResult<File> {
-    let read = open_read(path)?;
-
-    read.try_lock(FileLockMode::Exclusive)?;
-    Ok(read)
-}
-
-fn open_unique_pipe_for_write(path: &str) -> ZResult<File> {
-    let write = open_write(path)?;
-    // the file must be already locked at the other side...
-    match write.try_lock(FileLockMode::Exclusive) {
-        Ok(_) => {
-            let _ = write.unlock();
-            bail!("no listener...")
-        }
-        Err(_) => Ok(write),
-    }
 }
