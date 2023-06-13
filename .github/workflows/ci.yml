@@ -83,12 +83,6 @@ jobs:
             *windows*) echo "RUSTFLAGS=-Clink-arg=/DEBUG:NONE" >> $GITHUB_ENV ;;
           esac
 
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --all-targets --features shared-memory --verbose
-
       - name: Install nextest
         run: cargo install cargo-nextest --locked
 

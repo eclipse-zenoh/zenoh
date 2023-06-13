@@ -43,7 +43,7 @@ complete_n = ["zenoh-protocol/complete_n"]
 
 [dependencies]
 uhlc = { workspace = true }
-zenoh-buffers = { workspace = true }
+zenoh-buffers = { workspace = true, default-features = false }
 zenoh-protocol = { workspace = true }
 zenoh-shm = { workspace = true, optional = true }
 

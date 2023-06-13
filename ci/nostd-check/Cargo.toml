@@ -12,7 +12,6 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.65.0"
 name = "nostd-check"
 version = "0.1.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -27,8 +26,8 @@ description = "Internal crate for zenoh."
 
 [dependencies]
 getrandom = { version = "0.2.8", features = ["custom"] }
-linked_list_allocator = "0.10.4" # Needs nightly toolchain
-zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
+linked_list_allocator = "0.10.5" # Needs nightly toolchain
+zenoh-buffers = { path = "../../commons/zenoh-buffers/", default-features = false }
 zenoh-codec = { path = "../../commons/zenoh-codec/", default-features = false }
 zenoh-protocol = { path = "../../commons/zenoh-protocol/", default-features = false }
 
