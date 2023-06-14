@@ -21,6 +21,7 @@ use async_trait::async_trait;
 use filepath::FilePath;
 use nix::unistd::unlink;
 use rand::Rng;
+use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::fs::File;
@@ -90,7 +91,9 @@ struct PipeR {
 impl Drop for PipeR {
     fn drop(&mut self) {
         if let Ok(path) = self.pipe.as_mut().path() {
-            let _ = unlink(&path);
+            async_std::task::spawn_blocking( move || {
+                let _ = unlink(&path);
+            });
         }
     }
 }
@@ -258,8 +261,8 @@ async fn handle_incoming_connections(
     // send newly established link to manager
     manager
         .send_async(LinkUnicast(Arc::new(UnicastPipe {
-            r: async_std::sync::RwLock::new(dedicated_uplink),
-            w: async_std::sync::RwLock::new(dedicated_downlink),
+            r: UnsafeCell::new(dedicated_uplink),
+            w: UnsafeCell::new(dedicated_downlink),
             local,
             remote,
         })))
@@ -399,8 +402,8 @@ impl UnicastPipeClient {
         )?;
 
         Ok(UnicastPipe {
-            r: async_std::sync::RwLock::new(dedicated_downlink),
-            w: async_std::sync::RwLock::new(dedicated_uplink),
+            r: UnsafeCell::new(dedicated_downlink),
+            w: UnsafeCell::new(dedicated_uplink),
             local,
             remote,
         })
@@ -408,14 +411,30 @@ impl UnicastPipeClient {
 }
 
 struct UnicastPipe {
-    r: async_std::sync::RwLock<PipeR>,
-    w: async_std::sync::RwLock<PipeW>,
+    r: UnsafeCell<PipeR>,
+    w: UnsafeCell<PipeW>,
     local: Locator,
     remote: Locator,
 }
+
+impl UnicastPipe {
+    #[allow(clippy::mut_from_ref)]
+    fn get_r_mut(&self) -> &mut PipeR {
+        unsafe { &mut *self.r.get() }
+    }
+
+    #[allow(clippy::mut_from_ref)]
+    fn get_w_mut(&self) -> &mut PipeW {
+        unsafe { &mut *self.w.get() }
+    }
+}
+// Promise that proper synchronization exists *around accesses*.
+unsafe impl Sync for UnicastPipe {}
+
 impl Drop for UnicastPipe {
     fn drop(&mut self) {}
 }
+
 #[async_trait]
 impl LinkUnicastTrait for UnicastPipe {
     async fn close(&self) -> ZResult<()> {
@@ -424,23 +443,19 @@ impl LinkUnicastTrait for UnicastPipe {
     }
 
     async fn write(&self, buffer: &[u8]) -> ZResult<usize> {
-        //todo: I completely don't like the idea of locking reader\writer each time, but LinkUnicastTrait requires self.r and self.w to be Sync
-        self.w.write().await.write(buffer).await
+        self.get_w_mut().write(buffer).await
     }
 
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()> {
-        //todo: I completely don't like the idea of locking reader\writer each time, but LinkUnicastTrait requires self.r and self.w to be Sync
-        self.w.write().await.write_all(buffer).await
+        self.get_w_mut().write_all(buffer).await
     }
 
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize> {
-        //todo: I completely don't like the idea of locking reader\writer each time, but LinkUnicastTrait requires self.r and self.w to be Sync
-        self.r.write().await.read(buffer).await
+        self.get_r_mut().read(buffer).await
     }
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        //todo: I completely don't like the idea of locking reader\writer each time, but LinkUnicastTrait requires self.r and self.w to be Sync
-        self.r.write().await.read_exact(buffer).await
+        self.get_r_mut().read_exact(buffer).await
     }
 
     #[inline(always)]

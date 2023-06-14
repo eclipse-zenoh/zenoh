@@ -30,18 +30,18 @@ async-std = { workspace = true }
 async-trait = { workspace = true }
 async-io = ">= 1.13.0"
 unix-named-pipe = ">= 0.2.0"
-nix = ">=0.26.2"
+nix = { workspace = true }
 filepath = ">=0.1.2"
 log = { workspace = true }
 rand = { workspace = true }
 socket2 = { workspace = true }
-zenoh-buffers = { path = "../../../commons/zenoh-buffers/" }
-zenoh-cfg-properties = { path = "../../../commons/zenoh-cfg-properties/" }
-zenoh-collections = { path = "../../../commons/zenoh-collections/" }
-zenoh-core = { path = "../../../commons/zenoh-core/" }
-zenoh-config = { path = "../../../commons/zenoh-config/" }
-zenoh-link-commons = { path = "../../zenoh-link-commons/" }
-zenoh-protocol = { path = "../../../commons/zenoh-protocol/" }
-zenoh-result = { path = "../../../commons/zenoh-result/" }
-zenoh-sync = { path = "../../../commons/zenoh-sync/" }
-zenoh-util = { path = "../../../commons/zenoh-util/" }
+zenoh-buffers = { workspace = true }
+zenoh-cfg-properties = { workspace = true }
+zenoh-collections = { workspace = true }
+zenoh-core = { workspace = true }
+zenoh-config = { workspace = true }
+zenoh-link-commons = { workspace = true }
+zenoh-protocol = { workspace = true }
+zenoh-result = { workspace = true }
+zenoh-sync = { workspace = true }
+zenoh-util = { workspace = true }
