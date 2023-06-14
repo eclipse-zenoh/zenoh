@@ -259,12 +259,12 @@ impl Recipe {
                 async_std::task::sleep(node.warmup).await;
 
                 // In case of client can't connect to some peers/routers
-                let session = if let Ok(session) = zenoh::open(config.clone()).res_async().await {
-                    session.into_arc()
-                } else {
-                    println!("Sleep and retry to connect to the endpoint...");
-                    async_std::task::sleep(Duration::from_secs(1)).await;
-                    zenoh::open(config).res_async().await?.into_arc()
+                let session = loop {
+                    if let Ok(session) = zenoh::open(config.clone()).res_async().await {
+                        break session.into_arc();
+                    } else {
+                        async_std::task::sleep(Duration::from_secs(1)).await;
+                    }
                 };
 
                 // Each node consists of a specified session associated with tasks to run
@@ -514,11 +514,9 @@ fn three_node_combination() -> Result<()> {
                 },
             );
 
-        try_join_all(recipe_list.map(|recipe| async move {
+        for recipe in recipe_list {
             recipe.run().await?;
-            Result::Ok(())
-        }))
-        .await?;
+        }
 
         println!("Three-node combination test passed.");
         Result::Ok(())
