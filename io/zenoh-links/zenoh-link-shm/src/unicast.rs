@@ -91,7 +91,7 @@ struct PipeR {
 impl Drop for PipeR {
     fn drop(&mut self) {
         if let Ok(path) = self.pipe.as_mut().path() {
-            async_std::task::spawn_blocking( move || {
+            async_std::task::spawn_blocking(move || {
                 let _ = unlink(&path);
             });
         }
