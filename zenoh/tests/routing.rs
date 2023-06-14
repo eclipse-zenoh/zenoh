@@ -303,11 +303,9 @@ impl Recipe {
 // And the message transmission should work even if the common node disappears after a while.
 #[test]
 fn gossip() -> Result<()> {
+    env_logger::try_init().unwrap_or_default();
     async_std::task::block_on(async {
         zasync_executor_init!();
-
-        // env_logger should be activated only once across all the tests. Otherwise, it fails the tests below.
-        env_logger::try_init()?;
 
         let locator = String::from("tcp/127.0.0.1:17448");
         let ke = String::from("testKeyExprGossip");
@@ -375,6 +373,7 @@ fn gossip() -> Result<()> {
 // Simulate two peers connecting to a router but not directly reachable to each other can exchange messages via the brokering by the router.
 #[test]
 fn static_failover_brokering() -> Result<()> {
+    env_logger::try_init().unwrap_or_default();
     async_std::task::block_on(async {
         zasync_executor_init!();
 
@@ -438,6 +437,7 @@ fn static_failover_brokering() -> Result<()> {
 // 3. Spawning order
 #[test]
 fn three_node_combination() -> Result<()> {
+    env_logger::try_init().unwrap_or_default();
     async_std::task::block_on(async {
         zasync_executor_init!();
 
