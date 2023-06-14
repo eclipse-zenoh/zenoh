@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022 ZettaScale Technology
+# Copyright (c) 2023 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -12,7 +12,6 @@
 #   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 #
 [package]
-rust-version = "1.62.1"
 name = "nostd-check"
 version = "0.1.0"
 repository = "https://github.com/eclipse-zenoh/zenoh"
@@ -20,15 +19,15 @@ homepage = "http://zenoh.io"
 authors = [
   "Davide Della Giustina <davide.dellagiustina@zettascale.tech>",
 ]
-edition = "2018"
-license = " EPL-2.0 OR Apache-2.0"
+edition = "2021"
+license = "EPL-2.0 OR Apache-2.0"
 categories = ["network-programming"]
 description = "Internal crate for zenoh."
 
 [dependencies]
 getrandom = { version = "0.2.8", features = ["custom"] }
-linked_list_allocator = "0.10.4" # Needs nightly toolchain
-zenoh-buffers = { path = "../../commons/zenoh-buffers/" }
+linked_list_allocator = "0.10.5" # Needs nightly toolchain
+zenoh-buffers = { path = "../../commons/zenoh-buffers/", default-features = false }
 zenoh-codec = { path = "../../commons/zenoh-codec/", default-features = false }
 zenoh-protocol = { path = "../../commons/zenoh-protocol/", default-features = false }
 

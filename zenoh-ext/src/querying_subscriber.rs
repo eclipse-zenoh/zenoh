@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -163,9 +163,7 @@ impl<'a, 'b, Handler> QueryingSubscriberBuilder<'a, 'b, crate::UserSpace, Handle
         self.origin = origin;
         self
     }
-}
 
-impl<'a, 'b, KeySpace, Handler> QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
     /// Change the selector to be used for queries.
     #[inline]
     pub fn query_selector<IntoSelector>(mut self, query_selector: IntoSelector) -> Self
@@ -200,7 +198,9 @@ impl<'a, 'b, KeySpace, Handler> QueryingSubscriberBuilder<'a, 'b, KeySpace, Hand
         self.query_accept_replies = accept_replies;
         self
     }
+}
 
+impl<'a, 'b, KeySpace, Handler> QueryingSubscriberBuilder<'a, 'b, KeySpace, Handler> {
     /// Change the timeout to be used for queries.
     #[inline]
     pub fn query_timeout(mut self, query_timeout: Duration) -> Self {
@@ -256,9 +256,6 @@ where
                     .liveliness()
                     .get(key_expr)
                     .callback(cb)
-                    .target(query_target)
-                    .consolidation(query_consolidation)
-                    .accept_replies(query_accept_replies)
                     .timeout(query_timeout)
                     .res_sync(),
             },

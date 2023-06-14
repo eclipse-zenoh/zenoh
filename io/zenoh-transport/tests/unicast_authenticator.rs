@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -93,7 +93,6 @@ impl TransportEventHandler for SHClientAuthenticator {
 #[cfg(feature = "auth_pubkey")]
 async fn auth_pubkey(endpoint: &EndPoint) {
     use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
-    use std::convert::TryFrom;
     use zenoh_transport::unicast::establishment::ext::auth::AuthPubKey;
     use zenoh_transport::TransportManager;
 
@@ -375,7 +374,6 @@ async fn auth_pubkey(endpoint: &EndPoint) {
 
 #[cfg(feature = "auth_usrpwd")]
 async fn auth_usrpwd(endpoint: &EndPoint) {
-    use std::convert::TryFrom;
     use zenoh_transport::establishment::ext::auth::AuthUsrPwd;
     use zenoh_transport::TransportManager;
 

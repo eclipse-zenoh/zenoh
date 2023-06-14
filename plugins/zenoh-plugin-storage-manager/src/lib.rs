@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -114,7 +114,7 @@ impl StorageRuntimeInner {
             storages: Default::default(),
         };
         new_self.spawn_volume(VolumeConfig {
-            name: "memory".into(),
+            name: MEMORY_BACKEND_NAME.into(),
             backend: None,
             paths: None,
             required: false,
@@ -272,7 +272,10 @@ impl StorageRuntimeInner {
                 .insert(storage_name, stopper);
             Ok(())
         } else {
-            bail!("`{}` volume not found", volume_id)
+            bail!(
+                "`{}` volume doesn't support the required storage configuration",
+                volume_id
+            )
         }
     }
 }
@@ -389,7 +392,7 @@ impl RunningPluginTrait for StorageRuntime {
     }
 }
 
-const BACKEND_LIB_PREFIX: &str = "zbackend_";
+const BACKEND_LIB_PREFIX: &str = "zenoh_backend_";
 const MEMORY_BACKEND_NAME: &str = "memory";
 
 fn with_extended_string<R, F: FnMut(&mut String) -> R>(

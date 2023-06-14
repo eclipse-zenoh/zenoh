@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -76,7 +76,7 @@ fn parse_args() -> (Config, String, String) {
             .endpoints
             .extend(values.map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listeners") {
+    if let Some(values) = args.values_of("listen") {
         config
             .listen
             .endpoints

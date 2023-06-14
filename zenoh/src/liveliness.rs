@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -16,13 +16,14 @@
 //!
 //! see [`Liveliness`](Liveliness)
 
+use crate::query::Reply;
+
 #[zenoh_macros::unstable]
 use {
     crate::{
         handlers::locked,
         handlers::DefaultHandler,
         prelude::*,
-        query::GetBuilder,
         subscriber::{Subscriber, SubscriberInner},
         SessionRef, Undeclarable,
     },
@@ -178,22 +179,17 @@ impl<'a> Liveliness<'a> {
     pub fn get<'b: 'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
-    ) -> GetBuilder<'a, 'b, DefaultHandler>
+    ) -> LivelinessGetBuilder<'a, 'b, DefaultHandler>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        let selector = key_expr.try_into().map_err(Into::into).map(|k| k.into());
+        let key_expr = key_expr.try_into().map_err(Into::into);
         let conf = self.session.runtime.config.lock();
-        GetBuilder {
+        LivelinessGetBuilder {
             session: &self.session,
-            selector,
-            scope: Ok(Some(KeyExpr::from(*KE_PREFIX_LIVELINESS))),
-            target: QueryTarget::default(),
-            consolidation: QueryConsolidation::default(),
-            destination: Locality::default(),
+            key_expr,
             timeout: Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout())),
-            value: None,
             handler: DefaultHandler,
         }
     }
@@ -570,6 +566,199 @@ where
     type Future = Ready<Self::To>;
 
     #[zenoh_macros::unstable]
+    fn res_async(self) -> Self::Future {
+        std::future::ready(self.res_sync())
+    }
+}
+
+/// A builder for initializing a liveliness `query`.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// # use std::convert::TryFrom;
+/// use zenoh::prelude::r#async::*;
+/// use zenoh::query::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap();
+/// let tokens = session
+///     .liveliness()
+///     .get("key/expression")
+///     .res()
+///     .await
+///     .unwrap();
+/// while let Ok(token) = tokens.recv_async().await {
+///     match token.sample {
+///         Ok(sample) => println!("Alive token ('{}')", sample.key_expr.as_str(),),
+///         Err(err) => println!("Received (ERROR: '{}')", String::try_from(&err).unwrap()),
+///     }
+/// }
+/// # })
+/// ```
+#[derive(Debug)]
+pub struct LivelinessGetBuilder<'a, 'b, Handler> {
+    pub(crate) session: &'a Session,
+    pub(crate) key_expr: ZResult<KeyExpr<'b>>,
+    pub(crate) timeout: Duration,
+    pub(crate) handler: Handler,
+}
+
+impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
+    /// Receive the replies for this query with a callback.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let queryable = session
+    ///     .liveliness()
+    ///     .get("key/expression")
+    ///     .callback(|reply| {println!("Received {:?}", reply.sample);})
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub fn callback<Callback>(self, callback: Callback) -> LivelinessGetBuilder<'a, 'b, Callback>
+    where
+        Callback: Fn(Reply) + Send + Sync + 'static,
+    {
+        let LivelinessGetBuilder {
+            session,
+            key_expr,
+            timeout,
+            handler: _,
+        } = self;
+        LivelinessGetBuilder {
+            session,
+            key_expr,
+            timeout,
+            handler: callback,
+        }
+    }
+
+    /// Receive the replies for this query with a mutable callback.
+    ///
+    /// Using this guarantees that your callback will never be called concurrently.
+    /// If your callback is also accepted by the [`callback`](LivelinessGetBuilder::callback) method, we suggest you use it instead of `callback_mut`
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let mut n = 0;
+    /// let queryable = session
+    ///     .liveliness()
+    ///     .get("key/expression")
+    ///     .callback_mut(move |reply| {n += 1;})
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
+    #[inline]
+    pub fn callback_mut<CallbackMut>(
+        self,
+        callback: CallbackMut,
+    ) -> LivelinessGetBuilder<'a, 'b, impl Fn(Reply) + Send + Sync + 'static>
+    where
+        CallbackMut: FnMut(Reply) + Send + Sync + 'static,
+    {
+        self.callback(locked(callback))
+    }
+
+    /// Receive the replies for this query with a [`Handler`](crate::prelude::IntoCallbackReceiverPair).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let replies = session
+    ///     .liveliness()
+    ///     .get("key/expression")
+    ///     .with(flume::bounded(32))
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// while let Ok(reply) = replies.recv_async().await {
+    ///     println!("Received {:?}", reply.sample);
+    /// }
+    /// # })
+    /// ```
+    #[inline]
+    pub fn with<Handler>(self, handler: Handler) -> LivelinessGetBuilder<'a, 'b, Handler>
+    where
+        Handler: IntoCallbackReceiverPair<'static, Reply>,
+    {
+        let LivelinessGetBuilder {
+            session,
+            key_expr,
+            timeout,
+            handler: _,
+        } = self;
+        LivelinessGetBuilder {
+            session,
+            key_expr,
+            timeout,
+            handler,
+        }
+    }
+}
+
+impl<'a, 'b, Handler> LivelinessGetBuilder<'a, 'b, Handler> {
+    /// Set query timeout.
+    #[inline]
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = timeout;
+        self
+    }
+}
+
+impl<Handler> Resolvable for LivelinessGetBuilder<'_, '_, Handler>
+where
+    Handler: IntoCallbackReceiverPair<'static, Reply> + Send,
+    Handler::Receiver: Send,
+{
+    type To = ZResult<Handler::Receiver>;
+}
+
+impl<Handler> SyncResolve for LivelinessGetBuilder<'_, '_, Handler>
+where
+    Handler: IntoCallbackReceiverPair<'static, Reply> + Send,
+    Handler::Receiver: Send,
+{
+    fn res_sync(self) -> <Self as Resolvable>::To {
+        let (callback, receiver) = self.handler.into_cb_receiver_pair();
+
+        self.session
+            .query(
+                &self.key_expr?.into(),
+                &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
+                QueryTarget::default(),
+                QueryConsolidation::default(),
+                Locality::default(),
+                self.timeout,
+                None,
+                callback,
+            )
+            .map(|_| receiver)
+    }
+}
+
+impl<Handler> AsyncResolve for LivelinessGetBuilder<'_, '_, Handler>
+where
+    Handler: IntoCallbackReceiverPair<'static, Reply> + Send,
+    Handler::Receiver: Send,
+{
+    type Future = Ready<Self::To>;
+
     fn res_async(self) -> Self::Future {
         std::future::ready(self.res_sync())
     }

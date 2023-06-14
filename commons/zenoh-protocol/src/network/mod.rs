@@ -254,12 +254,11 @@ pub mod ext {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use crate::core::ZenohId;
-            use core::convert::TryFrom;
             use rand::Rng;
             let mut rng = rand::thread_rng();
 
             let time = uhlc::NTP64(rng.gen());
-            let id = uhlc::ID::try_from(ZenohId::rand().as_slice()).unwrap();
+            let id = uhlc::ID::try_from(ZenohId::rand().to_le_bytes()).unwrap();
             let timestamp = uhlc::Timestamp::new(time, id);
             Self { timestamp }
         }

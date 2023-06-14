@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -21,7 +21,7 @@ use zenoh_protocol::core::{Timestamp, ZenohId};
 
 impl LCodec<&Timestamp> for Zenoh080 {
     fn w_len(self, x: &Timestamp) -> usize {
-        self.w_len(x.get_time().as_u64()) + self.w_len(x.get_id().as_slice())
+        self.w_len(x.get_time().as_u64()) + self.w_len(x.get_id().size())
     }
 }
 
@@ -33,7 +33,8 @@ where
 
     fn write(self, writer: &mut W, x: &Timestamp) -> Self::Output {
         self.write(&mut *writer, x.get_time().as_u64())?;
-        self.write(&mut *writer, x.get_id().as_slice())?;
+        let id = x.get_id();
+        self.write(&mut *writer, &id.to_le_bytes()[..id.size()])?;
         Ok(())
     }
 }

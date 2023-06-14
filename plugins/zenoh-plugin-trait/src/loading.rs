@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -182,7 +182,7 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
 
     pub fn load_plugin_by_name(&mut self, name: String) -> ZResult<String> {
         let (lib, p) = match &mut self.loader {
-            Some(l) => unsafe { l.search_and_load(&format!("zplugin_{}", &name))? },
+            Some(l) => unsafe { l.search_and_load(&format!("zenoh_plugin_{}", &name))? },
             None => bail!("Can't load dynamic plugin ` {}`, as dynamic loading is not enabled for this plugin manager.", name),
         };
         let plugin = match Self::load_plugin(&name, lib, p.clone()) {

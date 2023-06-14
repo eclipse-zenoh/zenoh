@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022 ZettaScale Technology
+# Copyright (c) 2023 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -44,11 +44,11 @@ const_format = { workspace = true }
 hex = { workspace = true, features = ["alloc"] }
 rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
 serde = { workspace = true, features = ["alloc"] }
-uhlc = { workspace = true }
+uhlc = { workspace = true, default-features = false }
 uuid = { workspace = true }                                                     # Needs a getrandom::getrandom() custom implementation on embedded (in root crate)
-zenoh-buffers = { path = "../zenoh-buffers/", default-features = false }
-zenoh-keyexpr = { path = "../zenoh-keyexpr/", default-features = false }
-zenoh-result = { path = "../zenoh-result/", default-features = false }
+zenoh-buffers = { workspace = true, default-features = false  }
+zenoh-keyexpr = { workspace = true }
+zenoh-result = { workspace = true }
 
 # NOTE: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0
 [dev-dependencies]

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -494,8 +494,8 @@ impl<'a> TryFrom<&'a String> for Selector<'a> {
 impl<'a> From<&'a Query> for Selector<'a> {
     fn from(q: &'a Query) -> Self {
         Selector {
-            key_expr: q.key_expr.clone(),
-            parameters: (&q.parameters).into(),
+            key_expr: q.inner.key_expr.clone(),
+            parameters: (&q.inner.parameters).into(),
         }
     }
 }

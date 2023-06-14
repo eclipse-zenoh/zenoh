@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -68,7 +68,7 @@ fn parse_args() -> (Config, String, Option<String>, usize, u64) {
             "-g, --group=[STRING] 'The group name'",
         ).default_value("zgroup"))
         .arg(Arg::from_usage(
-            "-i, --id=[STRING] 'The group member id (default is the zenoh UUID)'",
+            "-i, --id=[STRING] 'The group member id (default is the zenoh ID)'",
         ))
         .arg(Arg::from_usage(
             "-s, --size=[INT] 'The expected group size. The example will wait for the group to reach this size'",
@@ -92,7 +92,7 @@ fn parse_args() -> (Config, String, Option<String>, usize, u64) {
             .endpoints
             .extend(values.map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listeners") {
+    if let Some(values) = args.values_of("listen") {
         config
             .listen
             .endpoints

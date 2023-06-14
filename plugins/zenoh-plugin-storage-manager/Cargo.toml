@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022 ZettaScale Technology
+# Copyright (c) 2023 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -17,12 +17,7 @@ name = "zenoh-plugin-storage-manager"
 version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
-authors = [
-    "kydos <angelo@icorsaro.net>",
-    "Julien Enoch <julien@enoch.fr>",
-    "Olivier Hécart <olivier.hecart@zettascale.tech>",
-    "Luca Cominardi <luca.cominardi@zettascale.tech>",
-]
+authors = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
 categories = { workspace = true }
@@ -33,7 +28,7 @@ default = ["no_mangle"]
 no_mangle = ["zenoh-plugin-trait/no_mangle"]
 
 [lib]
-name = "zplugin_storage_manager"
+name = "zenoh_plugin_storage_manager"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
@@ -52,19 +47,20 @@ log = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
-zenoh = { path = "../../zenoh/", default-features = false, features = [ "unstable" ] }
-zenoh-collections = { path = "../../commons/zenoh-collections/" }
-zenoh-core = { path = "../../commons/zenoh-core/" }
-zenoh-plugin-trait = { path = "../zenoh-plugin-trait/", default-features = false }
-zenoh-result = { path = "../../commons/zenoh-result/" }
-zenoh-util = { path = "../../commons/zenoh-util/" }
-zenoh_backend_traits = { path = "../zenoh-backend-traits/" }
-
-[dev-dependencies]
-async-global-executor = { workspace = true }
+zenoh = { workspace = true, features = [ "unstable" ] }
+zenoh-collections = { workspace = true }
+zenoh-core = { workspace = true }
+zenoh-keyexpr = { workspace = true }
+zenoh-plugin-trait = { workspace = true }
+zenoh-result = { workspace = true }
+zenoh-util = { workspace = true }
+zenoh_backend_traits = { workspace = true }
 
 [build-dependencies]
 rustc_version = { workspace = true }
+
+[dev-dependencies]
+async-global-executor = { workspace = true }
 
 [package.metadata.deb]
 name = "zenoh-plugin-storage-manager"
@@ -72,4 +68,4 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2022 ZettaScale Technology"
 section = "net"
 license-file = ["../../LICENSE", "0"]
-depends = "zenohd (=0.8.0-rc)"
+depends = "zenohd (=0.10.0-dev)"

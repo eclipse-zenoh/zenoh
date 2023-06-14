@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -20,7 +20,7 @@ pub use crate::Result as ZResult;
 use zenoh_core::zconfigurable;
 
 zconfigurable! {
-    pub static ref PLUGIN_PREFIX: String = "zplugin_".to_string();
+    pub static ref PLUGIN_PREFIX: String = "zenoh_plugin_".to_string();
 }
 
 /// Zenoh plugins should implement this trait to ensure type-safety, even if the starting arguments and expected plugin types change in a future release.

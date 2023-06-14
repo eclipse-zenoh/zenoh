@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022 ZettaScale Technology
+# Copyright (c) 2023 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -38,8 +38,8 @@ futures = { workspace = true }
 git-version = { workspace = true }
 json5 = { workspace = true }
 log = { workspace = true }
-zenoh = { path = "../zenoh/", default-features = false }
-zenoh-ext = { path = "../zenoh-ext/" }
+zenoh = { workspace = true }
+zenoh-ext = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }

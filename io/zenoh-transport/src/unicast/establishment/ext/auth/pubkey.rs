@@ -492,7 +492,7 @@ impl StateAccept {
         }
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "test"))]
     pub(crate) fn rand() -> Self {
         let mut rng = rand::thread_rng();
         let mut nonce = vec![0u8; rng.gen_range(0..=64)];

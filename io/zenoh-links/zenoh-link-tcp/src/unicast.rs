@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -299,6 +299,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
                     // Spawn the accept loop for the listener
                     let active = Arc::new(AtomicBool::new(true));
                     let signal = Signal::new();
+                    let mut listeners = zwrite!(self.listeners);
 
                     let c_active = active.clone();
                     let c_signal = signal.clone();
@@ -315,7 +316,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
                     let locator = endpoint.to_locator();
                     let listener = ListenerUnicastTcp::new(endpoint, active, signal, handle);
                     // Update the list of active listeners on the manager
-                    zwrite!(self.listeners).insert(local_addr, listener);
+                    listeners.insert(local_addr, listener);
 
                     return Ok(locator);
                 }

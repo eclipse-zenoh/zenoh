@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::*;
+
+pub const ENV: &str = "ZENOH_CONFIG";
 
 macro_rules! mode_accessor {
     ($type:ty) => {
@@ -123,13 +125,6 @@ impl Default for QoSConf {
     }
 }
 
-#[allow(clippy::derivable_impls)]
-impl Default for SharedMemoryConf {
-    fn default() -> Self {
-        Self { enabled: false }
-    }
-}
-
 impl Default for LinkTxConf {
     #[allow(clippy::unnecessary_cast)]
     fn default() -> Self {
@@ -180,5 +175,13 @@ impl Default for LinkRxConf {
             buffer_size: BatchSize::MAX as usize,
             max_message_size: 2_usize.pow(30),
         }
+    }
+}
+
+// Make explicit the value and ignore clippy warning
+#[allow(clippy::derivable_impls)]
+impl Default for SharedMemoryConf {
+    fn default() -> Self {
+        Self { enabled: false }
     }
 }

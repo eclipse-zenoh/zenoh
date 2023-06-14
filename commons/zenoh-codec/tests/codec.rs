@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -312,7 +312,7 @@ fn codec_locator() {
 fn codec_timestamp() {
     run!(Timestamp, {
         let time = uhlc::NTP64(thread_rng().gen());
-        let id = uhlc::ID::try_from(ZenohId::rand().as_slice()).unwrap();
+        let id = uhlc::ID::try_from(ZenohId::rand().to_le_bytes()).unwrap();
         Timestamp::new(time, id)
     });
 }

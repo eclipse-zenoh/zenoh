@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022 ZettaScale Technology
+# Copyright (c) 2023 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -19,6 +19,19 @@ on:
   schedule:
     - cron: "0 0 * * 1-5"
   workflow_dispatch:
+    inputs:
+      runtests:
+        description: 'run tests'
+        type: boolean
+      dockerhub:
+        description: 'publish to dockerhub'
+        type: boolean
+      doc:
+        description: 'generate doc'
+        type: boolean
+      features:
+        description: 'build with specified features (comma separated, no space)'
+        type: string
 
 jobs:
   checks:
@@ -43,18 +56,17 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets -- -D warnings
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-
+          args: --all-targets --features=${{ github.event.inputs.features}} -- -D warnings
       - name: Clippy unstable check
         uses: actions-rs/cargo@v1
         with:
           command: clippy
           args: --all-targets --features unstable -- -D warnings
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-
+      - name: Clippy shared-memory
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --all-targets --features shared-memory -- -D warnings
       - name: Environment setup
         id: env
         shell: bash
@@ -99,6 +111,7 @@ jobs:
 
   tests:
     name: Tests
+    if: ${{ !(github.event.inputs.runtests == 'false') }}
     needs: checks
     runs-on: ubuntu-latest
     steps:
@@ -115,7 +128,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: nextest
-          args: run --release --verbose
+          args: run --release --features=${{ github.event.inputs.features}} --verbose
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
@@ -124,27 +137,27 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --doc
+          args: --release --features=${{ github.event.inputs.features}} --doc
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
   doc:
     name: Doc generation
+    if: ${{ !(github.event.inputs.doc == 'false') }}
     needs: checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
+        with:
+            toolchain: nightly
       - name: generate doc
         uses: actions-rs/cargo@v1
         with:
           command: doc
-          args: --no-deps
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-          RUSTDOCFLAGS: -Dwarnings
+          args: --no-deps --features=${{ github.event.inputs.features}}
 
   builds:
     name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
@@ -238,9 +251,7 @@ jobs:
         with:
           use-cross: ${{ matrix.job.use-cross }}
           command: build
-          args: --release --bins --lib --target=${{ matrix.job.target }}
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+          args: --release --bins --lib --features=${{ github.event.inputs.features}} --target=${{ matrix.job.target }}
 
       - name: Debian package - zenohd
         if: contains(matrix.job.target, '-linux-gnu')
@@ -281,7 +292,7 @@ jobs:
             *linux*)
               cd "target/${TARGET}/release/"
               echo "Packaging ${MAIN_PKG_NAME}:"
-              zip ${MAIN_PKG_NAME} zenohd libzplugin_*.so
+              zip ${MAIN_PKG_NAME} zenohd libzenoh_plugin_*.so
               cd -
               echo "MAIN_PKG_NAME=${MAIN_PKG_NAME}" >> $GITHUB_OUTPUT
 
@@ -298,14 +309,14 @@ jobs:
             *apple*)
               cd "target/${TARGET}/release/"
               echo "Packaging ${MAIN_PKG_NAME}:"
-              zip ${MAIN_PKG_NAME} zenohd libzplugin_*.dylib
+              zip ${MAIN_PKG_NAME} zenohd libzenoh_plugin_*.dylib
               cd -
               echo "MAIN_PKG_NAME=${MAIN_PKG_NAME}" >> $GITHUB_OUTPUT
               ;;
             *windows*)
               cd "target/${TARGET}/release/"
               echo "Packaging ${MAIN_PKG_NAME}:"
-              7z -y a "${MAIN_PKG_NAME}" zenohd.exe zplugin_*.dll
+              7z -y a "${MAIN_PKG_NAME}" zenohd.exe zenoh_plugin_*.dll
               cd -
               echo "MAIN_PKG_NAME=${MAIN_PKG_NAME}" >> $GITHUB_OUTPUT
               ;;
@@ -321,7 +332,7 @@ jobs:
 
   publication:
     name: Release publication
-    if: needs.checks.outputs.IS_RELEASE == 'true'
+    if: ${{ needs.checks.outputs.IS_RELEASE == 'true' && !failure() }}
     needs: [checks, builds, tests, doc]
     runs-on: ubuntu-latest
     steps:
@@ -359,44 +370,19 @@ jobs:
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
+      - name: Check crates
+        shell: bash
+        run: .github/workflows/crates_check.sh
       - name: Publish to crates.io
         shell: bash
-        run: |
-          cargo login ${{ secrets.CRATES_IO_TOKEN }}
-          cd commons/zenoh-core && cargo publish && cd -
-          cd commons/zenoh-sync && cargo publish && cd -
-          cd commons/zenoh-collections && cargo publish && cd -
-          cd commons/zenoh-crypto && cargo publish && cd -
-          cd commons/zenoh-util && cargo publish && cd -
-          cd commons/zenoh-buffers && cargo publish && cd -
-          cd commons/zenoh-protocol && cargo publish && cd -
-          cd commons/zenoh-macros && cargo publish && cd -
-          cd commons/zenoh-codec && cargo publish && cd -
-          cd commons/zenoh-shm && cargo publish && cd -
-          cd commons/zenoh-config && cargo publish && cd -
-          cd io/zenoh-link-commons && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-udp && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-tcp && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-tls && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-quic && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-unixsock_stream && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-serial && cargo publish && cd -
-          cd io/zenoh-links/zenoh-link-ws && cargo publish && cd -
-          cd io/zenoh-link && cargo publish && cd -
-          cd io/zenoh-transport && cargo publish && cd -
-          cd plugins/zenoh-plugin-trait && cargo publish && cd -
-          cd zenoh && cargo publish && cd -
-          cd zenoh-ext && cargo publish && cd -
-          cd zenohd && cargo publish && cd -
-          cd plugins/zenoh-plugin-rest && cargo publish && cd -
-          cd plugins/zenoh-backend-traits && cargo publish && cd -
-          cd plugins/zenoh-plugin-storage-manager && cargo publish && cd -
+        run: .github/workflows/crates_publish.sh ${{ secrets.CRATES_IO_TOKEN }}
       - name: Cancel workflow if fail # thus Docker job be interrupted
         if: failure()
         uses: andymckay/cancel-action@0.2
 
   docker:
     name: Docker build and push
+    if: ${{ !(github.event.inputs.dockerhub == 'false') && !failure() }}
     needs: [checks, builds, tests, doc]
     runs-on: ubuntu-latest
     steps:
@@ -415,10 +401,10 @@ jobs:
           ls PACKAGES
           mkdir -p docker/linux/amd
           unzip PACKAGES/x86_64-unknown-linux-musl/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-x86_64-unknown-linux-musl.zip -d docker/linux/amd64/
-          rm docker/linux/amd64/libzplugin_example.so
+          rm docker/linux/amd64/libzenoh_plugin_example.so
           mkdir -p docker/linux/arm64
           unzip PACKAGES/aarch64-unknown-linux-musl/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-aarch64-unknown-linux-musl.zip -d docker/linux/arm64/
-          rm docker/linux/arm64/libzplugin_example.so
+          rm docker/linux/arm64/libzenoh_plugin_example.so
           tree docker
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v1

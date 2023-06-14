@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -300,6 +300,19 @@ impl BacktrackableReader for &mut ZSlice {
     fn rewind(&mut self, mark: Self::Mark) -> bool {
         self.start = mark;
         true
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::io::Read for &mut ZSlice {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match <Self as Reader>::read(self, buf) {
+            Ok(n) => Ok(n.get()),
+            Err(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "UnexpectedEof",
+            )),
+        }
     }
 }
 

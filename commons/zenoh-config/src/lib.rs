@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -111,7 +111,7 @@ validated_struct::validator! {
     #[serde(default)]
     #[serde(deny_unknown_fields)]
     Config {
-        /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random UUIDv4 will be generated.
+        /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random u128 will be generated.
         id: ZenohId,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
@@ -287,11 +287,23 @@ validated_struct::validator! {
                     client_private_key: Option<String>,
                     client_certificate: Option<String>,
                 },
+                pub compression: #[derive(Default)]
+                /// **Experimental** compression feature.
+                /// Will compress the batches hop to hop (as opposed to end to end). May cause errors when
+                /// the batches's complexity is too high, causing the resulting compression to be bigger in
+                /// size than the MTU.
+                /// You must use the features "transport_compression" and "unstable" to enable this.
+                CompressionConf {
+                    /// When enabled is true, batches will be sent compressed. It does not affect the
+                    /// reception, which always expects compressed batches when built with thes features
+                    /// "transport_compression" and "unstable".
+                    enabled: bool,
+                }
             },
             pub shared_memory:
             SharedMemoryConf {
                 /// Whether shared memory is enabled or not.
-                /// If set to `false`, the shared-memory transport will be disabled. (default `false`).
+                /// If set to `true`, the shared-memory transport will be enabled. (default `false`).
                 enabled: bool,
             },
             pub auth: #[derive(Default)]
@@ -508,10 +520,17 @@ impl std::fmt::Display for ConfigOpenErr {
 }
 impl std::error::Error for ConfigOpenErr {}
 impl Config {
+    pub fn from_env() -> ZResult<Self> {
+        let path = std::env::var(defaults::ENV)
+            .map_err(|e| zerror!("Invalid ENV variable ({}): {}", defaults::ENV, e))?;
+        Self::from_file(path.as_str())
+    }
+
     pub fn from_file<P: AsRef<Path>>(path: P) -> ZResult<Self> {
         let path = path.as_ref();
         Self::_from_file(path)
     }
+
     fn _from_file(path: &Path) -> ZResult<Config> {
         match std::fs::File::open(path) {
             Ok(mut f) => {
@@ -541,6 +560,7 @@ impl Config {
             Err(e) => bail!(e),
         }
     }
+
     pub fn libloader(&self) -> LibLoader {
         if self.plugins_search_dirs.is_empty() {
             LibLoader::default()
@@ -789,7 +809,7 @@ fn user_conf_validator(u: &UsrPwdConf) -> bool {
 ///         //   simply log them otherwise
 ///         __required__: bool,
 ///         // The path(s) where the plugin is expected to be located.
-///         // If none is specified, `zenohd` will search for a `<dylib_prefix>zplugin_<plugin_name>.<dylib_suffix>` file in the search directories.
+///         // If none is specified, `zenohd` will search for a `<dylib_prefix>zenoh_plugin_<plugin_name>.<dylib_suffix>` file in the search directories.
 ///         // If any path is specified, file-search will be disabled, and the first path leading to
 ///         // an existing file will be used
 ///         __path__: string | [string],

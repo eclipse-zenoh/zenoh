@@ -65,13 +65,12 @@ impl Put {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use crate::{common::iext, core::ZenohId};
-        use core::convert::TryFrom;
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
         let timestamp = rng.gen_bool(0.5).then_some({
             let time = uhlc::NTP64(rng.gen());
-            let id = uhlc::ID::try_from(ZenohId::rand().as_slice()).unwrap();
+            let id = uhlc::ID::try_from(ZenohId::rand().to_le_bytes()).unwrap();
             Timestamp::new(time, id)
         });
         let encoding = Encoding::rand();

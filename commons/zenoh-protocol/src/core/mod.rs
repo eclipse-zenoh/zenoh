@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -21,11 +21,10 @@ use alloc::{
 use core::{
     convert::{From, TryFrom, TryInto},
     fmt,
-    hash::{Hash, Hasher},
+    hash::Hash,
     str::FromStr,
 };
 pub use uhlc::{Timestamp, NTP64};
-use uuid::Uuid;
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::{bail, zerror};
 
@@ -95,7 +94,8 @@ impl TryFrom<u64> for SampleKind {
 }
 
 /// The global unique id of a zenoh peer.
-#[derive(Clone, Copy, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
 pub struct ZenohId(uhlc::ID);
 
 impl ZenohId {
@@ -107,12 +107,12 @@ impl ZenohId {
     }
 
     #[inline]
-    pub fn as_slice(&self) -> &[u8] {
-        self.0.as_slice()
+    pub fn to_le_bytes(&self) -> [u8; uhlc::ID::MAX_SIZE] {
+        self.0.to_le_bytes()
     }
 
     pub fn rand() -> ZenohId {
-        ZenohId::from(Uuid::new_v4())
+        ZenohId(uhlc::ID::rand())
     }
 
     pub fn into_keyexpr(self) -> OwnedKeyExpr {
@@ -123,13 +123,6 @@ impl ZenohId {
 impl Default for ZenohId {
     fn default() -> Self {
         Self::rand()
-    }
-}
-
-impl From<uuid::Uuid> for ZenohId {
-    #[inline]
-    fn from(uuid: uuid::Uuid) -> Self {
-        ZenohId(uuid.into())
     }
 }
 
@@ -165,10 +158,10 @@ macro_rules! derive_tryfrom {
         impl TryFrom<$T> for ZenohId {
             type Error = zenoh_result::Error;
             fn try_from(val: $T) -> Result<Self, Self::Error> {
-                return match val.try_into() {
+                match val.try_into() {
                     Ok(ok) => Ok(Self(ok)),
                     Err(err) => Err(Box::<SizeError>::new(err.into())),
-                };
+                }
             }
         }
     };
@@ -211,29 +204,22 @@ impl FromStr for ZenohId {
     type Err = zenoh_result::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // filter-out '-' characters (in case s has UUID format)
-        let s = s.replace('-', "");
-        let vec = hex::decode(&s).map_err(|e| zerror!("Invalid id: {} - {}", s, e))?;
-        vec.as_slice().try_into()
-    }
-}
-
-impl PartialEq for ZenohId {
-    #[inline]
-    fn eq(&self, other: &Self) -> bool {
-        self.0.eq(&other.0)
-    }
-}
-
-impl Hash for ZenohId {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.as_slice().hash(state);
+        if s.contains(|c: char| c.is_ascii_uppercase()) {
+            bail!(
+                "Invalid id: {} - uppercase hexadecimal is not accepted, use lowercase",
+                s
+            );
+        }
+        let u: uhlc::ID = s
+            .parse()
+            .map_err(|e: uhlc::ParseIDError| zerror!("Invalid id: {} - {}", s, e.cause))?;
+        Ok(ZenohId(u))
     }
 }
 
 impl fmt::Debug for ZenohId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", hex::encode_upper(self.as_slice()))
+        write!(f, "{}", self.0)
     }
 }
 

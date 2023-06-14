@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -12,6 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
 use async_std::prelude::FutureExt;
 use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
 use futures::StreamExt;

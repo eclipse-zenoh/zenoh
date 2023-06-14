@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022 ZettaScale Technology
+# Copyright (c) 2023 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -31,7 +31,7 @@ serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 validated_struct = { workspace = true, features = ["json5", "json_get"] }
-zenoh-core = { path = "../zenoh-core/" }
-zenoh-protocol = { path = "../zenoh-protocol/" }
-zenoh-result = { path = "../zenoh-result/" }
-zenoh-util = { path = "../zenoh-util/" }
+zenoh-core = { workspace = true }
+zenoh-protocol = { workspace = true }
+zenoh-result = { workspace = true }
+zenoh-util = { workspace = true }

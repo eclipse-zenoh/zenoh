@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -206,7 +206,7 @@ impl Tables {
                     for b in key_expr.as_bytes() {
                         hasher.write_u8(*b);
                     }
-                    for b in r.as_slice() {
+                    for b in &r.to_le_bytes()[..r.size()] {
                         hasher.write_u8(*b);
                     }
                     hasher.finish()

@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -970,7 +970,7 @@ fn transport_unicast_tls_only_mutual_success() {
 //
 // See: https://docs.rs/rustls/latest/src/rustls/msgs/enums.rs.html#128
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
-const RUSTLS_HANDSHAKE_FAILURE_ALERT_DESCRIPTION: &str = "HandshakeFailure";
+const RUSTLS_UNKNOWN_CA_ALERT_DESCRIPTION: &str = "UnknownCA";
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 const RUSTLS_CERTIFICATE_REQUIRED_ALERT_DESCRIPTION: &str = "CertificateRequired";
 
@@ -1126,5 +1126,5 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
     assert!(result.is_err());
     let err = result.unwrap_err();
     let error_msg = panic_message::panic_message(&err);
-    assert!(error_msg.contains(RUSTLS_HANDSHAKE_FAILURE_ALERT_DESCRIPTION));
+    assert!(error_msg.contains(RUSTLS_UNKNOWN_CA_ALERT_DESCRIPTION));
 }

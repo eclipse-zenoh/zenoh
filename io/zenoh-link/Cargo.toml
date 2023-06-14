@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022 ZettaScale Technology
+# Copyright (c) 2023 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -37,14 +37,14 @@ transport_serial = ["zenoh-link-serial"]
 async-std = { workspace = true }
 async-trait = { workspace = true }
 rcgen = { workspace = true, optional = true }
-zenoh-config = { path = "../../commons/zenoh-config/" }
-zenoh-result = { path = "../../commons/zenoh-result/" }
-zenoh-link-commons = { path = "../zenoh-link-commons/" }
-zenoh-link-quic = { path = "../zenoh-links/zenoh-link-quic/", optional = true }
-zenoh-link-serial = { path = "../zenoh-links/zenoh-link-serial/", optional = true }
-zenoh-link-tcp = { path = "../zenoh-links/zenoh-link-tcp/", optional = true }
-zenoh-link-tls = { path = "../zenoh-links/zenoh-link-tls/", optional = true }
-zenoh-link-udp = { path = "../zenoh-links/zenoh-link-udp/", optional = true }
-zenoh-link-unixsock_stream = { path = "../zenoh-links/zenoh-link-unixsock_stream/", optional = true }
-zenoh-link-ws = { path = "../zenoh-links/zenoh-link-ws/", optional = true }
-zenoh-protocol = { path = "../../commons/zenoh-protocol/" }
+zenoh-config = { workspace = true }
+zenoh-link-commons = { workspace = true }
+zenoh-link-quic = { workspace = true, optional = true }
+zenoh-link-serial = { workspace = true, optional = true }
+zenoh-link-tcp = { workspace = true, optional = true }
+zenoh-link-tls = { workspace = true, optional = true }
+zenoh-link-udp = { workspace = true, optional = true }
+zenoh-link-unixsock_stream = { workspace = true, optional = true }
+zenoh-link-ws = { workspace = true, optional = true }
+zenoh-protocol = { workspace = true }
+zenoh-result = { workspace = true }

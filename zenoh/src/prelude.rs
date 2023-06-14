@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -25,7 +25,7 @@
 pub use common::*;
 pub(crate) mod common {
     pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
-    pub use zenoh_buffers::SplitBuffer;
+    pub use zenoh_buffers::{reader::HasReader, writer::HasWriter, SplitBuffer};
     pub use zenoh_core::Resolve;
 
     pub(crate) type Id = usize;
@@ -38,7 +38,7 @@ pub(crate) mod common {
     pub use crate::query::{QueryConsolidation, QueryTarget};
 
     pub use crate::value::Value;
-    /// The encoding of a zenoh [`Value`].
+    /// The encoding of a zenoh `Value`.
     pub use zenoh_protocol::core::{Encoding, KnownEncoding};
 
     #[zenoh_macros::unstable]

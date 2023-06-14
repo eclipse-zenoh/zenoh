@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -32,7 +32,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &ZenohId) -> Self::Output {
-        self.write(&mut *writer, x.as_slice())
+        self.write(&mut *writer, &x.to_le_bytes()[..x.size()])
     }
 }
 
@@ -63,7 +63,7 @@ where
         if self.length > ZenohId::MAX_SIZE {
             return Err(DidntWrite);
         }
-        writer.write_exact(x.as_slice())
+        writer.write_exact(&x.to_le_bytes()[..x.size()])
     }
 }
 

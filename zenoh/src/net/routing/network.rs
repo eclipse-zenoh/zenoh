@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -297,6 +297,7 @@ impl Network {
     fn propagate_locators(&self, idx: NodeIndex) -> bool {
         self.gossip
             && (self.gossip_multihop
+                || idx == self.idx
                 || self.links.values().any(|link| {
                     self.graph
                         .node_weight(idx)
@@ -308,12 +309,12 @@ impl Network {
     fn update_edge(&mut self, idx1: NodeIndex, idx2: NodeIndex) {
         use std::hash::Hasher;
         let mut hasher = std::collections::hash_map::DefaultHasher::default();
-        if self.graph[idx1].zid.as_slice() > self.graph[idx2].zid.as_slice() {
-            hasher.write(self.graph[idx2].zid.as_slice());
-            hasher.write(self.graph[idx1].zid.as_slice());
+        if self.graph[idx1].zid > self.graph[idx2].zid {
+            hasher.write(&self.graph[idx2].zid.to_le_bytes());
+            hasher.write(&self.graph[idx1].zid.to_le_bytes());
         } else {
-            hasher.write(self.graph[idx1].zid.as_slice());
-            hasher.write(self.graph[idx2].zid.as_slice());
+            hasher.write(&self.graph[idx1].zid.to_le_bytes());
+            hasher.write(&self.graph[idx2].zid.to_le_bytes());
         }
         let weight = 100.0 + ((hasher.finish() as u32) as f64) / u32::MAX as f64;
         self.graph.update_edge(idx1, idx2, weight);

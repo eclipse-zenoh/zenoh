@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -172,7 +172,7 @@ impl DataInfo {
         let encoding = rng.gen_bool(0.5).then(Encoding::rand);
         let timestamp = rng.gen_bool(0.5).then(|| {
             let time = uhlc::NTP64(rng.gen());
-            let id = uhlc::ID::try_from(ZenohId::rand().as_slice()).unwrap();
+            let id = uhlc::ID::try_from(ZenohId::rand().to_le_bytes()).unwrap();
             Timestamp::new(time, id)
         });
         let source_id = rng.gen_bool(0.5).then(ZenohId::rand);

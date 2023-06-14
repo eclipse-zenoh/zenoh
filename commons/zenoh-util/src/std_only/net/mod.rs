@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -57,7 +57,6 @@ pub fn set_linger(socket: &TcpStream, dur: Option<Duration>) -> ZResult<()> {
 
     #[cfg(windows)]
     {
-        use std::convert::TryInto;
         use std::os::windows::io::AsRawSocket;
         use winapi::um::winsock2;
         use winapi::um::ws2tcpip;
@@ -114,7 +113,6 @@ pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
     {
         unsafe {
             use crate::ffi;
-            use std::convert::TryInto;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
             let mut ret;
@@ -215,7 +213,6 @@ pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
     {
         unsafe {
             use crate::ffi;
-            use std::convert::TryInto;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
             let mut result = vec![];
@@ -307,7 +304,6 @@ pub fn get_unicast_addresses_of_interface(name: &str) -> ZResult<Vec<IpAddr>> {
     {
         unsafe {
             use crate::ffi;
-            use std::convert::TryInto;
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
             let mut addrs = vec![];

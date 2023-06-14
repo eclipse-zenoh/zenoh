@@ -150,8 +150,7 @@ impl StateAccept {
         Self { nonce: prng.gen() }
     }
 
-    #[cfg(feature = "test")]
-    #[allow(unused)] // Used for testing
+    #[cfg(all(test, feature = "test"))]
     pub(crate) fn rand() -> Self {
         let mut rng = rand::thread_rng();
         Self::new(&mut rng)

@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022 ZettaScale Technology
+# Copyright (c) 2023 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -13,18 +13,18 @@
 #
 [package]
 rust-version = { workspace = true }
-name = "zplugin-example"
+name = "zenoh-plugin-example"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 
 [lib]
-# When auto-detecting the "example" plugin, `zenohd` will look for a dynamic library named "zplugin_example"
+# When auto-detecting the "example" plugin, `zenohd` will look for a dynamic library named "zenoh_plugin_example"
 # `zenohd` will expect the file to be named according to OS conventions:
-#   - libzplugin_example.so on linux
-#   - libzplugin_example.dylib on macOS
-#   - zplugin_example.dll on Windows
-name = "zplugin_example"
+#   - libzenoh_plugin_example.so on linux
+#   - libzenoh_plugin_example.dylib on macOS
+#   - zenoh_plugin_example.dll on Windows
+name = "zenoh_plugin_example"
 # This crate type will make `cargo` output a dynamic library instead of a rust static library
 crate-type = ["cdylib"]
 
@@ -35,8 +35,8 @@ env_logger = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
 serde_json = { workspace = true }
-zenoh = { path = "../../zenoh/", default-features = false }
-zenoh-core = { path = "../../commons/zenoh-core/" }
-zenoh-plugin-trait = { path = "../zenoh-plugin-trait/" }
-zenoh-result = { path = "../../commons/zenoh-result/" }
-zenoh-util = { path = "../../commons/zenoh-util/" }
+zenoh = { workspace = true }
+zenoh-core = { workspace = true }
+zenoh-plugin-trait = { workspace = true }
+zenoh-result = { workspace = true }
+zenoh-util = { workspace = true }

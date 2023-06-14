@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -109,8 +109,8 @@ pub(super) fn compute_sn(zid1: ZenohId, zid2: ZenohId, resolution: Resolution) -
     // In case of multilink it's important that the same initial_sn is used for every connection attempt.
     // Instead of storing the state everywhere, we make sure that the we always compute the same initial_sn.
     let mut hasher = Shake128::default();
-    hasher.update(zid1.as_slice());
-    hasher.update(zid2.as_slice());
+    hasher.update(&zid1.to_le_bytes()[..zid1.size()]);
+    hasher.update(&zid2.to_le_bytes()[..zid2.size()]);
     let mut array = (0 as TransportSn).to_le_bytes();
     hasher.finalize_xof().read(&mut array);
     TransportSn::from_le_bytes(array) & seq_num::get_mask(resolution.get(Field::FrameSN))

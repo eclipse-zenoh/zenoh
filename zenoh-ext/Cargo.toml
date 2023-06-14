@@ -1,5 +1,5 @@
 #
-# Copyright (c) 2022 ZettaScale Technology
+# Copyright (c) 2023 ZettaScale Technology
 #
 # This program and the accompanying materials are made available under the
 # terms of the Eclipse Public License 2.0 which is available at
@@ -38,14 +38,12 @@ flume = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["default"] }
-zenoh = { path = "../zenoh/", default-features = false, features = [
-    "unstable",
-] }
-zenoh-core = { path = "../commons/zenoh-core/" }
-zenoh-macros = { path = "../commons/zenoh-macros/" }
-zenoh-result = { path = "../commons/zenoh-result/" }
-zenoh-sync = { path = "../commons/zenoh-sync/" }
-zenoh-util = { path = "../commons/zenoh-util/" }
+zenoh = { workspace = true, features = ["unstable"] }
+zenoh-core = { workspace = true }
+zenoh-macros = { workspace = true }
+zenoh-result = { workspace = true }
+zenoh-sync = { workspace = true }
+zenoh-util = { workspace = true }
 
 [dev-dependencies]
 clap = { workspace = true }

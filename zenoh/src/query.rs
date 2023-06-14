@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -284,7 +284,6 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     }
 
     /// Set query value.
-    #[zenoh_macros::unstable]
     #[inline]
     pub fn with_value<IntoValue>(mut self, value: IntoValue) -> Self
     where

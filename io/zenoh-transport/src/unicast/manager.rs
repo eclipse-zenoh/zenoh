@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -49,6 +49,8 @@ pub struct TransportManagerConfigUnicast {
     pub max_links: usize,
     #[cfg(feature = "shared-memory")]
     pub is_shm: bool,
+    #[cfg(all(feature = "unstable", feature = "transport_compression"))]
+    pub is_compressed: bool,
 }
 
 pub struct TransportManagerStateUnicast {
@@ -143,6 +145,12 @@ impl TransportManagerBuilderUnicast {
         self
     }
 
+    #[cfg(all(feature = "unstable", feature = "transport_compression"))]
+    pub fn compression(mut self, is_compressed: bool) -> Self {
+        self.is_compressed = is_compressed;
+        self
+    }
+
     pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilderUnicast> {
         self = self.lease(Duration::from_millis(
             *config.transport().link().tx().lease(),
@@ -186,6 +194,8 @@ impl TransportManagerBuilderUnicast {
             max_links: self.max_links,
             #[cfg(feature = "shared-memory")]
             is_shm: self.is_shm,
+            #[cfg(all(feature = "unstable", feature = "transport_compression"))]
+            is_compressed: self.is_compressed,
         };
 
         let state = TransportManagerStateUnicast {

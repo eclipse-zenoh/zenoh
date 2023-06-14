@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -23,15 +23,14 @@ use config::{
     TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_PRIVATE_KEY_FILE,
 };
 use std::net::SocketAddr;
-use webpki::DnsNameRef;
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
 use zenoh_protocol::core::{
-    endpoint::{self, Address},
+    endpoint::{Address, Parameters},
     Locator,
 };
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_result::{bail, ZResult};
 
 mod unicast;
 pub use unicast::*;
@@ -82,7 +81,7 @@ impl ConfigurationInspector<Config> for QuicConfigurator {
         }
 
         let mut s = String::new();
-        endpoint::Parameters::extend(ps.drain(..), &mut s);
+        Parameters::extend(ps.drain(..), &mut s);
 
         Ok(s)
     }
@@ -117,10 +116,4 @@ async fn get_quic_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
         Some(addr) => Ok(addr),
         None => bail!("Couldn't resolve QUIC locator address: {}", address),
     }
-}
-
-async fn get_quic_dns<'a>(address: &'a Address<'a>) -> ZResult<DnsNameRef<'a>> {
-    let addr = address.as_str().split(':').next().unwrap();
-    let domain = DnsNameRef::try_from_ascii(addr.as_bytes()).map_err(|e| zerror!(e))?;
-    Ok(domain)
 }

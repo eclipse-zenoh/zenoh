@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -111,6 +111,7 @@ pub mod selector;
 pub use zenoh_config as config;
 pub mod handlers;
 pub mod info;
+#[cfg(feature = "unstable")]
 pub mod liveliness;
 pub mod plugins;
 pub mod prelude;
@@ -227,7 +228,7 @@ where
 /// use zenoh::prelude::r#async::*;
 ///
 /// let mut config = config::peer();
-/// config.set_id(ZenohId::from_str("F000").unwrap());
+/// config.set_id(ZenohId::from_str("221b72df20924c15b8794c6bdb471150").unwrap());
 /// config.connect.endpoints.extend("tcp/10.10.10.10:7447,tcp/11.11.11.11:7447".split(',').map(|s|s.parse().unwrap()));
 ///
 /// let session = zenoh::open(config).res().await.unwrap();

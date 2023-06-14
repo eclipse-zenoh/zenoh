@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2022 ZettaScale Technology
+// Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -306,6 +306,19 @@ impl<'a> SiphonableReader for ZBufReader<'a> {
     }
 }
 
+#[cfg(feature = "std")]
+impl<'a> std::io::Read for ZBufReader<'a> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        match <Self as Reader>::read(self, buf) {
+            Ok(n) => Ok(n.get()),
+            Err(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "UnexpectedEof",
+            )),
+        }
+    }
+}
+
 // ZSlice iterator
 pub struct ZBufSliceIterator<'a, 'b> {
     reader: &'a mut ZBufReader<'b>,
@@ -493,6 +506,23 @@ impl BacktrackableWriter for ZBufWriter<'_> {
             slice.end = mark.byte
         }
         true
+    }
+}
+
+#[cfg(feature = "std")]
+impl<'a> std::io::Write for ZBufWriter<'a> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        match <Self as Writer>::write(self, buf) {
+            Ok(n) => Ok(n.get()),
+            Err(_) => Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "UnexpectedEof",
+            )),
+        }
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
     }
 }
 
