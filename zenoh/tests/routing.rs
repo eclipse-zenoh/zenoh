@@ -88,7 +88,8 @@ impl Task {
             Self::Get(ke, expected_size) => {
                 let mut counter = 0;
                 while counter < MSG_COUNT {
-                    let replies = ztimeout!(session.get(ke).res_async())?;
+                    let replies =
+                        ztimeout!(session.get(ke).timeout(Duration::from_secs(10)).res_async())?;
                     while let Ok(reply) = replies.recv_async().await {
                         match reply.sample {
                             Ok(sample) => {
