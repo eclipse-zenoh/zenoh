@@ -100,7 +100,12 @@ impl Task {
                             }
 
                             Err(err) => {
-                                bail!("Sample got from {ke} failed to unwrap! Error: {err}.");
+                                log::warn!(
+                                    "Sample got from {} failed to unwrap! Error: {}.",
+                                    ke,
+                                    err
+                                );
+                                continue;
                             }
                         }
                         counter += 1;
