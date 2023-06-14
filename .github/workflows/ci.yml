@@ -57,8 +57,6 @@ jobs:
           args: --all-targets --features unstable -- -D warnings
 
       - name: Clippy shared-memory
-        # shared-memory supports only unix for a while...
-        if: ${{ matrix.os == 'ubuntu-latest' }}
         uses: actions-rs/cargo@v1
         with:
           command: clippy
@@ -93,16 +91,6 @@ jobs:
         with:
           command: nextest
           args: run
-        env:
-          ASYNC_STD_THREAD_COUNT: 4
-
-      - name: Run tests for shared-memory
-        # shared-memory supports only unix for a while...
-        if: ${{ matrix.os == 'ubuntu-latest' }}
-        uses: actions-rs/cargo@v1
-        with:
-          command: nextest
-          args: run --features shared-memory
         env:
           ASYNC_STD_THREAD_COUNT: 4
 
