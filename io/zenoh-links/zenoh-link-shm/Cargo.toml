@@ -36,7 +36,6 @@ log = { workspace = true }
 rand = { workspace = true }
 socket2 = { workspace = true }
 zenoh-buffers = { workspace = true }
-zenoh-cfg-properties = { workspace = true }
 zenoh-collections = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-config = { workspace = true }

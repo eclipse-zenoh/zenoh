@@ -21,11 +21,10 @@ mod unicast;
 
 use async_trait::async_trait;
 pub use unicast::*;
-use zenoh_cfg_properties::Properties;
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
-use zenoh_protocol::core::Locator;
+use zenoh_protocol::core::{Locator, Parameters};
 use zenoh_result::ZResult;
 
 pub const SHM_LOCATOR_PREFIX: &str = "shm";
@@ -47,15 +46,20 @@ impl LocatorInspector for ShmLocatorInspector {
 pub struct ShmConfigurator;
 #[async_trait]
 impl ConfigurationInspector<Config> for ShmConfigurator {
-    async fn inspect_config(&self, config: &Config) -> ZResult<Properties> {
-        let mut properties = Properties::default();
+    async fn inspect_config(&self, config: &Config) -> ZResult<String> {
+        let mut properties: Vec<(&str, &str)> = vec![];
 
         let c = config.transport().link().shared_memory();
+        let shm_access_mask_;
         if let Some(shm_access_mask) = c.shm_access_mask() {
-            properties.insert(config::SHM_ACCESS_MASK.into(), shm_access_mask.to_string());
+            shm_access_mask_ = shm_access_mask.to_string();
+            properties.push((config::SHM_ACCESS_MASK, &shm_access_mask_));
         }
 
-        Ok(properties)
+        let mut s = String::new();
+        Parameters::extend(properties.drain(..), &mut s);
+
+        Ok(s)
     }
 }
 

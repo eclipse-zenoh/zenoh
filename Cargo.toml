@@ -168,7 +168,6 @@ zenoh-codec = { version = "0.10.0-dev", path = "commons/zenoh-codec" }
 zenoh-sync = { version = "0.10.0-dev", path = "commons/zenoh-sync" }
 zenoh-collections = { version = "0.10.0-dev", path = "commons/zenoh-collections", default-features = false }
 zenoh-macros = { version = "0.10.0-dev", path = "commons/zenoh-macros" }
-zenoh-cfg-properties = { version = "0.10.0-dev", path = "commons/zenoh-cfg-properties" }
 zenoh-plugin-trait = { version = "0.10.0-dev", path = "plugins/zenoh-plugin-trait", default-features = false }
 zenoh_backend_traits = { version = "0.10.0-dev", path = "plugins/zenoh-backend-traits" }
 zenoh-transport = { version = "0.10.0-dev", path = "io/zenoh-transport" }

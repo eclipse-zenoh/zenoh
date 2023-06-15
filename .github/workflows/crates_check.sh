@@ -1,7 +1,6 @@
 cargo check -p zenoh-result --manifest-path commons/zenoh-result/Cargo.toml &&
 cargo check -p zenoh-core --manifest-path commons/zenoh-core/Cargo.toml &&
 cargo check -p zenoh-keyexpr --manifest-path commons/zenoh-keyexpr/Cargo.toml &&
-cargo check -p zenoh-cfg-properties --manifest-path commons/zenoh-cfg-properties/Cargo.toml &&
 cargo check -p zenoh-collections --manifest-path commons/zenoh-collections/Cargo.toml &&
 cargo check -p zenoh-crypto --manifest-path commons/zenoh-crypto/Cargo.toml &&
 cargo check -p zenoh-buffers --manifest-path commons/zenoh-buffers/Cargo.toml &&
