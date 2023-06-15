@@ -149,7 +149,7 @@ where
         let options: u8 = self.read(&mut *reader)?;
         #[cfg(feature = "shared-memory")]
         {
-            info.sliced = imsg::has_option(options, zmsg::data::info::SLICED);
+            info.sliced = imsg::has_flag(options, zmsg::data::info::SLICED);
         }
         if imsg::has_flag(options, zmsg::data::info::KIND) {
             let kind: u8 = self.read(&mut *reader)?;

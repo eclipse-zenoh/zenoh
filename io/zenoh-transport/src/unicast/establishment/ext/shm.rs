@@ -259,7 +259,7 @@ impl<'a> OpenFsm for ShmFsm<'a> {
         &self,
         input: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
-        const S: &str = "Shm extension - Send OpenSyn.";
+        // const S: &str = "Shm extension - Send OpenSyn.";
 
         let (state, bob_challenge) = input;
         if !state.is_shm() {
@@ -483,7 +483,7 @@ impl<'a> AcceptFsm for ShmFsm<'a> {
         &self,
         state: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
-        const S: &str = "Shm extension - Recv OpenSyn.";
+        // const S: &str = "Shm extension - Send OpenAck.";
 
         if !state.is_shm() {
             return Ok(None);
