@@ -43,8 +43,8 @@ use zenoh_protocol::{
 use zenoh_result::{bail, ZResult};
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
-    TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
+    TransportUnicast,
 };
 
 pub struct RuntimeState {
@@ -241,14 +241,6 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
             }
             None => bail!("Runtime not yet ready!"),
         }
-    }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        // @TODO
-        unimplemented!();
     }
 }
 

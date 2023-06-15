@@ -11,12 +11,42 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    core::{ConsolidationMode, QueryTarget, WireExpr, ZInt},
-    zenoh::DataInfo,
-};
+use crate::{core::WireExpr, zenoh::DataInfo};
 use alloc::string::String;
+use core::sync::atomic::AtomicU32;
 use zenoh_buffers::ZBuf;
+
+/// The resolution of a QueryId
+pub type QueryId = u32;
+pub type AtomicQueryId = AtomicU32;
+
+/// The kind of consolidation.
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum ConsolidationMode {
+    /// No consolidation applied: multiple samples may be received for the same key-timestamp.
+    None,
+    /// Monotonic consolidation immediately forwards samples, except if one with an equal or more recent timestamp
+    /// has already been sent with the same key.
+    ///
+    /// This optimizes latency while potentially reducing bandwidth.
+    ///
+    /// Note that this doesn't cause re-ordering, but drops the samples for which a more recent timestamp has already
+    /// been observed with the same key.
+    Monotonic,
+    /// Holds back samples to only send the set of samples that had the highest timestamp for their key.
+    Latest,
+}
+
+/// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum QueryTarget {
+    #[default]
+    BestMatching,
+    All,
+    AllComplete,
+    #[cfg(feature = "complete_n")]
+    Complete(u64),
+}
 
 /// # QueryBody
 ///
@@ -76,7 +106,7 @@ impl QueryBody {
 pub struct Query {
     pub key: WireExpr<'static>,
     pub parameters: String,
-    pub qid: ZInt,
+    pub qid: QueryId,
     pub target: Option<QueryTarget>,
     pub consolidation: ConsolidationMode,
     pub body: Option<QueryBody>,
@@ -105,7 +135,7 @@ impl Query {
             String::new()
         };
 
-        let qid: ZInt = rng.gen();
+        let qid: QueryId = rng.gen();
 
         let target = if rng.gen_bool(0.5) {
             let t = [

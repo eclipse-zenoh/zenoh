@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{QueryableInfo, SubInfo, WireExpr, ZInt};
+use crate::{
+    core::{ExprId, WireExpr},
+    zenoh::Reliability,
+};
 use alloc::vec::Vec;
 
 /// ```text
@@ -90,7 +93,7 @@ impl Declaration {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Resource {
-    pub expr_id: ZInt,
+    pub expr_id: ExprId,
     pub key: WireExpr<'static>,
 }
 
@@ -101,7 +104,7 @@ impl Resource {
 
         let mut rng = rand::thread_rng();
 
-        let expr_id: ZInt = rng.gen();
+        let expr_id: ExprId = rng.gen();
         let key = WireExpr::rand();
 
         Self { expr_id, key }
@@ -118,7 +121,7 @@ impl Resource {
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ForgetResource {
-    pub expr_id: ZInt,
+    pub expr_id: ExprId,
 }
 
 impl ForgetResource {
@@ -128,7 +131,7 @@ impl ForgetResource {
 
         let mut rng = rand::thread_rng();
 
-        let expr_id: ZInt = rng.gen();
+        let expr_id: ExprId = rng.gen();
 
         Self { expr_id }
     }
@@ -178,6 +181,20 @@ impl ForgetPublisher {
     }
 }
 
+/// The subscription mode.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SubMode {
+    #[default]
+    Push,
+    Pull,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct SubInfo {
+    pub reliability: Reliability,
+    pub mode: SubMode,
+}
+
 /// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
@@ -197,17 +214,12 @@ pub struct Subscriber {
 impl Subscriber {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::core::{Reliability, SubMode};
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
 
         let key = WireExpr::rand();
-        let reliability = if rng.gen_bool(0.5) {
-            Reliability::Reliable
-        } else {
-            Reliability::BestEffort
-        };
+        let reliability = Reliability::rand();
         let mode = if rng.gen_bool(0.5) {
             SubMode::Push
         } else {
@@ -241,6 +253,12 @@ impl ForgetSubscriber {
     }
 }
 
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub struct QueryableInfo {
+    pub complete: u64, // Default 0: incomplete
+    pub distance: u64, // Default 0: no distance
+}
+
 /// ```text
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
@@ -265,8 +283,8 @@ impl Queryable {
         let mut rng = rand::thread_rng();
 
         let key = WireExpr::rand();
-        let complete: ZInt = rng.gen();
-        let distance: ZInt = rng.gen();
+        let complete: u64 = rng.gen();
+        let distance: u64 = rng.gen();
         let info = QueryableInfo { complete, distance };
 
         Self { key, info }

@@ -651,6 +651,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fbdcdcb6d86f71c5e97409ad45898af11cbc995b4ee8112d59095a28d376c935"
 
 [[package]]
+name = "const_format"
+version = "0.2.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7309d9b4d3d2c0641e018d449232f2e28f1b22933c137f157d3dbc14228b8c0e"
+dependencies = [
+ "const_format_proc_macros",
+]
+
+[[package]]
+name = "const_format_proc_macros"
+version = "0.2.29"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d897f47bf7270cf70d370f8f98c1abb6d2d4cf60a6845d30e05bfb90c6568650"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-xid",
+]
+
+[[package]]
 name = "constant_time_eq"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3342,6 +3362,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "unicode-xid"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f962df74c8c05a667b5ee8bcf162993134c104e96440b663c8daa176dc772d8c"
+
+[[package]]
 name = "universal-hash"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3877,7 +3903,6 @@ dependencies = [
  "uuid",
  "vec_map",
  "zenoh-buffers",
- "zenoh-cfg-properties",
  "zenoh-codec",
  "zenoh-collections",
  "zenoh-config",
@@ -3903,18 +3928,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "zenoh-cfg-properties"
-version = "0.10.0-dev"
-dependencies = [
- "zenoh-result",
-]
-
-[[package]]
 name = "zenoh-codec"
 version = "0.10.0-dev"
 dependencies = [
  "criterion",
+ "env_logger",
+ "log",
  "rand 0.8.5",
+ "serde",
  "uhlc",
  "uuid",
  "zenoh-buffers",
@@ -3937,7 +3958,6 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "validated_struct",
- "zenoh-cfg-properties",
  "zenoh-core",
  "zenoh-protocol",
  "zenoh-result",
@@ -4024,7 +4044,6 @@ dependencies = [
  "async-std",
  "async-trait",
  "rcgen",
- "zenoh-cfg-properties",
  "zenoh-config",
  "zenoh-link-commons",
  "zenoh-link-quic",
@@ -4048,7 +4067,6 @@ dependencies = [
  "serde",
  "typenum",
  "zenoh-buffers",
- "zenoh-cfg-properties",
  "zenoh-codec",
  "zenoh-protocol",
  "zenoh-result",
@@ -4067,7 +4085,6 @@ dependencies = [
  "rustls-native-certs",
  "rustls-pemfile",
  "webpki",
- "zenoh-cfg-properties",
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
@@ -4088,7 +4105,6 @@ dependencies = [
  "tokio",
  "uuid",
  "z-serial",
- "zenoh-cfg-properties",
  "zenoh-collections",
  "zenoh-config",
  "zenoh-core",
@@ -4126,7 +4142,6 @@ dependencies = [
  "rustls-pemfile",
  "webpki",
  "webpki-roots",
- "zenoh-cfg-properties",
  "zenoh-config",
  "zenoh-core",
  "zenoh-link-commons",
@@ -4239,7 +4254,6 @@ dependencies = [
  "serde_json",
  "tide",
  "zenoh",
- "zenoh-cfg-properties",
  "zenoh-plugin-trait",
  "zenoh-result",
  "zenoh-util",
@@ -4292,6 +4306,7 @@ dependencies = [
 name = "zenoh-protocol"
 version = "0.10.0-dev"
 dependencies = [
+ "const_format",
  "hex",
  "lazy_static",
  "rand 0.8.5",
@@ -4354,8 +4369,8 @@ dependencies = [
  "ringbuffer-spsc",
  "rsa",
  "serde",
+ "sha3",
  "zenoh-buffers",
- "zenoh-cfg-properties",
  "zenoh-codec",
  "zenoh-collections",
  "zenoh-config",
@@ -4366,6 +4381,7 @@ dependencies = [
  "zenoh-result",
  "zenoh-shm",
  "zenoh-sync",
+ "zenoh-transport",
  "zenoh-util",
 ]
 

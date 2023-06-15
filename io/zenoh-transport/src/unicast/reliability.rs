@@ -15,7 +15,7 @@ use std::convert::TryInto;
 use std::fmt;
 
 use super::common::seq_num::SeqNum;
-use super::core::ZInt;
+use super::core::u64;
 
 use zenoh_result::{ZError, ZErrorKind, ZResult};
 use zenoh_util::zerror;
@@ -28,11 +28,7 @@ pub(super) struct ReliabilityQueue<T> {
 }
 
 impl<T> ReliabilityQueue<T> {
-    pub(super) fn new(
-        capacity: usize,
-        initial_sn: ZInt,
-        sn_resolution: ZInt,
-    ) -> ReliabilityQueue<T> {
+    pub(super) fn new(capacity: usize, initial_sn: u64, sn_resolution: u64) -> ReliabilityQueue<T> {
         let mut inner = Vec::with_capacity(capacity);
         for _ in 0..capacity {
             inner.push(None);
@@ -67,11 +63,11 @@ impl<T> ReliabilityQueue<T> {
     }
 
     #[inline]
-    pub(super) fn get_base(&self) -> ZInt {
+    pub(super) fn get_base(&self) -> u64 {
         self.sn.get()
     }
 
-    pub(super) fn set_base(&mut self, sn: ZInt) -> ZResult<()> {
+    pub(super) fn set_base(&mut self, sn: u64) -> ZResult<()> {
         let gap: usize = match self.sn.gap(sn) {
             Ok(gap) => match gap.try_into() {
                 Ok(gap) => gap,
@@ -103,7 +99,7 @@ impl<T> ReliabilityQueue<T> {
         Ok(())
     }
 
-    pub(super) fn insert(&mut self, t: T, sn: ZInt) -> ZResult<()> {
+    pub(super) fn insert(&mut self, t: T, sn: u64) -> ZResult<()> {
         let gap: usize = match self.sn.gap(sn) {
             Ok(gap) => match gap.try_into() {
                 Ok(gap) => gap,
@@ -135,7 +131,7 @@ impl<T> ReliabilityQueue<T> {
         Ok(())
     }
 
-    pub(super) fn remove(&mut self, sn: ZInt) -> ZResult<T> {
+    pub(super) fn remove(&mut self, sn: u64) -> ZResult<T> {
         let gap: usize = match self.sn.gap(sn) {
             Ok(gap) => match gap.try_into() {
                 Ok(gap) => gap,
@@ -187,8 +183,8 @@ impl<T> ReliabilityQueue<T> {
     /// Returns a bitmask of surely missed messages.
     /// A bit is set to 1 iff the position in the queue is empty and
     /// there is at least one message with a higher sequence number.
-    pub(super) fn get_mask(&self) -> ZInt {
-        let mut mask: ZInt = 0;
+    pub(super) fn get_mask(&self) -> u64 {
+        let mut mask: u64 = 0;
         let mut count = 0;
         let mut i = 0;
         while count < self.len() {
@@ -205,7 +201,7 @@ impl<T> ReliabilityQueue<T> {
 }
 
 impl<T: Clone> ReliabilityQueue<T> {
-    pub(super) fn get(&mut self, sn: ZInt) -> ZResult<T> {
+    pub(super) fn get(&mut self, sn: u64) -> ZResult<T> {
         let gap: usize = match self.sn.gap(sn) {
             Ok(gap) => match gap.try_into() {
                 Ok(gap) => gap,
@@ -259,9 +255,9 @@ mod tests {
     #[test]
     fn reliability_queue_simple() {
         let size = 2;
-        let mut queue: ReliabilityQueue<ZInt> = ReliabilityQueue::new(size, 0, 2);
+        let mut queue: ReliabilityQueue<u64> = ReliabilityQueue::new(size, 0, 2);
 
-        let mut sn: ZInt = 0;
+        let mut sn: u64 = 0;
         // Add the first element
         let res = queue.insert(0, sn);
         assert!(res.is_ok());
@@ -282,9 +278,9 @@ mod tests {
     #[test]
     fn reliability_queue_order() {
         let size = 2;
-        let mut queue: ReliabilityQueue<ZInt> = ReliabilityQueue::new(size, 0, 3);
+        let mut queue: ReliabilityQueue<u64> = ReliabilityQueue::new(size, 0, 3);
 
-        let sn: ZInt = 0;
+        let sn: u64 = 0;
 
         // Add the second element
         let res = queue.insert(1, sn + 1);
@@ -309,9 +305,9 @@ mod tests {
     #[test]
     fn reliability_queue_full() {
         let size = 2;
-        let mut queue: ReliabilityQueue<ZInt> = ReliabilityQueue::new(size, 0, 3);
+        let mut queue: ReliabilityQueue<u64> = ReliabilityQueue::new(size, 0, 3);
 
-        let mut sn: ZInt = 0;
+        let mut sn: u64 = 0;
 
         // Fill the queue
         let res = queue.insert(0, sn);
@@ -336,9 +332,9 @@ mod tests {
     #[test]
     fn reliability_queue_out_of_sync() {
         let size = 2;
-        let mut queue: ReliabilityQueue<ZInt> = ReliabilityQueue::new(size, 0, 2);
+        let mut queue: ReliabilityQueue<u64> = ReliabilityQueue::new(size, 0, 2);
 
-        let sn: ZInt = 3;
+        let sn: u64 = 3;
 
         let res = queue.insert(sn, sn);
         assert!(res.is_err());
@@ -351,10 +347,10 @@ mod tests {
     fn reliability_queue_overflow() {
         // Test the overflow case
         let size = 4;
-        let mut queue: ReliabilityQueue<ZInt> = ReliabilityQueue::new(size, 0, 4);
+        let mut queue: ReliabilityQueue<u64> = ReliabilityQueue::new(size, 0, 4);
 
-        let min: ZInt = 0;
-        let max: ZInt = 3;
+        let min: u64 = 0;
+        let max: u64 = 3;
 
         let res = queue.set_base(max - 1);
         assert!(res.is_ok());
@@ -385,22 +381,22 @@ mod tests {
     fn reliability_queue_mask() {
         // Test the deterministic insertion of elements and mask
         let size = 8;
-        let mut queue: ReliabilityQueue<ZInt> = ReliabilityQueue::new(size, 0, 8);
+        let mut queue: ReliabilityQueue<u64> = ReliabilityQueue::new(size, 0, 8);
 
-        let mut sn: ZInt = 0;
-        while sn < size as ZInt {
+        let mut sn: u64 = 0;
+        while sn < size as u64 {
             let res = queue.insert(sn, sn);
             assert!(res.is_ok());
             sn = sn + 2;
         }
 
         // Verify that the mask is correct
-        let mask: ZInt = 0b00101010;
+        let mask: u64 = 0b00101010;
         assert_eq!(queue.get_mask(), mask);
 
         // Insert the missing elements
-        let mut sn: ZInt = 1;
-        while sn < size as ZInt {
+        let mut sn: u64 = 1;
+        while sn < size as u64 {
             let res = queue.insert(sn, sn);
             assert!(res.is_ok());
             sn = sn + 2;
@@ -420,16 +416,16 @@ mod tests {
     fn reliability_queue_random_mask() {
         // Test the random insertion of elements and the mask
         let size = 64;
-        let mut queue: ReliabilityQueue<ZInt> = ReliabilityQueue::new(size, 0, 64);
+        let mut queue: ReliabilityQueue<u64> = ReliabilityQueue::new(size, 0, 64);
 
-        let mut sequence = Vec::<ZInt>::new();
-        for i in 0..size as ZInt {
+        let mut sequence = Vec::<u64>::new();
+        for i in 0..size as u64 {
             sequence.push(i);
         }
 
         let head = 0;
         let mut tail = 0;
-        let mut mask: ZInt = 0;
+        let mut mask: u64 = 0;
         let mut rng = thread_rng();
         while sequence.len() > 0 {
             // Get random sequence number
@@ -445,7 +441,7 @@ mod tests {
             // Locally compute the mask
             mask = mask | (1 << sn);
             let shift: u32 = tail.wrapping_sub(head) as u32;
-            let window = !ZInt::max_value().wrapping_shl(shift);
+            let window = !u64::max_value().wrapping_shl(shift);
             // Verify that the mask is correct
             assert_eq!(queue.get_mask(), !mask & window);
         }
@@ -453,7 +449,7 @@ mod tests {
         // Verify that we have filled the queue
         assert!(queue.is_full());
         // Verify that no elements are marked for retransmission
-        assert_eq!(queue.get_mask(), !ZInt::max_value());
+        assert_eq!(queue.get_mask(), !u64::max_value());
 
         // Drain the queue
         while let Some(_) = queue.pull() {}
@@ -468,10 +464,10 @@ mod tests {
     #[test]
     fn reliability_queue_rebase() {
         let size = 8;
-        let mut queue: ReliabilityQueue<ZInt> = ReliabilityQueue::new(size, 0, 32);
+        let mut queue: ReliabilityQueue<u64> = ReliabilityQueue::new(size, 0, 32);
 
         // Fill the queue
-        for i in 0..size as ZInt {
+        for i in 0..size as u64 {
             // Push the element on the queue
             let res = queue.insert(i, i);
             assert!(res.is_ok());
@@ -523,7 +519,7 @@ mod tests {
         assert_eq!(queue.get_base(), 0);
 
         // Fill the queue
-        for i in 0..size as ZInt {
+        for i in 0..size as u64 {
             // Push the element on the queue is correct
             let res = queue.insert(i, i);
             assert!(res.is_ok());
@@ -533,7 +529,7 @@ mod tests {
         assert!(queue.is_full());
 
         // Rebase beyond the current boundaries triggering a reset
-        let base = 2 * size as ZInt;
+        let base = 2 * size as u64;
         let res = queue.set_base(base);
         assert!(res.is_ok());
         assert_eq!(queue.get_base(), base);
@@ -549,10 +545,10 @@ mod tests {
     #[test]
     fn reliability_queue_remove() {
         let size = 8;
-        let mut queue: ReliabilityQueue<ZInt> = ReliabilityQueue::new(size, 0, 8);
+        let mut queue: ReliabilityQueue<u64> = ReliabilityQueue::new(size, 0, 8);
 
         // Fill the queue
-        for i in 0..size as ZInt {
+        for i in 0..size as u64 {
             // Push the element on the queue
             let res = queue.insert(i, i);
             assert!(res.is_ok());
@@ -595,7 +591,7 @@ mod tests {
         assert!(queue.is_empty());
 
         // Check that everything is None
-        for i in 0..size as ZInt {
+        for i in 0..size as u64 {
             // Remove the element from the queue
             let res = queue.remove(i);
             assert!(res.is_err());

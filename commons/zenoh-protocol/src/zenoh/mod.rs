@@ -19,12 +19,7 @@ mod query;
 mod routing;
 mod unit;
 
-use crate::{
-    common::Attachment,
-    core::{
-        Channel, CongestionControl, ConsolidationMode, QueryTarget, Reliability, WireExpr, ZInt,
-    },
-};
+use crate::core::{Channel, CongestionControl, Reliability, WireExpr};
 use alloc::{string::String, vec::Vec};
 use core::fmt;
 pub use data::*;
@@ -39,7 +34,7 @@ use zenoh_buffers::ZBuf;
 pub mod zmsg {
     use crate::{
         common::imsg,
-        core::{Channel, CongestionControl, Priority, Reliability, ZInt},
+        core::{Channel, CongestionControl, Priority, Reliability},
     };
 
     // Zenoh message IDs -- Re-export of some of the Inner Message IDs
@@ -57,7 +52,6 @@ pub mod zmsg {
         // Message decorators
         pub const PRIORITY: u8 = imsg::id::PRIORITY;
         pub const REPLY_CONTEXT: u8 = imsg::id::REPLY_CONTEXT;
-        pub const ATTACHMENT: u8 = imsg::id::ATTACHMENT;
         pub const ROUTING_CONTEXT: u8 = imsg::id::ROUTING_CONTEXT;
     }
 
@@ -80,21 +74,14 @@ pub mod zmsg {
 
     // Options used for DataInfo
     pub mod data {
-        use super::ZInt;
-
         pub mod info {
-            use super::ZInt;
-
             #[cfg(feature = "shared-memory")]
-            pub const SLICED: ZInt = 1 << 0; // 0x01
-            pub const KIND: ZInt = 1 << 1; // 0x02
-            pub const ENCODING: ZInt = 1 << 2; // 0x04
-            pub const TIMESTAMP: ZInt = 1 << 3; // 0x08
-                                                // 0x10: Reserved
-                                                // 0x20: Reserved
-                                                // 0x40: Reserved
-            pub const SRCID: ZInt = 1 << 7; // 0x80
-            pub const SRCSN: ZInt = 1 << 8; // 0x100
+            pub const SLICED: u8 = 1 << 0; // 0x01
+            pub const KIND: u8 = 1 << 1; // 0x02
+            pub const ENCODING: u8 = 1 << 2; // 0x04
+            pub const TIMESTAMP: u8 = 1 << 3; // 0x08
+            pub const SRCID: u8 = 1 << 4; // 0x10
+            pub const SRCSN: u8 = 1 << 5; // 0x20
         }
     }
 
@@ -123,11 +110,9 @@ pub mod zmsg {
 
     // Options used for LinkState
     pub mod link_state {
-        use super::ZInt;
-
-        pub const PID: ZInt = 1; // 0x01
-        pub const WAI: ZInt = 1 << 1; // 0x02
-        pub const LOC: ZInt = 1 << 2; // 0x04
+        pub const PID: u64 = 1; // 0x01
+        pub const WAI: u64 = 1 << 1; // 0x02
+        pub const LOC: u64 = 1 << 2; // 0x04
     }
 
     pub mod conduit {
@@ -208,7 +193,6 @@ pub struct ZenohMessage {
     pub body: ZenohBody,
     pub channel: Channel,
     pub routing_context: Option<RoutingContext>,
-    pub attachment: Option<Attachment>,
     #[cfg(feature = "stats")]
     pub size: Option<core::num::NonZeroUsize>,
 }
@@ -217,13 +201,11 @@ impl ZenohMessage {
     pub fn make_declare(
         declarations: Vec<Declaration>,
         routing_context: Option<RoutingContext>,
-        attachment: Option<Attachment>,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Declare(Declare { declarations }),
             channel: zmsg::default_channel::DECLARE,
             routing_context,
-            attachment,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -239,7 +221,6 @@ impl ZenohMessage {
         data_info: Option<DataInfo>,
         routing_context: Option<RoutingContext>,
         reply_context: Option<ReplyContext>,
-        attachment: Option<Attachment>,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Data(Data {
@@ -251,7 +232,6 @@ impl ZenohMessage {
             }),
             channel,
             routing_context,
-            attachment,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -261,7 +241,6 @@ impl ZenohMessage {
         channel: Channel,
         congestion_control: CongestionControl,
         reply_context: Option<ReplyContext>,
-        attachment: Option<Attachment>,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Unit(Unit {
@@ -270,7 +249,6 @@ impl ZenohMessage {
             }),
             channel,
             routing_context: None,
-            attachment,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -279,9 +257,8 @@ impl ZenohMessage {
     pub fn make_pull(
         is_final: bool,
         key: WireExpr<'static>,
-        pull_id: ZInt,
-        max_samples: Option<ZInt>,
-        attachment: Option<Attachment>,
+        pull_id: PullId,
+        max_samples: Option<u16>,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Pull(Pull {
@@ -292,7 +269,6 @@ impl ZenohMessage {
             }),
             channel: zmsg::default_channel::PULL,
             routing_context: None,
-            attachment,
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -303,12 +279,11 @@ impl ZenohMessage {
     pub fn make_query(
         key: WireExpr<'static>,
         parameters: String,
-        qid: ZInt,
+        qid: QueryId,
         target: Option<QueryTarget>,
         consolidation: ConsolidationMode,
         body: Option<QueryBody>,
         routing_context: Option<RoutingContext>,
-        attachment: Option<Attachment>,
     ) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::Query(Query {
@@ -321,21 +296,17 @@ impl ZenohMessage {
             }),
             channel: zmsg::default_channel::QUERY,
             routing_context,
-            attachment,
             #[cfg(feature = "stats")]
             size: None,
         }
     }
 
-    pub fn make_link_state_list(
-        link_states: Vec<LinkState>,
-        attachment: Option<Attachment>,
-    ) -> ZenohMessage {
+    pub fn make_link_state_list(link_states: Vec<LinkState>) -> ZenohMessage {
         ZenohMessage {
             body: ZenohBody::LinkStateList(LinkStateList { link_states }),
             channel: zmsg::default_channel::LINK_STATE_LIST,
             routing_context: None,
-            attachment,
+
             #[cfg(feature = "stats")]
             size: None,
         }
@@ -370,8 +341,8 @@ impl fmt::Debug for ZenohMessage {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "{:?} {:?} {:?} {:?}",
-            self.body, self.channel, self.routing_context, self.attachment
+            "{:?} {:?} {:?}",
+            self.body, self.channel, self.routing_context
         )?;
         #[cfg(feature = "stats")]
         write!(f, " {:?}", self.size)?;
@@ -393,12 +364,6 @@ impl ZenohMessage {
 
         let mut rng = rand::thread_rng();
 
-        let attachment = if rng.gen_bool(0.5) {
-            Some(Attachment::rand())
-        } else {
-            None
-        };
-
         let routing_context = if rng.gen_bool(0.5) {
             Some(RoutingContext::rand())
         } else {
@@ -409,11 +374,7 @@ impl ZenohMessage {
             .gen_range(Priority::MAX as u8..=Priority::MIN as u8)
             .try_into()
             .unwrap();
-        let reliability = if rng.gen_bool(0.5) {
-            Reliability::Reliable
-        } else {
-            Reliability::BestEffort
-        };
+        let reliability = Reliability::rand();
         let channel = Channel {
             priority,
             reliability,
@@ -432,7 +393,6 @@ impl ZenohMessage {
             body,
             channel,
             routing_context,
-            attachment,
         }
     }
 }

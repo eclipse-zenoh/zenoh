@@ -33,7 +33,6 @@ log = { workspace = true }
 rustls-pemfile = { workspace = true }
 webpki = { workspace = true }
 webpki-roots = { workspace = true }
-zenoh-cfg-properties = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }

@@ -11,85 +11,109 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::properties::EstablishmentProperties;
+// use super::properties::EstablishmentProperties;
+use crate::unicast::establishment::ext;
+use std::convert::TryFrom;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, HasWriter, Writer},
 };
-use zenoh_codec::{RCodec, WCodec, Zenoh060};
+use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_crypto::{BlockCipher, PseudoRng};
-use zenoh_protocol::core::{Property, WhatAmI, ZInt, ZenohId};
+use zenoh_protocol::core::{Resolution, WhatAmI, ZenohId};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Cookie {
-    pub whatami: WhatAmI,
-    pub zid: ZenohId,
-    pub sn_resolution: ZInt,
-    pub is_qos: bool,
-    pub nonce: ZInt,
-    pub properties: EstablishmentProperties,
+#[derive(Debug, PartialEq)]
+pub(crate) struct Cookie {
+    pub(crate) zid: ZenohId,
+    pub(crate) whatami: WhatAmI,
+    pub(crate) resolution: Resolution,
+    pub(crate) batch_size: u16,
+    pub(crate) nonce: u64,
+    // Extensions
+    pub(crate) ext_qos: ext::qos::StateAccept,
+    #[cfg(feature = "transport_multilink")]
+    pub(crate) ext_mlink: ext::multilink::StateAccept,
+    #[cfg(feature = "shared-memory")]
+    pub(crate) ext_shm: ext::shm::StateAccept,
+    #[cfg(feature = "transport_auth")]
+    pub(crate) ext_auth: ext::auth::StateAccept,
 }
 
-impl<W> WCodec<&Cookie, &mut W> for Zenoh060
+impl<W> WCodec<&Cookie, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Cookie) -> Self::Output {
-        let wai: ZInt = x.whatami.into();
-        self.write(&mut *writer, wai)?;
         self.write(&mut *writer, &x.zid)?;
-        self.write(&mut *writer, x.sn_resolution)?;
-        let is_qos = u8::from(x.is_qos);
-        self.write(&mut *writer, is_qos)?;
+        let wai: u8 = x.whatami.into();
+        self.write(&mut *writer, wai)?;
+        self.write(&mut *writer, x.resolution.as_u8())?;
+        self.write(&mut *writer, x.batch_size)?;
         self.write(&mut *writer, x.nonce)?;
-        self.write(&mut *writer, x.properties.as_slice())?;
+        // Extensions
+        self.write(&mut *writer, &x.ext_qos)?;
+        #[cfg(feature = "transport_multilink")]
+        self.write(&mut *writer, &x.ext_mlink)?;
+        #[cfg(feature = "shared-memory")]
+        self.write(&mut *writer, &x.ext_shm)?;
+        #[cfg(feature = "transport_auth")]
+        self.write(&mut *writer, &x.ext_auth)?;
 
         Ok(())
     }
 }
 
-impl<R> RCodec<Cookie, &mut R> for Zenoh060
+impl<R> RCodec<Cookie, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Cookie, Self::Error> {
-        let wai: ZInt = self.read(&mut *reader)?;
-        let whatami = WhatAmI::try_from(wai).ok_or(DidntRead)?;
         let zid: ZenohId = self.read(&mut *reader)?;
-        let sn_resolution: ZInt = self.read(&mut *reader)?;
-        let is_qos: u8 = self.read(&mut *reader)?;
-        let is_qos = is_qos == 1;
-        let nonce: ZInt = self.read(&mut *reader)?;
-        let mut ps: Vec<Property> = self.read(&mut *reader)?;
-        let mut properties = EstablishmentProperties::new();
-        for p in ps.drain(..) {
-            properties.insert(p).map_err(|_| DidntRead)?;
-        }
+        let wai: u8 = self.read(&mut *reader)?;
+        let whatami = WhatAmI::try_from(wai).map_err(|_| DidntRead)?;
+        let resolution: u8 = self.read(&mut *reader)?;
+        let resolution = Resolution::from(resolution);
+        let batch_size: u16 = self.read(&mut *reader)?;
+        let nonce: u64 = self.read(&mut *reader)?;
+        // Extensions
+        let ext_qos: ext::qos::StateAccept = self.read(&mut *reader)?;
+        #[cfg(feature = "transport_multilink")]
+        let ext_mlink: ext::multilink::StateAccept = self.read(&mut *reader)?;
+        #[cfg(feature = "shared-memory")]
+        let ext_shm: ext::shm::StateAccept = self.read(&mut *reader)?;
+        #[cfg(feature = "transport_auth")]
+        let ext_auth: ext::auth::StateAccept = self.read(&mut *reader)?;
 
         let cookie = Cookie {
-            whatami,
             zid,
-            sn_resolution,
-            is_qos,
+            whatami,
+            resolution,
+            batch_size,
             nonce,
-            properties,
+            ext_qos,
+            #[cfg(feature = "transport_multilink")]
+            ext_mlink,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
+            #[cfg(feature = "transport_auth")]
+            ext_auth,
         };
 
         Ok(cookie)
     }
 }
 
-pub(super) struct Zenoh060Cookie<'a> {
+pub(super) struct Zenoh080Cookie<'a> {
     pub(super) cipher: &'a BlockCipher,
     pub(super) prng: &'a mut PseudoRng,
-    pub(super) codec: Zenoh060,
+    pub(super) codec: Zenoh080,
 }
 
-impl<W> WCodec<&Cookie, &mut W> for &mut Zenoh060Cookie<'_>
+impl<W> WCodec<&Cookie, &mut W> for &mut Zenoh080Cookie<'_>
 where
     W: Writer,
 {
@@ -108,7 +132,7 @@ where
     }
 }
 
-impl<R> RCodec<Cookie, &mut R> for &mut Zenoh060Cookie<'_>
+impl<R> RCodec<Cookie, &mut R> for &mut Zenoh080Cookie<'_>
 where
     R: Reader,
 {
@@ -127,18 +151,24 @@ where
 
 impl Cookie {
     #[cfg(test)]
-    pub fn rand() -> Self {
+    pub(crate) fn rand() -> Self {
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
 
         Self {
-            whatami: WhatAmI::rand(),
             zid: ZenohId::default(),
-            sn_resolution: rng.gen(),
-            is_qos: rng.gen_bool(0.5),
+            whatami: WhatAmI::rand(),
+            resolution: Resolution::rand(),
+            batch_size: rng.gen(),
             nonce: rng.gen(),
-            properties: EstablishmentProperties::rand(),
+            ext_qos: ext::qos::StateAccept::rand(),
+            #[cfg(feature = "transport_multilink")]
+            ext_mlink: ext::multilink::StateAccept::rand(),
+            #[cfg(feature = "shared-memory")]
+            ext_shm: ext::shm::StateAccept::rand(),
+            #[cfg(feature = "transport_auth")]
+            ext_auth: ext::auth::StateAccept::rand(),
         }
     }
 }
@@ -177,12 +207,12 @@ mod tests {
                 run_single!($type, $rand, $codec, $codec, buffer);
 
                 println!("ZBuf: codec {}", std::any::type_name::<$type>());
-                let mut buffer = ZBuf::default();
+                let mut buffer = ZBuf::empty();
                 run_single!($type, $rand, $codec, $codec, buffer);
             };
         }
 
-        let codec = Zenoh060::default();
+        let codec = Zenoh080::new();
         run!(Cookie, Cookie::rand(), codec);
 
         let mut prng = PseudoRng::from_entropy();
@@ -190,10 +220,10 @@ mod tests {
         prng.fill(&mut key[..]);
 
         let cipher = BlockCipher::new(key);
-        let mut codec = Zenoh060Cookie {
+        let mut codec = Zenoh080Cookie {
             prng: &mut prng,
             cipher: &cipher,
-            codec: Zenoh060::default(),
+            codec: Zenoh080::new(),
         };
 
         run!(Cookie, Cookie::rand(), codec);

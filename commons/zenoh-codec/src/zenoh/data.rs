@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    RCodec, WCodec, Zenoh060, Zenoh060Condition, Zenoh060Header, Zenoh060HeaderReplyContext,
+    RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header, Zenoh080HeaderReplyContext,
 };
 use core::convert::TryInto;
 use uhlc::Timestamp;
@@ -23,12 +23,12 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{CongestionControl, Encoding, SampleKind, WireExpr, ZInt, ZenohId},
-    zenoh::{zmsg, Data, DataInfo, ReplierInfo, ReplyContext},
+    core::{CongestionControl, Encoding, WireExpr, ZenohId},
+    zenoh::{zmsg, Data, DataInfo, QueryId, ReplierInfo, ReplyContext, SampleKind, SourceSn},
 };
 
 // ReplyContext
-impl<W> WCodec<&ReplyContext, &mut W> for Zenoh060
+impl<W> WCodec<&ReplyContext, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -51,22 +51,21 @@ where
     }
 }
 
-impl<R> RCodec<ReplyContext, &mut R> for Zenoh060
+impl<R> RCodec<ReplyContext, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ReplyContext, Self::Error> {
-        let codec = Zenoh060Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<ReplyContext, &mut R> for Zenoh060Header
+impl<R> RCodec<ReplyContext, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -77,7 +76,7 @@ where
             return Err(DidntRead);
         }
 
-        let qid: ZInt = self.codec.read(&mut *reader)?;
+        let qid: QueryId = self.codec.read(&mut *reader)?;
         let replier = if imsg::has_flag(self.header, zmsg::flag::F) {
             None
         } else {
@@ -89,7 +88,7 @@ where
 }
 
 // DataInfo
-impl<W> WCodec<&DataInfo, &mut W> for Zenoh060
+impl<W> WCodec<&DataInfo, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -97,7 +96,7 @@ where
 
     fn write(self, writer: &mut W, x: &DataInfo) -> Self::Output {
         // Options
-        let mut options = 0;
+        let mut options: u8 = 0;
         #[cfg(feature = "shared-memory")]
         if x.sliced {
             options |= zmsg::data::info::SLICED;
@@ -120,7 +119,7 @@ where
         self.write(&mut *writer, options)?;
 
         if x.kind != SampleKind::Put {
-            self.write(&mut *writer, x.kind as ZInt)?;
+            self.write(&mut *writer, x.kind as u8)?;
         }
         if let Some(enc) = x.encoding.as_ref() {
             self.write(&mut *writer, enc)?;
@@ -139,7 +138,7 @@ where
     }
 }
 
-impl<R> RCodec<DataInfo, &mut R> for Zenoh060
+impl<R> RCodec<DataInfo, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -147,29 +146,29 @@ where
 
     fn read(self, reader: &mut R) -> Result<DataInfo, Self::Error> {
         let mut info = DataInfo::default();
-        let options: ZInt = self.read(&mut *reader)?;
+        let options: u8 = self.read(&mut *reader)?;
         #[cfg(feature = "shared-memory")]
         {
-            info.sliced = imsg::has_option(options, zmsg::data::info::SLICED);
+            info.sliced = imsg::has_flag(options, zmsg::data::info::SLICED);
         }
-        if imsg::has_option(options, zmsg::data::info::KIND) {
-            let kind: ZInt = self.read(&mut *reader)?;
+        if imsg::has_flag(options, zmsg::data::info::KIND) {
+            let kind: u8 = self.read(&mut *reader)?;
             info.kind = kind.try_into().map_err(|_| DidntRead)?;
         }
-        if imsg::has_option(options, zmsg::data::info::ENCODING) {
+        if imsg::has_flag(options, zmsg::data::info::ENCODING) {
             let encoding: Encoding = self.read(&mut *reader)?;
             info.encoding = Some(encoding);
         }
-        if imsg::has_option(options, zmsg::data::info::TIMESTAMP) {
+        if imsg::has_flag(options, zmsg::data::info::TIMESTAMP) {
             let timestamp: Timestamp = self.read(&mut *reader)?;
             info.timestamp = Some(timestamp);
         }
-        if imsg::has_option(options, zmsg::data::info::SRCID) {
+        if imsg::has_flag(options, zmsg::data::info::SRCID) {
             let source_id: ZenohId = self.read(&mut *reader)?;
             info.source_id = Some(source_id);
         }
-        if imsg::has_option(options, zmsg::data::info::SRCSN) {
-            let source_sn: ZInt = self.read(&mut *reader)?;
+        if imsg::has_flag(options, zmsg::data::info::SRCSN) {
+            let source_sn: SourceSn = self.read(&mut *reader)?;
             info.source_sn = Some(source_sn);
         }
 
@@ -178,7 +177,7 @@ where
 }
 
 // Data
-impl<W> WCodec<&Data, &mut W> for Zenoh060
+impl<W> WCodec<&Data, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -218,7 +217,7 @@ where
 
         #[cfg(feature = "shared-memory")]
         {
-            let codec = Zenoh060Condition::new(sliced);
+            let codec = Zenoh080Condition::new(sliced);
             codec.write(&mut *writer, &x.payload)?;
         }
 
@@ -231,22 +230,20 @@ where
     }
 }
 
-impl<R> RCodec<Data, &mut R> for Zenoh060
+impl<R> RCodec<Data, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Data, Self::Error> {
-        let mut codec = Zenoh060HeaderReplyContext {
+        let mut codec = Zenoh080HeaderReplyContext {
             header: self.read(&mut *reader)?,
-            ..Default::default()
+            reply_context: None,
+            codec: Zenoh080::new(),
         };
         if imsg::mid(codec.header) == zmsg::id::REPLY_CONTEXT {
-            let hodec = Zenoh060Header {
-                header: codec.header,
-                ..Default::default()
-            };
+            let hodec = Zenoh080Header::new(codec.header);
             codec.reply_context = Some(hodec.read(&mut *reader)?);
             codec.header = self.read(&mut *reader)?;
         }
@@ -254,7 +251,7 @@ where
     }
 }
 
-impl<R> RCodec<Data, &mut R> for Zenoh060HeaderReplyContext
+impl<R> RCodec<Data, &mut R> for Zenoh080HeaderReplyContext
 where
     R: Reader,
 {
@@ -271,10 +268,7 @@ where
             CongestionControl::Block
         };
 
-        let ccond = Zenoh060Condition {
-            condition: imsg::has_flag(self.header, zmsg::flag::K),
-            codec: self.codec,
-        };
+        let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, zmsg::flag::K));
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
 
         #[cfg(feature = "shared-memory")]
@@ -294,7 +288,7 @@ where
         let payload: ZBuf = {
             #[cfg(feature = "shared-memory")]
             {
-                let codec = Zenoh060Condition::new(is_sliced);
+                let codec = Zenoh080Condition::new(is_sliced);
                 codec.read(&mut *reader)?
             }
             #[cfg(not(feature = "shared-memory"))]

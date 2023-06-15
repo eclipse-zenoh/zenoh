@@ -20,28 +20,25 @@ mod routing;
 mod unit;
 
 use crate::{
-    RCodec, WCodec, Zenoh060, Zenoh060Header, Zenoh060HeaderReplyContext, Zenoh060Reliability,
+    RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080HeaderReplyContext, Zenoh080Reliability,
 };
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::{imsg, Attachment},
+    common::imsg,
     core::{Channel, Priority, Reliability},
     zenoh::{zmsg, ReplyContext, RoutingContext, ZenohBody, ZenohMessage},
 };
 
-impl<W> WCodec<&ZenohMessage, &mut W> for Zenoh060
+impl<W> WCodec<&ZenohMessage, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &ZenohMessage) -> Self::Output {
-        if let Some(a) = x.attachment.as_ref() {
-            self.write(&mut *writer, a)?;
-        }
         if let Some(r) = x.routing_context.as_ref() {
             self.write(&mut *writer, r)?;
         }
@@ -60,40 +57,28 @@ where
     }
 }
 
-impl<R> RCodec<ZenohMessage, &mut R> for Zenoh060
+impl<R> RCodec<ZenohMessage, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ZenohMessage, Self::Error> {
-        let codec = Zenoh060Reliability {
-            reliability: Reliability::default(),
-            ..Default::default()
-        };
+        let codec = Zenoh080Reliability::new(Reliability::default());
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<ZenohMessage, &mut R> for Zenoh060Reliability
+impl<R> RCodec<ZenohMessage, &mut R> for Zenoh080Reliability
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ZenohMessage, Self::Error> {
-        let mut codec = Zenoh060Header {
-            header: self.codec.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.codec.read(&mut *reader)?;
+        let mut codec = Zenoh080Header::new(header);
 
-        let attachment = if imsg::mid(codec.header) == imsg::id::ATTACHMENT {
-            let a: Attachment = codec.read(&mut *reader)?;
-            codec.header = self.codec.read(&mut *reader)?;
-            Some(a)
-        } else {
-            None
-        };
         let routing_context = if imsg::mid(codec.header) == zmsg::id::ROUTING_CONTEXT {
             let r: RoutingContext = codec.read(&mut *reader)?;
             codec.header = self.codec.read(&mut *reader)?;
@@ -108,32 +93,28 @@ where
         } else {
             Priority::default()
         };
+        let reply_context = if imsg::mid(codec.header) == zmsg::id::REPLY_CONTEXT {
+            let rc: ReplyContext = codec.read(&mut *reader)?;
+            codec.header = self.codec.read(&mut *reader)?;
+            Some(rc)
+        } else {
+            None
+        };
 
         let body = match imsg::mid(codec.header) {
-            zmsg::id::REPLY_CONTEXT => {
-                let rc: ReplyContext = codec.read(&mut *reader)?;
-                let rodec = Zenoh060HeaderReplyContext {
-                    header: self.codec.read(&mut *reader)?,
-                    reply_context: Some(rc),
-                    ..Default::default()
-                };
-                match imsg::mid(rodec.header) {
-                    zmsg::id::DATA => ZenohBody::Data(rodec.read(&mut *reader)?),
-                    zmsg::id::UNIT => ZenohBody::Unit(rodec.read(&mut *reader)?),
-                    _ => return Err(DidntRead),
-                }
-            }
             zmsg::id::DATA => {
-                let rodec = Zenoh060HeaderReplyContext {
+                let rodec = Zenoh080HeaderReplyContext {
                     header: codec.header,
-                    ..Default::default()
+                    reply_context,
+                    codec: Zenoh080::new(),
                 };
                 ZenohBody::Data(rodec.read(&mut *reader)?)
             }
             zmsg::id::UNIT => {
-                let rodec = Zenoh060HeaderReplyContext {
+                let rodec = Zenoh080HeaderReplyContext {
                     header: codec.header,
-                    ..Default::default()
+                    reply_context,
+                    codec: Zenoh080::new(),
                 };
                 ZenohBody::Unit(rodec.read(&mut *reader)?)
             }
@@ -146,7 +127,6 @@ where
 
         Ok(ZenohMessage {
             body,
-            attachment,
             channel: Channel {
                 priority,
                 reliability: self.reliability,

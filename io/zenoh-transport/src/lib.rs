@@ -19,14 +19,12 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 mod common;
 mod manager;
-mod multicast;
 mod primitives;
 #[cfg(feature = "shared-memory")]
 mod shm;
 pub mod unicast;
 
 pub use manager::*;
-pub use multicast::*;
 pub use primitives::*;
 use serde::Serialize;
 use std::any::Any;
@@ -46,11 +44,6 @@ pub trait TransportEventHandler: Send + Sync {
         peer: TransportPeer,
         transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>>;
-
-    fn new_multicast(
-        &self,
-        transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>>;
 }
 
 #[derive(Default)]
@@ -64,38 +57,6 @@ impl TransportEventHandler for DummyTransportEventHandler {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
     }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        Ok(Arc::new(DummyTransportMulticastEventHandler::default()))
-    }
-}
-
-/*************************************/
-/*            MULTICAST              */
-/*************************************/
-pub trait TransportMulticastEventHandler: Send + Sync {
-    fn new_peer(&self, peer: TransportPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>>;
-    fn closing(&self);
-    fn closed(&self);
-    fn as_any(&self) -> &dyn Any;
-}
-
-// Define an empty TransportCallback for the listener transport
-#[derive(Default)]
-pub struct DummyTransportMulticastEventHandler;
-
-impl TransportMulticastEventHandler for DummyTransportMulticastEventHandler {
-    fn new_peer(&self, _peer: TransportPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
-    }
-    fn closing(&self) {}
-    fn closed(&self) {}
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
 }
 
 /*************************************/
@@ -107,10 +68,10 @@ pub struct TransportPeer {
     pub zid: ZenohId,
     pub whatami: WhatAmI,
     pub is_qos: bool,
-    #[cfg(feature = "shared-memory")]
-    pub is_shm: bool,
     #[serde(skip)]
     pub links: Vec<Link>,
+    #[cfg(feature = "shared-memory")]
+    pub is_shm: bool,
 }
 
 pub trait TransportPeerEventHandler: Send + Sync {

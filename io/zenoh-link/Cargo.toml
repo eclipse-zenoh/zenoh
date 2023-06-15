@@ -38,7 +38,6 @@ transport_shm = ["zenoh-link-shm"]
 async-std = { workspace = true }
 async-trait = { workspace = true }
 rcgen = { workspace = true, optional = true }
-zenoh-cfg-properties = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-link-commons = { workspace = true }
 zenoh-link-quic = { workspace = true, optional = true }

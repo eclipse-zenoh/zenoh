@@ -22,7 +22,6 @@ use core::{
     convert::{From, TryFrom, TryInto},
     fmt,
     hash::Hash,
-    num::NonZeroU64,
     str::FromStr,
 };
 pub use uhlc::{Timestamp, NTP64};
@@ -32,27 +31,14 @@ use zenoh_result::{bail, zerror};
 /// The unique Id of the [`HLC`](uhlc::HLC) that generated the concerned [`Timestamp`].
 pub type TimestampId = uhlc::ID;
 
-/// A zenoh integer.
-pub type ZInt = u64;
-pub type ZiInt = i64;
-pub type NonZeroZInt = NonZeroU64;
-pub const ZINT_MAX_BYTES: usize = 10;
-
-// WhatAmI values
-pub type WhatAmI = whatami::WhatAmI;
-
 /// Constants and helpers for zenoh `whatami` flags.
 pub mod whatami;
-
-/// A numerical Id mapped to a key expression.
-pub type ExprId = ZInt;
-
-pub const EMPTY_EXPR_ID: ExprId = 0;
+pub use whatami::*;
 
 pub use zenoh_keyexpr::key_expr;
 
 pub mod wire_expr;
-pub use wire_expr::WireExpr;
+pub use wire_expr::*;
 
 mod cowstr;
 pub use cowstr::CowStr;
@@ -60,13 +46,19 @@ mod encoding;
 pub use encoding::{Encoding, KnownEncoding};
 
 pub mod locator;
-pub use locator::Locator;
+pub use locator::*;
+
 pub mod endpoint;
-pub use endpoint::EndPoint;
+pub use endpoint::*;
+
+pub mod resolution;
+pub use resolution::*;
+
+use crate::transport::TransportSn;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Property {
-    pub key: ZInt,
+    pub key: u64,
     pub value: Vec<u8>,
 }
 
@@ -90,9 +82,9 @@ impl fmt::Display for SampleKind {
     }
 }
 
-impl TryFrom<ZInt> for SampleKind {
-    type Error = ZInt;
-    fn try_from(kind: ZInt) -> Result<Self, ZInt> {
+impl TryFrom<u64> for SampleKind {
+    type Error = u64;
+    fn try_from(kind: u64) -> Result<Self, u64> {
         match kind {
             0 => Ok(SampleKind::Put),
             1 => Ok(SampleKind::Delete),
@@ -309,8 +301,8 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
 #[repr(u8)]
+#[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
 pub enum Priority {
     Control = 0,
     RealTime = 1,
@@ -363,6 +355,21 @@ pub enum Reliability {
     Reliable,
 }
 
+impl Reliability {
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+
+        let mut rng = rand::thread_rng();
+
+        if rng.gen_bool(0.5) {
+            Reliability::Reliable
+        } else {
+            Reliability::BestEffort
+        }
+    }
+}
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct Channel {
     pub priority: Priority,
@@ -409,17 +416,17 @@ impl fmt::Display for ConduitSnList {
 /// The kind of reliability.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
 pub struct ConduitSn {
-    pub reliable: ZInt,
-    pub best_effort: ZInt,
+    pub reliable: TransportSn,
+    pub best_effort: TransportSn,
 }
 
 /// The kind of congestion control.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum CongestionControl {
-    Block,
     #[default]
-    Drop,
+    Drop = 0,
+    Block = 1,
 }
 
 /// The subscription mode.
@@ -427,8 +434,8 @@ pub enum CongestionControl {
 #[repr(u8)]
 pub enum SubMode {
     #[default]
-    Push,
-    Pull,
+    Push = 0,
+    Pull = 1,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -439,8 +446,8 @@ pub struct SubInfo {
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct QueryableInfo {
-    pub complete: ZInt, // Default 0: incomplete
-    pub distance: ZInt, // Default 0: no distance
+    pub complete: u64, // Default 0: incomplete
+    pub distance: u64, // Default 0: no distance
 }
 
 /// The kind of consolidation.
@@ -468,15 +475,5 @@ pub enum QueryTarget {
     All,
     AllComplete,
     #[cfg(feature = "complete_n")]
-    Complete(ZInt),
-}
-
-pub(crate) fn split_once(s: &str, c: char) -> (&str, &str) {
-    match s.find(c) {
-        Some(index) => {
-            let (l, r) = s.split_at(index);
-            (l, &r[1..])
-        }
-        None => (s, ""),
-    }
+    Complete(u64),
 }

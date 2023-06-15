@@ -20,7 +20,7 @@ use std::convert::TryFrom;
 #[cfg(feature = "shared-memory")]
 use std::sync::Arc;
 
-use zenoh_cfg_properties::Properties;
+use zenoh_collections::Properties;
 use zenoh_result::ZError;
 
 use crate::buffers::ZBuf;
@@ -50,7 +50,7 @@ impl Value {
     /// Creates an empty Value.
     pub fn empty() -> Self {
         Value {
-            payload: ZBuf::default(),
+            payload: ZBuf::empty(),
             encoding: KnownEncoding::AppOctetStream.into(),
         }
     }

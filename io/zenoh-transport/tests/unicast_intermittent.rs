@@ -29,8 +29,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportPeer,
+    TransportPeerEventHandler, TransportUnicast,
 };
 
 const MSG_SIZE: usize = 8;
@@ -56,13 +56,6 @@ impl TransportEventHandler for SHRouterIntermittent {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
     }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        panic!();
-    }
 }
 
 // Transport Handler for the intermittent clients
@@ -76,13 +69,6 @@ impl TransportEventHandler for SHClientIntermittent {
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
-    }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        panic!();
     }
 }
 
@@ -104,13 +90,6 @@ impl TransportEventHandler for SHClientStable {
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(SCClient::new(self.counter.clone())))
-    }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        panic!();
     }
 }
 
@@ -276,7 +255,6 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         let data_info = None;
         let routing_context = None;
         let reply_context = None;
-        let attachment = None;
 
         let message = ZenohMessage::make_data(
             key,
@@ -286,7 +264,6 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             data_info,
             routing_context,
             reply_context,
-            attachment,
         );
 
         let mut ticks: Vec<usize> = (0..=MSG_COUNT).step_by(MSG_COUNT / 10).collect();

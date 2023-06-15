@@ -23,11 +23,13 @@ use config::{
     TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_PRIVATE_KEY_FILE,
 };
 use std::net::SocketAddr;
-use zenoh_cfg_properties::Properties;
-use zenoh_config::{Config, Locator};
+use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
-use zenoh_protocol::core::endpoint::Address;
+use zenoh_protocol::core::{
+    endpoint::{Address, Parameters},
+    Locator,
+};
 use zenoh_result::{bail, ZResult};
 
 mod unicast;
@@ -47,43 +49,41 @@ pub const QUIC_LOCATOR_PREFIX: &str = "quic";
 
 #[derive(Default, Clone, Copy, Debug)]
 pub struct QuicLocatorInspector;
+
 #[async_trait]
 impl LocatorInspector for QuicLocatorInspector {
     fn protocol(&self) -> &str {
         QUIC_LOCATOR_PREFIX
     }
+
     async fn is_multicast(&self, _locator: &Locator) -> ZResult<bool> {
         Ok(false)
     }
 }
+
 #[derive(Default, Clone, Copy, Debug)]
 pub struct QuicConfigurator;
+
 #[async_trait]
 impl ConfigurationInspector<Config> for QuicConfigurator {
-    async fn inspect_config(&self, config: &Config) -> ZResult<Properties> {
-        let mut properties = Properties::default();
+    async fn inspect_config(&self, config: &Config) -> ZResult<String> {
+        let mut ps: Vec<(&str, &str)> = vec![];
 
         let c = config.transport().link().tls();
         if let Some(tls_ca_certificate) = c.root_ca_certificate() {
-            properties.insert(
-                TLS_ROOT_CA_CERTIFICATE_FILE.into(),
-                tls_ca_certificate.into(),
-            );
+            ps.push((TLS_ROOT_CA_CERTIFICATE_FILE, tls_ca_certificate));
         }
         if let Some(tls_server_private_key) = c.server_private_key() {
-            properties.insert(
-                TLS_SERVER_PRIVATE_KEY_FILE.into(),
-                tls_server_private_key.into(),
-            );
+            ps.push((TLS_SERVER_PRIVATE_KEY_FILE, tls_server_private_key));
         }
         if let Some(tls_server_certificate) = c.server_certificate() {
-            properties.insert(
-                TLS_SERVER_CERTIFICATE_FILE.into(),
-                tls_server_certificate.into(),
-            );
+            ps.push((TLS_SERVER_CERTIFICATE_FILE, tls_server_certificate));
         }
 
-        Ok(properties)
+        let mut s = String::new();
+        Parameters::extend(ps.drain(..), &mut s);
+
+        Ok(s)
     }
 }
 
@@ -101,16 +101,14 @@ zconfigurable! {
 }
 
 pub mod config {
-    use zenoh_cfg_properties::config::*;
+    pub const TLS_ROOT_CA_CERTIFICATE_FILE: &str = "root_ca_certificate_file";
+    pub const TLS_ROOT_CA_CERTIFICATE_RAW: &str = "root_ca_certificate_raw";
 
-    pub const TLS_ROOT_CA_CERTIFICATE_FILE: &str = ZN_TLS_ROOT_CA_CERTIFICATE_STR;
-    pub const TLS_ROOT_CA_CERTIFICATE_RAW: &str = "tls_root_ca_certificate_raw";
+    pub const TLS_SERVER_PRIVATE_KEY_FILE: &str = "server_private_key_file";
+    pub const TLS_SERVER_PRIVATE_KEY_RAW: &str = "server_private_key_raw";
 
-    pub const TLS_SERVER_PRIVATE_KEY_FILE: &str = ZN_TLS_SERVER_PRIVATE_KEY_STR;
-    pub const TLS_SERVER_PRIVATE_KEY_RAW: &str = "tls_server_private_key_raw";
-
-    pub const TLS_SERVER_CERTIFICATE_FILE: &str = ZN_TLS_SERVER_CERTIFICATE_STR;
-    pub const TLS_SERVER_CERTIFICATE_RAW: &str = "tls_server_certificate_raw";
+    pub const TLS_SERVER_CERTIFICATE_FILE: &str = "server_certificate_file";
+    pub const TLS_SERVER_CERTIFICATE_RAW: &str = "server_certificate_raw";
 }
 
 async fn get_quic_addr(address: &Address<'_>) -> ZResult<SocketAddr> {

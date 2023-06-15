@@ -36,7 +36,7 @@ use {
     zenoh_core::Resolvable,
     zenoh_core::Result as ZResult,
     zenoh_core::SyncResolve,
-    zenoh_protocol::core::SubInfo,
+    zenoh_protocol::zenoh::SubInfo,
 };
 
 #[zenoh_macros::unstable]

@@ -28,7 +28,6 @@
 //! use std::sync::Arc;
 //! use async_trait::async_trait;
 //! use zenoh::prelude::r#async::*;
-//! use zenoh::properties::properties_to_json_value;
 //! use zenoh::time::Timestamp;
 //! use zenoh_backend_traits::*;
 //! use zenoh_backend_traits::config::*;

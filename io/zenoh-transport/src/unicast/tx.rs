@@ -63,9 +63,23 @@ impl TransportUnicastInner {
         false
     }
 
+    #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(super) fn schedule_first_fit(&self, msg: ZenohMessage) -> bool {
+    pub(crate) fn schedule(&self, mut msg: ZenohMessage) -> bool {
+        #[cfg(feature = "shared-memory")]
+        {
+            let res = if self.config.is_shm {
+                crate::shm::map_zmsg_to_shminfo(&mut msg)
+            } else {
+                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.state.unicast.shm.reader)
+            };
+            if let Err(e) = res {
+                log::trace!("Failed SHM conversion: {}", e);
+                return false;
+            }
+        }
+
         #[cfg(feature = "stats")]
         match &msg.body {
             ZenohBody::Data(data) => match data.reply_context {

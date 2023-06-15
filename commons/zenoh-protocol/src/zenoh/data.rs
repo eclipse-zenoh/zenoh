@@ -11,8 +11,43 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{CongestionControl, Encoding, SampleKind, Timestamp, WireExpr, ZInt, ZenohId};
+use crate::{
+    core::{CongestionControl, Encoding, Timestamp, WireExpr, ZenohId},
+    zenoh::QueryId,
+};
+use core::{convert::TryFrom, fmt};
 use zenoh_buffers::ZBuf;
+
+/// The kind of a `Sample`.
+#[repr(u8)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub enum SampleKind {
+    /// if the `Sample` was issued by a `put` operation.
+    #[default]
+    Put = 0,
+    /// if the `Sample` was issued by a `delete` operation.
+    Delete = 1,
+}
+
+impl fmt::Display for SampleKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SampleKind::Put => write!(f, "PUT"),
+            SampleKind::Delete => write!(f, "DELETE"),
+        }
+    }
+}
+
+impl TryFrom<u8> for SampleKind {
+    type Error = u8;
+    fn try_from(kind: u8) -> Result<Self, u8> {
+        match kind {
+            0 => Ok(SampleKind::Put),
+            1 => Ok(SampleKind::Delete),
+            _ => Err(kind),
+        }
+    }
+}
 
 /// # ReplyContext decorator
 ///
@@ -40,13 +75,13 @@ pub struct ReplierInfo {
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplyContext {
-    pub qid: ZInt,
+    pub qid: QueryId,
     pub replier: Option<ReplierInfo>,
 }
 
 impl ReplyContext {
     // Note: id replier_id=None flag F is set, meaning it's a REPLY_FINAL
-    pub fn new(qid: ZInt, replier: Option<ReplierInfo>) -> Self {
+    pub fn new(qid: QueryId, replier: Option<ReplierInfo>) -> Self {
         Self { qid, replier }
     }
 
@@ -62,7 +97,7 @@ impl ReplyContext {
 
         let mut rng = rand::thread_rng();
 
-        let qid: ZInt = rng.gen();
+        let qid: QueryId = rng.gen();
         let replier = if rng.gen_bool(0.5) {
             Some(ReplierInfo {
                 id: ZenohId::default(),
@@ -111,6 +146,8 @@ impl ReplyContext {
 /// - if options & (1 << 0) then the payload is sliced
 ///
 /// ```
+pub type SourceSn = u64;
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DataInfo {
     #[cfg(feature = "shared-memory")]
@@ -119,7 +156,7 @@ pub struct DataInfo {
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
     pub source_id: Option<ZenohId>,
-    pub source_sn: Option<ZInt>,
+    pub source_sn: Option<SourceSn>,
 }
 
 impl DataInfo {

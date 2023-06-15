@@ -25,8 +25,8 @@ use crate::{
 };
 use zenoh_core::SyncResolve;
 use zenoh_protocol::{
-    core::{Encoding, KnownEncoding, SampleKind, WireExpr},
-    zenoh::{DataInfo, ZenohMessage},
+    core::{Encoding, KnownEncoding, WireExpr},
+    zenoh::{DataInfo, SampleKind, ZenohMessage},
 };
 use zenoh_transport::{TransportEventHandler, TransportPeerEventHandler};
 
@@ -139,13 +139,6 @@ impl TransportEventHandler for Handler {
         } else {
             bail!("Unable to build keyexpr from zid")
         }
-    }
-
-    fn new_multicast(
-        &self,
-        _transport: zenoh_transport::TransportMulticast,
-    ) -> ZResult<Arc<dyn zenoh_transport::TransportMulticastEventHandler>> {
-        bail!("unimplemented")
     }
 }
 

@@ -11,20 +11,21 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use alloc::vec::Vec;
+use core::convert::TryFrom;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{Locator, WhatAmI, ZInt, ZenohId},
+    core::{Locator, WhatAmI, ZenohId},
     zenoh::{zmsg, LinkState, LinkStateList},
 };
 
 // LinkState
-impl<W> WCodec<&LinkState, &mut W> for Zenoh060
+impl<W> WCodec<&LinkState, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -45,13 +46,13 @@ where
         self.write(&mut *writer, options)?;
 
         // Body
-        self.write(&mut *writer, &x.psid)?;
+        self.write(&mut *writer, x.psid)?;
         self.write(&mut *writer, x.sn)?;
         if let Some(zid) = x.zid.as_ref() {
             self.write(&mut *writer, zid)?;
         }
         if let Some(wai) = x.whatami {
-            let wai: ZInt = wai.into();
+            let wai: u8 = wai.into();
             self.write(&mut *writer, wai)?;
         }
         if let Some(locators) = x.locators.as_ref() {
@@ -66,16 +67,16 @@ where
     }
 }
 
-impl<R> RCodec<LinkState, &mut R> for Zenoh060
+impl<R> RCodec<LinkState, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<LinkState, Self::Error> {
-        let options: ZInt = self.read(&mut *reader)?;
-        let psid: ZInt = self.read(&mut *reader)?;
-        let sn: ZInt = self.read(&mut *reader)?;
+        let options: u64 = self.read(&mut *reader)?;
+        let psid: u64 = self.read(&mut *reader)?;
+        let sn: u64 = self.read(&mut *reader)?;
         let zid = if imsg::has_option(options, zmsg::link_state::PID) {
             let zid: ZenohId = self.read(&mut *reader)?;
             Some(zid)
@@ -83,8 +84,8 @@ where
             None
         };
         let whatami = if imsg::has_option(options, zmsg::link_state::WAI) {
-            let wai: ZInt = self.read(&mut *reader)?;
-            Some(WhatAmI::try_from(wai).ok_or(DidntRead)?)
+            let wai: u8 = self.read(&mut *reader)?;
+            Some(WhatAmI::try_from(wai).map_err(|_| DidntRead)?)
         } else {
             None
         };
@@ -95,9 +96,9 @@ where
             None
         };
         let len: usize = self.read(&mut *reader)?;
-        let mut links: Vec<ZInt> = Vec::with_capacity(len);
+        let mut links: Vec<u64> = Vec::with_capacity(len);
         for _ in 0..len {
-            let l: ZInt = self.read(&mut *reader)?;
+            let l: u64 = self.read(&mut *reader)?;
             links.push(l);
         }
 
@@ -113,7 +114,7 @@ where
 }
 
 // LinkStateList
-impl<W> WCodec<&LinkStateList, &mut W> for Zenoh060
+impl<W> WCodec<&LinkStateList, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -134,22 +135,21 @@ where
     }
 }
 
-impl<R> RCodec<LinkStateList, &mut R> for Zenoh060
+impl<R> RCodec<LinkStateList, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<LinkStateList, Self::Error> {
-        let codec = Zenoh060Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<LinkStateList, &mut R> for Zenoh060Header
+impl<R> RCodec<LinkStateList, &mut R> for Zenoh080Header
 where
     R: Reader,
 {

@@ -11,15 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use core::convert::TryInto;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::{common::imsg, core::Priority, transport::tmsg};
+use zenoh_protocol::{common::imsg, core::Priority};
 
-impl<W> WCodec<&Priority, &mut W> for Zenoh060
+impl<W> WCodec<&Priority, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -27,28 +27,27 @@ where
 
     fn write(self, writer: &mut W, x: &Priority) -> Self::Output {
         // Header
-        let header = tmsg::id::PRIORITY | ((*x as u8) << imsg::HEADER_BITS);
+        let header = imsg::id::PRIORITY | ((*x as u8) << imsg::HEADER_BITS);
         self.write(&mut *writer, header)?;
         Ok(())
     }
 }
 
-impl<R> RCodec<Priority, &mut R> for Zenoh060
+impl<R> RCodec<Priority, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Priority, Self::Error> {
-        let codec = Zenoh060Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<Priority, &mut R> for Zenoh060Header
+impl<R> RCodec<Priority, &mut R> for Zenoh080Header
 where
     R: Reader,
 {

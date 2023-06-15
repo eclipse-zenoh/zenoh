@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060};
+use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use core::convert::TryInto;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -20,8 +20,91 @@ use zenoh_buffers::{
 
 const VLE_LEN: usize = 10;
 
-// ZInt
-impl<W> WCodec<u64, &mut W> for Zenoh060
+impl LCodec<u64> for Zenoh080 {
+    fn w_len(self, x: u64) -> usize {
+        const B1: u64 = u64::MAX << 7;
+        const B2: u64 = u64::MAX << (7 * 2);
+        const B3: u64 = u64::MAX << (7 * 3);
+        const B4: u64 = u64::MAX << (7 * 4);
+        const B5: u64 = u64::MAX << (7 * 5);
+        const B6: u64 = u64::MAX << (7 * 6);
+        const B7: u64 = u64::MAX << (7 * 7);
+        const B8: u64 = u64::MAX << (7 * 8);
+        const B9: u64 = u64::MAX << (7 * 9);
+
+        if (x & B1) == 0 {
+            1
+        } else if (x & B2) == 0 {
+            2
+        } else if (x & B3) == 0 {
+            3
+        } else if (x & B4) == 0 {
+            4
+        } else if (x & B5) == 0 {
+            5
+        } else if (x & B6) == 0 {
+            6
+        } else if (x & B7) == 0 {
+            7
+        } else if (x & B8) == 0 {
+            8
+        } else if (x & B9) == 0 {
+            9
+        } else {
+            10
+        }
+    }
+}
+
+impl LCodec<usize> for Zenoh080 {
+    fn w_len(self, x: usize) -> usize {
+        self.w_len(x as u64)
+    }
+}
+
+impl LCodec<u32> for Zenoh080 {
+    fn w_len(self, x: u32) -> usize {
+        self.w_len(x as u64)
+    }
+}
+
+impl LCodec<u16> for Zenoh080 {
+    fn w_len(self, x: u16) -> usize {
+        self.w_len(x as u64)
+    }
+}
+
+impl LCodec<u8> for Zenoh080 {
+    fn w_len(self, _: u8) -> usize {
+        1
+    }
+}
+
+// u8
+impl<W> WCodec<u8, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: u8) -> Self::Output {
+        writer.write_u8(x)
+    }
+}
+
+impl<R> RCodec<u8, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<u8, Self::Error> {
+        reader.read_u8()
+    }
+}
+
+// u64
+impl<W> WCodec<u64, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -44,18 +127,7 @@ where
     }
 }
 
-impl<W> WCodec<&u64, &mut W> for Zenoh060
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: &u64) -> Self::Output {
-        self.write(writer, *x)
-    }
-}
-
-impl<R> RCodec<u64, &mut R> for Zenoh060
+impl<R> RCodec<u64, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -82,30 +154,195 @@ where
     }
 }
 
-// usize
-impl<W> WCodec<usize, &mut W> for Zenoh060
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
+// Derive impls
+macro_rules! uint_impl {
+    ($uint:ty) => {
+        impl<W> WCodec<$uint, &mut W> for Zenoh080
+        where
+            W: Writer,
+        {
+            type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: usize) -> Self::Output {
-        let x: u64 = x.try_into().map_err(|_| DidntWrite)?;
-        self.write(writer, x)
-    }
+            fn write(self, writer: &mut W, x: $uint) -> Self::Output {
+                let x: u64 = x.try_into().map_err(|_| DidntWrite)?;
+                self.write(writer, x)
+            }
+        }
+
+        impl<R> RCodec<$uint, &mut R> for Zenoh080
+        where
+            R: Reader,
+        {
+            type Error = DidntRead;
+
+            fn read(self, reader: &mut R) -> Result<$uint, Self::Error> {
+                let x: u64 = self.read(reader)?;
+                Ok(x as $uint)
+            }
+        }
+    };
 }
 
-impl<R> RCodec<usize, &mut R> for Zenoh060
-where
-    R: Reader,
-{
-    type Error = DidntRead;
+uint_impl!(u16);
+uint_impl!(u32);
+uint_impl!(usize);
 
-    fn read(self, reader: &mut R) -> Result<usize, Self::Error> {
-        let x: u64 = <Self as RCodec<u64, &mut R>>::read(self, reader)?;
-        x.try_into().map_err(|_| DidntRead)
-    }
+macro_rules! uint_ref_impl {
+    ($uint:ty) => {
+        impl<W> WCodec<&$uint, &mut W> for Zenoh080
+        where
+            W: Writer,
+        {
+            type Output = Result<(), DidntWrite>;
+
+            fn write(self, writer: &mut W, x: &$uint) -> Self::Output {
+                self.write(writer, *x)
+            }
+        }
+    };
 }
+
+uint_ref_impl!(u8);
+uint_ref_impl!(u16);
+uint_ref_impl!(u32);
+uint_ref_impl!(u64);
+uint_ref_impl!(usize);
+
+// Encode unsigned integer and verify that the size boundaries are respected
+macro_rules! zint_impl_codec {
+    ($zint:ty, $bound:ty) => {
+        impl<W> WCodec<$zint, &mut W> for Zenoh080Bounded<$bound>
+        where
+            W: Writer,
+        {
+            type Output = Result<(), DidntWrite>;
+
+            fn write(self, writer: &mut W, x: $zint) -> Self::Output {
+                let t: $bound = x.try_into().map_err(|_| DidntWrite)?;
+                Zenoh080.write(writer, t)
+            }
+        }
+
+        impl<R> RCodec<$zint, &mut R> for Zenoh080Bounded<$bound>
+        where
+            R: Reader,
+        {
+            type Error = DidntRead;
+
+            fn read(self, reader: &mut R) -> Result<$zint, Self::Error> {
+                let x: u64 = Zenoh080.read(reader)?;
+                let t: $bound = x.try_into().map_err(|_| DidntRead)?;
+                t.try_into().map_err(|_| DidntRead)
+            }
+        }
+    };
+}
+macro_rules! zint_impl {
+    ($zint:ty) => {
+        zint_impl_codec!($zint, u8);
+        zint_impl_codec!($zint, u16);
+        zint_impl_codec!($zint, u32);
+        zint_impl_codec!($zint, u64);
+        zint_impl_codec!($zint, usize);
+    };
+}
+
+zint_impl!(u8);
+zint_impl!(u16);
+zint_impl!(u32);
+zint_impl!(u64);
+zint_impl!(usize);
+
+// const MAX_LEN: usize = 9;
+// const VLE_THR: u64 = 0xf8; // 248
+// impl<W> WCodec<u64, &mut W> for Zenoh080
+// where
+//     W: Writer,
+// {
+//     type Output = Result<(), DidntWrite>;
+//     fn write(self, writer: &mut W, mut x: u64) -> Self::Output {
+//         writer.with_slot(MAX_LEN, move |into| {
+//             if x < VLE_THR {
+//                 into[0] = x as u8;
+//                 return 1;
+//             }
+//             x -= VLE_THR - 1;
+//             // Safety:
+//             // The `if x < VLE_THR` check at the beginning followed by `x -= VLE_THR - 1`
+//             // guarantees at this point that `x` is never `0`. Since `x` is 64bit,
+//             // then `n` is guaranteed to have a value between 1 and 8, both inclusives.
+//             // `into` is guaranteed to be exactly 9 bytes long. Therefore, copying at most
+//             // 8 bytes with a pointer offest of 1 is actually safe.
+//             let n = 8 - (x.leading_zeros() / 8) as usize;
+//             unsafe {
+//                 core::ptr::copy_nonoverlapping(
+//                     x.to_le_bytes().as_ptr(),
+//                     into.as_mut_ptr().offset(1),
+//                     n,
+//                 )
+//             }
+//             into[0] = VLE_THR as u8 | (n - 1) as u8;
+//             1 + n
+//         })
+//     }
+// }
+
+// impl<R> RCodec<u64, &mut R> for Zenoh080
+// where
+//     R: Reader,
+// {
+//     type Error = DidntRead;
+//     fn read(self, reader: &mut R) -> Result<u64, Self::Error> {
+//         let b = reader.read_u8()?;
+//         if b < (VLE_THR as u8) {
+//             return Ok(b as u64);
+//         }
+//         let n = (1 + (b & !VLE_THR as u8)) as usize;
+//         let mut u64: [u8; 8] = 0u64.to_le_bytes();
+//         reader.read_exact(&mut u64[0..n])?;
+//         let u64 = u64::from_le_bytes(u64);
+//         Ok(u64.saturating_add(VLE_THR - 1))
+//     }
+// }
+
+// mod tests {
+//     #[test]
+//     fn u64_overhead() {
+//         use crate::{WCodec, Zenoh080};
+//         use zenoh_buffers::{
+//             reader::{HasReader, Reader},
+//             writer::HasWriter,
+//         };
+
+//         fn overhead(x: u64) -> usize {
+//             let codec = Zenoh080::new();
+//             let mut b = vec![];
+//             let mut w = b.writer();
+//             codec.write(&mut w, x).unwrap();
+//             let r = b.reader().remaining();
+//             println!("{} {}", x, r);
+//             r
+//         }
+
+//         assert_eq!(overhead(247), 1);
+//         assert_eq!(overhead(248), 2);
+//         assert_eq!(overhead(502), 2);
+//         assert_eq!(overhead(503), 3);
+//         assert_eq!(overhead(65_782), 3);
+//         assert_eq!(overhead(65_783), 4);
+//         assert_eq!(overhead(16_777_462), 4);
+//         assert_eq!(overhead(16_777_463), 5);
+//         assert_eq!(overhead(4_294_967_542), 5);
+//         assert_eq!(overhead(4_294_967_543), 6);
+//         assert_eq!(overhead(1_099_511_628_022), 6);
+//         assert_eq!(overhead(1_099_511_628_023), 7);
+//         assert_eq!(overhead(281_474_976_710_902), 7);
+//         assert_eq!(overhead(281_474_976_710_903), 8);
+//         assert_eq!(overhead(72_057_594_037_928_182), 8);
+//         assert_eq!(overhead(72_057_594_037_928_183), 9);
+//         assert_eq!(overhead(u64::MAX), 9);
+//     }
+// }
 
 // macro_rules! non_zero_array {
 //     ($($i: expr,)*) => {
@@ -113,9 +350,9 @@ where
 //     };
 // }
 
-// impl Zenoh070 {
+// impl Zenoh080 {
 //     pub const fn preview_length(&self, x: u64) -> NonZeroU8 {
-//         let x = match core::num::NonZeroU64::new(x) {
+//         let x = match NonZeroU64::new(x) {
 //             Some(x) => x,
 //             None => {
 //                 return unsafe { NonZeroU8::new_unchecked(1) };
@@ -131,197 +368,161 @@ where
 //     }
 // }
 
-// macro_rules! impl_unsigned_codec {
-//     ($t: ty) => {
-//         impl<Codec, Buffer> WCodec<Buffer, $t> for Codec
-//         where
-//             Codec: WCodec<Buffer, u64>,
-//         {
-//             type Output = <Codec as WCodec<Buffer, u64>>::Output;
-//             fn write(self, writer: Buffer, x: $t) -> Self::Output {
-//                 self.write(writer, x as u64)
-//             }
-//         }
-
-//         impl<Codec, Reader> RCodec<Reader, $t> for Codec
-//         where
-//             Codec: RCodec<Reader, u64>,
-//         {
-//             type Error = ConversionOrReadError<u64, $t, <Codec as RCodec<Reader, u64>>::Error>;
-
-//             fn read(self, writer: Reader) -> Result<$t, Self::Error> {
-//                 match self.read(writer) {
-//                     Ok(v) => v
-//                         .try_into()
-//                         .map_err(|e| ConversionOrReadError::ConversionError(e)),
-//                     Err(e) => Err(ConversionOrReadError::ReadError(e)),
-//                 }
-//             }
-//         }
-//     };
-// }
-
-// impl_unsigned_codec!(usize);
-// impl_unsigned_codec!(u32);
-// impl_unsigned_codec!(u16);
-// impl_unsigned_codec!(u8);
-
-// #[derive(Debug, Clone)]
-// pub enum ConversionOrReadError<T, U, E>
-// where
-//     T: TryInto<U>,
-//     <T as TryInto<U>>::Error: core::fmt::Debug + Clone,
-// {
-//     ReadError(E),
-//     ConversionError(<T as TryInto<U>>::Error),
-// }
-
-// impl<W> WCodec<&mut W, u64> for &Zenoh070
+// impl<W> WCodec<u64, &mut W> for Zenoh080
 // where
 //     W: Writer,
 // {
 //     type Output = Result<(), DidntWrite>;
 
 //     fn write(self, writer: &mut W, x: u64) -> Self::Output {
+//         const VLE_LEN: usize = 9;
+//         const VLE_MASK: [u8; VLE_LEN] = [
+//             0b11111111, // This is padding to avoid needless subtractions on index access
+//             0, 0b00000001, 0b00000011, 0b00000111, 0b00001111, 0b00011111, 0b00111111, 0b01111111,
+//         ];
 //         const VLE_SHIFT: [u8; 65] = [
 //             1, // This is padding to avoid needless subtractions on index access
 //             1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 5,
 //             5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 0, 0,
 //             0, 0, 0, 0, 0, 0,
 //         ];
-//         const VLE_MASK: [u8; 9] = [
-//             0b11111111, // This is padding to avoid needless subtractions on index access
-//             0, 0b00000001, 0b00000011, 0b00000111, 0b00001111, 0b00011111, 0b00111111, 0b01111111,
-//         ];
-//         const VLE_LEN: usize = 9;
-//         writer.with_slot(VLE_LEN, move |mut buffer| {
+
+//         writer.with_slot(VLE_LEN, move |buffer| {
 //             // since leading_zeros will jump conditionally on 0 anyway (`asm {bsr 0}` is UB), might as well jump to return
-//             let x = match core::num::NonZeroU64::new(x) {
+//             let x = match NonZeroU64::new(x) {
 //                 Some(x) => x,
 //                 None => {
 //                     buffer[0] = 0;
 //                     return 1;
 //                 }
 //             };
+
 //             let needed_bits = u64::BITS - x.leading_zeros();
 //             let payload_size = VLE_SHIFT[needed_bits as usize];
 //             let shift_payload = payload_size == 0;
 //             let mut x: u64 = x.into();
 //             x <<= payload_size;
 //             let serialized = x.to_le_bytes();
+
 //             unsafe {
-//                 core::ptr::copy_nonoverlapping(
+//                 ptr::copy_nonoverlapping(
 //                     serialized.as_ptr(),
 //                     buffer.as_mut_ptr().offset(shift_payload as isize),
 //                     u64::BITS as usize / 8,
 //                 )
 //             };
+
 //             let needed_bytes = payload_size as usize;
 //             buffer[0] |= VLE_MASK[needed_bytes];
-//             let to_write = if shift_payload { VLE_LEN } else { needed_bytes };
-//             to_write
+//             if shift_payload {
+//                 VLE_LEN
+//             } else {
+//                 needed_bytes
+//             }
 //         })?;
+
 //         Ok(())
 //     }
 // }
-// impl<'a, R> RCodec<&mut R, u64> for &Zenoh070
+
+// impl<W> WCodec<&u64, &mut W> for Zenoh080
 // where
-//     R: Reader<'a>,
+//     W: Writer,
 // {
-//     type Error = ();
+//     type Output = Result<(), DidntWrite>;
+
+//     fn write(self, writer: &mut W, x: &u64) -> Self::Output {
+//         self.write(writer, *x)
+//     }
+// }
+
+// impl<R> RCodec<u64, &mut R> for Zenoh080
+// where
+//     R: Reader,
+// {
+//     type Error = DidntRead;
+
 //     fn read(self, reader: &mut R) -> Result<u64, Self::Error> {
 //         let mut buffer = [0; 8];
-//         buffer[0] = match reader.read_u8() {
-//             None => return Err(()),
-//             Some(x) => x,
-//         };
+//         buffer[0] = reader.read_u8()?;
+
 //         // GCC: `__builtin_ctz(~buffer[0])`, clang: `__tzcnt_u64(~buffer[0])`
 //         let byte_count = (buffer[0].trailing_ones()) as usize;
 //         if byte_count == 0 {
 //             return Ok(u64::from_le_bytes(buffer) >> 1);
 //         }
+
 //         let shift_payload = (byte_count == 8) as usize; // branches are evil
-//         let shift_payload_multiplier = (1 - shift_payload) as usize;
+//         let shift_payload_multiplier = 1 - shift_payload;
 
 //         let len = byte_count + shift_payload_multiplier;
-//         reader.read(&mut buffer[shift_payload_multiplier..len]);
+//         reader.read_exact(&mut buffer[shift_payload_multiplier..len])?;
 
 //         // the shift also removes the mask
 //         Ok(u64::from_le_bytes(buffer) >> ((byte_count + 1) * shift_payload_multiplier) as u32)
 //     }
 // }
 
+// // usize
+// impl<W> WCodec<usize, &mut W> for Zenoh080
+// where
+//     W: Writer,
+// {
+//     type Output = Result<(), DidntWrite>;
+
+//     fn write(self, writer: &mut W, x: usize) -> Self::Output {
+//         let x: u64 = x.try_into().map_err(|_| DidntWrite)?;
+//         self.write(writer, x)
+//     }
+// }
+
+// impl<R> RCodec<usize, &mut R> for Zenoh080
+// where
+//     R: Reader,
+// {
+//     type Error = DidntRead;
+
+//     fn read(self, reader: &mut R) -> Result<usize, Self::Error> {
+//         let x: u64 = <Self as RCodec<u64, &mut R>>::read(self, reader)?;
+//         x.try_into().map_err(|_| DidntRead)
+//     }
+// }
+
 // #[cfg(test)]
 // mod test {
 //     #[test]
-//     fn zint_fuzz() {
-//         use crate::codec::*;
+//     fn u64_fuzz() {
+//         use crate::*;
 //         use rand::Rng;
-//         let codec = crate::zenoh_070::Zenoh070::default();
+//         use zenoh_buffers::{reader::HasReader, writer::HasWriter};
+
+//         const NUM: usize = 1_000;
+//         const LIMIT: [u64; 4] = [u8::MAX as u64, u16::MAX as u64, u32::MAX as u64, u64::MAX];
+
+//         let codec = Zenoh080::new();
 //         let mut rng = rand::thread_rng();
-//         let dist = rand::distributions::Uniform::new(0, u8::MAX as u64);
-//         let mut buffer = Vec::with_capacity(9);
-//         for _ in 0..1000000 {
-//             buffer.clear();
-//             let mut x: u64 = 1;
-//             for _ in 0..(rng.sample(&dist) % 8) {
-//                 x *= rng.sample(&dist);
+
+//         for l in LIMIT.iter() {
+//             let mut values = Vec::with_capacity(NUM);
+//             let mut buffer = vec![];
+
+//             let mut writer = buffer.writer();
+
+//             for _ in 0..NUM {
+//                 let x: u64 = rng.gen_range(0..=*l);
+//                 values.push(x);
+//                 codec.write(&mut writer, x).unwrap();
 //             }
 
-//             (&codec).write(&mut buffer, x).unwrap();
-//             let mut reader = buffer.as_slice();
-//             let y: u64 = (&codec).read(&mut reader).unwrap();
+//             let mut reader = buffer.reader();
+
+//             for x in values.drain(..).take(NUM) {
+//                 let y: u64 = codec.read(&mut reader).unwrap();
+//                 println!("{x} {y}");
+//                 assert_eq!(x, y);
+//             }
+
 //             assert!(reader.is_empty());
-//             assert_eq!(
-//                 x,
-//                 y,
-//                 "\n         {} ({}) != \n         {} ({})\n{} ({})",
-//                 binstr(&x.to_le_bytes()),
-//                 x,
-//                 binstr(&y.to_le_bytes()),
-//                 y,
-//                 binstr(&buffer),
-//                 y,
-//             );
 //         }
-//         buffer.clear();
-//         let mut expected = Vec::new();
-//         for _ in 0..1000 {
-//             let mut x: u64 = 1;
-//             for _ in 0..(rng.sample(&dist) % 8) {
-//                 x *= rng.sample(&dist);
-//             }
-//             expected.push(x);
-//             let _ = (&codec).write(&mut buffer, x);
-//         }
-//         println!("{:x?}", expected);
-//         let mut reader = buffer.as_slice();
-//         for (i, &x) in expected.iter().enumerate() {
-//             let y: u64 = (&codec).read(&mut reader).unwrap();
-//             assert_eq!(
-//                 x,
-//                 y,
-//                 "after reading {} numbers\n         {} ({}) != \n         {} ({})\n{} ({})",
-//                 i,
-//                 binstr(&x.to_le_bytes()),
-//                 x,
-//                 binstr(&y.to_le_bytes()),
-//                 y,
-//                 binstr(&buffer),
-//                 y,
-//             );
-//         }
-//         assert!(reader.is_empty());
-//     }
-
-//     pub fn binstr(buffer: &[u8]) -> String {
-//         let mut result = String::with_capacity(9 * buffer.len());
-//         for byte in buffer {
-//             for i in 0..8 {
-//                 result.push(if (byte >> i) & 1 == 1 { '1' } else { '0' })
-//             }
-//             result.push(' ')
-//         }
-//         result
 //     }
 // }

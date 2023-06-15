@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Condition, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header};
 use alloc::string::String;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -20,12 +20,12 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::imsg,
-    core::{ConsolidationMode, QueryTarget, WireExpr, ZInt},
-    zenoh::{zmsg, DataInfo, Query, QueryBody},
+    core::WireExpr,
+    zenoh::{zmsg, ConsolidationMode, DataInfo, Query, QueryBody, QueryId, QueryTarget},
 };
 
 // QueryTarget
-impl<W> WCodec<&QueryTarget, &mut W> for Zenoh060
+impl<W> WCodec<&QueryTarget, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -34,12 +34,12 @@ where
     fn write(self, writer: &mut W, x: &QueryTarget) -> Self::Output {
         #![allow(clippy::unnecessary_cast)]
         match x {
-            QueryTarget::BestMatching => self.write(&mut *writer, 0 as ZInt)?,
-            QueryTarget::All => self.write(&mut *writer, 1 as ZInt)?,
-            QueryTarget::AllComplete => self.write(&mut *writer, 2 as ZInt)?,
+            QueryTarget::BestMatching => self.write(&mut *writer, 0 as u64)?,
+            QueryTarget::All => self.write(&mut *writer, 1 as u64)?,
+            QueryTarget::AllComplete => self.write(&mut *writer, 2 as u64)?,
             #[cfg(feature = "complete_n")]
             QueryTarget::Complete(n) => {
-                self.write(&mut *writer, 3 as ZInt)?;
+                self.write(&mut *writer, 3 as u64)?;
                 self.write(&mut *writer, *n)?;
             }
         }
@@ -47,21 +47,21 @@ where
     }
 }
 
-impl<R> RCodec<QueryTarget, &mut R> for Zenoh060
+impl<R> RCodec<QueryTarget, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<QueryTarget, Self::Error> {
-        let t: ZInt = self.read(&mut *reader)?;
+        let t: u64 = self.read(&mut *reader)?;
         let t = match t {
             0 => QueryTarget::BestMatching,
             1 => QueryTarget::All,
             2 => QueryTarget::AllComplete,
             #[cfg(feature = "complete_n")]
             3 => {
-                let n: ZInt = self.read(&mut *reader)?;
+                let n: u64 = self.read(&mut *reader)?;
                 QueryTarget::Complete(n)
             }
             _ => return Err(DidntRead),
@@ -71,14 +71,14 @@ where
 }
 
 // ConsolidationMode
-impl<W> WCodec<&ConsolidationMode, &mut W> for Zenoh060
+impl<W> WCodec<&ConsolidationMode, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &ConsolidationMode) -> Self::Output {
-        let cm: ZInt = match x {
+        let cm: u64 = match x {
             ConsolidationMode::None => 0,
             ConsolidationMode::Monotonic => 1,
             ConsolidationMode::Latest => 2,
@@ -88,14 +88,14 @@ where
     }
 }
 
-impl<R> RCodec<ConsolidationMode, &mut R> for Zenoh060
+impl<R> RCodec<ConsolidationMode, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ConsolidationMode, Self::Error> {
-        let cm: ZInt = self.read(&mut *reader)?;
+        let cm: u64 = self.read(&mut *reader)?;
         let cm = match cm {
             0 => ConsolidationMode::None,
             1 => ConsolidationMode::Monotonic,
@@ -107,7 +107,7 @@ where
 }
 
 // QueryBody
-impl<W> WCodec<&QueryBody, &mut W> for Zenoh060
+impl<W> WCodec<&QueryBody, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -120,7 +120,7 @@ where
     }
 }
 
-impl<R> RCodec<QueryBody, &mut R> for Zenoh060
+impl<R> RCodec<QueryBody, &mut R> for Zenoh080
 where
     R: Reader,
 {
@@ -134,7 +134,7 @@ where
 }
 
 // Query
-impl<W> WCodec<&Query, &mut W> for Zenoh060
+impl<W> WCodec<&Query, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -170,22 +170,21 @@ where
     }
 }
 
-impl<R> RCodec<Query, &mut R> for Zenoh060
+impl<R> RCodec<Query, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Query, Self::Error> {
-        let codec = Zenoh060Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<Query, &mut R> for Zenoh060Header
+impl<R> RCodec<Query, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
@@ -196,14 +195,11 @@ where
             return Err(DidntRead);
         }
 
-        let ccond = Zenoh060Condition {
-            condition: imsg::has_flag(self.header, zmsg::flag::K),
-            codec: self.codec,
-        };
+        let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, zmsg::flag::K));
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
 
         let parameters: String = self.codec.read(&mut *reader)?;
-        let qid: ZInt = self.codec.read(&mut *reader)?;
+        let qid: QueryId = self.codec.read(&mut *reader)?;
         let target = if imsg::has_flag(self.header, zmsg::flag::T) {
             let qt: QueryTarget = self.codec.read(&mut *reader)?;
             Some(qt)

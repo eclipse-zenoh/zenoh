@@ -19,20 +19,20 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, QueryableInfo, SubInfo, WireExpr, ZInt, ZenohId},
-    zenoh::{DataInfo, RoutingContext},
+    core::{key_expr::keyexpr, ExprId, WireExpr, ZenohId},
+    zenoh::{DataInfo, QueryId, QueryableInfo, RoutingContext, SubInfo},
 };
 use zenoh_sync::get_mut_unchecked;
 
 pub(super) type Direction = (Arc<FaceState>, WireExpr<'static>, Option<RoutingContext>);
 pub(super) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
-pub(super) type QueryRoute = HashMap<usize, (Direction, ZInt, zenoh_protocol::core::QueryTarget)>;
+pub(super) type QueryRoute = HashMap<usize, (Direction, zenoh_protocol::core::QueryTarget)>;
 #[cfg(not(feature = "complete_n"))]
-pub(super) type QueryRoute = HashMap<usize, (Direction, ZInt)>;
+pub(super) type QueryRoute = HashMap<usize, (Direction, QueryId)>;
 pub(super) struct QueryTargetQabl {
     pub(super) direction: Direction,
-    pub(super) complete: ZInt,
+    pub(super) complete: u64,
     pub(super) distance: f64,
 }
 pub(super) type QueryTargetQablSet = Vec<QueryTargetQabl>;
@@ -40,8 +40,8 @@ pub(super) type PullCaches = Vec<Arc<SessionContext>>;
 
 pub(super) struct SessionContext {
     pub(super) face: Arc<FaceState>,
-    pub(super) local_expr_id: Option<ZInt>,
-    pub(super) remote_expr_id: Option<ZInt>,
+    pub(super) local_expr_id: Option<ExprId>,
+    pub(super) remote_expr_id: Option<ExprId>,
     pub(super) subs: Option<SubInfo>,
     pub(super) qabl: Option<QueryableInfo>,
     pub(super) last_values: HashMap<String, (Option<DataInfo>, ZBuf)>,
@@ -655,7 +655,7 @@ impl Resource {
 pub fn register_expr(
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
-    expr_id: ZInt,
+    expr_id: ExprId,
     expr: &WireExpr,
 ) {
     let rtables = zread!(tables.tables);
@@ -730,7 +730,7 @@ pub fn register_expr(
     }
 }
 
-pub fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: ZInt) {
+pub fn unregister_expr(tables: &TablesLock, face: &mut Arc<FaceState>, expr_id: ExprId) {
     let wtables = zwrite!(tables.tables);
     match get_mut_unchecked(face).remote_mappings.remove(&expr_id) {
         Some(mut res) => Resource::clean(&mut res),

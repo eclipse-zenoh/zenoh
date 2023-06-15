@@ -15,14 +15,12 @@ use super::super::TransportUnicast;
 use super::Primitives;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{
-        Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, SubInfo,
-        WireExpr, ZInt, ZenohId,
-    },
+    core::{Channel, CongestionControl, ExprId, WireExpr, ZenohId},
     zenoh::{
-        zmsg, DataInfo, Declaration, ForgetPublisher, ForgetQueryable, ForgetResource,
-        ForgetSubscriber, Publisher, QueryBody, Queryable, ReplierInfo, ReplyContext, Resource,
-        RoutingContext, Subscriber, ZenohMessage,
+        zmsg, ConsolidationMode, DataInfo, Declaration, ForgetPublisher, ForgetQueryable,
+        ForgetResource, ForgetSubscriber, Publisher, PullId, QueryBody, QueryId, QueryTarget,
+        Queryable, QueryableInfo, ReplierInfo, ReplyContext, Resource, RoutingContext, SubInfo,
+        Subscriber, ZenohMessage,
     },
 };
 
@@ -37,7 +35,7 @@ impl Mux {
 }
 
 impl Primitives for Mux {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
+    fn decl_resource(&self, expr_id: ExprId, key_expr: &WireExpr) {
         let d = Declaration::Resource(Resource {
             expr_id,
             key: key_expr.to_owned(),
@@ -45,15 +43,15 @@ impl Primitives for Mux {
         let decls = vec![d];
         let _ = self
             .handler
-            .handle_message(ZenohMessage::make_declare(decls, None, None));
+            .handle_message(ZenohMessage::make_declare(decls, None));
     }
 
-    fn forget_resource(&self, expr_id: ZInt) {
+    fn forget_resource(&self, expr_id: ExprId) {
         let d = Declaration::ForgetResource(ForgetResource { expr_id });
         let decls = vec![d];
         let _ = self
             .handler
-            .handle_message(ZenohMessage::make_declare(decls, None, None));
+            .handle_message(ZenohMessage::make_declare(decls, None));
     }
 
     fn decl_subscriber(
@@ -67,9 +65,9 @@ impl Primitives for Mux {
             info: sub_info.clone(),
         });
         let decls = vec![d];
-        let _ =
-            self.handler
-                .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
+        let _ = self
+            .handler
+            .handle_message(ZenohMessage::make_declare(decls, routing_context));
     }
 
     fn forget_subscriber(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
@@ -77,9 +75,9 @@ impl Primitives for Mux {
             key: key_expr.to_owned(),
         });
         let decls = vec![d];
-        let _ =
-            self.handler
-                .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
+        let _ = self
+            .handler
+            .handle_message(ZenohMessage::make_declare(decls, routing_context));
     }
 
     fn decl_publisher(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
@@ -87,9 +85,9 @@ impl Primitives for Mux {
             key: key_expr.to_owned(),
         });
         let decls = vec![d];
-        let _ =
-            self.handler
-                .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
+        let _ = self
+            .handler
+            .handle_message(ZenohMessage::make_declare(decls, routing_context));
     }
 
     fn forget_publisher(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
@@ -97,9 +95,9 @@ impl Primitives for Mux {
             key: key_expr.to_owned(),
         });
         let decls = vec![d];
-        let _ =
-            self.handler
-                .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
+        let _ = self
+            .handler
+            .handle_message(ZenohMessage::make_declare(decls, routing_context));
     }
 
     fn decl_queryable(
@@ -113,9 +111,9 @@ impl Primitives for Mux {
             info: qabl_info.clone(),
         });
         let decls = vec![d];
-        let _ =
-            self.handler
-                .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
+        let _ = self
+            .handler
+            .handle_message(ZenohMessage::make_declare(decls, routing_context));
     }
 
     fn forget_queryable(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
@@ -123,9 +121,9 @@ impl Primitives for Mux {
             key: key_expr.to_owned(),
         });
         let decls = vec![d];
-        let _ =
-            self.handler
-                .handle_message(ZenohMessage::make_declare(decls, routing_context, None));
+        let _ = self
+            .handler
+            .handle_message(ZenohMessage::make_declare(decls, routing_context));
     }
 
     fn send_data(
@@ -145,7 +143,6 @@ impl Primitives for Mux {
             data_info,
             routing_context,
             None,
-            None,
         ));
     }
 
@@ -153,7 +150,7 @@ impl Primitives for Mux {
         &self,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: ZInt,
+        qid: QueryId,
         target: QueryTarget,
         consolidation: ConsolidationMode,
         body: Option<QueryBody>,
@@ -172,13 +169,12 @@ impl Primitives for Mux {
             consolidation,
             body,
             routing_context,
-            None,
         ));
     }
 
     fn send_reply_data(
         &self,
-        qid: ZInt,
+        qid: QueryId,
         replier_id: ZenohId,
         key_expr: WireExpr,
         data_info: Option<DataInfo>,
@@ -192,16 +188,14 @@ impl Primitives for Mux {
             data_info,
             None,
             Some(ReplyContext::new(qid, Some(ReplierInfo { id: replier_id }))),
-            None,
         ));
     }
 
-    fn send_reply_final(&self, qid: ZInt) {
+    fn send_reply_final(&self, qid: QueryId) {
         let _ = self.handler.handle_message(ZenohMessage::make_unit(
             zmsg::default_channel::REPLY,
             zmsg::default_congestion_control::REPLY,
             Some(ReplyContext::new(qid, None)),
-            None,
         ));
     }
 
@@ -209,15 +203,14 @@ impl Primitives for Mux {
         &self,
         is_final: bool,
         key_expr: &WireExpr,
-        pull_id: ZInt,
-        max_samples: &Option<ZInt>,
+        pull_id: PullId,
+        max_samples: &Option<u16>,
     ) {
         let _ = self.handler.handle_message(ZenohMessage::make_pull(
             is_final,
             key_expr.to_owned(),
             pull_id,
             *max_samples,
-            None,
         ));
     }
 

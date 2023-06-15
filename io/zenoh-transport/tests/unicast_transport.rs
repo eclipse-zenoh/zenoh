@@ -31,8 +31,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
-    TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
+    TransportUnicast,
 };
 
 // These keys and certificates below are purposedly generated to run TLS and mTLS tests.
@@ -251,13 +251,6 @@ impl TransportEventHandler for SHRouter {
         let arc = Arc::new(SCRouter::new(self.count.clone()));
         Ok(arc)
     }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        panic!();
-    }
 }
 
 // Transport Callback for the router
@@ -298,13 +291,6 @@ impl TransportEventHandler for SHClient {
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(SCClient::default()))
-    }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        panic!();
     }
 }
 
@@ -353,7 +339,7 @@ async fn open_transport(
 
     // Create the listener on the router
     for e in server_endpoints.iter() {
-        println!("Add endpoint: {e}\n");
+        println!("Add endpoint: {}", e);
         let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
     }
 
@@ -369,7 +355,7 @@ async fn open_transport(
     // Create an empty transport with the client
     // Open transport -> This should be accepted
     for e in client_endpoints.iter() {
-        println!("Opening transport with {e}");
+        println!("Opening transport with {}", e);
         let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
     }
 
@@ -395,7 +381,7 @@ async fn close_transport(
     for e in endpoints.iter() {
         let _ = write!(ee, "{e} ");
     }
-    println!("Closing transport with {ee}");
+    println!("Closing transport with {}", ee);
     ztimeout!(client_transport.close()).unwrap();
 
     ztimeout!(async {
@@ -406,7 +392,7 @@ async fn close_transport(
 
     // Stop the locators on the manager
     for e in endpoints.iter() {
-        println!("Del locator: {e}");
+        println!("Del locator: {}", e);
         ztimeout!(router_manager.del_listener(e)).unwrap();
     }
 
@@ -438,7 +424,6 @@ async fn test_transport(
     let data_info = None;
     let routing_context = None;
     let reply_context = None;
-    let attachment = None;
     let message = ZenohMessage::make_data(
         key,
         payload,
@@ -447,10 +432,12 @@ async fn test_transport(
         data_info,
         routing_context,
         reply_context,
-        attachment,
     );
 
-    println!("Sending {MSG_COUNT} messages... {channel:?} {msg_size}");
+    println!(
+        "Sending {} messages... {:?} {}",
+        MSG_COUNT, channel, msg_size
+    );
     for _ in 0..MSG_COUNT {
         client_transport.schedule(message.clone()).unwrap();
     }
@@ -482,6 +469,11 @@ async fn run_single(
     channel: Channel,
     msg_size: usize,
 ) {
+    println!(
+        "\n>>> Running test for:  {:?}, {:?}, {:?}, {}",
+        client_endpoints, server_endpoints, channel, msg_size
+    );
+
     #[allow(unused_variables)] // Used when stats feature is enabled
     let (router_manager, router_handler, client_manager, client_transport) =
         open_transport(client_endpoints, server_endpoints).await;
@@ -497,13 +489,13 @@ async fn run_single(
     #[cfg(feature = "stats")]
     {
         let c_stats = client_transport.get_stats().unwrap();
-        println!("\tClient: {c_stats:?}");
+        println!("\tClient: {:?}", c_stats);
         let r_stats = router_manager
             .get_transport_unicast(&client_manager.config.zid)
             .unwrap()
             .get_stats()
             .unwrap();
-        println!("\tRouter: {r_stats:?}");
+        println!("\tRouter: {:?}", r_stats);
     }
 
     close_transport(

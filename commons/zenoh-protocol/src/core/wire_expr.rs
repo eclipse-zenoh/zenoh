@@ -13,17 +13,23 @@
 //
 
 //! This module defines the wire representation of Key Expressions.
-use crate::core::ExprId;
 use alloc::{
     borrow::Cow,
     string::{String, ToString},
 };
-use core::{convert::TryInto, fmt};
+use core::{convert::TryInto, fmt, sync::atomic::AtomicU16};
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_result::{bail, ZResult};
 
+/// A numerical Id mapped to a key expression.
+pub type ExprId = u16;
+pub type ExprLen = u16;
+
+pub type AtomicExprId = AtomicU16;
+pub const EMPTY_EXPR_ID: ExprId = 0;
+
 /// A zenoh **resource** is represented by a pair composed by a **key** and a
-/// **value**, such as, ```(/car/telemetry/speed, 320)```.  A **resource key**
+/// **value**, such as, ```(car/telemetry/speed, 320)```.  A **resource key**
 /// is an arbitrary array of characters, with the exclusion of the symbols
 /// ```*```, ```**```, ```?```, ```[```, ```]```, and ```#```,
 /// which have special meaning in the context of zenoh.
@@ -63,7 +69,7 @@ impl<'a> WireExpr<'a> {
     }
 
     pub fn try_as_str(&'a self) -> ZResult<&'a str> {
-        if self.scope == 0 {
+        if self.scope == EMPTY_EXPR_ID {
             Ok(self.suffix.as_ref())
         } else {
             bail!("Scoped key expression")

@@ -16,9 +16,7 @@ mod tests {
     use async_std::{prelude::FutureExt, task};
     use std::{
         any::Any,
-        collections::HashSet,
         convert::TryFrom,
-        iter::FromIterator,
         sync::{
             atomic::{AtomicUsize, Ordering},
             Arc,
@@ -35,9 +33,8 @@ mod tests {
     use zenoh_result::ZResult;
     use zenoh_shm::SharedMemoryManager;
     use zenoh_transport::{
-        unicast::establishment::authenticator::SharedMemoryAuthenticator, TransportEventHandler,
-        TransportManager, TransportMulticast, TransportMulticastEventHandler, TransportPeer,
-        TransportPeerEventHandler, TransportUnicast,
+        TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
+        TransportUnicast,
     };
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -80,13 +77,6 @@ mod tests {
         ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
             let arc = Arc::new(SCPeer::new(self.count.clone(), self.is_shm));
             Ok(arc)
-        }
-
-        fn new_multicast(
-            &self,
-            _transport: TransportMulticast,
-        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-            panic!();
         }
     }
 
@@ -149,28 +139,20 @@ mod tests {
                 .unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
-        let peer_shm01_handler = Arc::new(SHPeer::new(false));
-        let unicast =
-            TransportManager::config_unicast().peer_authenticator(HashSet::from_iter(vec![
-                SharedMemoryAuthenticator::make().unwrap().into(),
-            ]));
+        let peer_shm01_handler = Arc::new(SHPeer::new(true));
         let peer_shm01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_shm01)
-            .unicast(unicast)
+            .unicast(TransportManager::config_unicast().shm(true))
             .build(peer_shm01_handler.clone())
             .unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
-        let unicast =
-            TransportManager::config_unicast().peer_authenticator(HashSet::from_iter(vec![
-                SharedMemoryAuthenticator::make().unwrap().into(),
-            ]));
         let peer_shm02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_shm02)
-            .unicast(unicast)
+            .unicast(TransportManager::config_unicast().shm(true))
             .build(peer_shm02_handler.clone())
             .unwrap();
 
@@ -179,6 +161,7 @@ mod tests {
         let peer_net01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_net01)
+            .unicast(TransportManager::config_unicast().shm(false))
             .build(peer_net01_handler.clone())
             .unwrap();
 
@@ -191,18 +174,24 @@ mod tests {
 
         // Create a transport with the peer
         println!("Transport SHM [1b]");
-        let _ = ztimeout!(peer_shm02_manager.open_transport(endpoint.clone())).unwrap();
+        let peer_shm01_transport =
+            ztimeout!(peer_shm02_manager.open_transport(endpoint.clone())).unwrap();
+        assert!(peer_shm01_transport.is_shm().unwrap());
 
         // Create a transport with the peer
         println!("Transport SHM [1c]");
-        let _ = ztimeout!(peer_net01_manager.open_transport(endpoint.clone())).unwrap();
+        let peer_net02_transport =
+            ztimeout!(peer_net01_manager.open_transport(endpoint.clone())).unwrap();
+        assert!(!peer_net02_transport.is_shm().unwrap());
 
         // Retrieve the transports
         println!("Transport SHM [2a]");
         let peer_shm02_transport = peer_shm01_manager.get_transport(&peer_shm02).unwrap();
+        assert!(peer_shm02_transport.is_shm().unwrap());
 
         println!("Transport SHM [2b]");
         let peer_net01_transport = peer_shm01_manager.get_transport(&peer_net01).unwrap();
+        assert!(!peer_net01_transport.is_shm().unwrap());
 
         // Send the message
         println!("Transport SHM [3a]");
@@ -231,7 +220,6 @@ mod tests {
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
-            let attachment = None;
 
             let message = ZenohMessage::make_data(
                 key,
@@ -241,7 +229,6 @@ mod tests {
                 data_info,
                 routing_context,
                 reply_context,
-                attachment,
             );
 
             peer_shm02_transport.schedule(message.clone()).unwrap();
@@ -284,7 +271,6 @@ mod tests {
             let data_info = None;
             let routing_context = None;
             let reply_context = None;
-            let attachment = None;
 
             let message = ZenohMessage::make_data(
                 key,
@@ -294,7 +280,6 @@ mod tests {
                 data_info,
                 routing_context,
                 reply_context,
-                attachment,
             );
 
             peer_net01_transport.schedule(message.clone()).unwrap();

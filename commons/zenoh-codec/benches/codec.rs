@@ -22,60 +22,59 @@ use zenoh_buffers::{
 };
 use zenoh_codec::*;
 use zenoh_protocol::{
-    core::{Channel, CongestionControl, ZInt},
-    defaults::BATCH_SIZE,
-    transport::{Frame, FrameHeader, FrameKind},
+    core::{CongestionControl, Reliability},
+    transport::{BatchSize, Frame, FrameHeader, TransportSn},
     zenoh::Data,
 };
 
 fn criterion_benchmark(c: &mut Criterion) {
-    // ZInt Vec<u8>
+    // u64 Vec<u8>
     let mut buff = vec![];
-    let codec = Zenoh060::default();
-    c.bench_function("ZInt Vec<u8>", |b| {
+    let codec = Zenoh080::new();
+    c.bench_function("u64 Vec<u8>", |b| {
         b.iter(|| {
             buff.clear();
             let mut writer = buff.writer();
-            codec.write(&mut writer, ZInt::MAX).unwrap();
+            codec.write(&mut writer, u64::MAX).unwrap();
             let mut reader = buff.reader();
-            let _: ZInt = codec.read(&mut reader).unwrap();
+            let _: u64 = codec.read(&mut reader).unwrap();
         })
     });
 
-    // ZInt BBuf
-    let mut buff = BBuf::with_capacity(BATCH_SIZE as usize);
-    let codec = Zenoh060::default();
-    c.bench_function("ZInt BBuf", |b| {
+    // u64 BBuf
+    let mut buff = BBuf::with_capacity(BatchSize::MAX as usize);
+    let codec = Zenoh080::new();
+    c.bench_function("u64 BBuf", |b| {
         b.iter(|| {
             buff.clear();
             let mut writer = buff.writer();
-            codec.write(&mut writer, ZInt::MAX).unwrap();
+            codec.write(&mut writer, u64::MAX).unwrap();
             let mut reader = buff.reader();
-            let _: ZInt = codec.read(&mut reader).unwrap();
+            let _: u64 = codec.read(&mut reader).unwrap();
         })
     });
 
-    // ZInt ZBuf
-    let mut buff = ZBuf::default();
-    let codec = Zenoh060::default();
-    c.bench_function("ZInt ZBuf", |b| {
+    // u64 ZBuf
+    let mut buff = ZBuf::empty();
+    let codec = Zenoh080::new();
+    c.bench_function("u64 ZBuf", |b| {
         b.iter(|| {
             buff.clear();
             let mut writer = buff.writer();
-            codec.write(&mut writer, ZInt::MAX).unwrap();
+            codec.write(&mut writer, u64::MAX).unwrap();
             let mut reader = buff.reader();
-            let _: ZInt = codec.read(&mut reader).unwrap();
+            let _: u64 = codec.read(&mut reader).unwrap();
         })
     });
 
     // Batch BBuf Write
     let mut buff = BBuf::with_capacity(u16::MAX as usize);
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::new();
 
     let frame = FrameHeader {
-        channel: Channel::default(),
-        sn: ZInt::MIN,
-        kind: FrameKind::Messages,
+        reliability: Reliability::default(),
+        sn: TransportSn::MIN,
+        ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
     };
 
     let data = Data {
@@ -107,12 +106,12 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // Batch ZSlice Read NoAlloc
     let mut buff = BBuf::with_capacity(u16::MAX as usize);
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::new();
 
     let frame = FrameHeader {
-        channel: Channel::default(),
-        sn: ZInt::MIN,
-        kind: FrameKind::Messages,
+        reliability: Reliability::default(),
+        sn: TransportSn::MIN,
+        ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
     };
 
     let data = Data {
@@ -139,12 +138,12 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // Batch ZSlice Read NoAlloc
     let mut buff = BBuf::with_capacity(u16::MAX as usize);
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::new();
 
     let frame = FrameHeader {
-        channel: Channel::default(),
-        sn: ZInt::MIN,
-        kind: FrameKind::Messages,
+        reliability: Reliability::default(),
+        sn: TransportSn::MIN,
+        ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
     };
 
     let data = Data {
@@ -176,8 +175,8 @@ fn criterion_benchmark(c: &mut Criterion) {
     });
 
     // Fragmentation ZBuf Write
-    let mut buff = ZBuf::default();
-    let codec = Zenoh060::default();
+    let mut buff = ZBuf::empty();
+    let codec = Zenoh080::new();
 
     let data = Data {
         key: 0.into(),
@@ -195,7 +194,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // Fragmentation ZBuf Read
     let mut buff = vec![];
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::new();
 
     let data = Data {
         key: 0.into(),
@@ -208,7 +207,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut writer = buff.writer();
     codec.write(&mut writer, &data).unwrap();
 
-    let mut zbuf = ZBuf::default();
+    let mut zbuf = ZBuf::empty();
     let chunk = u16::MAX as usize;
     let mut idx = 0;
     while idx < buff.len() {
@@ -225,7 +224,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     // Fragmentation ZSlice ZBuf Read
     let mut buff = vec![];
-    let codec = Zenoh060::default();
+    let codec = Zenoh080::new();
 
     let data = Data {
         key: 0.into(),
@@ -242,7 +241,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function("Fragmentation ZSlice ZBuf Read", |b| {
         b.iter(|| {
-            let mut zbuf = ZBuf::default();
+            let mut zbuf = ZBuf::empty();
             let chunk = u16::MAX as usize;
             let mut idx = 0;
             while idx < zslice.len() {

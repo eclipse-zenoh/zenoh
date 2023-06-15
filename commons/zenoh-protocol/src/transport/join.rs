@@ -11,8 +11,48 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{ConduitSnList, WhatAmI, ZInt, ZenohId};
+use crate::{
+    core::{WhatAmI, ZenohId},
+    transport::ConduitSnList,
+};
 use core::time::Duration;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConduitSnList {
+    Plain(ConduitSn),
+    QoS(Box<[ConduitSn; Priority::NUM]>),
+}
+
+impl fmt::Display for ConduitSnList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "[ ")?;
+        match self {
+            ConduitSnList::Plain(sn) => {
+                write!(
+                    f,
+                    "{:?} {{ reliable: {}, best effort: {} }}",
+                    Priority::default(),
+                    sn.reliable,
+                    sn.best_effort
+                )?;
+            }
+            ConduitSnList::QoS(ref sns) => {
+                for (prio, sn) in sns.iter().enumerate() {
+                    let p: Priority = (prio as u8).try_into().unwrap();
+                    write!(
+                        f,
+                        "{:?} {{ reliable: {}, best effort: {} }}",
+                        p, sn.reliable, sn.best_effort
+                    )?;
+                    if p != Priority::Background {
+                        write!(f, ", ")?;
+                    }
+                }
+            }
+        }
+        write!(f, " ]")
+    }
+}
 
 /// # Join message
 ///
@@ -35,7 +75,7 @@ use core::time::Duration;
 /// +-------+-------+
 /// ~    whatami    ~ -- Router, Peer or a combination of them
 /// +---------------+
-/// ~    peer_id    ~ -- PID of the sender of the JOIN message
+/// ~    node_id    ~ -- PID of the sender of the JOIN message
 /// +---------------+
 /// ~     lease     ~ -- Lease period of the sender of the JOIN message(*)
 /// +---------------+
@@ -58,7 +98,7 @@ pub struct Join {
     pub whatami: WhatAmI,
     pub zid: ZenohId,
     pub lease: Duration,
-    pub sn_resolution: ZInt,
+    pub sn_resolution: u64,
     pub next_sns: ConduitSnList,
 }
 
@@ -74,7 +114,7 @@ impl Join {
 impl Join {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::core::{ConduitSn, Priority};
+        use crate::{core::Priority, transport::ConduitSn};
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
@@ -87,7 +127,7 @@ impl Join {
         } else {
             Duration::from_millis(rng.gen())
         };
-        let sn_resolution: ZInt = rng.gen();
+        let sn_resolution: u64 = rng.gen();
         let next_sns = if rng.gen_bool(0.5) {
             let mut sns = Box::new([ConduitSn::default(); Priority::NUM]);
             for i in 0..Priority::NUM {

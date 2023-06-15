@@ -23,10 +23,10 @@ use std::future::Ready;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
-use zenoh_protocol::core::SubInfo;
+use zenoh_protocol::zenoh::SubInfo;
 
 /// The subscription mode.
-pub use zenoh_protocol::core::SubMode;
+pub use zenoh_protocol::zenoh::SubMode;
 
 /// The kind of reliability.
 pub use zenoh_protocol::core::Reliability;

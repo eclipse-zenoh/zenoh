@@ -25,11 +25,13 @@ use config::{
     TLS_CLIENT_AUTH, TLS_CLIENT_CERTIFICATE_FILE, TLS_CLIENT_PRIVATE_KEY_FILE,
     TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_PRIVATE_KEY_FILE,
 };
-use zenoh_cfg_properties::Properties;
-use zenoh_config::{Config, ZN_FALSE, ZN_TRUE};
+use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
-use zenoh_protocol::core::{endpoint::Address, Locator};
+use zenoh_protocol::core::{
+    endpoint::{self, Address},
+    Locator,
+};
 use zenoh_result::{bail, zerror, ZResult};
 
 mod unicast;
@@ -51,56 +53,46 @@ impl LocatorInspector for TlsLocatorInspector {
     fn protocol(&self) -> &str {
         TLS_LOCATOR_PREFIX
     }
+
     async fn is_multicast(&self, _locator: &Locator) -> ZResult<bool> {
         Ok(false)
     }
 }
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;
+
 #[async_trait]
 impl ConfigurationInspector<Config> for TlsConfigurator {
-    async fn inspect_config(&self, config: &Config) -> ZResult<Properties> {
-        let mut properties = Properties::default();
+    async fn inspect_config(&self, config: &Config) -> ZResult<String> {
+        let mut ps: Vec<(&str, &str)> = vec![];
 
         let c = config.transport().link().tls();
-        if let Some(tls_ca_certificate) = c.root_ca_certificate() {
-            properties.insert(
-                TLS_ROOT_CA_CERTIFICATE_FILE.into(),
-                tls_ca_certificate.into(),
-            );
+        if let Some(ca_certificate) = c.root_ca_certificate() {
+            ps.push((TLS_ROOT_CA_CERTIFICATE_FILE, ca_certificate));
         }
-        if let Some(tls_server_private_key) = c.server_private_key() {
-            properties.insert(
-                TLS_SERVER_PRIVATE_KEY_FILE.into(),
-                tls_server_private_key.into(),
-            );
+        if let Some(server_private_key) = c.server_private_key() {
+            ps.push((TLS_SERVER_PRIVATE_KEY_FILE, server_private_key));
         }
-        if let Some(tls_server_certificate) = c.server_certificate() {
-            properties.insert(
-                TLS_SERVER_CERTIFICATE_FILE.into(),
-                tls_server_certificate.into(),
-            );
+        if let Some(server_certificate) = c.server_certificate() {
+            ps.push((TLS_SERVER_CERTIFICATE_FILE, server_certificate));
         }
-        if let Some(tls_client_auth) = c.client_auth() {
-            match tls_client_auth {
-                true => properties.insert(TLS_CLIENT_AUTH.into(), ZN_TRUE.into()),
-                false => properties.insert(TLS_CLIENT_AUTH.into(), ZN_FALSE.into()),
+        if let Some(client_auth) = c.client_auth() {
+            match client_auth {
+                true => ps.push((TLS_CLIENT_AUTH, "true")),
+                false => ps.push((TLS_CLIENT_AUTH, "false")),
             };
         }
-        if let Some(tls_client_private_key) = c.client_private_key() {
-            properties.insert(
-                TLS_CLIENT_PRIVATE_KEY_FILE.into(),
-                tls_client_private_key.into(),
-            );
+        if let Some(client_private_key) = c.client_private_key() {
+            ps.push((TLS_CLIENT_PRIVATE_KEY_FILE, client_private_key));
         }
-        if let Some(tls_client_certificate) = c.client_certificate() {
-            properties.insert(
-                TLS_CLIENT_CERTIFICATE_FILE.into(),
-                tls_client_certificate.into(),
-            );
+        if let Some(client_certificate) = c.client_certificate() {
+            ps.push((TLS_CLIENT_CERTIFICATE_FILE, client_certificate));
         }
 
-        Ok(properties)
+        let mut s = String::new();
+        endpoint::Parameters::extend(ps.drain(..), &mut s);
+
+        Ok(s)
     }
 }
 
@@ -118,24 +110,22 @@ zconfigurable! {
 }
 
 pub mod config {
-    use zenoh_cfg_properties::config::*;
-    pub const TLS_ROOT_CA_CERTIFICATE_FILE: &str = ZN_TLS_ROOT_CA_CERTIFICATE_STR;
-    pub const TLS_ROOT_CA_CERTIFICATE_RAW: &str = "tls_root_ca_certificate_raw";
+    pub const TLS_ROOT_CA_CERTIFICATE_FILE: &str = "root_ca_certificate_file";
+    pub const TLS_ROOT_CA_CERTIFICATE_RAW: &str = "root_ca_certificate_raw";
 
-    pub const TLS_SERVER_PRIVATE_KEY_FILE: &str = ZN_TLS_SERVER_PRIVATE_KEY_STR;
-    pub const TLS_SERVER_PRIVATE_KEY_RAW: &str = "tls_server_private_key_raw";
+    pub const TLS_SERVER_PRIVATE_KEY_FILE: &str = "server_private_key_file";
+    pub const TLS_SERVER_PRIVATE_KEY_RAW: &str = "server_private_key_raw";
 
-    pub const TLS_SERVER_CERTIFICATE_FILE: &str = ZN_TLS_SERVER_CERTIFICATE_STR;
-    pub const TLS_SERVER_CERTIFICATE_RAW: &str = "tls_server_certificate_raw";
+    pub const TLS_SERVER_CERTIFICATE_FILE: &str = "server_certificate_file";
+    pub const TLS_SERVER_CERTIFICATE_RAW: &str = "server_certificate_raw";
 
-    pub const TLS_CLIENT_PRIVATE_KEY_FILE: &str = ZN_TLS_CLIENT_PRIVATE_KEY_STR;
-    pub const TLS_CLIENT_PRIVATE_KEY_RAW: &str = "tls_client_private_key_raw";
+    pub const TLS_CLIENT_PRIVATE_KEY_FILE: &str = "client_private_key_file";
+    pub const TLS_CLIENT_PRIVATE_KEY_RAW: &str = "client_private_key_raw";
 
-    pub const TLS_CLIENT_CERTIFICATE_FILE: &str = ZN_TLS_CLIENT_CERTIFICATE_STR;
-    pub const TLS_CLIENT_CERTIFICATE_RAW: &str = "tls_client_certificate_raw";
+    pub const TLS_CLIENT_CERTIFICATE_FILE: &str = "client_certificate_file";
+    pub const TLS_CLIENT_CERTIFICATE_RAW: &str = "client_certificate_raw";
 
-    pub const TLS_CLIENT_AUTH: &str = ZN_TLS_CLIENT_AUTH_STR;
-    pub const TLS_CLIENT_AUTH_DEFAULT: &str = ZN_TLS_CLIENT_AUTH_DEFAULT;
+    pub const TLS_CLIENT_AUTH: &str = "client_auth";
 }
 
 pub async fn get_tls_addr(address: &Address<'_>) -> ZResult<SocketAddr> {

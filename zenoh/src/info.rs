@@ -15,8 +15,8 @@
 //! Tools to access information about the current zenoh [`Session`](crate::Session).
 use crate::SessionRef;
 use std::future::Ready;
-use zenoh_config::{WhatAmI, ZenohId};
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_protocol::core::{WhatAmI, ZenohId};
 
 /// A builder retuned by [`SessionInfo::zid()`](SessionInfo::zid) that allows
 /// to access the [`ZenohId`] of the current zenoh [`Session`](crate::Session).

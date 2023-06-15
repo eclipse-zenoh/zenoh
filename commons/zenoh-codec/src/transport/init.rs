@@ -11,211 +11,349 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{
+    common::extension, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header, Zenoh080Length,
+};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
     ZSlice,
 };
 use zenoh_protocol::{
-    common::imsg,
-    core::{WhatAmI, ZInt, ZenohId},
-    defaults::SEQ_NUM_RES,
-    transport::{tmsg, InitAck, InitSyn},
+    common::{iext, imsg},
+    core::{Resolution, WhatAmI, ZenohId},
+    transport::{
+        id,
+        init::{ext, flag, InitAck, InitSyn},
+        BatchSize,
+    },
 };
 
 // InitSyn
-impl<W> WCodec<&InitSyn, &mut W> for Zenoh060
+impl<W> WCodec<&InitSyn, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &InitSyn) -> Self::Output {
-        fn has_options(x: &InitSyn) -> bool {
-            x.is_qos
-        }
-
-        fn options(x: &InitSyn) -> ZInt {
-            let mut options = 0;
-            if x.is_qos {
-                options |= tmsg::init_options::QOS;
-            }
-            options
-        }
-
         // Header
-        let mut header = tmsg::id::INIT;
-        if x.sn_resolution != SEQ_NUM_RES {
-            header |= tmsg::flag::S;
+        let mut header = id::INIT;
+        if x.resolution != Resolution::default() || x.batch_size != u16::MAX {
+            header |= flag::S;
         }
-        if has_options(x) {
-            header |= tmsg::flag::O;
+        let mut n_exts = (x.ext_qos.is_some() as u8)
+            + (x.ext_shm.is_some() as u8)
+            + (x.ext_auth.is_some() as u8)
+            + (x.ext_mlink.is_some() as u8);
+        if n_exts != 0 {
+            header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        if has_options(x) {
-            self.write(&mut *writer, options(x))?;
-        }
         self.write(&mut *writer, x.version)?;
-        let wai: ZInt = x.whatami.into();
-        self.write(&mut *writer, wai)?;
-        self.write(&mut *writer, &x.zid)?;
-        if imsg::has_flag(header, tmsg::flag::S) {
-            self.write(&mut *writer, x.sn_resolution)?;
+
+        let whatami: u8 = match x.whatami {
+            WhatAmI::Router => 0b00,
+            WhatAmI::Peer => 0b01,
+            WhatAmI::Client => 0b10,
+        };
+        let flags: u8 = ((x.zid.size() as u8 - 1) << 4) | whatami;
+        self.write(&mut *writer, flags)?;
+
+        let lodec = Zenoh080Length::new(x.zid.size());
+        lodec.write(&mut *writer, &x.zid)?;
+
+        if imsg::has_flag(header, flag::S) {
+            self.write(&mut *writer, x.resolution.as_u8())?;
+            self.write(&mut *writer, x.batch_size.to_le_bytes())?;
         }
+
+        // Extensions
+        if let Some(qos) = x.ext_qos.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (qos, n_exts != 0))?;
+        }
+        if let Some(shm) = x.ext_shm.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (shm, n_exts != 0))?;
+        }
+        if let Some(auth) = x.ext_auth.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (auth, n_exts != 0))?;
+        }
+        if let Some(mlink) = x.ext_mlink.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (mlink, n_exts != 0))?;
+        }
+
         Ok(())
     }
 }
 
-impl<R> RCodec<InitSyn, &mut R> for Zenoh060
+impl<R> RCodec<InitSyn, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<InitSyn, Self::Error> {
-        let codec = Zenoh060Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<InitSyn, &mut R> for Zenoh060Header
+impl<R> RCodec<InitSyn, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<InitSyn, Self::Error> {
-        if imsg::mid(self.header) != tmsg::id::INIT || imsg::has_flag(self.header, tmsg::flag::A) {
+        if imsg::mid(self.header) != id::INIT || imsg::has_flag(self.header, flag::A) {
             return Err(DidntRead);
         }
 
-        let options: ZInt = if imsg::has_flag(self.header, tmsg::flag::O) {
-            self.codec.read(&mut *reader)?
-        } else {
-            0
-        };
+        // Body
         let version: u8 = self.codec.read(&mut *reader)?;
-        let wai: ZInt = self.codec.read(&mut *reader)?;
-        let whatami = WhatAmI::try_from(wai).ok_or(DidntRead)?;
-        let zid: ZenohId = self.codec.read(&mut *reader)?;
-        let sn_resolution: ZInt = if imsg::has_flag(self.header, tmsg::flag::S) {
-            self.codec.read(&mut *reader)?
-        } else {
-            SEQ_NUM_RES
+
+        let flags: u8 = self.codec.read(&mut *reader)?;
+        let whatami = match flags & 0b11 {
+            0b00 => WhatAmI::Router,
+            0b01 => WhatAmI::Peer,
+            0b10 => WhatAmI::Client,
+            _ => return Err(DidntRead),
         };
-        let is_qos = imsg::has_option(options, tmsg::init_options::QOS);
+        let length = 1 + ((flags >> 4) as usize);
+        let lodec = Zenoh080Length::new(length);
+        let zid: ZenohId = lodec.read(&mut *reader)?;
+
+        let mut resolution = Resolution::default();
+        let mut batch_size = BatchSize::MAX.to_le_bytes();
+        if imsg::has_flag(self.header, flag::S) {
+            let flags: u8 = self.codec.read(&mut *reader)?;
+            resolution = Resolution::from(flags & 0b00111111);
+            batch_size = self.codec.read(&mut *reader)?;
+        }
+        let batch_size = BatchSize::from_le_bytes(batch_size);
+
+        // Extensions
+        let mut ext_qos = None;
+        let mut ext_shm = None;
+        let mut ext_auth = None;
+        let mut ext_mlink = None;
+
+        let mut has_ext = imsg::has_flag(self.header, flag::Z);
+        while has_ext {
+            let ext: u8 = self.codec.read(&mut *reader)?;
+            let eodec = Zenoh080Header::new(ext);
+            match iext::eid(ext) {
+                ext::QoS::ID => {
+                    let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
+                    ext_qos = Some(q);
+                    has_ext = ext;
+                }
+                ext::Shm::ID => {
+                    let (s, ext): (ext::Shm, bool) = eodec.read(&mut *reader)?;
+                    ext_shm = Some(s);
+                    has_ext = ext;
+                }
+                ext::Auth::ID => {
+                    let (a, ext): (ext::Auth, bool) = eodec.read(&mut *reader)?;
+                    ext_auth = Some(a);
+                    has_ext = ext;
+                }
+                ext::MultiLink::ID => {
+                    let (a, ext): (ext::MultiLink, bool) = eodec.read(&mut *reader)?;
+                    ext_mlink = Some(a);
+                    has_ext = ext;
+                }
+                _ => {
+                    has_ext = extension::skip(reader, "InitSyn", ext)?;
+                }
+            }
+        }
 
         Ok(InitSyn {
             version,
             whatami,
             zid,
-            sn_resolution,
-            is_qos,
+            resolution,
+            batch_size,
+            ext_qos,
+            ext_shm,
+            ext_auth,
+            ext_mlink,
         })
     }
 }
 
 // InitAck
-impl<W> WCodec<&InitAck, &mut W> for Zenoh060
+impl<W> WCodec<&InitAck, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &InitAck) -> Self::Output {
-        fn has_options(x: &InitAck) -> bool {
-            x.is_qos
-        }
-
-        fn options(x: &InitAck) -> ZInt {
-            let mut options = 0;
-            if x.is_qos {
-                options |= tmsg::init_options::QOS;
-            }
-            options
-        }
-
         // Header
-        let mut header = tmsg::id::INIT;
-        header |= tmsg::flag::A;
-        if x.sn_resolution.is_some() {
-            header |= tmsg::flag::S;
+        let mut header = id::INIT | flag::A;
+        if x.resolution != Resolution::default() || x.batch_size != u16::MAX {
+            header |= flag::S;
         }
-        if has_options(x) {
-            header |= tmsg::flag::O;
+        let mut n_exts = (x.ext_qos.is_some() as u8)
+            + (x.ext_shm.is_some() as u8)
+            + (x.ext_auth.is_some() as u8)
+            + (x.ext_mlink.is_some() as u8);
+        if n_exts != 0 {
+            header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        if has_options(x) {
-            self.write(&mut *writer, options(x))?;
+        self.write(&mut *writer, x.version)?;
+
+        let whatami: u8 = match x.whatami {
+            WhatAmI::Router => 0b00,
+            WhatAmI::Peer => 0b01,
+            WhatAmI::Client => 0b10,
+        };
+        let flags: u8 = ((x.zid.size() as u8 - 1) << 4) | whatami;
+        self.write(&mut *writer, flags)?;
+
+        let lodec = Zenoh080Length::new(x.zid.size());
+        lodec.write(&mut *writer, &x.zid)?;
+
+        if imsg::has_flag(header, flag::S) {
+            self.write(&mut *writer, x.resolution.as_u8())?;
+            self.write(&mut *writer, x.batch_size.to_le_bytes())?;
         }
-        let wai: ZInt = x.whatami.into();
-        self.write(&mut *writer, wai)?;
-        self.write(&mut *writer, &x.zid)?;
-        if let Some(snr) = x.sn_resolution {
-            self.write(&mut *writer, snr)?;
+
+        let zodec = Zenoh080Bounded::<BatchSize>::new();
+        zodec.write(&mut *writer, &x.cookie)?;
+
+        // Extensions
+        if let Some(qos) = x.ext_qos.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (qos, n_exts != 0))?;
         }
-        self.write(&mut *writer, &x.cookie)?;
+        if let Some(shm) = x.ext_shm.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (shm, n_exts != 0))?;
+        }
+        if let Some(auth) = x.ext_auth.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (auth, n_exts != 0))?;
+        }
+        if let Some(mlink) = x.ext_mlink.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (mlink, n_exts != 0))?;
+        }
+
         Ok(())
     }
 }
 
-impl<R> RCodec<InitAck, &mut R> for Zenoh060
+impl<R> RCodec<InitAck, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<InitAck, Self::Error> {
-        let codec = Zenoh060Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<InitAck, &mut R> for Zenoh060Header
+impl<R> RCodec<InitAck, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<InitAck, Self::Error> {
-        if imsg::mid(self.header) != imsg::id::INIT || !imsg::has_flag(self.header, tmsg::flag::A) {
+        if imsg::mid(self.header) != id::INIT || !imsg::has_flag(self.header, flag::A) {
             return Err(DidntRead);
         }
 
-        let options: ZInt = if imsg::has_flag(self.header, tmsg::flag::O) {
-            self.codec.read(&mut *reader)?
-        } else {
-            0
+        // Body
+        let version: u8 = self.codec.read(&mut *reader)?;
+
+        let flags: u8 = self.codec.read(&mut *reader)?;
+        let whatami = match flags & 0b11 {
+            0b00 => WhatAmI::Router,
+            0b01 => WhatAmI::Peer,
+            0b10 => WhatAmI::Client,
+            _ => return Err(DidntRead),
         };
-        let wai: ZInt = self.codec.read(&mut *reader)?;
-        let whatami = WhatAmI::try_from(wai).ok_or(DidntRead)?;
-        let zid: ZenohId = self.codec.read(&mut *reader)?;
-        let sn_resolution = if imsg::has_flag(self.header, tmsg::flag::S) {
-            let snr: ZInt = self.codec.read(&mut *reader)?;
-            Some(snr)
-        } else {
-            None
-        };
-        let is_qos = imsg::has_option(options, tmsg::init_options::QOS);
-        let cookie: ZSlice = self.codec.read(&mut *reader)?;
+        let length = 1 + ((flags >> 4) as usize);
+        let lodec = Zenoh080Length::new(length);
+        let zid: ZenohId = lodec.read(&mut *reader)?;
+
+        let mut resolution = Resolution::default();
+        let mut batch_size = BatchSize::MAX.to_le_bytes();
+        if imsg::has_flag(self.header, flag::S) {
+            let flags: u8 = self.codec.read(&mut *reader)?;
+            resolution = Resolution::from(flags & 0b00111111);
+            batch_size = self.codec.read(&mut *reader)?;
+        }
+        let batch_size = BatchSize::from_le_bytes(batch_size);
+
+        let zodec = Zenoh080Bounded::<BatchSize>::new();
+        let cookie: ZSlice = zodec.read(&mut *reader)?;
+
+        // Extensions
+        let mut ext_qos = None;
+        let mut ext_shm = None;
+        let mut ext_auth = None;
+        let mut ext_mlink = None;
+
+        let mut has_ext = imsg::has_flag(self.header, flag::Z);
+        while has_ext {
+            let ext: u8 = self.codec.read(&mut *reader)?;
+            let eodec = Zenoh080Header::new(ext);
+            match iext::eid(ext) {
+                ext::QoS::ID => {
+                    let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
+                    ext_qos = Some(q);
+                    has_ext = ext;
+                }
+                ext::Shm::ID => {
+                    let (s, ext): (ext::Shm, bool) = eodec.read(&mut *reader)?;
+                    ext_shm = Some(s);
+                    has_ext = ext;
+                }
+                ext::Auth::ID => {
+                    let (a, ext): (ext::Auth, bool) = eodec.read(&mut *reader)?;
+                    ext_auth = Some(a);
+                    has_ext = ext;
+                }
+                ext::MultiLink::ID => {
+                    let (a, ext): (ext::MultiLink, bool) = eodec.read(&mut *reader)?;
+                    ext_mlink = Some(a);
+                    has_ext = ext;
+                }
+                _ => {
+                    has_ext = extension::skip(reader, "InitAck", ext)?;
+                }
+            }
+        }
 
         Ok(InitAck {
+            version,
             whatami,
             zid,
-            sn_resolution,
-            is_qos,
+            resolution,
+            batch_size,
             cookie,
+            ext_qos,
+            ext_shm,
+            ext_auth,
+            ext_mlink,
         })
     }
 }

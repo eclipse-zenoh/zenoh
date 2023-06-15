@@ -11,5 +11,5 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-mod attachment;
+pub mod extension;
 mod priority;

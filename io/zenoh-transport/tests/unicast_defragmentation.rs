@@ -71,7 +71,6 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     let data_info = None;
     let routing_context = None;
     let reply_context = None;
-    let attachment = None;
     let message = ZenohMessage::make_data(
         key,
         payload,
@@ -80,7 +79,6 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
         data_info,
         routing_context,
         reply_context,
-        attachment,
     );
 
     println!(
@@ -97,7 +95,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 
     // Wait on the router manager that the transport has been closed
     ztimeout!(async {
-        while !router_manager.get_transports_unicast().is_empty() {
+        while !router_manager.get_transports_unicast().await.is_empty() {
             task::sleep(SLEEP).await;
         }
     });
@@ -108,7 +106,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 
     // Wait a little bit
     ztimeout!(async {
-        while !router_manager.get_listeners().is_empty() {
+        while !router_manager.get_listeners_unicast().await.is_empty() {
             task::sleep(SLEEP).await;
         }
     });

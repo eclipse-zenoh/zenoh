@@ -17,15 +17,17 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
-use zenoh_config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
+use zenoh_config::defaults::queries_default_timeout;
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::{
-        key_expr::keyexpr, Channel, CongestionControl, ConsolidationMode, QueryTarget,
-        QueryableInfo, Reliability, SubInfo, SubMode, WhatAmI, WireExpr, ZInt, ZenohId,
-        EMPTY_EXPR_ID,
+        key_expr::keyexpr, Channel, CongestionControl, ExprId, Reliability, WhatAmI, WireExpr,
+        ZenohId, EMPTY_EXPR_ID,
     },
-    zenoh::{DataInfo, QueryBody, RoutingContext},
+    zenoh::{
+        ConsolidationMode, DataInfo, PullId, QueryBody, QueryId, QueryTarget, QueryableInfo,
+        RoutingContext, SubInfo, SubMode,
+    },
 };
 use zenoh_transport::{DummyPrimitives, Primitives};
 
@@ -38,7 +40,7 @@ fn base_test() {
             Some(Arc::new(HLC::default())),
             false,
             true,
-            Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+            Duration::from_millis(queries_default_timeout),
         )),
         ctrl_lock: Mutex::new(()),
         queries_lock: RwLock::new(()),
@@ -139,7 +141,7 @@ fn match_test() {
             Some(Arc::new(HLC::default())),
             false,
             true,
-            Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+            Duration::from_millis(queries_default_timeout),
         )),
         ctrl_lock: Mutex::new(()),
         queries_lock: RwLock::new(()),
@@ -185,7 +187,7 @@ fn clean_test() {
             Some(Arc::new(HLC::default())),
             false,
             true,
-            Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+            Duration::from_millis(queries_default_timeout),
         )),
         ctrl_lock: Mutex::new(()),
         queries_lock: RwLock::new(()),
@@ -375,7 +377,7 @@ fn clean_test() {
 
 pub struct ClientPrimitives {
     data: std::sync::Mutex<Option<WireExpr<'static>>>,
-    mapping: std::sync::Mutex<std::collections::HashMap<ZInt, String>>,
+    mapping: std::sync::Mutex<std::collections::HashMap<ExprId, String>>,
 }
 
 impl ClientPrimitives {
@@ -425,12 +427,12 @@ impl ClientPrimitives {
 }
 
 impl Primitives for ClientPrimitives {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
+    fn decl_resource(&self, expr_id: ExprId, key_expr: &WireExpr) {
         let name = self.get_name(key_expr);
         zlock!(self.mapping).insert(expr_id, name);
     }
 
-    fn forget_resource(&self, expr_id: ZInt) {
+    fn forget_resource(&self, expr_id: ExprId) {
         zlock!(self.mapping).remove(&expr_id);
     }
 
@@ -471,7 +473,7 @@ impl Primitives for ClientPrimitives {
         &self,
         _key_expr: &WireExpr,
         _parameters: &str,
-        _qid: ZInt,
+        _qid: QueryId,
         _target: QueryTarget,
         _consolidation: ConsolidationMode,
         _body: Option<QueryBody>,
@@ -481,21 +483,21 @@ impl Primitives for ClientPrimitives {
 
     fn send_reply_data(
         &self,
-        _qid: ZInt,
+        _qid: QueryId,
         _replier_id: ZenohId,
         _key_expr: WireExpr,
         _info: Option<DataInfo>,
         _payload: ZBuf,
     ) {
     }
-    fn send_reply_final(&self, _qid: ZInt) {}
+    fn send_reply_final(&self, _qid: QueryId) {}
 
     fn send_pull(
         &self,
         _is_final: bool,
         _key_expr: &WireExpr,
-        _pull_id: ZInt,
-        _max_samples: &Option<ZInt>,
+        _pull_id: PullId,
+        _max_samples: &Option<u16>,
     ) {
     }
 
@@ -511,7 +513,7 @@ fn client_test() {
             Some(Arc::new(HLC::default())),
             false,
             true,
-            Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+            Duration::from_millis(queries_default_timeout),
         )),
         ctrl_lock: Mutex::new(()),
         queries_lock: RwLock::new(()),
@@ -610,7 +612,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::default(),
+        ZBuf::empty(),
         None,
     );
 
@@ -636,7 +638,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::default(),
+        ZBuf::empty(),
         None,
     );
 
@@ -662,7 +664,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::default(),
+        ZBuf::empty(),
         None,
     );
 
@@ -688,7 +690,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::default(),
+        ZBuf::empty(),
         None,
     );
 
@@ -714,7 +716,7 @@ fn client_test() {
         Channel::default(),
         CongestionControl::default(),
         None,
-        ZBuf::default(),
+        ZBuf::empty(),
         None,
     );
 

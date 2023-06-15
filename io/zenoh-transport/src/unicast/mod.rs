@@ -15,6 +15,8 @@ pub mod establishment;
 pub(crate) mod link;
 pub(crate) mod manager;
 pub(crate) mod rx;
+#[cfg(feature = "shared-memory")]
+pub(crate) mod shm;
 pub(crate) mod transport;
 pub(crate) mod tx;
 
@@ -22,14 +24,17 @@ use super::common;
 #[cfg(feature = "stats")]
 use super::common::stats::stats_struct;
 use super::{TransportPeer, TransportPeerEventHandler};
+#[cfg(feature = "transport_multilink")]
+use crate::establishment::ext::auth::ZPublicKey;
 pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};
 use transport::TransportUnicastInner;
+use zenoh_core::zcondfeat;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{WhatAmI, ZInt, ZenohId},
-    transport::tmsg,
+    core::{Bits, WhatAmI, ZenohId},
+    transport::{close, TransportSn},
     zenoh::ZenohMessage,
 };
 use zenoh_result::{zerror, ZResult};
@@ -78,15 +83,17 @@ stats_struct! {
 /*************************************/
 /*        TRANSPORT UNICAST          */
 /*************************************/
-#[derive(Clone, Copy)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct TransportConfigUnicast {
-    pub(crate) peer: ZenohId,
+    pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
-    pub(crate) sn_resolution: ZInt,
-    pub(crate) initial_sn_tx: ZInt,
+    pub(crate) sn_resolution: Bits,
+    pub(crate) tx_initial_sn: TransportSn,
+    pub(crate) is_qos: bool,
+    #[cfg(feature = "transport_multilink")]
+    pub(crate) multilink: Option<ZPublicKey>,
     #[cfg(feature = "shared-memory")]
     pub(crate) is_shm: bool,
-    pub(crate) is_qos: bool,
 }
 
 /// [`TransportUnicast`] is the transport handler returned
@@ -115,9 +122,9 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
+    pub fn get_sn_resolution(&self) -> ZResult<u64> {
         let transport = self.get_inner()?;
-        Ok(transport.get_sn_resolution())
+        Ok(transport.get_sn_resolution().mask())
     }
 
     #[cfg(feature = "shared-memory")]
@@ -144,14 +151,14 @@ impl TransportUnicast {
         let tp = TransportPeer {
             zid: transport.get_zid(),
             whatami: transport.get_whatami(),
-            is_qos: transport.is_qos(),
-            #[cfg(feature = "shared-memory")]
-            is_shm: transport.is_shm(),
             links: transport
                 .get_links()
                 .into_iter()
                 .map(|l| l.into())
                 .collect(),
+            is_qos: transport.is_qos(),
+            #[cfg(feature = "shared-memory")]
+            is_shm: transport.is_shm(),
         };
         Ok(tp)
     }
@@ -181,9 +188,7 @@ impl TransportUnicast {
             .into_iter()
             .find(|l| l.get_src() == &link.src && l.get_dst() == &link.dst)
             .ok_or_else(|| zerror!("Invalid link"))?;
-        transport
-            .close_link(&link, tmsg::close_reason::GENERIC)
-            .await?;
+        transport.close_link(&link, close::reason::GENERIC).await?;
         Ok(())
     }
 
@@ -191,7 +196,7 @@ impl TransportUnicast {
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the transport has already been closed
         match self.get_inner() {
-            Ok(transport) => transport.close(tmsg::close_reason::GENERIC).await,
+            Ok(transport) => transport.close(close::reason::GENERIC).await,
             Err(_) => Ok(()),
         }
     }
@@ -224,25 +229,17 @@ impl PartialEq for TransportUnicast {
 impl fmt::Debug for TransportUnicast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.get_inner() {
-            #[cfg(feature = "shared-memory")]
-            Ok(transport) => f
-                .debug_struct("Transport Unicast")
-                .field("zid", &transport.get_zid())
-                .field("whatami", &transport.get_whatami())
-                .field("sn_resolution", &transport.get_sn_resolution())
-                .field("is_qos", &transport.is_qos())
-                .field("is_shm", &transport.is_shm())
-                .field("links", &transport.get_links())
-                .finish(),
-            #[cfg(not(feature = "shared-memory"))]
-            Ok(transport) => f
-                .debug_struct("Transport Unicast")
-                .field("zid", &transport.get_zid())
-                .field("whatami", &transport.get_whatami())
-                .field("sn_resolution", &transport.get_sn_resolution())
-                .field("is_qos", &transport.is_qos())
-                .field("links", &transport.get_links())
-                .finish(),
+            Ok(transport) => {
+                let is_shm = zcondfeat!("shared-memory", transport.is_shm(), false);
+                f.debug_struct("Transport Unicast")
+                    .field("zid", &transport.get_zid())
+                    .field("whatami", &transport.get_whatami())
+                    .field("sn_resolution", &transport.get_sn_resolution())
+                    .field("is_qos", &transport.is_qos())
+                    .field("is_shm", &is_shm)
+                    .field("links", &transport.get_links())
+                    .finish()
+            }
             Err(e) => {
                 write!(f, "{e}")
             }

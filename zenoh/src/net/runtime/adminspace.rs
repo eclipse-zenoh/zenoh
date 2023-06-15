@@ -14,7 +14,7 @@ use super::routing::face::Face;
 use super::Runtime;
 use crate::key_expr::KeyExpr;
 use crate::plugins::sealed as plugins;
-use crate::prelude::sync::Sample;
+use crate::prelude::sync::{Sample, SyncResolve};
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
 use crate::value::Value;
@@ -28,13 +28,15 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::{SplitBuffer, ZBuf};
 use zenoh_config::ValidatedMap;
-use zenoh_core::SyncResolve;
 use zenoh_protocol::{
     core::{
-        key_expr::OwnedKeyExpr, Channel, CongestionControl, ConsolidationMode, KnownEncoding,
-        QueryTarget, QueryableInfo, SampleKind, SubInfo, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+        key_expr::OwnedKeyExpr, Channel, CongestionControl, ExprId, KnownEncoding, WireExpr,
+        ZenohId, EMPTY_EXPR_ID,
     },
-    zenoh::{DataInfo, QueryBody, RoutingContext},
+    zenoh::{
+        ConsolidationMode, DataInfo, PullId, QueryBody, QueryId, QueryTarget, QueryableInfo,
+        RoutingContext, SampleKind, SubInfo,
+    },
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{Primitives, TransportUnicast};
@@ -51,7 +53,7 @@ type Handler = Arc<dyn Fn(&AdminContext, Query) + Send + Sync>;
 pub struct AdminSpace {
     zid: ZenohId,
     primitives: Mutex<Option<Arc<Face>>>,
-    mappings: Mutex<HashMap<ZInt, String>>,
+    mappings: Mutex<HashMap<ExprId, String>>,
     handlers: HashMap<OwnedKeyExpr, Handler>,
     context: Arc<AdminContext>,
 }
@@ -250,7 +252,7 @@ impl AdminSpace {
 }
 
 impl Primitives for AdminSpace {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
+    fn decl_resource(&self, expr_id: ExprId, key_expr: &WireExpr) {
         trace!("recv Resource {} {:?}", expr_id, key_expr);
         match self.key_expr_to_string(key_expr) {
             Ok(s) => {
@@ -260,7 +262,7 @@ impl Primitives for AdminSpace {
         }
     }
 
-    fn forget_resource(&self, _expr_id: ZInt) {
+    fn forget_resource(&self, _expr_id: ExprId) {
         trace!("recv Forget Resource {}", _expr_id);
     }
 
@@ -373,7 +375,7 @@ impl Primitives for AdminSpace {
         &self,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: ZInt,
+        qid: QueryId,
         target: QueryTarget,
         _consolidation: ConsolidationMode,
         body: Option<QueryBody>,
@@ -433,7 +435,7 @@ impl Primitives for AdminSpace {
 
     fn send_reply_data(
         &self,
-        qid: ZInt,
+        qid: QueryId,
         replier_id: ZenohId,
         key_expr: WireExpr,
         info: Option<DataInfo>,
@@ -449,7 +451,7 @@ impl Primitives for AdminSpace {
         );
     }
 
-    fn send_reply_final(&self, qid: ZInt) {
+    fn send_reply_final(&self, qid: QueryId) {
         trace!("recv ReplyFinal {:?}", qid);
     }
 
@@ -457,8 +459,8 @@ impl Primitives for AdminSpace {
         &self,
         _is_final: bool,
         _key_expr: &WireExpr,
-        _pull_id: ZInt,
-        _max_samples: &Option<ZInt>,
+        _pull_id: PullId,
+        _max_samples: &Option<u16>,
     ) {
         trace!(
             "recv Pull {:?} {:?} {:?} {:?}",

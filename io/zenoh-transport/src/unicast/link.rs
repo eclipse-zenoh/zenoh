@@ -28,12 +28,9 @@ use async_std::task::JoinHandle;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::Duration;
-use std::vec;
-use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::ZSlice;
-use zenoh_codec::{RCodec, Zenoh060};
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
-use zenoh_protocol::transport::TransportMessage;
+use zenoh_protocol::transport::{BatchSize, KeepAlive, TransportMessage};
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_sync::{RecyclingObjectPool, Signal};
 
@@ -104,8 +101,8 @@ impl TransportLinkUnicast {
             let config = TransmissionPipelineConf {
                 is_streamed: self.link.is_streamed(),
                 batch_size: batch_size.min(self.link.get_mtu()),
-                queue_size: self.transport.config.manager.config.queue_size,
-                backoff: self.transport.config.manager.config.queue_backoff,
+                queue_size: self.transport.manager.config.queue_size,
+                backoff: self.transport.manager.config.queue_backoff,
             };
 
             #[cfg(all(feature = "unstable", feature = "transport_compression"))]
@@ -146,13 +143,13 @@ impl TransportLinkUnicast {
         }
     }
 
-    pub(super) fn start_rx(&mut self, lease: Duration) {
+    pub(super) fn start_rx(&mut self, lease: Duration, batch_size: u16) {
         if self.handle_rx.is_none() {
             // Spawn the RX task
             let c_link = self.link.clone();
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
-            let c_rx_buffer_size = self.transport.config.manager.config.link_rx_buffer_size;
+            let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
 
             let handle = task::spawn(async move {
                 // Start the consume task
@@ -161,6 +158,7 @@ impl TransportLinkUnicast {
                     c_transport.clone(),
                     lease,
                     c_signal.clone(),
+                    batch_size,
                     c_rx_buffer_size,
                 )
                 .await;
@@ -247,12 +245,10 @@ async fn tx_task(
                 None => break,
             },
             Err(_) => {
-                let zid = None;
-                let attachment = None;
-                let message = TransportMessage::make_keep_alive(zid, attachment);
+                let message: TransportMessage = KeepAlive.into();
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.write_transport_message(&message).await?;
+                let n = link.send(&message).await?;
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(1);
@@ -285,6 +281,7 @@ async fn rx_task_stream(
     transport: TransportUnicastInner,
     lease: Duration,
     signal: Signal,
+    rx_batch_size: BatchSize,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     enum Action {
@@ -296,7 +293,7 @@ async fn rx_task_stream(
         // 16 bits for reading the batch length
         let mut length = [0_u8, 0_u8];
         link.read_exact(&mut length).await?;
-        let n = u16::from_le_bytes(length) as usize;
+        let n = BatchSize::from_le_bytes(length) as usize;
         link.read_exact(&mut buffer[0..n]).await?;
         Ok(Action::Read(n))
     }
@@ -306,10 +303,8 @@ async fn rx_task_stream(
         Ok(Action::Stop)
     }
 
-    let codec = Zenoh060::default();
-
     // The pool of buffers
-    let mtu = link.get_mtu() as usize;
+    let mtu = link.get_mtu().min(rx_batch_size) as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -342,20 +337,8 @@ async fn rx_task_stream(
                 rx_decompress(&mut buffer, &pool, n, &mut start_pos, &mut end_pos)?;
 
                 // Deserialize all the messages from the current ZBuf
-                let mut zslice = ZSlice::make(Arc::new(buffer), start_pos, end_pos).unwrap();
-                let mut reader = zslice.reader();
-                while reader.can_read() {
-                    let msg: TransportMessage = codec
-                        .read(&mut reader)
-                        .map_err(|_| zerror!("{}: decoding error", link))?;
-
-                    #[cfg(feature = "stats")]
-                    {
-                        transport.stats.inc_rx_t_msgs(1);
-                    }
-
-                    transport.receive_message(msg, &link)?
-                }
+                let zslice = ZSlice::make(Arc::new(buffer), start_pos, end_pos).unwrap();
+                transport.read_messages(zslice, &link)?;
             }
             Action::Stop => break,
         }
@@ -368,6 +351,7 @@ async fn rx_task_dgram(
     transport: TransportUnicastInner,
     lease: Duration,
     signal: Signal,
+    rx_batch_size: BatchSize,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     enum Action {
@@ -385,10 +369,8 @@ async fn rx_task_dgram(
         Ok(Action::Stop)
     }
 
-    let codec = Zenoh060::default();
-
     // The pool of buffers
-    let mtu = link.get_mtu() as usize;
+    let mtu = link.get_mtu().min(rx_batch_size) as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -426,20 +408,8 @@ async fn rx_task_dgram(
                 rx_decompress(&mut buffer, &pool, n, &mut start_pos, &mut end_pos)?;
 
                 // Deserialize all the messages from the current ZBuf
-                let mut zslice = ZSlice::make(Arc::new(buffer), start_pos, end_pos).unwrap();
-                let mut reader = zslice.reader();
-                while reader.can_read() {
-                    let msg: TransportMessage = codec
-                        .read(&mut reader)
-                        .map_err(|_| zerror!("{}: decoding error", link))?;
-
-                    #[cfg(feature = "stats")]
-                    {
-                        transport.stats.inc_rx_t_msgs(1);
-                    }
-
-                    transport.receive_message(msg, &link)?
-                }
+                let zslice = ZSlice::make(Arc::new(buffer), start_pos, end_pos).unwrap();
+                transport.read_messages(zslice, &link)?;
             }
             Action::Stop => break,
         }
@@ -452,12 +422,29 @@ async fn rx_task(
     transport: TransportUnicastInner,
     lease: Duration,
     signal: Signal,
+    rx_batch_size: u16,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     if link.is_streamed() {
-        rx_task_stream(link, transport, lease, signal, rx_buffer_size).await
+        rx_task_stream(
+            link,
+            transport,
+            lease,
+            signal,
+            rx_batch_size,
+            rx_buffer_size,
+        )
+        .await
     } else {
-        rx_task_dgram(link, transport, lease, signal, rx_buffer_size).await
+        rx_task_dgram(
+            link,
+            transport,
+            lease,
+            signal,
+            rx_batch_size,
+            rx_buffer_size,
+        )
+        .await
     }
 }
 

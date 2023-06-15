@@ -21,7 +21,7 @@ use std::{
 };
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 pub use zenoh_protocol::core::key_expr::*;
-use zenoh_protocol::core::{key_expr::canon::Canonizable, WireExpr};
+use zenoh_protocol::core::{key_expr::canon::Canonizable, ExprId, WireExpr};
 use zenoh_result::ZResult;
 use zenoh_transport::Primitives;
 
@@ -32,14 +32,14 @@ pub(crate) enum KeyExprInner<'a> {
     Borrowed(&'a keyexpr),
     BorrowedWire {
         key_expr: &'a keyexpr,
-        expr_id: u64,
+        expr_id: ExprId,
         prefix_len: u32,
         session_id: u16,
     },
     Owned(OwnedKeyExpr),
     Wire {
         key_expr: OwnedKeyExpr,
-        expr_id: u64,
+        expr_id: ExprId,
         prefix_len: u32,
         session_id: u16,
     },

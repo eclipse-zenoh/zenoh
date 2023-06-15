@@ -18,8 +18,8 @@ use zenoh_link::EndPoint;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportPeer,
+    TransportPeerEventHandler, TransportUnicast,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -43,13 +43,6 @@ impl TransportEventHandler for SHRouterOpenClose {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
     }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        panic!();
-    }
 }
 
 // Transport Handler for the client
@@ -68,13 +61,6 @@ impl TransportEventHandler for SHClientOpenClose {
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
-    }
-
-    fn new_multicast(
-        &self,
-        _transport: TransportMulticast,
-    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        panic!();
     }
 }
 

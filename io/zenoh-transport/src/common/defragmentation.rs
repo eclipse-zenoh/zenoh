@@ -13,9 +13,10 @@
 //
 use super::seq_num::SeqNum;
 use zenoh_buffers::{reader::HasReader, SplitBuffer, ZBuf, ZSlice};
-use zenoh_codec::{RCodec, Zenoh060Reliability};
+use zenoh_codec::{RCodec, Zenoh080Reliability};
 use zenoh_protocol::{
-    core::{Reliability, ZInt},
+    core::{Bits, Reliability},
+    transport::TransportSn,
     zenoh::ZenohMessage,
 };
 use zenoh_result::{bail, ZResult};
@@ -32,13 +33,13 @@ pub(crate) struct DefragBuffer {
 impl DefragBuffer {
     pub(crate) fn make(
         reliability: Reliability,
-        sn_resolution: ZInt,
+        resolution: Bits,
         capacity: usize,
     ) -> ZResult<DefragBuffer> {
         let db = DefragBuffer {
             reliability,
-            sn: SeqNum::make(0, sn_resolution)?,
-            buffer: ZBuf::default(),
+            sn: SeqNum::make(0, resolution)?,
+            buffer: ZBuf::empty(),
             capacity,
             len: 0,
         };
@@ -57,11 +58,11 @@ impl DefragBuffer {
     }
 
     #[inline(always)]
-    pub(crate) fn sync(&mut self, sn: ZInt) -> ZResult<()> {
+    pub(crate) fn sync(&mut self, sn: TransportSn) -> ZResult<()> {
         self.sn.set(sn)
     }
 
-    pub(crate) fn push(&mut self, sn: ZInt, zslice: ZSlice) -> ZResult<()> {
+    pub(crate) fn push(&mut self, sn: TransportSn, zslice: ZSlice) -> ZResult<()> {
         if sn != self.sn.get() {
             self.clear();
             bail!("Expected SN {}, received {}", self.sn.get(), sn)
@@ -87,7 +88,7 @@ impl DefragBuffer {
     #[inline(always)]
     pub(crate) fn defragment(&mut self) -> Option<ZenohMessage> {
         let mut reader = self.buffer.reader();
-        let rcodec = Zenoh060Reliability::new(self.reliability);
+        let rcodec = Zenoh080Reliability::new(self.reliability);
         let res: Option<ZenohMessage> = rcodec.read(&mut reader).ok();
         self.clear();
         res
