@@ -37,6 +37,8 @@ use zenoh_link_commons::{
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, ZResult};
 
+use super::SHM_ACCESS_MASK;
+
 const LINUX_PIPE_MAX_MTU: u16 = 65_535;
 const LINUX_PIPE_DEDICATE_TRIES: usize = 100;
 
@@ -566,8 +568,8 @@ fn parse_pipe_endpoint(endpoint: &EndPoint) -> (String, String, u32) {
     let access_mode = endpoint
         .config()
         .get(config::SHM_ACCESS_MASK)
-        .map_or(*crate::SHM_ACCESS_MASK, |val| {
-            val.parse().unwrap_or(*crate::SHM_ACCESS_MASK)
+        .map_or(*SHM_ACCESS_MASK, |val| {
+            val.parse().unwrap_or(*SHM_ACCESS_MASK)
         });
     (path_uplink, path_downlink, access_mode)
 }
