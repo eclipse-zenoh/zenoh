@@ -308,8 +308,9 @@ impl Recipe {
 
         // All tasks of the recipe run together
         try_join_all(futures)
+            .timeout(TIMEOUT)
             .await
-            .map_err(|e| format!("The recipe: {} failed due to {}", &self, e))?;
+            .map_err(|e| format!("The recipe: {} failed due to {}", &self, e))??;
         Ok(())
     }
 }
