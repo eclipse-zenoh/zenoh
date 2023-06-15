@@ -236,15 +236,12 @@ impl Recipe {
         );
 
         // All concurrent tasks to run
-        let futures = self.nodes.clone().into_iter().map(|node| {
-            println!("Node: {} started.", &node.name);
-
+        let futures = self.nodes.clone().into_iter().map(move |node| {
+            let receipe_name = self.to_string();
             // All nodes share the same checkpoint counter
             let remaining_checkpoints = remaining_checkpoints.clone();
 
             async move {
-                println!("Node: {} begin running.", &node.name);
-
                 // Load the config and build up a session
                 let config = {
                     let mut config = node.config.unwrap_or_default();
@@ -263,6 +260,7 @@ impl Recipe {
 
                 // Warmup before the session starts
                 async_std::task::sleep(node.warmup).await;
+                println!("Node: {} starting...", &node.name);
 
                 // In case of client can't connect to some peers/routers
                 let session = loop {
@@ -292,7 +290,7 @@ impl Recipe {
                 // All tasks of the node run together
                 try_join_all(node_tasks)
                     .await
-                    .map_err(|e| zerror!("The recipe {} failed due to {}", &self, &e))?;
+                    .map_err(|e| zerror!("The recipe {} failed due to {}", receipe_name, &e))?;
 
                 // Close the session once all the task assoicated with the node are done.
                 Arc::try_unwrap(session)
@@ -307,7 +305,7 @@ impl Recipe {
         });
 
         // All tasks of the recipe run together
-        try_join_all(futures)
+        try_join_all(futures.into_iter().map(async_std::task::spawn))
             .timeout(TIMEOUT)
             .await
             .map_err(|e| format!("The recipe: {} failed due to {}", &self, e))??;
