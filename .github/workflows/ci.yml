@@ -68,11 +68,12 @@ jobs:
           command: clippy
           args: --all-targets --features shared-memory -- -D warnings
 
-      - name: Clippy shared-memory
+      - name: Clippy transport_shm
+        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets --features shared-memory -- -D warnings
+          args: --all-targets --features shared-memory transport_shm -- -D warnings
 
   test:
     name: Run tests on ${{ matrix.os }}
@@ -103,6 +104,16 @@ jobs:
         with:
           command: nextest
           args: run
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+          ASYNC_STD_THREAD_COUNT: 4
+
+      - name: Run tests for SHM
+        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
+        uses: actions-rs/cargo@v1
+        with:
+          command: nextest
+          args: run --features shared-memory transport_shm
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
