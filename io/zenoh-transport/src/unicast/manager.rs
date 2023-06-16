@@ -393,7 +393,7 @@ impl TransportManager {
                 // Create the transport
                 let is_multilink =
                     zcondfeat!("transport_multilink", config.multilink.is_some(), false);
-                
+
                 let stc = TransportConfigUnicast {
                     zid: config.zid,
                     whatami: config.whatami,
