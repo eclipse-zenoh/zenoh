@@ -288,7 +288,7 @@ impl Recipe {
                 });
 
                 // All tasks of the node run together
-                try_join_all(node_tasks)
+                try_join_all(node_tasks.into_iter().map(async_std::task::spawn))
                     .await
                     .map_err(|e| zerror!("The recipe {} failed due to {}", receipe_name, &e))?;
 
