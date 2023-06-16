@@ -100,6 +100,7 @@ jobs:
         run: cargo install cargo-nextest --locked
 
       - name: Run tests
+        if: ${{ matrix.os != 'ubuntu-latest' }}
         uses: actions-rs/cargo@v1
         with:
           command: nextest
@@ -108,8 +109,8 @@ jobs:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
-      - name: Run tests for SHM
-        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
+      - name: Run tests with SHM
+        if: ${{ matrix.os == 'ubuntu-latest' }}
         uses: actions-rs/cargo@v1
         with:
           command: nextest
