@@ -393,8 +393,7 @@ impl TransportManager {
                 // Create the transport
                 let is_multilink =
                     zcondfeat!("transport_multilink", config.multilink.is_some(), false);
-                let is_shm = zcondfeat!("shared-memory", config.is_shm, false);
-
+                
                 let stc = TransportConfigUnicast {
                     zid: config.zid,
                     whatami: config.whatami,
@@ -421,16 +420,19 @@ impl TransportManager {
                     config.sn_resolution,
                     config.tx_initial_sn,
                     config.is_qos,
-                    is_multilink,                    is_shm
+                    config.is_shm,
+                    is_multilink
                 );
                 #[cfg(not(feature = "shared-memory"))]
                 log::debug!(
-                    "New transport opened with {}: whatami {}, sn resolution {}, initial sn {:?}, qos: {}",
-                    config.peer,
+                    "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, multilink: {}",
+                    self.config.zid,
+                    config.zid,
                     config.whatami,
                     config.sn_resolution,
-                    config.initial_sn_tx,
-                    config.is_qos
+                    config.tx_initial_sn,
+                    config.is_qos,
+                    is_multilink
                 );
 
                 Ok(transport)

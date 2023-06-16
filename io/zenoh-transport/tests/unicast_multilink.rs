@@ -502,6 +502,18 @@ mod tests {
         task::block_on(multilink_transport(&endpoint));
     }
 
+    #[cfg(feature = "transport_shm")]
+    #[test]
+    fn multilink_shm_only() {
+        let _ = env_logger::try_init();
+        task::block_on(async {
+            zasync_executor_init!();
+        });
+
+        let endpoint: EndPoint = "shm//tmp/multilink_shm_only".parse().unwrap();
+        task::block_on(multilink_transport(&endpoint));
+    }
+
     #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
     #[test]
     fn multilink_unix_only() {
