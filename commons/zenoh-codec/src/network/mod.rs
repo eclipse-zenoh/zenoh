@@ -13,6 +13,7 @@
 //
 mod declare;
 mod oam;
+mod pull;
 mod push;
 mod request;
 mod response;
@@ -40,6 +41,7 @@ where
             NetworkBody::Request(b) => self.write(&mut *writer, b),
             NetworkBody::Response(b) => self.write(&mut *writer, b),
             NetworkBody::ResponseFinal(b) => self.write(&mut *writer, b),
+            NetworkBody::Pull(b) => self.write(&mut *writer, b),
             NetworkBody::Declare(b) => self.write(&mut *writer, b),
             NetworkBody::OAM(b) => self.write(&mut *writer, b),
         }
@@ -61,6 +63,7 @@ where
             id::REQUEST => NetworkBody::Request(codec.read(&mut *reader)?),
             id::RESPONSE => NetworkBody::Response(codec.read(&mut *reader)?),
             id::RESPONSE_FINAL => NetworkBody::ResponseFinal(codec.read(&mut *reader)?),
+            id::PULL => NetworkBody::Pull(codec.read(&mut *reader)?),
             id::DECLARE => NetworkBody::Declare(codec.read(&mut *reader)?),
             id::OAM => NetworkBody::OAM(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
