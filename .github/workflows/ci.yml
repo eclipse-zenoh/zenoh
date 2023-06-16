@@ -73,7 +73,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets --features shared-memory transport_shm -- -D warnings
+          args: --all-targets --features shared-memory --features transport_shm -- -D warnings
 
   test:
     name: Run tests on ${{ matrix.os }}
