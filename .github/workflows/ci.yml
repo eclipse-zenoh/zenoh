@@ -113,7 +113,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: nextest
-          args: run --features shared-memory transport_shm
+          args: run -F shared-memory -F transport_shm
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
