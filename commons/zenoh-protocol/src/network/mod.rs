@@ -13,14 +13,12 @@
 //
 pub mod declare;
 pub mod oam;
-pub mod pull;
 pub mod push;
 pub mod request;
 pub mod response;
 
 pub use declare::*;
 pub use oam::*;
-pub use pull::*;
 pub use push::*;
 pub use request::*;
 pub use response::*;
@@ -34,7 +32,6 @@ pub mod id {
     pub const REQUEST: u8 = 0x1c;
     pub const RESPONSE: u8 = 0x1b;
     pub const RESPONSE_FINAL: u8 = 0x1a;
-    pub const PULL: u8 = 0x19;
 }
 
 #[repr(u8)]
@@ -66,7 +63,6 @@ pub enum NetworkBody {
     Request(Request),
     Response(Response),
     ResponseFinal(ResponseFinal),
-    Pull(Pull),
     Declare(Declare),
     OAM(Oam),
 }
@@ -85,14 +81,13 @@ impl NetworkMessage {
 
         let mut rng = rand::thread_rng();
 
-        let body = match rng.gen_range(0..7) {
+        let body = match rng.gen_range(0..6) {
             0 => NetworkBody::Push(Push::rand()),
             1 => NetworkBody::Request(Request::rand()),
             2 => NetworkBody::Response(Response::rand()),
             3 => NetworkBody::ResponseFinal(ResponseFinal::rand()),
-            4 => NetworkBody::Pull(Pull::rand()),
-            5 => NetworkBody::Declare(Declare::rand()),
-            6 => NetworkBody::OAM(Oam::rand()),
+            4 => NetworkBody::Declare(Declare::rand()),
+            5 => NetworkBody::OAM(Oam::rand()),
             _ => unreachable!(),
         };
 

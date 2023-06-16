@@ -11,18 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header};
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
+use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
+
 use zenoh_protocol::{
     common::{iext, imsg},
-    core::WireExpr,
-    network::{
+    zenoh_new::{
         id,
-        pull::{ext, flag},
-        Mapping, Pull,
+        pull::{ext, flag, Pull},
     },
 };
 
@@ -35,30 +35,20 @@ where
     fn write(self, writer: &mut W, x: &Pull) -> Self::Output {
         // Header
         let mut header = id::PULL;
-        let mut n_exts =
-            ((x.ext_qos != ext::QoSType::default()) as u8) + (x.ext_tstamp.is_some() as u8);
+        let mut n_exts = (x.ext_sinfo.is_some() as u8) + (x.ext_unknown.len() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
-        if x.mapping != Mapping::default() {
-            header |= flag::M;
-        }
-        if x.wire_expr.has_suffix() {
-            header |= flag::N;
-        }
         self.write(&mut *writer, header)?;
 
-        // Body
-        self.write(&mut *writer, &x.wire_expr)?;
-
         // Extensions
-        if x.ext_qos != ext::QoSType::default() {
+        if let Some(sinfo) = x.ext_sinfo.as_ref() {
             n_exts -= 1;
-            self.write(&mut *writer, (x.ext_qos, n_exts != 0))?;
+            self.write(&mut *writer, (sinfo, n_exts != 0))?;
         }
-        if let Some(ts) = x.ext_tstamp.as_ref() {
+        for u in x.ext_unknown.iter() {
             n_exts -= 1;
-            self.write(&mut *writer, (ts, n_exts != 0))?;
+            self.write(&mut *writer, (u, n_exts != 0))?;
         }
 
         Ok(())
@@ -89,45 +79,31 @@ where
             return Err(DidntRead);
         }
 
-        // Body
-        let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, flag::N));
-        let wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
-        let mapping = if imsg::has_flag(self.header, flag::M) {
-            Mapping::Sender
-        } else {
-            Mapping::Receiver
-        };
-
         // Extensions
-        let mut ext_qos = ext::QoSType::default();
-        let mut ext_tstamp = None;
+        let mut ext_sinfo: Option<ext::SourceInfoType> = None;
+        let mut ext_unknown = Vec::new();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
             let eodec = Zenoh080Header::new(ext);
             match iext::eid(ext) {
-                ext::QoS::ID => {
-                    let (q, ext): (ext::QoSType, bool) = eodec.read(&mut *reader)?;
-                    ext_qos = q;
-                    has_ext = ext;
-                }
-                ext::Timestamp::ID => {
-                    let (t, ext): (ext::TimestampType, bool) = eodec.read(&mut *reader)?;
-                    ext_tstamp = Some(t);
+                ext::SourceInfo::ID => {
+                    let (s, ext): (ext::SourceInfoType, bool) = eodec.read(&mut *reader)?;
+                    ext_sinfo = Some(s);
                     has_ext = ext;
                 }
                 _ => {
-                    has_ext = extension::skip(reader, "Pull", ext)?;
+                    let (u, ext) = extension::read(reader, "Pull", ext)?;
+                    ext_unknown.push(u);
+                    has_ext = ext;
                 }
             }
         }
 
         Ok(Pull {
-            wire_expr,
-            mapping,
-            ext_qos,
-            ext_tstamp,
+            ext_sinfo,
+            ext_unknown,
         })
     }
 }

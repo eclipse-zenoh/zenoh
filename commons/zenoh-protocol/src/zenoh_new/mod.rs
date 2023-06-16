@@ -14,6 +14,7 @@
 pub mod ack;
 pub mod del;
 pub mod err;
+pub mod pull;
 pub mod put;
 pub mod query;
 pub mod reply;
@@ -21,6 +22,7 @@ pub mod reply;
 pub use ack::*;
 pub use del::*;
 pub use err::*;
+pub use pull::*;
 pub use put::*;
 pub use query::*;
 pub use reply::*;
@@ -33,6 +35,7 @@ pub mod id {
     pub const REPLY: u8 = 0x04;
     pub const ERR: u8 = 0x05;
     pub const ACK: u8 = 0x06;
+    pub const PULL: u8 = 0x07;
 }
 
 // Push
@@ -75,6 +78,7 @@ pub enum RequestBody {
     Query(Query),
     Put(Put),
     Del(Del),
+    Pull(Pull),
 }
 
 impl RequestBody {
@@ -117,6 +121,7 @@ pub enum ResponseBody {
     Reply(Reply),
     Err(Err),
     Ack(Ack),
+    Put(Put),
 }
 
 impl ResponseBody {
@@ -126,10 +131,11 @@ impl ResponseBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..3) {
+        match rng.gen_range(0..4) {
             0 => ResponseBody::Reply(Reply::rand()),
             1 => ResponseBody::Err(Err::rand()),
             2 => ResponseBody::Ack(Ack::rand()),
+            3 => ResponseBody::Put(Put::rand()),
             _ => unreachable!(),
         }
     }

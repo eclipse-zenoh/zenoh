@@ -547,11 +547,6 @@ fn codec_response_final() {
 }
 
 #[test]
-fn codec_pull() {
-    run!(Pull, Pull::rand());
-}
-
-#[test]
 fn codec_network_oam() {
     run!(network::Oam, network::Oam::rand());
 }
@@ -590,6 +585,11 @@ fn codec_err() {
 #[test]
 fn codec_ack() {
     run!(zenoh_new::Ack, zenoh_new::Ack::rand());
+}
+
+#[test]
+fn codec_pull() {
+    run!(zenoh_new::Pull, zenoh_new::Pull::rand());
 }
 
 // Zenoh
