@@ -477,7 +477,7 @@ fn three_node_combination() -> Result<()> {
             .map(
                 |(node1_mode, node2_mode, msg_size, (delay1, delay2, delay3))| {
                     idx += 1;
-                    let ke_pubsub = format!("three_node_combination_keyexpr_pubsub_{idx}");
+                    // let ke_pubsub = format!("three_node_combination_keyexpr_pubsub_{idx}");
                     let ke_getqueryable =
                         format!("three_node_combination_keyexpr_getqueryable_{idx}");
                     let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
@@ -496,7 +496,7 @@ fn three_node_combination() -> Result<()> {
                             mode: node1_mode,
                             connect: vec![locator.clone()],
                             con_task: ConcurrentTask::from([
-                                SequentialTask::from([Task::Pub(ke_pubsub.clone(), msg_size)]),
+                                // SequentialTask::from([Task::Pub(ke_pubsub.clone(), msg_size)]),
                                 SequentialTask::from([Task::Queryable(
                                     ke_getqueryable.clone(),
                                     msg_size,
@@ -510,10 +510,10 @@ fn three_node_combination() -> Result<()> {
                             mode: node2_mode,
                             connect: vec![locator],
                             con_task: ConcurrentTask::from([
-                                SequentialTask::from([
-                                    Task::Sub(ke_pubsub, msg_size),
-                                    Task::Checkpoint,
-                                ]),
+                                // SequentialTask::from([
+                                //     Task::Sub(ke_pubsub, msg_size),
+                                //     Task::Checkpoint,
+                                // ]),
                                 SequentialTask::from([
                                     Task::Get(ke_getqueryable, msg_size),
                                     Task::Checkpoint,
@@ -562,7 +562,7 @@ fn two_node_combination() -> Result<()> {
             .flat_map(|(n1, n2, who)| MSG_SIZE.map(|s| (n1, n2, who, s)))
             .map(|(node1_mode, node2_mode, who, msg_size)| {
                 idx += 1;
-                let ke_pubsub = format!("two_node_combination_keyexpr_pubsub_{idx}");
+                // let ke_pubsub = format!("two_node_combination_keyexpr_pubsub_{idx}");
                 let ke_getqueryable = format!("two_node_combination_keyexpr_getqueryable_{idx}");
 
                 let (node1_listen_connect, node2_listen_connect) = {
@@ -584,7 +584,7 @@ fn two_node_combination() -> Result<()> {
                         listen: node1_listen_connect.0,
                         connect: node1_listen_connect.1,
                         con_task: ConcurrentTask::from([
-                            SequentialTask::from([Task::Pub(ke_pubsub.clone(), msg_size)]),
+                            // SequentialTask::from([Task::Pub(ke_pubsub.clone(), msg_size)]),
                             SequentialTask::from([Task::Queryable(
                                 ke_getqueryable.clone(),
                                 msg_size,
@@ -598,10 +598,10 @@ fn two_node_combination() -> Result<()> {
                         listen: node2_listen_connect.0,
                         connect: node2_listen_connect.1,
                         con_task: ConcurrentTask::from([
-                            SequentialTask::from([
-                                Task::Sub(ke_pubsub, msg_size),
-                                Task::Checkpoint,
-                            ]),
+                            // SequentialTask::from([
+                            //     Task::Sub(ke_pubsub, msg_size),
+                            //     Task::Checkpoint,
+                            // ]),
                             SequentialTask::from([
                                 Task::Get(ke_getqueryable, msg_size),
                                 Task::Checkpoint,
