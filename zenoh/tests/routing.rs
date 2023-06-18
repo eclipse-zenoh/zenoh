@@ -11,14 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use async_std::prelude::FutureExt;
 use futures::future::try_join_all;
 use futures::FutureExt as _;
 use std::str::FromStr;
 use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicUsize, Arc};
 use std::time::Duration;
-
-use async_std::prelude::FutureExt;
 use zenoh::config::{whatami::WhatAmI, Config};
 use zenoh::prelude::r#async::*;
 use zenoh::{value::Value, Result};
