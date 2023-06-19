@@ -28,7 +28,6 @@ description = "Internal crate for zenoh."
 transport_shm = []
 
 [dependencies]
-advisory-lock = ">= 0.3.0"
 async-std = { workspace = true }
 async-trait = { workspace = true }
 async-io = ">= 1.13.0"
@@ -46,6 +45,7 @@ zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
+advisory-lock = ">= 0.3.0"
 unix-named-pipe = ">= 0.2.0"
 nix = { workspace = true }
 filepath = ">=0.1.2"
