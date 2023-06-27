@@ -110,16 +110,10 @@ fn parse_args() -> (Config, String, String, bool) {
         config.set_mode(Some(mode)).unwrap();
     }
     if let Some(values) = args.values_of("connect") {
-        config
-            .connect
-            .endpoints
-            .extend(values.map(|v| v.parse().unwrap()))
+        config.connect.endpoints = values.map(|v| v.parse().unwrap()).collect();
     }
     if let Some(values) = args.values_of("listen") {
-        config
-            .listen
-            .endpoints
-            .extend(values.map(|v| v.parse().unwrap()))
+        config.listen.endpoints = values.map(|v| v.parse().unwrap()).collect();
     }
     if args.is_present("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
