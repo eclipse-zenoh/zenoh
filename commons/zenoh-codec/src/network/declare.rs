@@ -19,7 +19,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{iext, imsg, ZExtZ64},
-    core::{ExprId, WireExpr},
+    core::{ExprId, ExprLen, WireExpr},
     network::{
         declare::{
             self, common, interest, keyexpr, queryable, subscriber, token, Declare, DeclareBody,
@@ -1039,7 +1039,11 @@ where
             flags |= 1 << 1;
         }
         codec.write(&mut zriter, flags)?;
-        codec.write(&mut zriter, &x.wire_expr)?;
+
+        codec.write(&mut zriter, x.wire_expr.scope)?;
+        if x.wire_expr.has_suffix() {
+            zriter.write_exact(x.wire_expr.suffix.as_bytes())?;
+        }
 
         let ext = common::ext::WireExprExt { value };
         codec.write(&mut *writer, (&ext, more))?;
@@ -1058,11 +1062,23 @@ where
         use zenoh_buffers::reader::HasReader;
 
         let (ext, more): (common::ext::WireExprExt, bool) = self.read(&mut *reader)?;
+
         let mut zeader = ext.value.reader();
         let flags: u8 = self.codec.read(&mut zeader)?;
 
-        let codec = Zenoh080Condition::new(imsg::has_flag(flags, 1));
-        let wire_expr: WireExpr<'_> = codec.read(&mut zeader)?;
+        let scope: ExprLen = self.codec.read(&mut zeader)?;
+        let suffix = if imsg::has_flag(flags, 1) {
+            let mut buff = zenoh_buffers::vec::uninit(zeader.remaining());
+            zeader.read_exact(&mut buff)?;
+            String::from_utf8(buff).map_err(|_| DidntRead)?
+        } else {
+            String::new()
+        };
+        let wire_expr = WireExpr {
+            scope,
+            suffix: suffix.into(),
+        };
+
         let mapping = if imsg::has_flag(flags, 1 << 1) {
             Mapping::Receiver
         } else {
