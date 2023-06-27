@@ -39,8 +39,9 @@ where
     fn write(self, writer: &mut W, x: &Response) -> Self::Output {
         // Header
         let mut header = id::RESPONSE;
-        let mut n_exts =
-            ((x.ext_qos != ext::QoSType::default()) as u8) + (x.ext_tstamp.is_some() as u8);
+        let mut n_exts = ((x.ext_qos != ext::QoSType::default()) as u8)
+            + (x.ext_tstamp.is_some() as u8)
+            + (x.ext_respid.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -64,6 +65,10 @@ where
         if let Some(ts) = x.ext_tstamp.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
+        }
+        if let Some(ri) = x.ext_respid.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (ri, n_exts != 0))?;
         }
 
         // Payload

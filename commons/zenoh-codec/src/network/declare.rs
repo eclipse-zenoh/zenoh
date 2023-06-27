@@ -14,13 +14,16 @@
 use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Condition, Zenoh080Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
-    writer::{DidntWrite, Writer},
+    writer::{DidntWrite, HasWriter, Writer},
+    ZBuf,
 };
 use zenoh_protocol::{
     common::{iext, imsg, ZExtZ64},
     core::{ExprId, WireExpr},
     network::{
-        declare::{self, interest, keyexpr, queryable, subscriber, token, Declare, DeclareBody},
+        declare::{
+            self, common, interest, keyexpr, queryable, subscriber, token, Declare, DeclareBody,
+        },
         id, Mapping,
     },
 };
@@ -418,11 +421,14 @@ where
 
     fn write(self, writer: &mut W, x: &subscriber::UndeclareSubscriber) -> Self::Output {
         // Header
-        let header = declare::id::U_SUBSCRIBER;
+        let header = declare::id::U_SUBSCRIBER | subscriber::flag::Z;
         self.write(&mut *writer, header)?;
 
         // Body
         self.write(&mut *writer, x.id)?;
+
+        // Extension
+        self.write(&mut *writer, (&x.ext_wire_expr, false))?;
 
         Ok(())
     }
@@ -457,12 +463,26 @@ where
         let id: subscriber::SubscriberId = self.codec.read(&mut *reader)?;
 
         // Extensions
-        let has_ext = imsg::has_flag(self.header, subscriber::flag::Z);
-        if has_ext {
-            extension::skip_all(reader, "UndeclareSubscriber")?;
+        // WARNING: this is a temporary and mandatory extension used for undeclarations
+        let mut ext_wire_expr = common::ext::WireExprType::null();
+
+        let mut has_ext = imsg::has_flag(self.header, subscriber::flag::Z);
+        while has_ext {
+            let ext: u8 = self.codec.read(&mut *reader)?;
+            let eodec = Zenoh080Header::new(ext);
+            match iext::eid(ext) {
+                common::ext::WireExprExt::ID => {
+                    let (we, ext): (common::ext::WireExprType, bool) = eodec.read(&mut *reader)?;
+                    ext_wire_expr = we;
+                    has_ext = ext;
+                }
+                _ => {
+                    has_ext = extension::skip(reader, "UndeclareSubscriber", ext)?;
+                }
+            }
         }
 
-        Ok(subscriber::UndeclareSubscriber { id })
+        Ok(subscriber::UndeclareSubscriber { id, ext_wire_expr })
     }
 }
 
@@ -576,11 +596,14 @@ where
 
     fn write(self, writer: &mut W, x: &queryable::UndeclareQueryable) -> Self::Output {
         // Header
-        let header = declare::id::U_QUERYABLE;
+        let header = declare::id::U_QUERYABLE | queryable::flag::Z;
         self.write(&mut *writer, header)?;
 
         // Body
         self.write(&mut *writer, x.id)?;
+
+        // Extension
+        self.write(&mut *writer, (&x.ext_wire_expr, false))?;
 
         Ok(())
     }
@@ -615,12 +638,26 @@ where
         let id: queryable::QueryableId = self.codec.read(&mut *reader)?;
 
         // Extensions
-        let has_ext = imsg::has_flag(self.header, queryable::flag::Z);
-        if has_ext {
-            extension::skip_all(reader, "UndeclareQueryable")?;
+        // WARNING: this is a temporary and mandatory extension used for undeclarations
+        let mut ext_wire_expr = common::ext::WireExprType::null();
+
+        let mut has_ext = imsg::has_flag(self.header, queryable::flag::Z);
+        while has_ext {
+            let ext: u8 = self.codec.read(&mut *reader)?;
+            let eodec = Zenoh080Header::new(ext);
+            match iext::eid(ext) {
+                common::ext::WireExprExt::ID => {
+                    let (we, ext): (common::ext::WireExprType, bool) = eodec.read(&mut *reader)?;
+                    ext_wire_expr = we;
+                    has_ext = ext;
+                }
+                _ => {
+                    has_ext = extension::skip(reader, "UndeclareQueryable", ext)?;
+                }
+            }
         }
 
-        Ok(queryable::UndeclareQueryable { id })
+        Ok(queryable::UndeclareQueryable { id, ext_wire_expr })
     }
 }
 
@@ -707,11 +744,14 @@ where
 
     fn write(self, writer: &mut W, x: &token::UndeclareToken) -> Self::Output {
         // Header
-        let header = declare::id::U_TOKEN;
+        let header = declare::id::U_TOKEN | token::flag::Z;
         self.write(&mut *writer, header)?;
 
         // Body
         self.write(&mut *writer, x.id)?;
+
+        // Extension
+        self.write(&mut *writer, (&x.ext_wire_expr, false))?;
 
         Ok(())
     }
@@ -746,12 +786,26 @@ where
         let id: token::TokenId = self.codec.read(&mut *reader)?;
 
         // Extensions
-        let has_ext = imsg::has_flag(self.header, token::flag::Z);
-        if has_ext {
-            extension::skip_all(reader, "UndeclareToken")?;
+        // WARNING: this is a temporary and mandatory extension used for undeclarations
+        let mut ext_wire_expr = common::ext::WireExprType::null();
+
+        let mut has_ext = imsg::has_flag(self.header, interest::flag::Z);
+        while has_ext {
+            let ext: u8 = self.codec.read(&mut *reader)?;
+            let eodec = Zenoh080Header::new(ext);
+            match iext::eid(ext) {
+                common::ext::WireExprExt::ID => {
+                    let (we, ext): (common::ext::WireExprType, bool) = eodec.read(&mut *reader)?;
+                    ext_wire_expr = we;
+                    has_ext = ext;
+                }
+                _ => {
+                    has_ext = extension::skip(reader, "UndeclareToken", ext)?;
+                }
+            }
         }
 
-        Ok(token::UndeclareToken { id })
+        Ok(token::UndeclareToken { id, ext_wire_expr })
     }
 }
 
@@ -898,11 +952,14 @@ where
 
     fn write(self, writer: &mut W, x: &interest::UndeclareInterest) -> Self::Output {
         // Header
-        let header = declare::id::U_INTEREST;
+        let header = declare::id::U_INTEREST | interest::flag::Z;
         self.write(&mut *writer, header)?;
 
         // Body
         self.write(&mut *writer, x.id)?;
+
+        // Extension
+        self.write(&mut *writer, (&x.ext_wire_expr, false))?;
 
         Ok(())
     }
@@ -937,11 +994,81 @@ where
         let id: interest::InterestId = self.codec.read(&mut *reader)?;
 
         // Extensions
-        let has_ext = imsg::has_flag(self.header, token::flag::Z);
-        if has_ext {
-            extension::skip_all(reader, "UndeclareInterest")?;
+        // WARNING: this is a temporary and mandatory extension used for undeclarations
+        let mut ext_wire_expr = common::ext::WireExprType::null();
+
+        let mut has_ext = imsg::has_flag(self.header, interest::flag::Z);
+        while has_ext {
+            let ext: u8 = self.codec.read(&mut *reader)?;
+            let eodec = Zenoh080Header::new(ext);
+            match iext::eid(ext) {
+                common::ext::WireExprExt::ID => {
+                    let (we, ext): (common::ext::WireExprType, bool) = eodec.read(&mut *reader)?;
+                    ext_wire_expr = we;
+                    has_ext = ext;
+                }
+                _ => {
+                    has_ext = extension::skip(reader, "UndeclareInterest", ext)?;
+                }
+            }
         }
 
-        Ok(interest::UndeclareInterest { id })
+        Ok(interest::UndeclareInterest { id, ext_wire_expr })
+    }
+}
+
+// WARNING: this is a temporary extension used for undeclarations
+impl<W> WCodec<(&common::ext::WireExprType, bool), &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: (&common::ext::WireExprType, bool)) -> Self::Output {
+        let (x, more) = x;
+
+        let codec = Zenoh080::new();
+        let mut value = ZBuf::empty();
+        let mut zriter = value.writer();
+
+        let mut flags: u8 = 0;
+        if x.wire_expr.has_suffix() {
+            flags |= 1;
+        }
+        if let Mapping::Receiver = x.mapping {
+            flags |= 1 << 1;
+        }
+        codec.write(&mut zriter, flags)?;
+        codec.write(&mut zriter, &x.wire_expr)?;
+
+        let ext = common::ext::WireExprExt { value };
+        codec.write(&mut *writer, (&ext, more))?;
+
+        Ok(())
+    }
+}
+
+impl<R> RCodec<(common::ext::WireExprType, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(common::ext::WireExprType, bool), Self::Error> {
+        use zenoh_buffers::reader::HasReader;
+
+        let (ext, more): (common::ext::WireExprExt, bool) = self.read(&mut *reader)?;
+        let mut zeader = ext.value.reader();
+        let flags: u8 = self.codec.read(&mut zeader)?;
+
+        let codec = Zenoh080Condition::new(imsg::has_flag(flags, 1));
+        let wire_expr: WireExpr<'_> = codec.read(&mut zeader)?;
+        let mapping = if imsg::has_flag(flags, 1 << 1) {
+            Mapping::Receiver
+        } else {
+            Mapping::Sender
+        };
+
+        Ok((common::ext::WireExprType { wire_expr, mapping }, more))
     }
 }

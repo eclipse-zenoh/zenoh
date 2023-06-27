@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    common::{imsg, ZExtZ64},
+    common::{imsg, ZExtZ64, ZExtZBuf},
     core::{ExprId, Reliability, WireExpr},
     network::Mapping,
-    zextz64,
+    zextz64, zextzbuf,
 };
 use core::ops::BitOr;
 pub use interest::*;
@@ -165,6 +165,44 @@ impl Mode {
             Mode::Push
         } else {
             Mode::Pull
+        }
+    }
+}
+
+pub mod common {
+    use super::*;
+
+    pub mod ext {
+        use super::*;
+
+        // WARNING: this is a temporary and mandatory extension used for undeclarations
+        pub type WireExprExt = zextzbuf!(0x0f, true);
+        #[derive(Debug, Clone, PartialEq, Eq)]
+        pub struct WireExprType {
+            pub wire_expr: WireExpr<'static>,
+            pub mapping: Mapping,
+        }
+
+        impl WireExprType {
+            pub fn null() -> Self {
+                use std::borrow::Cow;
+
+                Self {
+                    wire_expr: WireExpr {
+                        scope: ExprId::MIN,
+                        suffix: Cow::from(""),
+                    },
+                    mapping: Mapping::Receiver,
+                }
+            }
+
+            #[cfg(feature = "test")]
+            pub fn rand() -> Self {
+                Self {
+                    wire_expr: WireExpr::rand(),
+                    mapping: Mapping::rand(),
+                }
+            }
         }
     }
 }
@@ -397,6 +435,8 @@ pub mod subscriber {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct UndeclareSubscriber {
         pub id: SubscriberId,
+        // WARNING: this is a temporary and mandatory extension used for undeclarations
+        pub ext_wire_expr: common::ext::WireExprType,
     }
 
     impl UndeclareSubscriber {
@@ -406,8 +446,9 @@ pub mod subscriber {
             let mut rng = rand::thread_rng();
 
             let id: SubscriberId = rng.gen();
+            let ext_wire_expr = common::ext::WireExprType::rand();
 
-            Self { id }
+            Self { id, ext_wire_expr }
         }
     }
 }
@@ -542,6 +583,8 @@ pub mod queryable {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct UndeclareQueryable {
         pub id: QueryableId,
+        // WARNING: this is a temporary and mandatory extension used for undeclarations
+        pub ext_wire_expr: common::ext::WireExprType,
     }
 
     impl UndeclareQueryable {
@@ -551,8 +594,9 @@ pub mod queryable {
             let mut rng = rand::thread_rng();
 
             let id: QueryableId = rng.gen();
+            let ext_wire_expr = common::ext::WireExprType::rand();
 
-            Self { id }
+            Self { id, ext_wire_expr }
         }
     }
 }
@@ -631,6 +675,8 @@ pub mod token {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct UndeclareToken {
         pub id: TokenId,
+        // WARNING: this is a temporary and mandatory extension used for undeclarations
+        pub ext_wire_expr: common::ext::WireExprType,
     }
 
     impl UndeclareToken {
@@ -640,8 +686,9 @@ pub mod token {
             let mut rng = rand::thread_rng();
 
             let id: TokenId = rng.gen();
+            let ext_wire_expr = common::ext::WireExprType::rand();
 
-            Self { id }
+            Self { id, ext_wire_expr }
         }
     }
 }
@@ -875,6 +922,8 @@ pub mod interest {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct UndeclareInterest {
         pub id: InterestId,
+        // WARNING: this is a temporary and mandatory extension used for undeclarations
+        pub ext_wire_expr: common::ext::WireExprType,
     }
 
     impl UndeclareInterest {
@@ -884,8 +933,9 @@ pub mod interest {
             let mut rng = rand::thread_rng();
 
             let id: InterestId = rng.gen();
+            let ext_wire_expr = common::ext::WireExprType::rand();
 
-            Self { id }
+            Self { id, ext_wire_expr }
         }
     }
 }
