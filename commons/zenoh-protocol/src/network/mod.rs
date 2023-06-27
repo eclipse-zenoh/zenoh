@@ -139,7 +139,7 @@ impl From<ResponseFinal> for NetworkMessage {
 pub mod ext {
     use crate::{
         common::{imsg, ZExtZ64},
-        core::{CongestionControl, Priority},
+        core::{CongestionControl, Priority, ZenohId},
     };
     use core::fmt;
 
@@ -253,7 +253,6 @@ pub mod ext {
     impl<const ID: u8> TimestampType<{ ID }> {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
-            use crate::core::ZenohId;
             use rand::Rng;
             let mut rng = rand::thread_rng();
 
@@ -298,6 +297,32 @@ pub mod ext {
     impl<const ID: u8> From<NodeIdType<{ ID }>> for ZExtZ64<{ ID }> {
         fn from(ext: NodeIdType<{ ID }>) -> Self {
             ZExtZ64::new(ext.node_id as u64)
+        }
+    }
+
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// |zid_len|X|X|X|X|
+    /// +-------+-+-+---+
+    /// ~      zid      ~
+    /// +---------------+
+    /// %      eid      %
+    /// +---------------+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct EntityIdType<const ID: u8> {
+        pub zid: ZenohId,
+        pub eid: u32,
+    }
+
+    impl<const ID: u8> EntityIdType<{ ID }> {
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            let zid = ZenohId::rand();
+            let eid: u32 = rng.gen();
+            Self { zid, eid }
         }
     }
 }

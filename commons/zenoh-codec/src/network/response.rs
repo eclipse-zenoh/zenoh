@@ -111,6 +111,7 @@ where
         // Extensions
         let mut ext_qos = ext::QoSType::default();
         let mut ext_tstamp = None;
+        let mut ext_respid = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -125,6 +126,11 @@ where
                 ext::Timestamp::ID => {
                     let (t, ext): (ext::TimestampType, bool) = eodec.read(&mut *reader)?;
                     ext_tstamp = Some(t);
+                    has_ext = ext;
+                }
+                ext::ResponderId::ID => {
+                    let (t, ext): (ext::ResponderIdType, bool) = eodec.read(&mut *reader)?;
+                    ext_respid = Some(t);
                     has_ext = ext;
                 }
                 _ => {
@@ -143,6 +149,7 @@ where
             payload,
             ext_qos,
             ext_tstamp,
+            ext_respid,
         })
     }
 }
