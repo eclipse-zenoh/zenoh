@@ -24,7 +24,8 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{imsg, ZExtZ64, ZExtZBufHeader},
-    network::*, core::ZenohId,
+    core::ZenohId,
+    network::*,
 };
 
 // NetworkMessage
