@@ -362,7 +362,7 @@ fn gossip() -> Result<()> {
         for mode in [WhatAmI::Peer, WhatAmI::Router] {
             Recipe::new([
                 Node {
-                    name: format!("RTR {}", mode),
+                    name: format!("Router {}", mode),
                     mode: WhatAmI::Peer,
                     listen: vec![locator.clone()],
                     con_task: ConcurrentTask::from([SequentialTask::from([Task::Sleep(
@@ -408,7 +408,7 @@ fn static_failover_brokering() -> Result<()> {
 
         let recipe = Recipe::new([
             Node {
-                name: format!("RTR {}", WhatAmI::Router),
+                name: format!("Router {}", WhatAmI::Router),
                 mode: WhatAmI::Router,
                 listen: vec![locator.clone()],
                 con_task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
@@ -477,119 +477,82 @@ fn three_node_combination() -> Result<()> {
             .map(
                 |(node1_mode, node2_mode, msg_size, (delay1, delay2, delay3))| {
                     idx += 1;
-                    // let ke_pubsub = format!("three_node_combination_keyexpr_pubsub_{idx}");
+                    let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
+
+                    let ke_pubsub = format!("three_node_combination_keyexpr_pubsub_{idx}");
                     let ke_getqueryable =
                         format!("three_node_combination_keyexpr_getqueryable_{idx}");
-                    let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
 
-                    Recipe::new([
-                        Node {
-                            name: format!("RTR {}", WhatAmI::Router),
-                            mode: WhatAmI::Router,
-                            listen: vec![locator.clone()],
-                            con_task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
-                            warmup: Duration::from_secs(delay1),
-                            ..Default::default()
-                        },
-                        Node {
-                            name: format!("Pub & Queryable {node1_mode}"),
-                            mode: node1_mode,
-                            connect: vec![locator.clone()],
-                            con_task: ConcurrentTask::from([
-                                // SequentialTask::from([Task::Pub(ke_pubsub.clone(), msg_size)]),
-                                SequentialTask::from([Task::Queryable(
-                                    ke_getqueryable.clone(),
+                    let router_node = Node {
+                        name: format!("Router {}", WhatAmI::Router),
+                        mode: WhatAmI::Router,
+                        listen: vec![locator.clone()],
+                        con_task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
+                        warmup: Duration::from_secs(delay1),
+                        ..Default::default()
+                    };
+
+                    let (pub_node, queryable_node) =
+                        {
+                            let base = Node {
+                                mode: node1_mode,
+                                connect: vec![locator.clone()],
+                                warmup: Duration::from_secs(delay2),
+                                ..Default::default()
+                            };
+
+                            let mut pub_node = base.clone();
+                            pub_node.name = format!("Pub {node1_mode}");
+                            pub_node.con_task =
+                                ConcurrentTask::from([SequentialTask::from([Task::Pub(
+                                    ke_pubsub.clone(),
                                     msg_size,
-                                )]),
-                            ]),
-                            warmup: Duration::from_secs(delay2),
-                            ..Default::default()
-                        },
-                        Node {
-                            name: format!("Sub & Get {node2_mode}"),
+                                )])]);
+
+                            let mut queryable_node = base;
+                            queryable_node.name = format!("Queryable {node1_mode}");
+                            queryable_node.con_task = ConcurrentTask::from([SequentialTask::from(
+                                [Task::Queryable(ke_getqueryable.clone(), msg_size)],
+                            )]);
+
+                            (pub_node, queryable_node)
+                        };
+
+                    let (sub_node, get_node) = {
+                        let base = Node {
                             mode: node2_mode,
                             connect: vec![locator],
-                            con_task: ConcurrentTask::from([
-                                // SequentialTask::from([
-                                //     Task::Sub(ke_pubsub, msg_size),
-                                //     Task::Checkpoint,
-                                // ]),
-                                SequentialTask::from([
-                                    Task::Get(ke_getqueryable, msg_size),
-                                    Task::Checkpoint,
-                                ]),
-                            ]),
                             warmup: Duration::from_secs(delay3),
                             ..Default::default()
-                        },
-                    ])
+                        };
+
+                        let mut sub_node = base.clone();
+                        sub_node.name = format!("Sub {node2_mode}");
+                        sub_node.con_task = ConcurrentTask::from([SequentialTask::from([
+                            Task::Sub(ke_pubsub, msg_size),
+                            Task::Checkpoint,
+                        ])]);
+
+                        let mut get_node = base;
+                        get_node.name = format!("Get {node2_mode}");
+                        get_node.con_task = ConcurrentTask::from([SequentialTask::from([
+                            Task::Get(ke_getqueryable, msg_size),
+                            Task::Checkpoint,
+                        ])]);
+
+                        (sub_node, get_node)
+                    };
+
+                    (
+                        Recipe::new([router_node.clone(), pub_node, sub_node]),
+                        Recipe::new([router_node, queryable_node, get_node]),
+                    )
                 },
             );
 
-        for recipe in recipe_list {
-            recipe.run().await?;
-        }
-
-        let recipe_list = modes
-            .map(|n1| modes.map(|n2| (n1, n2)))
-            .concat()
-            .into_iter()
-            .flat_map(|(n1, n2)| MSG_SIZE.map(|s| (n1, n2, s)))
-            .flat_map(|(n1, n2, s)| delay_in_secs.map(|d| (n1, n2, s, d)))
-            .map(
-                |(node1_mode, node2_mode, msg_size, (delay1, delay2, delay3))| {
-                    idx += 1;
-                    let ke_pubsub = format!("three_node_combination_keyexpr_pubsub_{idx}");
-                    // let ke_getqueryable =
-                    //     format!("three_node_combination_keyexpr_getqueryable_{idx}");
-                    let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
-
-                    Recipe::new([
-                        Node {
-                            name: format!("RTR {}", WhatAmI::Router),
-                            mode: WhatAmI::Router,
-                            listen: vec![locator.clone()],
-                            con_task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
-                            warmup: Duration::from_secs(delay1),
-                            ..Default::default()
-                        },
-                        Node {
-                            name: format!("Pub & Queryable {node1_mode}"),
-                            mode: node1_mode,
-                            connect: vec![locator.clone()],
-                            con_task: ConcurrentTask::from([
-                                SequentialTask::from([Task::Pub(ke_pubsub.clone(), msg_size)]),
-                                // SequentialTask::from([Task::Queryable(
-                                //     ke_getqueryable.clone(),
-                                //     msg_size,
-                                // )]),
-                            ]),
-                            warmup: Duration::from_secs(delay2),
-                            ..Default::default()
-                        },
-                        Node {
-                            name: format!("Sub & Get {node2_mode}"),
-                            mode: node2_mode,
-                            connect: vec![locator],
-                            con_task: ConcurrentTask::from([
-                                SequentialTask::from([
-                                    Task::Sub(ke_pubsub, msg_size),
-                                    Task::Checkpoint,
-                                ]),
-                                // SequentialTask::from([
-                                //     Task::Get(ke_getqueryable, msg_size),
-                                //     Task::Checkpoint,
-                                // ]),
-                            ]),
-                            warmup: Duration::from_secs(delay3),
-                            ..Default::default()
-                        },
-                    ])
-                },
-            );
-
-        for recipe in recipe_list {
-            recipe.run().await?;
+        for (pubsub, getqueryable) in recipe_list {
+            pubsub.run().await?;
+            getqueryable.run().await?;
         }
 
         println!("Three-node combination test passed.");
@@ -624,7 +587,7 @@ fn two_node_combination() -> Result<()> {
             .flat_map(|(n1, n2, who)| MSG_SIZE.map(|s| (n1, n2, who, s)))
             .map(|(node1_mode, node2_mode, who, msg_size)| {
                 idx += 1;
-                // let ke_pubsub = format!("two_node_combination_keyexpr_pubsub_{idx}");
+                let ke_pubsub = format!("two_node_combination_keyexpr_pubsub_{idx}");
                 let ke_getqueryable = format!("two_node_combination_keyexpr_getqueryable_{idx}");
 
                 let (node1_listen_connect, node2_listen_connect) = {
@@ -639,102 +602,66 @@ fn two_node_combination() -> Result<()> {
                     }
                 };
 
-                Recipe::new([
-                    Node {
-                        name: format!("Pub & Queryable {node1_mode}"),
+                let (pub_node, queryable_node) = {
+                    let base = Node {
                         mode: node1_mode,
                         listen: node1_listen_connect.0,
                         connect: node1_listen_connect.1,
-                        con_task: ConcurrentTask::from([
-                            // SequentialTask::from([Task::Pub(ke_pubsub.clone(), msg_size)]),
-                            SequentialTask::from([Task::Queryable(
-                                ke_getqueryable.clone(),
-                                msg_size,
-                            )]),
-                        ]),
                         ..Default::default()
-                    },
-                    Node {
-                        name: format!("Sub & Get {node2_mode}"),
-                        mode: node2_mode,
-                        listen: node2_listen_connect.0,
-                        connect: node2_listen_connect.1,
-                        con_task: ConcurrentTask::from([
-                            // SequentialTask::from([
-                            //     Task::Sub(ke_pubsub, msg_size),
-                            //     Task::Checkpoint,
-                            // ]),
-                            SequentialTask::from([
-                                Task::Get(ke_getqueryable, msg_size),
-                                Task::Checkpoint,
-                            ]),
-                        ]),
-                        ..Default::default()
-                    },
-                ])
-            });
+                    };
 
-        for recipe in recipe_list {
-            recipe.run().await?;
-        }
+                    let mut pub_node = base.clone();
+                    pub_node.name = format!("Pub {node1_mode}");
+                    pub_node.con_task = ConcurrentTask::from([SequentialTask::from([Task::Pub(
+                        ke_pubsub.clone(),
+                        msg_size,
+                    )])]);
 
-        let recipe_list = modes
-            .into_iter()
-            .flat_map(|(n1, n2, who)| MSG_SIZE.map(|s| (n1, n2, who, s)))
-            .map(|(node1_mode, node2_mode, who, msg_size)| {
-                idx += 1;
-                let ke_pubsub = format!("two_node_combination_keyexpr_pubsub_{idx}");
-                // let ke_getqueryable = format!("two_node_combination_keyexpr_getqueryable_{idx}");
+                    let mut queryable_node = base;
+                    queryable_node.name = format!("Queryable {node1_mode}");
+                    queryable_node.con_task =
+                        ConcurrentTask::from([SequentialTask::from([Task::Queryable(
+                            ke_getqueryable.clone(),
+                            msg_size,
+                        )])]);
 
-                let (node1_listen_connect, node2_listen_connect) = {
-                    let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
-                    let listen = vec![locator];
-                    let connect = vec![];
-
-                    if let IsFirstListen(true) = who {
-                        ((listen.clone(), connect.clone()), (connect, listen))
-                    } else {
-                        ((connect.clone(), listen.clone()), (listen, connect))
-                    }
+                    (pub_node, queryable_node)
                 };
 
-                Recipe::new([
-                    Node {
-                        name: format!("Pub & Queryable {node1_mode}"),
-                        mode: node1_mode,
-                        listen: node1_listen_connect.0,
-                        connect: node1_listen_connect.1,
-                        con_task: ConcurrentTask::from([
-                            SequentialTask::from([Task::Pub(ke_pubsub.clone(), msg_size)]),
-                            // SequentialTask::from([Task::Queryable(
-                            //     ke_getqueryable.clone(),
-                            //     msg_size,
-                            // )]),
-                        ]),
-                        ..Default::default()
-                    },
-                    Node {
-                        name: format!("Sub & Get {node2_mode}"),
+                let (sub_node, get_node) = {
+                    let base = Node {
                         mode: node2_mode,
                         listen: node2_listen_connect.0,
                         connect: node2_listen_connect.1,
-                        con_task: ConcurrentTask::from([
-                            SequentialTask::from([
-                                Task::Sub(ke_pubsub, msg_size),
-                                Task::Checkpoint,
-                            ]),
-                            // SequentialTask::from([
-                            //     Task::Get(ke_getqueryable, msg_size),
-                            //     Task::Checkpoint,
-                            // ]),
-                        ]),
                         ..Default::default()
-                    },
-                ])
+                    };
+
+                    let mut sub_node = base.clone();
+                    sub_node.name = format!("Sub {node2_mode}");
+                    sub_node.con_task = ConcurrentTask::from([SequentialTask::from([
+                        Task::Sub(ke_pubsub, msg_size),
+                        Task::Checkpoint,
+                    ])]);
+
+                    let mut get_node = base;
+                    get_node.name = format!("Get {node2_mode}");
+                    get_node.con_task = ConcurrentTask::from([SequentialTask::from([
+                        Task::Get(ke_getqueryable, msg_size),
+                        Task::Checkpoint,
+                    ])]);
+
+                    (sub_node, get_node)
+                };
+
+                (
+                    Recipe::new([pub_node, sub_node]),
+                    Recipe::new([queryable_node, get_node]),
+                )
             });
 
-        for recipe in recipe_list {
-            recipe.run().await?;
+        for (pubsub, getqueryable) in recipe_list {
+            pubsub.run().await?;
+            getqueryable.run().await?;
         }
 
         println!("Two-node combination test passed.");
