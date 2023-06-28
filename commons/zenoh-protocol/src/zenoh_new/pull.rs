@@ -37,38 +37,20 @@ pub mod flag {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pull {
-    pub ext_sinfo: Option<ext::SourceInfoType>,
     pub ext_unknown: Vec<ZExtUnknown>,
-}
-
-pub mod ext {
-    use crate::{common::ZExtZBuf, zextzbuf};
-
-    /// # SourceInfo extension
-    /// Used to carry additional information about the source of data
-    pub type SourceInfo = zextzbuf!(0x1, false);
-    pub type SourceInfoType = crate::zenoh_new::ext::SourceInfoType<{ SourceInfo::ID }>;
 }
 
 impl Pull {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::iext;
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
-        let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
-            ext_unknown.push(ZExtUnknown::rand2(
-                iext::mid(ext::SourceInfo::ID) + 1,
-                false,
-            ));
+            ext_unknown.push(ZExtUnknown::rand2(1, false));
         }
 
-        Self {
-            ext_sinfo,
-            ext_unknown,
-        }
+        Self { ext_unknown }
     }
 }

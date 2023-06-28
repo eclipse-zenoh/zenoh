@@ -19,10 +19,10 @@ use zenoh_buffers::{
 };
 
 use zenoh_protocol::{
-    common::{iext, imsg},
+    common::imsg,
     zenoh_new::{
         id,
-        pull::{ext, flag, Pull},
+        pull::{flag, Pull},
     },
 };
 
@@ -35,17 +35,13 @@ where
     fn write(self, writer: &mut W, x: &Pull) -> Self::Output {
         // Header
         let mut header = id::PULL;
-        let mut n_exts = (x.ext_sinfo.is_some() as u8) + (x.ext_unknown.len() as u8);
+        let mut n_exts = x.ext_unknown.len() as u8;
         if n_exts != 0 {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Extensions
-        if let Some(sinfo) = x.ext_sinfo.as_ref() {
-            n_exts -= 1;
-            self.write(&mut *writer, (sinfo, n_exts != 0))?;
-        }
         for u in x.ext_unknown.iter() {
             n_exts -= 1;
             self.write(&mut *writer, (u, n_exts != 0))?;
@@ -80,30 +76,16 @@ where
         }
 
         // Extensions
-        let mut ext_sinfo: Option<ext::SourceInfoType> = None;
         let mut ext_unknown = Vec::new();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
             let ext: u8 = self.codec.read(&mut *reader)?;
-            let eodec = Zenoh080Header::new(ext);
-            match iext::eid(ext) {
-                ext::SourceInfo::ID => {
-                    let (s, ext): (ext::SourceInfoType, bool) = eodec.read(&mut *reader)?;
-                    ext_sinfo = Some(s);
-                    has_ext = ext;
-                }
-                _ => {
-                    let (u, ext) = extension::read(reader, "Pull", ext)?;
-                    ext_unknown.push(u);
-                    has_ext = ext;
-                }
-            }
+            let (u, ext) = extension::read(reader, "Pull", ext)?;
+            ext_unknown.push(u);
+            has_ext = ext;
         }
 
-        Ok(Pull {
-            ext_sinfo,
-            ext_unknown,
-        })
+        Ok(Pull { ext_unknown })
     }
 }
