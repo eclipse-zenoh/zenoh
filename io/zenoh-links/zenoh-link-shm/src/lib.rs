@@ -18,7 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
-#[cfg(all(feature = "transport_shm", not(unix)))]
+#[cfg(all(feature = "transport_shm", not(target_family = "unix")))]
 compile_error!("Feature transport_shm: platform not supported yet!");
 
 #[cfg(all(feature = "transport_shm", unix))]
