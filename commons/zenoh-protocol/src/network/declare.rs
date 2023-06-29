@@ -83,7 +83,7 @@ pub mod id {
 
     pub const D_INTEREST: u8 = 0x08;
     pub const F_INTEREST: u8 = 0x09;
-    pub const U_INTEREST: u8 = 0x10;
+    pub const U_INTEREST: u8 = 0x0A;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
