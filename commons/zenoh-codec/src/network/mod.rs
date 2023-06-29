@@ -17,14 +17,16 @@ mod push;
 mod request;
 mod response;
 
-use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
+use crate::{
+    LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length, Zenoh080Reliability,
+};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
     common::{imsg, ZExtZ64, ZExtZBufHeader},
-    core::ZenohId,
+    core::{Reliability, ZenohId},
     network::*,
 };
 
@@ -54,7 +56,19 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<NetworkMessage, Self::Error> {
-        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Reliability::new(Reliability::default());
+        codec.read(reader)
+    }
+}
+
+impl<R> RCodec<NetworkMessage, &mut R> for Zenoh080Reliability
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<NetworkMessage, Self::Error> {
+        let header: u8 = self.codec.read(&mut *reader)?;
 
         let codec = Zenoh080Header::new(header);
         let body = match imsg::mid(codec.header) {

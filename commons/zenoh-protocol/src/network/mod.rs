@@ -17,11 +17,15 @@ pub mod push;
 pub mod request;
 pub mod response;
 
+use core::fmt;
+
 pub use declare::*;
 pub use oam::*;
 pub use push::*;
 pub use request::*;
 pub use response::*;
+
+use crate::core::{CongestionControl, Priority};
 
 pub mod id {
     // WARNING: it's crucial that these IDs do NOT collide with the IDs
@@ -92,6 +96,48 @@ impl NetworkMessage {
         };
 
         Self { body }
+    }
+
+    #[inline]
+    pub fn is_reliable(&self) -> bool {
+        // TODO
+        true
+    }
+
+    #[inline]
+    pub fn is_droppable(&self) -> bool {
+        if !self.is_reliable() {
+            return true;
+        }
+
+        let cc = match &self.body {
+            NetworkBody::Declare(msg) => msg.ext_qos.congestion_control(),
+            NetworkBody::Push(msg) => msg.ext_qos.congestion_control(),
+            NetworkBody::Request(msg) => msg.ext_qos.congestion_control(),
+            NetworkBody::Response(msg) => msg.ext_qos.congestion_control(),
+            NetworkBody::ResponseFinal(msg) => msg.ext_qos.congestion_control(),
+            NetworkBody::OAM(msg) => msg.ext_qos.congestion_control(),
+        };
+
+        cc == CongestionControl::Drop
+    }
+
+    #[inline]
+    pub fn priority(&self) -> Priority {
+        match &self.body {
+            NetworkBody::Declare(msg) => msg.ext_qos.priority(),
+            NetworkBody::Push(msg) => msg.ext_qos.priority(),
+            NetworkBody::Request(msg) => msg.ext_qos.priority(),
+            NetworkBody::Response(msg) => msg.ext_qos.priority(),
+            NetworkBody::ResponseFinal(msg) => msg.ext_qos.priority(),
+            NetworkBody::OAM(msg) => msg.ext_qos.priority(),
+        }
+    }
+}
+
+impl fmt::Display for NetworkMessage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        fmt::Debug::fmt(self, f)
     }
 }
 

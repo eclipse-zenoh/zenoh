@@ -16,78 +16,18 @@ mod mux;
 
 pub use demux::*;
 pub use mux::*;
-use zenoh_buffers::ZBuf;
-use zenoh_protocol::{
-    core::{Channel, CongestionControl, ExprId, WireExpr, ZenohId},
-    zenoh::{
-        ConsolidationMode, DataInfo, PullId, QueryBody, QueryId, QueryTarget, QueryableInfo,
-        RoutingContext, SubInfo,
-    },
-};
+use zenoh_protocol::network::{Declare, Push, Request, Response, ResponseFinal};
 
 pub trait Primitives: Send + Sync {
-    fn decl_resource(&self, expr_id: ExprId, key_expr: &WireExpr);
-    fn forget_resource(&self, expr_id: ExprId);
+    fn send_declare(&self, msg: Declare);
 
-    fn decl_publisher(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>);
-    fn forget_publisher(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>);
+    fn send_push(&self, msg: Push);
 
-    fn decl_subscriber(
-        &self,
-        key_expr: &WireExpr,
-        sub_info: &SubInfo,
-        routing_context: Option<RoutingContext>,
-    );
-    fn forget_subscriber(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>);
+    fn send_request(&self, msg: Request);
 
-    fn decl_queryable(
-        &self,
-        key_expr: &WireExpr,
-        qabl_info: &QueryableInfo,
-        routing_context: Option<RoutingContext>,
-    );
-    fn forget_queryable(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>);
+    fn send_response(&self, msg: Response);
 
-    fn send_data(
-        &self,
-        key_expr: &WireExpr,
-        payload: ZBuf,
-        channel: Channel,
-        cogestion_control: CongestionControl,
-        data_info: Option<DataInfo>,
-        routing_context: Option<RoutingContext>,
-    );
-
-    #[allow(clippy::too_many_arguments)]
-    fn send_query(
-        &self,
-        key_expr: &WireExpr,
-        parameters: &str,
-        qid: QueryId,
-        target: QueryTarget,
-        consolidation: ConsolidationMode,
-        body: Option<QueryBody>,
-        routing_context: Option<RoutingContext>,
-    );
-
-    fn send_reply_data(
-        &self,
-        qid: QueryId,
-        replier_id: ZenohId,
-        key_expr: WireExpr,
-        info: Option<DataInfo>,
-        payload: ZBuf,
-    );
-
-    fn send_reply_final(&self, qid: QueryId);
-
-    fn send_pull(
-        &self,
-        is_final: bool,
-        key_expr: &WireExpr,
-        pull_id: PullId,
-        max_samples: &Option<u16>,
-    );
+    fn send_response_final(&self, msg: ResponseFinal);
 
     fn send_close(&self);
 }
@@ -102,69 +42,15 @@ impl DummyPrimitives {
 }
 
 impl Primitives for DummyPrimitives {
-    fn decl_resource(&self, _expr_id: ExprId, _key_expr: &WireExpr) {}
-    fn forget_resource(&self, _expr_id: ExprId) {}
+    fn send_declare(&self, _msg: Declare) {}
 
-    fn decl_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
-    fn forget_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
+    fn send_push(&self, _msg: Push) {}
 
-    fn decl_subscriber(
-        &self,
-        _key_expr: &WireExpr,
-        _sub_info: &SubInfo,
-        _routing_context: Option<RoutingContext>,
-    ) {
-    }
-    fn forget_subscriber(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
+    fn send_request(&self, _msg: Request) {}
 
-    fn decl_queryable(
-        &self,
-        _key_expr: &WireExpr,
-        _qable_info: &QueryableInfo,
-        _routing_context: Option<RoutingContext>,
-    ) {
-    }
-    fn forget_queryable(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
+    fn send_response(&self, _msg: Response) {}
 
-    fn send_data(
-        &self,
-        _key_expr: &WireExpr,
-        _payload: ZBuf,
-        _channel: Channel,
-        _cogestion_control: CongestionControl,
-        _info: Option<DataInfo>,
-        _routing_context: Option<RoutingContext>,
-    ) {
-    }
-    fn send_query(
-        &self,
-        _key_expr: &WireExpr,
-        _parameters: &str,
-        _qid: QueryId,
-        _target: QueryTarget,
-        _consolidation: ConsolidationMode,
-        _body: Option<QueryBody>,
-        _routing_context: Option<RoutingContext>,
-    ) {
-    }
-    fn send_reply_data(
-        &self,
-        _qid: QueryId,
-        _replier_id: ZenohId,
-        _key_expr: WireExpr,
-        _info: Option<DataInfo>,
-        _payload: ZBuf,
-    ) {
-    }
-    fn send_reply_final(&self, _qid: QueryId) {}
-    fn send_pull(
-        &self,
-        _is_final: bool,
-        _key_expr: &WireExpr,
-        _pull_id: PullId,
-        _max_samples: &Option<u16>,
-    ) {
-    }
+    fn send_response_final(&self, _msg: ResponseFinal) {}
 
     fn send_close(&self) {}
 }

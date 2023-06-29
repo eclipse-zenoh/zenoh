@@ -17,7 +17,7 @@ use zenoh_core::zasync_executor_init;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::{
     core::{WhatAmI, ZenohId},
-    zenoh::ZenohMessage,
+    network::NetworkMessage,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -56,7 +56,7 @@ impl TransportEventHandler for SH {
 pub struct SC;
 
 impl TransportPeerEventHandler for SC {
-    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
     fn new_link(&self, _link: Link) {}

@@ -17,22 +17,28 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
-use zenoh_buffers::ZBuf;
+use zenoh_protocol::network::declare::ext;
+use zenoh_protocol::network::queryable::ext::QueryableInfo;
+#[cfg(feature = "complete_n")]
+use zenoh_protocol::network::request::ext::TargetType;
+use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
+use zenoh_protocol::network::{Declare, DeclareBody, DeclareKeyExpr};
+use zenoh_protocol::zenoh_new::PushBody;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr, ZenohId},
-    zenoh::{DataInfo, QueryId, QueryableInfo, RoutingContext, SubInfo},
+    zenoh::{QueryId, RoutingContext},
 };
 use zenoh_sync::get_mut_unchecked;
 
 pub(super) type Direction = (Arc<FaceState>, WireExpr<'static>, Option<RoutingContext>);
 pub(super) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
-pub(super) type QueryRoute = HashMap<usize, (Direction, zenoh_protocol::core::QueryTarget)>;
+pub(super) type QueryRoute = HashMap<usize, (Direction, TargetType)>;
 #[cfg(not(feature = "complete_n"))]
 pub(super) type QueryRoute = HashMap<usize, (Direction, QueryId)>;
 pub(super) struct QueryTargetQabl {
     pub(super) direction: Direction,
-    pub(super) complete: u64,
+    pub(super) complete: u8,
     pub(super) distance: f64,
 }
 pub(super) type QueryTargetQablSet = Vec<QueryTargetQabl>;
@@ -42,9 +48,9 @@ pub(super) struct SessionContext {
     pub(super) face: Arc<FaceState>,
     pub(super) local_expr_id: Option<ExprId>,
     pub(super) remote_expr_id: Option<ExprId>,
-    pub(super) subs: Option<SubInfo>,
+    pub(super) subs: Option<SubscriberInfo>,
     pub(super) qabl: Option<QueryableInfo>,
-    pub(super) last_values: HashMap<String, (Option<DataInfo>, ZBuf)>,
+    pub(super) last_values: HashMap<String, PushBody>,
 }
 
 pub(super) struct DataRoutes {
@@ -494,8 +500,15 @@ impl Resource {
                         get_mut_unchecked(face)
                             .local_mappings
                             .insert(expr_id, nonwild_prefix.clone());
-                        face.primitives
-                            .decl_resource(expr_id, &nonwild_prefix.expr().into());
+                        face.primitives.send_declare(Declare {
+                            ext_qos: ext::QoSType::default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                                id: expr_id,
+                                wire_expr: nonwild_prefix.expr().into(),
+                            }),
+                        });
                         expr_id
                     }
                 };
@@ -715,8 +728,15 @@ pub fn register_expr(
                         .local_mappings
                         .insert(local_expr_id, res.clone());
 
-                    face.primitives
-                        .decl_resource(local_expr_id, &res.expr().into());
+                    face.primitives.send_declare(Declare {
+                        ext_qos: ext::QoSType::default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                            id: local_expr_id,
+                            wire_expr: res.expr().into(),
+                        }),
+                    });
                 }
 
                 get_mut_unchecked(face)

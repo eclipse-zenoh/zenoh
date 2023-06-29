@@ -28,8 +28,8 @@ use zenoh_link::LinkUnicast;
 use zenoh_protocol::zenoh::ZenohBody;
 use zenoh_protocol::{
     core::{Priority, Reliability},
+    network::NetworkMessage,
     transport::{Close, Fragment, Frame, KeepAlive, TransportBody, TransportMessage, TransportSn},
-    zenoh::ZenohMessage,
 };
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -40,7 +40,7 @@ impl TransportUnicastInner {
     fn trigger_callback(
         &self,
         #[allow(unused_mut)] // shared-memory feature requires mut
-        mut msg: ZenohMessage,
+        mut msg: NetworkMessage,
     ) -> ZResult<()> {
         #[cfg(feature = "stats")]
         {

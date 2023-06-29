@@ -52,15 +52,39 @@ use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
+use zenoh_protocol::network::common::ext::WireExprType;
+use zenoh_protocol::network::declare;
+use zenoh_protocol::network::ext;
+use zenoh_protocol::network::queryable::ext::QueryableInfo;
+use zenoh_protocol::network::request;
+use zenoh_protocol::network::request::ext::TargetType;
+use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
+use zenoh_protocol::network::Declare;
+use zenoh_protocol::network::DeclareBody;
+use zenoh_protocol::network::DeclareKeyExpr;
+use zenoh_protocol::network::DeclareQueryable;
+use zenoh_protocol::network::DeclareSubscriber;
+use zenoh_protocol::network::Mapping;
+use zenoh_protocol::network::Push;
+use zenoh_protocol::network::Request;
+use zenoh_protocol::network::Response;
+use zenoh_protocol::network::ResponseFinal;
+use zenoh_protocol::network::UndeclareQueryable;
+use zenoh_protocol::network::UndeclareSubscriber;
+use zenoh_protocol::zenoh_new;
+use zenoh_protocol::zenoh_new::query;
+use zenoh_protocol::zenoh_new::query::ext::ConsolidationType;
+use zenoh_protocol::zenoh_new::query::ext::QueryBodyType;
+use zenoh_protocol::zenoh_new::Pull;
+use zenoh_protocol::zenoh_new::PushBody;
+use zenoh_protocol::zenoh_new::RequestBody;
+use zenoh_protocol::zenoh_new::ResponseBody;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        AtomicExprId, Channel, CongestionControl, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
+        AtomicExprId, CongestionControl, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
     },
-    zenoh::{
-        AtomicQueryId, DataInfo, PullId, QueryBody, QueryId, QueryTarget, QueryableInfo,
-        RoutingContext, SubInfo,
-    },
+    zenoh::{AtomicQueryId, DataInfo, QueryId, QueryTarget},
 };
 use zenoh_result::ZResult;
 use zenoh_util::core::AsyncResolve;
@@ -80,20 +104,20 @@ pub(crate) struct SessionState {
     pub(crate) decl_id_counter: AtomicUsize,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
     pub(crate) remote_resources: HashMap<ExprId, Resource>,
-    pub(crate) publications: Vec<OwnedKeyExpr>,
+    //pub(crate) publications: Vec<OwnedKeyExpr>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     #[cfg(feature = "unstable")]
     pub(crate) tokens: HashMap<Id, Arc<LivelinessTokenState>>,
     pub(crate) queries: HashMap<QueryId, QueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
-    pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
+    //pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
 }
 
 impl SessionState {
     pub(crate) fn new(
         aggregated_subscribers: Vec<OwnedKeyExpr>,
-        aggregated_publishers: Vec<OwnedKeyExpr>,
+        _aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> SessionState {
         SessionState {
             primitives: None,
@@ -102,14 +126,14 @@ impl SessionState {
             decl_id_counter: AtomicUsize::new(0),
             local_resources: HashMap::new(),
             remote_resources: HashMap::new(),
-            publications: Vec::new(),
+            //publications: Vec::new(),
             subscribers: HashMap::new(),
             queryables: HashMap::new(),
             #[cfg(feature = "unstable")]
             tokens: HashMap::new(),
             queries: HashMap::new(),
             aggregated_subscribers,
-            aggregated_publishers,
+            //aggregated_publishers,
         }
     }
 }
@@ -870,13 +894,18 @@ impl Session {
                     state.local_resources.insert(expr_id, res);
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
-                    primitives.decl_resource(
-                        expr_id,
-                        &WireExpr {
-                            scope: 0,
-                            suffix: std::borrow::Cow::Borrowed(prefix),
-                        },
-                    );
+                    primitives.send_declare(Declare {
+                        ext_qos: declare::ext::QoSType::default(),
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::default(),
+                        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                            id: expr_id,
+                            wire_expr: WireExpr {
+                                scope: 0,
+                                suffix: prefix.to_owned().into(),
+                            },
+                        }),
+                    });
                     expr_id
                 }
             }
@@ -893,30 +922,30 @@ impl Session {
     /// * `key_expr` - The key expression to publish
     pub(crate) fn declare_publication_intent<'a>(
         &'a self,
-        key_expr: KeyExpr<'a>,
+        _key_expr: KeyExpr<'a>,
     ) -> impl Resolve<Result<(), std::convert::Infallible>> + Send + 'a {
         ResolveClosure::new(move || {
-            log::trace!("declare_publication({:?})", key_expr);
-            let mut state = zwrite!(self.state);
-            if !state.publications.iter().any(|p| **p == **key_expr) {
-                let declared_pub = if let Some(join_pub) = state
-                    .aggregated_publishers
-                    .iter()
-                    .find(|s| s.includes(&key_expr))
-                {
-                    let joined_pub = state.publications.iter().any(|p| join_pub.includes(p));
-                    (!joined_pub).then(|| join_pub.clone().into())
-                } else {
-                    Some(key_expr.clone())
-                };
-                state.publications.push(key_expr.into());
+            // log::trace!("declare_publication({:?})", key_expr);
+            // let mut state = zwrite!(self.state);
+            // if !state.publications.iter().any(|p| **p == **key_expr) {
+            //     let declared_pub = if let Some(join_pub) = state
+            //         .aggregated_publishers
+            //         .iter()
+            //         .find(|s| s.includes(&key_expr))
+            //     {
+            //         let joined_pub = state.publications.iter().any(|p| join_pub.includes(p));
+            //         (!joined_pub).then(|| join_pub.clone().into())
+            //     } else {
+            //         Some(key_expr.clone())
+            //     };
+            //     state.publications.push(key_expr.into());
 
-                if let Some(res) = declared_pub {
-                    let primitives = state.primitives.as_ref().unwrap().clone();
-                    drop(state);
-                    primitives.decl_publisher(&res.to_wire(self), None);
-                }
-            }
+            //     if let Some(res) = declared_pub {
+            //         let primitives = state.primitives.as_ref().unwrap().clone();
+            //         drop(state);
+            //         primitives.decl_publisher(&res.to_wire(self), None);
+            //     }
+            // }
             Ok(())
         })
     }
@@ -929,36 +958,36 @@ impl Session {
     /// * `key_expr` - The key expression of the publication to undeclarte
     pub(crate) fn undeclare_publication_intent<'a>(
         &'a self,
-        key_expr: KeyExpr<'a>,
+        _key_expr: KeyExpr<'a>,
     ) -> impl Resolve<ZResult<()>> + 'a {
         ResolveClosure::new(move || {
-            let mut state = zwrite!(self.state);
-            if let Some(idx) = state.publications.iter().position(|p| **p == *key_expr) {
-                trace!("undeclare_publication({:?})", key_expr);
-                state.publications.remove(idx);
-                match state
-                    .aggregated_publishers
-                    .iter()
-                    .find(|s| s.includes(&key_expr))
-                {
-                    Some(join_pub) => {
-                        let joined_pub = state.publications.iter().any(|p| join_pub.includes(p));
-                        if !joined_pub {
-                            let primitives = state.primitives.as_ref().unwrap().clone();
-                            let key_expr = WireExpr::from(join_pub).to_owned();
-                            drop(state);
-                            primitives.forget_publisher(&key_expr, None);
-                        }
-                    }
-                    None => {
-                        let primitives = state.primitives.as_ref().unwrap().clone();
-                        drop(state);
-                        primitives.forget_publisher(&key_expr.to_wire(self), None);
-                    }
-                };
-            } else {
-                bail!("Unable to find publication")
-            }
+            // let mut state = zwrite!(self.state);
+            // if let Some(idx) = state.publications.iter().position(|p| **p == *key_expr) {
+            //     trace!("undeclare_publication({:?})", key_expr);
+            //     state.publications.remove(idx);
+            //     match state
+            //         .aggregated_publishers
+            //         .iter()
+            //         .find(|s| s.includes(&key_expr))
+            //     {
+            //         Some(join_pub) => {
+            //             let joined_pub = state.publications.iter().any(|p| join_pub.includes(p));
+            //             if !joined_pub {
+            //                 let primitives = state.primitives.as_ref().unwrap().clone();
+            //                 let key_expr = WireExpr::from(join_pub).to_owned();
+            //                 drop(state);
+            //                 primitives.forget_publisher(&key_expr, None);
+            //             }
+            //         }
+            //         None => {
+            //             let primitives = state.primitives.as_ref().unwrap().clone();
+            //             drop(state);
+            //             primitives.forget_publisher(&key_expr.to_wire(self), None);
+            //         }
+            //     };
+            // } else {
+            //     bail!("Unable to find publication")
+            // }
             Ok(())
         })
     }
@@ -969,7 +998,7 @@ impl Session {
         scope: &Option<KeyExpr>,
         origin: Locality,
         callback: Callback<'static, Sample>,
-        info: &SubInfo,
+        info: &SubscriberInfo,
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         log::trace!("subscribe({:?})", key_expr);
@@ -1065,7 +1094,17 @@ impl Session {
             //     key_expr.to_wire(self)
             // };
 
-            primitives.decl_subscriber(&key_expr.to_wire(self), info, None);
+            primitives.send_declare(Declare {
+                ext_qos: declare::ext::QoSType::default(),
+                ext_tstamp: None,
+                ext_nodeid: declare::ext::NodeIdType::default(),
+                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                    id: id as u32,
+                    wire_expr: key_expr.to_wire(self).to_owned(),
+                    mapping: Mapping::default(), // TODO
+                    ext_info: *info,
+                }),
+            });
         }
 
         Ok(sub_state)
@@ -1113,9 +1152,20 @@ impl Session {
                         });
                         if !joined_sub {
                             let primitives = state.primitives.as_ref().unwrap().clone();
-                            let key_expr = WireExpr::from(join_sub).to_owned();
+                            let wire_expr = WireExpr::from(join_sub).to_owned();
                             drop(state);
-                            primitives.forget_subscriber(&key_expr, None);
+                            primitives.send_declare(Declare {
+                                ext_qos: ext::QoSType::default(),
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::default(),
+                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                    id: 0, // TODO
+                                    ext_wire_expr: WireExprType {
+                                        wire_expr,
+                                        mapping: Mapping::default(),
+                                    },
+                                }),
+                            });
                         }
                     }
                     None => {
@@ -1126,7 +1176,18 @@ impl Session {
                         if !twin_sub {
                             let primitives = state.primitives.as_ref().unwrap().clone();
                             drop(state);
-                            primitives.forget_subscriber(&key_expr.to_wire(self), None);
+                            primitives.send_declare(Declare {
+                                ext_qos: ext::QoSType::default(),
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::default(),
+                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                    id: 0, // TODO
+                                    ext_wire_expr: WireExprType {
+                                        wire_expr: key_expr.to_wire(self).to_owned(),
+                                        mapping: Mapping::default(),
+                                    },
+                                }),
+                            });
                         }
                     }
                 };
@@ -1166,7 +1227,17 @@ impl Session {
                     complete,
                     distance: 0,
                 };
-                primitives.decl_queryable(key_expr, &qabl_info, None);
+                primitives.send_declare(Declare {
+                    ext_qos: declare::ext::QoSType::default(),
+                    ext_tstamp: None,
+                    ext_nodeid: declare::ext::NodeIdType::default(),
+                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                        id: id as u32,
+                        wire_expr: key_expr.to_owned(),
+                        mapping: Mapping::default(), // TODO
+                        ext_info: qabl_info,
+                    }),
+                });
             }
         }
         #[cfg(not(feature = "complete_n"))]
@@ -1179,13 +1250,23 @@ impl Session {
             if origin != Locality::SessionLocal && (!twin_qabl || (!complete_twin_qabl && complete))
             {
                 let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = u64::from(!complete_twin_qabl && complete);
+                let complete = u8::from(!complete_twin_qabl && complete);
                 drop(state);
                 let qabl_info = QueryableInfo {
                     complete,
                     distance: 0,
                 };
-                primitives.decl_queryable(key_expr, &qabl_info, None);
+                primitives.send_declare(Declare {
+                    ext_qos: declare::ext::QoSType::default(),
+                    ext_tstamp: None,
+                    ext_nodeid: declare::ext::NodeIdType::default(),
+                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                        id: id as u32,
+                        wire_expr: key_expr.to_owned(),
+                        mapping: Mapping::default(), // TODO
+                        ext_info: qabl_info,
+                    }),
+                });
             }
         }
         Ok(qable_state)
@@ -1241,7 +1322,17 @@ impl Session {
                                 complete,
                                 distance: 0,
                             };
-                            primitives.decl_queryable(&qable_state.key_expr, &qabl_info, None);
+                            primitives.send_declare(Declare {
+                                ext_qos: declare::ext::QoSType::default(),
+                                ext_tstamp: None,
+                                ext_nodeid: declare::ext::NodeIdType::default(),
+                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                    id: 0, // TODO
+                                    wire_expr: qable_state.key_expr.clone(),
+                                    mapping: Mapping::default(), // TODO
+                                    ext_info: qabl_info,
+                                }),
+                            });
                         }
                         #[cfg(not(feature = "complete_n"))]
                         {
@@ -1251,14 +1342,35 @@ impl Session {
                                     complete: 0,
                                     distance: 0,
                                 };
-                                primitives.decl_queryable(&qable_state.key_expr, &qabl_info, None);
+                                primitives.send_declare(Declare {
+                                    ext_qos: declare::ext::QoSType::default(),
+                                    ext_tstamp: None,
+                                    ext_nodeid: declare::ext::NodeIdType::default(),
+                                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                        id: 0, // TODO
+                                        wire_expr: qable_state.key_expr.clone(),
+                                        mapping: Mapping::default(), // TODO
+                                        ext_info: qabl_info,
+                                    }),
+                                });
                             }
                         }
                     }
                 } else {
                     // There are no more Queryables on the same KeyExpr.
                     drop(state);
-                    primitives.forget_queryable(&qable_state.key_expr, None);
+                    primitives.send_declare(Declare {
+                        ext_qos: declare::ext::QoSType::default(),
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::default(),
+                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                            id: 0, // TODO
+                            ext_wire_expr: WireExprType {
+                                wire_expr: qable_state.key_expr.clone(),
+                                mapping: Mapping::default(),
+                            },
+                        }),
+                    });
                 }
             }
             Ok(())
@@ -1284,8 +1396,17 @@ impl Session {
         state.tokens.insert(tok_state.id, tok_state.clone());
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
-        let sub_info = SubInfo::default();
-        primitives.decl_subscriber(&key_expr.to_wire(self), &sub_info, None);
+        primitives.send_declare(Declare {
+            ext_qos: declare::ext::QoSType::default(),
+            ext_tstamp: None,
+            ext_nodeid: declare::ext::NodeIdType::default(),
+            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                id: id as u32,
+                wire_expr: key_expr.to_wire(self).to_owned(),
+                mapping: Mapping::default(),
+                ext_info: SubscriberInfo::default(),
+            }),
+        });
         Ok(tok_state)
     }
 
@@ -1300,7 +1421,18 @@ impl Session {
             if !twin_tok {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
-                primitives.forget_subscriber(&key_expr.to_wire(self), None);
+                primitives.send_declare(Declare {
+                    ext_qos: ext::QoSType::default(),
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::default(),
+                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                        id: 0, // TODO
+                        ext_wire_expr: WireExprType {
+                            wire_expr: key_expr.to_wire(self).to_owned(),
+                            mapping: Mapping::default(),
+                        },
+                    }),
+                });
             }
             Ok(())
         } else {
@@ -1427,7 +1559,20 @@ impl Session {
             let state = zread!(self.state);
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
-            primitives.send_pull(true, &key_expr.to_wire(self), 0, &None);
+            primitives.send_request(Request {
+                id: 0, // TODO
+                wire_expr: key_expr.to_wire(self).to_owned(),
+                mapping: Mapping::default(),      // TODO
+                ext_qos: ext::QoSType::default(), // TODO
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::default(),
+                ext_target: request::ext::TargetType::default(),
+                ext_budget: None,
+                ext_timeout: None,
+                payload: RequestBody::Pull(Pull {
+                    ext_unknown: vec![],
+                }),
+            });
             Ok(())
         })
     }
@@ -1492,7 +1637,7 @@ impl Session {
         };
 
         log::trace!("Register query {} (nb_final = {})", qid, nb_final);
-        let wexpr = selector.key_expr.to_wire(self);
+        let wexpr = selector.key_expr.to_wire(self).to_owned();
         state.queries.insert(
             qid,
             QueryState {
@@ -1509,24 +1654,27 @@ impl Session {
 
         drop(state);
         if destination != Locality::SessionLocal {
-            primitives.send_query(
-                &wexpr,
-                selector.parameters(),
-                qid,
-                target,
-                consolidation,
-                value.as_ref().map(|v| {
-                    let data_info = DataInfo {
-                        encoding: Some(v.encoding.clone()),
-                        ..Default::default()
-                    };
-                    QueryBody {
-                        data_info,
+            primitives.send_request(Request {
+                id: qid,
+                wire_expr: wexpr.clone(),
+                mapping: Mapping::default(), // TODO
+                ext_qos: request::ext::QoSType::default(),
+                ext_tstamp: None,
+                ext_nodeid: request::ext::NodeIdType::default(),
+                ext_target: target.into(),
+                ext_budget: None,
+                ext_timeout: Some(timeout),
+                payload: RequestBody::Query(zenoh_new::Query {
+                    parameters: selector.parameters().to_string(),
+                    ext_sinfo: None,
+                    ext_consolidation: consolidation.into(),
+                    ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
+                        encoding: v.encoding.clone(),
                         payload: v.payload.clone(),
-                    }
+                    }),
+                    ext_unknown: vec![],
                 }),
-                None,
-            );
+            });
         }
         if destination != Locality::Remote {
             self.handle_query(
@@ -1534,17 +1682,11 @@ impl Session {
                 &wexpr,
                 selector.parameters(),
                 qid,
-                target,
-                consolidation,
-                value.map(|v| {
-                    let data_info = DataInfo {
-                        encoding: Some(v.encoding),
-                        ..Default::default()
-                    };
-                    QueryBody {
-                        data_info,
-                        payload: v.payload,
-                    }
+                target.into(),
+                consolidation.into(),
+                value.as_ref().map(|v| query::ext::QueryBodyType {
+                    encoding: v.encoding.clone(),
+                    payload: v.payload.clone(),
                 }),
             );
         }
@@ -1558,9 +1700,9 @@ impl Session {
         key_expr: &WireExpr,
         parameters: &str,
         qid: QueryId,
-        _target: QueryTarget,
-        _consolidation: ConsolidationMode,
-        body: Option<QueryBody>,
+        _target: TargetType,
+        _consolidation: ConsolidationType,
+        body: Option<QueryBodyType>,
     ) {
         let (primitives, key_expr, callbacks) = {
             let state = zread!(self.state);
@@ -1612,7 +1754,7 @@ impl Session {
                 parameters,
                 value: body.map(|b| Value {
                     payload: b.payload,
-                    encoding: b.data_info.encoding.unwrap_or_default(),
+                    encoding: b.encoding,
                 }),
                 qid,
                 zid,
@@ -1776,331 +1918,310 @@ impl SessionDeclarations for Arc<Session> {
 }
 
 impl Primitives for Session {
-    fn decl_resource(&self, expr_id: ExprId, wire_expr: &WireExpr) {
-        trace!("recv Decl Resource {} {:?}", expr_id, wire_expr);
-        let state = &mut zwrite!(self.state);
-        match state.remote_key_to_expr(wire_expr) {
-            Ok(key_expr) => {
-                let mut subs = Vec::new();
-                for sub in state.subscribers.values() {
-                    if key_expr.intersects(&sub.key_expr) {
-                        subs.push(sub.clone());
+    fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
+        match msg.body {
+            zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
+                trace!("recv DeclareKeyExpr {} {:?}", m.id, m.wire_expr);
+                let state = &mut zwrite!(self.state);
+                match state.remote_key_to_expr(&m.wire_expr) {
+                    Ok(key_expr) => {
+                        let mut subs = Vec::new();
+                        for sub in state.subscribers.values() {
+                            if key_expr.intersects(&sub.key_expr) {
+                                subs.push(sub.clone());
+                            }
+                        }
+                        let res = Resource::Node(ResourceNode {
+                            key_expr: key_expr.into(),
+                            subscribers: subs,
+                        });
+
+                        state.remote_resources.insert(m.id, res);
                     }
+                    Err(e) => error!(
+                        "Received Resource for invalid wire_expr `{}`: {}",
+                        m.wire_expr, e
+                    ),
                 }
-                let res = Resource::Node(ResourceNode {
-                    key_expr: key_expr.into(),
-                    subscribers: subs,
-                });
-
-                state.remote_resources.insert(expr_id, res);
             }
-            Err(e) => error!(
-                "Received Resource for invalid wire_expr `{}`: {}",
-                wire_expr, e
-            ),
-        }
-    }
-
-    fn forget_resource(&self, _expr_id: ExprId) {
-        trace!("recv Forget Resource {}", _expr_id);
-    }
-
-    fn decl_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
-        trace!("recv Decl Publisher {:?}", _key_expr);
-    }
-
-    fn forget_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
-        trace!("recv Forget Publisher {:?}", _key_expr);
-    }
-
-    fn decl_subscriber(
-        &self,
-        key_expr: &WireExpr,
-        _sub_info: &SubInfo,
-        _routing_context: Option<RoutingContext>,
-    ) {
-        trace!("recv Decl Subscriber {:?} , {:?}", key_expr, _sub_info);
-        #[cfg(feature = "unstable")]
-        {
-            let state = zread!(self.state);
-            match state.wireexpr_to_keyexpr(key_expr, false) {
-                Ok(expr) => {
-                    if expr
-                        .as_str()
-                        .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-                    {
-                        drop(state);
-                        self.handle_data(false, key_expr, None, ZBuf::default());
-                    }
-                }
-                Err(err) => log::error!("Received Forget Subscriber for unkown key_expr: {}", err),
+            zenoh_protocol::network::DeclareBody::UndeclareKeyExpr(m) => {
+                trace!("recv UndeclareKeyExpr {}", m.id);
             }
-        }
-    }
-
-    fn forget_subscriber(&self, key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
-        trace!("recv Forget Subscriber {:?}", key_expr);
-        #[cfg(feature = "unstable")]
-        {
-            let state = zread!(self.state);
-            match state.wireexpr_to_keyexpr(key_expr, false) {
-                Ok(expr) => {
-                    if expr
-                        .as_str()
-                        .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-                    {
-                        drop(state);
-                        let data_info = DataInfo {
-                            kind: SampleKind::Delete,
-                            ..Default::default()
-                        };
-                        self.handle_data(false, key_expr, Some(data_info), ZBuf::default());
-                    }
-                }
-                Err(err) => log::error!("Received Forget Subscriber for unkown key_expr: {}", err),
-            }
-        }
-    }
-
-    fn decl_queryable(
-        &self,
-        _key_expr: &WireExpr,
-        _qabl_info: &QueryableInfo,
-        _routing_context: Option<RoutingContext>,
-    ) {
-        trace!("recv Decl Queryable {:?}", _key_expr);
-    }
-
-    fn forget_queryable(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
-        trace!("recv Forget Queryable {:?}", _key_expr);
-    }
-
-    fn send_data(
-        &self,
-        key_expr: &WireExpr,
-        payload: ZBuf,
-        channel: Channel,
-        congestion_control: CongestionControl,
-        info: Option<DataInfo>,
-        _routing_context: Option<RoutingContext>,
-    ) {
-        trace!(
-            "recv Data {:?} {:?} {:?} {:?} {:?}",
-            key_expr,
-            payload,
-            channel,
-            congestion_control,
-            info,
-        );
-        self.handle_data(false, key_expr, info, payload)
-    }
-
-    fn send_query(
-        &self,
-        key_expr: &WireExpr,
-        parameters: &str,
-        qid: QueryId,
-        target: QueryTarget,
-        consolidation: ConsolidationMode,
-        body: Option<QueryBody>,
-        _routing_context: Option<RoutingContext>,
-    ) {
-        trace!(
-            "recv Query {:?} {:?} {:?} {:?}",
-            key_expr,
-            parameters,
-            target,
-            consolidation
-        );
-        self.handle_query(
-            false,
-            key_expr,
-            parameters,
-            qid,
-            target,
-            consolidation,
-            body,
-        )
-    }
-
-    fn send_reply_data(
-        &self,
-        qid: QueryId,
-        replier_id: ZenohId,
-        key_expr: WireExpr,
-        data_info: Option<DataInfo>,
-        payload: ZBuf,
-    ) {
-        trace!(
-            "recv ReplyData {:?} {:?} {:?} {:?} {:?}",
-            qid,
-            replier_id,
-            key_expr,
-            data_info,
-            payload
-        );
-        let mut state = zwrite!(self.state);
-        let key_expr = match state.remote_key_to_expr(&key_expr) {
-            Ok(key) => key.into_owned(),
-            Err(e) => {
-                error!("Received ReplyData for unkown key_expr: {}", e);
-                return;
-            }
-        };
-        match state.queries.get_mut(&qid) {
-            Some(query) => {
-                if !matches!(
-                    query
-                        .selector
-                        .parameters()
-                        .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
-                    Ok([true])
-                ) && !query.selector.key_expr.intersects(&key_expr)
+            zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
+                trace!("recv DeclareSubscriber {} {:?}", m.id, m.wire_expr);
+                #[cfg(feature = "unstable")]
                 {
-                    log::warn!(
-                        "Received ReplyData for `{}` from `{:?}, which didn't match query `{}`: dropping ReplyData.",
-                        key_expr,
-                        replier_id,
-                        query.selector
-                    );
+                    let state = zread!(self.state);
+                    match state.wireexpr_to_keyexpr(&m.wire_expr, false) {
+                        Ok(expr) => {
+                            if expr
+                                .as_str()
+                                .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                            {
+                                drop(state);
+                                self.handle_data(false, &m.wire_expr, None, ZBuf::default());
+                            }
+                        }
+                        Err(err) => {
+                            log::error!("Received DeclareSubscriber for unkown wire_expr: {}", err)
+                        }
+                    }
+                }
+            }
+            zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
+                trace!("recv UndeclareSubscriber {:?}", m.id);
+                // #[cfg(feature = "unstable")]
+                // {
+                //     let state = zread!(self.state);
+                //     match state.wireexpr_to_keyexpr(key_expr, false) {
+                //         Ok(expr) => {
+                //             if expr
+                //                 .as_str()
+                //                 .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                //             {
+                //                 drop(state);
+                //                 let data_info = DataInfo {
+                //                     kind: SampleKind::Delete,
+                //                     ..Default::default()
+                //                 };
+                //                 self.handle_data(false, key_expr, Some(data_info), ZBuf::default());
+                //             }
+                //         }
+                //         Err(err) => log::error!("Received Forget Subscriber for unkown key_expr: {}", err),
+                //     }
+                // }
+            }
+            zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
+                trace!("recv DeclareQueryable {} {:?}", m.id, m.wire_expr);
+            }
+            zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
+                trace!("recv UndeclareQueryable {:?}", m.id);
+            }
+            DeclareBody::DeclareToken(_) => todo!(),
+            DeclareBody::UndeclareToken(_) => todo!(),
+            DeclareBody::DeclareInterest(_) => todo!(),
+            DeclareBody::FinalInterest(_) => todo!(),
+            DeclareBody::UndeclareInterest(_) => todo!(),
+        }
+    }
+
+    fn send_push(&self, msg: Push) {
+        trace!("recv Push {:?}", msg);
+        match msg.payload {
+            PushBody::Put(m) => {
+                let info = DataInfo {
+                    kind: SampleKind::Put,
+                    encoding: Some(m.encoding),
+                    timestamp: m.timestamp,
+                    source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
+                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
+                };
+                self.handle_data(false, &msg.wire_expr, Some(info), m.payload)
+            }
+            PushBody::Del(m) => {
+                let info = DataInfo {
+                    kind: SampleKind::Delete,
+                    encoding: None,
+                    timestamp: m.timestamp,
+                    source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
+                    source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
+                };
+                self.handle_data(false, &msg.wire_expr, Some(info), ZBuf::empty())
+            }
+        }
+    }
+
+    fn send_request(&self, msg: Request) {
+        trace!("recv Request {:?}", msg);
+        match msg.payload {
+            RequestBody::Query(m) => self.handle_query(
+                false,
+                &msg.wire_expr,
+                &m.parameters,
+                msg.id,
+                msg.ext_target,
+                m.ext_consolidation,
+                m.ext_body,
+            ),
+            RequestBody::Put(_) => (),
+            RequestBody::Del(_) => (),
+            RequestBody::Pull(_) => todo!(),
+        }
+    }
+
+    fn send_response(&self, msg: Response) {
+        trace!("recv Response {:?}", msg);
+        if let ResponseBody::Reply(m) = msg.payload {
+            let mut state = zwrite!(self.state);
+            let key_expr = match state.remote_key_to_expr(&msg.wire_expr) {
+                Ok(key) => key.into_owned(),
+                Err(e) => {
+                    error!("Received ReplyData for unkown key_expr: {}", e);
                     return;
                 }
-                let key_expr = match &query.scope {
-                    Some(scope) => {
-                        if !key_expr.starts_with(&***scope) {
-                            log::warn!(
-                                "Received ReplyData for `{}` from `{:?}, which didn't start with scope `{}`: dropping ReplyData.",
-                                key_expr,
-                                replier_id,
-                                scope,
-                            );
-                            return;
-                        }
-                        match KeyExpr::try_from(&key_expr[(scope.len() + 1)..]) {
-                            Ok(key_expr) => key_expr,
-                            Err(e) => {
+            };
+            match state.queries.get_mut(&msg.rid) {
+                Some(query) => {
+                    if !matches!(
+                        query
+                            .selector
+                            .parameters()
+                            .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
+                        Ok([true])
+                    ) && !query.selector.key_expr.intersects(&key_expr)
+                    {
+                        log::warn!(
+                            "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",
+                            key_expr,
+                            msg.ext_respid,
+                            query.selector
+                        );
+                        return;
+                    }
+                    let key_expr = match &query.scope {
+                        Some(scope) => {
+                            if !key_expr.starts_with(&***scope) {
                                 log::warn!(
-                                    "Error unscoping received ReplyData for `{}` from `{:?}: {}",
+                                    "Received Reply for `{}` from `{:?}, which didn't start with scope `{}`: dropping Reply.",
                                     key_expr,
-                                    replier_id,
-                                    e,
+                                    msg.ext_respid,
+                                    scope,
                                 );
                                 return;
                             }
+                            match KeyExpr::try_from(&key_expr[(scope.len() + 1)..]) {
+                                Ok(key_expr) => key_expr,
+                                Err(e) => {
+                                    log::warn!(
+                                        "Error unscoping received Reply for `{}` from `{:?}: {}",
+                                        key_expr,
+                                        msg.ext_respid,
+                                        e,
+                                    );
+                                    return;
+                                }
+                            }
                         }
-                    }
-                    None => key_expr,
-                };
-                let new_reply = Reply {
-                    sample: Ok(Sample::with_info(key_expr.into_owned(), payload, data_info)),
-                    replier_id,
-                };
-                let callback = match query.reception_mode {
-                    ConsolidationMode::None => Some((query.callback.clone(), new_reply)),
-                    ConsolidationMode::Monotonic => {
-                        match query
-                            .replies
-                            .as_ref()
-                            .unwrap()
-                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr())
-                        {
-                            Some(reply) => {
-                                if new_reply.sample.as_ref().unwrap().timestamp
-                                    > reply.sample.as_ref().unwrap().timestamp
-                                {
+                        None => key_expr,
+                    };
+                    let info = DataInfo {
+                        kind: SampleKind::Put,
+                        encoding: Some(m.encoding),
+                        timestamp: m.timestamp,
+                        source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
+                        source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
+                    };
+                    let new_reply = Reply {
+                        sample: Ok(Sample::with_info(
+                            key_expr.into_owned(),
+                            m.payload,
+                            Some(info),
+                        )),
+                        replier_id: ZenohId::rand(), // TOTO
+                    };
+                    let callback = match query.reception_mode {
+                        ConsolidationMode::None => Some((query.callback.clone(), new_reply)),
+                        ConsolidationMode::Monotonic => {
+                            match query
+                                .replies
+                                .as_ref()
+                                .unwrap()
+                                .get(new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr())
+                            {
+                                Some(reply) => {
+                                    if new_reply.sample.as_ref().unwrap().timestamp
+                                        > reply.sample.as_ref().unwrap().timestamp
+                                    {
+                                        query.replies.as_mut().unwrap().insert(
+                                            new_reply
+                                                .sample
+                                                .as_ref()
+                                                .unwrap()
+                                                .key_expr
+                                                .clone()
+                                                .into(),
+                                            new_reply.clone(),
+                                        );
+                                        Some((query.callback.clone(), new_reply))
+                                    } else {
+                                        None
+                                    }
+                                }
+                                None => {
                                     query.replies.as_mut().unwrap().insert(
                                         new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
                                         new_reply.clone(),
                                     );
                                     Some((query.callback.clone(), new_reply))
-                                } else {
-                                    None
                                 }
                             }
-                            None => {
-                                query.replies.as_mut().unwrap().insert(
-                                    new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
-                                    new_reply.clone(),
-                                );
-                                Some((query.callback.clone(), new_reply))
-                            }
                         }
-                    }
-                    ConsolidationMode::Latest => {
-                        match query
-                            .replies
-                            .as_ref()
-                            .unwrap()
-                            .get(new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr())
-                        {
-                            Some(reply) => {
-                                if new_reply.sample.as_ref().unwrap().timestamp
-                                    > reply.sample.as_ref().unwrap().timestamp
-                                {
+                        ConsolidationMode::Latest => {
+                            match query
+                                .replies
+                                .as_ref()
+                                .unwrap()
+                                .get(new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr())
+                            {
+                                Some(reply) => {
+                                    if new_reply.sample.as_ref().unwrap().timestamp
+                                        > reply.sample.as_ref().unwrap().timestamp
+                                    {
+                                        query.replies.as_mut().unwrap().insert(
+                                            new_reply
+                                                .sample
+                                                .as_ref()
+                                                .unwrap()
+                                                .key_expr
+                                                .clone()
+                                                .into(),
+                                            new_reply,
+                                        );
+                                    }
+                                }
+                                None => {
                                     query.replies.as_mut().unwrap().insert(
                                         new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
                                         new_reply,
                                     );
                                 }
-                            }
-                            None => {
-                                query.replies.as_mut().unwrap().insert(
-                                    new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
-                                    new_reply,
-                                );
-                            }
-                        };
-                        None
+                            };
+                            None
+                        }
+                    };
+                    std::mem::drop(state);
+                    if let Some((callback, new_reply)) = callback {
+                        callback(new_reply);
                     }
-                };
-                std::mem::drop(state);
-                if let Some((callback, new_reply)) = callback {
-                    callback(new_reply);
                 }
-            }
-            None => {
-                log::warn!("Received ReplyData for unkown Query: {}", qid);
+                None => {
+                    log::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                }
             }
         }
     }
 
-    fn send_reply_final(&self, qid: QueryId) {
-        trace!("recv ReplyFinal {:?}", qid);
+    fn send_response_final(&self, msg: ResponseFinal) {
+        trace!("recv ResponseFinal {:?}", msg);
         let mut state = zwrite!(self.state);
-        match state.queries.get_mut(&qid) {
+        match state.queries.get_mut(&msg.rid) {
             Some(mut query) => {
                 query.nb_final -= 1;
                 if query.nb_final == 0 {
-                    let query = state.queries.remove(&qid).unwrap();
+                    let query = state.queries.remove(&msg.rid).unwrap();
                     std::mem::drop(state);
                     if query.reception_mode == ConsolidationMode::Latest {
                         for (_, reply) in query.replies.unwrap().into_iter() {
                             (query.callback)(reply);
                         }
                     }
-                    trace!("Close query {}", qid);
+                    trace!("Close query {}", msg.rid);
                 }
             }
             None => {
-                warn!("Received ReplyFinal for unkown Query: {}", qid);
+                warn!("Received ResponseFinal for unkown Request: {}", msg.rid);
             }
         }
-    }
-
-    fn send_pull(
-        &self,
-        _is_final: bool,
-        _key_expr: &WireExpr,
-        _pull_id: PullId,
-        _max_samples: &Option<u16>,
-    ) {
-        trace!(
-            "recv Pull {:?} {:?} {:?} {:?}",
-            _is_final,
-            _key_expr,
-            _pull_id,
-            _max_samples
-        );
     }
 
     fn send_close(&self) {

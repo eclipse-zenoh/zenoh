@@ -21,7 +21,10 @@ use std::{
 };
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 pub use zenoh_protocol::core::key_expr::*;
-use zenoh_protocol::core::{key_expr::canon::Canonizable, ExprId, WireExpr};
+use zenoh_protocol::{
+    core::{key_expr::canon::Canonizable, ExprId, WireExpr},
+    network::{declare, DeclareBody, UndeclareKeyExpr},
+};
 use zenoh_result::ZResult;
 use zenoh_transport::Primitives;
 
@@ -594,7 +597,12 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
-        primitives.forget_resource(expr_id);
+        primitives.send_declare(zenoh_protocol::network::Declare {
+            ext_qos: declare::ext::QoSType::default(),
+            ext_tstamp: None,
+            ext_nodeid: declare::ext::NodeIdType::default(),
+            body: DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr { id: expr_id }),
+        });
 
         Ok(())
     }
