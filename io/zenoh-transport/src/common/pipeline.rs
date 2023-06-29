@@ -693,332 +693,331 @@ impl TransmissionPipelineConsumer {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use async_std::{prelude::FutureExt, task};
-//     use std::{
-//         convert::TryFrom,
-//         sync::{
-//             atomic::{AtomicUsize, Ordering},
-//             Arc,
-//         },
-//         time::{Duration, Instant},
-//     };
-//     use zenoh_buffers::{
-//         reader::{DidntRead, HasReader},
-//         ZBuf,
-//     };
-//     use zenoh_codec::{RCodec, Zenoh080};
-//     use zenoh_protocol::{
-//         core::{Bits, Channel, CongestionControl, Priority, Reliability},
-//         transport::{BatchSize, Fragment, Frame, TransportBody, TransportSn},
-//         zenoh::ZenohMessage,
-//     };
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use async_std::{prelude::FutureExt, task};
+    use std::{
+        convert::TryFrom,
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        time::{Duration, Instant},
+    };
+    use zenoh_buffers::{
+        reader::{DidntRead, HasReader},
+        ZBuf,
+    };
+    use zenoh_codec::{RCodec, Zenoh080};
+    use zenoh_protocol::{
+        core::{Bits, CongestionControl, Encoding, Priority},
+        network::{ext, Mapping, Push},
+        transport::{BatchSize, Fragment, Frame, TransportBody, TransportSn},
+        zenoh_new::{PushBody, Put},
+    };
 
-//     const SLEEP: Duration = Duration::from_millis(100);
-//     const TIMEOUT: Duration = Duration::from_secs(60);
+    const SLEEP: Duration = Duration::from_millis(100);
+    const TIMEOUT: Duration = Duration::from_secs(60);
 
-//     const CONFIG: TransmissionPipelineConf = TransmissionPipelineConf {
-//         is_streamed: true,
-//         batch_size: BatchSize::MAX,
-//         queue_size: [1; Priority::NUM],
-//         backoff: Duration::from_micros(1),
-//     };
+    const CONFIG: TransmissionPipelineConf = TransmissionPipelineConf {
+        is_streamed: true,
+        batch_size: BatchSize::MAX,
+        queue_size: [1; Priority::NUM],
+        backoff: Duration::from_micros(1),
+    };
 
-//     #[test]
-//     fn tx_pipeline_flow() {
-//         fn schedule(queue: TransmissionPipelineProducer, num_msg: usize, payload_size: usize) {
-//             // Send reliable messages
-//             let key = "test".into();
-//             let payload = ZBuf::from(vec![0_u8; payload_size]);
-//             let data_info = None;
-//             let routing_context = None;
-//             let reply_context = None;
-//             let channel = Channel {
-//                 priority: Priority::Control,
-//                 reliability: Reliability::Reliable,
-//             };
-//             let congestion_control = CongestionControl::Block;
+    #[test]
+    fn tx_pipeline_flow() {
+        fn schedule(queue: TransmissionPipelineProducer, num_msg: usize, payload_size: usize) {
+            // Send reliable messages
+            let key = "test".into();
+            let payload = ZBuf::from(vec![0_u8; payload_size]);
 
-//             let message = ZenohMessage::make_data(
-//                 key,
-//                 payload,
-//                 channel,
-//                 congestion_control,
-//                 data_info,
-//                 routing_context,
-//                 reply_context,
-//             );
+            let message: NetworkMessage = Push {
+                wire_expr: key,
+                mapping: Mapping::default(),
+                ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::default(),
+                payload: PushBody::Put(Put {
+                    timestamp: None,
+                    encoding: Encoding::default(),
+                    ext_sinfo: None,
+                    ext_unknown: vec![],
+                    payload,
+                }),
+            }
+            .into();
 
-//             println!(
-//                 "Pipeline Flow [>>>]: Sending {num_msg} messages with payload size of {payload_size} bytes"
-//             );
-//             for i in 0..num_msg {
-//                 println!(
-//                     "Pipeline Flow [>>>]: Pushed {} msgs ({payload_size} bytes)",
-//                     i + 1
-//                 );
-//                 queue.push_zenoh_message(message.clone());
-//             }
-//         }
+            println!(
+                "Pipeline Flow [>>>]: Sending {num_msg} messages with payload size of {payload_size} bytes"
+            );
+            for i in 0..num_msg {
+                println!(
+                    "Pipeline Flow [>>>]: Pushed {} msgs ({payload_size} bytes)",
+                    i + 1
+                );
+                queue.push_network_message(message.clone());
+            }
+        }
 
-//         async fn consume(mut queue: TransmissionPipelineConsumer, num_msg: usize) {
-//             let mut batches: usize = 0;
-//             let mut bytes: usize = 0;
-//             let mut msgs: usize = 0;
-//             let mut fragments: usize = 0;
+        async fn consume(mut queue: TransmissionPipelineConsumer, num_msg: usize) {
+            let mut batches: usize = 0;
+            let mut bytes: usize = 0;
+            let mut msgs: usize = 0;
+            let mut fragments: usize = 0;
 
-//             while msgs != num_msg {
-//                 let (batch, priority) = queue.pull().await.unwrap();
-//                 batches += 1;
-//                 bytes += batch.len() as usize;
-//                 // Create a ZBuf for deserialization starting from the batch
-//                 let bytes = batch.as_bytes();
-//                 // Deserialize the messages
-//                 let mut reader = bytes.reader();
-//                 let codec = Zenoh080::new();
+            while msgs != num_msg {
+                let (batch, priority) = queue.pull().await.unwrap();
+                batches += 1;
+                bytes += batch.len() as usize;
+                // Create a ZBuf for deserialization starting from the batch
+                let bytes = batch.as_bytes();
+                // Deserialize the messages
+                let mut reader = bytes.reader();
+                let codec = Zenoh080::new();
 
-//                 loop {
-//                     let res: Result<TransportMessage, DidntRead> = codec.read(&mut reader);
-//                     match res {
-//                         Ok(msg) => {
-//                             match msg.body {
-//                                 TransportBody::Frame(Frame { payload, .. }) => {
-//                                     msgs += payload.len()
-//                                 }
-//                                 TransportBody::Fragment(Fragment { more, .. }) => {
-//                                     fragments += 1;
-//                                     if !more {
-//                                         msgs += 1;
-//                                     }
-//                                 }
-//                                 _ => {
-//                                     msgs += 1;
-//                                 }
-//                             }
-//                             println!("Pipeline Flow [<<<]: Pulled {} msgs", msgs + 1);
-//                         }
-//                         Err(_) => break,
-//                     }
-//                 }
-//                 println!("Pipeline Flow [+++]: Refill {} msgs", msgs + 1);
-//                 // Reinsert the batch
-//                 queue.refill(batch, priority);
-//             }
+                loop {
+                    let res: Result<TransportMessage, DidntRead> = codec.read(&mut reader);
+                    match res {
+                        Ok(msg) => {
+                            match msg.body {
+                                TransportBody::Frame(Frame { payload, .. }) => {
+                                    msgs += payload.len()
+                                }
+                                TransportBody::Fragment(Fragment { more, .. }) => {
+                                    fragments += 1;
+                                    if !more {
+                                        msgs += 1;
+                                    }
+                                }
+                                _ => {
+                                    msgs += 1;
+                                }
+                            }
+                            println!("Pipeline Flow [<<<]: Pulled {} msgs", msgs + 1);
+                        }
+                        Err(_) => break,
+                    }
+                }
+                println!("Pipeline Flow [+++]: Refill {} msgs", msgs + 1);
+                // Reinsert the batch
+                queue.refill(batch, priority);
+            }
 
-//             println!(
-//                 "Pipeline Flow [<<<]: Received {msgs} messages, {bytes} bytes, {batches} batches, {fragments} fragments"
-//             );
-//         }
+            println!(
+                "Pipeline Flow [<<<]: Received {msgs} messages, {bytes} bytes, {batches} batches, {fragments} fragments"
+            );
+        }
 
-//         // Pipeline conduits
-//         let tct = TransportConduitTx::make(Bits::from(TransportSn::MAX)).unwrap();
-//         let conduits = vec![tct];
+        // Pipeline conduits
+        let tct = TransportConduitTx::make(Bits::from(TransportSn::MAX)).unwrap();
+        let conduits = vec![tct];
 
-//         // Total amount of bytes to send in each test
-//         let bytes: usize = 100_000_000;
-//         let max_msgs: usize = 1_000;
-//         // Payload size of the messages
-//         let payload_sizes = [8, 64, 512, 4_096, 8_192, 32_768, 262_144, 2_097_152];
+        // Total amount of bytes to send in each test
+        let bytes: usize = 100_000_000;
+        let max_msgs: usize = 1_000;
+        // Payload size of the messages
+        let payload_sizes = [8, 64, 512, 4_096, 8_192, 32_768, 262_144, 2_097_152];
 
-//         task::block_on(async {
-//             for ps in payload_sizes.iter() {
-//                 if u64::try_from(*ps).is_err() {
-//                     break;
-//                 }
+        task::block_on(async {
+            for ps in payload_sizes.iter() {
+                if u64::try_from(*ps).is_err() {
+                    break;
+                }
 
-//                 // Compute the number of messages to send
-//                 let num_msg = max_msgs.min(bytes / ps);
+                // Compute the number of messages to send
+                let num_msg = max_msgs.min(bytes / ps);
 
-//                 let (producer, consumer) = TransmissionPipeline::make(
-//                     TransmissionPipelineConf::default(),
-//                     conduits.as_slice(),
-//                 );
+                let (producer, consumer) = TransmissionPipeline::make(
+                    TransmissionPipelineConf::default(),
+                    conduits.as_slice(),
+                );
 
-//                 let t_c = task::spawn(async move {
-//                     consume(consumer, num_msg).await;
-//                 });
+                let t_c = task::spawn(async move {
+                    consume(consumer, num_msg).await;
+                });
 
-//                 let c_ps = *ps;
-//                 let t_s = task::spawn(async move {
-//                     schedule(producer, num_msg, c_ps);
-//                 });
+                let c_ps = *ps;
+                let t_s = task::spawn(async move {
+                    schedule(producer, num_msg, c_ps);
+                });
 
-//                 let res = t_c.join(t_s).timeout(TIMEOUT).await;
-//                 assert!(res.is_ok());
-//             }
-//         });
-//     }
+                let res = t_c.join(t_s).timeout(TIMEOUT).await;
+                assert!(res.is_ok());
+            }
+        });
+    }
 
-//     #[test]
-//     fn tx_pipeline_blocking() {
-//         fn schedule(queue: TransmissionPipelineProducer, counter: Arc<AtomicUsize>, id: usize) {
-//             // Make sure to put only one message per batch: set the payload size
-//             // to half of the batch in such a way the serialized zenoh message
-//             // will be larger then half of the batch size (header + payload).
-//             let payload_size = (CONFIG.batch_size / 2) as usize;
+    #[test]
+    fn tx_pipeline_blocking() {
+        fn schedule(queue: TransmissionPipelineProducer, counter: Arc<AtomicUsize>, id: usize) {
+            // Make sure to put only one message per batch: set the payload size
+            // to half of the batch in such a way the serialized zenoh message
+            // will be larger then half of the batch size (header + payload).
+            let payload_size = (CONFIG.batch_size / 2) as usize;
 
-//             // Send reliable messages
-//             let key = "test".into();
-//             let payload = ZBuf::from(vec![0_u8; payload_size]);
-//             let channel = Channel {
-//                 priority: Priority::Control,
-//                 reliability: Reliability::Reliable,
-//             };
-//             let congestion_control = CongestionControl::Block;
-//             let data_info = None;
-//             let routing_context = None;
-//             let reply_context = None;
+            // Send reliable messages
+            let key = "test".into();
+            let payload = ZBuf::from(vec![0_u8; payload_size]);
 
-//             let message = ZenohMessage::make_data(
-//                 key,
-//                 payload,
-//                 channel,
-//                 congestion_control,
-//                 data_info,
-//                 routing_context,
-//                 reply_context,
-//             );
+            let message: NetworkMessage = Push {
+                wire_expr: key,
+                mapping: Mapping::default(),
+                ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::default(),
+                payload: PushBody::Put(Put {
+                    timestamp: None,
+                    encoding: Encoding::default(),
+                    ext_sinfo: None,
+                    ext_unknown: vec![],
+                    payload,
+                }),
+            }
+            .into();
 
-//             // The last push should block since there shouldn't any more batches
-//             // available for serialization.
-//             let num_msg = 1 + CONFIG.queue_size[0];
-//             for i in 0..num_msg {
-//                 println!(
-//                     "Pipeline Blocking [>>>]: ({id}) Scheduling message #{i} with payload size of {payload_size} bytes"
-//                 );
-//                 queue.push_zenoh_message(message.clone());
-//                 let c = counter.fetch_add(1, Ordering::AcqRel);
-//                 println!(
-//                     "Pipeline Blocking [>>>]: ({}) Scheduled message #{} (tot {}) with payload size of {} bytes",
-//                     id, i, c + 1,
-//                     payload_size
-//                 );
-//             }
-//         }
+            // The last push should block since there shouldn't any more batches
+            // available for serialization.
+            let num_msg = 1 + CONFIG.queue_size[0];
+            for i in 0..num_msg {
+                println!(
+                    "Pipeline Blocking [>>>]: ({id}) Scheduling message #{i} with payload size of {payload_size} bytes"
+                );
+                queue.push_network_message(message.clone());
+                let c = counter.fetch_add(1, Ordering::AcqRel);
+                println!(
+                    "Pipeline Blocking [>>>]: ({}) Scheduled message #{} (tot {}) with payload size of {} bytes",
+                    id, i, c + 1,
+                    payload_size
+                );
+            }
+        }
 
-//         // Pipeline
-//         let tct = TransportConduitTx::make(Bits::from(TransportSn::MAX)).unwrap();
-//         let conduits = vec![tct];
-//         let (producer, mut consumer) =
-//             TransmissionPipeline::make(TransmissionPipelineConf::default(), conduits.as_slice());
+        // Pipeline
+        let tct = TransportConduitTx::make(Bits::from(TransportSn::MAX)).unwrap();
+        let conduits = vec![tct];
+        let (producer, mut consumer) =
+            TransmissionPipeline::make(TransmissionPipelineConf::default(), conduits.as_slice());
 
-//         let counter = Arc::new(AtomicUsize::new(0));
+        let counter = Arc::new(AtomicUsize::new(0));
 
-//         let c_producer = producer.clone();
-//         let c_counter = counter.clone();
-//         let h1 = task::spawn_blocking(move || {
-//             schedule(c_producer, c_counter, 1);
-//         });
+        let c_producer = producer.clone();
+        let c_counter = counter.clone();
+        let h1 = task::spawn_blocking(move || {
+            schedule(c_producer, c_counter, 1);
+        });
 
-//         let c_counter = counter.clone();
-//         let h2 = task::spawn_blocking(move || {
-//             schedule(producer, c_counter, 2);
-//         });
+        let c_counter = counter.clone();
+        let h2 = task::spawn_blocking(move || {
+            schedule(producer, c_counter, 2);
+        });
 
-//         task::block_on(async {
-//             // Wait to have sent enough messages and to have blocked
-//             println!(
-//                 "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
-//                 CONFIG.queue_size[Priority::MAX as usize]
-//             );
-//             let check = async {
-//                 while counter.load(Ordering::Acquire) < CONFIG.queue_size[Priority::MAX as usize] {
-//                     task::sleep(SLEEP).await;
-//                 }
-//             };
-//             check.timeout(TIMEOUT).await.unwrap();
+        task::block_on(async {
+            // Wait to have sent enough messages and to have blocked
+            println!(
+                "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
+                CONFIG.queue_size[Priority::MAX as usize]
+            );
+            let check = async {
+                while counter.load(Ordering::Acquire) < CONFIG.queue_size[Priority::MAX as usize] {
+                    task::sleep(SLEEP).await;
+                }
+            };
+            check.timeout(TIMEOUT).await.unwrap();
 
-//             // Disable and drain the queue
-//             task::spawn_blocking(move || {
-//                 println!("Pipeline Blocking [---]: draining the queue");
-//                 let _ = consumer.drain();
-//             })
-//             .timeout(TIMEOUT)
-//             .await
-//             .unwrap();
+            // Disable and drain the queue
+            task::spawn_blocking(move || {
+                println!("Pipeline Blocking [---]: draining the queue");
+                let _ = consumer.drain();
+            })
+            .timeout(TIMEOUT)
+            .await
+            .unwrap();
 
-//             // Make sure that the tasks scheduling have been unblocked
-//             println!("Pipeline Blocking [---]: waiting for schedule (1) to be unblocked");
-//             h1.timeout(TIMEOUT).await.unwrap();
-//             println!("Pipeline Blocking [---]: waiting for schedule (2) to be unblocked");
-//             h2.timeout(TIMEOUT).await.unwrap();
-//         });
-//     }
+            // Make sure that the tasks scheduling have been unblocked
+            println!("Pipeline Blocking [---]: waiting for schedule (1) to be unblocked");
+            h1.timeout(TIMEOUT).await.unwrap();
+            println!("Pipeline Blocking [---]: waiting for schedule (2) to be unblocked");
+            h2.timeout(TIMEOUT).await.unwrap();
+        });
+    }
 
-//     #[test]
-//     #[ignore]
-//     fn tx_pipeline_thr() {
-//         // Queue
-//         let tct = TransportConduitTx::make(Bits::from(TransportSn::MAX)).unwrap();
-//         let conduits = vec![tct];
-//         let (producer, mut consumer) = TransmissionPipeline::make(CONFIG, conduits.as_slice());
-//         let count = Arc::new(AtomicUsize::new(0));
-//         let size = Arc::new(AtomicUsize::new(0));
+    #[test]
+    #[ignore]
+    fn tx_pipeline_thr() {
+        // Queue
+        let tct = TransportConduitTx::make(Bits::from(TransportSn::MAX)).unwrap();
+        let conduits = vec![tct];
+        let (producer, mut consumer) = TransmissionPipeline::make(CONFIG, conduits.as_slice());
+        let count = Arc::new(AtomicUsize::new(0));
+        let size = Arc::new(AtomicUsize::new(0));
 
-//         let c_size = size.clone();
-//         task::spawn(async move {
-//             loop {
-//                 let payload_sizes: [usize; 16] = [
-//                     8, 16, 32, 64, 128, 256, 512, 1_024, 2_048, 4_096, 8_192, 16_384, 32_768,
-//                     65_536, 262_144, 1_048_576,
-//                 ];
-//                 for size in payload_sizes.iter() {
-//                     c_size.store(*size, Ordering::Release);
+        let c_size = size.clone();
+        task::spawn(async move {
+            loop {
+                let payload_sizes: [usize; 16] = [
+                    8, 16, 32, 64, 128, 256, 512, 1_024, 2_048, 4_096, 8_192, 16_384, 32_768,
+                    65_536, 262_144, 1_048_576,
+                ];
+                for size in payload_sizes.iter() {
+                    c_size.store(*size, Ordering::Release);
 
-//                     // Send reliable messages
-//                     let key = "pipeline/thr".into();
-//                     let payload = ZBuf::from(vec![0_u8; *size]);
-//                     let channel = Channel {
-//                         priority: Priority::Control,
-//                         reliability: Reliability::Reliable,
-//                     };
-//                     let congestion_control = CongestionControl::Block;
-//                     let data_info = None;
-//                     let routing_context = None;
-//                     let reply_context = None;
+                    // Send reliable messages
+                    let key = "pipeline/thr".into();
+                    let payload = ZBuf::from(vec![0_u8; *size]);
 
-//                     let message = ZenohMessage::make_data(
-//                         key,
-//                         payload,
-//                         channel,
-//                         congestion_control,
-//                         data_info,
-//                         routing_context,
-//                         reply_context,
-//                     );
+                    let message: NetworkMessage = Push {
+                        wire_expr: key,
+                        mapping: Mapping::default(),
+                        ext_qos: ext::QoSType::new(
+                            Priority::Control,
+                            CongestionControl::Block,
+                            false,
+                        ),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        payload: PushBody::Put(Put {
+                            timestamp: None,
+                            encoding: Encoding::default(),
+                            ext_sinfo: None,
+                            ext_unknown: vec![],
+                            payload,
+                        }),
+                    }
+                    .into();
 
-//                     let duration = Duration::from_millis(5_500);
-//                     let start = Instant::now();
-//                     while start.elapsed() < duration {
-//                         producer.push_zenoh_message(message.clone());
-//                     }
-//                 }
-//             }
-//         });
+                    let duration = Duration::from_millis(5_500);
+                    let start = Instant::now();
+                    while start.elapsed() < duration {
+                        producer.push_network_message(message.clone());
+                    }
+                }
+            }
+        });
 
-//         let c_count = count.clone();
-//         task::spawn(async move {
-//             loop {
-//                 let (batch, priority) = consumer.pull().await.unwrap();
-//                 c_count.fetch_add(batch.len() as usize, Ordering::AcqRel);
-//                 consumer.refill(batch, priority);
-//             }
-//         });
+        let c_count = count.clone();
+        task::spawn(async move {
+            loop {
+                let (batch, priority) = consumer.pull().await.unwrap();
+                c_count.fetch_add(batch.len() as usize, Ordering::AcqRel);
+                consumer.refill(batch, priority);
+            }
+        });
 
-//         task::block_on(async {
-//             let mut prev_size: usize = usize::MAX;
-//             loop {
-//                 let received = count.swap(0, Ordering::AcqRel);
-//                 let current: usize = size.load(Ordering::Acquire);
-//                 if current == prev_size {
-//                     let thr = (8.0 * received as f64) / 1_000_000_000.0;
-//                     println!("{} bytes: {:.6} Gbps", current, 2.0 * thr);
-//                 }
-//                 prev_size = current;
-//                 task::sleep(Duration::from_millis(500)).await;
-//             }
-//         });
-//     }
-// }
+        task::block_on(async {
+            let mut prev_size: usize = usize::MAX;
+            loop {
+                let received = count.swap(0, Ordering::AcqRel);
+                let current: usize = size.load(Ordering::Acquire);
+                if current == prev_size {
+                    let thr = (8.0 * received as f64) / 1_000_000_000.0;
+                    println!("{} bytes: {:.6} Gbps", current, 2.0 * thr);
+                }
+                prev_size = current;
+                task::sleep(Duration::from_millis(500)).await;
+            }
+        });
+    }
+}
