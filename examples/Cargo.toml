@@ -28,15 +28,19 @@ readme = "README.md"
 [features]
 shared-memory = ["zenoh/shared-memory"]
 unstable = ["zenoh/unstable"]
+transport_shm = ["zenoh/transport_shm"]
 default = [
     "shared-memory",
 ]
 
-[target.'cfg(unix)'.dependencies]
-zenoh = { workspace = true, features = ["transport_shm"] }
-
-[target.'cfg(not(unix))'.dependencies]
-zenoh = { workspace = true }
+# Unfortunately, the feature "transport_shm" is always
+# enabled for the lines below. It looks like a bug :(
+#
+# [target.'cfg(unix)'.dependencies]
+# zenoh = { workspace = true, features = ["transport_shm"] }
+# 
+# [target.'cfg(not(unix))'.dependencies]
+# zenoh = { workspace = true }
 
 [dependencies]
 async-std = { workspace = true, features = ["attributes"] }
@@ -47,6 +51,7 @@ futures = { workspace = true }
 git-version = { workspace = true }
 json5 = { workspace = true }
 log = { workspace = true }
+zenoh = { workspace = true }
 zenoh-ext = { workspace = true }
 
 [dev-dependencies]
