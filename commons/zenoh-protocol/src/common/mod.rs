@@ -50,6 +50,17 @@ pub mod imsg {
         byte & flag != 0
     }
 
+    pub const fn unset_flag(mut byte: u8, flag: u8) -> u8 {
+        byte &= !flag;
+        byte
+    }
+
+    pub const fn set_flag(mut byte: u8, flag: u8) -> u8 {
+        byte = unset_flag(byte, flag);
+        byte |= flag;
+        byte
+    }
+
     pub const fn has_option(options: u64, flag: u64) -> bool {
         options & flag != 0
     }
