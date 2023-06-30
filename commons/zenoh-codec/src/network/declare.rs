@@ -326,7 +326,7 @@ where
         if n_exts != 0 {
             header |= subscriber::flag::Z;
         }
-        if x.mapping != Mapping::default() {
+        if x.wire_expr.mapping != Mapping::default() {
             header |= subscriber::flag::M;
         }
         if x.wire_expr.has_suffix() {
@@ -376,8 +376,8 @@ where
         // Body
         let id: subscriber::SubscriberId = self.codec.read(&mut *reader)?;
         let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, subscriber::flag::N));
-        let wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
-        let mapping = if imsg::has_flag(self.header, subscriber::flag::M) {
+        let mut wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
+        wire_expr.mapping = if imsg::has_flag(self.header, subscriber::flag::M) {
             Mapping::Sender
         } else {
             Mapping::Receiver
@@ -406,7 +406,6 @@ where
         Ok(subscriber::DeclareSubscriber {
             id,
             wire_expr,
-            mapping,
             ext_info,
         })
     }
@@ -503,7 +502,7 @@ where
         if n_exts != 0 {
             header |= subscriber::flag::Z;
         }
-        if x.mapping != Mapping::default() {
+        if x.wire_expr.mapping != Mapping::default() {
             header |= subscriber::flag::M;
         }
         if x.wire_expr.has_suffix() {
@@ -551,8 +550,8 @@ where
         // Body
         let id: queryable::QueryableId = self.codec.read(&mut *reader)?;
         let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, queryable::flag::N));
-        let wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
-        let mapping = if imsg::has_flag(self.header, queryable::flag::M) {
+        let mut wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
+        wire_expr.mapping = if imsg::has_flag(self.header, queryable::flag::M) {
             Mapping::Sender
         } else {
             Mapping::Receiver
@@ -581,7 +580,6 @@ where
         Ok(queryable::DeclareQueryable {
             id,
             wire_expr,
-            mapping,
             ext_info,
         })
     }
@@ -671,7 +669,7 @@ where
     fn write(self, writer: &mut W, x: &token::DeclareToken) -> Self::Output {
         // Header
         let mut header = declare::id::D_TOKEN;
-        if x.mapping != Mapping::default() {
+        if x.wire_expr.mapping != Mapping::default() {
             header |= subscriber::flag::M;
         }
         if x.wire_expr.has_suffix() {
@@ -714,8 +712,8 @@ where
         // Body
         let id: token::TokenId = self.codec.read(&mut *reader)?;
         let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, token::flag::N));
-        let wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
-        let mapping = if imsg::has_flag(self.header, token::flag::M) {
+        let mut wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
+        wire_expr.mapping = if imsg::has_flag(self.header, token::flag::M) {
             Mapping::Sender
         } else {
             Mapping::Receiver
@@ -727,11 +725,7 @@ where
             extension::skip_all(reader, "DeclareToken")?;
         }
 
-        Ok(token::DeclareToken {
-            id,
-            wire_expr,
-            mapping,
-        })
+        Ok(token::DeclareToken { id, wire_expr })
     }
 }
 
@@ -819,7 +813,7 @@ where
     fn write(self, writer: &mut W, x: &interest::DeclareInterest) -> Self::Output {
         // Header
         let mut header = declare::id::D_INTEREST;
-        if x.mapping != Mapping::default() {
+        if x.wire_expr.mapping != Mapping::default() {
             header |= subscriber::flag::M;
         }
         if x.wire_expr.has_suffix() {
@@ -863,8 +857,8 @@ where
         // Body
         let id: interest::InterestId = self.codec.read(&mut *reader)?;
         let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, token::flag::N));
-        let wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
-        let mapping = if imsg::has_flag(self.header, token::flag::M) {
+        let mut wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
+        wire_expr.mapping = if imsg::has_flag(self.header, token::flag::M) {
             Mapping::Sender
         } else {
             Mapping::Receiver
@@ -880,7 +874,6 @@ where
         Ok(interest::DeclareInterest {
             id,
             wire_expr,
-            mapping,
             interest: interest.into(),
         })
     }
@@ -1035,7 +1028,7 @@ where
         if x.wire_expr.has_suffix() {
             flags |= 1;
         }
-        if let Mapping::Receiver = x.mapping {
+        if let Mapping::Receiver = x.wire_expr.mapping {
             flags |= 1 << 1;
         }
         codec.write(&mut zriter, flags)?;
@@ -1074,17 +1067,21 @@ where
         } else {
             String::new()
         };
-        let wire_expr = WireExpr {
-            scope,
-            suffix: suffix.into(),
-        };
-
         let mapping = if imsg::has_flag(flags, 1 << 1) {
             Mapping::Receiver
         } else {
             Mapping::Sender
         };
 
-        Ok((common::ext::WireExprType { wire_expr, mapping }, more))
+        Ok((
+            common::ext::WireExprType {
+                wire_expr: WireExpr {
+                    scope,
+                    suffix: suffix.into(),
+                    mapping,
+                },
+            },
+            more,
+        ))
     }
 }

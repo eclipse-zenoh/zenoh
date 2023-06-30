@@ -17,7 +17,7 @@ use std::fmt;
 use std::sync::Arc;
 use zenoh_protocol::core::{ExprId, WhatAmI, ZenohId};
 use zenoh_protocol::network::queryable::ext::QueryableInfo;
-use zenoh_protocol::network::{Push, Request, RequestId, Response, ResponseFinal};
+use zenoh_protocol::network::{Mapping, Push, Request, RequestId, Response, ResponseFinal};
 use zenoh_protocol::zenoh_new::RequestBody;
 use zenoh_transport::Primitives;
 
@@ -64,10 +64,14 @@ impl FaceState {
 
     #[inline]
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub(super) fn get_mapping(&self, prefixid: &ExprId) -> Option<&std::sync::Arc<Resource>> {
-        match self.remote_mappings.get(prefixid) {
-            Some(prefix) => Some(prefix),
-            None => self.local_mappings.get(prefixid),
+    pub(super) fn get_mapping(
+        &self,
+        prefixid: &ExprId,
+        mapping: Mapping,
+    ) -> Option<&std::sync::Arc<Resource>> {
+        match mapping {
+            Mapping::Sender => self.remote_mappings.get(prefixid),
+            Mapping::Receiver => self.local_mappings.get(prefixid),
         }
     }
 

@@ -39,7 +39,7 @@ pub mod id {
 }
 
 #[repr(u8)]
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, Hash, PartialEq, Eq)]
 pub enum Mapping {
     #[default]
     Receiver = 0,
