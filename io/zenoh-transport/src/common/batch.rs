@@ -420,7 +420,7 @@ mod tests {
     use super::*;
     use zenoh_buffers::ZBuf;
     use zenoh_protocol::{
-        core::{Channel, CongestionControl, Priority, Reliability},
+        core::{Channel, CongestionControl, Priority, Reliability, WireExpr},
         transport::{
             frame::{self, FrameHeader},
             KeepAlive, TransportMessage,
@@ -434,7 +434,7 @@ mod tests {
 
         let tmsg: TransportMessage = KeepAlive.into();
         let mut zmsg = ZenohMessage::make_data(
-            0.into(),
+            WireExpr::empty(),
             ZBuf::from(vec![0u8; 8]),
             Channel {
                 priority: Priority::default(),

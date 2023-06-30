@@ -712,7 +712,7 @@ mod tests {
     use zenoh_codec::{RCodec, Zenoh080};
     use zenoh_protocol::{
         core::{Bits, CongestionControl, Encoding, Priority},
-        network::{ext, Mapping, Push},
+        network::{ext, Push},
         transport::{BatchSize, Fragment, Frame, TransportBody, TransportSn},
         zenoh_new::{PushBody, Put},
     };
@@ -736,7 +736,6 @@ mod tests {
 
             let message: NetworkMessage = Push {
                 wire_expr: key,
-                mapping: Mapping::default(),
                 ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
@@ -864,7 +863,6 @@ mod tests {
 
             let message: NetworkMessage = Push {
                 wire_expr: key,
-                mapping: Mapping::default(),
                 ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
@@ -970,7 +968,6 @@ mod tests {
 
                     let message: NetworkMessage = Push {
                         wire_expr: key,
-                        mapping: Mapping::default(),
                         ext_qos: ext::QoSType::new(
                             Priority::Control,
                             CongestionControl::Block,

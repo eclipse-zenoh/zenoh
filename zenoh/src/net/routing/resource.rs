@@ -22,7 +22,7 @@ use zenoh_protocol::network::queryable::ext::QueryableInfo;
 #[cfg(feature = "complete_n")]
 use zenoh_protocol::network::request::ext::TargetType;
 use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::{Declare, DeclareBody, DeclareKeyExpr};
+use zenoh_protocol::network::{Declare, DeclareBody, DeclareKeyExpr, Mapping};
 use zenoh_protocol::zenoh_new::PushBody;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr, ZenohId},
@@ -492,29 +492,38 @@ impl Resource {
                         })
                     });
 
-                let expr_id = match ctx.local_expr_id.or(ctx.remote_expr_id) {
-                    Some(expr_id) => expr_id,
-                    None => {
-                        let expr_id = face.get_next_local_id();
-                        get_mut_unchecked(ctx).local_expr_id = Some(expr_id);
-                        get_mut_unchecked(face)
-                            .local_mappings
-                            .insert(expr_id, nonwild_prefix.clone());
-                        face.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
-                            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
-                                id: expr_id,
-                                wire_expr: nonwild_prefix.expr().into(),
-                            }),
-                        });
-                        expr_id
+                if let Some(expr_id) = ctx.remote_expr_id {
+                    WireExpr {
+                        scope: expr_id,
+                        suffix: wildsuffix.into(),
+                        mapping: Mapping::Receiver,
                     }
-                };
-                WireExpr {
-                    scope: expr_id,
-                    suffix: wildsuffix.into(),
+                } else if let Some(expr_id) = ctx.local_expr_id {
+                    WireExpr {
+                        scope: expr_id,
+                        suffix: wildsuffix.into(),
+                        mapping: Mapping::Sender,
+                    }
+                } else {
+                    let expr_id = face.get_next_local_id();
+                    get_mut_unchecked(ctx).local_expr_id = Some(expr_id);
+                    get_mut_unchecked(face)
+                        .local_mappings
+                        .insert(expr_id, nonwild_prefix.clone());
+                    face.primitives.send_declare(Declare {
+                        ext_qos: ext::QoSType::default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                            id: expr_id,
+                            wire_expr: nonwild_prefix.expr().into(),
+                        }),
+                    });
+                    WireExpr {
+                        scope: expr_id,
+                        suffix: wildsuffix.into(),
+                        mapping: Mapping::Sender,
+                    }
                 }
             }
             None => wildsuffix.into(),
@@ -536,15 +545,17 @@ impl Resource {
                 }
             }
             if let Some(ctx) = prefix.session_ctxs.get(&sid) {
-                if let Some(expr_id) = ctx.local_expr_id {
+                if let Some(expr_id) = ctx.remote_expr_id {
                     return WireExpr {
                         scope: expr_id,
                         suffix: suffix.into(),
+                        mapping: Mapping::Receiver,
                     };
-                } else if let Some(expr_id) = ctx.remote_expr_id {
+                } else if let Some(expr_id) = ctx.local_expr_id {
                     return WireExpr {
                         scope: expr_id,
                         suffix: suffix.into(),
+                        mapping: Mapping::Sender,
                     };
                 }
             }
@@ -672,7 +683,10 @@ pub fn register_expr(
     expr: &WireExpr,
 ) {
     let rtables = zread!(tables.tables);
-    match rtables.get_mapping(face, &expr.scope).cloned() {
+    match rtables
+        .get_mapping(face, &expr.scope, expr.mapping)
+        .cloned()
+    {
         Some(mut prefix) => match face.remote_mappings.get(&expr_id) {
             Some(res) => {
                 let mut fullexpr = prefix.expr();
@@ -705,7 +719,7 @@ pub fn register_expr(
                     Resource::match_resource(&wtables, &mut res, matches);
                     (res, wtables)
                 };
-                let mut ctx = get_mut_unchecked(&mut res)
+                get_mut_unchecked(&mut res)
                     .session_ctxs
                     .entry(face.id)
                     .or_insert_with(|| {
@@ -717,27 +731,7 @@ pub fn register_expr(
                             qabl: None,
                             last_values: HashMap::new(),
                         })
-                    })
-                    .clone();
-
-                if face.local_mappings.get(&expr_id).is_some() && ctx.local_expr_id.is_none() {
-                    let local_expr_id = get_mut_unchecked(face).get_next_local_id();
-                    get_mut_unchecked(&mut ctx).local_expr_id = Some(local_expr_id);
-
-                    get_mut_unchecked(face)
-                        .local_mappings
-                        .insert(local_expr_id, res.clone());
-
-                    face.primitives.send_declare(Declare {
-                        ext_qos: ext::QoSType::default(),
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
-                        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
-                            id: local_expr_id,
-                            wire_expr: res.expr().into(),
-                        }),
                     });
-                }
 
                 get_mut_unchecked(face)
                     .remote_mappings

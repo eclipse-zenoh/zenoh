@@ -22,7 +22,7 @@ use zenoh_buffers::{
 };
 use zenoh_codec::*;
 use zenoh_protocol::{
-    core::{CongestionControl, Reliability},
+    core::{CongestionControl, Reliability, WireExpr},
     transport::{BatchSize, Frame, FrameHeader, TransportSn},
     zenoh::Data,
 };
@@ -78,7 +78,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     };
 
     let data = Data {
-        key: 0.into(),
+        key: WireExpr::empty(),
         data_info: None,
         payload: ZBuf::from(vec![0u8; 8]),
         congestion_control: CongestionControl::default(),
@@ -115,7 +115,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     };
 
     let data = Data {
-        key: 0.into(),
+        key: WireExpr::empty(),
         data_info: None,
         payload: ZBuf::from(vec![0u8; 8]),
         congestion_control: CongestionControl::default(),
@@ -147,7 +147,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     };
 
     let data = Data {
-        key: 0.into(),
+        key: WireExpr::empty(),
         data_info: None,
         payload: ZBuf::from(vec![0u8; 8]),
         congestion_control: CongestionControl::default(),
@@ -179,7 +179,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let codec = Zenoh080::new();
 
     let data = Data {
-        key: 0.into(),
+        key: WireExpr::empty(),
         data_info: None,
         payload: ZBuf::from(vec![0u8; 1_000_000]),
         congestion_control: CongestionControl::default(),
@@ -197,7 +197,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let codec = Zenoh080::new();
 
     let data = Data {
-        key: 0.into(),
+        key: WireExpr::empty(),
         data_info: None,
         payload: ZBuf::from(vec![0u8; 1_000_000]),
         congestion_control: CongestionControl::default(),
@@ -227,7 +227,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let codec = Zenoh080::new();
 
     let data = Data {
-        key: 0.into(),
+        key: WireExpr::empty(),
         data_info: None,
         payload: ZBuf::from(vec![0u8; 1_000_000]),
         congestion_control: CongestionControl::default(),

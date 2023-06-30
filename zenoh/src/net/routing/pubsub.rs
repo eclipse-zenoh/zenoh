@@ -27,7 +27,7 @@ use zenoh_protocol::network::common::ext::WireExprType;
 use zenoh_protocol::network::declare::ext;
 use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
 use zenoh_protocol::network::{
-    Declare, DeclareBody, DeclareSubscriber, Mapping, Mode, Push, UndeclareSubscriber,
+    Declare, DeclareBody, DeclareSubscriber, Mode, Push, UndeclareSubscriber,
 };
 use zenoh_protocol::zenoh_new::PushBody;
 use zenoh_protocol::{
@@ -64,7 +64,6 @@ fn send_sourced_subscription_to_net_childs(
                             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                 id: 0, // TODO
                                 wire_expr: key_expr,
-                                mapping: Mapping::default(), // TODO
                                 ext_info: *sub_info,
                             }),
                         });
@@ -117,7 +116,6 @@ fn propagate_simple_subscription_to(
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                 id: 0, // TODO
                 wire_expr: key_expr,
-                mapping: Mapping::default(), // TODO
                 ext_info: *sub_info,
             }),
         });
@@ -228,7 +226,10 @@ pub fn declare_router_subscription(
     sub_info: &SubscriberInfo,
     router: ZenohId,
 ) {
-    match rtables.get_mapping(face, &expr.scope).cloned() {
+    match rtables
+        .get_mapping(face, &expr.scope, expr.mapping)
+        .cloned()
+    {
         Some(mut prefix) => {
             let res = Resource::get_resource(&prefix, &expr.suffix);
             let (mut res, mut wtables) =
@@ -306,7 +307,10 @@ pub fn declare_peer_subscription(
     sub_info: &SubscriberInfo,
     peer: ZenohId,
 ) {
-    match rtables.get_mapping(face, &expr.scope).cloned() {
+    match rtables
+        .get_mapping(face, &expr.scope, expr.mapping)
+        .cloned()
+    {
         Some(mut prefix) => {
             let res = Resource::get_resource(&prefix, &expr.suffix);
             let (mut res, mut wtables) =
@@ -404,7 +408,10 @@ pub fn declare_client_subscription(
     sub_info: &SubscriberInfo,
 ) {
     log::debug!("Register client subscription");
-    match rtables.get_mapping(face, &expr.scope).cloned() {
+    match rtables
+        .get_mapping(face, &expr.scope, expr.mapping)
+        .cloned()
+    {
         Some(mut prefix) => {
             let res = Resource::get_resource(&prefix, &expr.suffix);
             let (mut res, mut wtables) =
@@ -538,10 +545,7 @@ fn send_forget_sourced_subscription_to_net_childs(
                             },
                             body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                                 id: 0, // TODO
-                                ext_wire_expr: WireExprType {
-                                    wire_expr,
-                                    mapping: Mapping::default(),
-                                },
+                                ext_wire_expr: WireExprType { wire_expr },
                             }),
                         });
                     }
@@ -562,10 +566,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
                 ext_nodeid: ext::NodeIdType::default(),
                 body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                     id: 0, // TODO
-                    ext_wire_expr: WireExprType {
-                        wire_expr,
-                        mapping: Mapping::default(),
-                    },
+                    ext_wire_expr: WireExprType { wire_expr },
                 }),
             });
             get_mut_unchecked(face).local_subs.remove(res);
@@ -601,10 +602,7 @@ fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                         id: 0, // TODO
-                        ext_wire_expr: WireExprType {
-                            wire_expr,
-                            mapping: Mapping::default(),
-                        },
+                        ext_wire_expr: WireExprType { wire_expr },
                     }),
                 });
 
@@ -692,7 +690,7 @@ pub fn forget_router_subscription(
     expr: &WireExpr,
     router: &ZenohId,
 ) {
-    match rtables.get_mapping(face, &expr.scope) {
+    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
@@ -758,7 +756,7 @@ pub fn forget_peer_subscription(
     expr: &WireExpr,
     peer: &ZenohId,
 ) {
-    match rtables.get_mapping(face, &expr.scope) {
+    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
@@ -843,10 +841,7 @@ pub(crate) fn undeclare_client_subscription(
                 ext_nodeid: ext::NodeIdType::default(),
                 body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                     id: 0, // TODO
-                    ext_wire_expr: WireExprType {
-                        wire_expr,
-                        mapping: Mapping::default(),
-                    },
+                    ext_wire_expr: WireExprType { wire_expr },
                 }),
             });
 
@@ -861,7 +856,7 @@ pub fn forget_client_subscription(
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
 ) {
-    match rtables.get_mapping(face, &expr.scope) {
+    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
@@ -907,7 +902,6 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                         body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                             id: 0, // TODO
                             wire_expr: key_expr,
-                            mapping: Mapping::default(), // TODO
                             ext_info: sub_info,
                         }),
                     });
@@ -932,7 +926,6 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                 id: 0, // TODO
                                 wire_expr: key_expr,
-                                mapping: Mapping::default(), // TODO
                                 ext_info: sub_info,
                             }),
                         });
@@ -953,7 +946,6 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                 id: 0, // TODO
                                 wire_expr: key_expr,
-                                mapping: Mapping::default(), // TODO
                                 ext_info: sub_info,
                             }),
                         });
@@ -1147,10 +1139,7 @@ pub(crate) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                         body: DeclareBody::UndeclareSubscriber(
                                             UndeclareSubscriber {
                                                 id: 0, // TODO
-                                                ext_wire_expr: WireExprType {
-                                                    wire_expr,
-                                                    mapping: Mapping::default(),
-                                                },
+                                                ext_wire_expr: WireExprType { wire_expr },
                                             },
                                         ),
                                     });
@@ -1172,7 +1161,6 @@ pub(crate) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                         id: 0, // TODO
                                         wire_expr: key_expr,
-                                        mapping: Mapping::default(), // TODO
                                         ext_info: sub_info,
                                     }),
                                 });
@@ -1692,7 +1680,7 @@ pub fn full_reentrant_route_data(
     routing_context: u64,
 ) {
     let tables = zread!(tables_ref);
-    match tables.get_mapping(face, &expr.scope).cloned() {
+    match tables.get_mapping(face, &expr.scope, expr.mapping).cloned() {
         Some(prefix) => {
             log::trace!(
                 "Route data for res {}{}",
@@ -1720,7 +1708,6 @@ pub fn full_reentrant_route_data(
                             drop(tables);
                             outface.primitives.send_push(Push {
                                 wire_expr: key_expr.into(),
-                                mapping: Mapping::default(), // TODO
                                 ext_qos,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
@@ -1749,7 +1736,6 @@ pub fn full_reentrant_route_data(
                             for (outface, key_expr, context) in route {
                                 outface.primitives.send_push(Push {
                                     wire_expr: key_expr,
-                                    mapping: Mapping::default(), // TODO
                                     ext_qos: ext::QoSType::default(),
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType {
@@ -1764,7 +1750,6 @@ pub fn full_reentrant_route_data(
                                 if face.id != outface.id {
                                     outface.primitives.send_push(Push {
                                         wire_expr: key_expr.into(),
-                                        mapping: Mapping::default(), // TODO
                                         ext_qos: ext::QoSType::default(),
                                         ext_tstamp: None,
                                         ext_nodeid: ext::NodeIdType {
@@ -1787,7 +1772,7 @@ pub fn full_reentrant_route_data(
 
 pub fn pull_data(tables_ref: &RwLock<Tables>, face: &Arc<FaceState>, expr: WireExpr) {
     let tables = zread!(tables_ref);
-    match tables.get_mapping(face, &expr.scope) {
+    match tables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 let res = get_mut_unchecked(&mut res);
@@ -1812,7 +1797,6 @@ pub fn pull_data(tables_ref: &RwLock<Tables>, face: &Arc<FaceState>, expr: WireE
                             for (key_expr, payload) in route {
                                 face.primitives.send_push(Push {
                                     wire_expr: key_expr,
-                                    mapping: Mapping::default(), // TODO
                                     ext_qos: ext::QoSType::default(), // TODO
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::default(),

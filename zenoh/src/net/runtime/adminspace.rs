@@ -34,8 +34,8 @@ use zenoh_protocol::core::{
 use zenoh_protocol::network::queryable::ext::QueryableInfo;
 use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
 use zenoh_protocol::network::{
-    ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Mapping, Push, Request,
-    Response, ResponseFinal,
+    ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
+    ResponseFinal,
 };
 use zenoh_protocol::zenoh_new::{PushBody, RequestBody};
 use zenoh_result::ZResult;
@@ -225,7 +225,6 @@ impl AdminSpace {
             body: DeclareBody::DeclareQueryable(DeclareQueryable {
                 id: 0, // TODO
                 wire_expr: [&root_key, "/**"].concat().into(),
-                mapping: Mapping::default(), // TODO
                 ext_info: QueryableInfo {
                     complete: 0,
                     distance: 0,
@@ -240,7 +239,6 @@ impl AdminSpace {
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                 id: 0, // TODO
                 wire_expr: [&root_key, "/config/**"].concat().into(),
-                mapping: Mapping::default(), // TODO
                 ext_info: SubscriberInfo::default(),
             }),
         });

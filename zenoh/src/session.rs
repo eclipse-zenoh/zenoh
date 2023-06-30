@@ -145,19 +145,19 @@ impl SessionState {
     }
 
     #[inline]
-    fn get_remote_res(&self, id: &ExprId) -> Option<&Resource> {
-        match self.remote_resources.get(id) {
-            None => self.local_resources.get(id),
-            res => res,
+    fn get_remote_res(&self, id: &ExprId, mapping: Mapping) -> Option<&Resource> {
+        match mapping {
+            Mapping::Receiver => self.local_resources.get(id),
+            Mapping::Sender => self.remote_resources.get(id),
         }
     }
 
     #[inline]
-    fn get_res(&self, id: &ExprId, local: bool) -> Option<&Resource> {
+    fn get_res(&self, id: &ExprId, mapping: Mapping, local: bool) -> Option<&Resource> {
         if local {
             self.get_local_res(id)
         } else {
-            self.get_remote_res(id)
+            self.get_remote_res(id, mapping)
         }
     }
 
@@ -165,7 +165,7 @@ impl SessionState {
         if key_expr.scope == EMPTY_EXPR_ID {
             Ok(unsafe { keyexpr::from_str_unchecked(key_expr.suffix.as_ref()) }.into())
         } else if key_expr.suffix.is_empty() {
-            match self.get_remote_res(&key_expr.scope) {
+            match self.get_remote_res(&key_expr.scope, key_expr.mapping) {
                 Some(Resource::Node(ResourceNode { key_expr, .. })) => Ok(key_expr.into()),
                 Some(Resource::Prefix { prefix }) => bail!(
                     "Received {:?}, where {} is `{}`, which isn't a valid key expression",
@@ -177,7 +177,7 @@ impl SessionState {
             }
         } else {
             [
-                match self.get_remote_res(&key_expr.scope) {
+                match self.get_remote_res(&key_expr.scope, key_expr.mapping) {
                     Some(Resource::Node(ResourceNode { key_expr, .. })) => key_expr.as_str(),
                     Some(Resource::Prefix { prefix }) => prefix.as_ref(),
                     None => bail!("Remote resource {} not found", key_expr.scope),
@@ -670,6 +670,7 @@ impl Session {
                     KeyExpr(KeyExprInner::BorrowedWire {
                         key_expr,
                         expr_id,
+                        mapping: Mapping::Sender,
                         prefix_len,
                         session_id: sid,
                     })
@@ -678,6 +679,7 @@ impl Session {
                     KeyExpr(KeyExprInner::Wire {
                         key_expr,
                         expr_id,
+                        mapping: Mapping::Sender,
                         prefix_len,
                         session_id: sid,
                     })
@@ -903,6 +905,7 @@ impl Session {
                             wire_expr: WireExpr {
                                 scope: 0,
                                 suffix: prefix.to_owned().into(),
+                                mapping: Mapping::Sender,
                             },
                         }),
                     });
@@ -1101,7 +1104,6 @@ impl Session {
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                     id: id as u32,
                     wire_expr: key_expr.to_wire(self).to_owned(),
-                    mapping: Mapping::default(), // TODO
                     ext_info: *info,
                 }),
             });
@@ -1160,10 +1162,7 @@ impl Session {
                                 ext_nodeid: ext::NodeIdType::default(),
                                 body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                                     id: 0, // TODO
-                                    ext_wire_expr: WireExprType {
-                                        wire_expr,
-                                        mapping: Mapping::default(),
-                                    },
+                                    ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             });
                         }
@@ -1184,7 +1183,6 @@ impl Session {
                                     id: 0, // TODO
                                     ext_wire_expr: WireExprType {
                                         wire_expr: key_expr.to_wire(self).to_owned(),
-                                        mapping: Mapping::default(),
                                     },
                                 }),
                             });
@@ -1234,7 +1232,6 @@ impl Session {
                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
                         id: id as u32,
                         wire_expr: key_expr.to_owned(),
-                        mapping: Mapping::default(), // TODO
                         ext_info: qabl_info,
                     }),
                 });
@@ -1263,7 +1260,6 @@ impl Session {
                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
                         id: id as u32,
                         wire_expr: key_expr.to_owned(),
-                        mapping: Mapping::default(), // TODO
                         ext_info: qabl_info,
                     }),
                 });
@@ -1329,7 +1325,6 @@ impl Session {
                                 body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                     id: 0, // TODO
                                     wire_expr: qable_state.key_expr.clone(),
-                                    mapping: Mapping::default(), // TODO
                                     ext_info: qabl_info,
                                 }),
                             });
@@ -1349,7 +1344,6 @@ impl Session {
                                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                         id: 0, // TODO
                                         wire_expr: qable_state.key_expr.clone(),
-                                        mapping: Mapping::default(), // TODO
                                         ext_info: qabl_info,
                                     }),
                                 });
@@ -1367,7 +1361,6 @@ impl Session {
                             id: 0, // TODO
                             ext_wire_expr: WireExprType {
                                 wire_expr: qable_state.key_expr.clone(),
-                                mapping: Mapping::default(),
                             },
                         }),
                     });
@@ -1403,7 +1396,6 @@ impl Session {
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                 id: id as u32,
                 wire_expr: key_expr.to_wire(self).to_owned(),
-                mapping: Mapping::default(),
                 ext_info: SubscriberInfo::default(),
             }),
         });
@@ -1429,7 +1421,6 @@ impl Session {
                         id: 0, // TODO
                         ext_wire_expr: WireExprType {
                             wire_expr: key_expr.to_wire(self).to_owned(),
-                            mapping: Mapping::default(),
                         },
                     }),
                 });
@@ -1450,7 +1441,7 @@ impl Session {
         let mut callbacks = SingleOrVec::default();
         let state = zread!(self.state);
         if key_expr.suffix.is_empty() {
-            match state.get_res(&key_expr.scope, local) {
+            match state.get_res(&key_expr.scope, key_expr.mapping, local) {
                 Some(Resource::Node(res)) => {
                     for sub in &res.subscribers {
                         if sub.origin == Locality::Any
@@ -1562,7 +1553,6 @@ impl Session {
             primitives.send_request(Request {
                 id: 0, // TODO
                 wire_expr: key_expr.to_wire(self).to_owned(),
-                mapping: Mapping::default(),      // TODO
                 ext_qos: ext::QoSType::default(), // TODO
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
@@ -1657,7 +1647,6 @@ impl Session {
             primitives.send_request(Request {
                 id: qid,
                 wire_expr: wexpr.clone(),
-                mapping: Mapping::default(), // TODO
                 ext_qos: request::ext::QoSType::default(),
                 ext_tstamp: None,
                 ext_nodeid: request::ext::NodeIdType::default(),

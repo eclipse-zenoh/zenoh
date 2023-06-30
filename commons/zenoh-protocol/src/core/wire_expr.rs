@@ -21,6 +21,8 @@ use core::{convert::TryInto, fmt, sync::atomic::AtomicU16};
 use zenoh_keyexpr::{keyexpr, OwnedKeyExpr};
 use zenoh_result::{bail, ZResult};
 
+use crate::network::Mapping;
+
 /// A numerical Id mapped to a key expression.
 pub type ExprId = u16;
 pub type ExprLen = u16;
@@ -57,9 +59,18 @@ pub const EMPTY_EXPR_ID: ExprId = 0;
 pub struct WireExpr<'a> {
     pub scope: ExprId, // 0 marks global scope
     pub suffix: Cow<'a, str>,
+    pub mapping: Mapping,
 }
 
 impl<'a> WireExpr<'a> {
+    pub fn empty() -> Self {
+        WireExpr {
+            scope: 0,
+            suffix: "".into(),
+            mapping: Mapping::Sender,
+        }
+    }
+
     pub fn as_str(&'a self) -> &'a str {
         if self.scope == 0 {
             self.suffix.as_ref()
@@ -100,6 +111,7 @@ impl<'a> WireExpr<'a> {
         WireExpr {
             scope: self.scope,
             suffix: self.suffix.to_string().into(),
+            mapping: self.mapping,
         }
     }
 
@@ -136,6 +148,7 @@ impl<'a> From<&'a OwnedKeyExpr> for WireExpr<'a> {
         WireExpr {
             scope: 0,
             suffix: Cow::Borrowed(val.as_str()),
+            mapping: Mapping::Sender,
         }
     }
 }
@@ -145,6 +158,7 @@ impl<'a> From<&'a keyexpr> for WireExpr<'a> {
         WireExpr {
             scope: 0,
             suffix: Cow::Borrowed(val.as_str()),
+            mapping: Mapping::Sender,
         }
     }
 }
@@ -154,7 +168,7 @@ impl fmt::Debug for WireExpr<'_> {
         if self.scope == 0 {
             write!(f, "{}", self.suffix)
         } else {
-            write!(f, "{}:{}", self.scope, self.suffix)
+            write!(f, "{}:{:?}:{}", self.scope, self.mapping, self.suffix)
         }
     }
 }
@@ -164,7 +178,7 @@ impl fmt::Display for WireExpr<'_> {
         if self.scope == 0 {
             write!(f, "{}", self.suffix)
         } else {
-            write!(f, "{}:{}", self.scope, self.suffix)
+            write!(f, "{}:{:?}:{}", self.scope, self.mapping, self.suffix)
         }
     }
 }
@@ -176,32 +190,13 @@ impl<'a> From<&WireExpr<'a>> for WireExpr<'a> {
     }
 }
 
-impl From<ExprId> for WireExpr<'_> {
-    #[inline]
-    fn from(rid: ExprId) -> WireExpr<'static> {
-        WireExpr {
-            scope: rid,
-            suffix: "".into(),
-        }
-    }
-}
-
-impl From<&ExprId> for WireExpr<'_> {
-    #[inline]
-    fn from(rid: &ExprId) -> WireExpr<'static> {
-        WireExpr {
-            scope: *rid,
-            suffix: "".into(),
-        }
-    }
-}
-
 impl<'a> From<&'a str> for WireExpr<'a> {
     #[inline]
     fn from(name: &'a str) -> WireExpr<'a> {
         WireExpr {
             scope: 0,
             suffix: name.into(),
+            mapping: Mapping::Sender,
         }
     }
 }
@@ -212,6 +207,7 @@ impl From<String> for WireExpr<'_> {
         WireExpr {
             scope: 0,
             suffix: name.into(),
+            mapping: Mapping::Sender,
         }
     }
 }
@@ -222,6 +218,7 @@ impl<'a> From<&'a String> for WireExpr<'a> {
         WireExpr {
             scope: 0,
             suffix: name.into(),
+            mapping: Mapping::Sender,
         }
     }
 }
@@ -250,6 +247,7 @@ impl WireExpr<'_> {
         WireExpr {
             scope,
             suffix: suffix.into(),
+            mapping: Mapping::default(),
         }
     }
 }

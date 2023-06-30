@@ -32,8 +32,8 @@ use zenoh_protocol::network::declare::ext;
 use zenoh_protocol::network::request::ext::TargetType;
 use zenoh_protocol::network::response::ext::ResponderIdType;
 use zenoh_protocol::network::{
-    response, Declare, DeclareBody, DeclareQueryable, Mapping, Request, RequestId, Response,
-    ResponseFinal, UndeclareQueryable,
+    response, Declare, DeclareBody, DeclareQueryable, Request, RequestId, Response, ResponseFinal,
+    UndeclareQueryable,
 };
 use zenoh_protocol::zenoh_new::reply::ext::ConsolidationType;
 use zenoh_protocol::zenoh_new::{self, RequestBody, ResponseBody};
@@ -231,7 +231,6 @@ fn send_sourced_queryable_to_net_childs(
                             body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                 id: 0, // TODO
                                 wire_expr: key_expr,
-                                mapping: Mapping::default(), // TODO
                                 ext_info: *qabl_info,
                             }),
                         });
@@ -297,7 +296,6 @@ fn propagate_simple_queryable(
                 body: DeclareBody::DeclareQueryable(DeclareQueryable {
                     id: 0, // TODO
                     wire_expr: key_expr,
-                    mapping: Mapping::default(), // TODO
                     ext_info: info,
                 }),
             });
@@ -397,7 +395,10 @@ pub fn declare_router_queryable(
     qabl_info: &QueryableInfo,
     router: ZenohId,
 ) {
-    match rtables.get_mapping(face, &expr.scope).cloned() {
+    match rtables
+        .get_mapping(face, &expr.scope, expr.mapping)
+        .cloned()
+    {
         Some(mut prefix) => {
             let res = Resource::get_resource(&prefix, &expr.suffix);
             let (mut res, mut wtables) =
@@ -484,7 +485,10 @@ pub fn declare_peer_queryable(
     qabl_info: &QueryableInfo,
     peer: ZenohId,
 ) {
-    match rtables.get_mapping(face, &expr.scope).cloned() {
+    match rtables
+        .get_mapping(face, &expr.scope, expr.mapping)
+        .cloned()
+    {
         Some(mut prefix) => {
             let res = Resource::get_resource(&prefix, &expr.suffix);
             let (mut res, mut wtables) =
@@ -565,7 +569,10 @@ pub fn declare_client_queryable(
     expr: &WireExpr,
     qabl_info: &QueryableInfo,
 ) {
-    match rtables.get_mapping(face, &expr.scope).cloned() {
+    match rtables
+        .get_mapping(face, &expr.scope, expr.mapping)
+        .cloned()
+    {
         Some(mut prefix) => {
             let res = Resource::get_resource(&prefix, &expr.suffix);
             let (mut res, mut wtables) =
@@ -701,10 +708,7 @@ fn send_forget_sourced_queryable_to_net_childs(
                             },
                             body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                 id: 0, // TODO
-                                ext_wire_expr: WireExprType {
-                                    wire_expr,
-                                    mapping: Mapping::default(),
-                                },
+                                ext_wire_expr: WireExprType { wire_expr },
                             }),
                         });
                     }
@@ -725,10 +729,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
                 ext_nodeid: ext::NodeIdType::default(),
                 body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                     id: 0, // TODO
-                    ext_wire_expr: WireExprType {
-                        wire_expr,
-                        mapping: Mapping::default(),
-                    },
+                    ext_wire_expr: WireExprType { wire_expr },
                 }),
             });
 
@@ -765,10 +766,7 @@ fn propagate_forget_simple_queryable_to_peers(tables: &mut Tables, res: &mut Arc
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                         id: 0, // TODO
-                        ext_wire_expr: WireExprType {
-                            wire_expr,
-                            mapping: Mapping::default(),
-                        },
+                        ext_wire_expr: WireExprType { wire_expr },
                     }),
                 });
 
@@ -856,7 +854,7 @@ pub fn forget_router_queryable(
     expr: &WireExpr,
     router: &ZenohId,
 ) {
-    match rtables.get_mapping(face, &expr.scope) {
+    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
@@ -916,7 +914,7 @@ pub fn forget_peer_queryable(
     expr: &WireExpr,
     peer: &ZenohId,
 ) {
-    match rtables.get_mapping(face, &expr.scope) {
+    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
@@ -1015,10 +1013,7 @@ pub(crate) fn undeclare_client_queryable(
                 ext_nodeid: ext::NodeIdType::default(),
                 body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                     id: 0, // TODO
-                    ext_wire_expr: WireExprType {
-                        wire_expr,
-                        mapping: Mapping::default(),
-                    },
+                    ext_wire_expr: WireExprType { wire_expr },
                 }),
             });
 
@@ -1033,7 +1028,7 @@ pub fn forget_client_queryable(
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
 ) {
-    match rtables.get_mapping(face, &expr.scope) {
+    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
@@ -1079,7 +1074,6 @@ pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                             body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                 id: 0, // TODO
                                 wire_expr: key_expr,
-                                mapping: Mapping::default(), // TODO
                                 ext_info: info,
                             }),
                         });
@@ -1108,7 +1102,6 @@ pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                             body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                 id: 0, // TODO
                                 wire_expr: key_expr,
-                                mapping: Mapping::default(), // TODO
                                 ext_info: info,
                             }),
                         });
@@ -1133,7 +1126,6 @@ pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                                 body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                     id: 0, // TODO
                                     wire_expr: key_expr,
-                                    mapping: Mapping::default(), // TODO
                                     ext_info: info,
                                 }),
                             });
@@ -1270,10 +1262,7 @@ pub(crate) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                                         ext_nodeid: ext::NodeIdType::default(),
                                         body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                             id: 0, // TODO
-                                            ext_wire_expr: WireExprType {
-                                                wire_expr,
-                                                mapping: Mapping::default(),
-                                            },
+                                            ext_wire_expr: WireExprType { wire_expr },
                                         }),
                                     });
 
@@ -1293,7 +1282,6 @@ pub(crate) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                         id: 0, // TODO
                                         wire_expr: key_expr,
-                                        mapping: Mapping::default(), // TODO
                                         ext_info: info,
                                     }),
                                 });
@@ -2008,7 +1996,7 @@ pub fn route_query(
     routing_context: u64,
 ) {
     let rtables = zread!(tables_ref.tables);
-    match rtables.get_mapping(face, &expr.scope) {
+    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => {
             log::debug!(
                 "Route query {}:{} for res {}{}",
@@ -2046,7 +2034,6 @@ pub fn route_query(
                     face.primitives.clone().send_response(Response {
                         rid: qid,
                         wire_expr: expr,
-                        mapping: Mapping::default(), // TODO
                         payload: ResponseBody::Reply(zenoh_new::Reply {
                             timestamp: None,
                             encoding: Encoding::default(),
@@ -2093,7 +2080,6 @@ pub fn route_query(
                             outface.primitives.send_request(Request {
                                 id: *qid,
                                 wire_expr: key_expr.into(),
-                                mapping: Mapping::default(),      // TODO
                                 ext_qos: ext::QoSType::default(), // TODO
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
@@ -2122,7 +2108,6 @@ pub fn route_query(
                             outface.primitives.send_request(Request {
                                 id: *qid,
                                 wire_expr: key_expr.into(),
-                                mapping: Mapping::default(),      // TODO
                                 ext_qos: ext::QoSType::default(), // TODO
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
@@ -2177,7 +2162,6 @@ pub(crate) fn route_send_response(
             query.src_face.primitives.clone().send_response(Response {
                 rid: query.src_qid,
                 wire_expr: key_expr.to_owned(),
-                mapping: Mapping::default(), // TODO
                 payload: body,
                 ext_qos: response::ext::QoSType::default(),
                 ext_tstamp: None,

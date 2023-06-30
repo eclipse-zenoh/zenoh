@@ -168,8 +168,8 @@ impl SyncResolve for ReplyBuilder<'_> {
                     wire_expr: WireExpr {
                         scope: 0,
                         suffix: std::borrow::Cow::Owned(key_expr.into()),
+                        mapping: Mapping::Sender,
                     },
-                    mapping: Mapping::default(), // TODO
                     payload: ResponseBody::Reply(zenoh_new::Reply {
                         timestamp: data_info.timestamp,
                         encoding: data_info.encoding.unwrap_or_default(),

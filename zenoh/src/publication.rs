@@ -139,7 +139,6 @@ impl SyncResolve for PutBuilder<'_, '_> {
         if publisher.destination != Locality::SessionLocal {
             primitives.send_push(Push {
                 wire_expr: key_expr.to_wire(&publisher.session).to_owned(),
-                mapping: Mapping::default(), // TODO
                 ext_qos: ext::QoSType::new(
                     publisher.priority.into(),
                     publisher.congestion_control,
@@ -430,7 +429,6 @@ impl SyncResolve for Publication<'_> {
         if publisher.destination != Locality::SessionLocal {
             primitives.send_push(Push {
                 wire_expr: publisher.key_expr.to_wire(&publisher.session).to_owned(),
-                mapping: Mapping::default(),      // TODO
                 ext_qos: ext::QoSType::default(), // TODO
                 // use publisher.priority
                 // use publisher.congestion_control
@@ -585,6 +583,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
                     KeyExpr(crate::key_expr::KeyExprInner::BorrowedWire {
                         key_expr,
                         expr_id,
+                        mapping: Mapping::Sender,
                         prefix_len,
                         session_id,
                     })
@@ -594,6 +593,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
                     KeyExpr(crate::key_expr::KeyExprInner::Wire {
                         key_expr,
                         expr_id,
+                        mapping: Mapping::Sender,
                         prefix_len,
                         session_id,
                     })

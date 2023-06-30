@@ -180,7 +180,6 @@ pub mod common {
         #[derive(Debug, Clone, PartialEq, Eq)]
         pub struct WireExprType {
             pub wire_expr: WireExpr<'static>,
-            pub mapping: Mapping,
         }
 
         impl WireExprType {
@@ -191,8 +190,8 @@ pub mod common {
                     wire_expr: WireExpr {
                         scope: ExprId::MIN,
                         suffix: Cow::from(""),
+                        mapping: Mapping::Receiver,
                     },
-                    mapping: Mapping::Receiver,
                 }
             }
 
@@ -200,7 +199,6 @@ pub mod common {
             pub fn rand() -> Self {
                 Self {
                     wire_expr: WireExpr::rand(),
-                    mapping: Mapping::rand(),
                 }
             }
         }
@@ -325,7 +323,6 @@ pub mod subscriber {
     pub struct DeclareSubscriber {
         pub id: SubscriberId,
         pub wire_expr: WireExpr<'static>,
-        pub mapping: Mapping,
         pub ext_info: ext::SubscriberInfo,
     }
 
@@ -405,14 +402,12 @@ pub mod subscriber {
 
             let id: SubscriberId = rng.gen();
             let wire_expr = WireExpr::rand();
-            let mapping = Mapping::rand();
             let ext_info = ext::SubscriberInfo::rand();
 
             Self {
                 id,
                 wire_expr,
                 ext_info,
-                mapping,
             }
         }
     }
@@ -492,7 +487,6 @@ pub mod queryable {
     pub struct DeclareQueryable {
         pub id: QueryableId,
         pub wire_expr: WireExpr<'static>,
-        pub mapping: Mapping,
         pub ext_info: ext::QueryableInfo,
     }
 
@@ -553,13 +547,11 @@ pub mod queryable {
 
             let id: QueryableId = rng.gen();
             let wire_expr = WireExpr::rand();
-            let mapping = Mapping::rand();
             let ext_info = ext::QueryableInfo::rand();
 
             Self {
                 id,
                 wire_expr,
-                mapping,
                 ext_info,
             }
         }
@@ -636,7 +628,6 @@ pub mod token {
     pub struct DeclareToken {
         pub id: TokenId,
         pub wire_expr: WireExpr<'static>,
-        pub mapping: Mapping,
     }
 
     impl DeclareToken {
@@ -647,13 +638,8 @@ pub mod token {
 
             let id: TokenId = rng.gen();
             let wire_expr = WireExpr::rand();
-            let mapping = Mapping::rand();
 
-            Self {
-                id,
-                wire_expr,
-                mapping,
-            }
+            Self { id, wire_expr }
         }
     }
 
@@ -777,7 +763,6 @@ pub mod interest {
     pub struct DeclareInterest {
         pub id: InterestId,
         pub wire_expr: WireExpr<'static>,
-        pub mapping: Mapping,
         pub interest: Interest,
     }
 
@@ -860,13 +845,11 @@ pub mod interest {
 
             let id: InterestId = rng.gen();
             let wire_expr = WireExpr::rand();
-            let mapping = Mapping::rand();
             let interest = Interest::rand();
 
             Self {
                 id,
                 wire_expr,
-                mapping,
                 interest,
             }
         }

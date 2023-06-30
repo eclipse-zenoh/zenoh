@@ -31,7 +31,7 @@ use uhlc::HLC;
 use zenoh_link::Link;
 use zenoh_protocol::common::ZExtBody;
 use zenoh_protocol::core::{ExprId, WhatAmI, WhatAmIMatcher, ZenohId};
-use zenoh_protocol::network::{NetworkBody, NetworkMessage};
+use zenoh_protocol::network::{Mapping, NetworkBody, NetworkMessage};
 use zenoh_transport::{DeMux, Mux, Primitives, TransportPeerEventHandler, TransportUnicast};
 // use zenoh_collections::Timer;
 use zenoh_core::zconfigurable;
@@ -139,10 +139,11 @@ impl Tables {
         &'a self,
         face: &'a FaceState,
         expr_id: &ExprId,
+        mapping: Mapping,
     ) -> Option<&'a Arc<Resource>> {
         match expr_id {
             0 => Some(&self.root_res),
-            expr_id => face.get_mapping(expr_id),
+            expr_id => face.get_mapping(expr_id, mapping),
         }
     }
 

@@ -11,11 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    core::WireExpr,
-    network::{Mapping, RequestId},
-    zenoh_new::ResponseBody,
-};
+use crate::{core::WireExpr, network::RequestId, zenoh_new::ResponseBody};
 
 /// # Response message
 ///
@@ -53,7 +49,6 @@ pub mod flag {
 pub struct Response {
     pub rid: RequestId,
     pub wire_expr: WireExpr<'static>,
-    pub mapping: Mapping,
     pub payload: ResponseBody,
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
@@ -83,7 +78,6 @@ impl Response {
 
         let rid: RequestId = rng.gen();
         let wire_expr = WireExpr::rand();
-        let mapping = Mapping::rand();
         let payload = ResponseBody::rand();
         let ext_qos = ext::QoSType::rand();
         let ext_tstamp = rng.gen_bool(0.5).then(ext::TimestampType::rand);
@@ -92,7 +86,6 @@ impl Response {
         Self {
             rid,
             wire_expr,
-            mapping,
             payload,
             ext_qos,
             ext_tstamp,
