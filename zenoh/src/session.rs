@@ -1970,26 +1970,33 @@ impl Primitives for Session {
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
                 trace!("recv UndeclareSubscriber {:?}", m.id);
-                // #[cfg(feature = "unstable")]
-                // {
-                //     let state = zread!(self.state);
-                //     match state.wireexpr_to_keyexpr(key_expr, false) {
-                //         Ok(expr) => {
-                //             if expr
-                //                 .as_str()
-                //                 .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-                //             {
-                //                 drop(state);
-                //                 let data_info = DataInfo {
-                //                     kind: SampleKind::Delete,
-                //                     ..Default::default()
-                //                 };
-                //                 self.handle_data(false, key_expr, Some(data_info), ZBuf::default());
-                //             }
-                //         }
-                //         Err(err) => log::error!("Received Forget Subscriber for unkown key_expr: {}", err),
-                //     }
-                // }
+                #[cfg(feature = "unstable")]
+                {
+                    let state = zread!(self.state);
+                    match state.wireexpr_to_keyexpr(&m.ext_wire_expr.wire_expr, false) {
+                        Ok(expr) => {
+                            if expr
+                                .as_str()
+                                .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                            {
+                                drop(state);
+                                let data_info = DataInfo {
+                                    kind: SampleKind::Delete,
+                                    ..Default::default()
+                                };
+                                self.handle_data(
+                                    false,
+                                    &m.ext_wire_expr.wire_expr,
+                                    Some(data_info),
+                                    ZBuf::default(),
+                                );
+                            }
+                        }
+                        Err(err) => {
+                            log::error!("Received Forget Subscriber for unkown key_expr: {}", err)
+                        }
+                    }
+                }
             }
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
                 trace!("recv DeclareQueryable {} {:?}", m.id, m.wire_expr);
