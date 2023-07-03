@@ -20,9 +20,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use zenoh_core::zasync_executor_init;
 use zenoh_link::Link;
-use zenoh_protocol::core::Encoding;
 use zenoh_protocol::{
-    core::{CongestionControl, EndPoint, Priority, WhatAmI, ZenohId},
+    core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
     network::{
         push::{
             ext::{NodeIdType, QoSType},
