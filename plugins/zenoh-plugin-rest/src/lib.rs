@@ -198,7 +198,11 @@ impl Plugin for RestPlugin {
 
         let conf: Config = serde_json::from_value(plugin_conf.clone())
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
-        async_std::task::spawn(run(runtime.clone(), conf.clone()));
+        let task = async_std::task::spawn(run(runtime.clone(), conf.clone()));
+        let task = async_std::task::block_on(task.timeout(std::time::Duration::from_millis(1)));
+        if let Ok(Err(e)) = task {
+            bail!("REST server failed within 1ms: {e}")
+        }
         Ok(Box::new(RunningPlugin(conf)))
     }
 }
@@ -435,7 +439,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
     }
 }
 
-pub async fn run(runtime: Runtime, conf: Config) {
+pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     // Try to initiate login.
     // Required in case of dynamic lib, otherwise no logs.
     // But cannot be done twice in case of static link.
@@ -461,7 +465,9 @@ pub async fn run(runtime: Runtime, conf: Config) {
 
     if let Err(e) = app.listen(conf.http_port).await {
         log::error!("Unable to start http server for REST: {:?}", e);
+        return Err(e.into());
     }
+    Ok(())
 }
 
 fn path_to_key_expr<'a>(path: &'a str, zid: &str) -> ZResult<KeyExpr<'a>> {
