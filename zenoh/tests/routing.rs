@@ -18,12 +18,11 @@ use std::str::FromStr;
 use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicUsize, Arc};
 use std::time::Duration;
-use zenoh::config::{whatami::WhatAmI, Config};
+use zenoh::config::{Config, ModeDependentValue};
 use zenoh::prelude::r#async::*;
 use zenoh::{value::Value, Result};
-use zenoh_config::whatami::WhatAmIMatcher;
-use zenoh_config::ModeDependentValue;
 use zenoh_core::zasync_executor_init;
+use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};
 use zenoh_result::{bail, zerror};
 
 const TIMEOUT: Duration = Duration::from_secs(360);
