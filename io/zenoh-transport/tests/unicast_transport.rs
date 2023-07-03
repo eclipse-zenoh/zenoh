@@ -30,7 +30,7 @@ use zenoh_protocol::{
     },
     network::{
         push::ext::{NodeIdType, QoSType},
-        Mapping, NetworkMessage, Push,
+        NetworkMessage, Push,
     },
     zenoh_new::Put,
 };
@@ -434,7 +434,6 @@ async fn test_transport(
     // Create the message to send
     let message: NetworkMessage = Push {
         wire_expr: "test".into(),
-        mapping: Mapping::Sender,
         ext_qos: QoSType::new(channel.priority, cctrl, false),
         ext_tstamp: None,
         ext_nodeid: NodeIdType::default(),
