@@ -11,185 +11,194 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// use async_std::{prelude::FutureExt, task};
-// use std::{convert::TryFrom, sync::Arc, time::Duration};
-// use zenoh_buffers::ZBuf;
-// use zenoh_core::zasync_executor_init;
-// use zenoh_protocol::{
-//     core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
-//     zenoh::ZenohMessage,
-// };
-// use zenoh_transport::{DummyTransportEventHandler, TransportManager};
+use async_std::{prelude::FutureExt, task};
+use std::{convert::TryFrom, sync::Arc, time::Duration};
+use zenoh_core::zasync_executor_init;
+use zenoh_protocol::{
+    core::{
+        Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI, ZenohId,
+    },
+    network::{
+        push::{
+            ext::{NodeIdType, QoSType},
+            Push,
+        },
+        NetworkMessage,
+    },
+    zenoh_new::Put,
+};
+use zenoh_transport::{DummyTransportEventHandler, TransportManager};
 
-// const TIMEOUT: Duration = Duration::from_secs(60);
-// const SLEEP: Duration = Duration::from_secs(1);
+const TIMEOUT: Duration = Duration::from_secs(60);
+const SLEEP: Duration = Duration::from_secs(1);
 
-// const MSG_SIZE: usize = 131_072;
-// const MSG_DEFRAG_BUF: usize = 128_000;
+const MSG_SIZE: usize = 131_072;
+const MSG_DEFRAG_BUF: usize = 128_000;
 
-// macro_rules! ztimeout {
-//     ($f:expr) => {
-//         $f.timeout(TIMEOUT).await.unwrap()
-//     };
-// }
+macro_rules! ztimeout {
+    ($f:expr) => {
+        $f.timeout(TIMEOUT).await.unwrap()
+    };
+}
 
-// async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
-//     // Define client and router IDs
-//     let client_id = ZenohId::try_from([1]).unwrap();
-//     let router_id = ZenohId::try_from([2]).unwrap();
+async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
+    // Define client and router IDs
+    let client_id = ZenohId::try_from([1]).unwrap();
+    let router_id = ZenohId::try_from([2]).unwrap();
 
-//     // Create the router transport manager
-//     let router_manager = TransportManager::builder()
-//         .zid(router_id)
-//         .whatami(WhatAmI::Router)
-//         .defrag_buff_size(MSG_DEFRAG_BUF)
-//         .build(Arc::new(DummyTransportEventHandler::default()))
-//         .unwrap();
+    // Create the router transport manager
+    let router_manager = TransportManager::builder()
+        .zid(router_id)
+        .whatami(WhatAmI::Router)
+        .defrag_buff_size(MSG_DEFRAG_BUF)
+        .build(Arc::new(DummyTransportEventHandler::default()))
+        .unwrap();
 
-//     // Create the client transport manager
-//     let client_manager = TransportManager::builder()
-//         .whatami(WhatAmI::Client)
-//         .zid(client_id)
-//         .defrag_buff_size(MSG_DEFRAG_BUF)
-//         .build(Arc::new(DummyTransportEventHandler::default()))
-//         .unwrap();
+    // Create the client transport manager
+    let client_manager = TransportManager::builder()
+        .whatami(WhatAmI::Client)
+        .zid(client_id)
+        .defrag_buff_size(MSG_DEFRAG_BUF)
+        .build(Arc::new(DummyTransportEventHandler::default()))
+        .unwrap();
 
-//     // Create the listener on the router
-//     println!("Add locator: {endpoint}");
-//     let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
+    // Create the listener on the router
+    println!("Add locator: {endpoint}");
+    let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
 
-//     // Create an empty transport with the client
-//     // Open transport -> This should be accepted
-//     println!("Opening transport with {endpoint}");
-//     let _ = ztimeout!(client_manager.open_transport(endpoint.clone())).unwrap();
+    // Create an empty transport with the client
+    // Open transport -> This should be accepted
+    println!("Opening transport with {endpoint}");
+    let _ = ztimeout!(client_manager.open_transport(endpoint.clone())).unwrap();
 
-//     let client_transport = client_manager.get_transport(&router_id).unwrap();
+    let client_transport = client_manager.get_transport(&router_id).unwrap();
 
-//     // Create the message to send, this would trigger the transport closure
-//     let key = "test".into();
-//     let payload = ZBuf::from(vec![0_u8; msg_size]);
-//     let data_info = None;
-//     let routing_context = None;
-//     let reply_context = None;
-//     let message = ZenohMessage::make_data(
-//         key,
-//         payload,
-//         channel,
-//         CongestionControl::Block,
-//         data_info,
-//         routing_context,
-//         reply_context,
-//     );
+    // Create the message to send
+    let message: NetworkMessage = Push {
+        wire_expr: "test".into(),
+        ext_qos: QoSType::new(channel.priority, CongestionControl::Block, false),
+        ext_tstamp: None,
+        ext_nodeid: NodeIdType::default(),
+        payload: Put {
+            payload: vec![0u8; msg_size].into(),
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            ext_unknown: vec![],
+        }
+        .into(),
+    }
+    .into();
 
-//     println!(
-//         "Sending message of {msg_size} bytes while defragmentation buffer size is {MSG_DEFRAG_BUF} bytes"
-//     );
-//     client_transport.schedule(message.clone()).unwrap();
+    println!(
+        "Sending message of {msg_size} bytes while defragmentation buffer size is {MSG_DEFRAG_BUF} bytes"
+    );
+    client_transport.schedule(message.clone()).unwrap();
 
-//     // Wait that the client transport has been closed
-//     ztimeout!(async {
-//         while client_transport.get_zid().is_ok() {
-//             task::sleep(SLEEP).await;
-//         }
-//     });
+    // Wait that the client transport has been closed
+    ztimeout!(async {
+        while client_transport.get_zid().is_ok() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
-//     // Wait on the router manager that the transport has been closed
-//     ztimeout!(async {
-//         while !router_manager.get_transports_unicast().await.is_empty() {
-//             task::sleep(SLEEP).await;
-//         }
-//     });
+    // Wait on the router manager that the transport has been closed
+    ztimeout!(async {
+        while !router_manager.get_transports_unicast().await.is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
-//     // Stop the locators on the manager
-//     println!("Del locator: {endpoint}");
-//     ztimeout!(router_manager.del_listener(endpoint)).unwrap();
+    // Stop the locators on the manager
+    println!("Del locator: {endpoint}");
+    ztimeout!(router_manager.del_listener(endpoint)).unwrap();
 
-//     // Wait a little bit
-//     ztimeout!(async {
-//         while !router_manager.get_listeners_unicast().await.is_empty() {
-//             task::sleep(SLEEP).await;
-//         }
-//     });
+    // Wait a little bit
+    ztimeout!(async {
+        while !router_manager.get_listeners_unicast().await.is_empty() {
+            task::sleep(SLEEP).await;
+        }
+    });
 
-//     task::sleep(SLEEP).await;
+    task::sleep(SLEEP).await;
 
-//     ztimeout!(router_manager.close());
-//     ztimeout!(client_manager.close());
+    ztimeout!(router_manager.close());
+    ztimeout!(client_manager.close());
 
-//     // Wait a little bit
-//     task::sleep(SLEEP).await;
-// }
+    // Wait a little bit
+    task::sleep(SLEEP).await;
+}
 
-// #[cfg(feature = "transport_tcp")]
-// #[test]
-// fn transport_unicast_defragmentation_tcp_only() {
-//     let _ = env_logger::try_init();
-//     task::block_on(async {
-//         zasync_executor_init!();
-//     });
+#[cfg(feature = "transport_tcp")]
+#[test]
+fn transport_unicast_defragmentation_tcp_only() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
 
-//     // Define the locators
-//     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 11000).parse().unwrap();
-//     // Define the reliability and congestion control
-//     let channel = [
-//         Channel {
-//             priority: Priority::default(),
-//             reliability: Reliability::Reliable,
-//         },
-//         Channel {
-//             priority: Priority::default(),
-//             reliability: Reliability::BestEffort,
-//         },
-//         Channel {
-//             priority: Priority::RealTime,
-//             reliability: Reliability::Reliable,
-//         },
-//         Channel {
-//             priority: Priority::RealTime,
-//             reliability: Reliability::BestEffort,
-//         },
-//     ];
-//     // Run
-//     task::block_on(async {
-//         for ch in channel.iter() {
-//             run(&endpoint, *ch, MSG_SIZE).await;
-//         }
-//     });
-// }
+    // Define the locators
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 11000).parse().unwrap();
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    task::block_on(async {
+        for ch in channel.iter() {
+            run(&endpoint, *ch, MSG_SIZE).await;
+        }
+    });
+}
 
-// #[cfg(feature = "transport_ws")]
-// #[test]
-// fn transport_unicast_defragmentation_ws_only() {
-//     let _ = env_logger::try_init();
-//     task::block_on(async {
-//         zasync_executor_init!();
-//     });
+#[cfg(feature = "transport_ws")]
+#[test]
+fn transport_unicast_defragmentation_ws_only() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
 
-//     // Define the locators
-//     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 11010).parse().unwrap();
-//     // Define the reliability and congestion control
-//     let channel = [
-//         Channel {
-//             priority: Priority::default(),
-//             reliability: Reliability::Reliable,
-//         },
-//         Channel {
-//             priority: Priority::default(),
-//             reliability: Reliability::BestEffort,
-//         },
-//         Channel {
-//             priority: Priority::RealTime,
-//             reliability: Reliability::Reliable,
-//         },
-//         Channel {
-//             priority: Priority::RealTime,
-//             reliability: Reliability::BestEffort,
-//         },
-//     ];
-//     // Run
-//     task::block_on(async {
-//         for ch in channel.iter() {
-//             run(&endpoint, *ch, MSG_SIZE).await;
-//         }
-//     });
-// }
+    // Define the locators
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 11010).parse().unwrap();
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    task::block_on(async {
+        for ch in channel.iter() {
+            run(&endpoint, *ch, MSG_SIZE).await;
+        }
+    });
+}
