@@ -143,6 +143,16 @@ impl TryInto<ExprId> for WireExpr<'_> {
     }
 }
 
+impl From<ExprId> for WireExpr<'_> {
+    fn from(scope: ExprId) -> Self {
+        Self {
+            scope,
+            suffix: "".into(),
+            mapping: Mapping::Sender,
+        }
+    }
+}
+
 impl<'a> From<&'a OwnedKeyExpr> for WireExpr<'a> {
     fn from(val: &'a OwnedKeyExpr) -> Self {
         WireExpr {
