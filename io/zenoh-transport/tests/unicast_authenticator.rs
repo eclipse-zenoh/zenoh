@@ -17,7 +17,7 @@ use zenoh_core::{zasync_executor_init, zasyncwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{EndPoint, WhatAmI, ZenohId},
-    zenoh::ZenohMessage,
+    network::NetworkMessage,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::unicast::establishment::ext::auth::Auth;
@@ -63,7 +63,7 @@ impl MHRouterAuthenticator {
 }
 
 impl TransportPeerEventHandler for MHRouterAuthenticator {
-    fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
     fn new_link(&self, _link: Link) {}

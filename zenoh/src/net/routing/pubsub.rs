@@ -21,15 +21,18 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::sync::RwLock;
 use std::sync::{Arc, RwLockReadGuard};
-use zenoh_buffers::ZBuf;
 use zenoh_core::zread;
 use zenoh_protocol::core::key_expr::keyexpr;
+use zenoh_protocol::network::common::ext::WireExprType;
+use zenoh_protocol::network::declare::ext;
+use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
+use zenoh_protocol::network::{
+    Declare, DeclareBody, DeclareSubscriber, Mode, Push, UndeclareSubscriber,
+};
+use zenoh_protocol::zenoh_new::PushBody;
 use zenoh_protocol::{
-    core::{
-        key_expr::OwnedKeyExpr, Channel, CongestionControl, Priority, Reliability, WhatAmI,
-        WireExpr, ZenohId,
-    },
-    zenoh::{DataInfo, PullId, RoutingContext, SubInfo, SubMode},
+    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI, WireExpr, ZenohId},
+    zenoh::RoutingContext,
 };
 use zenoh_sync::get_mut_unchecked;
 
@@ -40,7 +43,7 @@ fn send_sourced_subscription_to_net_childs(
     childs: &[NodeIndex],
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
-    sub_info: &SubInfo,
+    sub_info: &SubscriberInfo,
     routing_context: Option<RoutingContext>,
 ) {
     for child in childs {
@@ -52,9 +55,18 @@ fn send_sourced_subscription_to_net_childs(
 
                         log::debug!("Send subscription {} on {}", res.expr(), someface);
 
-                        someface
-                            .primitives
-                            .decl_subscriber(&key_expr, sub_info, routing_context);
+                        someface.primitives.send_declare(Declare {
+                            ext_qos: ext::QoSType::default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType {
+                                node_id: routing_context.map(|c| c.tree_id).unwrap_or(0) as u16,
+                            },
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id: 0, // TODO
+                                wire_expr: key_expr,
+                                ext_info: *sub_info,
+                            }),
+                        });
                     }
                 }
                 None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -68,7 +80,7 @@ fn propagate_simple_subscription_to(
     tables: &mut Tables,
     dst_face: &mut Arc<FaceState>,
     res: &Arc<Resource>,
-    sub_info: &SubInfo,
+    sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
     full_peer_net: bool,
 ) {
@@ -97,16 +109,23 @@ fn propagate_simple_subscription_to(
     {
         get_mut_unchecked(dst_face).local_subs.insert(res.clone());
         let key_expr = Resource::decl_key(res, dst_face);
-        dst_face
-            .primitives
-            .decl_subscriber(&key_expr, sub_info, None);
+        dst_face.primitives.send_declare(Declare {
+            ext_qos: ext::QoSType::default(),
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::default(),
+            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                id: 0, // TODO
+                wire_expr: key_expr,
+                ext_info: *sub_info,
+            }),
+        });
     }
 }
 
 fn propagate_simple_subscription(
     tables: &mut Tables,
     res: &Arc<Resource>,
-    sub_info: &SubInfo,
+    sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
 ) {
     let full_peer_net = tables.full_net(WhatAmI::Peer);
@@ -130,7 +149,7 @@ fn propagate_simple_subscription(
 fn propagate_sourced_subscription(
     tables: &Tables,
     res: &Arc<Resource>,
-    sub_info: &SubInfo,
+    sub_info: &SubscriberInfo,
     src_face: Option<&Arc<FaceState>>,
     source: &ZenohId,
     net_type: WhatAmI,
@@ -169,7 +188,7 @@ fn register_router_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    sub_info: &SubInfo,
+    sub_info: &SubscriberInfo,
     router: ZenohId,
 ) {
     if !res.context().router_subs.contains(&router) {
@@ -204,10 +223,13 @@ pub fn declare_router_subscription(
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
-    sub_info: &SubInfo,
+    sub_info: &SubscriberInfo,
     router: ZenohId,
 ) {
-    match rtables.get_mapping(face, &expr.scope).cloned() {
+    match rtables
+        .get_mapping(face, &expr.scope, expr.mapping)
+        .cloned()
+    {
         Some(mut prefix) => {
             let res = Resource::get_resource(&prefix, &expr.suffix);
             let (mut res, mut wtables) =
@@ -256,7 +278,7 @@ fn register_peer_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    sub_info: &SubInfo,
+    sub_info: &SubscriberInfo,
     peer: ZenohId,
 ) {
     if !res.context().peer_subs.contains(&peer) {
@@ -282,10 +304,13 @@ pub fn declare_peer_subscription(
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
-    sub_info: &SubInfo,
+    sub_info: &SubscriberInfo,
     peer: ZenohId,
 ) {
-    match rtables.get_mapping(face, &expr.scope).cloned() {
+    match rtables
+        .get_mapping(face, &expr.scope, expr.mapping)
+        .cloned()
+    {
         Some(mut prefix) => {
             let res = Resource::get_resource(&prefix, &expr.suffix);
             let (mut res, mut wtables) =
@@ -309,8 +334,8 @@ pub fn declare_peer_subscription(
                 };
             register_peer_subscription(&mut wtables, face, &mut res, sub_info, peer);
             if wtables.whatami == WhatAmI::Router {
-                let mut propa_sub_info = sub_info.clone();
-                propa_sub_info.mode = SubMode::Push;
+                let mut propa_sub_info = *sub_info;
+                propa_sub_info.mode = Mode::Push;
                 let zid = wtables.zid;
                 register_router_subscription(&mut wtables, face, &mut res, &propa_sub_info, zid);
             }
@@ -340,7 +365,7 @@ fn register_client_subscription(
     _tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
-    sub_info: &SubInfo,
+    sub_info: &SubscriberInfo,
 ) {
     // Register subscription
     {
@@ -349,12 +374,12 @@ fn register_client_subscription(
         match res.session_ctxs.get_mut(&face.id) {
             Some(ctx) => match &ctx.subs {
                 Some(info) => {
-                    if SubMode::Pull == info.mode {
-                        get_mut_unchecked(ctx).subs = Some(sub_info.clone());
+                    if Mode::Pull == info.mode {
+                        get_mut_unchecked(ctx).subs = Some(*sub_info);
                     }
                 }
                 None => {
-                    get_mut_unchecked(ctx).subs = Some(sub_info.clone());
+                    get_mut_unchecked(ctx).subs = Some(*sub_info);
                 }
             },
             None => {
@@ -364,7 +389,7 @@ fn register_client_subscription(
                         face: face.clone(),
                         local_expr_id: None,
                         remote_expr_id: None,
-                        subs: Some(sub_info.clone()),
+                        subs: Some(*sub_info),
                         qabl: None,
                         last_values: HashMap::new(),
                     }),
@@ -380,10 +405,13 @@ pub fn declare_client_subscription(
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
-    sub_info: &SubInfo,
+    sub_info: &SubscriberInfo,
 ) {
     log::debug!("Register client subscription");
-    match rtables.get_mapping(face, &expr.scope).cloned() {
+    match rtables
+        .get_mapping(face, &expr.scope, expr.mapping)
+        .cloned()
+    {
         Some(mut prefix) => {
             let res = Resource::get_resource(&prefix, &expr.suffix);
             let (mut res, mut wtables) =
@@ -407,8 +435,8 @@ pub fn declare_client_subscription(
                 };
 
             register_client_subscription(&mut wtables, face, &mut res, sub_info);
-            let mut propa_sub_info = sub_info.clone();
-            propa_sub_info.mode = SubMode::Push;
+            let mut propa_sub_info = *sub_info;
+            propa_sub_info.mode = Mode::Push;
             match wtables.whatami {
                 WhatAmI::Router => {
                     let zid = wtables.zid;
@@ -505,13 +533,21 @@ fn send_forget_sourced_subscription_to_net_childs(
             match tables.get_face(&net.graph[*child].zid).cloned() {
                 Some(mut someface) => {
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
-                        let key_expr = Resource::decl_key(res, &mut someface);
+                        let wire_expr = Resource::decl_key(res, &mut someface);
 
                         log::debug!("Send forget subscription {} on {}", res.expr(), someface);
 
-                        someface
-                            .primitives
-                            .forget_subscriber(&key_expr, routing_context);
+                        someface.primitives.send_declare(Declare {
+                            ext_qos: ext::QoSType::default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType {
+                                node_id: routing_context.map(|c| c.tree_id).unwrap_or(0) as u16,
+                            },
+                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                id: 0, // TODO
+                                ext_wire_expr: WireExprType { wire_expr },
+                            }),
+                        });
                     }
                 }
                 None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -523,9 +559,16 @@ fn send_forget_sourced_subscription_to_net_childs(
 fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>) {
     for face in tables.faces.values_mut() {
         if face.local_subs.contains(res) {
-            let key_expr = Resource::get_best_key(res, "", face.id);
-            face.primitives.forget_subscriber(&key_expr, None);
-
+            let wire_expr = Resource::get_best_key(res, "", face.id);
+            face.primitives.send_declare(Declare {
+                ext_qos: ext::QoSType::default(),
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::default(),
+                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                    id: 0, // TODO
+                    ext_wire_expr: WireExprType { wire_expr },
+                }),
+            });
             get_mut_unchecked(face).local_subs.remove(res);
         }
     }
@@ -552,8 +595,16 @@ fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<
                                 && tables.failover_brokering(s.face.zid, face.zid)))
                 })
             {
-                let key_expr = Resource::get_best_key(res, "", face.id);
-                face.primitives.forget_subscriber(&key_expr, None);
+                let wire_expr = Resource::get_best_key(res, "", face.id);
+                face.primitives.send_declare(Declare {
+                    ext_qos: ext::QoSType::default(),
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::default(),
+                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                        id: 0, // TODO
+                        ext_wire_expr: WireExprType { wire_expr },
+                    }),
+                });
 
                 get_mut_unchecked(&mut face).local_subs.remove(res);
             }
@@ -639,7 +690,7 @@ pub fn forget_router_subscription(
     expr: &WireExpr,
     router: &ZenohId,
 ) {
-    match rtables.get_mapping(face, &expr.scope) {
+    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
@@ -705,7 +756,7 @@ pub fn forget_peer_subscription(
     expr: &WireExpr,
     peer: &ZenohId,
 ) {
-    match rtables.get_mapping(face, &expr.scope) {
+    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
@@ -783,8 +834,16 @@ pub(crate) fn undeclare_client_subscription(
             && !(face.whatami == WhatAmI::Client
                 && res.expr().starts_with(super::PREFIX_LIVELINESS))
         {
-            let key_expr = Resource::get_best_key(res, "", face.id);
-            face.primitives.forget_subscriber(&key_expr, None);
+            let wire_expr = Resource::get_best_key(res, "", face.id);
+            face.primitives.send_declare(Declare {
+                ext_qos: ext::QoSType::default(),
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::default(),
+                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                    id: 0, // TODO
+                    ext_wire_expr: WireExprType { wire_expr },
+                }),
+            });
 
             get_mut_unchecked(face).local_subs.remove(res);
         }
@@ -797,7 +856,7 @@ pub fn forget_client_subscription(
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
 ) {
-    match rtables.get_mapping(face, &expr.scope) {
+    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 drop(rtables);
@@ -826,9 +885,9 @@ pub fn forget_client_subscription(
 }
 
 pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
-    let sub_info = SubInfo {
+    let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable, // @TODO
-        mode: SubMode::Push,
+        mode: Mode::Push,
     };
     match tables.whatami {
         WhatAmI::Router => {
@@ -836,7 +895,16 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                 for sub in &tables.router_subs {
                     get_mut_unchecked(face).local_subs.insert(sub.clone());
                     let key_expr = Resource::decl_key(sub, face);
-                    face.primitives.decl_subscriber(&key_expr, &sub_info, None);
+                    face.primitives.send_declare(Declare {
+                        ext_qos: ext::QoSType::default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                            id: 0, // TODO
+                            wire_expr: key_expr,
+                            ext_info: sub_info,
+                        }),
+                    });
                 }
             } else if face.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer) {
                 for sub in &tables.router_subs {
@@ -851,7 +919,16 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                     {
                         get_mut_unchecked(face).local_subs.insert(sub.clone());
                         let key_expr = Resource::decl_key(sub, face);
-                        face.primitives.decl_subscriber(&key_expr, &sub_info, None);
+                        face.primitives.send_declare(Declare {
+                            ext_qos: ext::QoSType::default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id: 0, // TODO
+                                wire_expr: key_expr,
+                                ext_info: sub_info,
+                            }),
+                        });
                     }
                 }
             }
@@ -862,7 +939,16 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                     for sub in &tables.peer_subs {
                         get_mut_unchecked(face).local_subs.insert(sub.clone());
                         let key_expr = Resource::decl_key(sub, face);
-                        face.primitives.decl_subscriber(&key_expr, &sub_info, None);
+                        face.primitives.send_declare(Declare {
+                            ext_qos: ext::QoSType::default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id: 0, // TODO
+                                wire_expr: key_expr,
+                                ext_info: sub_info,
+                            }),
+                        });
                     }
                 }
             } else {
@@ -985,9 +1071,9 @@ pub(crate) fn pubsub_tree_change(
                     };
                     for sub in subs {
                         if *sub == tree_id {
-                            let sub_info = SubInfo {
+                            let sub_info = SubscriberInfo {
                                 reliability: Reliability::Reliable, // @TODO
-                                mode: SubMode::Push,
+                                mode: Mode::Push,
                             };
                             send_sourced_subscription_to_net_childs(
                                 tables,
@@ -1045,8 +1131,18 @@ pub(crate) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                         })
                                     };
                                 if forget {
-                                    let key_expr = Resource::get_best_key(res, "", dst_face.id);
-                                    dst_face.primitives.forget_subscriber(&key_expr, None);
+                                    let wire_expr = Resource::get_best_key(res, "", dst_face.id);
+                                    dst_face.primitives.send_declare(Declare {
+                                        ext_qos: ext::QoSType::default(),
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::default(),
+                                        body: DeclareBody::UndeclareSubscriber(
+                                            UndeclareSubscriber {
+                                                id: 0, // TODO
+                                                ext_wire_expr: WireExprType { wire_expr },
+                                            },
+                                        ),
+                                    });
 
                                     get_mut_unchecked(dst_face).local_subs.remove(res);
                                 }
@@ -1054,13 +1150,20 @@ pub(crate) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                 let dst_face = &mut get_mut_unchecked(ctx).face;
                                 get_mut_unchecked(dst_face).local_subs.insert(res.clone());
                                 let key_expr = Resource::decl_key(res, dst_face);
-                                let sub_info = SubInfo {
+                                let sub_info = SubscriberInfo {
                                     reliability: Reliability::Reliable, // TODO
-                                    mode: SubMode::Push,
+                                    mode: Mode::Push,
                                 };
-                                dst_face
-                                    .primitives
-                                    .decl_subscriber(&key_expr, &sub_info, None);
+                                dst_face.primitives.send_declare(Declare {
+                                    ext_qos: ext::QoSType::default(),
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::default(),
+                                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                        id: 0, // TODO
+                                        wire_expr: key_expr,
+                                        ext_info: sub_info,
+                                    }),
+                                });
                             }
                         }
                     }
@@ -1206,7 +1309,7 @@ fn compute_data_route(
                             source_type == WhatAmI::Client
                                 || context.face.whatami == WhatAmI::Client
                         }
-                    } && subinfo.mode == SubMode::Push
+                    } && subinfo.mode == Mode::Push
                     {
                         route.entry(*sid).or_insert_with(|| {
                             let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
@@ -1238,7 +1341,7 @@ fn compute_matching_pulls(tables: &Tables, expr: &mut RoutingExpr) -> Arc<PullCa
         let mres = mres.upgrade().unwrap();
         for context in mres.session_ctxs.values() {
             if let Some(subinfo) = &context.subs {
-                if subinfo.mode == SubMode::Pull {
+                if subinfo.mode == Mode::Pull {
                     pull_caches.push(context.clone());
                 }
             }
@@ -1410,49 +1513,37 @@ pub(super) fn disable_matches_data_routes(_tables: &mut Tables, res: &mut Arc<Re
 }
 
 macro_rules! treat_timestamp {
-    ($hlc:expr, $info:expr, $drop:expr) => {
+    ($hlc:expr, $payload:expr, $drop:expr) => {
         // if an HLC was configured (via Config.add_timestamp),
         // check DataInfo and add a timestamp if there isn't
-        match $hlc {
-            Some(hlc) => {
-                if let Some(mut data_info) = $info {
-                    if let Some(ref ts) = data_info.timestamp {
-                        // Timestamp is present; update HLC with it (possibly raising error if delta exceed)
-                        match hlc.update_with_timestamp(ts) {
-                            Ok(()) => Some(data_info),
-                            Err(e) => {
-                                if $drop {
-                                    log::error!(
-                                        "Error treating timestamp for received Data ({}). Drop it!",
-                                        e
-                                    );
-                                    return;
-                                } else {
-                                    data_info.timestamp = Some(hlc.new_timestamp());
-                                    log::error!(
-                                        "Error treating timestamp for received Data ({}). Replace timestamp: {:?}",
-                                        e,
-                                        data_info.timestamp);
-                                    Some(data_info)
-                                }
+        if let Some(hlc) = $hlc {
+            if let PushBody::Put(data) = &mut $payload {
+                if let Some(ref ts) = data.timestamp {
+                    // Timestamp is present; update HLC with it (possibly raising error if delta exceed)
+                    match hlc.update_with_timestamp(ts) {
+                        Ok(()) => (),
+                        Err(e) => {
+                            if $drop {
+                                log::error!(
+                                    "Error treating timestamp for received Data ({}). Drop it!",
+                                    e
+                                );
+                                return;
+                            } else {
+                                data.timestamp = Some(hlc.new_timestamp());
+                                log::error!(
+                                    "Error treating timestamp for received Data ({}). Replace timestamp: {:?}",
+                                    e,
+                                    data.timestamp);
                             }
                         }
-                    } else {
-                        // Timestamp not present; add one
-                        data_info.timestamp = Some(hlc.new_timestamp());
-                        log::trace!("Adding timestamp to DataInfo: {:?}", data_info.timestamp);
-                        Some(data_info)
                     }
                 } else {
-                    // No DataInfo; add one with a Timestamp
-                    let data_info = DataInfo {
-                        timestamp: Some(hlc.new_timestamp()),
-                        ..Default::default()
-                    };
-                    Some(data_info)
+                    // Timestamp not present; add one
+                    data.timestamp = Some(hlc.new_timestamp());
+                    log::trace!("Adding timestamp to DataInfo: {:?}", data.timestamp);
                 }
-            },
-            None => $info,
+            }
         }
     }
 }
@@ -1463,14 +1554,13 @@ fn get_data_route(
     face: &FaceState,
     res: &Option<Arc<Resource>>,
     expr: &mut RoutingExpr,
-    routing_context: Option<RoutingContext>,
+    routing_context: u64,
 ) -> Arc<Route> {
     match tables.whatami {
         WhatAmI::Router => match face.whatami {
             WhatAmI::Router => {
                 let routers_net = tables.routers_net.as_ref().unwrap();
-                let local_context = routers_net
-                    .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
+                let local_context = routers_net.get_local_context(routing_context, face.link_id);
                 res.as_ref()
                     .and_then(|res| res.routers_data_route(local_context))
                     .unwrap_or_else(|| {
@@ -1480,8 +1570,7 @@ fn get_data_route(
             WhatAmI::Peer => {
                 if tables.full_net(WhatAmI::Peer) {
                     let peers_net = tables.peers_net.as_ref().unwrap();
-                    let local_context = peers_net
-                        .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
+                    let local_context = peers_net.get_local_context(routing_context, face.link_id);
                     res.as_ref()
                         .and_then(|res| res.peers_data_route(local_context))
                         .unwrap_or_else(|| {
@@ -1503,8 +1592,8 @@ fn get_data_route(
                 match face.whatami {
                     WhatAmI::Router | WhatAmI::Peer => {
                         let peers_net = tables.peers_net.as_ref().unwrap();
-                        let local_context = peers_net
-                            .get_local_context(routing_context.map(|rc| rc.tree_id), face.link_id);
+                        let local_context =
+                            peers_net.get_local_context(routing_context, face.link_id);
                         res.as_ref()
                             .and_then(|res| res.peers_data_route(local_context))
                             .unwrap_or_else(|| {
@@ -1548,14 +1637,12 @@ macro_rules! cache_data {
     (
         $matching_pulls:expr,
         $expr:expr,
-        $payload:expr,
-        $info:expr
+        $payload:expr
     ) => {
         for context in $matching_pulls.iter() {
-            get_mut_unchecked(&mut context.clone()).last_values.insert(
-                $expr.full_expr().to_string(),
-                ($info.clone(), $payload.clone()),
-            );
+            get_mut_unchecked(&mut context.clone())
+                .last_values
+                .insert($expr.full_expr().to_string(), $payload.clone());
         }
     };
 }
@@ -1588,14 +1675,12 @@ pub fn full_reentrant_route_data(
     tables_ref: &RwLock<Tables>,
     face: &FaceState,
     expr: &WireExpr,
-    channel: Channel,
-    congestion_control: CongestionControl,
-    info: Option<DataInfo>,
-    payload: ZBuf,
-    routing_context: Option<RoutingContext>,
+    ext_qos: ext::QoSType,
+    mut payload: PushBody,
+    routing_context: u64,
 ) {
     let tables = zread!(tables_ref);
-    match tables.get_mapping(face, &expr.scope).cloned() {
+    match tables.get_mapping(face, &expr.scope, expr.mapping).cloned() {
         Some(prefix) => {
             log::trace!(
                 "Route data for res {}{}",
@@ -1615,26 +1700,26 @@ pub fn full_reentrant_route_data(
                 let matching_pulls = get_matching_pulls(&tables, &res, &mut expr);
 
                 if !(route.is_empty() && matching_pulls.is_empty()) {
-                    let data_info =
-                        treat_timestamp!(&tables.hlc, info, tables.drop_future_timestamp);
+                    treat_timestamp!(&tables.hlc, payload, tables.drop_future_timestamp);
 
                     if route.len() == 1 && matching_pulls.len() == 0 {
                         let (outface, key_expr, context) = route.values().next().unwrap();
                         if should_route(&tables, face, outface, &mut expr) {
                             drop(tables);
-                            outface.primitives.send_data(
-                                key_expr,
+                            outface.primitives.send_push(Push {
+                                wire_expr: key_expr.into(),
+                                ext_qos,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType {
+                                    node_id: context.map(|c| c.tree_id).unwrap_or(0) as u16,
+                                },
                                 payload,
-                                channel, // @TODO: Need to check the active subscriptions to determine the right reliability value
-                                congestion_control,
-                                data_info,
-                                *context,
-                            )
+                            })
                         }
                     } else {
                         if !matching_pulls.is_empty() {
                             let lock = zlock!(tables.pull_caches_lock);
-                            cache_data!(matching_pulls, expr, payload, data_info);
+                            cache_data!(matching_pulls, expr, payload);
                             drop(lock);
                         }
 
@@ -1649,27 +1734,29 @@ pub fn full_reentrant_route_data(
 
                             drop(tables);
                             for (outface, key_expr, context) in route {
-                                outface.primitives.send_data(
-                                    &key_expr,
-                                    payload.clone(),
-                                    channel, // @TODO: Need to check the active subscriptions to determine the right reliability value
-                                    congestion_control,
-                                    data_info.clone(),
-                                    context,
-                                )
+                                outface.primitives.send_push(Push {
+                                    wire_expr: key_expr,
+                                    ext_qos: ext::QoSType::default(),
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType {
+                                        node_id: context.map(|c| c.tree_id).unwrap_or(0) as u16,
+                                    },
+                                    payload: payload.clone(),
+                                })
                             }
                         } else {
                             drop(tables);
                             for (outface, key_expr, context) in route.values() {
                                 if face.id != outface.id {
-                                    outface.primitives.send_data(
-                                        key_expr,
-                                        payload.clone(),
-                                        channel, // @TODO: Need to check the active subscriptions to determine the right reliability value
-                                        congestion_control,
-                                        data_info.clone(),
-                                        *context,
-                                    )
+                                    outface.primitives.send_push(Push {
+                                        wire_expr: key_expr.into(),
+                                        ext_qos: ext::QoSType::default(),
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType {
+                                            node_id: context.map(|c| c.tree_id).unwrap_or(0) as u16,
+                                        },
+                                        payload: payload.clone(),
+                                    })
                                 }
                             }
                         }
@@ -1683,23 +1770,16 @@ pub fn full_reentrant_route_data(
     }
 }
 
-pub fn pull_data(
-    tables_ref: &RwLock<Tables>,
-    face: &Arc<FaceState>,
-    _is_final: bool,
-    expr: &WireExpr,
-    _pull_id: PullId,
-    _max_samples: &Option<u16>,
-) {
+pub fn pull_data(tables_ref: &RwLock<Tables>, face: &Arc<FaceState>, expr: WireExpr) {
     let tables = zread!(tables_ref);
-    match tables.get_mapping(face, &expr.scope) {
+    match tables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
                 let res = get_mut_unchecked(&mut res);
                 match res.session_ctxs.get_mut(&face.id) {
                     Some(ctx) => match &ctx.subs {
-                        Some(subinfo) => {
-                            let reliability = subinfo.reliability;
+                        Some(_subinfo) => {
+                            // let reliability = subinfo.reliability;
                             let lock = zlock!(tables.pull_caches_lock);
                             let route = get_mut_unchecked(ctx)
                                 .last_values
@@ -1711,21 +1791,17 @@ pub fn pull_data(
                                         sample,
                                     )
                                 })
-                                .collect::<Vec<(WireExpr, (Option<DataInfo>, ZBuf))>>();
+                                .collect::<Vec<(WireExpr, PushBody)>>();
                             drop(lock);
                             drop(tables);
-                            for (key_expr, (info, data)) in route {
-                                face.primitives.send_data(
-                                    &key_expr,
-                                    data,
-                                    Channel {
-                                        priority: Priority::default(), // @TODO: Default value for the time being
-                                        reliability,
-                                    },
-                                    CongestionControl::default(), // @TODO: Default value for the time being
-                                    info,
-                                    None,
-                                );
+                            for (key_expr, payload) in route {
+                                face.primitives.send_push(Push {
+                                    wire_expr: key_expr,
+                                    ext_qos: ext::QoSType::default(), // TODO
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::default(),
+                                    payload,
+                                });
                             }
                         }
                         None => {

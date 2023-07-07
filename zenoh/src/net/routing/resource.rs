@@ -17,22 +17,28 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
-use zenoh_buffers::ZBuf;
+use zenoh_protocol::network::declare::ext;
+use zenoh_protocol::network::queryable::ext::QueryableInfo;
+#[cfg(feature = "complete_n")]
+use zenoh_protocol::network::request::ext::TargetType;
+use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
+use zenoh_protocol::network::{Declare, DeclareBody, DeclareKeyExpr, Mapping};
+use zenoh_protocol::zenoh_new::PushBody;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr, ZenohId},
-    zenoh::{DataInfo, QueryId, QueryableInfo, RoutingContext, SubInfo},
+    zenoh::{QueryId, RoutingContext},
 };
 use zenoh_sync::get_mut_unchecked;
 
 pub(super) type Direction = (Arc<FaceState>, WireExpr<'static>, Option<RoutingContext>);
 pub(super) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
-pub(super) type QueryRoute = HashMap<usize, (Direction, zenoh_protocol::core::QueryTarget)>;
+pub(super) type QueryRoute = HashMap<usize, (Direction, TargetType)>;
 #[cfg(not(feature = "complete_n"))]
 pub(super) type QueryRoute = HashMap<usize, (Direction, QueryId)>;
 pub(super) struct QueryTargetQabl {
     pub(super) direction: Direction,
-    pub(super) complete: u64,
+    pub(super) complete: u8,
     pub(super) distance: f64,
 }
 pub(super) type QueryTargetQablSet = Vec<QueryTargetQabl>;
@@ -42,9 +48,9 @@ pub(super) struct SessionContext {
     pub(super) face: Arc<FaceState>,
     pub(super) local_expr_id: Option<ExprId>,
     pub(super) remote_expr_id: Option<ExprId>,
-    pub(super) subs: Option<SubInfo>,
+    pub(super) subs: Option<SubscriberInfo>,
     pub(super) qabl: Option<QueryableInfo>,
-    pub(super) last_values: HashMap<String, (Option<DataInfo>, ZBuf)>,
+    pub(super) last_values: HashMap<String, PushBody>,
 }
 
 pub(super) struct DataRoutes {
@@ -486,22 +492,38 @@ impl Resource {
                         })
                     });
 
-                let expr_id = match ctx.local_expr_id.or(ctx.remote_expr_id) {
-                    Some(expr_id) => expr_id,
-                    None => {
-                        let expr_id = face.get_next_local_id();
-                        get_mut_unchecked(ctx).local_expr_id = Some(expr_id);
-                        get_mut_unchecked(face)
-                            .local_mappings
-                            .insert(expr_id, nonwild_prefix.clone());
-                        face.primitives
-                            .decl_resource(expr_id, &nonwild_prefix.expr().into());
-                        expr_id
+                if let Some(expr_id) = ctx.remote_expr_id {
+                    WireExpr {
+                        scope: expr_id,
+                        suffix: wildsuffix.into(),
+                        mapping: Mapping::Receiver,
                     }
-                };
-                WireExpr {
-                    scope: expr_id,
-                    suffix: wildsuffix.into(),
+                } else if let Some(expr_id) = ctx.local_expr_id {
+                    WireExpr {
+                        scope: expr_id,
+                        suffix: wildsuffix.into(),
+                        mapping: Mapping::Sender,
+                    }
+                } else {
+                    let expr_id = face.get_next_local_id();
+                    get_mut_unchecked(ctx).local_expr_id = Some(expr_id);
+                    get_mut_unchecked(face)
+                        .local_mappings
+                        .insert(expr_id, nonwild_prefix.clone());
+                    face.primitives.send_declare(Declare {
+                        ext_qos: ext::QoSType::default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                            id: expr_id,
+                            wire_expr: nonwild_prefix.expr().into(),
+                        }),
+                    });
+                    WireExpr {
+                        scope: expr_id,
+                        suffix: wildsuffix.into(),
+                        mapping: Mapping::Sender,
+                    }
                 }
             }
             None => wildsuffix.into(),
@@ -523,15 +545,17 @@ impl Resource {
                 }
             }
             if let Some(ctx) = prefix.session_ctxs.get(&sid) {
-                if let Some(expr_id) = ctx.local_expr_id {
+                if let Some(expr_id) = ctx.remote_expr_id {
                     return WireExpr {
                         scope: expr_id,
                         suffix: suffix.into(),
+                        mapping: Mapping::Receiver,
                     };
-                } else if let Some(expr_id) = ctx.remote_expr_id {
+                } else if let Some(expr_id) = ctx.local_expr_id {
                     return WireExpr {
                         scope: expr_id,
                         suffix: suffix.into(),
+                        mapping: Mapping::Sender,
                     };
                 }
             }
@@ -659,7 +683,10 @@ pub fn register_expr(
     expr: &WireExpr,
 ) {
     let rtables = zread!(tables.tables);
-    match rtables.get_mapping(face, &expr.scope).cloned() {
+    match rtables
+        .get_mapping(face, &expr.scope, expr.mapping)
+        .cloned()
+    {
         Some(mut prefix) => match face.remote_mappings.get(&expr_id) {
             Some(res) => {
                 let mut fullexpr = prefix.expr();
@@ -692,7 +719,7 @@ pub fn register_expr(
                     Resource::match_resource(&wtables, &mut res, matches);
                     (res, wtables)
                 };
-                let mut ctx = get_mut_unchecked(&mut res)
+                get_mut_unchecked(&mut res)
                     .session_ctxs
                     .entry(face.id)
                     .or_insert_with(|| {
@@ -704,20 +731,7 @@ pub fn register_expr(
                             qabl: None,
                             last_values: HashMap::new(),
                         })
-                    })
-                    .clone();
-
-                if face.local_mappings.get(&expr_id).is_some() && ctx.local_expr_id.is_none() {
-                    let local_expr_id = get_mut_unchecked(face).get_next_local_id();
-                    get_mut_unchecked(&mut ctx).local_expr_id = Some(local_expr_id);
-
-                    get_mut_unchecked(face)
-                        .local_mappings
-                        .insert(local_expr_id, res.clone());
-
-                    face.primitives
-                        .decl_resource(local_expr_id, &res.expr().into());
-                }
+                    });
 
                 get_mut_unchecked(face)
                     .remote_mappings

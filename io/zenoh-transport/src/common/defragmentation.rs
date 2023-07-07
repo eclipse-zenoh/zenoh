@@ -16,8 +16,8 @@ use zenoh_buffers::{reader::HasReader, SplitBuffer, ZBuf, ZSlice};
 use zenoh_codec::{RCodec, Zenoh080Reliability};
 use zenoh_protocol::{
     core::{Bits, Reliability},
+    network::NetworkMessage,
     transport::TransportSn,
-    zenoh::ZenohMessage,
 };
 use zenoh_result::{bail, ZResult};
 
@@ -86,10 +86,10 @@ impl DefragBuffer {
     }
 
     #[inline(always)]
-    pub(crate) fn defragment(&mut self) -> Option<ZenohMessage> {
+    pub(crate) fn defragment(&mut self) -> Option<NetworkMessage> {
         let mut reader = self.buffer.reader();
         let rcodec = Zenoh080Reliability::new(self.reliability);
-        let res: Option<ZenohMessage> = rcodec.read(&mut reader).ok();
+        let res: Option<NetworkMessage> = rcodec.read(&mut reader).ok();
         self.clear();
         res
     }

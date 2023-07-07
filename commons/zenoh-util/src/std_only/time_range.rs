@@ -69,14 +69,14 @@ impl TimeRange<TimeExpr> {
     /// [`TimeRange::<SystemTime>::contains`] instead.
     pub fn contains(&self, instant: SystemTime) -> bool {
         let now = SystemTime::now();
-        match &self.0 {
-            TimeBound::Inclusive(t) if t.resolve_at(now) > instant => return false,
-            TimeBound::Exclusive(t) if t.resolve_at(now) >= instant => return false,
+        match &self.0.resolve_at(now) {
+            TimeBound::Inclusive(t) if t > &instant => return false,
+            TimeBound::Exclusive(t) if t >= &instant => return false,
             _ => {}
         }
-        match &self.1 {
-            TimeBound::Inclusive(t) => t.resolve_at(now) >= instant,
-            TimeBound::Exclusive(t) => t.resolve_at(now) > instant,
+        match &self.1.resolve_at(now) {
+            TimeBound::Inclusive(t) => t >= &instant,
+            TimeBound::Exclusive(t) => t > &instant,
             _ => true,
         }
     }
@@ -215,10 +215,19 @@ impl TryFrom<TimeBound<TimeExpr>> for TimeBound<SystemTime> {
     }
 }
 impl TimeBound<TimeExpr> {
+    /// Resolves `self` into a [`TimeBound<SystemTime>`], using `now` as a reference for offset expressions.
+    /// If `self` is time boundary that cannot be represented as `SystemTime` (which means it’s not inside
+    /// the bounds of the underlying data structure), then `TimeBound::Unbounded` is returned.
     pub fn resolve_at(self, now: SystemTime) -> TimeBound<SystemTime> {
         match self {
-            TimeBound::Inclusive(t) => TimeBound::Inclusive(t.resolve_at(now)),
-            TimeBound::Exclusive(t) => TimeBound::Exclusive(t.resolve_at(now)),
+            TimeBound::Inclusive(t) => match t.checked_resolve_at(now) {
+                Some(ts) => TimeBound::Inclusive(ts),
+                None => TimeBound::Unbounded,
+            },
+            TimeBound::Exclusive(t) => match t.checked_resolve_at(now) {
+                Some(ts) => TimeBound::Exclusive(ts),
+                None => TimeBound::Unbounded,
+            },
             TimeBound::Unbounded => TimeBound::Unbounded,
         }
     }
@@ -245,10 +254,44 @@ impl TryFrom<TimeExpr> for SystemTime {
 }
 impl TimeExpr {
     /// Resolves `self` into a [`SystemTime`], using `now` as a reference for offset expressions.
+    ///
+    ///# Panics
+    ///
+    /// This function may panic if the resulting point in time cannot be represented by the
+    /// underlying data structure. See [`TimeExpr::checked_resolve_at`] for a version without panic.
     pub fn resolve_at(&self, now: SystemTime) -> SystemTime {
+        self.checked_resolve_at(now).unwrap()
+    }
+
+    /// Resolves `self` into a [`SystemTime`], using `now` as a reference for offset expressions.
+    /// If `self` is a `TimeExpr::Now{offset_secs}` and adding `offset_secs` to `now` results in a time
+    /// that would be outside the bounds of the underlying data structure, `None` is returned.
+    pub fn checked_resolve_at(&self, now: SystemTime) -> Option<SystemTime> {
         match self {
-            TimeExpr::Fixed(t) => *t,
-            TimeExpr::Now { offset_secs } => now + std::time::Duration::from_secs_f64(*offset_secs),
+            TimeExpr::Fixed(t) => Some(*t),
+            TimeExpr::Now { offset_secs } => checked_duration_add(now, *offset_secs),
+        }
+    }
+    /// Adds `duration` to `self`, returning `None` if `self` is a `Fixed(SystemTime)` and adding the duration is not possible
+    /// because the result would be outside the bounds of the underlying data structure (see [`SystemTime::checked_add`]).
+    /// Otherwise returns `Some(time_expr)`.
+    pub fn checked_add(&self, duration: f64) -> Option<Self> {
+        match self {
+            Self::Fixed(time) => checked_duration_add(*time, duration).map(Self::Fixed),
+            Self::Now { offset_secs } => Some(Self::Now {
+                offset_secs: offset_secs + duration,
+            }),
+        }
+    }
+    /// Substracts `duration` from `self`, returning `None` if `self` is a `Fixed(SystemTime)` and subsctracting the duration is not possible
+    /// because the result would be outside the bounds of the underlying data structure (see [`SystemTime::checked_sub`]).
+    /// Otherwise returns `Some(time_expr)`.
+    pub fn checked_sub(&self, duration: f64) -> Option<Self> {
+        match self {
+            Self::Fixed(time) => checked_duration_add(*time, -duration).map(Self::Fixed),
+            Self::Now { offset_secs } => Some(Self::Now {
+                offset_secs: offset_secs - duration,
+            }),
         }
     }
 }
@@ -315,6 +358,18 @@ impl<'a> Add<f64> for &'a TimeExpr {
     }
 }
 
+fn checked_duration_add(t: SystemTime, duration: f64) -> Option<SystemTime> {
+    if duration >= 0.0 {
+        Duration::try_from_secs_f64(duration)
+            .ok()
+            .and_then(|d| t.checked_add(d))
+    } else {
+        Duration::try_from_secs_f64(-duration)
+            .ok()
+            .and_then(|d| t.checked_sub(d))
+    }
+}
+
 fn parse_time_bound(s: &str, inclusive: bool) -> Result<TimeBound<TimeExpr>, ZError> {
     if s.is_empty() {
         Ok(TimeBound::Unbounded)
@@ -361,11 +416,84 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_time_range_contains() {
+        assert!("[now(-1s)..now(1s)]"
+            .parse::<TimeRange>()
+            .unwrap()
+            .contains(SystemTime::now()));
+        assert!(!"[now(-2s)..now(-1s)]"
+            .parse::<TimeRange>()
+            .unwrap()
+            .contains(SystemTime::now()));
+        assert!(!"[now(1s)..now(2s)]"
+            .parse::<TimeRange>()
+            .unwrap()
+            .contains(SystemTime::now()));
+
+        assert!("[now(-1m)..]"
+            .parse::<TimeRange>()
+            .unwrap()
+            .contains(SystemTime::now()));
+        assert!("[..now(1m)]"
+            .parse::<TimeRange>()
+            .unwrap()
+            .contains(SystemTime::now()));
+
+        assert!("[..]"
+            .parse::<TimeRange>()
+            .unwrap()
+            .contains(SystemTime::UNIX_EPOCH));
+        assert!("[..]"
+            .parse::<TimeRange>()
+            .unwrap()
+            .contains(SystemTime::now()));
+
+        assert!("[1970-01-01T00:00:00Z..]"
+            .parse::<TimeRange>()
+            .unwrap()
+            .contains(SystemTime::UNIX_EPOCH));
+        assert!("[..1970-01-01T00:00:00Z]"
+            .parse::<TimeRange>()
+            .unwrap()
+            .contains(SystemTime::UNIX_EPOCH));
+        assert!(!"]1970-01-01T00:00:00Z..]"
+            .parse::<TimeRange>()
+            .unwrap()
+            .contains(SystemTime::UNIX_EPOCH));
+        assert!(!"[..1970-01-01T00:00:00Z["
+            .parse::<TimeRange>()
+            .unwrap()
+            .contains(SystemTime::UNIX_EPOCH));
+    }
+
+    #[test]
     fn test_parse_time_range() {
         use TimeBound::*;
         assert_eq!(
             "[..]".parse::<TimeRange>().unwrap(),
             TimeRange(Unbounded, Unbounded)
+        );
+        assert_eq!(
+            "[now(-1h)..now(1h)]".parse::<TimeRange>().unwrap(),
+            TimeRange(
+                Inclusive(TimeExpr::Now {
+                    offset_secs: -3600.0
+                }),
+                Inclusive(TimeExpr::Now {
+                    offset_secs: 3600.0
+                })
+            )
+        );
+        assert_eq!(
+            "]now(-1h)..now(1h)[".parse::<TimeRange>().unwrap(),
+            TimeRange(
+                Exclusive(TimeExpr::Now {
+                    offset_secs: -3600.0
+                }),
+                Exclusive(TimeExpr::Now {
+                    offset_secs: 3600.0
+                })
+            )
         );
 
         assert!("".parse::<TimeExpr>().is_err());
@@ -398,6 +526,10 @@ mod tests {
             TimeExpr::Now { offset_secs: 0.0 }
         );
         assert_eq!(
+            "now(0)".parse::<TimeExpr>().unwrap(),
+            TimeExpr::Now { offset_secs: 0.0 }
+        );
+        assert_eq!(
             "now(123.45)".parse::<TimeExpr>().unwrap(),
             TimeExpr::Now {
                 offset_secs: 123.45
@@ -419,6 +551,84 @@ mod tests {
         assert!("".parse::<TimeExpr>().is_err());
         assert!("1h".parse::<TimeExpr>().is_err());
         assert!("2020-11-05".parse::<TimeExpr>().is_err());
+    }
+
+    #[test]
+    fn test_add_time_expr() {
+        let t = TimeExpr::Now { offset_secs: 0.0 };
+        assert_eq!(
+            t.checked_add(3600.0),
+            Some(TimeExpr::Now {
+                offset_secs: 3600.0
+            })
+        );
+        assert_eq!(
+            t.checked_add(-3600.0),
+            Some(TimeExpr::Now {
+                offset_secs: -3600.0
+            })
+        );
+        assert_eq!(
+            t.checked_sub(3600.0),
+            Some(TimeExpr::Now {
+                offset_secs: -3600.0
+            })
+        );
+        assert_eq!(
+            t.checked_sub(-3600.0),
+            Some(TimeExpr::Now {
+                offset_secs: 3600.0
+            })
+        );
+
+        let t = TimeExpr::Fixed(SystemTime::UNIX_EPOCH);
+        assert_eq!(
+            t.checked_add(3600.0),
+            Some(TimeExpr::Fixed(
+                SystemTime::UNIX_EPOCH + Duration::from_secs_f64(3600.0)
+            ))
+        );
+        assert_eq!(
+            t.checked_add(-3600.0),
+            Some(TimeExpr::Fixed(
+                SystemTime::UNIX_EPOCH - Duration::from_secs_f64(3600.0)
+            ))
+        );
+        assert_eq!(
+            t.checked_sub(3600.0),
+            Some(TimeExpr::Fixed(
+                SystemTime::UNIX_EPOCH - Duration::from_secs_f64(3600.0)
+            ))
+        );
+        assert_eq!(
+            t.checked_sub(-3600.0),
+            Some(TimeExpr::Fixed(
+                SystemTime::UNIX_EPOCH + Duration::from_secs_f64(3600.0)
+            ))
+        );
+
+        assert_eq!(t.checked_add(f64::MAX), None);
+        assert_eq!(t.checked_sub(f64::MAX), None);
+    }
+
+    #[test]
+    fn test_resolve_time_expr() {
+        let now = SystemTime::now();
+
+        assert_eq!(
+            TimeExpr::Now { offset_secs: 0.0 }.checked_resolve_at(now),
+            Some(now)
+        );
+        assert_eq!(
+            TimeExpr::Now {
+                offset_secs: f64::MAX
+            }
+            .checked_resolve_at(now),
+            None
+        );
+
+        let t = TimeExpr::Fixed(SystemTime::UNIX_EPOCH);
+        assert_eq!(t.checked_resolve_at(now), Some(SystemTime::UNIX_EPOCH));
     }
 
     #[test]

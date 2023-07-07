@@ -20,6 +20,7 @@ use zenoh_buffers::{
 use zenoh_codec::{WCodec, Zenoh080};
 use zenoh_protocol::{
     core::Reliability,
+    network::NetworkMessage,
     transport::{
         fragment::FragmentHeader, frame::FrameHeader, BatchSize, TransportMessage, TransportSn,
     },
@@ -219,6 +220,80 @@ pub(crate) enum WError {
     DidntWrite,
 }
 
+impl Encode<&NetworkMessage> for &mut WBatch {
+    type Output = Result<(), WError>;
+
+    /// Try to serialize a [`NetworkMessage`][NetworkMessage] on the [`SerializationBatch`][SerializationBatch].
+    ///
+    /// # Arguments
+    /// * `message` - The [`NetworkMessage`][NetworkMessage] to serialize.
+    ///
+    fn encode(self, message: &NetworkMessage) -> Self::Output {
+        // Eventually update the current frame and sn based on the current status
+        if let (CurrentFrame::Reliable, false)
+        | (CurrentFrame::BestEffort, true)
+        | (CurrentFrame::None, _) = (self.current_frame, message.is_reliable())
+        {
+            // We are not serializing on the right frame.
+            return Err(WError::NewFrame);
+        };
+
+        // Mark the write operation
+        let mut writer = self.buffer.writer();
+        let mark = writer.mark();
+
+        let codec = Zenoh080::new();
+        codec.write(&mut writer, message).map_err(|_| {
+            // Revert the write operation
+            writer.rewind(mark);
+            WError::DidntWrite
+        })
+    }
+}
+
+impl Encode<(&NetworkMessage, FrameHeader)> for &mut WBatch {
+    type Output = Result<(), DidntWrite>;
+
+    /// Try to serialize a [`NetworkMessage`][NetworkMessage] on the [`SerializationBatch`][SerializationBatch].
+    ///
+    /// # Arguments
+    /// * `message` - The [`NetworkMessage`][NetworkMessage] to serialize.
+    ///
+    fn encode(self, message: (&NetworkMessage, FrameHeader)) -> Self::Output {
+        let (message, frame) = message;
+
+        // Mark the write operation
+        let mut writer = self.buffer.writer();
+        let mark = writer.mark();
+
+        let codec = Zenoh080::new();
+        // Write the frame header
+        codec.write(&mut writer, &frame).map_err(|e| {
+            // Revert the write operation
+            writer.rewind(mark);
+            e
+        })?;
+        // Write the zenoh message
+        codec.write(&mut writer, message).map_err(|e| {
+            // Revert the write operation
+            writer.rewind(mark);
+            e
+        })?;
+        // Update the frame
+        self.current_frame = match frame.reliability {
+            Reliability::Reliable => {
+                self.latest_sn.reliable = Some(frame.sn);
+                CurrentFrame::Reliable
+            }
+            Reliability::BestEffort => {
+                self.latest_sn.best_effort = Some(frame.sn);
+                CurrentFrame::BestEffort
+            }
+        };
+        Ok(())
+    }
+}
+
 impl Encode<&ZenohMessage> for &mut WBatch {
     type Output = Result<(), WError>;
 
@@ -345,7 +420,7 @@ mod tests {
     use super::*;
     use zenoh_buffers::ZBuf;
     use zenoh_protocol::{
-        core::{Channel, CongestionControl, Priority, Reliability},
+        core::{Channel, CongestionControl, Priority, Reliability, WireExpr},
         transport::{
             frame::{self, FrameHeader},
             KeepAlive, TransportMessage,
@@ -359,7 +434,7 @@ mod tests {
 
         let tmsg: TransportMessage = KeepAlive.into();
         let mut zmsg = ZenohMessage::make_data(
-            0.into(),
+            WireExpr::empty(),
             ZBuf::from(vec![0u8; 8]),
             Channel {
                 priority: Priority::default(),

@@ -15,12 +15,12 @@ use super::transport::TransportUnicastInner;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
 use zenoh_core::zread;
+use zenoh_protocol::network::NetworkMessage;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
-use zenoh_protocol::zenoh::ZenohMessage;
 
 impl TransportUnicastInner {
-    fn schedule_on_link(&self, msg: ZenohMessage) -> bool {
+    fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
         macro_rules! zpush {
             ($guard:expr, $pipeline:expr, $msg:expr) => {
                 // Drop the guard before the push_zenoh_message since
@@ -29,7 +29,7 @@ impl TransportUnicastInner {
                 let pl = $pipeline.clone();
                 drop($guard);
                 log::trace!("Scheduled: {:?}", $msg);
-                return pl.push_zenoh_message($msg);
+                return pl.push_network_message($msg);
             };
         }
 
@@ -66,7 +66,7 @@ impl TransportUnicastInner {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(crate) fn schedule(&self, mut msg: ZenohMessage) -> bool {
+    pub(crate) fn schedule(&self, mut msg: NetworkMessage) -> bool {
         #[cfg(feature = "shared-memory")]
         {
             let res = if self.config.is_shm {

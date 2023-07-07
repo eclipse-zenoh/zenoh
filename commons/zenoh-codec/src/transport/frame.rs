@@ -20,11 +20,11 @@ use zenoh_buffers::{
 use zenoh_protocol::{
     common::{iext, imsg},
     core::Reliability,
+    network::NetworkMessage,
     transport::{
         frame::{ext, flag, Frame, FrameHeader},
         id, TransportSn,
     },
-    zenoh::ZenohMessage,
 };
 
 // FrameHeader
@@ -165,7 +165,7 @@ where
         let mut payload = Vec::new();
         while reader.can_read() {
             let mark = reader.mark();
-            let res: Result<ZenohMessage, DidntRead> = rcode.read(&mut *reader);
+            let res: Result<NetworkMessage, DidntRead> = rcode.read(&mut *reader);
             match res {
                 Ok(m) => payload.push(m),
                 Err(_) => {

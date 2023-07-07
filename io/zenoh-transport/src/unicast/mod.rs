@@ -32,10 +32,10 @@ use std::sync::{Arc, Weak};
 use transport::TransportUnicastInner;
 use zenoh_core::zcondfeat;
 use zenoh_link::Link;
+use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::{
     core::{Bits, WhatAmI, ZenohId},
     transport::{close, TransportSn},
-    zenoh::ZenohMessage,
 };
 use zenoh_result::{zerror, ZResult};
 
@@ -174,7 +174,7 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
+    pub fn schedule(&self, message: NetworkMessage) -> ZResult<()> {
         let transport = self.get_inner()?;
         transport.schedule(message);
         Ok(())
@@ -202,7 +202,7 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
+    pub fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
         self.schedule(message)
     }
 

@@ -26,7 +26,8 @@ use crate::{
 use zenoh_core::SyncResolve;
 use zenoh_protocol::{
     core::{Encoding, KnownEncoding, WireExpr},
-    zenoh::{DataInfo, SampleKind, ZenohMessage},
+    network::NetworkMessage,
+    zenoh::{DataInfo, SampleKind},
 };
 use zenoh_transport::{TransportEventHandler, TransportPeerEventHandler};
 
@@ -148,7 +149,7 @@ pub(crate) struct PeerHandler {
 }
 
 impl TransportPeerEventHandler for PeerHandler {
-    fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
 

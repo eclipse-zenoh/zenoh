@@ -36,7 +36,7 @@ use {
     zenoh_core::Resolvable,
     zenoh_core::Result as ZResult,
     zenoh_core::SyncResolve,
-    zenoh_protocol::zenoh::SubInfo,
+    zenoh_protocol::network::subscriber::ext::SubscriberInfo,
 };
 
 #[zenoh_macros::unstable]
@@ -544,7 +544,7 @@ where
                 &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
                 Locality::default(),
                 callback,
-                &SubInfo::default(),
+                &SubscriberInfo::default(),
             )
             .map(|sub_state| Subscriber {
                 subscriber: SubscriberInner {

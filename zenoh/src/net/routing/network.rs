@@ -1,3 +1,4 @@
+use crate::net::codec::Zenoh080Routing;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -11,16 +12,20 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::runtime::Runtime;
+use crate::net::protocol::linkstate::{LinkState, LinkStateList};
+use crate::net::protocol::OAM_LINKSTATE;
+use crate::net::runtime::Runtime;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
 use std::convert::TryInto;
 use vec_map::VecMap;
+use zenoh_buffers::writer::{DidntWrite, HasWriter};
+use zenoh_buffers::ZBuf;
+use zenoh_codec::WCodec;
 use zenoh_link::Locator;
-use zenoh_protocol::{
-    core::{WhatAmI, WhatAmIMatcher, ZenohId},
-    zenoh::{LinkState, ZenohMessage},
-};
+use zenoh_protocol::common::ZExtBody;
+use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, ZenohId};
+use zenoh_protocol::network::{oam, NetworkBody, NetworkMessage, Oam};
 use zenoh_transport::TransportUnicast;
 
 #[derive(Clone)]
@@ -184,8 +189,7 @@ impl Network {
     }
 
     #[inline]
-    pub(crate) fn get_local_context(&self, context: Option<u64>, link_id: usize) -> usize {
-        let context = context.unwrap_or(0);
+    pub(crate) fn get_local_context(&self, context: u64, link_id: usize) -> usize {
         match self.get_link(link_id) {
             Some(link) => match link.get_local_psid(&context) {
                 Some(psid) => (*psid).try_into().unwrap_or(0),
@@ -259,19 +263,32 @@ impl Network {
         }
     }
 
-    fn make_msg(&self, idxs: Vec<(NodeIndex, Details)>) -> ZenohMessage {
-        let mut list = vec![];
+    fn make_msg(&self, idxs: Vec<(NodeIndex, Details)>) -> Result<NetworkMessage, DidntWrite> {
+        let mut link_states = vec![];
         for (idx, details) in idxs {
-            list.push(self.make_link_state(idx, details));
+            link_states.push(self.make_link_state(idx, details));
         }
-        ZenohMessage::make_link_state_list(list)
+        let codec = Zenoh080Routing::new();
+        let mut buf = ZBuf::empty();
+        codec.write(&mut buf.writer(), &LinkStateList { link_states })?;
+        Ok(NetworkMessage {
+            body: NetworkBody::OAM(Oam {
+                id: OAM_LINKSTATE,
+                body: ZExtBody::ZBuf(buf),
+                ext_qos: oam::ext::QoSType::default(),
+                ext_tstamp: None,
+            }),
+        })
     }
 
     fn send_on_link(&self, idxs: Vec<(NodeIndex, Details)>, transport: &TransportUnicast) {
-        let msg = self.make_msg(idxs);
-        log::trace!("{} Send to {:?} {:?}", self.name, transport.get_zid(), msg);
-        if let Err(e) = transport.handle_message(msg) {
-            log::debug!("{} Error sending LinkStateList: {}", self.name, e);
+        if let Ok(msg) = self.make_msg(idxs) {
+            log::trace!("{} Send to {:?} {:?}", self.name, transport.get_zid(), msg);
+            if let Err(e) = transport.handle_message(msg) {
+                log::debug!("{} Error sending LinkStateList: {}", self.name, e);
+            }
+        } else {
+            log::error!("Failed to encode Linkstate message");
         }
     }
 
@@ -279,14 +296,17 @@ impl Network {
     where
         P: FnMut(&Link) -> bool,
     {
-        let msg = self.make_msg(idxs);
-        for link in self.links.values() {
-            if parameters(link) {
-                log::trace!("{} Send to {} {:?}", self.name, link.zid, msg);
-                if let Err(e) = link.transport.handle_message(msg.clone()) {
-                    log::debug!("{} Error sending LinkStateList: {}", self.name, e);
+        if let Ok(msg) = self.make_msg(idxs) {
+            for link in self.links.values() {
+                if parameters(link) {
+                    log::trace!("{} Send to {} {:?}", self.name, link.zid, msg);
+                    if let Err(e) = link.transport.handle_message(msg.clone()) {
+                        log::debug!("{} Error sending LinkStateList: {}", self.name, e);
+                    }
                 }
             }
+        } else {
+            log::error!("Failed to encode Linkstate message");
         }
     }
 

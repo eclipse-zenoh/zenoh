@@ -11,22 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+pub(crate) mod linkstate;
 
-//! ⚠️ WARNING ⚠️
-//!
-//! This module is intended for Zenoh's internal use.
-//!
-//! [Click here for Zenoh's documentation](../zenoh/index.html)
-#[doc(hidden)]
-pub(crate) mod codec;
-#[doc(hidden)]
-pub(crate) mod protocol;
-#[doc(hidden)]
-pub(crate) mod routing;
-#[doc(hidden)]
-pub mod runtime;
-#[doc(hidden)]
-pub(crate) use zenoh_transport as transport;
+#[derive(Clone, Copy)]
+pub struct Zenoh080Routing;
 
-#[cfg(test)]
-pub(crate) mod tests;
+impl Zenoh080Routing {
+    pub const fn new() -> Self {
+        Self
+    }
+}

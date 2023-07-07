@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::Reliability, transport::TransportSn, zenoh::ZenohMessage};
+use crate::{core::Reliability, network::NetworkMessage, transport::TransportSn};
 use alloc::vec::Vec;
 
 /// # Frame message
@@ -70,7 +70,7 @@ pub mod flag {
 pub struct Frame {
     pub reliability: Reliability,
     pub sn: TransportSn,
-    pub payload: Vec<ZenohMessage>,
+    pub payload: Vec<NetworkMessage>,
     pub ext_qos: ext::QoSType,
 }
 
@@ -94,9 +94,7 @@ impl Frame {
         let ext_qos = ext::QoSType::rand();
         let mut payload = vec![];
         for _ in 0..rng.gen_range(1..4) {
-            let mut m = ZenohMessage::rand();
-            m.channel.reliability = reliability;
-            m.channel.priority = ext_qos.priority();
+            let m = NetworkMessage::rand();
             payload.push(m);
         }
 

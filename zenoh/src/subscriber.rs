@@ -23,7 +23,8 @@ use std::future::Ready;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
-use zenoh_protocol::zenoh::SubInfo;
+use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
+use zenoh_protocol::network::Mode;
 
 /// The subscription mode.
 pub use zenoh_protocol::zenoh::SubMode;
@@ -257,6 +258,12 @@ impl From<PullMode> for SubMode {
     }
 }
 
+impl From<PullMode> for Mode {
+    fn from(_: PullMode) -> Self {
+        Mode::Pull
+    }
+}
+
 /// The mode for push subscribers.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
@@ -265,6 +272,12 @@ pub struct PushMode;
 impl From<PushMode> for SubMode {
     fn from(_: PushMode) -> Self {
         SubMode::Push
+    }
+}
+
+impl From<PushMode> for Mode {
+    fn from(_: PushMode) -> Self {
+        Mode::Push
     }
 }
 
@@ -530,7 +543,7 @@ where
                 &None,
                 self.origin,
                 callback,
-                &SubInfo {
+                &SubscriberInfo {
                     reliability: self.reliability,
                     mode: self.mode.into(),
                 },
@@ -582,7 +595,7 @@ where
                 &None,
                 self.origin,
                 callback,
-                &SubInfo {
+                &SubscriberInfo {
                     reliability: self.reliability,
                     mode: self.mode.into(),
                 },

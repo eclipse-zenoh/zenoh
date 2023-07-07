@@ -88,7 +88,7 @@ where
         if n_exts != 0 {
             header |= flag::Z;
         }
-        if x.mapping != Mapping::default() {
+        if x.wire_expr.mapping != Mapping::default() {
             header |= flag::M;
         }
         if x.wire_expr.has_suffix() {
@@ -163,8 +163,8 @@ where
         let bodec = Zenoh080Bounded::<RequestId>::new();
         let id: RequestId = bodec.read(&mut *reader)?;
         let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, flag::N));
-        let wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
-        let mapping = if imsg::has_flag(self.header, flag::M) {
+        let mut wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
+        wire_expr.mapping = if imsg::has_flag(self.header, flag::M) {
             Mapping::Sender
         } else {
             Mapping::Receiver
@@ -225,7 +225,6 @@ where
         Ok(Request {
             id,
             wire_expr,
-            mapping,
             payload,
             ext_qos,
             ext_tstamp,

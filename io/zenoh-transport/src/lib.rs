@@ -32,7 +32,7 @@ use std::sync::Arc;
 pub use unicast::*;
 use zenoh_link::Link;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
-use zenoh_protocol::zenoh::ZenohMessage;
+use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
 
 /*************************************/
@@ -75,7 +75,7 @@ pub struct TransportPeer {
 }
 
 pub trait TransportPeerEventHandler: Send + Sync {
-    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()>;
+    fn handle_message(&self, msg: NetworkMessage) -> ZResult<()>;
     fn new_link(&self, src: Link);
     fn del_link(&self, link: Link);
     fn closing(&self);
@@ -88,7 +88,7 @@ pub trait TransportPeerEventHandler: Send + Sync {
 pub struct DummyTransportPeerEventHandler;
 
 impl TransportPeerEventHandler for DummyTransportPeerEventHandler {
-    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
 

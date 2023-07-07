@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, network::Mapping, zenoh_new::RequestBody};
+use crate::{core::WireExpr, zenoh_new::RequestBody};
 use core::sync::atomic::AtomicU32;
 
 /// The resolution of a RequestId
@@ -54,7 +54,6 @@ pub mod flag {
 pub struct Request {
     pub id: RequestId,
     pub wire_expr: WireExpr<'static>,
-    pub mapping: Mapping,
     pub ext_qos: ext::QoSType,
     pub ext_tstamp: Option<ext::TimestampType>,
     pub ext_nodeid: ext::NodeIdType,
@@ -134,7 +133,6 @@ impl Request {
 
         let mut rng = rand::thread_rng();
         let wire_expr = WireExpr::rand();
-        let mapping = Mapping::rand();
         let id: RequestId = rng.gen();
         let payload = RequestBody::rand();
         let ext_qos = ext::QoSType::rand();
@@ -154,7 +152,6 @@ impl Request {
 
         Self {
             wire_expr,
-            mapping,
             id,
             payload,
             ext_qos,

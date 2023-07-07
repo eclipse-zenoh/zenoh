@@ -587,6 +587,11 @@ fn codec_ack() {
     run!(zenoh_new::Ack, zenoh_new::Ack::rand());
 }
 
+#[test]
+fn codec_pull() {
+    run!(zenoh_new::Pull, zenoh_new::Pull::rand());
+}
+
 // Zenoh
 #[test]
 fn codec_routing_context_old() {

@@ -20,12 +20,15 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
-    use zenoh_buffers::ZBuf;
     use zenoh_core::zasync_executor_init;
     use zenoh_link::Link;
     use zenoh_protocol::{
-        core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
-        zenoh::ZenohMessage,
+        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
+        network::{
+            push::ext::{NodeIdType, QoSType},
+            NetworkMessage, Push,
+        },
+        zenoh_new::Put,
     };
     use zenoh_result::ZResult;
     use zenoh_transport::{
@@ -71,26 +74,21 @@ mod tests {
             transport: TransportUnicast,
         ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
             // Create the message to send
-            let key = "test".into();
-            let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
-            let channel = Channel {
-                priority: Priority::Control,
-                reliability: Reliability::Reliable,
-            };
-            let congestion_control = CongestionControl::Block;
-            let data_info = None;
-            let routing_context = None;
-            let reply_context = None;
-
-            let message = ZenohMessage::make_data(
-                key,
-                payload,
-                channel,
-                congestion_control,
-                data_info,
-                routing_context,
-                reply_context,
-            );
+            let message: NetworkMessage = Push {
+                wire_expr: "test".into(),
+                ext_qos: QoSType::new(Priority::Control, CongestionControl::Block, false),
+                ext_tstamp: None,
+                ext_nodeid: NodeIdType::default(),
+                payload: Put {
+                    payload: vec![0u8; MSG_SIZE].into(),
+                    timestamp: None,
+                    encoding: Encoding::default(),
+                    ext_sinfo: None,
+                    ext_unknown: vec![],
+                }
+                .into(),
+            }
+            .into();
 
             println!("[Simultaneous {}] Sending {}...", self.zid, MSG_COUNT);
             for _ in 0..MSG_COUNT {
@@ -114,7 +112,7 @@ mod tests {
     }
 
     impl TransportPeerEventHandler for MHPeer {
-        fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
+        fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
             self.count.fetch_add(1, Ordering::AcqRel);
             Ok(())
         }

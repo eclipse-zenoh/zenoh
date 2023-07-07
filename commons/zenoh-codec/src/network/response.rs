@@ -39,12 +39,13 @@ where
     fn write(self, writer: &mut W, x: &Response) -> Self::Output {
         // Header
         let mut header = id::RESPONSE;
-        let mut n_exts =
-            ((x.ext_qos != ext::QoSType::default()) as u8) + (x.ext_tstamp.is_some() as u8);
+        let mut n_exts = ((x.ext_qos != ext::QoSType::default()) as u8)
+            + (x.ext_tstamp.is_some() as u8)
+            + (x.ext_respid.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
-        if x.mapping != Mapping::default() {
+        if x.wire_expr.mapping != Mapping::default() {
             header |= flag::M;
         }
         if x.wire_expr.has_suffix() {
@@ -64,6 +65,10 @@ where
         if let Some(ts) = x.ext_tstamp.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
+        }
+        if let Some(ri) = x.ext_respid.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (ri, n_exts != 0))?;
         }
 
         // Payload
@@ -101,8 +106,8 @@ where
         let bodec = Zenoh080Bounded::<RequestId>::new();
         let rid: RequestId = bodec.read(&mut *reader)?;
         let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, flag::N));
-        let wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
-        let mapping = if imsg::has_flag(self.header, flag::M) {
+        let mut wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
+        wire_expr.mapping = if imsg::has_flag(self.header, flag::M) {
             Mapping::Sender
         } else {
             Mapping::Receiver
@@ -111,6 +116,7 @@ where
         // Extensions
         let mut ext_qos = ext::QoSType::default();
         let mut ext_tstamp = None;
+        let mut ext_respid = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -127,6 +133,11 @@ where
                     ext_tstamp = Some(t);
                     has_ext = ext;
                 }
+                ext::ResponderId::ID => {
+                    let (t, ext): (ext::ResponderIdType, bool) = eodec.read(&mut *reader)?;
+                    ext_respid = Some(t);
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "Response", ext)?;
                 }
@@ -139,10 +150,10 @@ where
         Ok(Response {
             rid,
             wire_expr,
-            mapping,
             payload,
             ext_qos,
             ext_tstamp,
+            ext_respid,
         })
     }
 }

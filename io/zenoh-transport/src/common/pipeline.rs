@@ -31,6 +31,8 @@ use zenoh_buffers::{
 use zenoh_codec::{WCodec, Zenoh080};
 use zenoh_config::QueueSizeConf;
 use zenoh_core::zlock;
+use zenoh_protocol::core::Reliability;
+use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::{
     core::Priority,
     transport::{
@@ -38,7 +40,6 @@ use zenoh_protocol::{
         frame::{self, FrameHeader},
         BatchSize, TransportMessage,
     },
-    zenoh::ZenohMessage,
 };
 
 // It's faster to work directly with nanoseconds.
@@ -120,7 +121,7 @@ struct StageIn {
 }
 
 impl StageIn {
-    fn push_zenoh_message(&mut self, msg: &mut ZenohMessage, priority: Priority) -> bool {
+    fn push_network_message(&mut self, msg: &mut NetworkMessage, priority: Priority) -> bool {
         // Lock the current serialization batch.
         let mut c_guard = self.mutex.current();
 
@@ -184,7 +185,7 @@ impl StageIn {
 
         // The Frame
         let frame = FrameHeader {
-            reliability: msg.channel.reliability,
+            reliability: Reliability::Reliable, // TODO
             sn,
             ext_qos: frame::ext::QoSType::new(priority),
         };
@@ -586,16 +587,17 @@ pub(crate) struct TransmissionPipelineProducer {
 
 impl TransmissionPipelineProducer {
     #[inline]
-    pub(crate) fn push_zenoh_message(&self, mut msg: ZenohMessage) -> bool {
+    pub(crate) fn push_network_message(&self, mut msg: NetworkMessage) -> bool {
         // If the queue is not QoS, it means that we only have one priority with index 0.
         let (idx, priority) = if self.stage_in.len() > 1 {
-            (msg.channel.priority as usize, msg.channel.priority)
+            let priority = msg.priority();
+            (priority as usize, priority)
         } else {
             (0, Priority::default())
         };
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
-        queue.push_zenoh_message(&mut msg, priority)
+        queue.push_network_message(&mut msg, priority)
     }
 
     #[inline]
@@ -709,9 +711,10 @@ mod tests {
     };
     use zenoh_codec::{RCodec, Zenoh080};
     use zenoh_protocol::{
-        core::{Bits, Channel, CongestionControl, Priority, Reliability},
+        core::{Bits, CongestionControl, Encoding, Priority},
+        network::{ext, Push},
         transport::{BatchSize, Fragment, Frame, TransportBody, TransportSn},
-        zenoh::ZenohMessage,
+        zenoh_new::{PushBody, Put},
     };
 
     const SLEEP: Duration = Duration::from_millis(100);
@@ -730,24 +733,21 @@ mod tests {
             // Send reliable messages
             let key = "test".into();
             let payload = ZBuf::from(vec![0_u8; payload_size]);
-            let data_info = None;
-            let routing_context = None;
-            let reply_context = None;
-            let channel = Channel {
-                priority: Priority::Control,
-                reliability: Reliability::Reliable,
-            };
-            let congestion_control = CongestionControl::Block;
 
-            let message = ZenohMessage::make_data(
-                key,
-                payload,
-                channel,
-                congestion_control,
-                data_info,
-                routing_context,
-                reply_context,
-            );
+            let message: NetworkMessage = Push {
+                wire_expr: key,
+                ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::default(),
+                payload: PushBody::Put(Put {
+                    timestamp: None,
+                    encoding: Encoding::default(),
+                    ext_sinfo: None,
+                    ext_unknown: vec![],
+                    payload,
+                }),
+            }
+            .into();
 
             println!(
                 "Pipeline Flow [>>>]: Sending {num_msg} messages with payload size of {payload_size} bytes"
@@ -757,7 +757,7 @@ mod tests {
                     "Pipeline Flow [>>>]: Pushed {} msgs ({payload_size} bytes)",
                     i + 1
                 );
-                queue.push_zenoh_message(message.clone());
+                queue.push_network_message(message.clone());
             }
         }
 
@@ -860,24 +860,21 @@ mod tests {
             // Send reliable messages
             let key = "test".into();
             let payload = ZBuf::from(vec![0_u8; payload_size]);
-            let channel = Channel {
-                priority: Priority::Control,
-                reliability: Reliability::Reliable,
-            };
-            let congestion_control = CongestionControl::Block;
-            let data_info = None;
-            let routing_context = None;
-            let reply_context = None;
 
-            let message = ZenohMessage::make_data(
-                key,
-                payload,
-                channel,
-                congestion_control,
-                data_info,
-                routing_context,
-                reply_context,
-            );
+            let message: NetworkMessage = Push {
+                wire_expr: key,
+                ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::default(),
+                payload: PushBody::Put(Put {
+                    timestamp: None,
+                    encoding: Encoding::default(),
+                    ext_sinfo: None,
+                    ext_unknown: vec![],
+                    payload,
+                }),
+            }
+            .into();
 
             // The last push should block since there shouldn't any more batches
             // available for serialization.
@@ -886,7 +883,7 @@ mod tests {
                 println!(
                     "Pipeline Blocking [>>>]: ({id}) Scheduling message #{i} with payload size of {payload_size} bytes"
                 );
-                queue.push_zenoh_message(message.clone());
+                queue.push_network_message(message.clone());
                 let c = counter.fetch_add(1, Ordering::AcqRel);
                 println!(
                     "Pipeline Blocking [>>>]: ({}) Scheduled message #{} (tot {}) with payload size of {} bytes",
@@ -968,29 +965,30 @@ mod tests {
                     // Send reliable messages
                     let key = "pipeline/thr".into();
                     let payload = ZBuf::from(vec![0_u8; *size]);
-                    let channel = Channel {
-                        priority: Priority::Control,
-                        reliability: Reliability::Reliable,
-                    };
-                    let congestion_control = CongestionControl::Block;
-                    let data_info = None;
-                    let routing_context = None;
-                    let reply_context = None;
 
-                    let message = ZenohMessage::make_data(
-                        key,
-                        payload,
-                        channel,
-                        congestion_control,
-                        data_info,
-                        routing_context,
-                        reply_context,
-                    );
+                    let message: NetworkMessage = Push {
+                        wire_expr: key,
+                        ext_qos: ext::QoSType::new(
+                            Priority::Control,
+                            CongestionControl::Block,
+                            false,
+                        ),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        payload: PushBody::Put(Put {
+                            timestamp: None,
+                            encoding: Encoding::default(),
+                            ext_sinfo: None,
+                            ext_unknown: vec![],
+                            payload,
+                        }),
+                    }
+                    .into();
 
                     let duration = Duration::from_millis(5_500);
                     let start = Instant::now();
                     while start.elapsed() < duration {
-                        producer.push_zenoh_message(message.clone());
+                        producer.push_network_message(message.clone());
                     }
                 }
             }

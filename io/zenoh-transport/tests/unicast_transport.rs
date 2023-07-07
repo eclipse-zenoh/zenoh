@@ -22,12 +22,17 @@ use std::{
     },
     time::Duration,
 };
-use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
-    zenoh::ZenohMessage,
+    core::{
+        Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI, ZenohId,
+    },
+    network::{
+        push::ext::{NodeIdType, QoSType},
+        NetworkMessage, Push,
+    },
+    zenoh_new::Put,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -265,7 +270,7 @@ impl SCRouter {
 }
 
 impl TransportPeerEventHandler for SCRouter {
-    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -299,7 +304,7 @@ impl TransportEventHandler for SHClient {
 pub struct SCClient;
 
 impl TransportPeerEventHandler for SCClient {
-    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
 
@@ -418,28 +423,35 @@ async fn test_transport(
     channel: Channel,
     msg_size: usize,
 ) {
-    // Create the message to send
-    let key = "test".into();
-    let payload = ZBuf::from(vec![0_u8; msg_size]);
-    let data_info = None;
-    let routing_context = None;
-    let reply_context = None;
-    let message = ZenohMessage::make_data(
-        key,
-        payload,
-        channel,
-        CongestionControl::Block,
-        data_info,
-        routing_context,
-        reply_context,
-    );
-
     println!(
         "Sending {} messages... {:?} {}",
         MSG_COUNT, channel, msg_size
     );
+    let cctrl = match channel.reliability {
+        Reliability::Reliable => CongestionControl::Block,
+        Reliability::BestEffort => CongestionControl::Drop,
+    };
+    // Create the message to send
+    let message: NetworkMessage = Push {
+        wire_expr: "test".into(),
+        ext_qos: QoSType::new(channel.priority, cctrl, false),
+        ext_tstamp: None,
+        ext_nodeid: NodeIdType::default(),
+        payload: Put {
+            payload: vec![0u8; msg_size].into(),
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            ext_unknown: vec![],
+        }
+        .into(),
+    }
+    .into();
     for _ in 0..MSG_COUNT {
         client_transport.schedule(message.clone()).unwrap();
+        // print!("S-{i} ");
+        use std::io::Write;
+        std::io::stdout().flush().unwrap();
     }
 
     match channel.reliability {
@@ -539,18 +551,18 @@ fn transport_unicast_tcp_only() {
             priority: Priority::default(),
             reliability: Reliability::Reliable,
         },
-        Channel {
-            priority: Priority::default(),
-            reliability: Reliability::BestEffort,
-        },
+        // Channel {
+        //     priority: Priority::default(),
+        //     reliability: Reliability::BestEffort,
+        // },
         Channel {
             priority: Priority::RealTime,
             reliability: Reliability::Reliable,
         },
-        Channel {
-            priority: Priority::RealTime,
-            reliability: Reliability::BestEffort,
-        },
+        //     Channel {
+        //         priority: Priority::RealTime,
+        //         reliability: Reliability::BestEffort,
+        //     },
     ];
     // Run
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));

@@ -19,12 +19,19 @@ use std::fmt::Write as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
 use zenoh_link::Link;
+use zenoh_protocol::network::NetworkBody;
 use zenoh_protocol::{
-    core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
-    zenoh::ZenohMessage,
+    core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
+    network::{
+        push::{
+            ext::{NodeIdType, QoSType},
+            Push,
+        },
+        NetworkMessage,
+    },
+    zenoh_new::Put,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -107,11 +114,16 @@ impl SCRouter {
 }
 
 impl TransportPeerEventHandler for SCRouter {
-    fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
-        assert_eq!(
-            self.priority.load(Ordering::Relaxed),
-            message.channel.priority as usize
-        );
+    fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
+        match &message.body {
+            NetworkBody::Push(p) => {
+                assert_eq!(
+                    self.priority.load(Ordering::Relaxed),
+                    p.ext_qos.get_priority() as usize
+                );
+            }
+            _ => panic!("Unexpected message"),
+        }
         self.count.fetch_add(1, Ordering::Relaxed);
         Ok(())
     }
@@ -155,7 +167,7 @@ impl Default for SCClient {
 }
 
 impl TransportPeerEventHandler for SCClient {
-    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
 
@@ -256,35 +268,31 @@ async fn close_transport(
     task::sleep(SLEEP).await;
 }
 
-async fn single_run(
-    router_handler: Arc<SHRouter>,
-    client_transport: TransportUnicast,
-    channel: &[Channel],
-    msg_size: &[usize],
-) {
-    for ch in channel.iter() {
-        for ms in msg_size.iter() {
+async fn single_run(router_handler: Arc<SHRouter>, client_transport: TransportUnicast) {
+    for p in PRIORITY_ALL.iter() {
+        for ms in MSG_SIZE_ALL.iter() {
             // Reset the counter and set priority on the router
             router_handler.reset_count();
-            router_handler.set_priority(ch.priority);
+            router_handler.set_priority(*p);
 
             // Create the message to send
-            let key = "test".into();
-            let payload = ZBuf::from(vec![0_u8; *ms]);
-            let data_info = None;
-            let routing_context = None;
-            let reply_context = None;
-            let message = ZenohMessage::make_data(
-                key,
-                payload,
-                *ch,
-                CongestionControl::Block,
-                data_info,
-                routing_context,
-                reply_context,
-            );
+            let message: NetworkMessage = Push {
+                wire_expr: "test".into(),
+                ext_qos: QoSType::new(*p, CongestionControl::Block, false),
+                ext_tstamp: None,
+                ext_nodeid: NodeIdType::default(),
+                payload: Put {
+                    payload: vec![0u8; *ms].into(),
+                    timestamp: None,
+                    encoding: Encoding::default(),
+                    ext_sinfo: None,
+                    ext_unknown: vec![],
+                }
+                .into(),
+            }
+            .into();
 
-            println!("Sending {MSG_COUNT} messages... {ch:?} {ms}");
+            println!("Sending {MSG_COUNT} messages... {p:?} {ms}");
             for _ in 0..MSG_COUNT {
                 client_transport.schedule(message.clone()).unwrap();
             }
@@ -302,16 +310,10 @@ async fn single_run(
     task::sleep(SLEEP).await;
 }
 
-async fn run(endpoints: &[EndPoint], channel: &[Channel], msg_size: &[usize]) {
+async fn run(endpoints: &[EndPoint]) {
     let (router_manager, router_handler, client_manager, client_transport) =
         open_transport(endpoints).await;
-    single_run(
-        router_handler.clone(),
-        client_transport.clone(),
-        channel,
-        msg_size,
-    )
-    .await;
+    single_run(router_handler.clone(), client_transport.clone()).await;
     close_transport(router_manager, client_manager, client_transport, endpoints).await;
 }
 
@@ -322,17 +324,10 @@ fn conduits_tcp_only() {
     task::block_on(async {
         zasync_executor_init!();
     });
-    let mut channel = vec![];
-    for p in PRIORITY_ALL.iter() {
-        channel.push(Channel {
-            priority: *p,
-            reliability: Reliability::Reliable,
-        });
-    }
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 10000).parse().unwrap()];
     // Run
-    task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run(&endpoints));
 }
 
 #[cfg(feature = "transport_shm")]
@@ -362,15 +357,8 @@ fn conduits_ws_only() {
     task::block_on(async {
         zasync_executor_init!();
     });
-    let mut channel = vec![];
-    for p in PRIORITY_ALL.iter() {
-        channel.push(Channel {
-            priority: *p,
-            reliability: Reliability::Reliable,
-        });
-    }
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", 10010).parse().unwrap()];
     // Run
-    task::block_on(run(&endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run(&endpoints));
 }

@@ -13,11 +13,19 @@
 //
 use async_std::{prelude::FutureExt, task};
 use std::{convert::TryFrom, sync::Arc, time::Duration};
-use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
 use zenoh_protocol::{
-    core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
-    zenoh::ZenohMessage,
+    core::{
+        Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI, ZenohId,
+    },
+    network::{
+        push::{
+            ext::{NodeIdType, QoSType},
+            Push,
+        },
+        NetworkMessage,
+    },
+    zenoh_new::Put,
 };
 use zenoh_transport::{DummyTransportEventHandler, TransportManager};
 
@@ -65,21 +73,22 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 
     let client_transport = client_manager.get_transport(&router_id).unwrap();
 
-    // Create the message to send, this would trigger the transport closure
-    let key = "test".into();
-    let payload = ZBuf::from(vec![0_u8; msg_size]);
-    let data_info = None;
-    let routing_context = None;
-    let reply_context = None;
-    let message = ZenohMessage::make_data(
-        key,
-        payload,
-        channel,
-        CongestionControl::Block,
-        data_info,
-        routing_context,
-        reply_context,
-    );
+    // Create the message to send
+    let message: NetworkMessage = Push {
+        wire_expr: "test".into(),
+        ext_qos: QoSType::new(channel.priority, CongestionControl::Block, false),
+        ext_tstamp: None,
+        ext_nodeid: NodeIdType::default(),
+        payload: Put {
+            payload: vec![0u8; msg_size].into(),
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            ext_unknown: vec![],
+        }
+        .into(),
+    }
+    .into();
 
     println!(
         "Sending message of {msg_size} bytes while defragmentation buffer size is {MSG_DEFRAG_BUF} bytes"

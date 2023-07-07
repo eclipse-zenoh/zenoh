@@ -17,7 +17,10 @@ use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::core::{ExprId, ExprLen, WireExpr};
+use zenoh_protocol::{
+    core::{ExprId, ExprLen, WireExpr},
+    network::Mapping,
+};
 
 impl<W> WCodec<&WireExpr<'_>, &mut W> for Zenoh080
 where
@@ -56,6 +59,7 @@ where
         Ok(WireExpr {
             scope,
             suffix: suffix.into(),
+            mapping: Mapping::default(),
         })
     }
 }

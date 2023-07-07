@@ -11,7 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, zenoh::DataInfo};
+use crate::{
+    core::WireExpr, network::request::ext::TargetType, zenoh::DataInfo,
+    zenoh_new::query::ext::ConsolidationType,
+};
 use alloc::string::String;
 use core::sync::atomic::AtomicU32;
 use zenoh_buffers::ZBuf;
@@ -37,6 +40,16 @@ pub enum ConsolidationMode {
     Latest,
 }
 
+impl From<ConsolidationMode> for ConsolidationType {
+    fn from(val: ConsolidationMode) -> Self {
+        match val {
+            ConsolidationMode::None => ConsolidationType::None,
+            ConsolidationMode::Monotonic => ConsolidationType::Monotonic,
+            ConsolidationMode::Latest => ConsolidationType::Latest,
+        }
+    }
+}
+
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum QueryTarget {
@@ -46,6 +59,18 @@ pub enum QueryTarget {
     AllComplete,
     #[cfg(feature = "complete_n")]
     Complete(u64),
+}
+
+impl From<QueryTarget> for TargetType {
+    fn from(val: QueryTarget) -> Self {
+        match val {
+            QueryTarget::BestMatching => TargetType::BestMatching,
+            QueryTarget::All => TargetType::All,
+            QueryTarget::AllComplete => TargetType::AllComplete,
+            #[cfg(feature = "complete_n")]
+            QueryTarget::Complete(n) => TargetType::Complete(n),
+        }
+    }
 }
 
 /// # QueryBody

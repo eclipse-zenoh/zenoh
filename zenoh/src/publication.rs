@@ -16,13 +16,18 @@
 
 use crate::net::transport::Primitives;
 use crate::prelude::*;
-use crate::subscriber::Reliability;
 use crate::Encoding;
 use crate::SessionRef;
 use crate::Undeclarable;
 use std::future::Ready;
 use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
-use zenoh_protocol::{core::Channel, zenoh::DataInfo};
+use zenoh_protocol::network::push::ext;
+use zenoh_protocol::network::Mapping;
+use zenoh_protocol::network::Push;
+use zenoh_protocol::zenoh::DataInfo;
+use zenoh_protocol::zenoh_new::Del;
+use zenoh_protocol::zenoh_new::PushBody;
+use zenoh_protocol::zenoh_new::Put;
 use zenoh_result::ZResult;
 
 /// The kind of congestion control.
@@ -129,41 +134,46 @@ impl SyncResolve for PutBuilder<'_, '_> {
             .as_ref()
             .unwrap()
             .clone();
-
-        let info = DataInfo {
-            kind,
-            encoding: if value.encoding != Encoding::default() {
-                Some(value.encoding)
-            } else {
-                None
-            },
-            timestamp: publisher.session.runtime.new_timestamp(),
-            ..Default::default()
-        };
-        let data_info = if info != DataInfo::default() {
-            Some(info)
-        } else {
-            None
-        };
+        let timestamp = publisher.session.runtime.new_timestamp();
 
         if publisher.destination != Locality::SessionLocal {
-            primitives.send_data(
-                &key_expr.to_wire(&publisher.session),
-                value.payload.clone(),
-                Channel {
-                    priority: publisher.priority.into(),
-                    reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
+            primitives.send_push(Push {
+                wire_expr: key_expr.to_wire(&publisher.session).to_owned(),
+                ext_qos: ext::QoSType::new(
+                    publisher.priority.into(),
+                    publisher.congestion_control,
+                    false,
+                ),
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::default(),
+                payload: match kind {
+                    SampleKind::Put => PushBody::Put(Put {
+                        timestamp,
+                        encoding: value.encoding.clone(),
+                        ext_sinfo: None,
+                        ext_unknown: vec![],
+                        payload: value.payload.clone(),
+                    }),
+                    SampleKind::Delete => PushBody::Del(Del {
+                        timestamp,
+                        ext_sinfo: None,
+                        ext_unknown: vec![],
+                    }),
                 },
-                publisher.congestion_control,
-                data_info.clone(),
-                None,
-            );
+            });
         }
         if publisher.destination != Locality::Remote {
+            let data_info = DataInfo {
+                kind,
+                encoding: Some(value.encoding),
+                timestamp,
+                ..Default::default()
+            };
+
             publisher.session.handle_data(
                 true,
                 &key_expr.to_wire(&publisher.session),
-                data_info,
+                Some(data_info),
                 value.payload,
             );
         }
@@ -416,40 +426,35 @@ impl SyncResolve for Publication<'_> {
             .unwrap()
             .clone();
 
-        let info = DataInfo {
-            kind,
-            encoding: if value.encoding != Encoding::default() {
-                Some(value.encoding)
-            } else {
-                None
-            },
-            timestamp: publisher.session.runtime.new_timestamp(),
-            ..Default::default()
-        };
-        let data_info = if info != DataInfo::default() {
-            Some(info)
-        } else {
-            None
-        };
-
         if publisher.destination != Locality::SessionLocal {
-            primitives.send_data(
-                &publisher.key_expr.to_wire(&publisher.session),
-                value.payload.clone(),
-                Channel {
-                    priority: publisher.priority.into(),
-                    reliability: Reliability::Reliable, // @TODO: need to check subscriptions to determine the right reliability value
-                },
-                publisher.congestion_control,
-                data_info.clone(),
-                None,
-            );
+            primitives.send_push(Push {
+                wire_expr: publisher.key_expr.to_wire(&publisher.session).to_owned(),
+                ext_qos: ext::QoSType::default(), // TODO
+                // use publisher.priority
+                // use publisher.congestion_control
+                // need to check subscriptions to determine the right reliability value
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::default(),
+                payload: PushBody::Put(Put {
+                    timestamp: publisher.session.runtime.new_timestamp(),
+                    encoding: value.encoding.clone(),
+                    ext_sinfo: None,
+                    ext_unknown: vec![],
+                    payload: value.payload.clone(),
+                }),
+            });
         }
         if publisher.destination != Locality::Remote {
+            let data_info = DataInfo {
+                kind,
+                encoding: Some(value.encoding),
+                timestamp: publisher.session.runtime.new_timestamp(),
+                ..Default::default()
+            };
             publisher.session.handle_data(
                 true,
                 &publisher.key_expr.to_wire(&publisher.session),
-                data_info,
+                Some(data_info),
                 value.payload,
             );
         }
@@ -578,6 +583,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
                     KeyExpr(crate::key_expr::KeyExprInner::BorrowedWire {
                         key_expr,
                         expr_id,
+                        mapping: Mapping::Sender,
                         prefix_len,
                         session_id,
                     })
@@ -587,6 +593,7 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
                     KeyExpr(crate::key_expr::KeyExprInner::Wire {
                         key_expr,
                         expr_id,
+                        mapping: Mapping::Sender,
                         prefix_len,
                         session_id,
                     })
