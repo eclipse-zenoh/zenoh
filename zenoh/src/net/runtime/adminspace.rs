@@ -215,7 +215,11 @@ impl AdminSpace {
             }
         });
 
-        let primitives = runtime.router.new_primitives(admin.clone());
+        let primitives = runtime
+            .router
+            .as_ref()
+            .unwrap()
+            .new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(Declare {
@@ -474,7 +478,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
         .try_into()
         .unwrap();
 
-    let tables = zread!(context.runtime.router.tables.tables);
+    let tables = zread!(context.runtime.router.as_ref().unwrap().tables.tables);
 
     if let Err(e) = query
         .reply(Ok(Sample::new(
@@ -501,7 +505,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
         .try_into()
         .unwrap();
 
-    let tables = zread!(context.runtime.router.tables.tables);
+    let tables = zread!(context.runtime.router.as_ref().unwrap().tables.tables);
 
     if let Err(e) = query
         .reply(Ok(Sample::new(
@@ -524,7 +528,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
 }
 
 fn subscribers_data(context: &AdminContext, query: Query) {
-    let tables = zread!(context.runtime.router.tables.tables);
+    let tables = zread!(context.runtime.router.as_ref().unwrap().tables.tables);
     for sub in tables.router_subs.iter() {
         let key = KeyExpr::try_from(format!(
             "@/router/{}/subscriber/{}",
@@ -541,7 +545,7 @@ fn subscribers_data(context: &AdminContext, query: Query) {
 }
 
 fn queryables_data(context: &AdminContext, query: Query) {
-    let tables = zread!(context.runtime.router.tables.tables);
+    let tables = zread!(context.runtime.router.as_ref().unwrap().tables.tables);
     for qabl in tables.router_qabls.iter() {
         let key = KeyExpr::try_from(format!(
             "@/router/{}/queryable/{}",

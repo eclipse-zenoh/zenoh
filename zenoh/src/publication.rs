@@ -14,7 +14,6 @@
 
 //! Publishing primitives.
 
-use crate::net::transport::Primitives;
 use crate::prelude::*;
 use crate::Encoding;
 use crate::SessionRef;

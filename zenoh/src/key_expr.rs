@@ -26,7 +26,6 @@ use zenoh_protocol::{
     network::{declare, DeclareBody, Mapping, UndeclareKeyExpr},
 };
 use zenoh_result::ZResult;
-use zenoh_transport::Primitives;
 
 use crate::{prelude::Selector, Session, Undeclarable};
 

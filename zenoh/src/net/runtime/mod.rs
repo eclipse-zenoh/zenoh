@@ -21,10 +21,11 @@ mod adminspace;
 pub mod orchestrator;
 
 use super::routing;
+use super::routing::face::Face;
 use super::routing::pubsub::full_reentrant_route_data;
-use super::routing::router::{LinkStateInterceptor, Router};
+use super::routing::router::Router;
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
-use crate::GIT_VERSION;
+use crate::{Session, GIT_VERSION};
 pub use adminspace::AdminSpace;
 use async_std::task::JoinHandle;
 use futures::stream::StreamExt;
@@ -41,14 +42,15 @@ use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::{bail, ZResult};
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
+    DeMux, Mux, TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
     TransportUnicast,
 };
 
 pub struct RuntimeState {
     pub zid: ZenohId,
     pub whatami: WhatAmI,
-    pub router: Arc<Router>,
+    pub router: Option<Arc<Router>>,
+    pub(crate) handler: Arc<RuntimeTransportEventHandler>,
     pub config: Notifier<Config>,
     pub manager: TransportManager,
     pub transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
@@ -110,17 +112,20 @@ impl Runtime {
         let queries_default_timeout =
             Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
 
-        let router = Arc::new(Router::new(
-            zid,
-            whatami,
-            hlc.clone(),
-            drop_future_timestamp,
-            router_peers_failover_brokering,
-            queries_default_timeout,
-        ));
+        let router = (whatami != WhatAmI::Client).then(|| {
+            Arc::new(Router::new(
+                zid,
+                whatami,
+                hlc.clone(),
+                drop_future_timestamp,
+                router_peers_failover_brokering,
+                queries_default_timeout,
+            ))
+        });
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(None),
+            api: std::sync::RwLock::new(None),
         });
 
         let transport_manager = TransportManager::builder()
@@ -137,6 +142,7 @@ impl Runtime {
                 zid,
                 whatami,
                 router,
+                handler: handler.clone(),
                 config: config.clone(),
                 manager: transport_manager,
                 transport_handlers: std::sync::RwLock::new(vec![]),
@@ -146,15 +152,17 @@ impl Runtime {
             }),
         };
         *handler.runtime.write().unwrap() = Some(runtime.clone());
-        get_mut_unchecked(&mut runtime.router.clone()).init_link_state(
-            runtime.clone(),
-            router_link_state,
-            peer_link_state,
-            router_peers_failover_brokering,
-            gossip,
-            gossip_multihop,
-            autoconnect,
-        );
+        if whatami != WhatAmI::Client {
+            get_mut_unchecked(&mut runtime.router.as_ref().unwrap().clone()).init_link_state(
+                runtime.clone(),
+                router_link_state,
+                peer_link_state,
+                router_peers_failover_brokering,
+                gossip,
+                gossip_multihop,
+                autoconnect,
+            );
+        }
 
         let receiver = config.subscribe();
         runtime.spawn({
@@ -211,8 +219,9 @@ impl Runtime {
     }
 }
 
-struct RuntimeTransportEventHandler {
-    runtime: std::sync::RwLock<Option<Runtime>>,
+pub(crate) struct RuntimeTransportEventHandler {
+    pub(crate) runtime: std::sync::RwLock<Option<Runtime>>,
+    pub(crate) api: std::sync::RwLock<Option<Session>>,
 }
 
 impl TransportEventHandler for RuntimeTransportEventHandler {
@@ -230,12 +239,27 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                             handler.new_unicast(peer.clone(), transport.clone()).ok()
                         })
                         .collect();
-                Ok(Arc::new(RuntimeSession {
-                    runtime: runtime.clone(),
-                    endpoint: std::sync::RwLock::new(None),
-                    main_handler: runtime.router.new_transport_unicast(transport).unwrap(),
-                    slave_handlers,
-                }))
+                if let Some(router) = runtime.router.as_ref() {
+                    let main_handler = router.new_transport_unicast(transport).unwrap();
+                    let face = Some(main_handler.face.clone());
+                    Ok(Arc::new(RuntimeSession {
+                        runtime: runtime.clone(),
+                        endpoint: std::sync::RwLock::new(None),
+                        main_handler,
+                        slave_handlers,
+                        face,
+                    }))
+                } else {
+                    let api = zread!(self.api).as_ref().unwrap().clone();
+                    zwrite!(api.state).primitives = Some(Arc::new(Mux::new(transport)));
+                    Ok(Arc::new(RuntimeSession {
+                        runtime: runtime.clone(),
+                        endpoint: std::sync::RwLock::new(None),
+                        main_handler: Arc::new(DeMux::new(api)),
+                        slave_handlers,
+                        face: None,
+                    }))
+                }
             }
             None => bail!("Runtime not yet ready!"),
         }
@@ -245,25 +269,26 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 pub(super) struct RuntimeSession {
     pub(super) runtime: Runtime,
     pub(super) endpoint: std::sync::RwLock<Option<EndPoint>>,
-    pub(super) main_handler: Arc<LinkStateInterceptor>,
+    pub(super) main_handler: Arc<dyn TransportPeerEventHandler>,
     pub(super) slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>>,
+    pub(super) face: Option<Face>,
 }
 
 impl TransportPeerEventHandler for RuntimeSession {
     fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
         // critical path shortcut
-        if let NetworkBody::Push(data) = msg.body {
-            let face = &self.main_handler.face.state;
-
-            full_reentrant_route_data(
-                &self.main_handler.tables.tables,
-                face,
-                &data.wire_expr,
-                data.ext_qos,
-                data.payload,
-                data.ext_nodeid.node_id.into(),
-            );
-            return Ok(());
+        if let Some(face) = &self.face.as_ref() {
+            if let NetworkBody::Push(data) = msg.body {
+                full_reentrant_route_data(
+                    &self.runtime.router.as_ref().unwrap().tables.tables,
+                    &face.state,
+                    &data.wire_expr,
+                    data.ext_qos,
+                    data.payload,
+                    data.ext_nodeid.node_id.into(),
+                );
+                return Ok(());
+            }
         }
 
         self.main_handler.handle_message(msg)

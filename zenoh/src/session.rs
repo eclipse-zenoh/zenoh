@@ -20,7 +20,6 @@ use crate::info::*;
 use crate::key_expr::KeyExprInner;
 #[zenoh_macros::unstable]
 use crate::liveliness::{Liveliness, LivelinessTokenState};
-use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
 use crate::net::transport::Primitives;
 use crate::prelude::Locality;
@@ -52,6 +51,7 @@ use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
+use zenoh_protocol::core::WhatAmI;
 use zenoh_protocol::network::common::ext::WireExprType;
 use zenoh_protocol::network::declare;
 use zenoh_protocol::network::ext;
@@ -98,7 +98,7 @@ zconfigurable! {
 }
 
 pub(crate) struct SessionState {
-    pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
+    pub(crate) primitives: Option<Arc<dyn Primitives + Send + Sync>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicQueryId,
     pub(crate) decl_id_counter: AtomicUsize,
@@ -341,7 +341,6 @@ impl Session {
         aggregated_publishers: Vec<OwnedKeyExpr>,
     ) -> impl Resolve<Session> {
         ResolveClosure::new(move || {
-            let router = runtime.router.clone();
             let state = Arc::new(RwLock::new(SessionState::new(
                 aggregated_subscribers,
                 aggregated_publishers,
@@ -355,10 +354,16 @@ impl Session {
 
             runtime.new_handler(Arc::new(admin::Handler::new(session.clone())));
 
-            let primitives = Some(router.new_primitives(Arc::new(session.clone())));
-            zwrite!(state).primitives = primitives;
+            if runtime.whatami != WhatAmI::Client {
+                let router = runtime.router.as_ref().unwrap().clone();
+                zwrite!(state).primitives = Some(router.new_primitives(Arc::new(session.clone())));
+            } else {
+                *runtime.handler.api.write().unwrap() = Some(session.clone());
+            }
 
             admin::init(&session);
+
+            // TODO: start ?
 
             session
         })
@@ -456,8 +461,9 @@ impl Session {
             trace!("close()");
             self.runtime.close().await?;
 
-            let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
-            primitives.send_close();
+            if let Some(primitives) = zwrite!(self.state).primitives.as_ref() {
+                primitives.send_close();
+            }
 
             Ok(())
         })
