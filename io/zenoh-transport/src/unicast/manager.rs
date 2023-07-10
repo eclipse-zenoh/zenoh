@@ -249,6 +249,11 @@ impl TransportManager {
         TransportManagerBuilderUnicast::default()
     }
 
+    #[cfg(feature = "shared-memory")]
+    pub(crate) fn shm(&self) -> &Arc<SharedMemoryUnicast> {
+        &self.state.unicast.shm
+    }
+
     pub async fn close_unicast(&self) {
         log::trace!("TransportManagerUnicast::clear())");
 
@@ -485,7 +490,7 @@ impl TransportManager {
             .collect()
     }
 
-    pub(super) async fn del_transport_unicast(&self, peer: &ZenohId) -> ZResult<()> {
+    pub async fn del_transport_unicast(&self, peer: &ZenohId) -> ZResult<()> {
         let _ = zasynclock!(self.state.unicast.transports)
             .remove(peer)
             .ok_or_else(|| {

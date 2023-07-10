@@ -21,6 +21,12 @@ pub mod flag {
     pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
 }
 
+pub mod id {
+    pub const OAM_LINKSTATE: crate::transport::oam::OamId = 0x0001;
+    pub const OAM_KEEPALIVE: crate::transport::oam::OamId = 0x0002;
+    pub const OAM_CLOSE: crate::transport::oam::OamId = 0x0003;
+}
+
 /// ```text
 /// Flags:
 /// - E |: Encoding     The encoding of the extension

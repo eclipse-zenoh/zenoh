@@ -20,9 +20,12 @@
 mod common;
 mod manager;
 mod primitives;
+pub mod unicast;
+
 #[cfg(feature = "shared-memory")]
 mod shm;
-pub mod unicast;
+#[cfg(feature = "shared-memory")]
+pub mod shm_unicast;
 
 pub use manager::*;
 pub use primitives::*;

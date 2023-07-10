@@ -11,73 +11,42 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::TransportUnicastInner;
+use super::transport::ShmTransportUnicastInner;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
 use zenoh_core::zread;
 use zenoh_protocol::network::NetworkMessage;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
+use zenoh_result::{bail, ZResult};
 
-impl TransportUnicastInner {
-    fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
-        macro_rules! zpush {
-            ($guard:expr, $pipeline:expr, $msg:expr) => {
-                // Drop the guard before the push_zenoh_message since
-                // the link could be congested and this operation could
-                // block for fairly long time
-                let pl = $pipeline.clone();
-                drop($guard);
-                log::trace!("Scheduled: {:?}", $msg);
-                return pl.push_network_message($msg);
-            };
+impl ShmTransportUnicastInner {
+    async fn schedule_on_link(&self, msg: NetworkMessage) -> ZResult<()> {
+        let guard = zread!(self.link);
+        match guard.as_ref() {
+            Some(l) => l.send(msg).await,
+            None => {
+                // No Link found
+                log::trace!("Message dropped because the transport has no link: {}", msg);
+                bail!("Message dropped because the transport has no link: {}", msg)
+            }
         }
-
-        let guard = zread!(self.links);
-        // First try to find the best match between msg and link reliability
-        if let Some(pl) = guard
-            .iter()
-            .filter_map(|tl| {
-                if msg.is_reliable() == tl.link.is_reliable() {
-                    tl.pipeline.as_ref()
-                } else {
-                    None
-                }
-            })
-            .next()
-        {
-            zpush!(guard, pl, msg);
-        }
-
-        // No best match found, take the first available link
-        if let Some(pl) = guard.iter().filter_map(|tl| tl.pipeline.as_ref()).next() {
-            zpush!(guard, pl, msg);
-        }
-
-        // No Link found
-        log::trace!(
-            "Message dropped because the transport has no links: {}",
-            msg
-        );
-
-        false
     }
 
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(crate) fn schedule(&self, mut msg: NetworkMessage) -> bool {
+    pub(crate) async fn schedule(&self, mut msg: NetworkMessage) -> ZResult<()> {
         #[cfg(feature = "shared-memory")]
         {
             // todo: need to re-engineer this!
             //let res = if self.config.is_shm {
             //    crate::shm::map_zmsg_to_shminfo(&mut msg)
             //} else {
-            //    crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.state.unicast.shm.reader)
+            //    crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shm().reader)
             //};
             //if let Err(e) = res {
-            //    log::trace!("Failed SHM conversion: {}", e);
-            //    return false;
+            //    bail!("Failed SHM conversion: {}", e);
             //}
         }
 
@@ -104,7 +73,7 @@ impl TransportUnicastInner {
             ZenohBody::LinkStateList(_) => self.stats.inc_tx_z_linkstate_msgs(1),
         }
 
-        let res = self.schedule_on_link(msg);
+        let res = self.schedule_on_link(msg).await;
 
         #[cfg(feature = "stats")]
         if res {

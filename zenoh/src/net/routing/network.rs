@@ -13,7 +13,6 @@ use crate::net::codec::Zenoh080Routing;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::net::protocol::linkstate::{LinkState, LinkStateList};
-use crate::net::protocol::OAM_LINKSTATE;
 use crate::net::runtime::Runtime;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
@@ -25,6 +24,7 @@ use zenoh_codec::WCodec;
 use zenoh_link::Locator;
 use zenoh_protocol::common::ZExtBody;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, ZenohId};
+use zenoh_protocol::network::oam::id::OAM_LINKSTATE;
 use zenoh_protocol::network::{oam, NetworkBody, NetworkMessage, Oam};
 use zenoh_transport::TransportUnicast;
 

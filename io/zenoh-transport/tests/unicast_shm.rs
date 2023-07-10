@@ -27,8 +27,12 @@ mod tests {
     use zenoh_core::zasync_executor_init;
     use zenoh_link::Link;
     use zenoh_protocol::{
-        core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
-        zenoh::{Data, ZenohBody, ZenohMessage},
+        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
+        network::{
+            ext::{NodeIdType, QoSType},
+            NetworkBody, NetworkMessage, Push,
+        },
+        zenoh_new::{PushBody, Put},
     };
     use zenoh_result::ZResult;
     use zenoh_shm::SharedMemoryManager;
@@ -93,14 +97,17 @@ mod tests {
     }
 
     impl TransportPeerEventHandler for SCPeer {
-        fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
+        fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
             if self.is_shm {
                 print!("s");
             } else {
                 print!("n");
             }
             let payload = match message.body {
-                ZenohBody::Data(Data { payload, .. }) => payload.contiguous().into_owned(),
+                NetworkBody::Push(Push {
+                    payload: PushBody::Put(Put { payload, .. }),
+                    ..
+                }) => payload.contiguous().into_owned(),
                 _ => panic!("Unsolicited message"),
             };
             assert_eq!(payload.len(), MSG_SIZE);
@@ -210,26 +217,24 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = "test".into();
             let payload: ZBuf = sbuf.into();
-            let channel = Channel {
-                priority: Priority::default(),
-                reliability: Reliability::Reliable,
-            };
-            let congestion_control = CongestionControl::Block;
-            let data_info = None;
-            let routing_context = None;
-            let reply_context = None;
 
-            let message = ZenohMessage::make_data(
-                key,
-                payload,
-                channel,
-                congestion_control,
-                data_info,
-                routing_context,
-                reply_context,
-            );
+            // Create the message to send
+            let message: NetworkMessage = Push {
+                wire_expr: "test".into(),
+                ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+                ext_tstamp: None,
+                ext_nodeid: NodeIdType::default(),
+                payload: Put {
+                    payload,
+                    timestamp: None,
+                    encoding: Encoding::default(),
+                    ext_sinfo: None,
+                    ext_unknown: vec![],
+                }
+                .into(),
+            }
+            .into();
 
             peer_shm02_transport.schedule(message.clone()).unwrap();
         }
@@ -261,26 +266,24 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = "test".into();
             let payload: ZBuf = sbuf.into();
-            let channel = Channel {
-                priority: Priority::default(),
-                reliability: Reliability::Reliable,
-            };
-            let congestion_control = CongestionControl::Block;
-            let data_info = None;
-            let routing_context = None;
-            let reply_context = None;
 
-            let message = ZenohMessage::make_data(
-                key,
-                payload,
-                channel,
-                congestion_control,
-                data_info,
-                routing_context,
-                reply_context,
-            );
+            // Create the message to send
+            let message: NetworkMessage = Push {
+                wire_expr: "test".into(),
+                ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+                ext_tstamp: None,
+                ext_nodeid: NodeIdType::default(),
+                payload: Put {
+                    payload,
+                    timestamp: None,
+                    encoding: Encoding::default(),
+                    ext_sinfo: None,
+                    ext_unknown: vec![],
+                }
+                .into(),
+            }
+            .into();
 
             peer_net01_transport.schedule(message.clone()).unwrap();
         }

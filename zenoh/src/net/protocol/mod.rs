@@ -12,5 +12,3 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub(crate) mod linkstate;
-
-pub(crate) const OAM_LINKSTATE: u16 = 0x0001;
