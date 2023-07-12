@@ -605,13 +605,15 @@ impl TlsClientConfig {
 
         // Allows mixed user-generated CA and webPKI CA
         log::debug!("Loading default Web PKI certificates.");
-        let mut root_cert_store: RootCertStore = RootCertStore { roots: load_default_webpki_certs().roots };
-        
-        if let Some(custom_root_cert) = load_trust_anchors(config)?{
+        let mut root_cert_store: RootCertStore = RootCertStore {
+            roots: load_default_webpki_certs().roots,
+        };
+
+        if let Some(custom_root_cert) = load_trust_anchors(config)? {
             log::debug!("Loading user-generated certificates.");
             root_cert_store.add_server_trust_anchors(custom_root_cert.roots.into_iter());
         }
-            
+
         let cc = if client_auth {
             log::debug!("Loading client authentication key and certificate...");
             let tls_client_private_key = TlsClientConfig::load_tls_private_key(config).await?;
