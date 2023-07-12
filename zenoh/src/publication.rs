@@ -151,6 +151,8 @@ impl SyncResolve for PutBuilder<'_, '_> {
                         timestamp,
                         encoding: value.encoding.clone(),
                         ext_sinfo: None,
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
                         ext_unknown: vec![],
                         payload: value.payload.clone(),
                     }),
@@ -439,6 +441,8 @@ impl SyncResolve for Publication<'_> {
                     timestamp: publisher.session.runtime.new_timestamp(),
                     encoding: value.encoding.clone(),
                     ext_sinfo: None,
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: None,
                     ext_unknown: vec![],
                     payload: value.payload.clone(),
                 }),

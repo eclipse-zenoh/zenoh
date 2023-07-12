@@ -188,8 +188,6 @@ impl Sample {
             kind: self.kind,
             encoding: Some(self.value.encoding),
             timestamp: self.timestamp,
-            #[cfg(feature = "shared-memory")]
-            sliced: false,
             #[cfg(feature = "unstable")]
             source_id: self.source_info.source_id,
             #[cfg(not(feature = "unstable"))]

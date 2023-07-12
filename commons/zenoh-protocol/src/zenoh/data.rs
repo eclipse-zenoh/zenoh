@@ -150,8 +150,6 @@ pub type SourceSn = u64;
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct DataInfo {
-    #[cfg(feature = "shared-memory")]
-    pub sliced: bool,
     pub kind: SampleKind,
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
@@ -166,8 +164,6 @@ impl DataInfo {
 
         let mut rng = rand::thread_rng();
 
-        #[cfg(feature = "shared-memory")]
-        let sliced = rng.gen_bool(0.5);
         let kind = SampleKind::try_from(rng.gen_range(0..=1)).unwrap();
         let encoding = rng.gen_bool(0.5).then(Encoding::rand);
         let timestamp = rng.gen_bool(0.5).then(|| {
@@ -179,8 +175,6 @@ impl DataInfo {
         let source_sn = rng.gen_bool(0.5).then(|| rng.gen());
 
         Self {
-            #[cfg(feature = "shared-memory")]
-            sliced,
             kind,
             encoding,
             timestamp,

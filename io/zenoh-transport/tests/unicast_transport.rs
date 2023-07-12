@@ -442,6 +442,8 @@ async fn test_transport(
             timestamp: None,
             encoding: Encoding::default(),
             ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
             ext_unknown: vec![],
         }
         .into(),
@@ -551,18 +553,10 @@ fn transport_unicast_tcp_only() {
             priority: Priority::default(),
             reliability: Reliability::Reliable,
         },
-        // Channel {
-        //     priority: Priority::default(),
-        //     reliability: Reliability::BestEffort,
-        // },
         Channel {
             priority: Priority::RealTime,
             reliability: Reliability::Reliable,
         },
-        //     Channel {
-        //         priority: Priority::RealTime,
-        //         reliability: Reliability::BestEffort,
-        //     },
     ];
     // Run
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));

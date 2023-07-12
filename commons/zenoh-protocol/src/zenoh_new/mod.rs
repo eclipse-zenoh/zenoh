@@ -201,6 +201,10 @@ pub mod ext {
 
     #[cfg(feature = "shared-memory")]
     impl<const ID: u8> ShmType<{ ID }> {
+        pub const fn new() -> Self {
+            Self
+        }
+
         #[cfg(feature = "test")]
         pub const fn rand() -> Self {
             Self

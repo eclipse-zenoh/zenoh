@@ -84,6 +84,8 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
             timestamp: None,
             encoding: Encoding::default(),
             ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
             ext_unknown: vec![],
         }
         .into(),
