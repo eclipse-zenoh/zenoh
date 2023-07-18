@@ -43,7 +43,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
         .zid(router_id)
         .whatami(WhatAmI::Router)
         .defrag_buff_size(MSG_DEFRAG_BUF)
-        .build(Arc::new(DummyTransportEventHandler::default()))
+        .build(Arc::new(DummyTransportEventHandler))
         .unwrap();
 
     // Create the client transport manager
@@ -51,7 +51,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
         .whatami(WhatAmI::Client)
         .zid(client_id)
         .defrag_buff_size(MSG_DEFRAG_BUF)
-        .build(Arc::new(DummyTransportEventHandler::default()))
+        .build(Arc::new(DummyTransportEventHandler))
         .unwrap();
 
     // Create the listener on the router
