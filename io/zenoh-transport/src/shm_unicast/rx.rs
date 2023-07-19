@@ -1,4 +1,4 @@
-use crate::shm_unicast::oam_extensions::unpack_oam_close;
+use crate::{shm_unicast::oam_extensions::unpack_oam_close, transport_unicast_inner::TransportUnicastInnerTrait};
 
 //
 // Copyright (c) 2023 ZettaScale Technology
@@ -130,13 +130,15 @@ impl ShmTransportUnicastInner {
             }
 
             match msg.body {
-                zenoh_protocol::network::NetworkBody::OAM(oam) => match oam.id {
+                zenoh_protocol::network::NetworkBody::OAM(ref oam) => match oam.id {
                     OAM_KEEPALIVE => {}
                     OAM_CLOSE => {
                         let oam_close = unpack_oam_close(oam)?;
                         self.handle_close(link, oam_close)?;
                     }
-                    _ => {}
+                    _ => {
+                        self.trigger_callback(msg)?;
+                    }
                 },
                 _ => {
                     self.trigger_callback(msg)?;

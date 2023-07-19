@@ -286,7 +286,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
                             assert_eq!(ll.len(), 1);
                         }
                     }
-                    let res = s.schedule(message.clone());
+                    let res = task::block_on(s.schedule(message.clone()));
                     if res.is_err() {
                         print!("X");
                         std::io::stdout().flush().unwrap();

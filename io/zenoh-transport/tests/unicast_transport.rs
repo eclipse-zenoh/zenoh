@@ -448,7 +448,7 @@ async fn test_transport(
     }
     .into();
     for _ in 0..MSG_COUNT {
-        client_transport.schedule(message.clone()).unwrap();
+        client_transport.schedule(message.clone()).await.unwrap();
         // print!("S-{i} ");
         use std::io::Write;
         std::io::stdout().flush().unwrap();

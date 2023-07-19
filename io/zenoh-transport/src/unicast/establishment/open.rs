@@ -512,6 +512,7 @@ pub(crate) async fn open_link(
         #[cfg(feature = "shared-memory")]
         is_shm: state.ext_shm.is_shm(),
     };
+
     let transport = step!(manager
         .init_transport_unicast(config)
         .await

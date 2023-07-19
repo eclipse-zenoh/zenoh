@@ -294,7 +294,7 @@ async fn single_run(router_handler: Arc<SHRouter>, client_transport: TransportUn
 
             println!("Sending {MSG_COUNT} messages... {p:?} {ms}");
             for _ in 0..MSG_COUNT {
-                client_transport.schedule(message.clone()).unwrap();
+                client_transport.schedule(message.clone()).await.unwrap();
             }
 
             // Wait for the messages to arrive to the other side

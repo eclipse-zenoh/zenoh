@@ -18,7 +18,10 @@ pub(crate) mod rx;
 #[cfg(feature = "shared-memory")]
 pub(crate) mod shm;
 pub(crate) mod transport;
+pub(crate) mod transport_unicast_inner;
 pub(crate) mod tx;
+
+use self::transport_unicast_inner::TransportUnicastInnerTrait;
 
 use super::common;
 #[cfg(feature = "stats")]
@@ -29,7 +32,6 @@ use crate::establishment::ext::auth::ZPublicKey;
 pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};
-use transport::TransportUnicastInner;
 use zenoh_core::zcondfeat;
 use zenoh_link::Link;
 use zenoh_protocol::network::NetworkMessage;
@@ -99,11 +101,11 @@ pub(crate) struct TransportConfigUnicast {
 /// [`TransportUnicast`] is the transport handler returned
 /// when opening a new unicast transport
 #[derive(Clone)]
-pub struct TransportUnicast(Weak<TransportUnicastInner>);
+pub struct TransportUnicast(Weak<dyn TransportUnicastInnerTrait>);
 
 impl TransportUnicast {
     #[inline(always)]
-    pub(super) fn get_inner(&self) -> ZResult<Arc<TransportUnicastInner>> {
+    pub(super) fn get_inner(&self) -> ZResult<Arc<dyn TransportUnicastInnerTrait>> {
         self.0
             .upgrade()
             .ok_or_else(|| zerror!("Transport unicast closed").into())
@@ -121,24 +123,24 @@ impl TransportUnicast {
         Ok(transport.get_whatami())
     }
 
-    #[inline(always)]
-    pub fn get_sn_resolution(&self) -> ZResult<u64> {
-        let transport = self.get_inner()?;
-        Ok(transport.get_sn_resolution().mask())
-    }
+    //#[inline(always)]
+    //pub fn get_sn_resolution(&self) -> ZResult<u64> {
+    //    let transport = self.get_inner()?;
+    //    Ok(transport.get_sn_resolution().mask())
+    //}
 
-    #[cfg(feature = "shared-memory")]
-    #[inline(always)]
-    pub fn is_shm(&self) -> ZResult<bool> {
-        let transport = self.get_inner()?;
-        Ok(transport.is_shm())
-    }
+    //#[cfg(feature = "shared-memory")]
+    //#[inline(always)]
+    //pub fn is_shm(&self) -> ZResult<bool> {
+    //    let transport = self.get_inner()?;
+    //    Ok(transport.is_shm())
+    //}
 
-    #[inline(always)]
-    pub fn is_qos(&self) -> ZResult<bool> {
-        let transport = self.get_inner()?;
-        Ok(transport.is_qos())
-    }
+    //#[inline(always)]
+    //pub fn is_qos(&self) -> ZResult<bool> {
+    //    let transport = self.get_inner()?;
+    //    Ok(transport.is_qos())
+    //}
 
     #[inline(always)]
     pub fn get_callback(&self) -> ZResult<Option<Arc<dyn TransportPeerEventHandler>>> {
@@ -174,10 +176,9 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn schedule(&self, message: NetworkMessage) -> ZResult<()> {
+    pub async fn schedule(&self, message: NetworkMessage) -> ZResult<()> {
         let transport = self.get_inner()?;
-        transport.schedule(message);
-        Ok(())
+        transport.schedule(message).await
     }
 
     #[inline(always)]
@@ -202,8 +203,8 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
-        self.schedule(message)
+    pub async fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
+        self.schedule(message).await
     }
 
     #[cfg(feature = "stats")]
@@ -212,9 +213,9 @@ impl TransportUnicast {
     }
 }
 
-impl From<&Arc<TransportUnicastInner>> for TransportUnicast {
-    fn from(s: &Arc<TransportUnicastInner>) -> TransportUnicast {
-        TransportUnicast(Arc::downgrade(s))
+impl From<&Arc<dyn TransportUnicastInnerTrait>> for TransportUnicast {
+    fn from(link: &Arc<dyn TransportUnicastInnerTrait>) -> TransportUnicast {
+        TransportUnicast(Arc::downgrade(link))
     }
 }
 
@@ -231,13 +232,16 @@ impl fmt::Debug for TransportUnicast {
         match self.get_inner() {
             Ok(transport) => {
                 let is_shm = zcondfeat!("shared-memory", transport.is_shm(), false);
-                f.debug_struct("Transport Unicast")
-                    .field("zid", &transport.get_zid())
-                    .field("whatami", &transport.get_whatami())
-                    .field("sn_resolution", &transport.get_sn_resolution())
-                    .field("is_qos", &transport.is_qos())
-                    .field("is_shm", &is_shm)
-                    .field("links", &transport.get_links())
+
+                transport
+                    .add_debug_fields(
+                        f.debug_struct("Transport Unicast")
+                .field("zid", &transport.get_zid())
+                .field("whatami", &transport.get_whatami())
+                .field("is_qos", &transport.is_qos())
+                .field("is_shm", &is_shm)
+                .field("links", &transport.get_links()),
+                    )
                     .finish()
             }
             Err(e) => {

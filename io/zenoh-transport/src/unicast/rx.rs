@@ -1,3 +1,5 @@
+use crate::transport_unicast_inner::TransportUnicastInnerTrait;
+
 //
 // Copyright (c) 2023 ZettaScale Technology
 //

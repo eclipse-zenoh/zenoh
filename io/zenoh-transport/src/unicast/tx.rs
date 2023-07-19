@@ -66,7 +66,7 @@ impl TransportUnicastInner {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(crate) fn schedule(&self, mut msg: NetworkMessage) -> bool {
+    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessage) -> bool {
         #[cfg(feature = "shared-memory")]
         {
             // todo: need to re-engineer this!

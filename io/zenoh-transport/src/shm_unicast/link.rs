@@ -184,8 +184,8 @@ impl ShmTransportLinkUnicast {
 
     pub(super) async fn close(mut self) -> ZResult<()> {
         log::trace!("{}: closing", self.link);
-        self.stop_rx();
-        self.stop_keepalive();
+        self.stop_rx().await;
+        self.stop_keepalive().await;
         self.link.close().await
     }
 }

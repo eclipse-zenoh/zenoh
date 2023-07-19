@@ -18,6 +18,7 @@ use crate::unicast::establishment::ext::multilink::MultiLink;
 #[cfg(feature = "shared-memory")]
 use crate::unicast::shm::SharedMemoryUnicast;
 use crate::{
+    transport_unicast_inner::TransportUnicastInnerTrait,
     unicast::{transport::TransportUnicastInner, TransportConfigUnicast, TransportUnicast},
     TransportManager,
 };
@@ -381,7 +382,9 @@ impl TransportManager {
                     return Err(e.into());
                 }
 
-                Ok(transport.into())
+                // todo: I cannot find a way to make transport.into() work for TransportUnicastInnerTrait
+                let weak = Arc::downgrade(transport);
+                Ok(TransportUnicast(weak))
             }
             None => {
                 // Then verify that we haven't reached the transport number limit
@@ -413,7 +416,9 @@ impl TransportManager {
                 let a_t = Arc::new(TransportUnicastInner::make(self.clone(), stc)?);
 
                 // Add the transport transport to the list of active transports
-                let transport: TransportUnicast = (&a_t).into();
+                // todo: I cannot find a way to make transport.into() work for TransportUnicastInnerTrait
+                let weak = Arc::downgrade(&a_t);
+                let transport = TransportUnicast(weak);
                 guard.insert(config.zid, a_t);
 
                 #[cfg(feature = "shared-memory")]
@@ -480,13 +485,21 @@ impl TransportManager {
     pub async fn get_transport_unicast(&self, peer: &ZenohId) -> Option<TransportUnicast> {
         zasynclock!(self.state.unicast.transports)
             .get(peer)
-            .map(|t| t.into())
+            .map(|t| {
+                // todo: I cannot find a way to make transport.into() work for TransportUnicastInnerTrait
+                let weak = Arc::downgrade(t);
+                TransportUnicast(weak)
+            })
     }
 
     pub async fn get_transports_unicast(&self) -> Vec<TransportUnicast> {
         zasynclock!(self.state.unicast.transports)
             .values()
-            .map(|t| t.into())
+            .map(|t| {
+                // todo: I cannot find a way to make transport.into() work for TransportUnicastInnerTrait
+                let weak = Arc::downgrade(t);
+                TransportUnicast(weak)
+            })
             .collect()
     }
 

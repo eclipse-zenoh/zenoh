@@ -46,7 +46,7 @@ pub(crate) fn pack_oam_close(close: Close) -> ZResult<NetworkMessage> {
     Ok(msg)
 }
 
-pub(crate) fn unpack_oam_close(oam: Oam) -> ZResult<Close> {
+pub(crate) fn unpack_oam_close(oam: &Oam) -> ZResult<Close> {
     match oam.body {
         ZExtBody::ZBuf(ref body) => {
             let codec = Zenoh080::new();
