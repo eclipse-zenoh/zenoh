@@ -23,19 +23,19 @@ mod tests {
         },
         time::Duration,
     };
-    use zenoh_buffers::{SplitBuffer, ZBuf};
+    use zenoh_buffers::{SplitBuffer, ZSlice};
     use zenoh_core::zasync_executor_init;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
         network::{
-            ext::{NodeIdType, QoSType},
+            push::ext::{NodeIdType, QoSType},
             NetworkBody, NetworkMessage, Push,
         },
         zenoh_new::{PushBody, Put},
     };
     use zenoh_result::ZResult;
-    use zenoh_shm::SharedMemoryManager;
+    use zenoh_shm::{SharedMemoryBuf, SharedMemoryManager};
     use zenoh_transport::{
         TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
         TransportUnicast,
@@ -104,10 +104,24 @@ mod tests {
                 print!("n");
             }
             let payload = match message.body {
-                NetworkBody::Push(Push {
-                    payload: PushBody::Put(Put { payload, .. }),
-                    ..
-                }) => payload.contiguous().into_owned(),
+                NetworkBody::Push(m) => match m.payload {
+                    PushBody::Put(Put { payload, .. }) => {
+                        for zs in payload.zslices() {
+                            let ZSlice { buf, .. } = zs;
+                            if self.is_shm
+                                && buf.as_any().downcast_ref::<SharedMemoryBuf>().is_none()
+                            {
+                                panic!("Expected SharedMemoryBuf");
+                            } else if !self.is_shm
+                                && buf.as_any().downcast_ref::<SharedMemoryBuf>().is_some()
+                            {
+                                panic!("Not Expected SharedMemoryBuf");
+                            }
+                        }
+                        payload.contiguous().into_owned()
+                    }
+                    _ => panic!("Unsolicited message"),
+                },
                 _ => panic!("Unsolicited message"),
             };
             assert_eq!(payload.len(), MSG_SIZE);
@@ -217,26 +231,24 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let payload: ZBuf = sbuf.into();
-
-            // Create the message to send
             let message: NetworkMessage = Push {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
                 ext_tstamp: None,
                 ext_nodeid: NodeIdType::default(),
                 payload: Put {
-                    payload,
+                    payload: sbuf.into(),
                     timestamp: None,
                     encoding: Encoding::default(),
                     ext_sinfo: None,
+                    ext_shm: None,
                     ext_unknown: vec![],
                 }
                 .into(),
             }
             .into();
 
-            peer_shm02_transport.schedule(message.clone()).await.unwrap();
+            peer_shm02_transport.schedule(message).unwrap();
         }
 
         // Wait a little bit
@@ -266,26 +278,24 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let payload: ZBuf = sbuf.into();
-
-            // Create the message to send
             let message: NetworkMessage = Push {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
                 ext_tstamp: None,
                 ext_nodeid: NodeIdType::default(),
                 payload: Put {
-                    payload,
+                    payload: sbuf.into(),
                     timestamp: None,
                     encoding: Encoding::default(),
                     ext_sinfo: None,
+                    ext_shm: None,
                     ext_unknown: vec![],
                 }
                 .into(),
             }
             .into();
 
-            peer_net01_transport.schedule(message.clone()).await.unwrap();
+            peer_net01_transport.schedule(message).unwrap();
         }
 
         // Wait a little bit
@@ -356,18 +366,6 @@ mod tests {
         });
 
         let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14010).parse().unwrap();
-        task::block_on(run(&endpoint));
-    }
-
-    #[cfg(all(feature = "transport_shm", feature = "shared-memory"))]
-    #[test]
-    fn transport_shm_shm() {
-        let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
-
-        let endpoint: EndPoint = "shm//tmp/transport_shm_shm".parse().unwrap();
         task::block_on(run(&endpoint));
     }
 }

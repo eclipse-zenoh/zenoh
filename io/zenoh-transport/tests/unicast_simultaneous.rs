@@ -84,6 +84,8 @@ mod tests {
                     timestamp: None,
                     encoding: Encoding::default(),
                     ext_sinfo: None,
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: None,
                     ext_unknown: vec![],
                 }
                 .into(),

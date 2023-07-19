@@ -191,4 +191,23 @@ pub mod ext {
             Self { zid, eid, sn }
         }
     }
+
+    ///  7 6 5 4 3 2 1 0
+    /// +-+-+-+-+-+-+-+-+
+    /// +-+-+-+-+-+-+-+-+
+    #[cfg(feature = "shared-memory")]
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct ShmType<const ID: u8>;
+
+    #[cfg(feature = "shared-memory")]
+    impl<const ID: u8> ShmType<{ ID }> {
+        pub const fn new() -> Self {
+            Self
+        }
+
+        #[cfg(feature = "test")]
+        pub const fn rand() -> Self {
+            Self
+        }
+    }
 }

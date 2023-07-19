@@ -97,10 +97,6 @@ where
     fn write(self, writer: &mut W, x: &DataInfo) -> Self::Output {
         // Options
         let mut options: u8 = 0;
-        #[cfg(feature = "shared-memory")]
-        if x.sliced {
-            options |= zmsg::data::info::SLICED;
-        }
         if x.kind != SampleKind::Put {
             options |= zmsg::data::info::KIND;
         }
@@ -147,10 +143,6 @@ where
     fn read(self, reader: &mut R) -> Result<DataInfo, Self::Error> {
         let mut info = DataInfo::default();
         let options: u8 = self.read(&mut *reader)?;
-        #[cfg(feature = "shared-memory")]
-        {
-            info.sliced = imsg::has_flag(options, zmsg::data::info::SLICED);
-        }
         if imsg::has_flag(options, zmsg::data::info::KIND) {
             let kind: u8 = self.read(&mut *reader)?;
             info.kind = kind.try_into().map_err(|_| DidntRead)?;
@@ -204,27 +196,11 @@ where
         // Body
         self.write(&mut *writer, &x.key)?;
 
-        #[cfg(feature = "shared-memory")]
-        let mut sliced = false;
-
         if let Some(data_info) = x.data_info.as_ref() {
             self.write(&mut *writer, data_info)?;
-            #[cfg(feature = "shared-memory")]
-            {
-                sliced = data_info.sliced;
-            }
         }
 
-        #[cfg(feature = "shared-memory")]
-        {
-            let codec = Zenoh080Condition::new(sliced);
-            codec.write(&mut *writer, &x.payload)?;
-        }
-
-        #[cfg(not(feature = "shared-memory"))]
-        {
-            self.write(&mut *writer, &x.payload)?;
-        }
+        self.write(&mut *writer, &x.payload)?;
 
         Ok(())
     }
@@ -271,31 +247,14 @@ where
         let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, zmsg::flag::K));
         let key: WireExpr<'static> = ccond.read(&mut *reader)?;
 
-        #[cfg(feature = "shared-memory")]
-        let mut is_sliced = false;
-
         let data_info = if imsg::has_flag(self.header, zmsg::flag::I) {
             let di: DataInfo = self.codec.read(&mut *reader)?;
-            #[cfg(feature = "shared-memory")]
-            {
-                is_sliced = di.sliced;
-            }
             Some(di)
         } else {
             None
         };
 
-        let payload: ZBuf = {
-            #[cfg(feature = "shared-memory")]
-            {
-                let codec = Zenoh080Condition::new(is_sliced);
-                codec.read(&mut *reader)?
-            }
-            #[cfg(not(feature = "shared-memory"))]
-            {
-                self.codec.read(&mut *reader)?
-            }
-        };
+        let payload: ZBuf = self.codec.read(&mut *reader)?;
 
         Ok(Data {
             key,

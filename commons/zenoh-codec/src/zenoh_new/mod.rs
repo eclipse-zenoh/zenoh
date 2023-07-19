@@ -24,6 +24,8 @@ use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
+#[cfg(feature = "shared-memory")]
+use zenoh_protocol::common::ZExtUnit;
 use zenoh_protocol::{
     common::{imsg, ZExtZBufHeader},
     core::ZenohId,
@@ -192,5 +194,34 @@ where
         let sn: u32 = self.codec.read(&mut *reader)?;
 
         Ok((ext::SourceInfoType { zid, eid, sn }, more))
+    }
+}
+
+// Extension: Shm
+#[cfg(feature = "shared-memory")]
+impl<W, const ID: u8> WCodec<(&ext::ShmType<{ ID }>, bool), &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: (&ext::ShmType<{ ID }>, bool)) -> Self::Output {
+        let (_, more) = x;
+        let header: ZExtUnit<{ ID }> = ZExtUnit::new();
+        self.write(&mut *writer, (&header, more))?;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+impl<R, const ID: u8> RCodec<(ext::ShmType<{ ID }>, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::ShmType<{ ID }>, bool), Self::Error> {
+        let (_, more): (ZExtUnit<{ ID }>, bool) = self.read(&mut *reader)?;
+        Ok((ext::ShmType, more))
     }
 }

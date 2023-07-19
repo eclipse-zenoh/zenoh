@@ -17,6 +17,7 @@ use crate::{
     network::Mapping,
     zextz64, zextzbuf,
 };
+use alloc::borrow::Cow;
 use core::ops::BitOr;
 pub use interest::*;
 pub use keyexpr::*;
@@ -184,8 +185,6 @@ pub mod common {
 
         impl WireExprType {
             pub fn null() -> Self {
-                use std::borrow::Cow;
-
                 Self {
                     wire_expr: WireExpr {
                         scope: ExprId::MIN,

@@ -12,47 +12,96 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::{sync::RwLock, task};
-use std::any::TypeId;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::{zasyncread, zasyncwrite, zerror};
-use zenoh_protocol::zenoh::*;
-use zenoh_result::ZResult;
-use zenoh_shm::{
-    SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryBufInfoSerialized, SharedMemoryReader,
+use zenoh_protocol::{
+    network::{NetworkBody, NetworkMessage, Push},
+    zenoh_new::{
+        put::{ext::ShmType, Put},
+        PushBody,
+    },
 };
+use zenoh_result::ZResult;
+use zenoh_shm::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryReader};
 
-macro_rules! unset_sliced {
-    ($msg:expr, $data_info:expr) => {
-        // Set the right data info SHM parameters
-        if let Some(di) = $data_info {
-            di.sliced = false;
-            if di == &DataInfo::default() {
-                *$data_info = None;
-            }
+// ShmBuf -> ShmInfo
+pub fn map_zmsg_to_shminfo(msg: &mut NetworkMessage) -> ZResult<bool> {
+    let mut res = false;
+
+    if let NetworkBody::Push(Push {
+        payload: PushBody::Put(Put {
+            payload, ext_shm, ..
+        }),
+        ..
+    }) = &mut msg.body
+    {
+        res |= map_zbuf_to_shminfo(payload)?;
+        if res {
+            *ext_shm = Some(ShmType::new());
         }
-    };
+    }
+
+    Ok(res)
 }
 
-macro_rules! set_sliced {
-    ($msg:expr, $data_info:expr) => {
-        match $data_info {
-            Some(di) => {
-                // Just update the is_shm field. This field can be
-                // then used at receiver side to identify that the
-                // actual content is stored in shared memory
-                di.sliced = true;
-            }
-            None => {
-                // Create the DataInfo content
-                let di = DataInfo {
-                    sliced: true,
-                    ..Default::default()
-                };
-                *$data_info = Some(di);
-            }
+pub fn map_zbuf_to_shminfo(zbuf: &mut ZBuf) -> ZResult<bool> {
+    let mut res = false;
+    for zs in zbuf.zslices_mut() {
+        let ZSlice { buf, .. } = zs;
+        if let Some(shmb) = buf.as_any().downcast_ref::<SharedMemoryBuf>() {
+            *zs = map_zslice_to_shminfo(shmb)?;
+            res = true;
         }
-    };
+    }
+    Ok(res)
+}
+
+#[cold]
+#[inline(never)]
+pub fn map_zslice_to_shminfo(shmb: &SharedMemoryBuf) -> ZResult<ZSlice> {
+    // Serialize the shmb info
+    let codec = Zenoh080::new();
+    let mut info = vec![];
+    let mut writer = info.writer();
+    codec
+        .write(&mut writer, &shmb.info)
+        .map_err(|e| zerror!("{:?}", e))?;
+    // Increase the reference count so to keep the SharedMemoryBuf valid
+    shmb.inc_ref_count();
+    // Replace the content of the slice
+    Ok(info.into())
+}
+
+// ShmInfo -> ShmBuf
+pub fn map_zmsg_to_shmbuf(
+    msg: &mut NetworkMessage,
+    shmr: &RwLock<SharedMemoryReader>,
+) -> ZResult<bool> {
+    let mut res = false;
+
+    if let NetworkBody::Push(Push {
+        payload: PushBody::Put(Put {
+            payload, ext_shm, ..
+        }),
+        ..
+    }) = &mut msg.body
+    {
+        if ext_shm.is_some() {
+            res |= map_zbuf_to_shmbuf(payload, shmr)?;
+            *ext_shm = None;
+        }
+    }
+
+    Ok(res)
+}
+
+pub fn map_zbuf_to_shmbuf(zbuf: &mut ZBuf, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
+    let mut res = false;
+    for zs in zbuf.zslices_mut() {
+        res |= map_zslice_to_shmbuf(zs, shmr)?;
+    }
+    Ok(res)
 }
 
 #[cold]
@@ -61,10 +110,10 @@ pub fn map_zslice_to_shmbuf(
     zslice: &mut ZSlice,
     shmr: &RwLock<SharedMemoryReader>,
 ) -> ZResult<bool> {
-    let ZSlice { buf, .. } = zslice;
     // Deserialize the shmb info into shm buff
     let codec = Zenoh080::new();
-    let mut reader = buf.as_slice().reader();
+    let mut reader = zslice.reader();
+
     let shmbinfo: SharedMemoryBufInfo = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
 
     // First, try in read mode allowing concurrenct lookups
@@ -81,107 +130,3 @@ pub fn map_zslice_to_shmbuf(
 
     Ok(true)
 }
-
-pub fn map_zbuf_to_shmbuf(zbuf: &mut ZBuf, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
-    let mut res = false;
-    for zs in zbuf.zslices_mut() {
-        let ZSlice { buf, .. } = zs;
-        if buf.as_any().type_id() == TypeId::of::<SharedMemoryBufInfoSerialized>() {
-            res |= map_zslice_to_shmbuf(zs, shmr)?;
-        }
-    }
-    Ok(res)
-}
-
-#[cold]
-#[inline(never)]
-pub fn map_zslice_to_shminfo(shmb: &SharedMemoryBuf) -> ZResult<ZSlice> {
-    // Serialize the shmb info
-    let codec = Zenoh080::new();
-    let mut bytes = vec![];
-    let mut writer = bytes.writer();
-    codec
-        .write(&mut writer, &shmb.info)
-        .map_err(|e| zerror!("{:?}", e))?;
-    let info: SharedMemoryBufInfoSerialized = bytes.into();
-    // Increase the reference count so to keep the SharedMemoryBuf valid
-    shmb.inc_ref_count();
-    // Replace the content of the slice
-    Ok(info.into())
-}
-
-pub fn map_zbuf_to_shminfo(zbuf: &mut ZBuf) -> ZResult<bool> {
-    let mut res = false;
-    for zs in zbuf.zslices_mut() {
-        let ZSlice { buf, .. } = zs;
-        if let Some(shmb) = buf.as_any().downcast_ref::<SharedMemoryBuf>() {
-            *zs = map_zslice_to_shminfo(shmb)?;
-            res = true;
-        }
-    }
-    Ok(res)
-}
-
-pub fn map_zmsg_to_shmbuf(
-    msg: &mut ZenohMessage,
-    shmr: &RwLock<SharedMemoryReader>,
-) -> ZResult<bool> {
-    let mut res = false;
-
-    if let ZenohBody::Data(Data {
-        payload, data_info, ..
-    }) = &mut msg.body
-    {
-        res |= map_zbuf_to_shmbuf(payload, shmr)?;
-        if res {
-            unset_sliced!(msg, data_info);
-        }
-    } else if let ZenohBody::Query(Query {
-        body: Some(body), ..
-    }) = &mut msg.body
-    {
-        res |= map_zbuf_to_shmbuf(&mut body.payload, shmr)?;
-        if res {
-            body.data_info.sliced = false;
-        }
-    }
-
-    Ok(res)
-}
-
-pub fn map_zmsg_to_shminfo(msg: &mut ZenohMessage) -> ZResult<bool> {
-    let mut res = false;
-
-    if let ZenohBody::Data(Data {
-        payload, data_info, ..
-    }) = &mut msg.body
-    {
-        res |= map_zbuf_to_shminfo(payload)?;
-        if res {
-            set_sliced!(msg, data_info);
-        }
-    } else if let ZenohBody::Query(Query {
-        body: Some(body), ..
-    }) = &mut msg.body
-    {
-        res |= map_zbuf_to_shminfo(&mut body.payload)?;
-        if res {
-            body.data_info.sliced = true;
-        }
-    }
-
-    Ok(res)
-}
-
-// Unused for the time being
-//
-// #[cfg(feature = "shared-memory")]
-// impl TransportMessage {
-//     pub(crate) fn map_to_shmbuf(&mut self, shmr: Arc<RwLock<SharedMemoryReader>>) -> ZResult<bool> {
-//         Ok(false)
-//     }
-//
-//     pub(crate) fn map_to_shminfo(&mut self) -> ZResult<bool> {
-//         Ok(false)
-//     }
-// }

@@ -18,12 +18,6 @@ use zenoh_buffers::{
     ZSlice,
 };
 
-#[cfg(feature = "shared-memory")]
-pub(crate) mod kind {
-    pub(crate) const RAW: u8 = 0;
-    pub(crate) const SHM_INFO: u8 = 1;
-}
-
 // ZSlice - Bounded
 macro_rules! zslice_impl {
     ($bound:ty) => {
