@@ -16,7 +16,6 @@ use rand::{
     *,
 };
 use std::convert::TryFrom;
-use std::sync::Arc;
 use zenoh_buffers::{
     reader::{HasReader, Reader},
     writer::HasWriter,
@@ -97,7 +96,7 @@ macro_rules! run_buffers {
             let mut writer = buffer.writer();
             $wcode.write(&mut writer, &x).unwrap();
 
-            let mut zslice = ZSlice::from(Arc::new(buffer));
+            let mut zslice = ZSlice::from(buffer);
             let mut reader = zslice.reader();
             let y: $type = $rcode.read(&mut reader).unwrap();
             assert_eq!(x, y);

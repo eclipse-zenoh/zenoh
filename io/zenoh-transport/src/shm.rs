@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::{sync::RwLock, task};
-use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice};
+use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice, ZSliceKind};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::{zasyncread, zasyncwrite, zerror};
 use zenoh_protocol::{
@@ -48,8 +48,7 @@ pub fn map_zmsg_to_shminfo(msg: &mut NetworkMessage) -> ZResult<bool> {
 pub fn map_zbuf_to_shminfo(zbuf: &mut ZBuf) -> ZResult<bool> {
     let mut res = false;
     for zs in zbuf.zslices_mut() {
-        let ZSlice { buf, .. } = zs;
-        if let Some(shmb) = buf.as_any().downcast_ref::<SharedMemoryBuf>() {
+        if let Some(shmb) = zs.downcast_ref::<SharedMemoryBuf>() {
             *zs = map_zslice_to_shminfo(shmb)?;
             res = true;
         }
@@ -70,7 +69,9 @@ pub fn map_zslice_to_shminfo(shmb: &SharedMemoryBuf) -> ZResult<ZSlice> {
     // Increase the reference count so to keep the SharedMemoryBuf valid
     shmb.inc_ref_count();
     // Replace the content of the slice
-    Ok(info.into())
+    let mut zslice: ZSlice = info.into();
+    zslice.kind = ZSliceKind::ShmPtr;
+    Ok(zslice)
 }
 
 // ShmInfo -> ShmBuf
@@ -98,7 +99,7 @@ pub fn map_zmsg_to_shmbuf(
 
 pub fn map_zbuf_to_shmbuf(zbuf: &mut ZBuf, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
     let mut res = false;
-    for zs in zbuf.zslices_mut() {
+    for zs in zbuf.zslices_mut().filter(|x| x.kind == ZSliceKind::ShmPtr) {
         res |= map_zslice_to_shmbuf(zs, shmr)?;
     }
     Ok(res)

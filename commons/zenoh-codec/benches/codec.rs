@@ -14,6 +14,8 @@
 #[macro_use]
 extern crate criterion;
 
+use std::sync::Arc;
+
 use criterion::Criterion;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader},
@@ -237,7 +239,8 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut writer = buff.writer();
     codec.write(&mut writer, &data).unwrap();
 
-    let zslice: ZSlice = buff.into();
+    let buff = Arc::new(buff);
+    let zslice: ZSlice = buff.clone().into();
 
     c.bench_function("Fragmentation ZSlice ZBuf Read", |b| {
         b.iter(|| {
@@ -246,7 +249,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             let mut idx = 0;
             while idx < zslice.len() {
                 let len = (zslice.len() - idx).min(chunk);
-                zbuf.push_zslice(ZSlice::make(zslice.buf.clone(), idx, idx + len).unwrap());
+                zbuf.push_zslice(ZSlice::make(buff.clone(), idx, idx + len).unwrap());
                 idx += len;
             }
 

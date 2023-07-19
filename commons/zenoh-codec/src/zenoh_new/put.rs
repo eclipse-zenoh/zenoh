@@ -11,7 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header};
+#[cfg(not(feature = "shared-memory"))]
+use crate::Zenoh080Bounded;
+#[cfg(feature = "shared-memory")]
+use crate::Zenoh080Sliced;
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -76,8 +80,17 @@ where
         }
 
         // Payload
-        let bodec = Zenoh080Bounded::<u32>::new();
-        bodec.write(&mut *writer, &x.payload)?;
+        #[cfg(feature = "shared-memory")]
+        {
+            let codec = Zenoh080Sliced::<u32>::new(x.ext_shm.is_some());
+            codec.write(&mut *writer, &x.payload)?;
+        }
+
+        #[cfg(not(feature = "shared-memory"))]
+        {
+            let bodec = Zenoh080Bounded::<u32>::new();
+            bodec.write(&mut *writer, &x.payload)?;
+        }
 
         Ok(())
     }
@@ -149,8 +162,19 @@ where
         }
 
         // Payload
-        let bodec = Zenoh080Bounded::<u32>::new();
-        let payload: ZBuf = bodec.read(&mut *reader)?;
+        let payload: ZBuf = {
+            #[cfg(feature = "shared-memory")]
+            {
+                let codec = Zenoh080Sliced::<u32>::new(ext_shm.is_some());
+                codec.read(&mut *reader)?
+            }
+
+            #[cfg(not(feature = "shared-memory"))]
+            {
+                let bodec = Zenoh080Bounded::<u32>::new();
+                bodec.read(&mut *reader)?
+            }
+        };
 
         Ok(Put {
             timestamp,

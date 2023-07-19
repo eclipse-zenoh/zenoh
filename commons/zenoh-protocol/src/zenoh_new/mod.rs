@@ -19,6 +19,7 @@ pub mod put;
 pub mod query;
 pub mod reply;
 
+use crate::core::Encoding;
 pub use ack::*;
 pub use del::*;
 pub use err::*;
@@ -36,6 +37,12 @@ pub mod id {
     pub const ERR: u8 = 0x05;
     pub const ACK: u8 = 0x06;
     pub const PULL: u8 = 0x07;
+}
+
+// DataInfo
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataInfo {
+    pub encoding: Encoding,
 }
 
 // Push

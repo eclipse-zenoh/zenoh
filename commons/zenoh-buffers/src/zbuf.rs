@@ -11,10 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "shared-memory")]
+use crate::ZSliceKind;
 use crate::{
     reader::{BacktrackableReader, DidntRead, DidntSiphon, HasReader, Reader, SiphonableReader},
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
-    SplitBuffer, ZSlice, ZSliceBuffer,
+    SplitBuffer, ZSlice,
 };
 use alloc::{sync::Arc, vec::Vec};
 use core::{cmp, iter, mem, num::NonZeroUsize, slice};
@@ -106,33 +108,17 @@ impl PartialEq for ZBuf {
 }
 
 // From impls
-impl From<ZSlice> for ZBuf {
-    fn from(zs: ZSlice) -> Self {
+impl<T> From<T> for ZBuf
+where
+    T: Into<ZSlice>,
+{
+    fn from(buf: T) -> Self {
         let mut zbuf = ZBuf::empty();
-        zbuf.push_zslice(zs);
+        let zslice: ZSlice = buf.into();
+        zbuf.push_zslice(zslice);
         zbuf
     }
 }
-
-impl<T> From<Arc<T>> for ZBuf
-where
-    T: ZSliceBuffer + 'static,
-{
-    fn from(buf: Arc<T>) -> Self {
-        let zs: ZSlice = buf.into();
-        Self::from(zs)
-    }
-}
-
-impl<T> From<T> for ZBuf
-where
-    T: ZSliceBuffer + 'static,
-{
-    fn from(buf: T) -> Self {
-        Self::from(Arc::new(buf))
-    }
-}
-
 // Reader
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ZBufPos {
@@ -240,7 +226,7 @@ impl<'a> Reader for ZBufReader<'a> {
             }
             cmp::Ordering::Equal => {
                 let s = slice
-                    .new_sub_slice(self.cursor.byte, slice.len())
+                    .subslice(self.cursor.byte, slice.len())
                     .ok_or(DidntRead)?;
 
                 self.cursor.slice += 1;
@@ -250,9 +236,7 @@ impl<'a> Reader for ZBufReader<'a> {
             cmp::Ordering::Greater => {
                 let start = self.cursor.byte;
                 self.cursor.byte += len;
-                slice
-                    .new_sub_slice(start, self.cursor.byte)
-                    .ok_or(DidntRead)
+                slice.subslice(start, self.cursor.byte).ok_or(DidntRead)
             }
         }
     }
@@ -340,14 +324,14 @@ impl Iterator for ZBufSliceIterator<'_, '_> {
         match self.remaining.cmp(&len) {
             core::cmp::Ordering::Less => {
                 let end = start + self.remaining;
-                let slice = slice.new_sub_slice(start, end);
+                let slice = slice.subslice(start, end);
                 self.reader.cursor.byte = end;
                 self.remaining = 0;
                 slice
             }
             core::cmp::Ordering::Equal => {
                 let end = start + self.remaining;
-                let slice = slice.new_sub_slice(start, end);
+                let slice = slice.subslice(start, end);
                 self.reader.cursor.slice += 1;
                 self.reader.cursor.byte = 0;
                 self.remaining = 0;
@@ -355,7 +339,7 @@ impl Iterator for ZBufSliceIterator<'_, '_> {
             }
             core::cmp::Ordering::Greater => {
                 let end = start + len;
-                let slice = slice.new_sub_slice(start, end);
+                let slice = slice.subslice(start, end);
                 self.reader.cursor.slice += 1;
                 self.reader.cursor.byte = 0;
                 self.remaining -= len;
@@ -426,6 +410,8 @@ impl Writer for ZBufWriter<'_> {
             buf: self.cache.clone(),
             start: prev_cache_len,
             end: cache_len,
+            #[cfg(feature = "shared-memory")]
+            kind: ZSliceKind::Raw,
         });
         Ok(())
     }
@@ -479,6 +465,8 @@ impl Writer for ZBufWriter<'_> {
             buf: self.cache.clone(),
             start: prev_cache_len,
             end: cache_len,
+            #[cfg(feature = "shared-memory")]
+            kind: ZSliceKind::Raw,
         });
         NonZeroUsize::new(len).ok_or(DidntWrite)
     }
@@ -543,24 +531,24 @@ mod tests {
         let slice: ZSlice = [0u8, 1, 2, 3, 4, 5, 6, 7].to_vec().into();
 
         let mut zbuf1 = ZBuf::empty();
-        zbuf1.push_zslice(slice.new_sub_slice(0, 4).unwrap());
-        zbuf1.push_zslice(slice.new_sub_slice(4, 8).unwrap());
+        zbuf1.push_zslice(slice.subslice(0, 4).unwrap());
+        zbuf1.push_zslice(slice.subslice(4, 8).unwrap());
 
         let mut zbuf2 = ZBuf::empty();
-        zbuf2.push_zslice(slice.new_sub_slice(0, 1).unwrap());
-        zbuf2.push_zslice(slice.new_sub_slice(1, 4).unwrap());
-        zbuf2.push_zslice(slice.new_sub_slice(4, 8).unwrap());
+        zbuf2.push_zslice(slice.subslice(0, 1).unwrap());
+        zbuf2.push_zslice(slice.subslice(1, 4).unwrap());
+        zbuf2.push_zslice(slice.subslice(4, 8).unwrap());
 
         assert_eq!(zbuf1, zbuf2);
 
         let mut zbuf1 = ZBuf::empty();
-        zbuf1.push_zslice(slice.new_sub_slice(2, 4).unwrap());
-        zbuf1.push_zslice(slice.new_sub_slice(4, 8).unwrap());
+        zbuf1.push_zslice(slice.subslice(2, 4).unwrap());
+        zbuf1.push_zslice(slice.subslice(4, 8).unwrap());
 
         let mut zbuf2 = ZBuf::empty();
-        zbuf2.push_zslice(slice.new_sub_slice(2, 3).unwrap());
-        zbuf2.push_zslice(slice.new_sub_slice(3, 6).unwrap());
-        zbuf2.push_zslice(slice.new_sub_slice(6, 8).unwrap());
+        zbuf2.push_zslice(slice.subslice(2, 3).unwrap());
+        zbuf2.push_zslice(slice.subslice(3, 6).unwrap());
+        zbuf2.push_zslice(slice.subslice(6, 8).unwrap());
 
         assert_eq!(zbuf1, zbuf2);
     }

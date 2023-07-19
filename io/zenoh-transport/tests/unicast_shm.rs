@@ -23,7 +23,7 @@ mod tests {
         },
         time::Duration,
     };
-    use zenoh_buffers::{SplitBuffer, ZSlice};
+    use zenoh_buffers::SplitBuffer;
     use zenoh_core::zasync_executor_init;
     use zenoh_link::Link;
     use zenoh_protocol::{
@@ -107,15 +107,11 @@ mod tests {
                 NetworkBody::Push(m) => match m.payload {
                     PushBody::Put(Put { payload, .. }) => {
                         for zs in payload.zslices() {
-                            let ZSlice { buf, .. } = zs;
-                            if self.is_shm
-                                && buf.as_any().downcast_ref::<SharedMemoryBuf>().is_none()
+                            if self.is_shm && zs.downcast_ref::<SharedMemoryBuf>().is_none() {
+                                panic!("Expected SharedMemoryBuf: {:?}", zs);
+                            } else if !self.is_shm && zs.downcast_ref::<SharedMemoryBuf>().is_some()
                             {
-                                panic!("Expected SharedMemoryBuf");
-                            } else if !self.is_shm
-                                && buf.as_any().downcast_ref::<SharedMemoryBuf>().is_some()
-                            {
-                                panic!("Not Expected SharedMemoryBuf");
+                                panic!("Not Expected SharedMemoryBuf: {:?}", zs);
                             }
                         }
                         payload.contiguous().into_owned()

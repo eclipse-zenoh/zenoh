@@ -69,12 +69,22 @@ impl<const N: usize> ZSliceBuffer for [u8; N] {
 /*************************************/
 /*               ZSLICE              */
 /*************************************/
+#[cfg(feature = "shared-memory")]
+#[derive(Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ZSliceKind {
+    Raw = 0,
+    ShmPtr = 1,
+}
+
 /// A clonable wrapper to a contiguous slice of bytes.
 #[derive(Clone)]
 pub struct ZSlice {
-    pub buf: Arc<dyn ZSliceBuffer>,
+    pub(crate) buf: Arc<dyn ZSliceBuffer>,
     pub(crate) start: usize,
     pub(crate) end: usize,
+    #[cfg(feature = "shared-memory")]
+    pub kind: ZSliceKind,
 }
 
 impl ZSlice {
@@ -83,11 +93,25 @@ impl ZSlice {
         start: usize,
         end: usize,
     ) -> Result<ZSlice, Arc<dyn ZSliceBuffer>> {
-        if end <= buf.as_slice().len() {
-            Ok(ZSlice { buf, start, end })
+        if start <= end && end <= buf.as_slice().len() {
+            Ok(ZSlice {
+                buf,
+                start,
+                end,
+                #[cfg(feature = "shared-memory")]
+                kind: ZSliceKind::Raw,
+            })
         } else {
             Err(buf)
         }
+    }
+
+    #[inline]
+    pub fn downcast_ref<T>(&self) -> Option<&T>
+    where
+        T: Any,
+    {
+        self.buf.as_any().downcast_ref::<T>()
     }
 
     #[inline]
@@ -110,12 +134,14 @@ impl ZSlice {
         &self.buf.as_slice()[self.range()]
     }
 
-    pub(crate) fn new_sub_slice(&self, start: usize, end: usize) -> Option<ZSlice> {
-        if end <= self.len() {
+    pub fn subslice(&self, start: usize, end: usize) -> Option<ZSlice> {
+        if start <= end && end <= self.len() {
             Some(ZSlice {
                 buf: self.buf.clone(),
                 start: self.start + start,
                 end: self.start + end,
+                #[cfg(feature = "shared-memory")]
+                kind: self.kind,
             })
         } else {
             None
@@ -220,7 +246,13 @@ where
 {
     fn from(buf: Arc<T>) -> Self {
         let end = buf.as_slice().len();
-        Self { buf, start: 0, end }
+        Self {
+            buf,
+            start: 0,
+            end,
+            #[cfg(feature = "shared-memory")]
+            kind: ZSliceKind::Raw,
+        }
     }
 }
 
@@ -229,12 +261,7 @@ where
     T: ZSliceBuffer + 'static,
 {
     fn from(buf: T) -> Self {
-        let end = buf.as_slice().len();
-        Self {
-            buf: Arc::new(buf),
-            start: 0,
-            end,
-        }
+        Self::from(Arc::new(buf))
     }
 }
 
@@ -276,7 +303,7 @@ impl Reader for &mut ZSlice {
     }
 
     fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
-        let res = self.new_sub_slice(0, len).ok_or(DidntRead)?;
+        let res = self.subslice(0, len).ok_or(DidntRead)?;
         self.start += len;
         Ok(res)
     }
