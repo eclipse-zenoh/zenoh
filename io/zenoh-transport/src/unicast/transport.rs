@@ -16,16 +16,16 @@ use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::TransportLinkUnicast;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
-use crate::TransportConfigUnicast;
 use crate::transport_unicast_inner::TransportUnicastInnerTrait;
+use crate::TransportConfigUnicast;
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use async_trait::async_trait;
-use zenoh_protocol::network::NetworkMessage;
 use std::fmt::DebugStruct;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
+use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::{
     core::{Priority, WhatAmI, ZenohId},
     transport::{Close, ConduitSn, TransportMessage, TransportSn},
@@ -203,7 +203,6 @@ impl TransportUnicastInner {
         }
     }
 
-    
     pub(crate) fn stop_tx(&self, link: &LinkUnicast) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, link) {
@@ -220,7 +219,6 @@ impl TransportUnicastInner {
             }
         }
     }
-
 
     pub(crate) fn stop_rx(&self, link: &LinkUnicast) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
@@ -245,11 +243,7 @@ impl TransportUnicastInnerTrait for TransportUnicastInner {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    fn add_link(
-        &self,
-        link: LinkUnicast,
-        direction: LinkUnicastDirection,
-    ) -> ZResult<()> {
+    fn add_link(&self, link: LinkUnicast, direction: LinkUnicastDirection) -> ZResult<()> {
         // Add the link to the channel
         let mut guard = zwrite!(self.links);
 
@@ -321,7 +315,6 @@ impl TransportUnicastInnerTrait for TransportUnicastInner {
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>> {
         zread!(self.callback).clone()
     }
-
 
     /*************************************/
     /*           INITIATION              */
@@ -405,10 +398,10 @@ impl TransportUnicastInnerTrait for TransportUnicastInner {
     /*************************************/
     /*                TX                 */
     /*************************************/
-    async fn schedule(&self, msg: NetworkMessage) -> ZResult<()> {
+    fn schedule(&self, msg: NetworkMessage) -> ZResult<()> {
         match self.internal_schedule(msg) {
             true => Ok(()),
-            false => bail!("error scheduling mesage!")
+            false => bail!("error scheduling mesage!"),
         }
     }
 
@@ -436,12 +429,7 @@ impl TransportUnicastInnerTrait for TransportUnicastInner {
         }
     }
 
-    fn start_rx(
-        &self,
-        link: &LinkUnicast,
-        lease: Duration,
-        batch_size: u16,
-    ) -> ZResult<()> {
+    fn start_rx(&self, link: &LinkUnicast, lease: Duration, batch_size: u16) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, link) {
             Some(l) => {
@@ -458,7 +446,10 @@ impl TransportUnicastInnerTrait for TransportUnicastInner {
         }
     }
 
-    fn add_debug_fields<'a, 'b: 'a, 'c>(&self, s: &'c mut DebugStruct<'a, 'b>) -> &'c mut DebugStruct<'a, 'b> {
+    fn add_debug_fields<'a, 'b: 'a, 'c>(
+        &self,
+        s: &'c mut DebugStruct<'a, 'b>,
+    ) -> &'c mut DebugStruct<'a, 'b> {
         s.field("sn_resolution", &self.config.sn_resolution)
     }
 }

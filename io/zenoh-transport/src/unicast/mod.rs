@@ -123,24 +123,12 @@ impl TransportUnicast {
         Ok(transport.get_whatami())
     }
 
-    //#[inline(always)]
-    //pub fn get_sn_resolution(&self) -> ZResult<u64> {
-    //    let transport = self.get_inner()?;
-    //    Ok(transport.get_sn_resolution().mask())
-    //}
-
-    //#[cfg(feature = "shared-memory")]
-    //#[inline(always)]
-    //pub fn is_shm(&self) -> ZResult<bool> {
-    //    let transport = self.get_inner()?;
-    //    Ok(transport.is_shm())
-    //}
-
-    //#[inline(always)]
-    //pub fn is_qos(&self) -> ZResult<bool> {
-    //    let transport = self.get_inner()?;
-    //    Ok(transport.is_qos())
-    //}
+    #[cfg(feature = "shared-memory")]
+    #[inline(always)]
+    pub fn is_shm(&self) -> ZResult<bool> {
+        let transport = self.get_inner()?;
+        Ok(transport.is_shm())
+    }
 
     #[inline(always)]
     pub fn get_callback(&self) -> ZResult<Option<Arc<dyn TransportPeerEventHandler>>> {
@@ -176,9 +164,9 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub async fn schedule(&self, message: NetworkMessage) -> ZResult<()> {
+    pub fn schedule(&self, message: NetworkMessage) -> ZResult<()> {
         let transport = self.get_inner()?;
-        transport.schedule(message).await
+        transport.schedule(message)
     }
 
     #[inline(always)]
@@ -200,11 +188,6 @@ impl TransportUnicast {
             Ok(transport) => transport.close(close::reason::GENERIC).await,
             Err(_) => Ok(()),
         }
-    }
-
-    #[inline(always)]
-    pub async fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
-        self.schedule(message).await
     }
 
     #[cfg(feature = "stats")]
@@ -236,11 +219,11 @@ impl fmt::Debug for TransportUnicast {
                 transport
                     .add_debug_fields(
                         f.debug_struct("Transport Unicast")
-                .field("zid", &transport.get_zid())
-                .field("whatami", &transport.get_whatami())
-                .field("is_qos", &transport.is_qos())
-                .field("is_shm", &is_shm)
-                .field("links", &transport.get_links()),
+                            .field("zid", &transport.get_zid())
+                            .field("whatami", &transport.get_whatami())
+                            .field("is_qos", &transport.is_qos())
+                            .field("is_shm", &is_shm)
+                            .field("links", &transport.get_links()),
                     )
                     .finish()
             }

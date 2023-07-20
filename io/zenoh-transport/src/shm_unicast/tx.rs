@@ -14,7 +14,7 @@
 use super::transport::ShmTransportUnicastInner;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
-use zenoh_core::{zasyncread};
+use zenoh_core::zasyncread;
 use zenoh_protocol::network::NetworkMessage;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;

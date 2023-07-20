@@ -2011,7 +2011,6 @@ impl Primitives for Session {
                     timestamp: m.timestamp,
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
-                    sliced: false,
                 };
                 self.handle_data(false, &msg.wire_expr, Some(info), m.payload)
             }
@@ -2022,7 +2021,6 @@ impl Primitives for Session {
                     timestamp: m.timestamp,
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
-                    sliced: false,
                 };
                 self.handle_data(false, &msg.wire_expr, Some(info), ZBuf::empty())
             }
@@ -2108,7 +2106,6 @@ impl Primitives for Session {
                         timestamp: m.timestamp,
                         source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                         source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
-                        sliced: false,
                     };
                     let new_reply = Reply {
                         sample: Ok(Sample::with_info(

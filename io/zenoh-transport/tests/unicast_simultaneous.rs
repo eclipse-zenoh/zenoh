@@ -94,7 +94,7 @@ mod tests {
 
             println!("[Simultaneous {}] Sending {}...", self.zid, MSG_COUNT);
             for _ in 0..MSG_COUNT {
-                task::block_on(transport.handle_message(message.clone())).unwrap();
+                transport.schedule(message.clone()).unwrap();
             }
             println!("[Simultaneous {}] ... sent {}", self.zid, MSG_COUNT);
 

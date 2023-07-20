@@ -17,16 +17,16 @@ use super::link::ShmTransportLinkUnicast;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
 use crate::shm_unicast::oam_extensions::pack_oam_close;
-use crate::TransportConfigUnicast;
 use crate::transport_unicast_inner::TransportUnicastInnerTrait;
+use crate::TransportConfigUnicast;
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock as AsyncRwLock};
 use async_trait::async_trait;
-use zenoh_protocol::network::NetworkMessage;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_core::{zasynclock, zread, zwrite, zasyncwrite, zasyncread};
+use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::core::{WhatAmI, ZenohId};
+use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::transport::Close;
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -122,9 +122,7 @@ impl ShmTransportUnicastInner {
         let _ = self.manager.del_transport_unicast(&self.config.zid).await;
 
         // Close and drop the link
-        let l = {
-            zasyncwrite!(self.link).take()
-        };
+        let l = { zasyncwrite!(self.link).take() };
         if let Some(l) = l {
             let _ = l.close().await;
         }
@@ -136,7 +134,6 @@ impl ShmTransportUnicastInner {
 
         Ok(())
     }
-
 
     pub(crate) async fn del_link(&self, link: &LinkUnicast) -> ZResult<()> {
         // check if the link is ours
@@ -210,7 +207,12 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
     }
 
     fn get_links(&self) -> Vec<LinkUnicast> {
-        async_std::task::block_on(async { zasyncread!(self.link).iter().map(|l| l.link.clone()).collect() })
+        async_std::task::block_on(async {
+            zasyncread!(self.link)
+                .iter()
+                .map(|l| l.link.clone())
+                .collect()
+        })
     }
 
     fn get_zid(&self) -> ZenohId {
@@ -233,12 +235,12 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>> {
         zread!(self.callback).clone()
     }
-    
+
     /*************************************/
     /*                TX                 */
     /*************************************/
-    async fn schedule(&self, mut msg: NetworkMessage) -> ZResult<()> {
-        self.internal_schedule(msg).await
+    fn schedule(&self, msg: NetworkMessage) -> ZResult<()> {
+        async_std::task::block_on(self.internal_schedule(msg))
     }
 
     fn start_tx(
@@ -248,7 +250,7 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
         keep_alive: Duration,
         _batch_size: u16,
     ) -> ZResult<()> {
-        let mut guard = async_std::task::block_on(async { zasyncwrite!(self.link)});
+        let mut guard = async_std::task::block_on(async { zasyncwrite!(self.link) });
         match zlinkgetmut!(guard, link) {
             Some(l) => {
                 l.start_keepalive(executor, keep_alive);
@@ -264,13 +266,8 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
         }
     }
 
-    fn start_rx(
-        &self,
-        link: &LinkUnicast,
-        lease: Duration,
-        batch_size: u16,
-    ) -> ZResult<()> {
-        let mut guard = async_std::task::block_on(async { zasyncwrite!(self.link)});
+    fn start_rx(&self, link: &LinkUnicast, lease: Duration, batch_size: u16) -> ZResult<()> {
+        let mut guard = async_std::task::block_on(async { zasyncwrite!(self.link) });
         match zlinkgetmut!(guard, link) {
             Some(l) => {
                 l.start_rx(lease, batch_size);
@@ -289,11 +286,7 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    fn add_link(
-        &self,
-        link: LinkUnicast,
-        direction: LinkUnicastDirection,
-    ) -> ZResult<()> {
+    fn add_link(&self, link: LinkUnicast, direction: LinkUnicastDirection) -> ZResult<()> {
         // Add the link to the channel
         let mut guard = async_std::task::block_on(async { zasyncwrite!(self.link) });
         match guard.as_ref() {

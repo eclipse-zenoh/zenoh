@@ -1,4 +1,7 @@
-use crate::{shm_unicast::oam_extensions::unpack_oam_close, transport_unicast_inner::TransportUnicastInnerTrait};
+use crate::{
+    shm_unicast::oam_extensions::unpack_oam_close,
+    transport_unicast_inner::TransportUnicastInnerTrait,
+};
 
 //
 // Copyright (c) 2023 ZettaScale Technology

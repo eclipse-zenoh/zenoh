@@ -95,7 +95,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     println!(
         "Sending message of {msg_size} bytes while defragmentation buffer size is {MSG_DEFRAG_BUF} bytes"
     );
-    client_transport.schedule(message.clone()).await.unwrap();
+    client_transport.schedule(message.clone()).unwrap();
 
     // Wait that the client transport has been closed
     ztimeout!(async {
