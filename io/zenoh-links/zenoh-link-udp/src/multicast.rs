@@ -174,12 +174,9 @@ impl LinkManagerMulticastUdp {
                 Ok(addr) => Some(addr),
                 Err(_) => zenoh_util::net::get_unicast_addresses_of_interface(iface)?
                     .into_iter()
-                    .filter(|x| {
-                        !x.is_loopback()
-                            && match mcast_addr.ip() {
-                                IpAddr::V4(_) => x.is_ipv4(),
-                                IpAddr::V6(_) => x.is_ipv6(),
-                            }
+                    .filter(|x| match mcast_addr.ip() {
+                        IpAddr::V4(_) => x.is_ipv4(),
+                        IpAddr::V6(_) => x.is_ipv6(),
                     })
                     .take(1)
                     .collect::<Vec<IpAddr>>()
@@ -217,9 +214,22 @@ impl LinkManagerMulticastUdp {
         };
 
         // Establish a unicast UDP socket
-        let ucast_sock = UdpSocket::bind(SocketAddr::new(local_addr, 0))
-            .await
+        let ucast_sock = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP))
             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+        match &local_addr {
+            IpAddr::V4(addr) => {
+                ucast_sock
+                    .set_multicast_if_v4(addr)
+                    .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+            }
+            IpAddr::V6(_addr) => (), // TODO
+        }
+
+        ucast_sock
+            .bind(&SocketAddr::new(local_addr, 0).into())
+            .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+
+        let ucast_sock: UdpSocket = std::net::UdpSocket::from(ucast_sock).into();
 
         // Establish a multicast UDP socket
         let mcast_sock = Socket::new(domain, Type::DGRAM, Some(Protocol::UDP))
@@ -282,7 +292,7 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
         let mut errs: Vec<ZError> = vec![];
         for maddr in mcast_addrs {
             match self
-                .new_link_inner(&maddr, endpoint.config().get(UDP_MULTICAST_SRC_IFACE))
+                .new_link_inner(&maddr, endpoint.config().get(UDP_MULTICAST_IFACE))
                 .await
             {
                 Ok((mcast_sock, ucast_sock, ucast_addr)) => {

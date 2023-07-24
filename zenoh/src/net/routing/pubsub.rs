@@ -1217,6 +1217,16 @@ fn compute_data_route(
             }
         }
     }
+    for mcast_group in &tables.mcast_groups {
+        route.insert(
+            mcast_group.id,
+            (
+                mcast_group.clone(),
+                expr.full_expr().to_string().into(),
+                None,
+            ),
+        );
+    }
     Arc::new(route)
 }
 
@@ -1369,7 +1379,7 @@ pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) 
     }
 }
 
-fn compute_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(super) fn compute_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
     compute_data_routes(tables, res);
     let res = get_mut_unchecked(res);
     for child in res.childs.values_mut() {
@@ -1567,7 +1577,11 @@ fn should_route(
     outface: &Arc<FaceState>,
     expr: &mut RoutingExpr,
 ) -> bool {
-    if src_face.id != outface.id {
+    if src_face.id != outface.id
+        && (src_face.mcast_group.is_none()
+            || outface.mcast_group.is_none()
+            || src_face.mcast_group.as_ref().unwrap() != outface.mcast_group.as_ref().unwrap())
+    {
         let dst_master = tables.whatami != WhatAmI::Router
             || outface.whatami != WhatAmI::Peer
             || tables.peers_net.is_none()
@@ -1661,7 +1675,12 @@ pub fn full_reentrant_route_data(
                         } else {
                             drop(tables);
                             for (outface, key_expr, context) in route.values() {
-                                if face.id != outface.id {
+                                if face.id != outface.id
+                                    && (face.mcast_group.is_none()
+                                        || outface.mcast_group.is_none()
+                                        || face.mcast_group.as_ref().unwrap()
+                                            != outface.mcast_group.as_ref().unwrap())
+                                {
                                     outface.primitives.send_data(
                                         key_expr,
                                         payload.clone(),

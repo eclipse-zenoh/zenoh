@@ -41,9 +41,9 @@ pub struct TransportManagerBuilderMulticast {
 
 pub struct TransportManagerStateMulticast {
     // Established listeners
-    pub(super) protocols: Arc<Mutex<HashMap<String, LinkManagerMulticast>>>,
+    pub(crate) protocols: Arc<Mutex<HashMap<String, LinkManagerMulticast>>>,
     // Established transports
-    pub(super) transports: Arc<Mutex<HashMap<Locator, Arc<TransportMulticastInner>>>>,
+    pub(crate) transports: Arc<Mutex<HashMap<Locator, Arc<TransportMulticastInner>>>>,
 }
 
 pub struct TransportManagerParamsMulticast {
@@ -89,7 +89,9 @@ impl TransportManagerBuilderMulticast {
             config.transport().multicast().join_interval().unwrap(),
         ));
         self = self.max_sessions(config.transport().multicast().max_sessions().unwrap());
-        self = self.qos(*config.transport().qos().enabled());
+        // Force QoS deactivation in multicast
+        // self = self.qos(*config.transport().qos().enabled());
+        self = self.qos(false);
 
         Ok(self)
     }

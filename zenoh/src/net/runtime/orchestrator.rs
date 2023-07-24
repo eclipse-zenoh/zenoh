@@ -22,7 +22,7 @@ use zenoh_buffers::reader::DidntRead;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter};
 use zenoh_codec::{RCodec, WCodec, Zenoh060};
 use zenoh_config::{unwrap_or_default, EndPoint, ModeDependent};
-use zenoh_link::Locator;
+use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
     core::{whatami::WhatAmIMatcher, WhatAmI, ZenohId},
     scouting::{Hello, Scout, ScoutingBody, ScoutingMessage},
@@ -453,46 +453,95 @@ impl Runtime {
         loop {
             log::trace!("Trying to connect to configured peer {}", peer);
             let endpoint = peer.clone();
-            match self
-                .manager()
-                .open_transport(endpoint)
-                .timeout(CONNECTION_TIMEOUT)
+            if let Ok(is_mcast) = LocatorInspector::default()
+                .is_multicast(&endpoint.to_locator())
                 .await
             {
-                Ok(Ok(transport)) => {
-                    log::debug!("Successfully connected to configured peer {}", peer);
-                    if let Some(orch_transport) = transport
-                        .get_callback()
-                        .unwrap()
-                        .unwrap()
-                        .as_any()
-                        .downcast_ref::<super::RuntimeSession>()
+                if is_mcast {
+                    match self
+                        .manager()
+                        .open_transport_mcast(endpoint)
+                        .timeout(CONNECTION_TIMEOUT)
+                        .await
                     {
-                        *zwrite!(orch_transport.endpoint) = Some(peer);
+                        Ok(Ok(transport)) => {
+                            log::debug!("Successfully connected to configured peer {}", peer);
+                            if let Some(orch_transport) = transport
+                                .get_callback()
+                                .unwrap()
+                                .unwrap()
+                                .as_any()
+                                .downcast_ref::<super::RuntimeSession>()
+                            {
+                                *zwrite!(orch_transport.endpoint) = Some(peer);
+                            }
+                            break;
+                        }
+                        Ok(Err(e)) => {
+                            log::debug!(
+                                "Unable to connect to configured peer {}! {}. Retry in {:?}.",
+                                peer,
+                                e,
+                                delay
+                            );
+                        }
+                        Err(e) => {
+                            log::debug!(
+                                "Unable to connect to configured peer {}! {}. Retry in {:?}.",
+                                peer,
+                                e,
+                                delay
+                            );
+                        }
                     }
-                    break;
+                    async_std::task::sleep(delay).await;
+                    delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
+                    if delay > CONNECTION_RETRY_MAX_PERIOD {
+                        delay = CONNECTION_RETRY_MAX_PERIOD;
+                    }
+                } else {
+                    match self
+                        .manager()
+                        .open_transport(endpoint)
+                        .timeout(CONNECTION_TIMEOUT)
+                        .await
+                    {
+                        Ok(Ok(transport)) => {
+                            log::debug!("Successfully connected to configured peer {}", peer);
+                            if let Some(orch_transport) = transport
+                                .get_callback()
+                                .unwrap()
+                                .unwrap()
+                                .as_any()
+                                .downcast_ref::<super::RuntimeSession>()
+                            {
+                                *zwrite!(orch_transport.endpoint) = Some(peer);
+                            }
+                            break;
+                        }
+                        Ok(Err(e)) => {
+                            log::debug!(
+                                "Unable to connect to configured peer {}! {}. Retry in {:?}.",
+                                peer,
+                                e,
+                                delay
+                            );
+                        }
+                        Err(e) => {
+                            log::debug!(
+                                "Unable to connect to configured peer {}! {}. Retry in {:?}.",
+                                peer,
+                                e,
+                                delay
+                            );
+                        }
+                    }
+                    async_std::task::sleep(delay).await;
+                    delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
+                    if delay > CONNECTION_RETRY_MAX_PERIOD {
+                        delay = CONNECTION_RETRY_MAX_PERIOD;
+                    }
                 }
-                Ok(Err(e)) => {
-                    log::debug!(
-                        "Unable to connect to configured peer {}! {}. Retry in {:?}.",
-                        peer,
-                        e,
-                        delay
-                    );
-                }
-                Err(e) => {
-                    log::debug!(
-                        "Unable to connect to configured peer {}! {}. Retry in {:?}.",
-                        peer,
-                        e,
-                        delay
-                    );
-                }
-            }
-            async_std::task::sleep(delay).await;
-            delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
-            if delay > CONNECTION_RETRY_MAX_PERIOD {
-                delay = CONNECTION_RETRY_MAX_PERIOD;
             }
         }
     }
