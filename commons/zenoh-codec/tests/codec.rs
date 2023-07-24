@@ -173,6 +173,7 @@ fn codec_zint_bounded() {
 
         macro_rules! check {
             ($zint:ty) => {
+                println!("Bound: {}. Value: {}", std::any::type_name::<$zint>(), i);
                 let zodec = Zenoh080Bounded::<$zint>::new();
 
                 let mut btmp = vec![];

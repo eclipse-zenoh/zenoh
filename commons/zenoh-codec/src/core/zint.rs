@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
-use core::convert::TryInto;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -164,8 +163,7 @@ macro_rules! uint_impl {
             type Output = Result<(), DidntWrite>;
 
             fn write(self, writer: &mut W, x: $uint) -> Self::Output {
-                let x: u64 = x.try_into().map_err(|_| DidntWrite)?;
-                self.write(writer, x)
+                self.write(writer, x as u64)
             }
         }
 
@@ -218,8 +216,10 @@ macro_rules! zint_impl_codec {
             type Output = Result<(), DidntWrite>;
 
             fn write(self, writer: &mut W, x: $zint) -> Self::Output {
-                let t: $bound = x.try_into().map_err(|_| DidntWrite)?;
-                Zenoh080.write(writer, t)
+                if (x as u64 & !(<$bound>::MAX as u64)) != 0 {
+                    return Err(DidntWrite);
+                }
+                Zenoh080.write(writer, x as u64)
             }
         }
 
@@ -231,8 +231,10 @@ macro_rules! zint_impl_codec {
 
             fn read(self, reader: &mut R) -> Result<$zint, Self::Error> {
                 let x: u64 = Zenoh080.read(reader)?;
-                let t: $bound = x.try_into().map_err(|_| DidntRead)?;
-                t.try_into().map_err(|_| DidntRead)
+                if (x & !(<$bound>::MAX as u64)) != 0 {
+                    return Err(DidntRead);
+                }
+                Ok(x as $zint)
             }
         }
     };
