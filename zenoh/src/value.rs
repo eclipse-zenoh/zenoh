@@ -567,7 +567,7 @@ impl TryFrom<Value> for usize {
 impl From<f64> for Value {
     fn from(f: f64) -> Self {
         Value {
-            payload: ZBuf::from(f.to_string().as_bytes().to_vec()),
+            payload: ZBuf::from(Vec::<u8>::from(f.to_string())),
             encoding: KnownEncoding::AppFloat.into(),
         }
     }
@@ -599,7 +599,7 @@ impl TryFrom<Value> for f64 {
 impl From<f32> for Value {
     fn from(f: f32) -> Self {
         Value {
-            payload: ZBuf::from(f.to_string().as_bytes().to_vec()),
+            payload: ZBuf::from(Vec::<u8>::from(f.to_string())),
             encoding: KnownEncoding::AppFloat.into(),
         }
     }
