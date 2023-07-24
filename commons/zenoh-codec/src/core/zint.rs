@@ -218,10 +218,8 @@ macro_rules! zint_impl_codec {
             type Output = Result<(), DidntWrite>;
 
             fn write(self, writer: &mut W, x: $zint) -> Self::Output {
-                if (x as u64 & !(<$bound>::MAX as u64)) == 0 {
-                    return Err(DidntWrite);
-                }
-                Zenoh080.write(writer, x as u64)
+                let t: $bound = x.try_into().map_err(|_| DidntWrite)?;
+                Zenoh080.write(writer, t)
             }
         }
 
@@ -233,10 +231,8 @@ macro_rules! zint_impl_codec {
 
             fn read(self, reader: &mut R) -> Result<$zint, Self::Error> {
                 let x: u64 = Zenoh080.read(reader)?;
-                if (x & !(<$bound>::MAX as u64)) != 0 {
-                    return Err(DidntRead);
-                }
-                Ok(x as $zint)
+                let t: $bound = x.try_into().map_err(|_| DidntRead)?;
+                t.try_into().map_err(|_| DidntRead)
             }
         }
     };
