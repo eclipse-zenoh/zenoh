@@ -57,7 +57,7 @@ use zenoh_shm::SharedMemoryReader;
 ///         _peer: TransportPeer,
 ///         _transport: TransportUnicast
 ///     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-///         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+///         Ok(Arc::new(DummyTransportPeerEventHandler))
 ///     }
 ///
 ///     fn new_multicast(&self,

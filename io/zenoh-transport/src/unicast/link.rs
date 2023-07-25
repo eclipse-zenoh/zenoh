@@ -482,7 +482,7 @@ fn rx_decompress(
     } else {
         *start_pos = BATCH_PAYLOAD_START_INDEX;
         *end_pos = read_bytes;
-    };
+    }
     Ok(())
 }
 
