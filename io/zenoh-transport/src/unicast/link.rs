@@ -590,8 +590,11 @@ fn set_uncompressed_batch_header(
     if is_streamed {
         let mut header = [0_u8, 0_u8];
         header[..HEADER_BYTES_SIZE].copy_from_slice(&bytes[..HEADER_BYTES_SIZE]);
-        let mut batch_size = u16::from_le_bytes(header);
-        batch_size += 1;
+        let batch_size = if let Some(size) = u16::from_le_bytes(header).checked_add(1) {
+            size
+        } else {
+            bail!("Compression error: unable to convert compression size into u16",)
+        };
         buff[0..HEADER_BYTES_SIZE].copy_from_slice(&batch_size.to_le_bytes());
         buff[COMPRESSION_BYTE_INDEX_STREAMED] = COMPRESSION_DISABLED;
         let batch_size: usize = batch_size.into();
