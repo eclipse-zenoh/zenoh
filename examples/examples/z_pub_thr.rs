@@ -83,6 +83,9 @@ fn parse_args() -> (Config, usize, Priority, bool, usize) {
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
         .arg(Arg::from_usage(
+            "--enable-shm 'Enable SHM transport.'",
+        ))
+        .arg(Arg::from_usage(
             "<PAYLOAD_SIZE>          'Sets the size of the payload to publish'",
         ))
         .get_matches();
@@ -109,6 +112,10 @@ fn parse_args() -> (Config, usize, Priority, bool, usize) {
 
     if args.is_present("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    }
+    #[cfg(feature = "shared-memory")]
+    if args.is_present("enable-shm") {
+        config.transport.shared_memory.set_enabled(true).unwrap();
     }
 
     let number: usize = args.value_of("number").unwrap().parse().unwrap();

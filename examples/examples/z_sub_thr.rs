@@ -120,6 +120,9 @@ fn parse_args() -> (Config, usize, usize) {
             "-c, --config=[FILE]      'A configuration file.'",
         ))
         .arg(Arg::from_usage(
+            "--enable-shm 'Enable SHM transport.'",
+        ))    
+        .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
         .get_matches();
@@ -138,10 +141,14 @@ fn parse_args() -> (Config, usize, usize) {
     if let Some(values) = args.values_of("listen") {
         config.listen.endpoints = values.map(|v| v.parse().unwrap()).collect();
     }
-
     if args.is_present("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
+    #[cfg(feature = "shared-memory")]
+    if args.is_present("enable-shm") {
+        config.transport.shared_memory.set_enabled(true).unwrap();
+    }
+
 
     let samples: usize = args.value_of("samples").unwrap().parse().unwrap();
     let number: usize = args.value_of("number").unwrap().parse().unwrap();

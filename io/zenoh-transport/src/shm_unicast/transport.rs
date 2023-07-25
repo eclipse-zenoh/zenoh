@@ -63,7 +63,7 @@ pub(crate) struct ShmTransportUnicastInner {
 }
 
 impl ShmTransportUnicastInner {
-    pub(super) fn make(
+    pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
     ) -> ZResult<ShmTransportUnicastInner> {
@@ -78,24 +78,6 @@ impl ShmTransportUnicastInner {
         };
 
         Ok(t)
-    }
-
-    /*************************************/
-    /*           INITIATION              */
-    /*************************************/
-    pub(super) async fn sync(&self) -> ZResult<()> {
-        // Mark the transport as alive and keep the lock
-        // to avoid concurrent new_transport and closing/closed notifications
-        let mut a_guard = zasynclock!(self.alive);
-        if *a_guard {
-            let e = zerror!("Transport already synched with peer: {}", self.config.zid);
-            log::trace!("{}", e);
-            return Err(e.into());
-        }
-
-        *a_guard = true;
-
-        Ok(())
     }
 
     /*************************************/
@@ -236,6 +218,10 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
         zread!(self.callback).clone()
     }
 
+    fn get_config(&self) -> &TransportConfigUnicast {
+        &self.config
+    }
+
     /*************************************/
     /*                TX                 */
     /*************************************/
@@ -287,8 +273,11 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
     /*               LINK                */
     /*************************************/
     fn add_link(&self, link: LinkUnicast, direction: LinkUnicastDirection) -> ZResult<()> {
+        log::trace!("Adding link: {}", link);
         // Add the link to the channel
         let mut guard = async_std::task::block_on(async { zasyncwrite!(self.link) });
+
+        #[cfg(not(feature = "transport_shm"))]
         match guard.as_ref() {
             Some(_) => {
                 let e = zerror!(
@@ -297,6 +286,57 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
                     self.config.zid,
                 );
                 return Err(e.into());
+            }
+            None => {
+                // Create a channel link from a link
+                let link = ShmTransportLinkUnicast::new(self.clone(), link, direction);
+                *guard = Some(link);
+            }
+        }
+        
+        #[cfg(feature = "transport_shm")]
+        match guard.take() {
+            Some(existing_link) => {
+                // link already exists...
+                let shm_protocol = "shm";
+                let existing_shm = existing_link.link.get_dst().protocol().as_str() == shm_protocol;
+                let new_shm = link.get_dst().protocol().as_str() == shm_protocol;
+                match (existing_shm, new_shm) {
+                    (false, true) => {
+                        // SHM transport suports only a single link, but code here also handles upgrade from non-shm link to shm link!
+                        log::trace!(
+                            "Upgrading {} SHM transport's link from {} to {}",
+                            self.config.zid,
+                            existing_link.link,
+                            link
+                        );
+
+                        // Prepare and send close message on old link
+                        let close = pack_oam_close(Close {
+                            reason: 0,
+                            session: false,
+                        })?;
+                        let _ = async_std::task::block_on(existing_link.send(close));
+                        // Notify the callback
+                        if let Some(callback) = zread!(self.callback).as_ref() {
+                            callback.del_link(Link::from(existing_link.link));
+                        }
+
+                        // Set the new link
+                        let link = ShmTransportLinkUnicast::new(self.clone(), link, direction);
+                        *guard = Some(link);
+                    }
+                    _ => {
+                        // Rollback
+                        *guard = Some(existing_link);
+                        let e = zerror!(
+                            "Can not add Link {} with peer {}: link already exists and only unique link is supported!",
+                            link,
+                            self.config.zid,
+                        );
+                        return Err(e.into());
+                    }
+                }
             }
             None => {
                 // Create a channel link from a link
@@ -323,7 +363,7 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
             reason,
             session: false,
         })?;
-        l.send(close).await;
+        let _ = l.send(close).await;
 
         // Remove the link from the channel
         self.del_link(link).await
@@ -337,7 +377,7 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
                 reason,
                 session: false,
             })?;
-            l.send(close).await;
+            let _ = l.send(close).await;
         }
 
         // Terminate and clean up the transport

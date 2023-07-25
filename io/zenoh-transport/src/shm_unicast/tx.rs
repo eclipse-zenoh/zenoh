@@ -39,15 +39,14 @@ impl ShmTransportUnicastInner {
     pub(crate) async fn internal_schedule(&self, mut msg: NetworkMessage) -> ZResult<()> {
         #[cfg(feature = "shared-memory")]
         {
-            // todo: need to re-engineer this!
-            //let res = if self.config.is_shm {
-            //    crate::shm::map_zmsg_to_shminfo(&mut msg)
-            //} else {
-            //    crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shm().reader)
-            //};
-            //if let Err(e) = res {
-            //    bail!("Failed SHM conversion: {}", e);
-            //}
+            let res = if self.config.is_shm {
+                crate::shm::map_zmsg_to_shminfo(&mut msg)
+            } else {
+                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shm().reader)
+            };
+            if let Err(e) = res {
+                bail!("Failed SHM conversion: {}", e);
+            }
         }
 
         #[cfg(feature = "stats")]

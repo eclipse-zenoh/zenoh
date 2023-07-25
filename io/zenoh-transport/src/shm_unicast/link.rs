@@ -94,7 +94,7 @@ async fn send_with_link(
     // write len for streamed links only
     if link.is_streamed() {
         let len = buff.len();
-        let ne = len.to_ne_bytes();
+        let ne = BatchSize::to_le_bytes(len.try_into()?);
         link.write_all(&ne).await?;
     }
     link.write_all(&buff).await?;
@@ -218,19 +218,14 @@ async fn rx_task_stream(
     rx_batch_size: BatchSize,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
-    enum Action {
-        Read(usize),
-        Stop,
-    }
-
-    async fn read(link: &LinkUnicast, buffer: &mut [u8]) -> ZResult<Action> {
+    async fn read(link: &LinkUnicast, buffer: &mut [u8]) -> ZResult<usize> {
         // 16 bits for reading the batch length
         let mut length = [0_u8, 0_u8];
         link.read_exact(&mut length).await?;
         let n = BatchSize::from_le_bytes(length) as usize;
 
         link.read_exact(&mut buffer[0..n]).await?;
-        Ok(Action::Read(n))
+        Ok(n)
     }
 
     // The pool of buffers
@@ -246,23 +241,17 @@ async fn rx_task_stream(
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
         // Async read from the underlying link
-        let action = read(&link, &mut buffer)
+        let bytes = read(&link, &mut buffer)
             .timeout(lease)
             .await
             .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
-        match action {
-            Action::Read(n) => {
-                #[cfg(feature = "stats")]
-                transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
+        #[cfg(feature = "stats")]
+        transport.stats.inc_rx_bytes(2 + bytes); // Account for the batch len encoding (16 bits)
 
-                // Deserialize all the messages from the current ZBuf
-                let zslice = ZSlice::make(Arc::new(buffer), 0, n).unwrap();
-                transport.read_messages(zslice, &link)?;
-            }
-            Action::Stop => break,
-        }
+        // Deserialize all the messages from the current ZBuf
+        let zslice = ZSlice::make(Arc::new(buffer), 0, bytes).unwrap();
+        transport.read_messages(zslice, &link)?;
     }
-    Ok(())
 }
 
 async fn rx_task_dgram(
@@ -272,16 +261,6 @@ async fn rx_task_dgram(
     rx_batch_size: BatchSize,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
-    enum Action {
-        Read(usize),
-        Stop,
-    }
-
-    async fn read(link: &LinkUnicast, buffer: &mut [u8]) -> ZResult<Action> {
-        let n = link.read(buffer).await?;
-        Ok(Action::Read(n))
-    }
-
     // The pool of buffers
     let mtu = link.get_mtu().min(rx_batch_size) as usize;
     let mut n = rx_buffer_size / mtu;
@@ -295,23 +274,18 @@ async fn rx_task_dgram(
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
         // Async read from the underlying link
-        let action = read(&link, &mut buffer)
-            .timeout(lease)
-            .await
-            .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
-        match action {
-            Action::Read(n) => {
-                #[cfg(feature = "stats")]
-                transport.stats.inc_rx_bytes(n);
+        let bytes =
+            link.read(&mut buffer).timeout(lease).await.map_err(|_| {
+                zerror!("{}: expired after {} milliseconds", link, lease.as_millis())
+            })??;
 
-                // Deserialize all the messages from the current ZBuf
-                let zslice = ZSlice::make(Arc::new(buffer), 0, n).unwrap();
-                transport.read_messages(zslice, &link)?;
-            }
-            Action::Stop => break,
-        }
+        #[cfg(feature = "stats")]
+        transport.stats.inc_rx_bytes(bytes);
+
+        // Deserialize all the messages from the current ZBuf
+        let zslice = ZSlice::make(Arc::new(buffer), 0, bytes).unwrap();
+        transport.read_messages(zslice, &link)?;
     }
-    Ok(())
 }
 
 async fn rx_task(

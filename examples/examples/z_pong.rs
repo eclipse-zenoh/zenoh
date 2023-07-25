@@ -62,6 +62,9 @@ fn parse_args() -> Config {
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
         .arg(Arg::from_usage(
+            "--enable-shm 'Enable SHM transport.'",
+        ))
+        .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
         ))
         .get_matches();
@@ -82,6 +85,10 @@ fn parse_args() -> Config {
     }
     if args.is_present("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    }
+    #[cfg(feature = "shared-memory")]
+    if args.is_present("enable-shm") {
+        config.transport.shared_memory.set_enabled(true).unwrap();
     }
 
     config

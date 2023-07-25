@@ -108,7 +108,10 @@ impl TransportUnicast {
     pub(super) fn get_inner(&self) -> ZResult<Arc<dyn TransportUnicastInnerTrait>> {
         self.0
             .upgrade()
-            .ok_or_else(|| zerror!("Transport unicast closed").into())
+            .ok_or_else(|| {
+                zerror!("Transport unicast closed").into()
+            }
+        )
     }
 
     #[inline(always)]

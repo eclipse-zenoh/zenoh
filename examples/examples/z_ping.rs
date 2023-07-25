@@ -99,6 +99,9 @@ fn parse_args() -> (Config, Duration, usize, usize) {
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
         .arg(Arg::from_usage(
+            "--enable-shm 'Enable SHM transport.'",
+        ))
+        .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
         ))
         .arg(Arg::from_usage(
@@ -123,6 +126,11 @@ fn parse_args() -> (Config, Duration, usize, usize) {
     if args.is_present("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
+    #[cfg(feature = "shared-memory")]
+    if args.is_present("enable-shm") {
+        config.transport.shared_memory.set_enabled(true).unwrap();
+    }
+
     let n: usize = args.value_of("samples").unwrap().parse().unwrap();
     let w: f64 = args.value_of("warmup").unwrap().parse().unwrap();
     let size: usize = args.value_of("PAYLOAD_SIZE").unwrap().parse().unwrap();

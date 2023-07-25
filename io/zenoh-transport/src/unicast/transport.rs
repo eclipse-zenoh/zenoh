@@ -316,6 +316,10 @@ impl TransportUnicastInnerTrait for TransportUnicastInner {
         zread!(self.callback).clone()
     }
 
+    fn get_config(&self) -> &TransportConfigUnicast {
+        &self.config
+    }
+
     /*************************************/
     /*           INITIATION              */
     /*************************************/
@@ -401,7 +405,7 @@ impl TransportUnicastInnerTrait for TransportUnicastInner {
     fn schedule(&self, msg: NetworkMessage) -> ZResult<()> {
         match self.internal_schedule(msg) {
             true => Ok(()),
-            false => bail!("error scheduling mesage!"),
+            false => bail!("error scheduling message!"),
         }
     }
 

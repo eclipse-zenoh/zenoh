@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "shared-memory")]
+use crate::shm_unicast::transport::ShmTransportUnicastInner;
 #[cfg(feature = "transport_auth")]
 use crate::unicast::establishment::ext::auth::Auth;
 #[cfg(feature = "transport_multilink")]
@@ -60,7 +62,7 @@ pub struct TransportManagerStateUnicast {
     // Established listeners
     pub(super) protocols: Arc<Mutex<HashMap<String, LinkManagerUnicast>>>,
     // Established transports
-    pub(super) transports: Arc<Mutex<HashMap<ZenohId, Arc<TransportUnicastInner>>>>,
+    pub(super) transports: Arc<Mutex<HashMap<ZenohId, Arc<dyn TransportUnicastInnerTrait>>>>,
     // Multilink
     #[cfg(feature = "transport_multilink")]
     pub(super) multilink: Arc<MultiLink>,
@@ -272,7 +274,7 @@ impl TransportManager {
         let mut tu_guard = zasynclock!(self.state.unicast.transports)
             .drain()
             .map(|(_, v)| v)
-            .collect::<Vec<Arc<TransportUnicastInner>>>();
+            .collect::<Vec<Arc<dyn TransportUnicastInnerTrait>>>();
         for tu in tu_guard.drain(..) {
             let _ = tu.close(close::reason::GENERIC).await;
         }
@@ -369,22 +371,21 @@ impl TransportManager {
         // First verify if the transport already exists
         match guard.get(&config.zid) {
             Some(transport) => {
+                let existing_config = transport.get_config();
                 // If it exists, verify that fundamental parameters like are correct.
                 // Ignore the non fundamental parameters like initial SN.
-                if transport.config != config {
+                if *existing_config != config {
                     let e = zerror!(
                         "Transport with peer {} already exist. Invalid config: {:?}. Expected: {:?}.",
                         config.zid,
                         config,
-                        transport.config
+                        existing_config
                     );
                     log::trace!("{}", e);
                     return Err(e.into());
                 }
 
-                // todo: I cannot find a way to make transport.into() work for TransportUnicastInnerTrait
-                let weak = Arc::downgrade(transport);
-                Ok(TransportUnicast(weak))
+                Ok(TransportUnicast(Arc::downgrade(transport)))
             }
             None => {
                 // Then verify that we haven't reached the transport number limit
@@ -413,12 +414,32 @@ impl TransportManager {
                     #[cfg(feature = "shared-memory")]
                     is_shm: config.is_shm,
                 };
-                let a_t = Arc::new(TransportUnicastInner::make(self.clone(), stc)?);
+
+                // select and create transport implementation depending on the cfg
+                let a_t = {
+                    #[cfg(feature = "shared-memory")]
+                    {
+                        match stc.is_shm {
+                            false => {
+                                log::info!("Will use NET transport!");
+                                Arc::new(TransportUnicastInner::make(self.clone(), stc)?)
+                                as Arc<dyn TransportUnicastInnerTrait> },
+                            true => {
+                                log::info!("Will use SHM transport!");
+                                Arc::new(ShmTransportUnicastInner::make(self.clone(), stc)?)
+                                as Arc<dyn TransportUnicastInnerTrait> },
+                        }
+                    }
+                    #[cfg(not(feature = "shared-memory"))]
+                    {
+                        log::info!("Will use the only NET transport!");
+                        Arc::new(TransportUnicastInner::make(self.clone(), stc)?)
+                            as Arc<dyn TransportUnicastInnerTrait>
+                    }
+                };
 
                 // Add the transport transport to the list of active transports
-                // todo: I cannot find a way to make transport.into() work for TransportUnicastInnerTrait
-                let weak = Arc::downgrade(&a_t);
-                let transport = TransportUnicast(weak);
+                let transport = TransportUnicast(Arc::downgrade(&a_t));
                 guard.insert(config.zid, a_t);
 
                 #[cfg(feature = "shared-memory")]

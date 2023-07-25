@@ -24,7 +24,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use crate::{TransportExecutor, TransportPeerEventHandler};
+use crate::{TransportConfigUnicast, TransportExecutor, TransportPeerEventHandler};
 
 /*************************************/
 /*      UNICAST TRANSPORT TRAIT      */
@@ -43,6 +43,7 @@ pub(crate) trait TransportUnicastInnerTrait: Send + Sync {
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool;
     fn is_qos(&self) -> bool;
+    fn get_config(&self) -> &TransportConfigUnicast;
 
     /*************************************/
     /*               LINK                */

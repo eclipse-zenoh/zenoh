@@ -77,13 +77,12 @@ impl ShmTransportUnicastInner {
         if let Some(callback) = callback.as_ref() {
             #[cfg(feature = "shared-memory")]
             {
-                // todo: need to re-engineer this!
-                //if self.config.is_shm {
-                //    crate::shm::map_zmsg_to_shmbuf(
-                //        &mut msg,
-                //        &self.manager.shm().reader,
-                //    )?;
-                //}
+                if self.config.is_shm {
+                    crate::shm::map_zmsg_to_shmbuf(
+                        &mut msg,
+                        &self.manager.shm().reader,
+                    )?;
+                }
             }
             callback.handle_message(msg)
         } else {
