@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -17,6 +15,7 @@ use async_std::task;
 use clap::{ArgMatches, Command};
 use futures::future;
 use git_version::git_version;
+use std::collections::HashSet;
 use zenoh::config::{
     Config, EndPoint, ModeDependentValue, PermissionsConf, PluginLoad, ValidatedMap,
 };
