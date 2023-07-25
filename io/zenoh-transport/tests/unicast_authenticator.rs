@@ -102,7 +102,7 @@ impl TransportEventHandler for SHClientAuthenticator {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+        Ok(Arc::new(DummyTransportPeerEventHandler))
     }
 
     fn new_multicast(
@@ -218,7 +218,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
         .whatami(WhatAmI::Client)
         .zid(client01_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientAuthenticator::default()))
+        .build(Arc::new(SHClientAuthenticator))
         .unwrap();
 
     // Create the transport transport manager for the client 02
@@ -271,7 +271,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
         .whatami(WhatAmI::Client)
         .zid(client02_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientAuthenticator::default()))
+        .build(Arc::new(SHClientAuthenticator))
         .unwrap();
 
     // Create the transport transport manager for the third client
@@ -325,7 +325,7 @@ async fn authenticator_multilink(endpoint: &EndPoint) {
         .whatami(WhatAmI::Client)
         .zid(client01_spoof_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientAuthenticator::default()))
+        .build(Arc::new(SHClientAuthenticator))
         .unwrap();
 
     /* [1] */
@@ -559,7 +559,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         .whatami(WhatAmI::Client)
         .zid(client01_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientAuthenticator::default()))
+        .build(Arc::new(SHClientAuthenticator))
         .unwrap();
 
     // Create the transport transport manager for the second client
@@ -574,7 +574,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         .whatami(WhatAmI::Client)
         .zid(client02_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientAuthenticator::default()))
+        .build(Arc::new(SHClientAuthenticator))
         .unwrap();
 
     // Create the transport transport manager for the third client
@@ -589,7 +589,7 @@ async fn authenticator_user_password(endpoint: &EndPoint) {
         .whatami(WhatAmI::Client)
         .zid(client03_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientAuthenticator::default()))
+        .build(Arc::new(SHClientAuthenticator))
         .unwrap();
 
     /* [1] */
@@ -723,7 +723,7 @@ async fn authenticator_shared_memory(endpoint: &EndPoint) {
         .whatami(WhatAmI::Router)
         .zid(client_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientAuthenticator::default()))
+        .build(Arc::new(SHClientAuthenticator))
         .unwrap();
 
     /* [1] */

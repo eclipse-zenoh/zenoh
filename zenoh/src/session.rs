@@ -2065,7 +2065,7 @@ impl Primitives for Session {
         trace!("recv ReplyFinal {:?}", qid);
         let mut state = zwrite!(self.state);
         match state.queries.get_mut(&qid) {
-            Some(mut query) => {
+            Some(query) => {
                 query.nb_final -= 1;
                 if query.nb_final == 0 {
                     let query = state.queries.remove(&qid).unwrap();

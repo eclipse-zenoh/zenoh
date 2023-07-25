@@ -46,7 +46,7 @@ impl TransportEventHandler for SH {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        let arc = Arc::new(SC::default());
+        let arc = Arc::new(SC);
         Ok(arc)
     }
 
@@ -81,7 +81,7 @@ async fn run(endpoints: &[EndPoint]) {
     let sm = TransportManager::builder()
         .whatami(WhatAmI::Peer)
         .zid(ZenohId::try_from([1]).unwrap())
-        .build(Arc::new(SH::default()))
+        .build(Arc::new(SH))
         .unwrap();
 
     for _ in 0..RUNS {

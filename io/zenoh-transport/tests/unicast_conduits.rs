@@ -137,7 +137,7 @@ impl TransportEventHandler for SHClient {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(SCClient::default()))
+        Ok(Arc::new(SCClient))
     }
 
     fn new_multicast(
@@ -197,7 +197,7 @@ async fn open_transport(
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client_id)
-        .build(Arc::new(SHClient::default()))
+        .build(Arc::new(SHClient))
         .unwrap();
 
     // Create the listener on the router

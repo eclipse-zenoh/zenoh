@@ -62,14 +62,14 @@ impl TransportEventHandler for DummyTransportEventHandler {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+        Ok(Arc::new(DummyTransportPeerEventHandler))
     }
 
     fn new_multicast(
         &self,
         _transport: TransportMulticast,
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        Ok(Arc::new(DummyTransportMulticastEventHandler::default()))
+        Ok(Arc::new(DummyTransportMulticastEventHandler))
     }
 }
 
@@ -89,7 +89,7 @@ pub struct DummyTransportMulticastEventHandler;
 
 impl TransportMulticastEventHandler for DummyTransportMulticastEventHandler {
     fn new_peer(&self, _peer: TransportPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+        Ok(Arc::new(DummyTransportPeerEventHandler))
     }
     fn closing(&self) {}
     fn closed(&self) {}

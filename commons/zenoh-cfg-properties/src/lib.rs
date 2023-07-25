@@ -307,6 +307,19 @@ impl TryFrom<&std::path::Path> for Properties {
     }
 }
 
+#[non_exhaustive]
+pub struct DummyTranscoder;
+
+impl KeyTranscoder for DummyTranscoder {
+    fn encode(_key: &str) -> Option<u64> {
+        None
+    }
+
+    fn decode(_key: u64) -> Option<String> {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -341,18 +354,5 @@ mod tests {
             Properties::from("p1=x=y;p2=a==b"),
             Properties::from(&[("p1", "x=y"), ("p2", "a==b")][..])
         );
-    }
-}
-
-#[non_exhaustive]
-pub struct DummyTranscoder;
-
-impl KeyTranscoder for DummyTranscoder {
-    fn encode(_key: &str) -> Option<u64> {
-        None
-    }
-
-    fn decode(_key: u64) -> Option<String> {
-        None
     }
 }

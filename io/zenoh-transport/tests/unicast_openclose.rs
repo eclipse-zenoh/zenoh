@@ -41,7 +41,7 @@ impl TransportEventHandler for SHRouterOpenClose {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+        Ok(Arc::new(DummyTransportPeerEventHandler))
     }
 
     fn new_multicast(
@@ -67,7 +67,7 @@ impl TransportEventHandler for SHClientOpenClose {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+        Ok(Arc::new(DummyTransportPeerEventHandler))
     }
 
     fn new_multicast(
@@ -82,7 +82,7 @@ async fn openclose_transport(endpoint: &EndPoint) {
     /* [ROUTER] */
     let router_id = ZenohId::try_from([1]).unwrap();
 
-    let router_handler = Arc::new(SHRouterOpenClose::default());
+    let router_handler = Arc::new(SHRouterOpenClose);
     // Create the router transport manager
     let unicast = TransportManager::config_unicast()
         .max_links(2)
