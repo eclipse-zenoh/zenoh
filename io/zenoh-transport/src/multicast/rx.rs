@@ -83,7 +83,7 @@ impl TransportMulticastInner {
                 "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
                 self.manager.config.zid,
                 sn,
-                guard.sn.get() + 1,
+                guard.sn.next(),
             );
             // Drop the fragments if needed
             if !guard.defrag.is_empty() {
