@@ -1,5 +1,3 @@
-use crate::TransportMulticast;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -13,7 +11,7 @@ use crate::TransportMulticast;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::TransportUnicast;
+use super::super::{TransportMulticast, TransportUnicast};
 use super::Primitives;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::{

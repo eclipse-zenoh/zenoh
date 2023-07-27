@@ -15,7 +15,6 @@ use super::multicast::manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
 };
-use super::multicast::TransportMulticast;
 use super::unicast::manager::{
     TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
 };
@@ -501,23 +500,5 @@ impl TransportManager {
         }
 
         self.open_transport_unicast(endpoint).await
-    }
-
-    pub async fn open_transport_mcast(&self, endpoint: EndPoint) -> ZResult<TransportMulticast> {
-        let p = endpoint.protocol();
-        if !self
-            .config
-            .protocols
-            .iter()
-            .any(|x| x.as_str() == p.as_str())
-        {
-            bail!(
-                "Unsupported protocol: {}. Supported protocols are: {:?}",
-                p,
-                self.config.protocols
-            );
-        }
-
-        self.open_transport_multicast(endpoint).await
     }
 }

@@ -1578,9 +1578,10 @@ fn should_route(
     expr: &mut RoutingExpr,
 ) -> bool {
     if src_face.id != outface.id
-        && (src_face.mcast_group.is_none()
-            || outface.mcast_group.is_none()
-            || src_face.mcast_group.as_ref().unwrap() != outface.mcast_group.as_ref().unwrap())
+        && match (src_face.mcast_group.as_ref(), outface.mcast_group.as_ref()) {
+            (Some(l), Some(r)) => l != r,
+            _ => true,
+        }
     {
         let dst_master = tables.whatami != WhatAmI::Router
             || outface.whatami != WhatAmI::Peer
@@ -1676,10 +1677,13 @@ pub fn full_reentrant_route_data(
                             drop(tables);
                             for (outface, key_expr, context) in route.values() {
                                 if face.id != outface.id
-                                    && (face.mcast_group.is_none()
-                                        || outface.mcast_group.is_none()
-                                        || face.mcast_group.as_ref().unwrap()
-                                            != outface.mcast_group.as_ref().unwrap())
+                                    && match (
+                                        face.mcast_group.as_ref(),
+                                        outface.mcast_group.as_ref(),
+                                    ) {
+                                        (Some(l), Some(r)) => l != r,
+                                        _ => true,
+                                    }
                                 {
                                     outface.primitives.send_data(
                                         key_expr,

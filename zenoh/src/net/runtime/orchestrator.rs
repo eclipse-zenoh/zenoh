@@ -249,17 +249,18 @@ impl Runtime {
 
         if self.whatami == WhatAmI::Client {
             for transport in tranports {
-                let should_close = if let Some(orch_transport) = transport
-                    .get_callback()
-                    .unwrap()
-                    .unwrap()
-                    .as_any()
-                    .downcast_ref::<super::RuntimeSession>()
-                {
-                    if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
-                        !peers.contains(endpoint)
+                let should_close = if let Ok(Some(orch_transport)) = transport.get_callback() {
+                    if let Some(orch_transport) = orch_transport
+                        .as_any()
+                        .downcast_ref::<super::RuntimeSession>()
+                    {
+                        if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
+                            !peers.contains(endpoint)
+                        } else {
+                            true
+                        }
                     } else {
-                        true
+                        false
                     }
                 } else {
                     false
@@ -271,15 +272,14 @@ impl Runtime {
         } else {
             for peer in peers {
                 if !tranports.iter().any(|transport| {
-                    if let Some(orch_transport) = transport
-                        .get_callback()
-                        .unwrap()
-                        .unwrap()
-                        .as_any()
-                        .downcast_ref::<super::RuntimeSession>()
-                    {
-                        if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
-                            return *endpoint == peer;
+                    if let Ok(Some(orch_transport)) = transport.get_callback() {
+                        if let Some(orch_transport) = orch_transport
+                            .as_any()
+                            .downcast_ref::<super::RuntimeSession>()
+                        {
+                            if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
+                                return *endpoint == peer;
+                            }
                         }
                     }
                     false
@@ -460,20 +460,19 @@ impl Runtime {
                 if is_mcast {
                     match self
                         .manager()
-                        .open_transport_mcast(endpoint)
+                        .open_transport_multicast(endpoint)
                         .timeout(CONNECTION_TIMEOUT)
                         .await
                     {
                         Ok(Ok(transport)) => {
                             log::debug!("Successfully connected to configured peer {}", peer);
-                            if let Some(orch_transport) = transport
-                                .get_callback()
-                                .unwrap()
-                                .unwrap()
-                                .as_any()
-                                .downcast_ref::<super::RuntimeSession>()
-                            {
-                                *zwrite!(orch_transport.endpoint) = Some(peer);
+                            if let Ok(Some(orch_transport)) = transport.get_callback() {
+                                if let Some(orch_transport) = orch_transport
+                                    .as_any()
+                                    .downcast_ref::<super::RuntimeSession>(
+                                ) {
+                                    *zwrite!(orch_transport.endpoint) = Some(peer);
+                                }
                             }
                             break;
                         }
@@ -508,14 +507,13 @@ impl Runtime {
                     {
                         Ok(Ok(transport)) => {
                             log::debug!("Successfully connected to configured peer {}", peer);
-                            if let Some(orch_transport) = transport
-                                .get_callback()
-                                .unwrap()
-                                .unwrap()
-                                .as_any()
-                                .downcast_ref::<super::RuntimeSession>()
-                            {
-                                *zwrite!(orch_transport.endpoint) = Some(peer);
+                            if let Ok(Some(orch_transport)) = transport.get_callback() {
+                                if let Some(orch_transport) = orch_transport
+                                    .as_any()
+                                    .downcast_ref::<super::RuntimeSession>(
+                                ) {
+                                    *zwrite!(orch_transport.endpoint) = Some(peer);
+                                }
                             }
                             break;
                         }

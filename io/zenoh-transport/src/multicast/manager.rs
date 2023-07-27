@@ -90,7 +90,7 @@ impl TransportManagerBuilderMulticast {
         ));
         self = self.max_sessions(config.transport().multicast().max_sessions().unwrap());
         // Force QoS deactivation in multicast
-        // self = self.qos(*config.transport().qos().enabled());
+        // self = self.qos(*config.transport().qos().enabled()); @TODO
         self = self.qos(false);
 
         Ok(self)
@@ -180,6 +180,19 @@ impl TransportManager {
         &self,
         mut endpoint: EndPoint,
     ) -> ZResult<TransportMulticast> {
+        let p = endpoint.protocol();
+        if !self
+            .config
+            .protocols
+            .iter()
+            .any(|x| x.as_str() == p.as_str())
+        {
+            bail!(
+                "Unsupported protocol: {}. Supported protocols are: {:?}",
+                p,
+                self.config.protocols
+            );
+        }
         if !self
             .locator_inspector
             .is_multicast(&endpoint.to_locator())
