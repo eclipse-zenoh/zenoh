@@ -15,19 +15,21 @@ use super::face::FaceState;
 use super::network::Network;
 use super::resource::{DataRoutes, Direction, PullCaches, Resource, Route, SessionContext};
 use super::router::{RoutingExpr, Tables, TablesLock};
+use crate::prelude::sync::KeyExpr;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::sync::RwLock;
-use std::sync::{Arc, RwLockReadGuard};
+use std::sync::{Arc, RwLockReadGuard, RwLockWriteGuard};
 use zenoh_core::zread;
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::network::common::ext::WireExprType;
 use zenoh_protocol::network::declare::ext;
 use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
 use zenoh_protocol::network::{
-    Declare, DeclareBody, DeclareSubscriber, Mode, Push, UndeclareSubscriber,
+    Declare, DeclareBody, DeclareInterest, DeclareSubscriber, Interest, Mode, Push,
+    UndeclareSubscriber,
 };
 use zenoh_protocol::zenoh_new::PushBody;
 use zenoh_protocol::{
@@ -35,6 +37,17 @@ use zenoh_protocol::{
     zenoh::RoutingContext,
 };
 use zenoh_sync::get_mut_unchecked;
+
+#[inline]
+fn intersects(e1: &str, e2: &str) -> bool {
+    match (keyexpr::new(e1), keyexpr::new(e2)) {
+        (Ok(e1), Ok(e2)) => e1.intersects(e2),
+        _ => {
+            log::error!("Invaid key expression in routing process");
+            false
+        }
+    }
+}
 
 #[inline]
 fn send_sourced_subscription_to_net_childs(
@@ -82,9 +95,11 @@ fn propagate_simple_subscription_to(
     res: &Arc<Resource>,
     sub_info: &SubscriberInfo,
     src_face: &mut Arc<FaceState>,
+    interest: &str,
     full_peer_net: bool,
 ) {
-    if (src_face.id != dst_face.id || res.expr().starts_with(super::PREFIX_LIVELINESS))
+    if ((src_face.id != dst_face.id && intersects(&res.expr(), interest))
+        || res.expr().starts_with(super::PREFIX_LIVELINESS))
         && !dst_face.local_subs.contains(res)
         && match tables.whatami {
             WhatAmI::Router => {
@@ -122,6 +137,15 @@ fn propagate_simple_subscription_to(
     }
 }
 
+fn intersect(expr1: &String, expr2: &String) -> bool {
+    if let Ok(expr1) = KeyExpr::try_from(expr1) {
+        if let Ok(expr2) = KeyExpr::try_from(expr2) {
+            return expr1.intersects(&expr2);
+        }
+    }
+    false
+}
+
 fn propagate_simple_subscription(
     tables: &mut Tables,
     res: &Arc<Resource>,
@@ -135,14 +159,49 @@ fn propagate_simple_subscription(
         .cloned()
         .collect::<Vec<Arc<FaceState>>>()
     {
-        propagate_simple_subscription_to(
-            tables,
-            &mut dst_face,
-            res,
-            sub_info,
-            src_face,
-            full_peer_net,
-        );
+        if ((src_face.id != dst_face.id
+            && dst_face
+                .remote_sub_interests
+                .iter()
+                .any(|key| intersect(key, &res.expr())))
+            || res.expr().starts_with(super::PREFIX_LIVELINESS))
+            && !dst_face.local_subs.contains(res)
+            && match tables.whatami {
+                WhatAmI::Router => {
+                    if full_peer_net {
+                        dst_face.whatami == WhatAmI::Client
+                    } else {
+                        dst_face.whatami != WhatAmI::Router
+                            && (src_face.whatami != WhatAmI::Peer
+                                || dst_face.whatami != WhatAmI::Peer
+                                || tables.failover_brokering(src_face.zid, dst_face.zid))
+                    }
+                }
+                WhatAmI::Peer => {
+                    if full_peer_net {
+                        dst_face.whatami == WhatAmI::Client
+                    } else {
+                        src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client
+                    }
+                }
+                _ => src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client,
+            }
+        {
+            get_mut_unchecked(&mut dst_face)
+                .local_subs
+                .insert(res.clone());
+            let key_expr = Resource::decl_key(res, &mut dst_face);
+            dst_face.primitives.send_declare(Declare {
+                ext_qos: ext::QoSType::default(),
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::default(),
+                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                    id: 0, // TODO
+                    wire_expr: key_expr,
+                    ext_info: *sub_info,
+                }),
+            });
+        }
     }
 }
 
@@ -884,112 +943,176 @@ pub fn forget_client_subscription(
     }
 }
 
+pub fn declare_subscription_interest(
+    _tables: &TablesLock,
+    mut wtables: RwLockWriteGuard<Tables>,
+    face: &mut Arc<FaceState>,
+    expr: &WireExpr,
+    current: bool,
+    future: bool,
+    // router: &ZenohId,
+) {
+    match wtables
+        .get_mapping(face, &expr.scope, expr.mapping)
+        .cloned()
+    {
+        Some(prefix) => {
+            if future {
+                get_mut_unchecked(face)
+                    .remote_sub_interests
+                    .insert(prefix.expr() + expr.suffix.as_ref());
+            }
+            if current {
+                let sub_info = SubscriberInfo {
+                    reliability: Reliability::Reliable, // @TODO
+                    mode: Mode::Push,
+                };
+                match wtables.whatami {
+                    WhatAmI::Router => {
+                        if face.whatami == WhatAmI::Client {
+                            for sub in &wtables.router_subs {
+                                if !face.local_subs.contains(sub)
+                                    && intersects(
+                                        &sub.expr(),
+                                        &(prefix.expr() + expr.suffix.as_ref()),
+                                    )
+                                {
+                                    get_mut_unchecked(face).local_subs.insert(sub.clone());
+                                    let key_expr = Resource::decl_key(sub, face);
+                                    face.primitives.send_declare(Declare {
+                                        ext_qos: ext::QoSType::default(),
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::default(),
+                                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                            id: 0, // TODO
+                                            wire_expr: key_expr,
+                                            ext_info: sub_info,
+                                        }),
+                                    });
+                                }
+                            }
+                        } else if face.whatami == WhatAmI::Peer && !wtables.full_net(WhatAmI::Peer)
+                        {
+                            for sub in &wtables.router_subs {
+                                if !face.local_subs.contains(sub)
+                                    && keyexpr::new(&sub.expr()).unwrap().intersects(
+                                        keyexpr::new(&(prefix.expr() + expr.suffix.as_ref()))
+                                            .unwrap(),
+                                    )
+                                    && sub.context.is_some()
+                                    && (sub.context().router_subs.iter().any(|r| *r != wtables.zid)
+                                        || sub.session_ctxs.values().any(|s| {
+                                            s.subs.is_some()
+                                                && (s.face.whatami == WhatAmI::Client
+                                                    || (s.face.whatami == WhatAmI::Peer
+                                                        && wtables.failover_brokering(
+                                                            s.face.zid, face.zid,
+                                                        )))
+                                        }))
+                                {
+                                    get_mut_unchecked(face).local_subs.insert(sub.clone());
+                                    let key_expr = Resource::decl_key(sub, face);
+                                    face.primitives.send_declare(Declare {
+                                        ext_qos: ext::QoSType::default(),
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::default(),
+                                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                            id: 0, // TODO
+                                            wire_expr: key_expr,
+                                            ext_info: sub_info,
+                                        }),
+                                    });
+                                }
+                            }
+                        }
+                    }
+                    WhatAmI::Peer => {
+                        if wtables.full_net(WhatAmI::Peer) {
+                            if face.whatami == WhatAmI::Client {
+                                for sub in &wtables.peer_subs {
+                                    if !face.local_subs.contains(sub)
+                                        && intersects(
+                                            &sub.expr(),
+                                            &(prefix.expr() + expr.suffix.as_ref()),
+                                        )
+                                    {
+                                        get_mut_unchecked(face).local_subs.insert(sub.clone());
+                                        let key_expr = Resource::decl_key(sub, face);
+                                        face.primitives.send_declare(Declare {
+                                            ext_qos: ext::QoSType::default(),
+                                            ext_tstamp: None,
+                                            ext_nodeid: ext::NodeIdType::default(),
+                                            body: DeclareBody::DeclareSubscriber(
+                                                DeclareSubscriber {
+                                                    id: 0, // TODO
+                                                    wire_expr: key_expr,
+                                                    ext_info: sub_info,
+                                                },
+                                            ),
+                                        });
+                                    }
+                                }
+                            }
+                        } else {
+                            for src_face in wtables
+                                .faces
+                                .values()
+                                .cloned()
+                                .collect::<Vec<Arc<FaceState>>>()
+                            {
+                                for sub in &src_face.remote_subs {
+                                    propagate_simple_subscription_to(
+                                        &mut wtables,
+                                        face,
+                                        sub,
+                                        &sub_info,
+                                        &mut src_face.clone(),
+                                        &(prefix.expr() + expr.suffix.as_ref()),
+                                        false,
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    WhatAmI::Client => {
+                        for src_face in wtables
+                            .faces
+                            .values()
+                            .cloned()
+                            .collect::<Vec<Arc<FaceState>>>()
+                        {
+                            for sub in &src_face.remote_subs {
+                                propagate_simple_subscription_to(
+                                    &mut wtables,
+                                    face,
+                                    sub,
+                                    &sub_info,
+                                    &mut src_face.clone(),
+                                    &(prefix.expr() + expr.suffix.as_ref()),
+                                    false,
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None => log::error!("Declare interest for unknown scope {}!", expr.scope),
+    }
+}
+
 pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
-    let sub_info = SubscriberInfo {
-        reliability: Reliability::Reliable, // @TODO
-        mode: Mode::Push,
-    };
-    match tables.whatami {
-        WhatAmI::Router => {
-            if face.whatami == WhatAmI::Client {
-                for sub in &tables.router_subs {
-                    get_mut_unchecked(face).local_subs.insert(sub.clone());
-                    let key_expr = Resource::decl_key(sub, face);
-                    face.primitives.send_declare(Declare {
-                        ext_qos: ext::QoSType::default(),
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
-                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                            id: 0, // TODO
-                            wire_expr: key_expr,
-                            ext_info: sub_info,
-                        }),
-                    });
-                }
-            } else if face.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer) {
-                for sub in &tables.router_subs {
-                    if sub.context.is_some()
-                        && (sub.context().router_subs.iter().any(|r| *r != tables.zid)
-                            || sub.session_ctxs.values().any(|s| {
-                                s.subs.is_some()
-                                    && (s.face.whatami == WhatAmI::Client
-                                        || (s.face.whatami == WhatAmI::Peer
-                                            && tables.failover_brokering(s.face.zid, face.zid)))
-                            }))
-                    {
-                        get_mut_unchecked(face).local_subs.insert(sub.clone());
-                        let key_expr = Resource::decl_key(sub, face);
-                        face.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
-                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                id: 0, // TODO
-                                wire_expr: key_expr,
-                                ext_info: sub_info,
-                            }),
-                        });
-                    }
-                }
-            }
-        }
-        WhatAmI::Peer => {
-            if tables.full_net(WhatAmI::Peer) {
-                if face.whatami == WhatAmI::Client {
-                    for sub in &tables.peer_subs {
-                        get_mut_unchecked(face).local_subs.insert(sub.clone());
-                        let key_expr = Resource::decl_key(sub, face);
-                        face.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
-                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                id: 0, // TODO
-                                wire_expr: key_expr,
-                                ext_info: sub_info,
-                            }),
-                        });
-                    }
-                }
-            } else {
-                for src_face in tables
-                    .faces
-                    .values()
-                    .cloned()
-                    .collect::<Vec<Arc<FaceState>>>()
-                {
-                    for sub in &src_face.remote_subs {
-                        propagate_simple_subscription_to(
-                            tables,
-                            face,
-                            sub,
-                            &sub_info,
-                            &mut src_face.clone(),
-                            false,
-                        );
-                    }
-                }
-            }
-        }
-        WhatAmI::Client => {
-            for src_face in tables
-                .faces
-                .values()
-                .cloned()
-                .collect::<Vec<Arc<FaceState>>>()
-            {
-                for sub in &src_face.remote_subs {
-                    propagate_simple_subscription_to(
-                        tables,
-                        face,
-                        sub,
-                        &sub_info,
-                        &mut src_face.clone(),
-                        false,
-                    );
-                }
-            }
-        }
+    if tables.whatami != WhatAmI::Client {
+        face.primitives.send_declare(Declare {
+            ext_qos: ext::QoSType::default(),
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::default(),
+            body: DeclareBody::DeclareInterest(DeclareInterest {
+                id: 0,
+                wire_expr: "**".to_string().into(),
+                interest: Interest::SUBSCRIBERS | Interest::CURRENT | Interest::FUTURE,
+            }),
+        });
     }
 }
 
@@ -1687,6 +1810,27 @@ pub fn full_reentrant_route_data(
                 prefix.expr(),
                 expr.suffix.as_ref()
             );
+
+            if tables.whatami == WhatAmI::Client {
+                for outface in tables.faces.values() {
+                    if face.id != outface.id {
+                        outface.primitives.send_push(Push {
+                            wire_expr: Resource::get_best_key(
+                                &prefix,
+                                expr.suffix.as_ref(),
+                                outface.id,
+                            )
+                            .to_owned(),
+                            ext_qos: ext::QoSType::default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            payload: payload.clone(),
+                        })
+                    }
+                }
+                return;
+            }
+
             let mut expr = RoutingExpr::new(&prefix, expr.suffix.as_ref());
 
             if tables.whatami != WhatAmI::Router

@@ -31,6 +31,7 @@ pub struct FaceState {
     pub(super) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(super) local_subs: HashSet<Arc<Resource>>,
     pub(super) remote_subs: HashSet<Arc<Resource>>,
+    pub(super) remote_sub_interests: HashSet<String>,
     pub(super) local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
     pub(super) remote_qabls: HashSet<Arc<Resource>>,
     pub(super) next_qid: RequestId,
@@ -53,6 +54,7 @@ impl FaceState {
             link_id,
             local_mappings: HashMap::new(),
             remote_mappings: HashMap::new(),
+            remote_sub_interests: HashSet::new(),
             local_subs: HashSet::new(),
             remote_subs: HashSet::new(),
             local_qabls: HashMap::new(),
@@ -360,7 +362,19 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::DeclareToken(_m) => todo!(),
             zenoh_protocol::network::DeclareBody::UndeclareToken(_m) => todo!(),
-            zenoh_protocol::network::DeclareBody::DeclareInterest(_m) => todo!(),
+            zenoh_protocol::network::DeclareBody::DeclareInterest(m) => {
+                let wtables = zwrite!(self.tables.tables);
+                if m.interest.subscribers() {
+                    declare_subscription_interest(
+                        &self.tables,
+                        wtables,
+                        &mut self.state.clone(),
+                        &m.wire_expr,
+                        m.interest.current(),
+                        m.interest.future(),
+                    );
+                }
+            }
             zenoh_protocol::network::DeclareBody::FinalInterest(_m) => todo!(),
             zenoh_protocol::network::DeclareBody::UndeclareInterest(_m) => todo!(),
         }

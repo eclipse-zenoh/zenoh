@@ -1993,11 +1993,11 @@ impl Primitives for Session {
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
                 trace!("recv UndeclareQueryable {:?}", m.id);
             }
-            DeclareBody::DeclareToken(_) => todo!(),
-            DeclareBody::UndeclareToken(_) => todo!(),
-            DeclareBody::DeclareInterest(_) => todo!(),
-            DeclareBody::FinalInterest(_) => todo!(),
-            DeclareBody::UndeclareInterest(_) => todo!(),
+            DeclareBody::DeclareToken(_) => {}
+            DeclareBody::UndeclareToken(_) => {}
+            DeclareBody::DeclareInterest(_) => {}
+            DeclareBody::FinalInterest(_) => {}
+            DeclareBody::UndeclareInterest(_) => {}
         }
     }
 
