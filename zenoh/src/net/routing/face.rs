@@ -23,7 +23,7 @@ use zenoh_protocol::{
     },
     zenoh::{DataInfo, QueryBody, RoutingContext},
 };
-use zenoh_transport::Primitives;
+use zenoh_transport::{Primitives, TransportMulticast};
 
 pub struct FaceState {
     pub(super) id: usize,
@@ -39,6 +39,7 @@ pub struct FaceState {
     pub(super) remote_qabls: HashSet<Arc<Resource>>,
     pub(super) next_qid: ZInt,
     pub(super) pending_queries: HashMap<ZInt, Arc<Query>>,
+    pub(super) mcast_group: Option<TransportMulticast>,
 }
 
 impl FaceState {
@@ -48,6 +49,7 @@ impl FaceState {
         whatami: WhatAmI,
         primitives: Arc<dyn Primitives + Send + Sync>,
         link_id: usize,
+        mcast_group: Option<TransportMulticast>,
     ) -> Arc<FaceState> {
         Arc::new(FaceState {
             id,
@@ -63,6 +65,7 @@ impl FaceState {
             remote_qabls: HashSet::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
+            mcast_group,
         })
     }
 

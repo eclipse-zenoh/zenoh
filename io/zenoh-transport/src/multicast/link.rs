@@ -87,8 +87,22 @@ impl TransportLinkMulticast {
         let initial_sns: Vec<ConduitSn> = conduit_tx
             .iter()
             .map(|x| ConduitSn {
-                reliable: zlock!(x.reliable).sn.now(),
-                best_effort: zlock!(x.best_effort).sn.now(),
+                reliable: {
+                    let sn = zlock!(x.reliable).sn.now();
+                    if sn == 0 {
+                        config.sn_resolution - 1
+                    } else {
+                        sn - 1
+                    }
+                },
+                best_effort: {
+                    let sn = zlock!(x.best_effort).sn.now();
+                    if sn == 0 {
+                        config.sn_resolution - 1
+                    } else {
+                        sn - 1
+                    }
+                },
             })
             .collect();
 
