@@ -354,6 +354,20 @@ pub fn get_unicast_addresses_of_interface(name: &str) -> ZResult<Vec<IpAddr>> {
     }
 }
 
+pub fn get_index_of_interface(addr: IpAddr) -> Option<u32> {
+    #[cfg(unix)]
+    {
+        pnet_datalink::interfaces()
+            .iter()
+            .find(|iface| iface.ips.iter().any(|ipnet| ipnet.ip() == addr))
+            .map(|iface| iface.index)
+    }
+    #[cfg(windows)]
+    {
+        None
+    }
+}
+
 pub fn get_ipv4_ipaddrs() -> Vec<IpAddr> {
     get_local_addresses()
         .unwrap_or_else(|_| vec![])
