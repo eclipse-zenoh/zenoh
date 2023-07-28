@@ -689,7 +689,7 @@ where
     ) -> Result<<Self as validated_struct::ValidatedMapAssociatedTypes<'a>>::Accessor, GetError>
     {
         let guard: MutexGuard<'a, T> = zlock!(self.inner.inner);
-        // Safety: MutexGuard pins the mutex behind which the value is held.
+        // SAFETY: MutexGuard pins the mutex behind which the value is held.
         let subref = guard.get(key.as_ref())? as *const _;
         Ok(GetGuard {
             _guard: guard,
@@ -729,7 +729,7 @@ where
     ) -> Result<<Self as validated_struct::ValidatedMapAssociatedTypes<'a>>::Accessor, GetError>
     {
         let guard: MutexGuard<'a, T> = zlock!(self.inner.inner);
-        // Safety: MutexGuard pins the mutex behind which the value is held.
+        // SAFETY: MutexGuard pins the mutex behind which the value is held.
         let subref = guard.get(key.as_ref())? as *const _;
         Ok(GetGuard {
             _guard: guard,

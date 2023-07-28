@@ -269,7 +269,7 @@ zint_impl!(usize);
 //                 return 1;
 //             }
 //             x -= VLE_THR - 1;
-//             // Safety:
+//             // SAFETY
 //             // The `if x < VLE_THR` check at the beginning followed by `x -= VLE_THR - 1`
 //             // guarantees at this point that `x` is never `0`. Since `x` is 64bit,
 //             // then `n` is guaranteed to have a value between 1 and 8, both inclusives.

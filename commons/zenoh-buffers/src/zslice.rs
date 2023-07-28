@@ -117,26 +117,27 @@ impl ZSlice {
 
     #[inline]
     #[must_use]
-    pub fn range(&self) -> Range<usize> {
+    pub const fn range(&self) -> Range<usize> {
         self.start..self.end
     }
 
     #[inline]
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.end - self.start
     }
 
     #[inline]
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     #[inline]
     #[must_use]
     pub fn as_slice(&self) -> &[u8] {
-        &self.buf.as_slice()[self.range()]
+        // SAFETY: bounds checks are performed at `ZSlice` construction via `make()` or `subslice()`.
+        crate::unsafe_slice!(self.buf.as_slice(), self.range())
     }
 
     #[must_use]

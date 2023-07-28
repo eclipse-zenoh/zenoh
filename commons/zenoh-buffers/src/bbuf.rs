@@ -35,27 +35,29 @@ impl BBuf {
     }
 
     #[must_use]
-    pub fn capacity(&self) -> usize {
+    pub const fn capacity(&self) -> usize {
         self.buffer.len()
     }
 
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.len
     }
 
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.len == 0
     }
 
     #[must_use]
     pub fn as_slice(&self) -> &[u8] {
-        &self.buffer[..self.len]
+        // SAFETY: self.len is ensured by the writer to be smaller than buffer length.
+        crate::unsafe_slice!(self.buffer, ..self.len)
     }
 
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
-        &mut self.buffer[..self.len]
+        // SAFETY: self.len is ensured by the writer to be smaller than buffer length.
+        crate::unsafe_slice_mut!(self.buffer, ..self.len)
     }
 
     pub fn clear(&mut self) {
@@ -63,7 +65,8 @@ impl BBuf {
     }
 
     fn as_writable_slice(&mut self) -> &mut [u8] {
-        &mut self.buffer[self.len..]
+        // SAFETY: self.len is ensured by the writer to be smaller than buffer length.
+        crate::unsafe_slice_mut!(self.buffer, self.len..)
     }
 }
 

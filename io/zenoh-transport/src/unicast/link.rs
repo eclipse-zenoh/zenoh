@@ -182,14 +182,14 @@ impl TransportLinkUnicast {
         log::trace!("{}: closing", self.link);
         self.stop_rx();
         if let Some(handle) = self.handle_rx.take() {
-            // Safety: it is safe to unwrap the Arc since we have the ownership of the whole link
+            // SAFETY: it is safe to unwrap the Arc since we have the ownership of the whole link
             let handle_rx = Arc::try_unwrap(handle).unwrap();
             handle_rx.await;
         }
 
         self.stop_tx();
         if let Some(handle) = self.handle_tx.take() {
-            // Safety: it is safe to unwrap the Arc since we have the ownership of the whole link
+            // SAFETY: it is safe to unwrap the Arc since we have the ownership of the whole link
             let handle_tx = Arc::try_unwrap(handle).unwrap();
             handle_tx.await;
         }

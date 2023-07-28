@@ -238,7 +238,7 @@ impl From<&ZenohId> for uhlc::ID {
 
 impl From<ZenohId> for OwnedKeyExpr {
     fn from(zid: ZenohId) -> Self {
-        // Safety: zid.to_string() returns an stringified hexadecimal
+        // SAFETY: zid.to_string() returns an stringified hexadecimal
         // representation of the zid. Therefore, building a OwnedKeyExpr
         // by calling from_string_unchecked() is safe because it is
         // guaranteed that no wildcards nor reserved chars will be present.
