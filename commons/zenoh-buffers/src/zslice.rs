@@ -107,6 +107,7 @@ impl ZSlice {
     }
 
     #[inline]
+    #[must_use]
     pub fn downcast_ref<T>(&self) -> Option<&T>
     where
         T: Any,
@@ -115,25 +116,31 @@ impl ZSlice {
     }
 
     #[inline]
+    #[must_use]
     pub fn range(&self) -> Range<usize> {
         self.start..self.end
     }
 
     #[inline]
+    #[must_use]
     pub fn len(&self) -> usize {
         self.end - self.start
     }
 
     #[inline]
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     #[inline]
+    #[must_use]
     pub fn as_slice(&self) -> &[u8] {
-        &self.buf.as_slice()[self.range()]
+        // &self.buf.as_slice()[self.range()]
+        unsafe { self.buf.as_slice().get_unchecked(self.range()) }
     }
 
+    #[must_use]
     pub fn subslice(&self, start: usize, end: usize) -> Option<ZSlice> {
         if start <= end && end <= self.len() {
             Some(ZSlice {
@@ -159,7 +166,7 @@ impl Deref for ZSlice {
 
 impl AsRef<[u8]> for ZSlice {
     fn as_ref(&self) -> &[u8] {
-        self.deref()
+        self
     }
 }
 
@@ -191,7 +198,7 @@ impl Index<RangeFull> for ZSlice {
     type Output = [u8];
 
     fn index(&self, _range: RangeFull) -> &Self::Output {
-        self.deref()
+        self
     }
 }
 

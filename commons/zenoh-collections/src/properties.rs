@@ -53,13 +53,13 @@ impl fmt::Display for Properties {
             if v.is_empty() {
                 write!(f, "{k}")?
             } else {
-                write!(f, "{}{}{}", k, KV_SEP, v)?
+                write!(f, "{k}{KV_SEP}{v}")?
             }
             for (k, v) in it {
                 if v.is_empty() {
                     write!(f, "{DEFAULT_PROP_SEP}{k}")?
                 } else {
-                    write!(f, "{}{}{}{}", DEFAULT_PROP_SEP, k, KV_SEP, v)?
+                    write!(f, "{DEFAULT_PROP_SEP}{k}{KV_SEP}{v}")?
                 }
             }
         }
@@ -69,7 +69,7 @@ impl fmt::Display for Properties {
 
 impl fmt::Debug for Properties {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
+        write!(f, "{self}")
     }
 }
 
@@ -82,7 +82,7 @@ impl From<&str> for Properties {
                 .flat_map(|s| s.split(sep))
                 .collect::<Vec<&str>>();
         }
-        props = props.into_iter().map(|s| s.trim()).collect::<Vec<&str>>();
+        props = props.into_iter().map(str::trim).collect::<Vec<&str>>();
         let inner = props
             .iter()
             .filter_map(|prop| {
@@ -117,7 +117,7 @@ impl From<&[(&str, &str)]> for Properties {
     fn from(kvs: &[(&str, &str)]) -> Self {
         let inner = kvs
             .iter()
-            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
             .collect();
         Self(inner)
     }

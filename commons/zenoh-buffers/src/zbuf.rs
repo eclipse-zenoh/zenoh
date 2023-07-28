@@ -19,7 +19,7 @@ use crate::{
     SplitBuffer, ZSlice,
 };
 use alloc::{sync::Arc, vec::Vec};
-use core::{cmp, iter, mem, num::NonZeroUsize, slice};
+use core::{cmp, iter, num::NonZeroUsize, ptr, slice};
 use zenoh_collections::SingleOrVec;
 
 fn get_mut_unchecked<T>(arc: &mut Arc<T>) -> &mut T {
@@ -32,6 +32,7 @@ pub struct ZBuf {
 }
 
 impl ZBuf {
+    #[must_use]
     pub fn empty() -> Self {
         Self::default()
     }
@@ -92,14 +93,14 @@ impl PartialEq for ZBuf {
                         return false;
                     }
                     if cmp_len == l.len() {
-                        current_self = self_slices.next()
+                        current_self = self_slices.next();
                     } else {
-                        current_self = Some(&l[cmp_len..])
+                        current_self = Some(&l[cmp_len..]);
                     }
                     if cmp_len == r.len() {
-                        current_other = other_slices.next()
+                        current_other = other_slices.next();
                     } else {
-                        current_other = Some(&r[cmp_len..])
+                        current_other = Some(&r[cmp_len..]);
                     }
                 }
             }
@@ -112,9 +113,9 @@ impl<T> From<T> for ZBuf
 where
     T: Into<ZSlice>,
 {
-    fn from(buf: T) -> Self {
+    fn from(t: T) -> Self {
         let mut zbuf = ZBuf::empty();
-        let zslice: ZSlice = buf.into();
+        let zslice: ZSlice = t.into();
         zbuf.push_zslice(zslice);
         zbuf
     }
@@ -437,7 +438,7 @@ impl Writer for ZBufWriter<'_> {
         let prev_cache_len = cache.len();
         cache.reserve(len);
         unsafe {
-            len = f(mem::transmute(&mut cache.spare_capacity_mut()[..len]));
+            len = f(&mut *(ptr::addr_of_mut!(cache.spare_capacity_mut()[..len]) as *mut [u8]));
             cache.set_len(prev_cache_len + len);
         }
         let cache_len = cache.len();
@@ -489,9 +490,9 @@ impl BacktrackableWriter for ZBufWriter<'_> {
     fn rewind(&mut self, mark: Self::Mark) -> bool {
         self.inner
             .slices
-            .truncate(mark.slice + (mark.byte != 0) as usize);
+            .truncate(mark.slice + usize::from(mark.byte != 0));
         if let Some(slice) = self.inner.slices.last_mut() {
-            slice.end = mark.byte
+            slice.end = mark.byte;
         }
         true
     }

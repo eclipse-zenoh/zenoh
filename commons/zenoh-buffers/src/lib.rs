@@ -87,14 +87,14 @@ pub mod reader {
         fn read_exact(&mut self, into: &mut [u8]) -> Result<(), DidntRead>;
         fn remaining(&self) -> usize;
 
-        /// Returns an iterator of ZSlices such that the sum of their length is _exactly_ `len`.
+        /// Returns an iterator of `ZSlices` such that the sum of their length is _exactly_ `len`.
         fn read_zslices<F: FnMut(ZSlice)>(
             &mut self,
             len: usize,
             for_each_slice: F,
         ) -> Result<(), DidntRead>;
 
-        /// Reads exactly `len` bytes, returning them as a single ZSlice.
+        /// Reads exactly `len` bytes, returning them as a single `ZSlice`.
         fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead>;
 
         fn read_u8(&mut self) -> Result<u8, DidntRead> {
@@ -145,7 +145,7 @@ pub trait SplitBuffer<'a> {
 
     /// Returns `true` if the buffer has a length of 0.
     fn is_empty(&'a self) -> bool {
-        self.slices().all(|s| s.is_empty())
+        self.slices().all(<[u8]>::is_empty)
     }
 
     /// Returns the number of bytes in the buffer.
