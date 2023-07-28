@@ -16,9 +16,10 @@ use crate::{
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
 };
 use alloc::vec::Vec;
-use core::{mem, num::NonZeroUsize};
+use core::{num::NonZeroUsize, ptr};
 
 /// Allocate a vector with a given capacity and sets the length to that capacity.
+#[must_use]
 pub fn uninit(capacity: usize) -> Vec<u8> {
     let mut vbuf = Vec::with_capacity(capacity);
     #[allow(clippy::uninit_vec)]
@@ -66,7 +67,7 @@ impl Writer for &mut Vec<u8> {
     {
         self.reserve(len);
         unsafe {
-            len = f(mem::transmute(&mut self.spare_capacity_mut()[..len]));
+            len = f(&mut *(ptr::addr_of_mut!(self.spare_capacity_mut()[..len]) as *mut [u8]));
             self.set_len(self.len() + len);
         }
         NonZeroUsize::new(len).ok_or(DidntWrite)

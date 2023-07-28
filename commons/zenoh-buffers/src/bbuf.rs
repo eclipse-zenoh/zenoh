@@ -26,6 +26,7 @@ pub struct BBuf {
 }
 
 impl BBuf {
+    #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
             buffer: vec::uninit(capacity).into_boxed_slice(),
@@ -33,18 +34,22 @@ impl BBuf {
         }
     }
 
+    #[must_use]
     pub fn capacity(&self) -> usize {
         self.buffer.len()
     }
 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.len
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len == 0
     }
 
+    #[must_use]
     pub fn as_slice(&self) -> &[u8] {
         &self.buffer[..self.len]
     }

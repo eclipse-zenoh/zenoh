@@ -11,9 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use zenoh_buffers::reader::*;
-use zenoh_buffers::writer::*;
-use zenoh_buffers::*;
+use zenoh_buffers::{
+    reader::{HasReader, Reader, SiphonableReader},
+    writer::{BacktrackableWriter, HasWriter, Writer},
+};
+use zenoh_buffers::{BBuf, ZBuf, ZSlice};
 
 const BYTES: usize = 18;
 
