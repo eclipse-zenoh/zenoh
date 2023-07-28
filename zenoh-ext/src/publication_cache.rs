@@ -53,9 +53,9 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
 
     /// Change the prefix used for queryable.
     pub fn queryable_prefix<TryIntoKeyExpr>(mut self, queryable_prefix: TryIntoKeyExpr) -> Self
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh_result::Error>,
+        where
+            TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
+            <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh_result::Error>,
     {
         self.queryable_prefix = Some(queryable_prefix.try_into().map_err(Into::into));
         self
@@ -195,6 +195,11 @@ impl<'a> PublicationCache<'a> {
                             if !query.selector().key_expr.as_str().contains('*') {
                                 if let Some(queue) = cache.get(query.selector().key_expr.as_keyexpr()) {
                                     for sample in queue {
+                                        if let (Some(time_range), Some(timestamp)) = (query.selector().time_range().unwrap(), sample.timestamp) {
+                                            if !time_range.contains(timestamp.get_time().to_system_time()){
+                                                continue;
+                                            }
+                                        }
                                         if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
                                             log::warn!("Error replying to query: {}", e);
                                         }
@@ -204,6 +209,11 @@ impl<'a> PublicationCache<'a> {
                                 for (key_expr, queue) in cache.iter() {
                                     if query.selector().key_expr.intersects(unsafe{ keyexpr::from_str_unchecked(key_expr) }) {
                                         for sample in queue {
+                                            if let (Some(time_range), Some(timestamp)) = (query.selector().time_range().unwrap(), sample.timestamp) {
+                                                if !time_range.contains(timestamp.get_time().to_system_time()){
+                                                    continue;
+                                                }
+                                            }
                                             if let Err(e) = query.reply(Ok(sample.clone())).res_async().await {
                                                 log::warn!("Error replying to query: {}", e);
                                             }
