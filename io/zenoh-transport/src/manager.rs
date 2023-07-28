@@ -499,15 +499,6 @@ impl TransportManager {
             );
         }
 
-        if self
-            .locator_inspector
-            .is_multicast(&endpoint.to_locator())
-            .await?
-        {
-            // @TODO: multicast
-            bail!("Unimplemented");
-        } else {
-            self.open_transport_unicast(endpoint).await
-        }
+        self.open_transport_unicast(endpoint).await
     }
 }

@@ -63,6 +63,11 @@ impl SeqNum {
     }
 
     #[inline(always)]
+    pub(crate) fn next(&self) -> ZInt {
+        (self.value + 1) % self.resolution
+    }
+
+    #[inline(always)]
     pub(crate) fn resolution(&self) -> ZInt {
         self.resolution
     }
@@ -79,7 +84,7 @@ impl SeqNum {
 
     #[inline(always)]
     pub(crate) fn increment(&mut self) {
-        self.value = (self.value + 1) % self.resolution;
+        self.value = self.next();
     }
 
     /// Checks to see if two sequence number are in a precedence relationship,
