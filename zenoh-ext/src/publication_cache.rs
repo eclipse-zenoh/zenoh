@@ -53,9 +53,9 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
 
     /// Change the prefix used for queryable.
     pub fn queryable_prefix<TryIntoKeyExpr>(mut self, queryable_prefix: TryIntoKeyExpr) -> Self
-        where
-            TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
-            <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh_result::Error>,
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'c>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'c>>>::Error: Into<zenoh_result::Error>,
     {
         self.queryable_prefix = Some(queryable_prefix.try_into().map_err(Into::into));
         self
