@@ -2039,6 +2039,8 @@ pub fn route_query(
                             encoding: Encoding::default(),
                             ext_sinfo: None,
                             ext_consolidation: ConsolidationType::default(),
+                            #[cfg(feature = "shared-memory")]
+                            ext_shm: None,
                             ext_unknown: vec![],
                             payload,
                         }),

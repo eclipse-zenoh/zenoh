@@ -21,7 +21,7 @@ use zenoh_protocol::{
         err::{ext::ErrBodyType, Err},
         ext::ShmType,
         query::{ext::QueryBodyType, Query},
-        PushBody, Put, RequestBody, ResponseBody,
+        PushBody, Put, Reply, RequestBody, ResponseBody,
     },
 };
 use zenoh_result::ZResult;
@@ -102,6 +102,23 @@ impl MapShm for Query {
     }
 }
 
+// Impl - Reply
+impl MapShm for Reply {
+    fn map_to_shminfo(&mut self) -> ZResult<bool> {
+        let Self {
+            payload, ext_shm, ..
+        } = self;
+        map_to_shminfo!(payload, ext_shm)
+    }
+
+    fn map_to_shmbuf(&mut self, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
+        let Self {
+            payload, ext_shm, ..
+        } = self;
+        map_to_shmbuf!(payload, ext_shm, shmr)
+    }
+}
+
 // Impl - Err
 impl MapShm for Err {
     fn map_to_shminfo(&mut self) -> ZResult<bool> {
@@ -146,9 +163,10 @@ pub fn map_zmsg_to_shminfo(msg: &mut NetworkMessage) -> ZResult<bool> {
             RequestBody::Del(_) | RequestBody::Pull(_) => Ok(false),
         },
         NetworkBody::Response(Response { payload, .. }) => match payload {
+            ResponseBody::Reply(b) => b.map_to_shminfo(),
             ResponseBody::Put(b) => b.map_to_shminfo(),
             ResponseBody::Err(b) => b.map_to_shminfo(),
-            ResponseBody::Ack(_) | ResponseBody::Reply(_) => Ok(false),
+            ResponseBody::Ack(_) => Ok(false),
         },
         NetworkBody::ResponseFinal(_) | NetworkBody::Declare(_) | NetworkBody::OAM(_) => Ok(false),
     }
@@ -202,7 +220,8 @@ pub fn map_zmsg_to_shmbuf(
         NetworkBody::Response(Response { payload, .. }) => match payload {
             ResponseBody::Put(b) => b.map_to_shmbuf(shmr),
             ResponseBody::Err(b) => b.map_to_shmbuf(shmr),
-            ResponseBody::Ack(_) | ResponseBody::Reply(_) => Ok(false),
+            ResponseBody::Reply(b) => b.map_to_shmbuf(shmr),
+            ResponseBody::Ack(_) => Ok(false),
         },
         NetworkBody::ResponseFinal(_) | NetworkBody::Declare(_) | NetworkBody::OAM(_) => Ok(false),
     }
