@@ -1658,6 +1658,8 @@ impl Session {
                     ext_sinfo: None,
                     ext_consolidation: consolidation.into(),
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
                         encoding: v.encoding.clone(),
                         payload: v.payload.clone(),
                     }),
@@ -1674,6 +1676,8 @@ impl Session {
                 target.into(),
                 consolidation.into(),
                 value.as_ref().map(|v| query::ext::QueryBodyType {
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: None,
                     encoding: v.encoding.clone(),
                     payload: v.payload.clone(),
                 }),
