@@ -52,39 +52,29 @@ use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
-use zenoh_protocol::network::common::ext::WireExprType;
-use zenoh_protocol::network::declare;
-use zenoh_protocol::network::ext;
-use zenoh_protocol::network::queryable::ext::QueryableInfo;
-use zenoh_protocol::network::request;
-use zenoh_protocol::network::request::ext::TargetType;
-use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::Declare;
-use zenoh_protocol::network::DeclareBody;
-use zenoh_protocol::network::DeclareKeyExpr;
-use zenoh_protocol::network::DeclareQueryable;
-use zenoh_protocol::network::DeclareSubscriber;
-use zenoh_protocol::network::Mapping;
-use zenoh_protocol::network::Push;
-use zenoh_protocol::network::Request;
-use zenoh_protocol::network::Response;
-use zenoh_protocol::network::ResponseFinal;
-use zenoh_protocol::network::UndeclareQueryable;
-use zenoh_protocol::network::UndeclareSubscriber;
-use zenoh_protocol::zenoh_new;
-use zenoh_protocol::zenoh_new::query;
-use zenoh_protocol::zenoh_new::query::ext::ConsolidationType;
-use zenoh_protocol::zenoh_new::query::ext::QueryBodyType;
-use zenoh_protocol::zenoh_new::Pull;
-use zenoh_protocol::zenoh_new::PushBody;
-use zenoh_protocol::zenoh_new::RequestBody;
-use zenoh_protocol::zenoh_new::ResponseBody;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
         AtomicExprId, CongestionControl, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
     },
+    network::{
+        declare::{
+            self, common::ext::WireExprType, queryable::ext::QueryableInfo,
+            subscriber::ext::SubscriberInfo, Declare, DeclareBody, DeclareKeyExpr,
+            DeclareQueryable, DeclareSubscriber, UndeclareQueryable, UndeclareSubscriber,
+        },
+        ext,
+        request::{self, ext::TargetType, Request},
+        Mapping, Push, Response, ResponseFinal,
+    },
     zenoh::{AtomicQueryId, DataInfo, QueryId, QueryTarget},
+    zenoh_new::{
+        query::{
+            self,
+            ext::{ConsolidationType, QueryBodyType},
+        },
+        Pull, PushBody, RequestBody, ResponseBody,
+    },
 };
 use zenoh_result::ZResult;
 use zenoh_util::core::AsyncResolve;
@@ -1653,7 +1643,7 @@ impl Session {
                 ext_target: target.into(),
                 ext_budget: None,
                 ext_timeout: Some(timeout),
-                payload: RequestBody::Query(zenoh_new::Query {
+                payload: RequestBody::Query(zenoh_protocol::zenoh_new::Query {
                     parameters: selector.parameters().to_string(),
                     ext_sinfo: None,
                     ext_consolidation: consolidation.into(),
@@ -2205,7 +2195,7 @@ impl Primitives for Session {
         trace!("recv ResponseFinal {:?}", msg);
         let mut state = zwrite!(self.state);
         match state.queries.get_mut(&msg.rid) {
-            Some(mut query) => {
+            Some(query) => {
                 query.nb_final -= 1;
                 if query.nb_final == 0 {
                     let query = state.queries.remove(&msg.rid).unwrap();

@@ -281,7 +281,7 @@ impl<'a> AcceptFsm for MultiLinkFsm<'a> {
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         const S: &str = "MultiLink extension - Recv InitSyn.";
 
-        let (mut state, mut ext) = input;
+        let (state, mut ext) = input;
         let mut pubkey = match state.pubkey.take() {
             Some(pubkey) => pubkey,
             None => return Ok(()),

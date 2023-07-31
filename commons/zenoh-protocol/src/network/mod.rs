@@ -19,11 +19,15 @@ pub mod response;
 
 use core::fmt;
 
-pub use declare::*;
-pub use oam::*;
-pub use push::*;
-pub use request::*;
-pub use response::*;
+pub use declare::{
+    Declare, DeclareBody, DeclareInterest, DeclareKeyExpr, DeclareQueryable, DeclareSubscriber,
+    DeclareToken, UndeclareInterest, UndeclareKeyExpr, UndeclareQueryable, UndeclareSubscriber,
+    UndeclareToken,
+};
+pub use oam::{Oam, OamId};
+pub use push::Push;
+pub use request::{AtomicRequestId, Request, RequestId};
+pub use response::{Response, ResponseFinal};
 
 use crate::core::{CongestionControl, Priority};
 

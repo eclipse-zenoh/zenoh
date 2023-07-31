@@ -55,7 +55,7 @@ impl TransportEventHandler for DummyTransportEventHandler {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+        Ok(Arc::new(DummyTransportPeerEventHandler))
     }
 }
 

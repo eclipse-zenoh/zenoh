@@ -60,7 +60,7 @@ impl TransportEventHandler for SHRouterIntermittent {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+        Ok(Arc::new(DummyTransportPeerEventHandler))
     }
 }
 
@@ -74,7 +74,7 @@ impl TransportEventHandler for SHClientIntermittent {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+        Ok(Arc::new(DummyTransportPeerEventHandler))
     }
 }
 
@@ -130,7 +130,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     /* [ROUTER] */
     let router_id = ZenohId::try_from([1]).unwrap();
 
-    let router_handler = Arc::new(SHRouterIntermittent::default());
+    let router_handler = Arc::new(SHRouterIntermittent);
     // Create the router transport manager
     let unicast = TransportManager::config_unicast()
         .max_links(1)
@@ -167,7 +167,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         .whatami(WhatAmI::Client)
         .zid(client02_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientIntermittent::default()))
+        .build(Arc::new(SHClientIntermittent))
         .unwrap();
 
     // Create the transport transport manager for the third client
@@ -178,7 +178,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         .whatami(WhatAmI::Client)
         .zid(client03_id)
         .unicast(unicast)
-        .build(Arc::new(SHClientIntermittent::default()))
+        .build(Arc::new(SHClientIntermittent))
         .unwrap();
 
     /* [1] */

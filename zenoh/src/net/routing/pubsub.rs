@@ -22,17 +22,20 @@ use std::convert::TryFrom;
 use std::sync::RwLock;
 use std::sync::{Arc, RwLockReadGuard};
 use zenoh_core::zread;
-use zenoh_protocol::core::key_expr::keyexpr;
-use zenoh_protocol::network::common::ext::WireExprType;
-use zenoh_protocol::network::declare::ext;
-use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::{
-    Declare, DeclareBody, DeclareSubscriber, Mode, Push, UndeclareSubscriber,
-};
-use zenoh_protocol::zenoh_new::PushBody;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI, WireExpr, ZenohId},
+    core::{
+        key_expr::{keyexpr, OwnedKeyExpr},
+        Reliability, WhatAmI, WireExpr, ZenohId,
+    },
+    network::{
+        declare::{
+            common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
+            DeclareSubscriber, Mode, UndeclareSubscriber,
+        },
+        Push,
+    },
     zenoh::RoutingContext,
+    zenoh_new::PushBody,
 };
 use zenoh_sync::get_mut_unchecked;
 

@@ -20,13 +20,13 @@ pub mod query;
 pub mod reply;
 
 use crate::core::Encoding;
-pub use ack::*;
-pub use del::*;
-pub use err::*;
-pub use pull::*;
-pub use put::*;
-pub use query::*;
-pub use reply::*;
+pub use ack::Ack;
+pub use del::Del;
+pub use err::Err;
+pub use pull::Pull;
+pub use put::Put;
+pub use query::{Consolidation, Query};
+pub use reply::Reply;
 
 pub mod id {
     pub const OAM: u8 = 0x00;

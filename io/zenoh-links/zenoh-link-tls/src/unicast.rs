@@ -15,10 +15,13 @@ use crate::{
     config::*, get_tls_addr, get_tls_host, get_tls_server_name, TLS_ACCEPT_THROTTLE_TIME,
     TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
-use async_rustls::rustls::server::AllowAnyAuthenticatedClient;
-use async_rustls::rustls::version::TLS13;
-pub use async_rustls::rustls::*;
-use async_rustls::{TlsAcceptor, TlsConnector, TlsStream};
+use async_rustls::{
+    rustls::{
+        server::AllowAnyAuthenticatedClient, version::TLS13, Certificate, ClientConfig,
+        OwnedTrustAnchor, PrivateKey, RootCertStore, ServerConfig,
+    },
+    TlsAcceptor, TlsConnector, TlsStream,
+};
 use async_std::fs;
 use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::FutureExt;

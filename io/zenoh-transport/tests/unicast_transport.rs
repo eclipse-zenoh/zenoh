@@ -295,7 +295,7 @@ impl TransportEventHandler for SHClient {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(SCClient::default()))
+        Ok(Arc::new(SCClient))
     }
 }
 
@@ -354,7 +354,7 @@ async fn open_transport(
         .whatami(WhatAmI::Client)
         .zid(client_id)
         .unicast(unicast)
-        .build(Arc::new(SHClient::default()))
+        .build(Arc::new(SHClient))
         .unwrap();
 
     // Create an empty transport with the client

@@ -214,7 +214,7 @@ impl LinkManagerBuilderMulticast {
     pub fn make(protocol: &str) -> ZResult<LinkManagerMulticast> {
         match protocol {
             #[cfg(feature = "transport_udp")]
-            UDP_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerMulticastUdp::default())),
+            UDP_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerMulticastUdp)),
             _ => bail!("Multicast not supported for {} protocol", protocol),
         }
     }

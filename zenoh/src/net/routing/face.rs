@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
 use zenoh_protocol::core::{ExprId, WhatAmI, ZenohId};
-use zenoh_protocol::network::queryable::ext::QueryableInfo;
+use zenoh_protocol::network::declare::queryable::ext::QueryableInfo;
 use zenoh_protocol::network::{Mapping, Push, Request, RequestId, Response, ResponseFinal};
 use zenoh_protocol::zenoh_new::RequestBody;
 use zenoh_transport::Primitives;
