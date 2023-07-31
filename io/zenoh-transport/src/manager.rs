@@ -56,6 +56,13 @@ use zenoh_result::{bail, ZResult};
 ///     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
 ///         Ok(Arc::new(DummyTransportPeerEventHandler))
 ///     }
+///
+///     fn new_multicast(
+///         &self,
+///         _transport: TransportMulticast,
+///     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+///         Ok(Arc::new(DummyTransportMulticastEventHandler))
+///     }
 /// }
 ///
 /// // Create the default TransportManager
@@ -70,7 +77,6 @@ use zenoh_result::{bail, ZResult};
 ///         .keep_alive(4)      // Send a KeepAlive every 250 ms
 ///         .accept_timeout(Duration::from_secs(1))
 ///         .accept_pending(10) // Set to 10 the number of simultanous pending incoming transports        
-///         .max_links(1)       // Allow max 1 inbound link per transport
 ///         .max_sessions(5);   // Allow max 5 transports open
 /// let mut resolution = Resolution::default();
 /// resolution.set(Field::FrameSN, Bits::U8);
