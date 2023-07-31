@@ -33,7 +33,6 @@ use zenoh_protocol::core::Resolution;
 use zenoh_protocol::transport::TransportSn;
 use zenoh_protocol::{
     core::{ConduitSnList, Priority, WhatAmI, ZenohId},
-    network::NetworkMessage,
     transport::{close, Join},
 };
 use zenoh_result::{bail, ZResult};
@@ -239,24 +238,6 @@ impl TransportMulticastInner {
         // // Terminate and clean up the transport
         // self.delete().await
         todo!();
-    }
-
-    /*************************************/
-    /*        SCHEDULE AND SEND TX       */
-    /*************************************/
-    /// Schedule a Zenoh message on the transmission queue    
-    #[allow(unused_mut)] // Required with "shared-memory" feature
-    pub(crate) fn schedule(&self, mut msg: NetworkMessage) {
-        // Multicast transports do not support SHM for the time being
-        #[cfg(feature = "shared-memory")]
-        {
-            let res = crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr);
-            if let Err(e) = res {
-                log::trace!("Failed SHM conversion: {}", e);
-                return;
-            }
-        }
-        self.schedule_first_fit(msg);
     }
 
     /*************************************/
