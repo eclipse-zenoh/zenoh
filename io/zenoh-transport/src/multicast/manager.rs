@@ -11,12 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::multicast::transport::TransportMulticastInner;
-use crate::multicast::TransportMulticast;
+#[cfg(feature = "shared-memory")]
+use crate::multicast::shm::SharedMemoryMulticast;
+use crate::multicast::{transport::TransportMulticastInner, TransportMulticast};
 use crate::TransportManager;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
+#[cfg(feature = "shared-memory")]
+use zenoh_config::SharedMemoryConf;
 use zenoh_config::{Config, LinkTxConf};
 use zenoh_core::zlock;
 use zenoh_link::*;
@@ -32,6 +35,8 @@ pub struct TransportManagerConfigMulticast {
     pub join_interval: Duration,
     pub max_sessions: usize,
     pub is_qos: bool,
+    #[cfg(feature = "shared-memory")]
+    pub is_shm: bool,
 }
 
 pub struct TransportManagerBuilderMulticast {
@@ -40,6 +45,8 @@ pub struct TransportManagerBuilderMulticast {
     join_interval: Duration,
     max_sessions: usize,
     is_qos: bool,
+    #[cfg(feature = "shared-memory")]
+    is_shm: bool,
 }
 
 pub struct TransportManagerStateMulticast {
@@ -47,6 +54,9 @@ pub struct TransportManagerStateMulticast {
     pub(crate) protocols: Arc<Mutex<HashMap<String, LinkManagerMulticast>>>,
     // Established transports
     pub(crate) transports: Arc<Mutex<HashMap<Locator, Arc<TransportMulticastInner>>>>,
+    // Shared memory
+    #[cfg(feature = "shared-memory")]
+    pub(super) shm: Arc<SharedMemoryMulticast>,
 }
 
 pub struct TransportManagerParamsMulticast {
@@ -80,6 +90,12 @@ impl TransportManagerBuilderMulticast {
         self
     }
 
+    #[cfg(feature = "shared-memory")]
+    pub fn shm(mut self, is_shm: bool) -> Self {
+        self.is_shm = is_shm;
+        self
+    }
+
     pub async fn from_config(
         mut self,
         config: &Config,
@@ -92,9 +108,13 @@ impl TransportManagerBuilderMulticast {
             config.transport().multicast().join_interval().unwrap(),
         ));
         self = self.max_sessions(config.transport().multicast().max_sessions().unwrap());
-        // Force QoS deactivation in multicast
-        // self = self.qos(*config.transport().qos().enabled()); @TODO
+        // @TODO: Force QoS deactivation in multicast since it is not supported
+        // self = self.qos(*config.transport().qos().enabled());
         self = self.qos(false);
+        #[cfg(feature = "shared-memory")]
+        {
+            self = self.shm(*config.transport().shared_memory().enabled());
+        }
 
         Ok(self)
     }
@@ -106,11 +126,15 @@ impl TransportManagerBuilderMulticast {
             join_interval: self.join_interval,
             max_sessions: self.max_sessions,
             is_qos: self.is_qos,
+            #[cfg(feature = "shared-memory")]
+            is_shm: self.is_shm,
         };
 
         let state = TransportManagerStateMulticast {
             protocols: Arc::new(Mutex::new(HashMap::new())),
             transports: Arc::new(Mutex::new(HashMap::new())),
+            #[cfg(feature = "shared-memory")]
+            shm: Arc::new(SharedMemoryMulticast::make()?),
         };
 
         let params = TransportManagerParamsMulticast { config, state };
@@ -122,6 +146,8 @@ impl TransportManagerBuilderMulticast {
 impl Default for TransportManagerBuilderMulticast {
     fn default() -> TransportManagerBuilderMulticast {
         let link_tx = LinkTxConf::default();
+        #[cfg(feature = "shared-memory")]
+        let shm = SharedMemoryConf::default();
 
         let tmb = TransportManagerBuilderMulticast {
             lease: Duration::from_millis(*link_tx.lease()),
@@ -129,6 +155,8 @@ impl Default for TransportManagerBuilderMulticast {
             join_interval: Duration::from_millis(0),
             max_sessions: 0,
             is_qos: false,
+            #[cfg(feature = "shared-memory")]
+            is_shm: *shm.enabled(),
         };
         async_std::task::block_on(tmb.from_config(&Config::default())).unwrap()
     }

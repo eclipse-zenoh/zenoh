@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
+use crate::unicast::{
     establishment::{AcceptFsm, OpenFsm},
-    unicast::{shm::Challenge, shm::SharedMemoryUnicast},
+    shm::{Challenge, SharedMemoryUnicast},
 };
 use async_trait::async_trait;
 use std::convert::TryInto;
