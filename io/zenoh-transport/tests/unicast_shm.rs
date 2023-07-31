@@ -37,8 +37,8 @@ mod tests {
     use zenoh_result::ZResult;
     use zenoh_shm::{SharedMemoryBuf, SharedMemoryManager};
     use zenoh_transport::{
-        TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
-        TransportUnicast,
+        TransportEventHandler, TransportManager, TransportMulticast,
+        TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -81,6 +81,13 @@ mod tests {
         ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
             let arc = Arc::new(SCPeer::new(self.count.clone(), self.is_shm));
             Ok(arc)
+        }
+
+        fn new_multicast(
+            &self,
+            _transport: TransportMulticast,
+        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+            panic!();
         }
     }
 
