@@ -2210,7 +2210,7 @@ pub(crate) fn finalize_pending_queries(tables_ref: &TablesLock, face: &mut Arc<F
 }
 
 pub(crate) fn finalize_pending_query(query: Arc<Query>) {
-    if let Ok(query) = Arc::try_unwrap(query) {
+    if let Some(query) = Arc::into_inner(query) {
         log::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
         query
             .src_face

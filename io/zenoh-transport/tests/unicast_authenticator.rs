@@ -20,7 +20,9 @@ use zenoh_protocol::{
     network::NetworkMessage,
 };
 use zenoh_result::ZResult;
-use zenoh_transport::unicast::establishment::ext::auth::Auth;
+use zenoh_transport::{
+    unicast::establishment::ext::auth::Auth, TransportMulticast, TransportMulticastEventHandler,
+};
 use zenoh_transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportPeer,
     TransportPeerEventHandler, TransportUnicast,
@@ -51,6 +53,13 @@ impl TransportEventHandler for SHRouterAuthenticator {
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(MHRouterAuthenticator::new()))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -87,6 +96,13 @@ impl TransportEventHandler for SHClientAuthenticator {
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(DummyTransportPeerEventHandler))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -374,7 +390,7 @@ async fn auth_pubkey(endpoint: &EndPoint) {
 
 #[cfg(feature = "auth_usrpwd")]
 async fn auth_usrpwd(endpoint: &EndPoint) {
-    use zenoh_transport::establishment::ext::auth::AuthUsrPwd;
+    use zenoh_transport::unicast::establishment::ext::auth::AuthUsrPwd;
     use zenoh_transport::TransportManager;
 
     /* [CLIENT] */

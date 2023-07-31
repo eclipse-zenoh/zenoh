@@ -15,6 +15,7 @@ use async_std::task;
 use clap::{ArgMatches, Command};
 use futures::future;
 use git_version::git_version;
+use std::collections::HashSet;
 use zenoh::config::{Config, ModeDependentValue, PermissionsConf, PluginLoad, ValidatedMap};
 use zenoh::plugins::PluginsManager;
 use zenoh::prelude::{EndPoint, WhatAmI};
@@ -77,21 +78,29 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
 
         let mut plugins = PluginsManager::dynamic(config.libloader());
         // Static plugins are to be added here, with `.add_static::<PluginType>()`
+        let mut required_plugins = HashSet::new();
         for plugin_load in config.plugins().load_requests() {
             let PluginLoad {
                 name,
                 paths,
                 required,
             } = plugin_load;
+            log::info!(
+                "Loading {req} plugin \"{name}\"",
+                req = if required { "required" } else { "" }
+            );
             if let Err(e) = match paths {
-                None => plugins.load_plugin_by_name(name),
-                Some(paths) => plugins.load_plugin_by_paths(name, &paths),
+                None => plugins.load_plugin_by_name(name.clone()),
+                Some(paths) => plugins.load_plugin_by_paths(name.clone(), &paths),
             } {
                 if required {
                     panic!("Plugin load failure: {}", e)
                 } else {
                     log::error!("Plugin load failure: {}", e)
                 }
+            }
+            if required {
+                required_plugins.insert(name);
             }
         }
 
@@ -104,6 +113,11 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
         };
 
         for (name, path, start_result) in plugins.start_all(&runtime) {
+            let required = required_plugins.contains(name);
+            log::info!(
+                "Starting {req} plugin \"{name}\"",
+                req = if required { "required" } else { "" }
+            );
             match start_result {
                 Ok(Some(_)) => log::info!("Successfully started plugin {} from {:?}", name, path),
                 Ok(None) => log::warn!("Plugin {} from {:?} wasn't loaded, as an other plugin by the same name is already running", name, path),
@@ -112,7 +126,11 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
                         Ok(s) => s,
                         Err(_) => panic!("Formatting the error from plugin {} ({:?}) failed, this is likely due to ABI unstability.\r\nMake sure your plugin was built with the same version of cargo as zenohd", name, path),
                     };
-                    log::error!("Plugin start failure: {}", if report.is_empty() {"no details provided"} else {report.as_str()});
+                    if required {
+                        panic!("Plugin \"{name}\" failed to start: {}", if report.is_empty() {"no details provided"} else {report.as_str()});
+                    }else {
+                        log::error!("Required plugin \"{name}\" failed to start: {}", if report.is_empty() {"no details provided"} else {report.as_str()});
+                    }
                 }
             }
         }
@@ -153,6 +171,9 @@ fn config_from_args(args: &ArgMatches) -> Config {
         if !value.eq_ignore_ascii_case("none") {
             config
                 .insert_json5("plugins/rest/http_port", &format!(r#""{value}""#))
+                .unwrap();
+            config
+                .insert_json5("plugins/rest/__required__", "true")
                 .unwrap();
         }
     }

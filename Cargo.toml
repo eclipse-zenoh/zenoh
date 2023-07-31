@@ -49,7 +49,7 @@ members = [
 exclude = ["ci/nostd-check"]
 
 [workspace.package]
-rust-version = "1.65.0"
+rust-version = "1.66.1"
 version = "0.10.0-dev" # Zenoh version
 repository = "https://github.com/eclipse-zenoh/zenoh"
 homepage = "http://zenoh.io"

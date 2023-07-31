@@ -39,7 +39,7 @@ where
     fn write(self, writer: &mut W, x: &InitSyn) -> Self::Output {
         // Header
         let mut header = id::INIT;
-        if x.resolution != Resolution::default() || x.batch_size != u16::MAX {
+        if x.resolution != Resolution::default() || x.batch_size != BatchSize::MAX {
             header |= flag::S;
         }
         let mut n_exts = (x.ext_qos.is_some() as u8)
@@ -200,7 +200,7 @@ where
     fn write(self, writer: &mut W, x: &InitAck) -> Self::Output {
         // Header
         let mut header = id::INIT | flag::A;
-        if x.resolution != Resolution::default() || x.batch_size != u16::MAX {
+        if x.resolution != Resolution::default() || x.batch_size != BatchSize::MAX {
             header |= flag::S;
         }
         let mut n_exts = (x.ext_qos.is_some() as u8)

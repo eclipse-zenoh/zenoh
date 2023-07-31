@@ -11,12 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{
-    establishment::AcceptFsm,
-    unicast::establishment::{
-        ext::auth::pubkey::{self, AuthPubKey, AuthPubKeyFsm, ZPublicKey},
-        OpenFsm,
-    },
+use crate::unicast::establishment::{
+    ext::auth::pubkey::{self, AuthPubKey, AuthPubKeyFsm, ZPublicKey},
+    AcceptFsm, OpenFsm,
 };
 use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;

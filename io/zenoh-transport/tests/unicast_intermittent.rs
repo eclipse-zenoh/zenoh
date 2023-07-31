@@ -35,8 +35,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportPeer,
-    TransportPeerEventHandler, TransportUnicast,
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
+    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 
 const MSG_SIZE: usize = 8;
@@ -62,6 +62,13 @@ impl TransportEventHandler for SHRouterIntermittent {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(DummyTransportPeerEventHandler))
     }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
+    }
 }
 
 // Transport Handler for the intermittent clients
@@ -75,6 +82,13 @@ impl TransportEventHandler for SHClientIntermittent {
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(DummyTransportPeerEventHandler))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -96,6 +110,13 @@ impl TransportEventHandler for SHClientStable {
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         Ok(Arc::new(SCClient::new(self.counter.clone())))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 

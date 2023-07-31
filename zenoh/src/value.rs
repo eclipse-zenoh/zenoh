@@ -275,11 +275,299 @@ impl TryFrom<Value> for i64 {
     }
 }
 
+// i32 conversion
+impl From<i32> for Value {
+    fn from(i: i32) -> Self {
+        Value {
+            payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
+            encoding: KnownEncoding::AppInteger.into(),
+        }
+    }
+}
+
+impl TryFrom<&Value> for i32 {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+                .map_err(|e| zerror!("{}", e))?
+                .parse()
+                .map_err(|e| zerror!("{}", e)),
+            unexpected => Err(zerror!("{:?} can not be converted into i32", unexpected)),
+        }
+    }
+}
+
+impl TryFrom<Value> for i32 {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+// i16 conversion
+impl From<i16> for Value {
+    fn from(i: i16) -> Self {
+        Value {
+            payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
+            encoding: KnownEncoding::AppInteger.into(),
+        }
+    }
+}
+
+impl TryFrom<&Value> for i16 {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+                .map_err(|e| zerror!("{}", e))?
+                .parse()
+                .map_err(|e| zerror!("{}", e)),
+            unexpected => Err(zerror!("{:?} can not be converted into i16", unexpected)),
+        }
+    }
+}
+
+impl TryFrom<Value> for i16 {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+// i8 conversion
+impl From<i8> for Value {
+    fn from(i: i8) -> Self {
+        Value {
+            payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
+            encoding: KnownEncoding::AppInteger.into(),
+        }
+    }
+}
+
+impl TryFrom<&Value> for i8 {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+                .map_err(|e| zerror!("{}", e))?
+                .parse()
+                .map_err(|e| zerror!("{}", e)),
+            unexpected => Err(zerror!("{:?} can not be converted into i8", unexpected)),
+        }
+    }
+}
+
+impl TryFrom<Value> for i8 {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+// isize conversion
+impl From<isize> for Value {
+    fn from(i: isize) -> Self {
+        Value {
+            payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
+            encoding: KnownEncoding::AppInteger.into(),
+        }
+    }
+}
+
+impl TryFrom<&Value> for isize {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+                .map_err(|e| zerror!("{}", e))?
+                .parse()
+                .map_err(|e| zerror!("{}", e)),
+            unexpected => Err(zerror!("{:?} can not be converted into isize", unexpected)),
+        }
+    }
+}
+
+impl TryFrom<Value> for isize {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+// u64 conversion
+impl From<u64> for Value {
+    fn from(i: u64) -> Self {
+        Value {
+            payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
+            encoding: KnownEncoding::AppInteger.into(),
+        }
+    }
+}
+
+impl TryFrom<&Value> for u64 {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+                .map_err(|e| zerror!("{}", e))?
+                .parse()
+                .map_err(|e| zerror!("{}", e)),
+            unexpected => Err(zerror!("{:?} can not be converted into u64", unexpected)),
+        }
+    }
+}
+
+impl TryFrom<Value> for u64 {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+// u32 conversion
+impl From<u32> for Value {
+    fn from(i: u32) -> Self {
+        Value {
+            payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
+            encoding: KnownEncoding::AppInteger.into(),
+        }
+    }
+}
+
+impl TryFrom<&Value> for u32 {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+                .map_err(|e| zerror!("{}", e))?
+                .parse()
+                .map_err(|e| zerror!("{}", e)),
+            unexpected => Err(zerror!("{:?} can not be converted into u32", unexpected)),
+        }
+    }
+}
+
+impl TryFrom<Value> for u32 {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+// u16 conversion
+impl From<u16> for Value {
+    fn from(i: u16) -> Self {
+        Value {
+            payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
+            encoding: KnownEncoding::AppInteger.into(),
+        }
+    }
+}
+
+impl TryFrom<&Value> for u16 {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+                .map_err(|e| zerror!("{}", e))?
+                .parse()
+                .map_err(|e| zerror!("{}", e)),
+            unexpected => Err(zerror!("{:?} can not be converted into u16", unexpected)),
+        }
+    }
+}
+
+impl TryFrom<Value> for u16 {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+// u8 conversion
+impl From<u8> for Value {
+    fn from(i: u8) -> Self {
+        Value {
+            payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
+            encoding: KnownEncoding::AppInteger.into(),
+        }
+    }
+}
+
+impl TryFrom<&Value> for u8 {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+                .map_err(|e| zerror!("{}", e))?
+                .parse()
+                .map_err(|e| zerror!("{}", e)),
+            unexpected => Err(zerror!("{:?} can not be converted into u8", unexpected)),
+        }
+    }
+}
+
+impl TryFrom<Value> for u8 {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+// usize conversion
+impl From<usize> for Value {
+    fn from(i: usize) -> Self {
+        Value {
+            payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
+            encoding: KnownEncoding::AppInteger.into(),
+        }
+    }
+}
+
+impl TryFrom<&Value> for usize {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+                .map_err(|e| zerror!("{}", e))?
+                .parse()
+                .map_err(|e| zerror!("{}", e)),
+            unexpected => Err(zerror!("{:?} can not be converted into usize", unexpected)),
+        }
+    }
+}
+
+impl TryFrom<Value> for usize {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
 // f64 conversion
 impl From<f64> for Value {
     fn from(f: f64) -> Self {
         Value {
-            payload: ZBuf::from(f.to_string().as_bytes().to_vec()),
+            payload: ZBuf::from(Vec::<u8>::from(f.to_string())),
             encoding: KnownEncoding::AppFloat.into(),
         }
     }
@@ -300,6 +588,38 @@ impl TryFrom<&Value> for f64 {
 }
 
 impl TryFrom<Value> for f64 {
+    type Error = ZError;
+
+    fn try_from(v: Value) -> Result<Self, Self::Error> {
+        Self::try_from(&v)
+    }
+}
+
+// f32 conversion
+impl From<f32> for Value {
+    fn from(f: f32) -> Self {
+        Value {
+            payload: ZBuf::from(Vec::<u8>::from(f.to_string())),
+            encoding: KnownEncoding::AppFloat.into(),
+        }
+    }
+}
+
+impl TryFrom<&Value> for f32 {
+    type Error = ZError;
+
+    fn try_from(v: &Value) -> Result<Self, Self::Error> {
+        match v.encoding.prefix() {
+            KnownEncoding::AppFloat => std::str::from_utf8(&v.payload.contiguous())
+                .map_err(|e| zerror!("{}", e))?
+                .parse()
+                .map_err(|e| zerror!("{}", e)),
+            unexpected => Err(zerror!("{:?} can not be converted into f32", unexpected)),
+        }
+    }
+}
+
+impl TryFrom<Value> for f32 {
     type Error = ZError;
 
     fn try_from(v: Value) -> Result<Self, Self::Error> {

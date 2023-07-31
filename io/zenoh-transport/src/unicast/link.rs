@@ -225,7 +225,7 @@ async fn tx_task(
                         let (batch_size, _) = tx_compressed(
                             is_compressed,
                             link.is_streamed(),
-                            &bytes,
+                            bytes,
                             &mut compression_aux_buff,
                         )?;
                         bytes = &compression_aux_buff[..batch_size];
@@ -458,7 +458,7 @@ fn rx_decompress(
     end_pos: &mut usize,
 ) -> ZResult<()> {
     let is_compressed: bool = buffer[COMPRESSION_BYTE_INDEX] == COMPRESSION_ENABLED;
-    Ok(if is_compressed {
+    if is_compressed {
         let mut aux_buff = pool.try_take().unwrap_or_else(|| pool.alloc());
         *end_pos = lz4_flex::block::decompress_into(
             &buffer[BATCH_PAYLOAD_START_INDEX..read_bytes],
@@ -469,7 +469,8 @@ fn rx_decompress(
     } else {
         *start_pos = BATCH_PAYLOAD_START_INDEX;
         *end_pos = read_bytes;
-    })
+    }
+    Ok(())
 }
 
 #[cfg(all(feature = "unstable", feature = "transport_compression"))]
@@ -576,14 +577,11 @@ fn set_uncompressed_batch_header(
     if is_streamed {
         let mut header = [0_u8, 0_u8];
         header[..HEADER_BYTES_SIZE].copy_from_slice(&bytes[..HEADER_BYTES_SIZE]);
-        let mut batch_size = u16::from_le_bytes(header);
-        batch_size += 1;
-        let batch_size: u16 = batch_size.try_into().map_err(|e| {
-            zerror!(
-                "Compression error: unable to convert compression size into u16: {}",
-                e
-            )
-        })?;
+        let batch_size = if let Some(size) = u16::from_le_bytes(header).checked_add(1) {
+            size
+        } else {
+            bail!("Compression error: unable to convert compression size into u16",)
+        };
         buff[0..HEADER_BYTES_SIZE].copy_from_slice(&batch_size.to_le_bytes());
         buff[COMPRESSION_BYTE_INDEX_STREAMED] = COMPRESSION_DISABLED;
         let batch_size: usize = batch_size.into();
@@ -599,7 +597,7 @@ fn set_uncompressed_batch_header(
         // May happen when the payload size is itself the MTU and adding the header exceeds it.
         Err(zerror!("Failed to send uncompressed batch, batch size ({}) exceeds the maximum batch size of {}.", final_batch_size, MAX_BATCH_SIZE))?;
     }
-    return Ok(final_batch_size);
+    Ok(final_batch_size)
 }
 
 #[cfg(all(feature = "transport_compression", feature = "unstable"))]
@@ -613,18 +611,17 @@ fn tx_compression_test() {
     // Compression done for the sake of comparing the result.
     let payload_compression_size = lz4_flex::block::compress_into(&payload, &mut buff).unwrap();
 
-    fn get_header_value(buff: &Box<[u8]>) -> u16 {
+    fn get_header_value(buff: &[u8]) -> u16 {
         let mut header = [0_u8, 0_u8];
         header[..HEADER_BYTES_SIZE].copy_from_slice(&buff[..HEADER_BYTES_SIZE]);
-        let batch_size = u16::from_le_bytes(header);
-        batch_size
+        u16::from_le_bytes(header)
     }
 
     // Streamed with compression enabled
     let batch = [16, 0, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4];
     let (batch_size, was_compressed) = tx_compressed(true, true, &batch, &mut buff).unwrap();
     let header = get_header_value(&buff);
-    assert_eq!(was_compressed, true);
+    assert!(was_compressed);
     assert_eq!(header as usize, payload_compression_size + COMPRESSION_BYTE);
     assert!(batch_size < batch.len() + COMPRESSION_BYTE);
     assert_eq!(batch_size, payload_compression_size + 3);
@@ -632,7 +629,7 @@ fn tx_compression_test() {
     // Not streamed with compression enabled
     let batch = payload;
     let (batch_size, was_compressed) = tx_compressed(true, false, &batch, &mut buff).unwrap();
-    assert_eq!(was_compressed, true);
+    assert!(was_compressed);
     assert!(batch_size < batch.len() + COMPRESSION_BYTE);
     assert_eq!(batch_size, payload_compression_size + COMPRESSION_BYTE);
 
@@ -640,20 +637,20 @@ fn tx_compression_test() {
     let batch = [16, 0, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4, 1, 2, 3, 4];
     let (batch_size, was_compressed) = tx_compressed(false, true, &batch, &mut buff).unwrap();
     let header = get_header_value(&buff);
-    assert_eq!(was_compressed, false);
+    assert!(!was_compressed);
     assert_eq!(header as usize, payload.len() + COMPRESSION_BYTE);
     assert_eq!(batch_size, batch.len() + COMPRESSION_BYTE);
 
     // Not streamed and compression disabled
     let batch = payload;
     let (batch_size, was_compressed) = tx_compressed(false, false, &batch, &mut buff).unwrap();
-    assert_eq!(was_compressed, false);
+    assert!(!was_compressed);
     assert_eq!(batch_size, payload.len() + COMPRESSION_BYTE);
 
     // Verify that if the compression result is bigger than the original payload size, then the non compressed payload is returned.
     let batch = [16, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]; // a non compressable payload with no repetitions
     let (batch_size, was_compressed) = tx_compressed(true, true, &batch, &mut buff).unwrap();
-    assert_eq!(was_compressed, false);
+    assert!(!was_compressed);
     assert_eq!(batch_size, batch.len() + COMPRESSION_BYTE);
 }
 

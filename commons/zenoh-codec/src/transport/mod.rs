@@ -15,10 +15,10 @@ mod close;
 mod fragment;
 mod frame;
 mod init;
+mod join;
 mod keepalive;
 mod oam;
 mod open;
-// mod join;
 
 use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
@@ -48,7 +48,7 @@ where
             TransportBody::OpenAck(b) => self.write(&mut *writer, b),
             TransportBody::Close(b) => self.write(&mut *writer, b),
             TransportBody::OAM(b) => self.write(&mut *writer, b),
-            // TransportBody::Join(b) => self.write(&mut *writer, b),
+            TransportBody::Join(b) => self.write(&mut *writer, b),
         }
     }
 }
@@ -83,7 +83,7 @@ where
             }
             id::CLOSE => TransportBody::Close(codec.read(&mut *reader)?),
             id::OAM => TransportBody::OAM(codec.read(&mut *reader)?),
-            // id::JOIN => TransportBody::Join(codec.read(&mut *reader)?),
+            id::JOIN => TransportBody::Join(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 

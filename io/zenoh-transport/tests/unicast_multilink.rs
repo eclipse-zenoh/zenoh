@@ -20,7 +20,8 @@ mod tests {
     use zenoh_protocol::core::{WhatAmI, ZenohId};
     use zenoh_result::ZResult;
     use zenoh_transport::{
-        DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportPeer,
+        DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
+        TransportMulticast, TransportMulticastEventHandler, TransportPeer,
         TransportPeerEventHandler, TransportUnicast,
     };
 
@@ -45,6 +46,13 @@ mod tests {
         ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
             Ok(Arc::new(DummyTransportPeerEventHandler))
         }
+
+        fn new_multicast(
+            &self,
+            _transport: TransportMulticast,
+        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+            panic!();
+        }
     }
 
     // Transport Handler for the client
@@ -63,6 +71,13 @@ mod tests {
             _transport: TransportUnicast,
         ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
             Ok(Arc::new(DummyTransportPeerEventHandler))
+        }
+
+        fn new_multicast(
+            &self,
+            _transport: TransportMulticast,
+        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+            panic!();
         }
     }
 
