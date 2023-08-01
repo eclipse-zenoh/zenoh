@@ -14,29 +14,20 @@
 use super::transport::ShmTransportUnicastInner;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
-use zenoh_core::zasyncread;
 use zenoh_protocol::network::NetworkMessage;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
 use zenoh_result::{bail, ZResult};
 
 impl ShmTransportUnicastInner {
-    async fn schedule_on_link(&self, msg: NetworkMessage) -> ZResult<()> {
-        let guard = zasyncread!(self.link);
-        match guard.as_ref() {
-            Some(l) => l.send(msg).await,
-            None => {
-                // No Link found
-                log::trace!("Message dropped because the transport has no link: {}", msg);
-                bail!("Message dropped because the transport has no link: {}", msg)
-            }
-        }
+    fn schedule_on_link(&self, msg: NetworkMessage) -> ZResult<()> {
+        self.send(msg)
     }
 
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(crate) async fn internal_schedule(&self, mut msg: NetworkMessage) -> ZResult<()> {
+    pub(crate) fn internal_schedule(&self, mut msg: NetworkMessage) -> ZResult<()> {
         #[cfg(feature = "shared-memory")]
         {
             let res = if self.config.is_shm {
@@ -72,7 +63,7 @@ impl ShmTransportUnicastInner {
             ZenohBody::LinkStateList(_) => self.stats.inc_tx_z_linkstate_msgs(1),
         }
 
-        let res = self.schedule_on_link(msg).await;
+        let res = self.schedule_on_link(msg);
 
         #[cfg(feature = "stats")]
         if res {

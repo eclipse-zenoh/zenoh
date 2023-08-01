@@ -98,9 +98,7 @@ fn parse_args() -> (Config, Duration, usize, usize) {
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
-        .arg(Arg::from_usage(
-            "--enable-shm 'Enable SHM transport.'",
-        ))
+        .arg(Arg::from_usage("--enable-shm 'Enable SHM transport.'"))
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
         ))

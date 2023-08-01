@@ -587,17 +587,12 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         #[cfg(feature = "shared-memory")]
         is_shm: state.ext_shm.is_shm(),
     };
-    let transport = step!(manager
-        .init_transport_unicast(config)
-        .await
-        .map_err(|e| (e, Some(close::reason::INVALID))));
 
-    // Add the link to the transport
-    step!(step!(transport
-        .get_inner()
-        .map_err(|e| (e, Some(close::reason::INVALID))))
-    .add_link(link.clone(), LinkUnicastDirection::Inbound)
-    .map_err(|e| (e, Some(close::reason::MAX_LINKS))));
+    let transport = step!(
+        manager
+            .init_transport_unicast(config, link.clone(), LinkUnicastDirection::Inbound)
+            .await
+    );
 
     // Send the open_ack on the link
     step!(link

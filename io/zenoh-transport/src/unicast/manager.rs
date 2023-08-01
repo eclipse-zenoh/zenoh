@@ -36,7 +36,7 @@ use zenoh_protocol::{
     core::{endpoint, ZenohId},
     transport::close,
 };
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_result::{bail, zerror, Error, ZResult};
 
 /*************************************/
 /*         TRANSPORT CONFIG          */
@@ -365,7 +365,9 @@ impl TransportManager {
     pub(super) async fn init_transport_unicast(
         &self,
         config: TransportConfigUnicast,
-    ) -> ZResult<TransportUnicast> {
+        link: LinkUnicast,
+        direction: LinkUnicastDirection,
+    ) -> Result<TransportUnicast, (Error, Option<u8>)> {
         let mut guard = zasynclock!(self.state.unicast.transports);
 
         // First verify if the transport already exists
@@ -382,8 +384,13 @@ impl TransportManager {
                         existing_config
                     );
                     log::trace!("{}", e);
-                    return Err(e.into());
+                    return Err((e.into(), Some(close::reason::INVALID)));
                 }
+
+                // Add the link to the transport
+                transport
+                    .add_link(link, direction)
+                    .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
 
                 Ok(TransportUnicast(Arc::downgrade(transport)))
             }
@@ -396,7 +403,7 @@ impl TransportManager {
                         config.zid
                     );
                     log::trace!("{}", e);
-                    return Err(e.into());
+                    return Err((e.into(), Some(close::reason::INVALID)));
                 }
 
                 // Create the transport
@@ -416,27 +423,43 @@ impl TransportManager {
                 };
 
                 // select and create transport implementation depending on the cfg
-                let a_t = {
+                let a_t: Result<Arc<dyn TransportUnicastInnerTrait>, (Error, Option<u8>)> = {
                     #[cfg(feature = "shared-memory")]
                     {
                         match stc.is_shm {
                             false => {
                                 log::info!("Will use NET transport!");
-                                Arc::new(TransportUnicastInner::make(self.clone(), stc)?)
-                                as Arc<dyn TransportUnicastInnerTrait> },
+                                let t: Arc<dyn TransportUnicastInnerTrait> =
+                                    TransportUnicastInner::make(self.clone(), stc)
+                                        .map_err(|e| (e, Some(close::reason::INVALID)))
+                                        .map(|v| {
+                                            Arc::new(v) as Arc<dyn TransportUnicastInnerTrait>
+                                        })?;
+                                // Add the link to the transport
+                                t.add_link(link, direction)
+                                    .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
+                                Ok(t)
+                            }
                             true => {
                                 log::info!("Will use SHM transport!");
-                                Arc::new(ShmTransportUnicastInner::make(self.clone(), stc)?)
-                                as Arc<dyn TransportUnicastInnerTrait> },
+                                Ok(ShmTransportUnicastInner::make(self.clone(), stc, link)
+                                    .map_err(|e| (e, Some(close::reason::INVALID)))
+                                    .map(|v| Arc::new(v) as Arc<dyn TransportUnicastInnerTrait>)?)
+                            }
                         }
                     }
                     #[cfg(not(feature = "shared-memory"))]
                     {
                         log::info!("Will use the only NET transport!");
-                        Arc::new(TransportUnicastInner::make(self.clone(), stc)?)
-                            as Arc<dyn TransportUnicastInnerTrait>
+                        let t = Arc::new(TransportUnicastInner::make(self.clone(), stc)?)
+                            as Arc<dyn TransportUnicastInnerTrait>;
+                        t.add_link(link, direction)
+                            .map_err(|e| (e, Some(close::reason::MAX_LINKS)))
+                            .into()?;
+                        Ok(t)
                     }
                 };
+                let a_t = a_t?;
 
                 // Add the transport transport to the list of active transports
                 let transport = TransportUnicast(Arc::downgrade(&a_t));

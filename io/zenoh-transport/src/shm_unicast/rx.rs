@@ -1,7 +1,4 @@
-use crate::{
-    shm_unicast::oam_extensions::unpack_oam_close,
-    transport_unicast_inner::TransportUnicastInnerTrait,
-};
+use crate::shm_unicast::oam_extensions::unpack_oam_close;
 
 //
 // Copyright (c) 2023 ZettaScale Technology
@@ -78,10 +75,7 @@ impl ShmTransportUnicastInner {
             #[cfg(feature = "shared-memory")]
             {
                 if self.config.is_shm {
-                    crate::shm::map_zmsg_to_shmbuf(
-                        &mut msg,
-                        &self.manager.shm().reader,
-                    )?;
+                    crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shm().reader)?;
                 }
             }
             callback.handle_message(msg)
@@ -95,10 +89,10 @@ impl ShmTransportUnicastInner {
         }
     }
 
-    fn handle_close(&self, link: &LinkUnicast, close: Close) -> ZResult<()> {
+    async fn handle_close(&self, link: &LinkUnicast, close: Close) -> ZResult<()> {
         // Stop now rx and tx tasks before doing the proper cleanup
-        let _ = self.stop_rx(link);
-        let _ = self.stop_tx(link);
+        self.stop_rx();
+        self.stop_keepalive();
 
         // Delete and clean up
         let c_transport = self.clone();
@@ -136,7 +130,7 @@ impl ShmTransportUnicastInner {
                     OAM_KEEPALIVE => {}
                     OAM_CLOSE => {
                         let oam_close = unpack_oam_close(oam)?;
-                        self.handle_close(link, oam_close)?;
+                        async_std::task::block_on(self.handle_close(link, oam_close))?;
                     }
                     _ => {
                         self.trigger_callback(msg)?;

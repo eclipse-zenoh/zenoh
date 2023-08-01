@@ -82,9 +82,7 @@ fn parse_args() -> (Config, usize, Priority, bool, usize) {
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
-        .arg(Arg::from_usage(
-            "--enable-shm 'Enable SHM transport.'",
-        ))
+        .arg(Arg::from_usage("--enable-shm 'Enable SHM transport.'"))
         .arg(Arg::from_usage(
             "<PAYLOAD_SIZE>          'Sets the size of the payload to publish'",
         ))

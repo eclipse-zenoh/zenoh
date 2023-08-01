@@ -643,10 +643,7 @@ fn transport_unicast_tcp_only() {
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
 }
 
-#[cfg(all(
-    feature = "transport_tcp",
-    feature = "shared-memory",
-))]
+#[cfg(all(feature = "transport_tcp", feature = "shared-memory",))]
 #[test]
 fn transport_unicast_tcp_only_with_shm() {
     let _ = env_logger::try_init();
@@ -671,7 +668,12 @@ fn transport_unicast_tcp_only_with_shm() {
         },
     ];
     // Run
-    task::block_on(run_with_shm(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_shm(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
 }
 
 #[cfg(feature = "transport_udp")]
@@ -702,10 +704,7 @@ fn transport_unicast_udp_only() {
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
 }
 
-#[cfg(all(
-    feature = "transport_tcp",
-    feature = "shared-memory",
-))]
+#[cfg(all(feature = "transport_udp", feature = "shared-memory",))]
 #[test]
 fn transport_unicast_udp_only_with_shm() {
     let _ = env_logger::try_init();
@@ -730,7 +729,12 @@ fn transport_unicast_udp_only_with_shm() {
         },
     ];
     // Run
-    task::block_on(run_with_shm(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_shm(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NOFRAG,
+    ));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -762,7 +766,11 @@ fn transport_unicast_unix_only() {
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
-#[cfg(all(feature = "transport_unixsock-stream", feature ="shared-memory", target_family = "unix"))]
+#[cfg(all(
+    feature = "transport_unixsock-stream",
+    feature = "shared-memory",
+    target_family = "unix"
+))]
 #[test]
 fn transport_unicast_unix_only_with_shm() {
     let _ = env_logger::try_init();
@@ -786,7 +794,12 @@ fn transport_unicast_unix_only_with_shm() {
         },
     ];
     // Run
-    task::block_on(run_with_shm(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_shm(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -827,10 +840,7 @@ fn transport_unicast_ws_only() {
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
 }
 
-#[cfg(all(
-    feature = "transport_ws",
-    feature = "shared-memory",
-))]
+#[cfg(all(feature = "transport_ws", feature = "shared-memory",))]
 #[test]
 fn transport_unicast_ws_only_with_shm() {
     let _ = env_logger::try_init();
@@ -863,7 +873,12 @@ fn transport_unicast_ws_only_with_shm() {
         },
     ];
     // Run
-    task::block_on(run_with_shm(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_shm(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
 }
 
 #[cfg(feature = "transport_shm")]
@@ -894,10 +909,7 @@ fn transport_unicast_shm_only() {
     task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
 }
 
-#[cfg(all(
-    feature = "transport_shm",
-    feature = "shared-memory",
-))]
+#[cfg(all(feature = "transport_shm", feature = "shared-memory",))]
 #[test]
 fn transport_unicast_shm_only_with_shm() {
     let _ = env_logger::try_init();
@@ -922,7 +934,12 @@ fn transport_unicast_shm_only_with_shm() {
         },
     ];
     // Run
-    task::block_on(run_with_shm(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_shm(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NOFRAG,
+    ));
 }
 
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]

@@ -17,176 +17,112 @@ use super::{oam_extensions::pack_oam_keepalive, transport::ShmTransportUnicastIn
 use crate::TransportExecutor;
 use async_std::prelude::FutureExt;
 use async_std::task;
-use async_std::task::JoinHandle;
 use zenoh_codec::*;
+use zenoh_core::{zasyncread, zwrite};
 
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::{writer::HasWriter, ZSlice};
-use zenoh_link::{LinkUnicast, LinkUnicastDirection};
+use zenoh_link::LinkUnicast;
 use zenoh_protocol::{network::NetworkMessage, transport::BatchSize};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::RecyclingObjectPool;
 
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const HEADER_BYTES_SIZE: usize = 2;
-
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const COMPRESSION_BYTE_INDEX_STREAMED: usize = 2;
-
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const COMPRESSION_BYTE_INDEX: usize = 0;
-
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const COMPRESSION_ENABLED: u8 = 1_u8;
-
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const COMPRESSION_DISABLED: u8 = 0_u8;
-
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const BATCH_PAYLOAD_START_INDEX: usize = 1;
-
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const MAX_BATCH_SIZE: usize = u16::MAX as usize;
-
-pub(super) struct ShmTransportLinkUnicast {
-    // Inbound / outbound
-    pub(super) direction: LinkUnicastDirection,
-    // The underlying link
-    pub(super) link: LinkUnicast,
-    // The transport this link is associated to
-    transport: ShmTransportUnicastInner,
-    // The signals to stop TX/RX tasks
-    handle_keepalive: Option<async_executor::Task<()>>,
-    handle_rx: Option<JoinHandle<()>>,
-}
-
-impl ShmTransportLinkUnicast {
-    pub(super) fn new(
-        transport: ShmTransportUnicastInner,
-        link: LinkUnicast,
-        direction: LinkUnicastDirection,
-    ) -> ShmTransportLinkUnicast {
-        ShmTransportLinkUnicast {
-            direction,
-            transport,
-            link,
-            handle_keepalive: None,
-            handle_rx: None,
-        }
-    }
-}
-
-async fn send_with_link(
-    link: &LinkUnicast,
-    msg: NetworkMessage,
-    #[cfg(feature = "stats")] stats: &Arc<TransportUnicastStatsAtomic>,
-) -> ZResult<()> {
-    let mut buff = vec![];
-    let codec = Zenoh080::new();
-    let mut writer = buff.writer();
-    codec
-        .write(&mut writer, &msg)
-        .map_err(|_| zerror!("Error serializing message {}", msg))?;
-
-    // write len for streamed links only
+pub(crate) async fn send_with_link(link: &LinkUnicast, msg: NetworkMessage) -> ZResult<()> {
     if link.is_streamed() {
-        let len = buff.len();
-        let ne = BatchSize::to_le_bytes(len.try_into()?);
-        link.write_all(&ne).await?;
+        let mut buffer = vec![0, 0];
+        let codec = Zenoh080::new();
+        let mut writer = buffer.writer();
+        codec
+            .write(&mut writer, &msg)
+            .map_err(|_| zerror!("Error serializing message {}", msg))?;
+
+        let len = buffer.len() - 2;
+        let le = BatchSize::to_le_bytes(len.try_into()?);
+
+        buffer[0] = le[0];
+        buffer[1] = le[1];
+
+        link.write_all(&buffer).await?;
+    } else {
+        let mut buffer = vec![];
+        let codec = Zenoh080::new();
+        let mut writer = buffer.writer();
+        codec
+            .write(&mut writer, &msg)
+            .map_err(|_| zerror!("Error serializing message {}", msg))?;
+
+        link.write_all(&buffer).await?;
     }
-    link.write_all(&buff).await?;
 
     #[cfg(feature = "stats")]
     {
-        self.transport.stats.inc_tx_t_msgs(1);
-        self.transport.stats.inc_tx_bytes(buff.len() + 2);
+        stats.inc_tx_t_msgs(1);
+        stats.inc_tx_bytes(buff.len() + 2);
     }
+
     Ok(())
 }
 
-impl ShmTransportLinkUnicast {
-    pub(super) async fn send(&self, msg: NetworkMessage) -> ZResult<()> {
-        send_with_link(
-            &self.link,
-            msg,
-            #[cfg(feature = "stats")]
-            &self.transport.stats,
-        )
-        .await
+impl ShmTransportUnicastInner {
+    pub(super) fn send(&self, msg: NetworkMessage) -> ZResult<()> {
+        async_std::task::block_on(async move {
+            let guard = zasyncread!(self.link);
+            send_with_link(&guard, msg).await
+        })
     }
 
-    pub(super) fn start_keepalive(&mut self, executor: &TransportExecutor, keep_alive: Duration) {
-        if self.handle_keepalive.is_none() {
-            // Spawn the keepalive task
-            let c_link = self.link.clone();
-            let c_transport = self.transport.clone();
-            let handle = executor.spawn(async move {
-                let res = keepalive_task(
-                    c_link.clone(),
-                    keep_alive,
-                    #[cfg(feature = "stats")]
-                    c_transport.stats.clone(),
-                )
-                .await;
-                if let Err(e) = res {
-                    log::debug!("{}", e);
-                    // Spawn a task to avoid a deadlock waiting for this same task
-                    // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link(&c_link).await });
-                }
-            });
-            self.handle_keepalive = Some(handle);
+    pub(super) fn start_keepalive(&self, executor: &TransportExecutor, keep_alive: Duration) {
+        let mut guard = zwrite!(self.handle_keepalive);
+        let c_transport = self.clone();
+        let handle = executor.spawn(async move {
+            let link = zasyncread!(c_transport.link).clone();
+            let res = keepalive_task(
+                link,
+                keep_alive,
+                #[cfg(feature = "stats")]
+                c_transport.stats,
+            )
+            .await;
+            if let Err(e) = res {
+                log::debug!("{}", e);
+                // Spawn a task to avoid a deadlock waiting for this same task
+                // to finish in the close() joining its handle
+                task::spawn(async move { c_transport.delete().await });
+            }
+        });
+        *guard = Some(handle);
+    }
+
+    pub(super) fn stop_keepalive(&self) {
+        if let Some(handle) = zwrite!(self.handle_keepalive).take() {
+            async_std::task::block_on(async move { handle.cancel().await });
         }
     }
 
-    pub(super) async fn stop_keepalive(&mut self) {
-        if let Some(handle_keepalive) = self.handle_keepalive.take() {
-            handle_keepalive.cancel().await;
-        }
+    pub(super) fn internal_start_rx(&self, lease: Duration, batch_size: u16) {
+        let mut guard = zwrite!(self.handle_rx);
+        let c_transport = self.clone();
+        let handle = task::spawn(async move {
+            let link = zasyncread!(c_transport.link).clone();
+            let rx_buffer_size = c_transport.manager.config.link_rx_buffer_size;
+
+            // Start the consume task
+            let res = rx_task(link, c_transport.clone(), lease, batch_size, rx_buffer_size).await;
+            if let Err(e) = res {
+                log::debug!("{}", e);
+                // Spawn a task to avoid a deadlock waiting for this same task
+                // to finish in the close() joining its handle
+                task::spawn(async move { c_transport.delete().await });
+            }
+        });
+        *guard = Some(handle);
     }
 
-    pub(super) fn start_rx(&mut self, lease: Duration, batch_size: u16) {
-        if self.handle_rx.is_none() {
-            // Spawn the RX task
-            let c_link = self.link.clone();
-            let c_transport = self.transport.clone();
-            let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
-
-            let handle = task::spawn(async move {
-                // Start the consume task
-                let res = rx_task(
-                    c_link.clone(),
-                    c_transport.clone(),
-                    lease,
-                    batch_size,
-                    c_rx_buffer_size,
-                )
-                .await;
-                if let Err(e) = res {
-                    log::debug!("{}", e);
-                    // Spawn a task to avoid a deadlock waiting for this same task
-                    // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link(&c_link).await });
-                }
-            });
-            self.handle_rx = Some(handle);
+    pub(super) fn stop_rx(&self) {
+        if let Some(handle) = zwrite!(self.handle_rx).take() {
+            async_std::task::block_on(async move { handle.cancel().await });
         }
-    }
-
-    pub(super) async fn stop_rx(&mut self) {
-        if let Some(handle_rx) = self.handle_rx.take() {
-            handle_rx.cancel().await;
-        }
-    }
-
-    pub(super) async fn close(mut self) -> ZResult<()> {
-        log::trace!("{}: closing", self.link);
-        self.stop_rx().await;
-        self.stop_keepalive().await;
-        self.link.close().await
     }
 }
 
@@ -200,14 +136,13 @@ async fn keepalive_task(
 ) -> ZResult<()> {
     loop {
         async_std::task::sleep(keep_alive).await;
-
-        send_with_link(
+        let _ = send_with_link(
             &link,
             pack_oam_keepalive(),
             #[cfg(feature = "stats")]
             &stats,
         )
-        .await?;
+        .await;
     }
 }
 

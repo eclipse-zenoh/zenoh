@@ -13,34 +13,28 @@
 //
 use super::super::TransportManager;
 use super::super::{TransportExecutor, TransportPeerEventHandler};
-use super::link::ShmTransportLinkUnicast;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
+use crate::shm_unicast::link::send_with_link;
 use crate::shm_unicast::oam_extensions::pack_oam_close;
 use crate::transport_unicast_inner::TransportUnicastInnerTrait;
 use crate::TransportConfigUnicast;
-use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock as AsyncRwLock};
+use async_executor::Task;
+use async_std::sync::{
+    Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock, RwLockReadGuard,
+    RwLockUpgradableReadGuard,
+};
+use async_std::task::JoinHandle;
 use async_trait::async_trait;
-use std::sync::{Arc, RwLock};
+use std::ops::Deref;
+use std::sync::{Arc, RwLock as SyncRwLock};
 use std::time::Duration;
-use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
+use zenoh_core::{zasynclock, zasyncread, zasyncread_upgradable, zread, zwrite};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::transport::Close;
 use zenoh_result::{bail, zerror, ZResult};
-
-macro_rules! zlinkget {
-    ($guard:expr, $link:expr) => {
-        $guard.iter().find(|tl| &tl.link == $link)
-    };
-}
-
-macro_rules! zlinkgetmut {
-    ($guard:expr, $link:expr) => {
-        $guard.iter_mut().find(|tl| &tl.link == $link)
-    };
-}
 
 /*************************************/
 /*             TRANSPORT             */
@@ -51,33 +45,52 @@ pub(crate) struct ShmTransportUnicastInner {
     pub(crate) manager: TransportManager,
     // Transport config
     pub(super) config: TransportConfigUnicast,
-    // The link associated to the channel
-    pub(super) link: Arc<AsyncRwLock<Option<ShmTransportLinkUnicast>>>,
+    // The link associated to the transport
+    pub(super) link: Arc<RwLock<LinkUnicast>>,
     // The callback
-    pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
+    pub(super) callback: Arc<SyncRwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
     // Mutex for notification
     pub(super) alive: Arc<AsyncMutex<bool>>,
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportUnicastStatsAtomic>,
+
+    // The flags to stop TX/RX tasks
+    pub(crate) handle_keepalive: Arc<SyncRwLock<Option<Task<()>>>>,
+    pub(crate) handle_rx: Arc<SyncRwLock<Option<JoinHandle<()>>>>,
 }
 
 impl ShmTransportUnicastInner {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
+        link: LinkUnicast,
     ) -> ZResult<ShmTransportUnicastInner> {
         let t = ShmTransportUnicastInner {
             manager,
             config,
-            link: Arc::new(AsyncRwLock::new(None)),
-            callback: Arc::new(RwLock::new(None)),
+            link: Arc::new(RwLock::new(link)),
+            callback: Arc::new(SyncRwLock::new(None)),
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats: Arc::new(TransportUnicastStatsAtomic::default()),
+            handle_keepalive: Arc::new(SyncRwLock::new(None)),
+            handle_rx: Arc::new(SyncRwLock::new(None)),
         };
 
         Ok(t)
+    }
+
+    #[inline(always)]
+    async fn zlinkget_complementary(
+        &self,
+        that_link: &LinkUnicast,
+    ) -> ZResult<RwLockReadGuard<'_, LinkUnicast>> {
+        let link = zasyncread!(self.link);
+        match link.deref() == that_link {
+            true => Ok(link),
+            false => bail!("not my link!"),
+        }
     }
 
     /*************************************/
@@ -104,10 +117,9 @@ impl ShmTransportUnicastInner {
         let _ = self.manager.del_transport_unicast(&self.config.zid).await;
 
         // Close and drop the link
-        let l = { zasyncwrite!(self.link).take() };
-        if let Some(l) = l {
-            let _ = l.close().await;
-        }
+        self.stop_keepalive();
+        let _ = zasyncread!(self.link).close().await;
+        self.stop_rx();
 
         // Notify the callback that we have closed the transport
         if let Some(cb) = callback.as_ref() {
@@ -119,16 +131,12 @@ impl ShmTransportUnicastInner {
 
     pub(crate) async fn del_link(&self, link: &LinkUnicast) -> ZResult<()> {
         // check if the link is ours
-        {
-            let guard = zasyncwrite!(self.link);
-            if zlinkget!(guard, link).is_none() {
-                bail!(
-                    "Can not delete Link {} with peer: {}",
-                    link,
-                    self.config.zid
-                )
-            }
-            drop(guard);
+        if self.zlinkget_complementary(link).await.is_err() {
+            bail!(
+                "Can not delete Link {} with peer: {}",
+                link,
+                self.config.zid
+            )
         }
 
         // Notify the callback
@@ -137,40 +145,6 @@ impl ShmTransportUnicastInner {
         }
 
         self.delete().await
-    }
-
-    pub(crate) async fn stop_tx(&self, link: &LinkUnicast) -> ZResult<()> {
-        let mut guard = zasyncwrite!(self.link);
-        match zlinkgetmut!(guard, link) {
-            Some(l) => {
-                l.stop_keepalive().await;
-                Ok(())
-            }
-            None => {
-                bail!(
-                    "Can not stop Link TX(keepalive) {} with peer: {}",
-                    link,
-                    self.config.zid
-                )
-            }
-        }
-    }
-
-    pub(crate) async fn stop_rx(&self, link: &LinkUnicast) -> ZResult<()> {
-        let mut guard = zasyncwrite!(self.link);
-        match zlinkgetmut!(guard, link) {
-            Some(l) => {
-                l.stop_rx().await;
-                Ok(())
-            }
-            None => {
-                bail!(
-                    "Can not stop Link RX {} with peer: {}",
-                    link,
-                    self.config.zid
-                )
-            }
-        }
     }
 }
 
@@ -189,12 +163,8 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
     }
 
     fn get_links(&self) -> Vec<LinkUnicast> {
-        async_std::task::block_on(async {
-            zasyncread!(self.link)
-                .iter()
-                .map(|l| l.link.clone())
-                .collect()
-        })
+        let guard = async_std::task::block_on(async { zasyncread!(self.link) });
+        [guard.clone()].to_vec()
     }
 
     fn get_zid(&self) -> ZenohId {
@@ -226,126 +196,84 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
     /*                TX                 */
     /*************************************/
     fn schedule(&self, msg: NetworkMessage) -> ZResult<()> {
-        async_std::task::block_on(self.internal_schedule(msg))
+        self.internal_schedule(msg)
     }
 
     fn start_tx(
         &self,
-        link: &LinkUnicast,
+        _link: &LinkUnicast,
         executor: &TransportExecutor,
         keep_alive: Duration,
         _batch_size: u16,
     ) -> ZResult<()> {
-        let mut guard = async_std::task::block_on(async { zasyncwrite!(self.link) });
-        match zlinkgetmut!(guard, link) {
-            Some(l) => {
-                l.start_keepalive(executor, keep_alive);
-                Ok(())
-            }
-            None => {
-                bail!(
-                    "Can not start Link TX(keepalive) {} with peer: {}",
-                    link,
-                    self.config.zid
-                )
-            }
-        }
+        self.start_keepalive(executor, keep_alive);
+        Ok(())
     }
 
-    fn start_rx(&self, link: &LinkUnicast, lease: Duration, batch_size: u16) -> ZResult<()> {
-        let mut guard = async_std::task::block_on(async { zasyncwrite!(self.link) });
-        match zlinkgetmut!(guard, link) {
-            Some(l) => {
-                l.start_rx(lease, batch_size);
-                Ok(())
-            }
-            None => {
-                bail!(
-                    "Can not start Link RX {} with peer: {}",
-                    link,
-                    self.config.zid
-                )
-            }
-        }
+    fn start_rx(&self, _link: &LinkUnicast, lease: Duration, batch_size: u16) -> ZResult<()> {
+        self.internal_start_rx(lease, batch_size);
+        Ok(())
     }
 
     /*************************************/
     /*               LINK                */
     /*************************************/
-    fn add_link(&self, link: LinkUnicast, direction: LinkUnicastDirection) -> ZResult<()> {
+    fn add_link(&self, link: LinkUnicast, _direction: LinkUnicastDirection) -> ZResult<()> {
         log::trace!("Adding link: {}", link);
-        // Add the link to the channel
-        let mut guard = async_std::task::block_on(async { zasyncwrite!(self.link) });
 
         #[cfg(not(feature = "transport_shm"))]
-        match guard.as_ref() {
-            Some(_) => {
-                let e = zerror!(
-                    "Can not add Link {} with peer {}: link already exists and only unique link is supported!",
-                    link,
-                    self.config.zid,
-                );
-                return Err(e.into());
-            }
-            None => {
-                // Create a channel link from a link
-                let link = ShmTransportLinkUnicast::new(self.clone(), link, direction);
-                *guard = Some(link);
-            }
-        }
-        
-        #[cfg(feature = "transport_shm")]
-        match guard.take() {
-            Some(existing_link) => {
-                // link already exists...
-                let shm_protocol = "shm";
-                let existing_shm = existing_link.link.get_dst().protocol().as_str() == shm_protocol;
-                let new_shm = link.get_dst().protocol().as_str() == shm_protocol;
-                match (existing_shm, new_shm) {
-                    (false, true) => {
-                        // SHM transport suports only a single link, but code here also handles upgrade from non-shm link to shm link!
-                        log::trace!(
-                            "Upgrading {} SHM transport's link from {} to {}",
-                            self.config.zid,
-                            existing_link.link,
-                            link
-                        );
+        bail!(
+            "Can not add Link {} with peer {}: link already exists and only unique link is supported!",
+            link,
+            self.config.zid,
+        );
 
-                        // Prepare and send close message on old link
+        #[cfg(feature = "transport_shm")]
+        async_std::task::block_on(async {
+            let guard = zasyncread_upgradable!(self.link);
+
+            let shm_protocol = "shm";
+            let existing_shm = guard.get_dst().protocol().as_str() == shm_protocol;
+            let new_shm = link.get_dst().protocol().as_str() == shm_protocol;
+            match (existing_shm, new_shm) {
+                (false, true) => {
+                    // SHM transport suports only a single link, but code here also handles upgrade from non-shm link to shm link!
+                    log::trace!(
+                        "Upgrading {} SHM transport's link from {} to {}",
+                        self.config.zid,
+                        guard,
+                        link
+                    );
+
+                    // Prepare and send close message on old link
+                    {
                         let close = pack_oam_close(Close {
                             reason: 0,
                             session: false,
                         })?;
-                        let _ = async_std::task::block_on(existing_link.send(close));
-                        // Notify the callback
-                        if let Some(callback) = zread!(self.callback).as_ref() {
-                            callback.del_link(Link::from(existing_link.link));
-                        }
+                        let _ = send_with_link(&guard, close).await;
+                    };
+                    // Notify the callback
+                    if let Some(callback) = zread!(self.callback).as_ref() {
+                        callback.del_link(Link::from(guard.clone()));
+                    }
 
-                        // Set the new link
-                        let link = ShmTransportLinkUnicast::new(self.clone(), link, direction);
-                        *guard = Some(link);
-                    }
-                    _ => {
-                        // Rollback
-                        *guard = Some(existing_link);
-                        let e = zerror!(
-                            "Can not add Link {} with peer {}: link already exists and only unique link is supported!",
-                            link,
-                            self.config.zid,
-                        );
-                        return Err(e.into());
-                    }
+                    // Set the new link
+                    let mut write_guard = RwLockUpgradableReadGuard::upgrade(guard).await;
+                    *write_guard = link;
+
+                    Ok(())
+                }
+                _ => {
+                    let e = zerror!(
+                    "Can not add Link {} with peer {}: link already exists and only unique link is supported!",
+                    link,
+                    self.config.zid,
+                );
+                    Err(e.into())
                 }
             }
-            None => {
-                // Create a channel link from a link
-                let link = ShmTransportLinkUnicast::new(self.clone(), link, direction);
-                *guard = Some(link);
-            }
-        }
-
-        Ok(())
+        })
     }
 
     /*************************************/
@@ -354,31 +282,26 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
     async fn close_link(&self, link: &LinkUnicast, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.config.zid);
 
-        let guard = zasyncread!(self.link);
-
-        let l = zlinkget!(guard, link)
-            .ok_or_else(|| zerror!("Cannot close Link {:?}: not found", link))?;
-
         let close = pack_oam_close(Close {
             reason,
             session: false,
         })?;
-        let _ = l.send(close).await;
+        let guard = zasyncread!(self.link);
+        let _ = send_with_link(&guard, close).await;
 
-        // Remove the link from the channel
-        self.del_link(link).await
+        // Terminate and clean up the transport
+        self.delete().await
     }
 
     async fn close(&self, reason: u8) -> ZResult<()> {
         log::trace!("Closing transport with peer: {}", self.config.zid);
 
-        if let Some(l) = zasyncwrite!(self.link).take() {
-            let close = pack_oam_close(Close {
-                reason,
-                session: false,
-            })?;
-            let _ = l.send(close).await;
-        }
+        let close = pack_oam_close(Close {
+            reason,
+            session: false,
+        })?;
+        let guard = zasyncread!(self.link);
+        let _ = send_with_link(&guard, close).await;
 
         // Terminate and clean up the transport
         self.delete().await
