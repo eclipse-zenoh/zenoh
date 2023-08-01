@@ -56,8 +56,8 @@ pub(crate) struct ShmTransportUnicastInner {
     pub(super) stats: Arc<TransportUnicastStatsAtomic>,
 
     // The flags to stop TX/RX tasks
-    pub(crate) handle_keepalive: Arc<SyncRwLock<Option<Task<()>>>>,
-    pub(crate) handle_rx: Arc<SyncRwLock<Option<JoinHandle<()>>>>,
+    pub(crate) handle_keepalive: Arc<RwLock<Option<Task<()>>>>,
+    pub(crate) handle_rx: Arc<RwLock<Option<JoinHandle<()>>>>,
 }
 
 impl ShmTransportUnicastInner {
@@ -74,8 +74,8 @@ impl ShmTransportUnicastInner {
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats: Arc::new(TransportUnicastStatsAtomic::default()),
-            handle_keepalive: Arc::new(SyncRwLock::new(None)),
-            handle_rx: Arc::new(SyncRwLock::new(None)),
+            handle_keepalive: Arc::new(RwLock::new(None)),
+            handle_rx: Arc::new(RwLock::new(None)),
         };
 
         Ok(t)
@@ -117,9 +117,9 @@ impl ShmTransportUnicastInner {
         let _ = self.manager.del_transport_unicast(&self.config.zid).await;
 
         // Close and drop the link
-        self.stop_keepalive();
+        self.stop_keepalive().await;
+        self.stop_rx().await;
         let _ = zasyncread!(self.link).close().await;
-        self.stop_rx();
 
         // Notify the callback that we have closed the transport
         if let Some(cb) = callback.as_ref() {

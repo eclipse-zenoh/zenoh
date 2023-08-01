@@ -91,8 +91,8 @@ impl ShmTransportUnicastInner {
 
     async fn handle_close(&self, link: &LinkUnicast, close: Close) -> ZResult<()> {
         // Stop now rx and tx tasks before doing the proper cleanup
-        self.stop_rx();
-        self.stop_keepalive();
+        self.stop_rx().await;
+        self.stop_keepalive().await;
 
         // Delete and clean up
         let c_transport = self.clone();

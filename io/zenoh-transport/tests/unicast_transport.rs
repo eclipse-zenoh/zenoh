@@ -36,8 +36,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
-    TransportPeer, TransportPeerEventHandler, TransportUnicast, TransportManagerBuilderUnicast,
+    TransportEventHandler, TransportManager, TransportManagerBuilderUnicast, TransportMulticast,
+    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 
 // These keys and certificates below are purposedly generated to run TLS and mTLS tests.

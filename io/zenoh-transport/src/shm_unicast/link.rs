@@ -18,7 +18,7 @@ use crate::TransportExecutor;
 use async_std::prelude::FutureExt;
 use async_std::task;
 use zenoh_codec::*;
-use zenoh_core::{zasyncread, zwrite};
+use zenoh_core::{zasyncread, zasyncwrite};
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -73,7 +73,7 @@ impl ShmTransportUnicastInner {
     }
 
     pub(super) fn start_keepalive(&self, executor: &TransportExecutor, keep_alive: Duration) {
-        let mut guard = zwrite!(self.handle_keepalive);
+        let mut guard = async_std::task::block_on(async { zasyncwrite!(self.handle_keepalive) });
         let c_transport = self.clone();
         let handle = executor.spawn(async move {
             let link = zasyncread!(c_transport.link).clone();
@@ -94,14 +94,14 @@ impl ShmTransportUnicastInner {
         *guard = Some(handle);
     }
 
-    pub(super) fn stop_keepalive(&self) {
-        if let Some(handle) = zwrite!(self.handle_keepalive).take() {
-            async_std::task::block_on(async move { handle.cancel().await });
+    pub(super) async fn stop_keepalive(&self) {
+        if let Some(handle) = zasyncwrite!(self.handle_keepalive).take() {
+            handle.cancel().await;
         }
     }
 
     pub(super) fn internal_start_rx(&self, lease: Duration, batch_size: u16) {
-        let mut guard = zwrite!(self.handle_rx);
+        let mut guard = async_std::task::block_on(async { zasyncwrite!(self.handle_rx) });
         let c_transport = self.clone();
         let handle = task::spawn(async move {
             let link = zasyncread!(c_transport.link).clone();
@@ -119,9 +119,9 @@ impl ShmTransportUnicastInner {
         *guard = Some(handle);
     }
 
-    pub(super) fn stop_rx(&self) {
-        if let Some(handle) = zwrite!(self.handle_rx).take() {
-            async_std::task::block_on(async move { handle.cancel().await });
+    pub(super) async fn stop_rx(&self) {
+        if let Some(handle) = zasyncwrite!(self.handle_rx).take() {
+            handle.cancel().await;
         }
     }
 }
