@@ -498,6 +498,19 @@ impl TransportManager {
         &self,
         mut endpoint: EndPoint,
     ) -> ZResult<TransportUnicast> {
+        let p = endpoint.protocol();
+        if !self
+            .config
+            .protocols
+            .iter()
+            .any(|x| x.as_str() == p.as_str())
+        {
+            bail!(
+                "Unsupported protocol: {}. Supported protocols are: {:?}",
+                p,
+                self.config.protocols
+            );
+        }
         if self
             .locator_inspector
             .is_multicast(&endpoint.to_locator())

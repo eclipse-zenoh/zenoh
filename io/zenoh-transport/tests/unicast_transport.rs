@@ -36,8 +36,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportManagerBuilderUnicast, TransportPeer,
-    TransportPeerEventHandler, TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 
 // These keys and certificates below are purposedly generated to run TLS and mTLS tests.
@@ -256,6 +256,13 @@ impl TransportEventHandler for SHRouter {
         let arc = Arc::new(SCRouter::new(self.count.clone()));
         Ok(arc)
     }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
+    }
 }
 
 // Transport Callback for the router
@@ -295,7 +302,14 @@ impl TransportEventHandler for SHClient {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(SCClient::default()))
+        Ok(Arc::new(SCClient))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -383,7 +397,7 @@ async fn open_transport(
         .whatami(WhatAmI::Client)
         .zid(client_id)
         .unicast(unicast)
-        .build(Arc::new(SHClient::default()))
+        .build(Arc::new(SHClient))
         .unwrap();
 
     // Create an empty transport with the client

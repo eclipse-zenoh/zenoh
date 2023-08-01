@@ -28,16 +28,15 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::SplitBuffer;
 use zenoh_config::ValidatedMap;
-use zenoh_protocol::core::{
-    key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID,
+use zenoh_protocol::{
+    core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
+    network::{
+        declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo},
+        ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
+        ResponseFinal,
+    },
+    zenoh_new::{PushBody, RequestBody},
 };
-use zenoh_protocol::network::queryable::ext::QueryableInfo;
-use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::{
-    ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
-    ResponseFinal,
-};
-use zenoh_protocol::zenoh_new::{PushBody, RequestBody};
 use zenoh_result::ZResult;
 use zenoh_transport::{Primitives, TransportUnicast};
 

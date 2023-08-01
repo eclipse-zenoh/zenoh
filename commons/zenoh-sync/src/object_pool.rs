@@ -142,11 +142,9 @@ impl ZSliceBuffer for RecyclingObject<Box<[u8]>> {
     fn as_slice(&self) -> &[u8] {
         self.as_ref()
     }
-
     fn as_mut_slice(&mut self) -> &mut [u8] {
         self.as_mut()
     }
-
     fn as_any(&self) -> &dyn Any {
         self
     }

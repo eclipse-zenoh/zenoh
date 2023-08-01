@@ -20,7 +20,8 @@ mod tests {
     use zenoh_protocol::core::{WhatAmI, ZenohId};
     use zenoh_result::ZResult;
     use zenoh_transport::{
-        DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportPeer,
+        DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
+        TransportMulticast, TransportMulticastEventHandler, TransportPeer,
         TransportPeerEventHandler, TransportUnicast,
     };
 
@@ -43,7 +44,14 @@ mod tests {
             _peer: TransportPeer,
             _transport: TransportUnicast,
         ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-            Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+            Ok(Arc::new(DummyTransportPeerEventHandler))
+        }
+
+        fn new_multicast(
+            &self,
+            _transport: TransportMulticast,
+        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+            panic!();
         }
     }
 
@@ -62,7 +70,14 @@ mod tests {
             _peer: TransportPeer,
             _transport: TransportUnicast,
         ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-            Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+            Ok(Arc::new(DummyTransportPeerEventHandler))
+        }
+
+        fn new_multicast(
+            &self,
+            _transport: TransportMulticast,
+        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+            panic!();
         }
     }
 
@@ -70,7 +85,7 @@ mod tests {
         /* [ROUTER] */
         let router_id = ZenohId::try_from([1]).unwrap();
 
-        let router_handler = Arc::new(SHRouterOpenClose::default());
+        let router_handler = Arc::new(SHRouterOpenClose);
         // Create the router transport manager
         let unicast = TransportManager::config_unicast()
             .max_links(2)
@@ -466,7 +481,7 @@ mod tests {
         task::sleep(SLEEP).await;
     }
 
-    #[cfg(all(feature = "transport_tcp"))]
+    #[cfg(feature = "transport_tcp")]
     #[test]
     fn multilink_tcp_only() {
         let _ = env_logger::try_init();

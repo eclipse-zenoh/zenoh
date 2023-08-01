@@ -11,7 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Bounded, Zenoh080Header};
+#[cfg(not(feature = "shared-memory"))]
+use crate::Zenoh080Bounded;
+#[cfg(feature = "shared-memory")]
+use crate::Zenoh080Sliced;
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
@@ -45,6 +49,10 @@ where
         let mut n_exts = (x.ext_sinfo.is_some()) as u8
             + ((x.ext_consolidation != ext::ConsolidationType::default()) as u8)
             + (x.ext_unknown.len() as u8);
+        #[cfg(feature = "shared-memory")]
+        {
+            n_exts += x.ext_shm.is_some() as u8;
+        }
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -67,14 +75,28 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (x.ext_consolidation, n_exts != 0))?;
         }
+        #[cfg(feature = "shared-memory")]
+        if let Some(eshm) = x.ext_shm.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (eshm, n_exts != 0))?;
+        }
         for u in x.ext_unknown.iter() {
             n_exts -= 1;
             self.write(&mut *writer, (u, n_exts != 0))?;
         }
 
         // Payload
-        let bodec = Zenoh080Bounded::<u32>::new();
-        bodec.write(&mut *writer, &x.payload)?;
+        #[cfg(feature = "shared-memory")]
+        {
+            let codec = Zenoh080Sliced::<u32>::new(x.ext_shm.is_some());
+            codec.write(&mut *writer, &x.payload)?;
+        }
+
+        #[cfg(not(feature = "shared-memory"))]
+        {
+            let bodec = Zenoh080Bounded::<u32>::new();
+            bodec.write(&mut *writer, &x.payload)?;
+        }
 
         Ok(())
     }
@@ -118,6 +140,8 @@ where
         // Extensions
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
         let mut ext_consolidation = ext::ConsolidationType::default();
+        #[cfg(feature = "shared-memory")]
+        let mut ext_shm: Option<ext::ShmType> = None;
         let mut ext_unknown = Vec::new();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
@@ -135,6 +159,12 @@ where
                     ext_consolidation = c;
                     has_ext = ext;
                 }
+                #[cfg(feature = "shared-memory")]
+                ext::Shm::ID => {
+                    let (s, ext): (ext::ShmType, bool) = eodec.read(&mut *reader)?;
+                    ext_shm = Some(s);
+                    has_ext = ext;
+                }
                 _ => {
                     let (u, ext) = extension::read(reader, "Reply", ext)?;
                     ext_unknown.push(u);
@@ -144,14 +174,27 @@ where
         }
 
         // Payload
-        let bodec = Zenoh080Bounded::<u32>::new();
-        let payload: ZBuf = bodec.read(&mut *reader)?;
+        let payload: ZBuf = {
+            #[cfg(feature = "shared-memory")]
+            {
+                let codec = Zenoh080Sliced::<u32>::new(ext_shm.is_some());
+                codec.read(&mut *reader)?
+            }
+
+            #[cfg(not(feature = "shared-memory"))]
+            {
+                let bodec = Zenoh080Bounded::<u32>::new();
+                bodec.read(&mut *reader)?
+            }
+        };
 
         Ok(Reply {
             timestamp,
             encoding,
             ext_sinfo,
             ext_consolidation,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
             ext_unknown,
             payload,
         })

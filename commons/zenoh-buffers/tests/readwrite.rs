@@ -11,10 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::sync::Arc;
-use zenoh_buffers::reader::*;
-use zenoh_buffers::writer::*;
-use zenoh_buffers::*;
+use zenoh_buffers::{
+    reader::{HasReader, Reader, SiphonableReader},
+    writer::{BacktrackableWriter, HasWriter, Writer},
+};
+use zenoh_buffers::{BBuf, ZBuf, ZSlice};
 
 const BYTES: usize = 18;
 
@@ -204,7 +205,7 @@ fn buffer_zslice() {
     let mut vbuf = vec![];
     run_write!(&mut vbuf);
 
-    let mut zslice = ZSlice::from(Arc::new(vbuf));
+    let mut zslice = ZSlice::from(vbuf);
     run_read!(zslice);
 
     let mut zslice = ZSlice::from(vec![]);

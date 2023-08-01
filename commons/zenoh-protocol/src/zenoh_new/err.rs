@@ -51,8 +51,7 @@ pub struct Err {
 }
 
 pub mod ext {
-    use crate::{common::ZExtZBuf, core::Encoding, zextzbuf};
-    use zenoh_buffers::ZBuf;
+    use crate::{common::ZExtZBuf, zextzbuf};
 
     /// # SourceInfo extension
     /// Used to carry additional information about the source of data
@@ -60,33 +59,10 @@ pub mod ext {
     pub type SourceInfoType = crate::zenoh_new::ext::SourceInfoType<{ SourceInfo::ID }>;
 
     /// # ErrBody extension
-    /// Used to carry a body attached to the error
-    pub type ErrBody = zextzbuf!(0x02, false);
-
-    ///   7 6 5 4 3 2 1 0
-    ///  +-+-+-+-+-+-+-+-+
-    ///  ~   encoding    ~
-    ///  +---------------+
-    ///  ~ pl: [u8;z32]  ~  -- Payload
-    ///  +---------------+
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct ErrBodyType {
-        pub encoding: Encoding,
-        pub payload: ZBuf,
-    }
-
-    impl ErrBodyType {
-        #[cfg(feature = "test")]
-        pub fn rand() -> Self {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-
-            let encoding = Encoding::rand();
-            let payload = ZBuf::rand(rng.gen_range(1..=64));
-
-            Self { encoding, payload }
-        }
-    }
+    /// Used to carry a body attached to the query
+    /// Shared Memory extension is automatically defined by ValueType extension if
+    /// #[cfg(feature = "shared-memory")] is defined.
+    pub type ErrBodyType = crate::zenoh_new::ext::ValueType<0x02, 0x03>;
 }
 
 impl Err {
@@ -107,7 +83,10 @@ impl Err {
         let ext_body = rng.gen_bool(0.5).then_some(ext::ErrBodyType::rand());
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
-            ext_unknown.push(ZExtUnknown::rand2(iext::mid(ext::ErrBody::ID) + 1, false));
+            ext_unknown.push(ZExtUnknown::rand2(
+                iext::mid(ext::ErrBodyType::SID) + 1,
+                false,
+            ));
         }
 
         Self {

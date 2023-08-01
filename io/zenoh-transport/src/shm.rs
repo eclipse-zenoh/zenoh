@@ -12,44 +12,171 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::{sync::RwLock, task};
-use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice};
+use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice, ZSliceKind};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::{zasyncread, zasyncwrite, zerror};
 use zenoh_protocol::{
-    network::{NetworkBody, NetworkMessage, Push},
+    network::{NetworkBody, NetworkMessage, Push, Request, Response},
     zenoh_new::{
-        put::{ext::ShmType, Put},
-        PushBody,
+        err::{ext::ErrBodyType, Err},
+        ext::ShmType,
+        query::{ext::QueryBodyType, Query},
+        PushBody, Put, Reply, RequestBody, ResponseBody,
     },
 };
 use zenoh_result::ZResult;
 use zenoh_shm::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryReader};
 
-// ShmBuf -> ShmInfo
-pub fn map_zmsg_to_shminfo(msg: &mut NetworkMessage) -> ZResult<bool> {
-    let mut res = false;
+// Traits
+trait MapShm {
+    fn map_to_shminfo(&mut self) -> ZResult<bool>;
+    fn map_to_shmbuf(&mut self, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool>;
+}
 
-    if let NetworkBody::Push(Push {
-        payload: PushBody::Put(Put {
-            payload, ext_shm, ..
-        }),
-        ..
-    }) = &mut msg.body
-    {
-        res |= map_zbuf_to_shminfo(payload)?;
+macro_rules! map_to_shminfo {
+    ($zbuf:expr, $ext_shm:expr) => {{
+        let res = map_zbuf_to_shminfo($zbuf)?;
         if res {
-            *ext_shm = Some(ShmType::new());
+            *$ext_shm = Some(ShmType::new());
+        }
+        Ok(res)
+    }};
+}
+
+macro_rules! map_to_shmbuf {
+    ($zbuf:expr, $ext_shm:expr, $shmr:expr) => {{
+        if $ext_shm.is_some() {
+            *$ext_shm = None;
+            map_zbuf_to_shmbuf($zbuf, $shmr)
+        } else {
+            Ok(false)
+        }
+    }};
+}
+
+// Impl - Put
+impl MapShm for Put {
+    fn map_to_shminfo(&mut self) -> ZResult<bool> {
+        let Self {
+            payload, ext_shm, ..
+        } = self;
+        map_to_shminfo!(payload, ext_shm)
+    }
+
+    fn map_to_shmbuf(&mut self, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
+        let Self {
+            payload, ext_shm, ..
+        } = self;
+        map_to_shmbuf!(payload, ext_shm, shmr)
+    }
+}
+
+// Impl - Query
+impl MapShm for Query {
+    fn map_to_shminfo(&mut self) -> ZResult<bool> {
+        if let Self {
+            ext_body: Some(QueryBodyType {
+                payload, ext_shm, ..
+            }),
+            ..
+        } = self
+        {
+            map_to_shminfo!(payload, ext_shm)
+        } else {
+            Ok(false)
         }
     }
 
-    Ok(res)
+    fn map_to_shmbuf(&mut self, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
+        if let Self {
+            ext_body: Some(QueryBodyType {
+                payload, ext_shm, ..
+            }),
+            ..
+        } = self
+        {
+            map_to_shmbuf!(payload, ext_shm, shmr)
+        } else {
+            Ok(false)
+        }
+    }
 }
 
+// Impl - Reply
+impl MapShm for Reply {
+    fn map_to_shminfo(&mut self) -> ZResult<bool> {
+        let Self {
+            payload, ext_shm, ..
+        } = self;
+        map_to_shminfo!(payload, ext_shm)
+    }
+
+    fn map_to_shmbuf(&mut self, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
+        let Self {
+            payload, ext_shm, ..
+        } = self;
+        map_to_shmbuf!(payload, ext_shm, shmr)
+    }
+}
+
+// Impl - Err
+impl MapShm for Err {
+    fn map_to_shminfo(&mut self) -> ZResult<bool> {
+        if let Self {
+            ext_body: Some(ErrBodyType {
+                payload, ext_shm, ..
+            }),
+            ..
+        } = self
+        {
+            map_to_shminfo!(payload, ext_shm)
+        } else {
+            Ok(false)
+        }
+    }
+
+    fn map_to_shmbuf(&mut self, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
+        if let Self {
+            ext_body: Some(ErrBodyType {
+                payload, ext_shm, ..
+            }),
+            ..
+        } = self
+        {
+            map_to_shmbuf!(payload, ext_shm, shmr)
+        } else {
+            Ok(false)
+        }
+    }
+}
+
+// ShmBuf -> ShmInfo
+pub fn map_zmsg_to_shminfo(msg: &mut NetworkMessage) -> ZResult<bool> {
+    match &mut msg.body {
+        NetworkBody::Push(Push { payload, .. }) => match payload {
+            PushBody::Put(b) => b.map_to_shminfo(),
+            PushBody::Del(_) => Ok(false),
+        },
+        NetworkBody::Request(Request { payload, .. }) => match payload {
+            RequestBody::Query(b) => b.map_to_shminfo(),
+            RequestBody::Put(b) => b.map_to_shminfo(),
+            RequestBody::Del(_) | RequestBody::Pull(_) => Ok(false),
+        },
+        NetworkBody::Response(Response { payload, .. }) => match payload {
+            ResponseBody::Reply(b) => b.map_to_shminfo(),
+            ResponseBody::Put(b) => b.map_to_shminfo(),
+            ResponseBody::Err(b) => b.map_to_shminfo(),
+            ResponseBody::Ack(_) => Ok(false),
+        },
+        NetworkBody::ResponseFinal(_) | NetworkBody::Declare(_) | NetworkBody::OAM(_) => Ok(false),
+    }
+}
+
+// Mapping
 pub fn map_zbuf_to_shminfo(zbuf: &mut ZBuf) -> ZResult<bool> {
     let mut res = false;
     for zs in zbuf.zslices_mut() {
-        let ZSlice { buf, .. } = zs;
-        if let Some(shmb) = buf.as_any().downcast_ref::<SharedMemoryBuf>() {
+        if let Some(shmb) = zs.downcast_ref::<SharedMemoryBuf>() {
             *zs = map_zslice_to_shminfo(shmb)?;
             res = true;
         }
@@ -70,7 +197,9 @@ pub fn map_zslice_to_shminfo(shmb: &SharedMemoryBuf) -> ZResult<ZSlice> {
     // Increase the reference count so to keep the SharedMemoryBuf valid
     shmb.inc_ref_count();
     // Replace the content of the slice
-    Ok(info.into())
+    let mut zslice: ZSlice = info.into();
+    zslice.kind = ZSliceKind::ShmPtr;
+    Ok(zslice)
 }
 
 // ShmInfo -> ShmBuf
@@ -78,27 +207,30 @@ pub fn map_zmsg_to_shmbuf(
     msg: &mut NetworkMessage,
     shmr: &RwLock<SharedMemoryReader>,
 ) -> ZResult<bool> {
-    let mut res = false;
-
-    if let NetworkBody::Push(Push {
-        payload: PushBody::Put(Put {
-            payload, ext_shm, ..
-        }),
-        ..
-    }) = &mut msg.body
-    {
-        if ext_shm.is_some() {
-            res |= map_zbuf_to_shmbuf(payload, shmr)?;
-            *ext_shm = None;
-        }
+    match &mut msg.body {
+        NetworkBody::Push(Push { payload, .. }) => match payload {
+            PushBody::Put(b) => b.map_to_shmbuf(shmr),
+            PushBody::Del(_) => Ok(false),
+        },
+        NetworkBody::Request(Request { payload, .. }) => match payload {
+            RequestBody::Query(b) => b.map_to_shmbuf(shmr),
+            RequestBody::Put(b) => b.map_to_shmbuf(shmr),
+            RequestBody::Del(_) | RequestBody::Pull(_) => Ok(false),
+        },
+        NetworkBody::Response(Response { payload, .. }) => match payload {
+            ResponseBody::Put(b) => b.map_to_shmbuf(shmr),
+            ResponseBody::Err(b) => b.map_to_shmbuf(shmr),
+            ResponseBody::Reply(b) => b.map_to_shmbuf(shmr),
+            ResponseBody::Ack(_) => Ok(false),
+        },
+        NetworkBody::ResponseFinal(_) | NetworkBody::Declare(_) | NetworkBody::OAM(_) => Ok(false),
     }
-
-    Ok(res)
 }
 
+// Mapping
 pub fn map_zbuf_to_shmbuf(zbuf: &mut ZBuf, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
     let mut res = false;
-    for zs in zbuf.zslices_mut() {
+    for zs in zbuf.zslices_mut().filter(|x| x.kind == ZSliceKind::ShmPtr) {
         res |= map_zslice_to_shmbuf(zs, shmr)?;
     }
     Ok(res)

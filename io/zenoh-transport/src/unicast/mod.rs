@@ -28,7 +28,7 @@ use super::common;
 use super::common::stats::stats_struct;
 use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "transport_multilink")]
-use crate::establishment::ext::auth::ZPublicKey;
+use establishment::ext::auth::ZPublicKey;
 pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};

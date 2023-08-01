@@ -35,8 +35,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
-    TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -99,6 +99,13 @@ impl TransportEventHandler for SHRouter {
         let arc = Arc::new(SCRouter::new(self.priority.clone(), self.count.clone()));
         Ok(arc)
     }
+
+    fn new_multicast(
+        &self,
+        _transport: zenoh_transport::TransportMulticast,
+    ) -> ZResult<Arc<dyn zenoh_transport::TransportMulticastEventHandler>> {
+        panic!();
+    }
 }
 
 // Transport Callback for the router
@@ -153,7 +160,14 @@ impl TransportEventHandler for SHClient {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(SCClient::default()))
+        Ok(Arc::new(SCClient))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -205,7 +219,7 @@ async fn open_transport(
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client_id)
-        .build(Arc::new(SHClient::default()))
+        .build(Arc::new(SHClient))
         .unwrap();
 
     // Create the listener on the router

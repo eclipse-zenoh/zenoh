@@ -414,7 +414,7 @@ pub(crate) mod sealed {
         fn next(&mut self) -> Option<Self::Item> {
             self.iter.next().map(|i| {
                 Tokenized(i, unsafe {
-                    // Safety: while this makes it possible for multiple mutable references to the Token to exist,
+                    // SAFETY: while this makes it possible for multiple mutable references to the Token to exist,
                     // it prevents them from being extracted and thus used to create multiple mutable references to
                     // a same memory address.
                     core::mem::transmute_copy(&self.token)

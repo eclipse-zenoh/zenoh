@@ -71,6 +71,12 @@ impl SeqNum {
         self.value
     }
 
+    #[inline(always)]
+    pub(crate) fn next(&self) -> TransportSn {
+        self.value.wrapping_add(1) & self.mask
+    }
+
+    #[inline(always)]
     pub(crate) fn resolution(&self) -> TransportSn {
         self.mask
     }
@@ -85,7 +91,7 @@ impl SeqNum {
     }
 
     pub(crate) fn increment(&mut self) {
-        self.value = self.value.wrapping_add(1) & self.mask;
+        self.value = self.next();
     }
 
     /// Checks to see if two sequence number are in a precedence relationship,

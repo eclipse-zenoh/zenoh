@@ -11,70 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header};
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
-    SplitBuffer, ZBuf,
 };
 use zenoh_protocol::{
-    common::{iext, imsg, ZExtZBufHeader},
-    core::Encoding,
+    common::{iext, imsg},
     zenoh_new::{
         err::{ext, flag, Err},
         id,
     },
 };
-
-impl LCodec<&ext::ErrBodyType> for Zenoh080 {
-    fn w_len(self, x: &ext::ErrBodyType) -> usize {
-        self.w_len(&x.encoding) + x.payload.len()
-    }
-}
-
-impl<W> WCodec<(&ext::ErrBodyType, bool), &mut W> for Zenoh080
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: (&ext::ErrBodyType, bool)) -> Self::Output {
-        let (x, more) = x;
-        let header: ZExtZBufHeader<{ ext::ErrBody::ID }> = ZExtZBufHeader::new(self.w_len(x));
-        self.write(&mut *writer, (&header, more))?;
-
-        self.write(&mut *writer, &x.encoding)?;
-        // Don't write the length since it is already included in the header
-        for s in x.payload.zslices() {
-            writer.write_zslice(s)?;
-        }
-
-        Ok(())
-    }
-}
-
-impl<R> RCodec<(ext::ErrBodyType, bool), &mut R> for Zenoh080Header
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<(ext::ErrBodyType, bool), Self::Error> {
-        let (header, more): (ZExtZBufHeader<{ ext::ErrBody::ID }>, bool) =
-            self.read(&mut *reader)?;
-
-        let start = reader.remaining();
-        let encoding: Encoding = self.codec.read(&mut *reader)?;
-        let end = reader.remaining();
-        // Calculate how many bytes are left in the payload
-        let len = header.len - (start - end);
-        let mut payload = ZBuf::empty();
-        reader.read_zslices(len, |s| payload.push_zslice(s))?;
-
-        Ok((ext::ErrBodyType { encoding, payload }, more))
-    }
-}
 
 impl<W> WCodec<&Err, &mut W> for Zenoh080
 where
@@ -170,7 +119,7 @@ where
                     ext_sinfo = Some(s);
                     has_ext = ext;
                 }
-                ext::ErrBody::ID => {
+                ext::ErrBodyType::VID | ext::ErrBodyType::SID => {
                     let (s, ext): (ext::ErrBodyType, bool) = eodec.read(&mut *reader)?;
                     ext_body = Some(s);
                     has_ext = ext;

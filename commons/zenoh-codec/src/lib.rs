@@ -132,3 +132,20 @@ impl<T> Zenoh080Bounded<T> {
         Self { _t: PhantomData }
     }
 }
+
+#[cfg(feature = "shared-memory")]
+#[derive(Clone, Copy)]
+pub struct Zenoh080Sliced<T> {
+    is_sliced: bool,
+    codec: Zenoh080Bounded<T>,
+}
+
+#[cfg(feature = "shared-memory")]
+impl<T> Zenoh080Sliced<T> {
+    pub const fn new(is_sliced: bool) -> Self {
+        Self {
+            is_sliced,
+            codec: Zenoh080Bounded::<T>::new(),
+        }
+    }
+}

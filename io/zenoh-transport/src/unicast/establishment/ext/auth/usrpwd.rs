@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
+use crate::unicast::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
 use async_std::{fs, sync::RwLock};
 use async_trait::async_trait;
 use rand::{CryptoRng, Rng};

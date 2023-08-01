@@ -11,11 +11,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::unicast::manager::{
-    TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
+use super::unicast::{
+    manager::{
+        TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
+    },
+    TransportUnicast,
 };
-use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
+use crate::multicast::manager::{
+    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
+    TransportManagerStateMulticast,
+};
 use async_std::{sync::Mutex as AsyncMutex, task};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
@@ -48,7 +54,14 @@ use zenoh_result::{bail, ZResult};
 ///         _peer: TransportPeer,
 ///         _transport: TransportUnicast
 ///     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-///         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+///         Ok(Arc::new(DummyTransportPeerEventHandler))
+///     }
+///
+///     fn new_multicast(
+///         &self,
+///         _transport: TransportMulticast,
+///     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+///         Ok(Arc::new(DummyTransportMulticastEventHandler))
 ///     }
 /// }
 ///
@@ -64,7 +77,6 @@ use zenoh_result::{bail, ZResult};
 ///         .keep_alive(4)      // Send a KeepAlive every 250 ms
 ///         .accept_timeout(Duration::from_secs(1))
 ///         .accept_pending(10) // Set to 10 the number of simultanous pending incoming transports        
-///         .max_links(1)       // Allow max 1 inbound link per transport
 ///         .max_sessions(5);   // Allow max 5 transports open
 /// let mut resolution = Resolution::default();
 /// resolution.set(Field::FrameSN, Bits::U8);
@@ -89,6 +101,7 @@ pub struct TransportManagerConfig {
     pub defrag_buff_size: usize,
     pub link_rx_buffer_size: usize,
     pub unicast: TransportManagerConfigUnicast,
+    pub multicast: TransportManagerConfigMulticast,
     pub endpoints: HashMap<String, String>, // (protocol, config)
     pub handler: Arc<dyn TransportEventHandler>,
     pub tx_threads: usize,
@@ -97,6 +110,7 @@ pub struct TransportManagerConfig {
 
 pub struct TransportManagerState {
     pub unicast: TransportManagerStateUnicast,
+    pub multicast: TransportManagerStateMulticast,
 }
 
 pub struct TransportManagerParams {
@@ -115,6 +129,7 @@ pub struct TransportManagerBuilder {
     defrag_buff_size: usize,
     link_rx_buffer_size: usize,
     unicast: TransportManagerBuilderUnicast,
+    multicast: TransportManagerBuilderMulticast,
     endpoints: HashMap<String, String>, // (protocol, config)
     tx_threads: usize,
     protocols: Option<Vec<String>>,
@@ -171,6 +186,11 @@ impl TransportManagerBuilder {
         self
     }
 
+    pub fn multicast(mut self, multicast: TransportManagerBuilderMulticast) -> Self {
+        self.multicast = multicast;
+        self
+    }
+
     pub fn tx_threads(mut self, num: usize) -> Self {
         self.tx_threads = num;
         self
@@ -215,6 +235,11 @@ impl TransportManagerBuilder {
                 .from_config(config)
                 .await?,
         );
+        self = self.multicast(
+            TransportManagerBuilderMulticast::default()
+                .from_config(config)
+                .await?,
+        );
 
         Ok(self)
     }
@@ -224,6 +249,7 @@ impl TransportManagerBuilder {
         let mut prng = PseudoRng::from_entropy();
 
         let unicast = self.unicast.build(&mut prng)?;
+        let multicast = self.multicast.build()?;
 
         let mut queue_size = [0; Priority::NUM];
         queue_size[Priority::Control as usize] = *self.queue_size.control();
@@ -246,6 +272,7 @@ impl TransportManagerBuilder {
             defrag_buff_size: self.defrag_buff_size,
             link_rx_buffer_size: self.link_rx_buffer_size,
             unicast: unicast.config,
+            multicast: multicast.config,
             endpoints: self.endpoints,
             handler,
             tx_threads: self.tx_threads,
@@ -259,6 +286,7 @@ impl TransportManagerBuilder {
 
         let state = TransportManagerState {
             unicast: unicast.state,
+            multicast: multicast.state,
         };
 
         let params = TransportManagerParams { config, state };
@@ -284,6 +312,7 @@ impl Default for TransportManagerBuilder {
             link_rx_buffer_size: *link_rx.buffer_size(),
             endpoints: HashMap::new(),
             unicast: TransportManagerBuilderUnicast::default(),
+            multicast: TransportManagerBuilderMulticast::default(),
             tx_threads: 1,
             protocols: None,
         }
@@ -463,15 +492,6 @@ impl TransportManager {
             );
         }
 
-        if self
-            .locator_inspector
-            .is_multicast(&endpoint.to_locator())
-            .await?
-        {
-            // @TODO: multicast
-            bail!("Unimplemented");
-        } else {
-            self.open_transport_unicast(endpoint).await
-        }
+        self.open_transport_unicast(endpoint).await
     }
 }

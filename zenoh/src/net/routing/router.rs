@@ -24,6 +24,7 @@ use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::hash::Hasher;
+use std::str::FromStr;
 use std::sync::{Arc, Weak};
 use std::sync::{Mutex, RwLock};
 use std::time::Duration;
@@ -33,7 +34,10 @@ use zenoh_protocol::common::ZExtBody;
 use zenoh_protocol::core::{ExprId, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::network::oam::id::OAM_LINKSTATE;
 use zenoh_protocol::network::{Mapping, NetworkBody, NetworkMessage};
-use zenoh_transport::{DeMux, Mux, Primitives, TransportPeerEventHandler, TransportUnicast};
+use zenoh_transport::{
+    DeMux, DummyPrimitives, McastMux, Mux, Primitives, TransportMulticast, TransportPeer,
+    TransportPeerEventHandler, TransportUnicast,
+};
 // use zenoh_collections::Timer;
 use zenoh_core::zconfigurable;
 use zenoh_result::ZResult;
@@ -80,6 +84,8 @@ pub struct Tables {
     // pub(crate) queries_default_timeout: Duration,
     pub(crate) root_res: Arc<Resource>,
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
+    pub(crate) mcast_groups: Vec<Arc<FaceState>>,
+    pub(crate) mcast_faces: Vec<Arc<FaceState>>,
     pub(crate) pull_caches_lock: Mutex<()>,
     pub(crate) router_subs: HashSet<Arc<Resource>>,
     pub(crate) peer_subs: HashSet<Arc<Resource>>,
@@ -112,6 +118,8 @@ impl Tables {
             // queries_default_timeout,
             root_res: Resource::root(),
             faces: HashMap::new(),
+            mcast_groups: vec![],
+            mcast_faces: vec![],
             pull_caches_lock: Mutex::new(()),
             router_subs: HashSet::new(),
             peer_subs: HashSet::new(),
@@ -256,7 +264,7 @@ impl Tables {
         let mut newface = self
             .faces
             .entry(fid)
-            .or_insert_with(|| FaceState::new(fid, zid, whatami, primitives.clone(), link_id))
+            .or_insert_with(|| FaceState::new(fid, zid, whatami, primitives.clone(), link_id, None))
             .clone();
         log::debug!("New {}", newface);
 
@@ -592,6 +600,52 @@ impl Router {
         drop(tables);
         drop(ctrl_lock);
         Ok(handler)
+    }
+
+    pub fn new_transport_multicast(&self, transport: TransportMulticast) -> ZResult<()> {
+        let mut tables = zwrite!(self.tables.tables);
+        let fid = tables.face_counter;
+        tables.face_counter += 1;
+        tables.mcast_groups.push(FaceState::new(
+            fid,
+            ZenohId::from_str("1").unwrap(),
+            WhatAmI::Peer,
+            Arc::new(McastMux::new(transport.clone())),
+            0,
+            Some(transport),
+        ));
+
+        // recompute routes
+        let mut root_res = tables.root_res.clone();
+        compute_data_routes_from(&mut tables, &mut root_res);
+        Ok(())
+    }
+
+    pub fn new_peer_multicast(
+        &self,
+        transport: TransportMulticast,
+        peer: TransportPeer,
+    ) -> ZResult<Arc<DeMux<Face>>> {
+        let mut tables = zwrite!(self.tables.tables);
+        let fid = tables.face_counter;
+        tables.face_counter += 1;
+        let face_state = FaceState::new(
+            fid,
+            peer.zid,
+            WhatAmI::Client, // Quick hack
+            Arc::new(DummyPrimitives),
+            0,
+            Some(transport),
+        );
+        tables.mcast_faces.push(face_state.clone());
+
+        // recompute routes
+        let mut root_res = tables.root_res.clone();
+        compute_data_routes_from(&mut tables, &mut root_res);
+        Ok(Arc::new(DeMux::new(Face {
+            tables: self.tables.clone(),
+            state: face_state,
+        })))
     }
 }
 

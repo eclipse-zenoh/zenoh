@@ -19,13 +19,14 @@ pub mod put;
 pub mod query;
 pub mod reply;
 
-pub use ack::*;
-pub use del::*;
-pub use err::*;
-pub use pull::*;
-pub use put::*;
-pub use query::*;
-pub use reply::*;
+use crate::core::Encoding;
+pub use ack::Ack;
+pub use del::Del;
+pub use err::Err;
+pub use pull::Pull;
+pub use put::Put;
+pub use query::{Consolidation, Query};
+pub use reply::Reply;
 
 pub mod id {
     pub const OAM: u8 = 0x00;
@@ -36,6 +37,12 @@ pub mod id {
     pub const ERR: u8 = 0x05;
     pub const ACK: u8 = 0x06;
     pub const PULL: u8 = 0x07;
+}
+
+// DataInfo
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DataInfo {
+    pub encoding: Encoding,
 }
 
 // Push
@@ -160,7 +167,9 @@ impl From<Ack> for ResponseBody {
 }
 
 pub mod ext {
-    use crate::core::ZenohId;
+    use zenoh_buffers::ZBuf;
+
+    use crate::core::{Encoding, ZenohId};
 
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
@@ -208,6 +217,43 @@ pub mod ext {
         #[cfg(feature = "test")]
         pub const fn rand() -> Self {
             Self
+        }
+    }
+
+    ///   7 6 5 4 3 2 1 0
+    ///  +-+-+-+-+-+-+-+-+
+    ///  ~   encoding    ~
+    ///  +---------------+
+    ///  ~ pl: [u8;z32]  ~  -- Payload
+    ///  +---------------+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct ValueType<const VID: u8, const SID: u8> {
+        #[cfg(feature = "shared-memory")]
+        pub ext_shm: Option<ShmType<{ SID }>>,
+        pub encoding: Encoding,
+        pub payload: ZBuf,
+    }
+
+    impl<const VID: u8, const SID: u8> ValueType<{ VID }, { SID }> {
+        pub const VID: u8 = VID;
+        pub const SID: u8 = SID;
+
+        #[cfg(feature = "test")]
+        pub fn rand() -> Self {
+            use rand::Rng;
+            let mut rng = rand::thread_rng();
+
+            #[cfg(feature = "shared-memory")]
+            let ext_shm = rng.gen_bool(0.5).then_some(ShmType::rand());
+            let encoding = Encoding::rand();
+            let payload = ZBuf::rand(rng.gen_range(1..=64));
+
+            Self {
+                #[cfg(feature = "shared-memory")]
+                ext_shm,
+                encoding,
+                payload,
+            }
         }
     }
 }

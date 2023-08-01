@@ -31,7 +31,7 @@ impl<T> SingleOrVecInner<T> {
             SingleOrVecInner::Vec(vec) if vec.capacity() == 0 => *self = Self::Single(value),
             SingleOrVecInner::Single(first) => unsafe {
                 let first = ptr::read(first);
-                ptr::write(self, Self::Vec(vec![first, value]))
+                ptr::write(self, Self::Vec(vec![first, value]));
             },
             SingleOrVecInner::Vec(vec) => vec.push(value),
         }
@@ -85,14 +85,14 @@ pub struct SingleOrVec<T>(SingleOrVecInner<T>);
 
 impl<T> SingleOrVec<T> {
     pub fn push(&mut self, value: T) {
-        self.0.push(value)
+        self.0.push(value);
     }
 
     pub fn truncate(&mut self, len: usize) {
         if let SingleOrVecInner::Vec(v) = &mut self.0 {
-            v.truncate(len)
+            v.truncate(len);
         } else if len == 0 {
-            self.0 = SingleOrVecInner::Vec(Vec::new())
+            self.0 = SingleOrVecInner::Vec(Vec::new());
         }
     }
 
@@ -143,7 +143,7 @@ impl<T> SingleOrVec<T> {
 
 impl<T> Default for SingleOrVec<T> {
     fn default() -> Self {
-        Self(Default::default())
+        Self(SingleOrVecInner::default())
     }
 }
 
@@ -192,7 +192,7 @@ impl<T> IntoIterator for SingleOrVec<T> {
 impl<T> iter::Extend<T> for SingleOrVec<T> {
     fn extend<I: IntoIterator<Item = T>>(&mut self, iter: I) {
         for value in iter {
-            self.push(value)
+            self.push(value);
         }
     }
 }

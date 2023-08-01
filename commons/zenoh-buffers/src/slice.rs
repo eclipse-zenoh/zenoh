@@ -34,12 +34,20 @@ impl Writer for &mut [u8] {
             return Err(DidntWrite);
         }
 
-        self[..len].copy_from_slice(&bytes[..len]);
-        // Safety: this doesn't compile with simple assignment because the compiler
+        // SAFETY: len is guaranteed to be the minimum between lhs and rhs length.
+        //         We early return if length is 0.
+        let lhs = crate::unsafe_slice_mut!(self, ..len);
+        let rhs = crate::unsafe_slice!(bytes, ..len);
+        lhs.copy_from_slice(rhs);
+
+        // SAFETY: len is guaranteed to be the minimum between lhs and rhs length.
+        let lhs = crate::unsafe_slice_mut!(self, len..);
+        // SAFETY: this doesn't compile with simple assignment because the compiler
         // doesn't believe that the subslice has the same lifetime as the original slice,
         // so we transmute to assure it that it does.
-        *self = unsafe { mem::transmute(&mut self[len..]) };
-        // Safety: this operation is safe since we check if len is non-zero
+        *self = unsafe { mem::transmute(lhs) };
+
+        // SAFETY: this operation is safe since we check if len is non-zero.
         Ok(unsafe { NonZeroUsize::new_unchecked(len) })
     }
 
@@ -49,11 +57,18 @@ impl Writer for &mut [u8] {
             return Err(DidntWrite);
         }
 
-        self[..len].copy_from_slice(&bytes[..len]);
-        // Safety: this doesn't compile with simple assignment because the compiler
+        // SAFETY: len is guaranteed to be the smaller than lhs length.
+        let lhs = crate::unsafe_slice_mut!(self, ..len);
+        let rhs = crate::unsafe_slice!(bytes, ..len);
+        lhs.copy_from_slice(rhs);
+
+        // SAFETY: len is guaranteed to be the minimum between lhs and rhs length.
+        let lhs = crate::unsafe_slice_mut!(self, len..);
+        // SAFETY: this doesn't compile with simple assignment because the compiler
         // doesn't believe that the subslice has the same lifetime as the original slice,
         // so we transmute to assure it that it does.
-        *self = unsafe { mem::transmute(&mut self[len..]) };
+        *self = unsafe { mem::transmute(lhs) };
+
         Ok(())
     }
 
@@ -68,11 +83,15 @@ impl Writer for &mut [u8] {
         if len > self.len() {
             return Err(DidntWrite);
         }
-        len = f(&mut self[..len]);
-        // Safety: this doesn't compile with simple assignment because the compiler
+        // SAFETY: we early return in case len is greater than slice.len().
+        let s = crate::unsafe_slice_mut!(self, ..len);
+        len = f(s);
+        // SAFETY: we early return in case len is greater than slice.len().
+        let s = crate::unsafe_slice_mut!(self, len..);
+        // SAFETY: this doesn't compile with simple assignment because the compiler
         // doesn't believe that the subslice has the same lifetime as the original slice,
         // so we transmute to assure it that it does.
-        *self = unsafe { mem::transmute(&mut self[len..]) };
+        *self = unsafe { mem::transmute(s) };
 
         NonZeroUsize::new(len).ok_or(DidntWrite)
     }
@@ -97,7 +116,7 @@ impl<'s> BacktrackableWriter for &'s mut [u8] {
     }
 
     fn rewind(&mut self, mark: Self::Mark) -> bool {
-        // Safety: SliceMark's lifetime is bound to the slice's lifetime
+        // SAFETY: SliceMark's lifetime is bound to the slice's lifetime
         *self = unsafe { slice::from_raw_parts_mut(mark.ptr as *mut u8, mark.len) };
         true
     }
@@ -115,8 +134,12 @@ impl<'a> HasReader for &'a [u8] {
 impl Reader for &[u8] {
     fn read(&mut self, into: &mut [u8]) -> Result<NonZeroUsize, DidntRead> {
         let len = self.len().min(into.len());
-        into[..len].copy_from_slice(&self[..len]);
-        *self = &self[len..];
+        // SAFETY: len is guaranteed to be the smaller than lhs length.
+        let lhs = crate::unsafe_slice_mut!(into, ..len);
+        let rhs = crate::unsafe_slice!(self, ..len);
+        lhs.copy_from_slice(rhs);
+        // SAFETY: len is guaranteed to be smaller than slice.len().
+        *self = crate::unsafe_slice!(self, len..);
         NonZeroUsize::new(len).ok_or(DidntRead)
     }
 
@@ -125,9 +148,12 @@ impl Reader for &[u8] {
         if self.len() < len {
             return Err(DidntRead);
         }
-
-        into.copy_from_slice(&self[..len]);
-        *self = &self[len..];
+        // SAFETY: len is guaranteed to be the smaller than lhs length.
+        let lhs = crate::unsafe_slice_mut!(into, ..len);
+        let rhs = crate::unsafe_slice!(self, ..len);
+        lhs.copy_from_slice(rhs);
+        // SAFETY: len is guaranteed to be smaller than slice.len().
+        *self = crate::unsafe_slice!(self, len..);
         Ok(())
     }
 
@@ -135,8 +161,10 @@ impl Reader for &[u8] {
         if !self.can_read() {
             return Err(DidntRead);
         }
-        let ret = self[0];
-        *self = &self[1..];
+        // SAFETY: we early return in case the slice is empty.
+        //         Therefore, there is at least one element in the slice.
+        let ret = *crate::unsafe_slice!(self, 0);
+        *self = crate::unsafe_slice!(self, 1..);
         Ok(ret)
     }
 
@@ -147,7 +175,7 @@ impl Reader for &[u8] {
     }
 
     fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
-        // Safety: the buffer is initialized by the `read_exact()` function. Should the `read_exact()`
+        // SAFETY: the buffer is initialized by the `read_exact()` function. Should the `read_exact()`
         // function fail, the `read_zslice()` will fail as well and return None. It is hence guaranteed
         // that any `ZSlice` returned by `read_zslice()` points to a fully initialized buffer.
         let mut buffer = crate::vec::uninit(len);
@@ -184,7 +212,9 @@ impl<'a> SiphonableReader for &'a [u8] {
     {
         let res = writer.write(self).map_err(|_| DidntSiphon);
         if let Ok(len) = res {
-            *self = &self[len.get()..];
+            // SAFETY: len is returned from the writer, therefore it means
+            //         len amount of bytes have been written to the slice.
+            *self = crate::unsafe_slice!(self, len.get()..);
         }
         res
     }

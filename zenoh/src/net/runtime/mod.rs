@@ -21,6 +21,7 @@ mod adminspace;
 pub mod orchestrator;
 
 use super::routing;
+use super::routing::face::Face;
 use super::routing::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
@@ -41,8 +42,8 @@ use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::{bail, ZResult};
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
-    TransportUnicast,
+    DeMux, TransportEventHandler, TransportManager, TransportMulticast,
+    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 
 pub struct RuntimeState {
@@ -240,6 +241,28 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
             None => bail!("Runtime not yet ready!"),
         }
     }
+
+    fn new_multicast(
+        &self,
+        transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        match zread!(self.runtime).as_ref() {
+            Some(runtime) => {
+                let slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>> =
+                    zread!(runtime.transport_handlers)
+                        .iter()
+                        .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
+                        .collect();
+                runtime.router.new_transport_multicast(transport.clone())?;
+                Ok(Arc::new(RuntimeMuticastGroup {
+                    runtime: runtime.clone(),
+                    transport,
+                    slave_handlers,
+                }))
+            }
+            None => bail!("Runtime not yet ready!"),
+        }
+    }
 }
 
 pub(super) struct RuntimeSession {
@@ -286,6 +309,88 @@ impl TransportPeerEventHandler for RuntimeSession {
     fn closing(&self) {
         self.main_handler.closing();
         Runtime::closing_session(self);
+        for handler in &self.slave_handlers {
+            handler.closing();
+        }
+    }
+
+    fn closed(&self) {
+        self.main_handler.closed();
+        for handler in &self.slave_handlers {
+            handler.closed();
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+pub(super) struct RuntimeMuticastGroup {
+    pub(super) runtime: Runtime,
+    pub(super) transport: TransportMulticast,
+    pub(super) slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>>,
+}
+
+impl TransportMulticastEventHandler for RuntimeMuticastGroup {
+    fn new_peer(&self, peer: TransportPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> = self
+            .slave_handlers
+            .iter()
+            .filter_map(|handler| handler.new_peer(peer.clone()).ok())
+            .collect();
+        Ok(Arc::new(RuntimeMuticastSession {
+            main_handler: self
+                .runtime
+                .router
+                .new_peer_multicast(self.transport.clone(), peer)?,
+            slave_handlers,
+        }))
+    }
+
+    fn closing(&self) {
+        for handler in &self.slave_handlers {
+            handler.closed();
+        }
+    }
+
+    fn closed(&self) {
+        for handler in &self.slave_handlers {
+            handler.closed();
+        }
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+pub(super) struct RuntimeMuticastSession {
+    pub(super) main_handler: Arc<DeMux<Face>>,
+    pub(super) slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>>,
+}
+
+impl TransportPeerEventHandler for RuntimeMuticastSession {
+    fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
+        self.main_handler.handle_message(msg)
+    }
+
+    fn new_link(&self, link: Link) {
+        self.main_handler.new_link(link.clone());
+        for handler in &self.slave_handlers {
+            handler.new_link(link.clone());
+        }
+    }
+
+    fn del_link(&self, link: Link) {
+        self.main_handler.del_link(link.clone());
+        for handler in &self.slave_handlers {
+            handler.del_link(link.clone());
+        }
+    }
+
+    fn closing(&self) {
+        self.main_handler.closing();
         for handler in &self.slave_handlers {
             handler.closing();
         }

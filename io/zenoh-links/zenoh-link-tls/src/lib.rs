@@ -17,14 +17,14 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use std::{convert::TryFrom, net::SocketAddr};
-
+use async_rustls::rustls::ServerName;
 use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 use config::{
     TLS_CLIENT_AUTH, TLS_CLIENT_CERTIFICATE_FILE, TLS_CLIENT_PRIVATE_KEY_FILE,
     TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_PRIVATE_KEY_FILE,
 };
+use std::{convert::TryFrom, net::SocketAddr};
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};

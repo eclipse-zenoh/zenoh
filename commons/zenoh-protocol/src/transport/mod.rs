@@ -15,19 +15,19 @@ pub mod close;
 pub mod fragment;
 pub mod frame;
 pub mod init;
+pub mod join;
 pub mod keepalive;
 pub mod oam;
 pub mod open;
-// pub mod join;
 
 pub use close::Close;
 pub use fragment::{Fragment, FragmentHeader};
 pub use frame::{Frame, FrameHeader};
 pub use init::{InitAck, InitSyn};
+pub use join::Join;
 pub use keepalive::KeepAlive;
 pub use oam::Oam;
 pub use open::{OpenAck, OpenSyn};
-// pub use join::Join;
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
 ///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
@@ -46,7 +46,7 @@ pub mod id {
     pub const KEEP_ALIVE: u8 = 0x04;
     pub const FRAME: u8 = 0x05;
     pub const FRAGMENT: u8 = 0x06;
-    // pub const JOIN: u8 = 0x07; // For multicast communications only
+    pub const JOIN: u8 = 0x07; // For multicast communications only
 }
 
 pub type TransportSn = u32;
@@ -70,7 +70,7 @@ pub enum TransportBody {
     Frame(Frame),
     Fragment(Fragment),
     OAM(Oam),
-    // Join(Join),
+    Join(Join),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,7 +87,7 @@ impl TransportMessage {
 
         let mut rng = rand::thread_rng();
 
-        let body = match rng.gen_range(0..9) {
+        let body = match rng.gen_range(0..10) {
             0 => TransportBody::InitSyn(InitSyn::rand()),
             1 => TransportBody::InitAck(InitAck::rand()),
             2 => TransportBody::OpenSyn(OpenSyn::rand()),
@@ -97,7 +97,7 @@ impl TransportMessage {
             6 => TransportBody::Frame(Frame::rand()),
             7 => TransportBody::Fragment(Fragment::rand()),
             8 => TransportBody::OAM(Oam::rand()),
-            // 8 => TransportBody::Join(Join::rand()),
+            9 => TransportBody::Join(Join::rand()),
             _ => unreachable!(),
         };
 
@@ -163,11 +163,11 @@ impl From<Fragment> for TransportMessage {
     }
 }
 
-// impl From<Join> for TransportMessage {
-//     fn from(join: Join) -> Self {
-//         TransportBody::Join(join).into()
-//     }
-// }
+impl From<Join> for TransportMessage {
+    fn from(join: Join) -> Self {
+        TransportBody::Join(join).into()
+    }
+}
 
 pub mod ext {
     use crate::{common::ZExtZ64, core::Priority};

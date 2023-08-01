@@ -1,4 +1,3 @@
-use crate::net::codec::Zenoh080Routing;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -12,6 +11,7 @@ use crate::net::codec::Zenoh080Routing;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::net::codec::Zenoh080Routing;
 use crate::net::protocol::linkstate::{LinkState, LinkStateList};
 use crate::net::runtime::Runtime;
 use petgraph::graph::NodeIndex;

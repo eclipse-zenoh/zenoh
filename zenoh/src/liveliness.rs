@@ -36,7 +36,7 @@ use {
     zenoh_core::Resolvable,
     zenoh_core::Result as ZResult,
     zenoh_core::SyncResolve,
-    zenoh_protocol::network::subscriber::ext::SubscriberInfo,
+    zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo,
 };
 
 #[zenoh_macros::unstable]

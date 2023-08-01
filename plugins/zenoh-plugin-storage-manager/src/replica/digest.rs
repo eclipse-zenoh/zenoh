@@ -293,7 +293,7 @@ impl Digest {
 
         // reconstruct updated parts of the digest
         for sub in subintervals_to_update {
-            let mut subinterval = subintervals.get_mut(&sub).unwrap();
+            let subinterval = subintervals.get_mut(&sub).unwrap();
             let content = &subinterval.content;
             if !content.is_empty() {
                 // order the content, hash them
@@ -308,7 +308,7 @@ impl Digest {
         }
 
         for int in intervals_to_update {
-            let mut interval = intervals.get_mut(&int).unwrap();
+            let interval = intervals.get_mut(&int).unwrap();
             let content = &interval.content;
             if !content.is_empty() {
                 // order the content, hash them
@@ -324,7 +324,7 @@ impl Digest {
         }
 
         for era_type in eras_to_update {
-            let mut era = eras.get_mut(&era_type).unwrap();
+            let era = eras.get_mut(&era_type).unwrap();
             let content = &era.content;
             if !content.is_empty() {
                 // order the content, hash them

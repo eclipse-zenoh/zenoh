@@ -25,28 +25,24 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::{Arc, RwLockReadGuard, Weak};
 use zenoh_buffers::ZBuf;
-use zenoh_protocol::core::key_expr::keyexpr;
-use zenoh_protocol::core::Encoding;
-use zenoh_protocol::network::common::ext::WireExprType;
-use zenoh_protocol::network::declare::ext;
-use zenoh_protocol::network::request::ext::TargetType;
-use zenoh_protocol::network::response::ext::ResponderIdType;
-use zenoh_protocol::network::{
-    response, Declare, DeclareBody, DeclareQueryable, Request, RequestId, Response, ResponseFinal,
-    UndeclareQueryable,
-};
-use zenoh_protocol::zenoh_new::reply::ext::ConsolidationType;
-use zenoh_protocol::zenoh_new::{self, RequestBody, ResponseBody};
 use zenoh_protocol::{
     core::{
         key_expr::{
             include::{Includer, DEFAULT_INCLUDER},
-            OwnedKeyExpr,
+            keyexpr, OwnedKeyExpr,
         },
-        WhatAmI, WireExpr, ZenohId,
+        Encoding, WhatAmI, WireExpr, ZenohId,
     },
-    network::queryable::ext::QueryableInfo,
+    network::{
+        declare::{
+            common::ext::WireExprType, ext, queryable::ext::QueryableInfo, Declare, DeclareBody,
+            DeclareQueryable, UndeclareQueryable,
+        },
+        request::{ext::TargetType, Request, RequestId},
+        response::{self, ext::ResponderIdType, Response, ResponseFinal},
+    },
     zenoh::{QueryId, RoutingContext},
+    zenoh_new::{reply::ext::ConsolidationType, Reply, RequestBody, ResponseBody},
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;
@@ -2034,11 +2030,13 @@ pub fn route_query(
                     face.primitives.clone().send_response(Response {
                         rid: qid,
                         wire_expr: expr,
-                        payload: ResponseBody::Reply(zenoh_new::Reply {
+                        payload: ResponseBody::Reply(Reply {
                             timestamp: None,
                             encoding: Encoding::default(),
                             ext_sinfo: None,
                             ext_consolidation: ConsolidationType::default(),
+                            #[cfg(feature = "shared-memory")]
+                            ext_shm: None,
                             ext_unknown: vec![],
                             payload,
                         }),
@@ -2212,7 +2210,7 @@ pub(crate) fn finalize_pending_queries(tables_ref: &TablesLock, face: &mut Arc<F
 }
 
 pub(crate) fn finalize_pending_query(query: Arc<Query>) {
-    if let Ok(query) = Arc::try_unwrap(query) {
+    if let Some(query) = Arc::into_inner(query) {
         log::debug!("Propagate final reply {}:{}", query.src_face, query.src_qid);
         query
             .src_face

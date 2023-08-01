@@ -13,42 +13,29 @@
 //
 use async_std::sync::RwLock;
 use rand::{Rng, SeedableRng};
-use zenoh_core::zerror;
 use zenoh_crypto::PseudoRng;
 use zenoh_result::ZResult;
-use zenoh_shm::{SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader};
+use zenoh_shm::{SharedMemoryManager, SharedMemoryReader};
 
 pub(crate) type Challenge = u64;
-const NAME: &str = "zshm";
+const NAME: &str = "zshm_mcast";
 
-/*************************************/
-/*          Authenticator            */
-/*************************************/
-pub(crate) struct SharedMemoryUnicast {
-    // Rust guarantees that fields are dropped in the order of declaration.
-    // Buffer needs to be dropped before the manager.
-    pub(crate) challenge: SharedMemoryBuf,
+pub(crate) struct SharedMemoryMulticast {
     pub(crate) _manager: SharedMemoryManager,
     pub(crate) reader: RwLock<SharedMemoryReader>,
 }
 
-unsafe impl Sync for SharedMemoryUnicast {}
+unsafe impl Sync for SharedMemoryMulticast {}
 
-impl SharedMemoryUnicast {
-    pub fn make() -> ZResult<SharedMemoryUnicast> {
-        // Create a challenge for session establishment
+impl SharedMemoryMulticast {
+    pub fn make() -> ZResult<SharedMemoryMulticast> {
         let mut prng = PseudoRng::from_entropy();
         let nonce = prng.gen::<Challenge>();
         let size = std::mem::size_of::<Challenge>();
 
         let mut _manager = SharedMemoryManager::make(format!("{NAME}.{nonce}"), size)?;
 
-        let mut challenge = _manager.alloc(size).map_err(|e| zerror!("{e}"))?;
-        let slice = unsafe { challenge.as_mut_slice() };
-        slice[0..size].copy_from_slice(&nonce.to_le_bytes());
-
-        let shmauth = SharedMemoryUnicast {
-            challenge,
+        let shmauth = SharedMemoryMulticast {
             _manager,
             reader: RwLock::new(SharedMemoryReader::new()),
         };
