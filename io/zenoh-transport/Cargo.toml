@@ -78,5 +78,5 @@ zenoh-util = { workspace = true }
 env_logger = { workspace = true }
 panic-message = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
-zenoh-transport = { workspace = true, features = ["test", "transport_multilink", "shared-memory"] }
+zenoh-transport = { workspace = true, features = ["test", "transport_multilink"] }
 

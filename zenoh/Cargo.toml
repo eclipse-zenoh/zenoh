@@ -59,7 +59,6 @@ default = [
     "transport_unixsock-stream",
     "transport_ws",
     "transport_shm",
-    "shared-memory",
 ]
 
 [dependencies]

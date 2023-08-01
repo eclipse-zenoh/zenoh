@@ -37,7 +37,7 @@ use zenoh_protocol::{
 use zenoh_result::ZResult;
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
-    TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast, TransportManagerBuilderUnicast,
 };
 
 // These keys and certificates below are purposedly generated to run TLS and mTLS tests.
@@ -477,14 +477,10 @@ async fn test_transport(
         "Sending {} messages... {:?} {}",
         MSG_COUNT, channel, msg_size
     );
-    let cctrl = match channel.reliability {
-        Reliability::Reliable => CongestionControl::Block,
-        Reliability::BestEffort => CongestionControl::Drop,
-    };
     // Create the message to send
     let message: NetworkMessage = Push {
         wire_expr: "test".into(),
-        ext_qos: QoSType::new(channel.priority, cctrl, false),
+        ext_qos: QoSType::new(channel.priority, CongestionControl::Block, false),
         ext_tstamp: None,
         ext_nodeid: NodeIdType::default(),
         payload: Put {

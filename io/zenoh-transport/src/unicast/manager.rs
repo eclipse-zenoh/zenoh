@@ -451,11 +451,13 @@ impl TransportManager {
                     #[cfg(not(feature = "shared-memory"))]
                     {
                         log::info!("Will use the only NET transport!");
-                        let t = Arc::new(TransportUnicastInner::make(self.clone(), stc)?)
-                            as Arc<dyn TransportUnicastInnerTrait>;
+                        let t: Arc<dyn TransportUnicastInnerTrait> =
+                            TransportUnicastInner::make(self.clone(), stc)
+                                .map_err(|e| (e, Some(close::reason::INVALID)))
+                                .map(|v| Arc::new(v) as Arc<dyn TransportUnicastInnerTrait>)?;
+                        // Add the link to the transport
                         t.add_link(link, direction)
-                            .map_err(|e| (e, Some(close::reason::MAX_LINKS)))
-                            .into()?;
+                            .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
                         Ok(t)
                     }
                 };
