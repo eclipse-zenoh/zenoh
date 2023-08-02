@@ -406,7 +406,6 @@ impl TransportManager {
     }
 
     pub async fn close(&self) {
-        log::trace!("TransportManager::clear())");
         self.close_unicast().await;
         self.tx_executor.stop().await;
     }

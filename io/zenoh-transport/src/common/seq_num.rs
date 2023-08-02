@@ -31,7 +31,7 @@ pub(crate) fn get_mask(resolution: Bits) -> TransportSn {
 /// Sequence Number
 ///
 /// Zenoh sequence numbers have a negotiable resolution. Each session can
-/// ideally negotiate its resolution and use it across all conduits.
+/// ideally negotiate its resolution and use it across all priorities.
 ///
 /// The [`SeqNum`][SeqNum] encapsulates the sequence numbers along with a
 /// the comparison operators that check whether two sequence numbers are

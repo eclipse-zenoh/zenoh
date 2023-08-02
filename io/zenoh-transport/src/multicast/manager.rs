@@ -264,7 +264,7 @@ impl TransportManager {
             .collect()
     }
 
-    pub(super) fn _del_transport_multicast(&self, locator: &Locator) -> ZResult<()> {
+    pub(super) fn del_transport_multicast(&self, locator: &Locator) -> ZResult<()> {
         let mut guard = zlock!(self.state.multicast.transports);
         let res = guard.remove(locator);
 

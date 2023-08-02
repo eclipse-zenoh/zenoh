@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::common::conduit::TransportConduitTx;
+use super::common::priority::TransportPriorityTx;
 use super::transport::TransportUnicastInner;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
@@ -95,7 +95,7 @@ impl TransportLinkUnicast {
         executor: &TransportExecutor,
         keep_alive: Duration,
         batch_size: u16,
-        conduit_tx: &[TransportConduitTx],
+        priority_tx: &[TransportPriorityTx],
     ) {
         if self.handle_tx.is_none() {
             let config = TransmissionPipelineConf {
@@ -109,7 +109,7 @@ impl TransportLinkUnicast {
             let is_compressed = self.transport.config.manager.config.unicast.is_compressed;
 
             // The pipeline
-            let (producer, consumer) = TransmissionPipeline::make(config, conduit_tx);
+            let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
             self.pipeline = Some(producer);
 
             // Spawn the TX task
@@ -337,7 +337,8 @@ async fn rx_task_stream(
                 rx_decompress(&mut buffer, &pool, n, &mut start_pos, &mut end_pos)?;
 
                 // Deserialize all the messages from the current ZBuf
-                let zslice = ZSlice::make(Arc::new(buffer), start_pos, end_pos).unwrap();
+                let zslice = ZSlice::make(Arc::new(buffer), start_pos, end_pos)
+                    .map_err(|_| zerror!("Read {} bytes but buffer is {} bytes", n, mtu))?;
                 transport.read_messages(zslice, &link)?;
             }
             Action::Stop => break,
@@ -408,7 +409,8 @@ async fn rx_task_dgram(
                 rx_decompress(&mut buffer, &pool, n, &mut start_pos, &mut end_pos)?;
 
                 // Deserialize all the messages from the current ZBuf
-                let zslice = ZSlice::make(Arc::new(buffer), start_pos, end_pos).unwrap();
+                let zslice = ZSlice::make(Arc::new(buffer), start_pos, end_pos)
+                    .map_err(|_| zerror!("Read {} bytes but buffer is {} bytes", n, mtu))?;
                 transport.read_messages(zslice, &link)?;
             }
             Action::Stop => break,

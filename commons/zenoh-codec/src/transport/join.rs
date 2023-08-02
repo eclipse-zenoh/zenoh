@@ -11,22 +11,116 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
+use crate::{common::extension, LCodec, RCodec, WCodec, Zenoh080, Zenoh080Header, Zenoh080Length};
 use core::time::Duration;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::{iext, imsg},
-    core::{Resolution, WhatAmI, ZenohId},
+    common::{iext, imsg, ZExtZBufHeader},
+    core::{Priority, Resolution, WhatAmI, ZenohId},
     transport::{
         id,
         join::{ext, flag, Join},
-        BatchSize, TransportSn,
+        BatchSize, PrioritySn, TransportSn,
     },
 };
 
+impl LCodec<&PrioritySn> for Zenoh080 {
+    fn w_len(self, p: &PrioritySn) -> usize {
+        self.w_len(p.best_effort) + self.w_len(p.reliable)
+    }
+}
+
+impl<W> WCodec<&PrioritySn, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &PrioritySn) -> Self::Output {
+        self.write(&mut *writer, x.best_effort)?;
+        self.write(&mut *writer, x.reliable)?;
+        Ok(())
+    }
+}
+
+impl<R> RCodec<PrioritySn, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<PrioritySn, Self::Error> {
+        let best_effort: TransportSn = self.read(&mut *reader)?;
+        let reliable: TransportSn = self.read(&mut *reader)?;
+
+        Ok(PrioritySn {
+            best_effort,
+            reliable,
+        })
+    }
+}
+
+// Extension
+impl<W> WCodec<(&ext::QoSType, bool), &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: (&ext::QoSType, bool)) -> Self::Output {
+        let (x, more) = x;
+
+        // Header
+        let len = x.iter().fold(0, |acc, p| acc + self.w_len(p));
+        let header = ZExtZBufHeader::<{ ext::QoS::ID }>::new(len);
+        self.write(&mut *writer, (&header, more))?;
+
+        // Body
+        for p in x.iter() {
+            self.write(&mut *writer, p)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<R> RCodec<(ext::QoSType, bool), &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::QoSType, bool), Self::Error> {
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+        codec.read(reader)
+    }
+}
+
+impl<R> RCodec<(ext::QoSType, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::QoSType, bool), Self::Error> {
+        // Header
+        let (_, more): (ZExtZBufHeader<{ ext::QoS::ID }>, bool) = self.read(&mut *reader)?;
+
+        // Body
+        let mut ext_qos = Box::new([PrioritySn::default(); Priority::NUM]);
+        for p in ext_qos.iter_mut() {
+            *p = self.codec.read(&mut *reader)?;
+        }
+
+        Ok((ext_qos, more))
+    }
+}
+
+// Join
 impl<W> WCodec<&Join, &mut W> for Zenoh080
 where
     W: Writer,
@@ -72,7 +166,7 @@ where
         } else {
             self.write(&mut *writer, x.lease.as_millis() as u64)?;
         }
-        self.write(&mut *writer, x.next_sn)?;
+        self.write(&mut *writer, &x.next_sn)?;
 
         // Extensions
         if let Some(qos) = x.ext_qos.as_ref() {
@@ -141,7 +235,7 @@ where
         } else {
             Duration::from_millis(lease)
         };
-        let next_sn: TransportSn = self.codec.read(&mut *reader)?;
+        let next_sn: PrioritySn = self.codec.read(&mut *reader)?;
 
         // Extensions
         let mut ext_qos = None;
@@ -153,7 +247,7 @@ where
             let eodec = Zenoh080Header::new(ext);
             match iext::eid(ext) {
                 ext::QoS::ID => {
-                    let (q, ext): (ext::QoS, bool) = eodec.read(&mut *reader)?;
+                    let (q, ext): (ext::QoSType, bool) = eodec.read(&mut *reader)?;
                     ext_qos = Some(q);
                     has_ext = ext;
                 }

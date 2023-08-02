@@ -11,12 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::common::conduit::{TransportConduitRx, TransportConduitTx};
-use super::link::TransportLinkMulticast;
+use super::common::priority::{TransportPriorityRx, TransportPriorityTx};
+use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
 #[cfg(feature = "stats")]
 use super::TransportMulticastStatsAtomic;
 use crate::{
-    TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
+    TransportConfigMulticast, TransportManager, TransportMulticastEventHandler, TransportPeer,
+    TransportPeerEventHandler,
 };
 use async_trait::async_trait;
 use std::{
@@ -27,41 +28,41 @@ use std::{
     },
     time::Duration,
 };
-use zenoh_core::{zread, zwrite};
-use zenoh_link::{LinkMulticast, Locator};
+use zenoh_core::{zcondfeat, zread, zwrite};
+use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::core::Resolution;
-use zenoh_protocol::transport::TransportSn;
+use zenoh_protocol::transport::{Close, TransportMessage};
 use zenoh_protocol::{
-    core::{ConduitSnList, Priority, WhatAmI, ZenohId},
+    core::{Bits, Field, Priority, WhatAmI, ZenohId},
     transport::{close, Join},
 };
 use zenoh_result::{bail, ZResult};
-use zenoh_util::{Timed, TimedHandle, Timer};
+use zenoh_util::{Timed, TimedEvent, TimedHandle, Timer};
 
 /*************************************/
 /*             TRANSPORT             */
 /*************************************/
 #[derive(Clone)]
 pub(super) struct TransportMulticastPeer {
-    pub(super) _version: u8,
-    pub(super) _locator: Locator,
+    pub(super) version: u8,
+    pub(super) locator: Locator,
     pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
-    pub(super) _resolution: Resolution,
-    pub(super) _lease: Duration,
-    pub(super) _whatchdog: Arc<AtomicBool>,
+    pub(super) resolution: Resolution,
+    pub(super) lease: Duration,
+    pub(super) whatchdog: Arc<AtomicBool>,
     pub(super) handle: TimedHandle,
-    pub(super) _conduit_rx: Box<[TransportConduitRx]>,
+    pub(super) priority_rx: Box<[TransportPriorityRx]>,
     pub(super) handler: Arc<dyn TransportPeerEventHandler>,
 }
 
 impl TransportMulticastPeer {
-    pub(super) fn _active(&self) {
-        self._whatchdog.store(true, Ordering::Release);
+    pub(super) fn active(&self) {
+        self.whatchdog.store(true, Ordering::Release);
     }
 
-    pub(super) fn _is_qos(&self) -> bool {
-        self._conduit_rx.len() == Priority::NUM
+    pub(super) fn is_qos(&self) -> bool {
+        self.priority_rx.len() == Priority::NUM
     }
 }
 
@@ -87,70 +88,61 @@ impl Timed for TransportMulticastPeerLeaseTimer {
 #[derive(Clone)]
 pub(crate) struct TransportMulticastInner {
     // The manager this channel is associated to
-    pub(super) _manager: TransportManager,
-    // The multicast locator
-    pub(super) locator: Locator,
-    // Tx conduits
-    pub(super) conduit_tx: Arc<[TransportConduitTx]>,
+    pub(super) manager: TransportManager,
+    // Tx priorities
+    pub(super) priority_tx: Arc<[TransportPriorityTx]>,
     // Remote peers
     pub(super) peers: Arc<RwLock<HashMap<Locator, TransportMulticastPeer>>>,
+    // The multicast locator - Convenience for logging
+    pub(super) locator: Locator,
     // The multicast link
     pub(super) link: Arc<RwLock<Option<TransportLinkMulticast>>>,
     // The callback
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportMulticastEventHandler>>>>,
     // The timer for peer leases
-    pub(super) _timer: Arc<Timer>,
+    pub(super) timer: Arc<Timer>,
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportMulticastStatsAtomic>,
 }
 
-pub(crate) struct _TransportMulticastConfig {
-    pub(crate) manager: TransportManager,
-    pub(crate) initial_sns: ConduitSnList,
-    pub(crate) link: LinkMulticast,
-}
-
 impl TransportMulticastInner {
-    pub(super) fn _make(_config: _TransportMulticastConfig) -> ZResult<TransportMulticastInner> {
-        // let mut conduit_tx = vec![];
+    pub(super) fn make(
+        manager: TransportManager,
+        config: TransportConfigMulticast,
+    ) -> ZResult<TransportMulticastInner> {
+        let mut priority_tx = vec![];
+        if (config.initial_sns.len() != 1) != (config.initial_sns.len() != Priority::NUM) {
+            for (_, sn) in config.initial_sns.iter().enumerate() {
+                let tct = TransportPriorityTx::make(config.sn_resolution)?;
+                tct.sync(*sn)?;
+                priority_tx.push(tct);
+            }
+        } else {
+            bail!("Invalid QoS configuration");
+        }
 
-        // match config.initial_sns {
-        //     ConduitSnList::Plain(sn) => {
-        //         let tct = TransportConduitTx::make(config.manager.config.resolution)?;
-        //         tct.sync(sn)?;
-        //         conduit_tx.push(tct);
-        //     }
-        //     ConduitSnList::QoS(sns) => {
-        //         for (_, sn) in sns.iter().enumerate() {
-        //             let tct = TransportConduitTx::make(config.manager.config.resolution)?;
-        //             tct.sync(*sn)?;
-        //             conduit_tx.push(tct);
-        //         }
-        //     }
-        // }
+        let ti = TransportMulticastInner {
+            manager,
+            priority_tx: priority_tx.into_boxed_slice().into(),
+            peers: Arc::new(RwLock::new(HashMap::new())),
+            locator: config.link.get_dst().to_owned(),
+            link: Arc::new(RwLock::new(None)),
+            callback: Arc::new(RwLock::new(None)),
+            timer: Arc::new(Timer::new(false)),
+            #[cfg(feature = "stats")]
+            stats: Arc::new(TransportMulticastStatsAtomic::default()),
+        };
 
-        // let ti = TransportMulticastInner {
-        //     manager: config.manager,
-        //     locator: config.link.get_dst().to_owned(),
-        //     conduit_tx: conduit_tx.into_boxed_slice().into(),
-        //     peers: Arc::new(RwLock::new(HashMap::new())),
-        //     link: Arc::new(RwLock::new(None)),
-        //     callback: Arc::new(RwLock::new(None)),
-        //     timer: Arc::new(Timer::new(false)),
-        //     #[cfg(feature = "stats")]
-        //     stats: Arc::new(TransportMulticastStatsAtomic::default()),
-        // };
+        let link = TransportLinkMulticast::new(ti.clone(), config.link);
+        let mut guard = zwrite!(ti.link);
+        *guard = Some(link);
+        drop(guard);
 
-        // let mut w_guard = zwrite!(ti.link);
-        // *w_guard = Some(TransportLinkMulticast::new(ti.clone(), config.link));
-        // drop(w_guard);
-
-        // Ok(ti)
-        todo!();
+        Ok(ti)
     }
 
-    pub(super) fn _set_callback(&self, callback: Arc<dyn TransportMulticastEventHandler>) {
+    pub(super) fn set_callback(&self, callback: Arc<dyn TransportMulticastEventHandler>) {
         let mut guard = zwrite!(self.callback);
         *guard = Some(callback);
     }
@@ -158,17 +150,17 @@ impl TransportMulticastInner {
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
-    pub(crate) fn get_sn_resolution(&self) -> TransportSn {
-        // self.manager.config.sn_resolution
-        todo!();
+    pub(crate) fn get_sn_resolution(&self) -> Bits {
+        self.manager.config.resolution.get(Field::FrameSN)
     }
 
     pub(crate) fn is_qos(&self) -> bool {
-        self.conduit_tx.len() > 1
+        self.priority_tx.len() == Priority::NUM
     }
 
+    #[cfg(feature = "shared-memory")]
     pub(crate) fn is_shm(&self) -> bool {
-        false
+        self.manager.config.multicast.is_shm
     }
 
     pub(crate) fn get_callback(&self) -> Option<Arc<dyn TransportMulticastEventHandler>> {
@@ -182,8 +174,8 @@ impl TransportMulticastInner {
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
-    pub(super) async fn _delete(&self) -> ZResult<()> {
-        log::debug!("Closing multicast transport on {}", self.locator);
+    pub(super) async fn delete(&self) -> ZResult<()> {
+        log::debug!("Closing multicast transport on {:?}", self.locator);
 
         // Notify the callback that we are going to close the transport
         let callback = zwrite!(self.callback).take();
@@ -192,12 +184,12 @@ impl TransportMulticastInner {
         }
 
         // Delete the transport on the manager
-        let _ = self._manager._del_transport_multicast(&self.locator);
+        let _ = self.manager.del_transport_multicast(&self.locator);
 
         // Close all the links
         let mut link = zwrite!(self.link).take();
         if let Some(l) = link.take() {
-            let _ = l._close().await;
+            let _ = l.close().await;
         }
 
         // Notify the callback that we have closed the transport
@@ -208,115 +200,110 @@ impl TransportMulticastInner {
         Ok(())
     }
 
-    pub(crate) async fn close(&self, _reason: u8) -> ZResult<()> {
-        // log::trace!(
-        //     "Closing multicast transport of peer {}: {}",
-        //     self.manager.config.zid,
-        //     self.locator
-        // );
+    pub(crate) async fn close(&self, reason: u8) -> ZResult<()> {
+        log::trace!(
+            "Closing multicast transport of peer {}: {}",
+            self.manager.config.zid,
+            self.locator
+        );
 
-        // let pipeline = zread!(self.link)
-        //     .as_ref()
-        //     .unwrap()
-        //     .pipeline
-        //     .as_ref()
-        //     .unwrap()
-        //     .clone();
+        {
+            let r_guard = zread!(self.link);
+            if let Some(link) = r_guard.as_ref() {
+                if let Some(pipeline) = link.pipeline.as_ref() {
+                    let pipeline = pipeline.clone();
+                    drop(r_guard);
+                    // Close message to be sent on all the links
+                    let msg: TransportMessage = Close {
+                        reason,
+                        session: false,
+                    }
+                    .into();
+                    pipeline.push_transport_message(msg, Priority::Background);
+                }
+            }
+        }
 
-        // // Close message to be sent on all the links
-        // let peer_id = Some(self.manager.zid());
-        // let reason_id = reason;
-        // // link_only should always be false for user-triggered close. However, in case of
-        // // multiple links, it is safer to close all the links first. When no links are left,
-        // // the transport is then considered closed.
-        // let link_only = true;
-        // let attachment = None; // No attachment here
-        // let msg = TransportMessage::make_close(peer_id, reason_id, link_only, attachment);
-
-        // pipeline.push_transport_message(msg, Priority::Background);
-
-        // // Terminate and clean up the transport
-        // self.delete().await
-        todo!();
+        // Terminate and clean up the transport
+        self.delete().await
     }
 
     /*************************************/
     /*               LINK                */
     /*************************************/
-    pub(super) fn _start_tx(&self, _batch_size: u16) -> ZResult<()> {
-        // let mut guard = zwrite!(self.link);
-        // match guard.as_mut() {
-        //     Some(l) => {
-        //         assert!(!self.conduit_tx.is_empty());
-        //         let config = TransportLinkMulticastConfig {
-        //             version: self.manager.config.version,
-        //             zid: self.manager.config.zid,
-        //             whatami: self.manager.config.whatami,
-        //             lease: self.manager.config.multicast.lease,
-        //             keep_alive: self.manager.config.multicast.keep_alive,
-        //             join_interval: self.manager.config.multicast.join_interval,
-        //             sn_resolution: self.manager.config.sn_resolution,
-        //             batch_size,
-        //         };
-        //         l.start_tx(config, self.conduit_tx.clone());
-        //         Ok(())
-        //     }
-        //     None => {
-        //         bail!(
-        //             "Can not start multicast Link TX of peer {}: {}",
-        //             self.manager.config.zid,
-        //             self.locator
-        //         )
-        //     }
-        // }
-        todo!();
-    }
-
-    pub(super) fn _stop_tx(&self) -> ZResult<()> {
+    pub(super) fn start_tx(&self) -> ZResult<()> {
         let mut guard = zwrite!(self.link);
         match guard.as_mut() {
             Some(l) => {
-                l._stop_tx();
+                assert!(!self.priority_tx.is_empty());
+                let config = TransportLinkMulticastConfig {
+                    version: self.manager.config.version,
+                    zid: self.manager.config.zid,
+                    whatami: self.manager.config.whatami,
+                    lease: self.manager.config.multicast.lease,
+                    keep_alive: self.manager.config.multicast.keep_alive,
+                    join_interval: self.manager.config.multicast.join_interval,
+                    sn_resolution: self.manager.config.resolution.get(Field::FrameSN),
+                    batch_size: self.manager.config.batch_size.min(l.link.get_mtu()),
+                };
+                l.start_tx(config, self.priority_tx.clone());
+                Ok(())
+            }
+            None => {
+                bail!(
+                    "Can not start multicast Link TX of peer {}: {}",
+                    self.manager.config.zid,
+                    self.locator
+                )
+            }
+        }
+    }
+
+    pub(super) fn stop_tx(&self) -> ZResult<()> {
+        let mut guard = zwrite!(self.link);
+        match guard.as_mut() {
+            Some(l) => {
+                l.stop_tx();
                 Ok(())
             }
             None => {
                 bail!(
                     "Can not stop multicast Link TX of peer {}: {}",
-                    self._manager.config.zid,
+                    self.manager.config.zid,
                     self.locator
                 )
             }
         }
     }
 
-    pub(super) fn _start_rx(&self) -> ZResult<()> {
+    pub(super) fn start_rx(&self) -> ZResult<()> {
         let mut guard = zwrite!(self.link);
         match guard.as_mut() {
             Some(l) => {
-                l._start_rx();
+                l.start_rx();
                 Ok(())
             }
             None => {
                 bail!(
                     "Can not start multicast Link RX of peer {}: {}",
-                    self._manager.config.zid,
+                    self.manager.config.zid,
                     self.locator
                 )
             }
         }
     }
 
-    pub(super) fn _stop_rx(&self) -> ZResult<()> {
+    pub(super) fn stop_rx(&self) -> ZResult<()> {
         let mut guard = zwrite!(self.link);
         match guard.as_mut() {
             Some(l) => {
-                l._stop_rx();
+                l.stop_rx();
                 Ok(())
             }
             None => {
                 bail!(
                     "Can not stop multicast Link RX of peer {}: {}",
-                    self._manager.config.zid,
+                    self.manager.config.zid,
                     self.locator
                 )
             }
@@ -326,90 +313,84 @@ impl TransportMulticastInner {
     /*************************************/
     /*               PEER                */
     /*************************************/
-    pub(super) fn _new_peer(&self, _locator: &Locator, _join: Join) -> ZResult<()> {
-        // let mut link = Link::from(self.get_link());
-        // link.dst = locator.clone();
+    pub(super) fn new_peer(&self, locator: &Locator, join: Join) -> ZResult<()> {
+        let mut link = Link::from(self.get_link());
+        link.dst = locator.clone();
 
-        // let peer = TransportPeer {
-        //     zid: join.zid,
-        //     whatami: join.whatami,
-        //     is_qos: join.is_qos(),
-        //     is_shm: self.is_shm(),
-        //     links: vec![link],
-        // };
+        let is_shm = zcondfeat!("shared-memory", join.ext_shm.is_some(), false);
+        let peer = TransportPeer {
+            zid: join.zid,
+            whatami: join.whatami,
+            is_qos: join.ext_qos.is_some(),
+            #[cfg(feature = "shared-memory")]
+            is_shm,
+            links: vec![link],
+        };
 
-        // let handler = match zread!(self.callback).as_ref() {
-        //     Some(cb) => cb.new_peer(peer.clone())?,
-        //     None => return Ok(()),
-        // };
+        let handler = match zread!(self.callback).as_ref() {
+            Some(cb) => cb.new_peer(peer.clone())?,
+            None => return Ok(()),
+        };
 
-        // let conduit_rx = match join.next_sns {
-        //     ConduitSnList::Plain(sn) => {
-        //         let tcr = TransportConduitRx::make(
-        //             join.sn_resolution,
-        //             self.manager.config.defrag_buff_size,
-        //         )?;
-        //         tcr.sync(sn)?;
-        //         vec![tcr]
-        //     }
-        //     ConduitSnList::QoS(ref sns) => {
-        //         let mut tcrs = Vec::with_capacity(sns.len());
-        //         for (_, sn) in sns.iter().enumerate() {
-        //             let tcr = TransportConduitRx::make(
-        //                 join.sn_resolution,
-        //                 self.manager.config.defrag_buff_size,
-        //             )?;
-        //             tcr.sync(*sn)?;
-        //             tcrs.push(tcr);
-        //         }
-        //         tcrs
-        //     }
-        // }
-        // .into_boxed_slice();
+        // Build next SNs
+        let next_sns = match join.ext_qos.as_ref() {
+            Some(sns) => sns.to_vec(),
+            None => vec![join.next_sn],
+        }
+        .into_boxed_slice();
 
-        // // Create lease event
-        // let whatchdog = Arc::new(AtomicBool::new(false));
-        // let event = TransportMulticastPeerLeaseTimer {
-        //     whatchdog: whatchdog.clone(),
-        //     locator: locator.clone(),
-        //     transport: self.clone(),
-        // };
-        // let event = TimedEvent::periodic(join.lease, event);
-        // let handle = event.get_handle();
+        let mut priority_rx = Vec::with_capacity(next_sns.len());
+        for (_, sn) in next_sns.iter().enumerate() {
+            let tprx = TransportPriorityRx::make(
+                join.resolution.get(Field::FrameSN),
+                self.manager.config.defrag_buff_size,
+            )?;
+            tprx.sync(*sn)?;
+            priority_rx.push(tprx);
+        }
+        let priority_rx = priority_rx.into_boxed_slice();
 
-        // // Store the new peer
-        // let peer = TransportMulticastPeer {
-        //     version: join.version,
-        //     locator: locator.clone(),
-        //     zid: peer.zid,
-        //     whatami: peer.whatami,
-        //     sn_resolution: join.sn_resolution,
-        //     lease: join.lease,
-        //     whatchdog,
-        //     handle,
-        //     conduit_rx,
-        //     handler,
-        // };
-        // {
-        //     zwrite!(self.peers).insert(locator.clone(), peer);
-        // }
+        log::debug!(
+                "New transport joined on {}: zid {}, whatami {}, resolution {:?}, locator {}, is_qos {}, is_shm {}, initial sn: {:?}",
+                self.locator,
+                peer.zid,
+                peer.whatami,
+                join.resolution,
+                locator,
+                peer.is_qos,
+                is_shm,
+                next_sns,
+            );
 
-        // // Add the event to the timer
-        // self.timer.add(event);
+        // Create lease event
+        let whatchdog = Arc::new(AtomicBool::new(false));
+        let event = TransportMulticastPeerLeaseTimer {
+            whatchdog: whatchdog.clone(),
+            locator: locator.clone(),
+            transport: self.clone(),
+        };
+        let event = TimedEvent::periodic(join.lease, event);
+        let handle = event.get_handle();
 
-        // log::debug!(
-        //         "New transport joined on {}: zid {}, whatami {}, sn resolution {}, locator {}, qos {}, initial sn: {}",
-        //         self.locator,
-        //         join.zid,
-        //         join.whatami,
-        //         join.sn_resolution,
-        //         locator,
-        //         join.is_qos(),
-        //         join.next_sns,
-        //     );
+        // Store the new peer
+        let peer = TransportMulticastPeer {
+            version: join.version,
+            locator: locator.clone(),
+            zid: peer.zid,
+            whatami: peer.whatami,
+            resolution: join.resolution,
+            lease: join.lease,
+            whatchdog,
+            handle,
+            priority_rx,
+            handler,
+        };
+        zwrite!(self.peers).insert(locator.clone(), peer);
 
-        // Ok(())
-        todo!();
+        // Add the event to the timer
+        self.timer.add(event);
+
+        Ok(())
     }
 
     pub(super) fn del_peer(&self, locator: &Locator, reason: u8) -> ZResult<()> {
@@ -433,21 +414,21 @@ impl TransportMulticastInner {
     }
 
     pub(super) fn get_peers(&self) -> Vec<TransportPeer> {
-        // zread!(self.peers)
-        //     .values()
-        //     .map(|p| {
-        //         let mut link = Link::from(self.get_link());
-        //         link.dst = p.locator.clone();
+        zread!(self.peers)
+            .values()
+            .map(|p| {
+                let mut link = Link::from(self.get_link());
+                link.dst = p.locator.clone();
 
-        //         TransportPeer {
-        //             zid: p.zid,
-        //             whatami: p.whatami,
-        //             is_qos: p.is_qos(),
-        //             is_shm: self.is_shm(),
-        //             links: vec![link],
-        //         }
-        //     })
-        //     .collect()
-        todo!();
+                TransportPeer {
+                    zid: p.zid,
+                    whatami: p.whatami,
+                    is_qos: p.is_qos(),
+                    #[cfg(feature = "shared-memory")]
+                    is_shm: self.is_shm(),
+                    links: vec![link],
+                }
+            })
+            .collect()
     }
 }

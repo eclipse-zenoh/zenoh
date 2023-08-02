@@ -31,7 +31,7 @@ macro_rules! ztimeout {
     };
 }
 
-async fn open_session(endpoints: &[&str]) -> (Session, Session) {
+async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     // Open the sessions
     let mut config = config::peer();
     config.listen.endpoints = endpoints
@@ -39,7 +39,7 @@ async fn open_session(endpoints: &[&str]) -> (Session, Session) {
         .map(|e| e.parse().unwrap())
         .collect::<Vec<_>>();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][01a] Opening peer01 session");
+    println!("[  ][01a] Opening peer01 session: {:?}", endpoints);
     let peer01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
 
     let mut config = config::peer();
@@ -48,7 +48,24 @@ async fn open_session(endpoints: &[&str]) -> (Session, Session) {
         .map(|e| e.parse().unwrap())
         .collect::<Vec<_>>();
     config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    println!("[  ][02a] Opening peer02 session");
+    println!("[  ][02a] Opening peer02 session: {:?}", endpoints);
+    let peer02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+
+    (peer01, peer02)
+}
+
+async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
+    // Open the sessions
+    let mut config = config::peer();
+    config.connect.endpoints = vec![endpoint01.parse().unwrap()];
+    config.scouting.multicast.set_enabled(Some(true)).unwrap();
+    println!("[  ][01a] Opening peer01 session: {}", endpoint01);
+    let peer01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+
+    let mut config = config::peer();
+    config.connect.endpoints = vec![endpoint02.parse().unwrap()];
+    config.scouting.multicast.set_enabled(Some(true)).unwrap();
+    println!("[  ][02a] Opening peer02 session: {}", endpoint02);
     let peer02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
 
     (peer01, peer02)
@@ -161,14 +178,27 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session) {
 }
 
 #[test]
-fn zenoh_session() {
+fn zenoh_session_unicast() {
     task::block_on(async {
         zasync_executor_init!();
         let _ = env_logger::try_init();
 
-        let (peer01, peer02) = open_session(&["tcp/127.0.0.1:17447"]).await;
+        let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
         test_session_pubsub(&peer01, &peer02).await;
         test_session_qryrep(&peer01, &peer02).await;
+        close_session(peer01, peer02).await;
+    });
+}
+
+#[test]
+fn zenoh_session_multicast() {
+    task::block_on(async {
+        zasync_executor_init!();
+        let _ = env_logger::try_init();
+
+        let (peer01, peer02) =
+            open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17449").await;
+        test_session_pubsub(&peer01, &peer02).await;
         close_session(peer01, peer02).await;
     });
 }
