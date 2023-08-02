@@ -115,8 +115,9 @@ pub struct Join {
 
 // Extensions
 pub mod ext {
-    use super::PrioritySn;
-    use crate::{common::ZExtZBuf, core::Priority, zextzbuf};
+    use super::{Priority, PrioritySn};
+    use crate::{common::ZExtZBuf, zextzbuf};
+    use alloc::boxed::Box;
 
     /// # QoS extension
     /// Used to announce next sn when QoS is enabled
