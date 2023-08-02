@@ -4162,6 +4162,7 @@ dependencies = [
  "async-trait",
  "futures",
  "log",
+ "rustls",
  "rustls-pemfile",
  "webpki",
  "webpki-roots",
