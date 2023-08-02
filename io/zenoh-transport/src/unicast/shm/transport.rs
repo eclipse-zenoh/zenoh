@@ -20,16 +20,19 @@ use crate::TransportConfigUnicast;
 use crate::TransportManager;
 use crate::{TransportExecutor, TransportPeerEventHandler};
 use async_executor::Task;
+#[cfg(feature = "transport_shm")]
+use async_std::sync::RwLockUpgradableReadGuard;
 use async_std::sync::{
     Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock, RwLockReadGuard,
-    RwLockUpgradableReadGuard,
 };
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::ops::Deref;
 use std::sync::{Arc, RwLock as SyncRwLock};
 use std::time::Duration;
-use zenoh_core::{zasynclock, zasyncread, zasyncread_upgradable, zread, zwrite};
+#[cfg(feature = "transport_shm")]
+use zenoh_core::zasyncread_upgradable;
+use zenoh_core::{zasynclock, zasyncread, zread, zwrite};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
