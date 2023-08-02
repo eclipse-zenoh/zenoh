@@ -12,18 +12,17 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod establishment;
-pub(crate) mod link;
 pub(crate) mod manager;
-pub(crate) mod rx;
+pub(crate) mod net;
+pub(crate) mod transport_unicast_inner;
+
+#[cfg(feature = "shared-memory")]
+pub(crate) mod shared_memory_unicast;
 #[cfg(feature = "shared-memory")]
 pub(crate) mod shm;
-pub(crate) mod transport;
-pub(crate) mod transport_unicast_inner;
-pub(crate) mod tx;
 
 use self::transport_unicast_inner::TransportUnicastInnerTrait;
 
-use super::common;
 #[cfg(feature = "stats")]
 use super::common::stats::stats_struct;
 use super::{TransportPeer, TransportPeerEventHandler};

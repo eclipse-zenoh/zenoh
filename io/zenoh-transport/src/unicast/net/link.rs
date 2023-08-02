@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::common::conduit::TransportConduitTx;
 use super::transport::TransportUnicastInner;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
+use crate::common::conduit::TransportConduitTx;
 use crate::common::pipeline::{
     TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
     TransmissionPipelineProducer,

@@ -12,16 +12,17 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #[cfg(feature = "shared-memory")]
-use crate::shm_unicast::transport::ShmTransportUnicastInner;
+use super::shared_memory_unicast::SharedMemoryUnicast;
+#[cfg(feature = "shared-memory")]
+use super::shm::transport::ShmTransportUnicastInner;
 #[cfg(feature = "transport_auth")]
 use crate::unicast::establishment::ext::auth::Auth;
 #[cfg(feature = "transport_multilink")]
 use crate::unicast::establishment::ext::multilink::MultiLink;
-#[cfg(feature = "shared-memory")]
-use crate::unicast::shm::SharedMemoryUnicast;
 use crate::{
+    net::transport::TransportUnicastInner,
     transport_unicast_inner::TransportUnicastInnerTrait,
-    unicast::{transport::TransportUnicastInner, TransportConfigUnicast, TransportUnicast},
+    unicast::{TransportConfigUnicast, TransportUnicast},
     TransportManager,
 };
 use async_std::{prelude::FutureExt, sync::Mutex, task};

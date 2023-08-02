@@ -1,4 +1,4 @@
-use crate::shm_unicast::oam_extensions::unpack_oam_close;
+use super::oam_extensions::unpack_oam_close;
 
 //
 // Copyright (c) 2023 ZettaScale Technology

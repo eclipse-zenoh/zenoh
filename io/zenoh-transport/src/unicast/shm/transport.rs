@@ -11,14 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::TransportManager;
-use super::super::{TransportExecutor, TransportPeerEventHandler};
+use super::link::send_with_link;
+use super::oam_extensions::pack_oam_close;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
-use crate::shm_unicast::link::send_with_link;
-use crate::shm_unicast::oam_extensions::pack_oam_close;
 use crate::transport_unicast_inner::TransportUnicastInnerTrait;
 use crate::TransportConfigUnicast;
+use crate::TransportManager;
+use crate::{TransportExecutor, TransportPeerEventHandler};
 use async_executor::Task;
 use async_std::sync::{
     Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock, RwLockReadGuard,
@@ -33,7 +33,7 @@ use zenoh_core::{zasynclock, zasyncread, zasyncread_upgradable, zread, zwrite};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
-use zenoh_protocol::transport::Close;
+use zenoh_protocol::transport::{Close, TransportSn};
 use zenoh_result::{bail, zerror, ZResult};
 
 /*************************************/
@@ -42,7 +42,7 @@ use zenoh_result::{bail, zerror, ZResult};
 #[derive(Clone)]
 pub(crate) struct ShmTransportUnicastInner {
     // Transport Manager
-    pub(crate) manager: TransportManager,
+    pub(super) manager: TransportManager,
     // Transport config
     pub(super) config: TransportConfigUnicast,
     // The link associated to the transport
@@ -50,7 +50,7 @@ pub(crate) struct ShmTransportUnicastInner {
     // The callback
     pub(super) callback: Arc<SyncRwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
     // Mutex for notification
-    pub(super) alive: Arc<AsyncMutex<bool>>,
+    alive: Arc<AsyncMutex<bool>>,
     // Transport statistics
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportUnicastStatsAtomic>,
@@ -274,6 +274,23 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
                 }
             }
         })
+    }
+
+    /*************************************/
+    /*           INITIATION              */
+    /*************************************/
+    async fn sync(&self, _initial_sn_rx: TransportSn) -> ZResult<()> {
+        // Mark the transport as alive
+        let mut a_guard = zasynclock!(self.alive);
+        if *a_guard {
+            let e = zerror!("Transport already synched with peer: {}", self.config.zid);
+            log::trace!("{}", e);
+            return Err(e.into());
+        }
+
+        *a_guard = true;
+
+        Ok(())
     }
 
     /*************************************/

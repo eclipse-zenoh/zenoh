@@ -11,12 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-//pub mod establishment;
-pub(crate) mod link;
-pub(crate) mod rx;
-//#[cfg(feature = "shared-memory")]
-//pub(crate) mod shm;
 pub(crate) mod transport;
-pub(crate) mod tx;
 
-mod oam_extensions;
+mod link;
+mod rx;
+mod tx;

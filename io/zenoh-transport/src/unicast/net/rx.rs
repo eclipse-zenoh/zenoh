@@ -13,8 +13,8 @@ use crate::transport_unicast_inner::TransportUnicastInnerTrait;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::common::conduit::TransportChannelRx;
 use super::transport::TransportUnicastInner;
+use crate::common::conduit::TransportChannelRx;
 use async_std::task;
 use std::sync::MutexGuard;
 #[cfg(feature = "stats")]

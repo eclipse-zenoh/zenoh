@@ -25,8 +25,6 @@ pub mod unicast;
 
 #[cfg(feature = "shared-memory")]
 mod shm;
-#[cfg(feature = "shared-memory")]
-pub mod shm_unicast;
 
 pub use manager::*;
 pub use multicast::*;

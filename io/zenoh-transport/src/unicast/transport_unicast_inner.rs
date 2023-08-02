@@ -70,9 +70,7 @@ pub(crate) trait TransportUnicastInnerTrait: Send + Sync {
     /*************************************/
     /*           INITIATION              */
     /*************************************/
-    async fn sync(&self, _initial_sn_rx: TransportSn) -> ZResult<()> {
-        Ok(())
-    }
+    async fn sync(&self, _initial_sn_rx: TransportSn) -> ZResult<()>;
 
     /*************************************/
     /*            TERMINATION            */

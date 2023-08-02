@@ -11,13 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::{TransportExecutor, TransportManager, TransportPeerEventHandler};
-use super::common::conduit::{TransportConduitRx, TransportConduitTx};
 use super::link::TransportLinkUnicast;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
+use crate::common::conduit::{TransportConduitRx, TransportConduitTx};
 use crate::transport_unicast_inner::TransportUnicastInnerTrait;
 use crate::TransportConfigUnicast;
+use crate::{TransportExecutor, TransportManager, TransportPeerEventHandler};
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use async_trait::async_trait;
 use std::fmt::DebugStruct;
@@ -75,7 +75,7 @@ pub(crate) struct TransportUnicastInner {
 }
 
 impl TransportUnicastInner {
-    pub(super) fn make(
+    pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
     ) -> ZResult<TransportUnicastInner> {

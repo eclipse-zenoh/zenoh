@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #[cfg(feature = "shared-memory")]
-use crate::unicast::shm::Challenge;
+use crate::unicast::shared_memory_unicast::Challenge;
 use crate::{
     unicast::establishment::{
         close_link, compute_sn, ext, finalize_transport, AcceptFsm, Cookie, InputFinalize,
