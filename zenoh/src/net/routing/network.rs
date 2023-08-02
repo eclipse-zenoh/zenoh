@@ -493,7 +493,7 @@ impl Network {
 
                         if !self.autoconnect.is_empty() {
                             // Connect discovered peers
-                            if self.runtime.manager().get_transport(&zid).is_none()
+                            if self.runtime.manager().get_transport_unicast(&zid).is_none()
                                 && self.autoconnect.matches(whatami)
                             {
                                 if let Some(locators) = locators {
@@ -611,7 +611,11 @@ impl Network {
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
                 if let Some(whatami) = node.whatami {
-                    if self.runtime.manager().get_transport(&node.zid).is_none()
+                    if self
+                        .runtime
+                        .manager()
+                        .get_transport_unicast(&node.zid)
+                        .is_none()
                         && self.autoconnect.matches(whatami)
                     {
                         if let Some(locators) = &node.locators {

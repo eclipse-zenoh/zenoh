@@ -199,22 +199,26 @@ mod tests {
         // Create a transport with the peer
         println!("Transport SHM [1b]");
         let peer_shm01_transport =
-            ztimeout!(peer_shm02_manager.open_transport(endpoint.clone())).unwrap();
+            ztimeout!(peer_shm02_manager.open_transport_unicast(endpoint.clone())).unwrap();
         assert!(peer_shm01_transport.is_shm().unwrap());
 
         // Create a transport with the peer
         println!("Transport SHM [1c]");
         let peer_net02_transport =
-            ztimeout!(peer_net01_manager.open_transport(endpoint.clone())).unwrap();
+            ztimeout!(peer_net01_manager.open_transport_unicast(endpoint.clone())).unwrap();
         assert!(!peer_net02_transport.is_shm().unwrap());
 
         // Retrieve the transports
         println!("Transport SHM [2a]");
-        let peer_shm02_transport = peer_shm01_manager.get_transport(&peer_shm02).unwrap();
+        let peer_shm02_transport = peer_shm01_manager
+            .get_transport_unicast(&peer_shm02)
+            .unwrap();
         assert!(peer_shm02_transport.is_shm().unwrap());
 
         println!("Transport SHM [2b]");
-        let peer_net01_transport = peer_shm01_manager.get_transport(&peer_net01).unwrap();
+        let peer_net01_transport = peer_shm01_manager
+            .get_transport_unicast(&peer_net01)
+            .unwrap();
         assert!(!peer_net01_transport.is_shm().unwrap());
 
         // Send the message
@@ -323,7 +327,7 @@ mod tests {
         ztimeout!(peer_net01_transport.close()).unwrap();
 
         ztimeout!(async {
-            while !peer_shm01_manager.get_transports().is_empty() {
+            while !peer_shm01_manager.get_transports_unicast().is_empty() {
                 task::sleep(SLEEP).await;
             }
         });

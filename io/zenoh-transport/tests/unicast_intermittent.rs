@@ -212,9 +212,9 @@ async fn transport_intermittent(endpoint: &EndPoint) {
 
     /* [2] */
     // Open a transport from client01 to the router
-    let c_ses1 = ztimeout!(client01_manager.open_transport(endpoint.clone())).unwrap();
+    let c_ses1 = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone())).unwrap();
     assert_eq!(c_ses1.get_links().unwrap().len(), 1);
-    assert_eq!(client01_manager.get_transports().len(), 1);
+    assert_eq!(client01_manager.get_transports_unicast().len(), 1);
     assert_eq!(c_ses1.get_zid().unwrap(), router_id);
 
     /* [3] */
@@ -227,9 +227,10 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             print!("+");
             std::io::stdout().flush().unwrap();
 
-            let c_ses2 = ztimeout!(c_client02_manager.open_transport(c_endpoint.clone())).unwrap();
+            let c_ses2 =
+                ztimeout!(c_client02_manager.open_transport_unicast(c_endpoint.clone())).unwrap();
             assert_eq!(c_ses2.get_links().unwrap().len(), 1);
-            assert_eq!(c_client02_manager.get_transports().len(), 1);
+            assert_eq!(c_client02_manager.get_transports_unicast().len(), 1);
             assert_eq!(c_ses2.get_zid().unwrap(), c_router_id);
 
             task::sleep(SLEEP).await;
@@ -251,9 +252,10 @@ async fn transport_intermittent(endpoint: &EndPoint) {
             print!("*");
             std::io::stdout().flush().unwrap();
 
-            let c_ses3 = ztimeout!(c_client03_manager.open_transport(c_endpoint.clone())).unwrap();
+            let c_ses3 =
+                ztimeout!(c_client03_manager.open_transport_unicast(c_endpoint.clone())).unwrap();
             assert_eq!(c_ses3.get_links().unwrap().len(), 1);
-            assert_eq!(c_client03_manager.get_transports().len(), 1);
+            assert_eq!(c_client03_manager.get_transports_unicast().len(), 1);
             assert_eq!(c_ses3.get_zid().unwrap(), c_router_id);
 
             task::sleep(SLEEP).await;
@@ -299,7 +301,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
                 println!("\nScheduled {count}");
                 ticks.remove(0);
             }
-            let transports = c_router_manager.get_transports();
+            let transports = c_router_manager.get_transports_unicast();
             if !transports.is_empty() {
                 for s in transports.iter() {
                     if let Ok(ll) = s.get_links() {
@@ -343,15 +345,15 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     /* [5] */
     // Close the open transport on the client
     println!("Transport Intermittent [5a1]");
-    for s in client01_manager.get_transports().iter() {
+    for s in client01_manager.get_transports_unicast().iter() {
         ztimeout!(s.close()).unwrap();
     }
     println!("Transport Intermittent [5a2]");
-    for s in client02_manager.get_transports().iter() {
+    for s in client02_manager.get_transports_unicast().iter() {
         ztimeout!(s.close()).unwrap();
     }
     println!("Transport Intermittent [5a3]");
-    for s in client03_manager.get_transports().iter() {
+    for s in client03_manager.get_transports_unicast().iter() {
         ztimeout!(s.close()).unwrap();
     }
 
@@ -360,7 +362,7 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     println!("Transport Intermittent [6a1]");
     ztimeout!(async {
         loop {
-            let transports = router_manager.get_transports();
+            let transports = router_manager.get_transports_unicast();
             if transports.is_empty() {
                 break;
             }

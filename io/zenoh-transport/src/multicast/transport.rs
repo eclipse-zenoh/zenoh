@@ -184,7 +184,7 @@ impl TransportMulticastInner {
         }
 
         // Delete the transport on the manager
-        let _ = self.manager.del_transport_multicast(&self.locator);
+        let _ = self.manager.del_transport_multicast(&self.locator).await;
 
         // Close all the links
         let mut link = zwrite!(self.link).take();

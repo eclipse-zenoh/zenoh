@@ -69,9 +69,9 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Create an empty transport with the client
     // Open transport -> This should be accepted
     println!("Opening transport with {endpoint}");
-    let _ = ztimeout!(client_manager.open_transport(endpoint.clone())).unwrap();
+    let _ = ztimeout!(client_manager.open_transport_unicast(endpoint.clone())).unwrap();
 
-    let client_transport = client_manager.get_transport(&router_id).unwrap();
+    let client_transport = client_manager.get_transport_unicast(&router_id).unwrap();
 
     // Create the message to send
     let message: NetworkMessage = Push {
@@ -106,7 +106,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 
     // Wait on the router manager that the transport has been closed
     ztimeout!(async {
-        while !router_manager.get_transports_unicast().await.is_empty() {
+        while !router_manager.get_transports_unicast().is_empty() {
             task::sleep(SLEEP).await;
         }
     });
@@ -117,7 +117,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 
     // Wait a little bit
     ztimeout!(async {
-        while !router_manager.get_listeners_unicast().await.is_empty() {
+        while !router_manager.get_listeners().is_empty() {
             task::sleep(SLEEP).await;
         }
     });

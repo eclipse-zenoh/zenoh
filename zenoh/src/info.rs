@@ -80,7 +80,7 @@ impl<'a> SyncResolve for RoutersZidBuilder<'a> {
             self.session
                 .runtime
                 .manager()
-                .get_transports()
+                .get_transports_unicast()
                 .into_iter()
                 .filter_map(|s| {
                     s.get_whatami()
@@ -128,7 +128,7 @@ impl<'a> SyncResolve for PeersZidBuilder<'a> {
             self.session
                 .runtime
                 .manager()
-                .get_transports()
+                .get_transports_unicast()
                 .into_iter()
                 .filter_map(|s| {
                     s.get_whatami()

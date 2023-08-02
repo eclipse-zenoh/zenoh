@@ -195,7 +195,7 @@ impl TransportPeerEventHandler for SCClient {
     }
 }
 
-async fn open_transport(
+async fn open_transport_unicast(
     endpoints: &[EndPoint],
 ) -> (
     TransportManager,
@@ -232,10 +232,10 @@ async fn open_transport(
     // Open transport -> This should be accepted
     for e in endpoints.iter() {
         println!("Opening transport with {e}");
-        let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
+        let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap();
     }
 
-    let client_transport = client_manager.get_transport(&router_id).unwrap();
+    let client_transport = client_manager.get_transport_unicast(&router_id).unwrap();
 
     // Return the handlers
     (
@@ -261,7 +261,7 @@ async fn close_transport(
     ztimeout!(client_transport.close()).unwrap();
 
     ztimeout!(async {
-        while !router_manager.get_transports().is_empty() {
+        while !router_manager.get_transports_unicast().is_empty() {
             task::sleep(SLEEP).await;
         }
     });
@@ -328,7 +328,7 @@ async fn single_run(router_handler: Arc<SHRouter>, client_transport: TransportUn
 
 async fn run(endpoints: &[EndPoint]) {
     let (router_manager, router_handler, client_manager, client_transport) =
-        open_transport(endpoints).await;
+        open_transport_unicast(endpoints).await;
     single_run(router_handler.clone(), client_transport.clone()).await;
     close_transport(router_manager, client_manager, client_transport, endpoints).await;
 }

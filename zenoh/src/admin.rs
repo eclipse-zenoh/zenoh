@@ -1,9 +1,3 @@
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher},
-    sync::Arc,
-};
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -22,6 +16,11 @@ use crate::{
     prelude::sync::{KeyExpr, Locality},
     queryable::Query,
     Sample, Session, ZResult,
+};
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+    sync::Arc,
 };
 use zenoh_core::SyncResolve;
 use zenoh_protocol::{
@@ -92,7 +91,7 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
     }
 
     if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        for transport in session.runtime.manager().get_transports() {
+        for transport in session.runtime.manager().get_transports_unicast() {
             if let Ok(peer) = transport.get_peer() {
                 reply_peer(own_zid, &query, peer);
             }

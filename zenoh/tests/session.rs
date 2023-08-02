@@ -78,9 +78,12 @@ async fn close_session(peer01: Session, peer02: Session) {
     ztimeout!(peer02.close().res_async()).unwrap();
 }
 
-async fn test_session_pubsub(peer01: &Session, peer02: &Session) {
+async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Reliability) {
     let key_expr = "test/session";
-
+    let msg_count = match reliability {
+        Reliability::Reliable => MSG_COUNT,
+        Reliability::BestEffort => 1,
+    };
     let msgs = Arc::new(AtomicUsize::new(0));
 
     for size in MSG_SIZE {
@@ -93,7 +96,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session) {
             .declare_subscriber(key_expr)
             .callback(move |sample| {
                 assert_eq!(sample.value.payload.len(), size);
-                c_msgs.fetch_add(1, Ordering::SeqCst);
+                c_msgs.fetch_add(1, Ordering::Relaxed);
             })
             .res_async())
         .unwrap();
@@ -103,7 +106,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session) {
 
         // Put data
         println!("[PS][02b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");
-        for _ in 0..MSG_COUNT {
+        for _ in 0..msg_count {
             ztimeout!(peer02
                 .put(key_expr, vec![0u8; size])
                 .congestion_control(CongestionControl::Block)
@@ -113,9 +116,9 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session) {
 
         ztimeout!(async {
             loop {
-                let cnt = msgs.load(Ordering::SeqCst);
-                println!("[PS][03b] Received {cnt}/{MSG_COUNT}.");
-                if cnt < MSG_COUNT {
+                let cnt = msgs.load(Ordering::Relaxed);
+                println!("[PS][03b] Received {cnt}/{msg_count}.");
+                if cnt < msg_count {
                     task::sleep(SLEEP).await;
                 } else {
                     break;
@@ -131,13 +134,16 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session) {
     }
 }
 
-async fn test_session_qryrep(peer01: &Session, peer02: &Session) {
+async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Reliability) {
     let key_expr = "test/session";
-
+    let msg_count = match reliability {
+        Reliability::Reliable => MSG_COUNT,
+        Reliability::BestEffort => 1,
+    };
     let msgs = Arc::new(AtomicUsize::new(0));
 
     for size in MSG_SIZE {
-        msgs.store(0, Ordering::SeqCst);
+        msgs.store(0, Ordering::Relaxed);
 
         // Queryable to data
         println!("[QR][01c] Queryable on peer01 session");
@@ -145,7 +151,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session) {
         let qbl = ztimeout!(peer01
             .declare_queryable(key_expr)
             .callback(move |sample| {
-                c_msgs.fetch_add(1, Ordering::SeqCst);
+                c_msgs.fetch_add(1, Ordering::Relaxed);
                 let rep = Sample::try_from(key_expr, vec![0u8; size]).unwrap();
                 task::block_on(async { ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap() });
             })
@@ -156,18 +162,18 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session) {
         task::sleep(SLEEP).await;
 
         // Get data
-        println!("[QR][02c] Getting on peer02 session. {MSG_COUNT} msgs.");
+        println!("[QR][02c] Getting on peer02 session. {msg_count} msgs.");
         let mut cnt = 0;
-        for _ in 0..MSG_COUNT {
+        for _ in 0..msg_count {
             let rs = ztimeout!(peer02.get(key_expr).res_async()).unwrap();
             while let Ok(s) = ztimeout!(rs.recv_async()) {
                 assert_eq!(s.sample.unwrap().value.payload.len(), size);
                 cnt += 1;
             }
         }
-        println!("[QR][02c] Got on peer02 session. {cnt}/{MSG_COUNT} msgs.");
-        assert_eq!(msgs.load(Ordering::SeqCst), MSG_COUNT);
-        assert_eq!(cnt, MSG_COUNT);
+        println!("[QR][02c] Got on peer02 session. {cnt}/{msg_count} msgs.");
+        assert_eq!(msgs.load(Ordering::Relaxed), msg_count);
+        assert_eq!(cnt, msg_count);
 
         println!("[PS][03c] Unqueryable on peer01 session");
         ztimeout!(qbl.undeclare().res_async()).unwrap();
@@ -184,8 +190,8 @@ fn zenoh_session_unicast() {
         let _ = env_logger::try_init();
 
         let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
-        test_session_pubsub(&peer01, &peer02).await;
-        test_session_qryrep(&peer01, &peer02).await;
+        test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
+        test_session_qryrep(&peer01, &peer02, Reliability::Reliable).await;
         close_session(peer01, peer02).await;
     });
 }
@@ -198,7 +204,7 @@ fn zenoh_session_multicast() {
 
         let (peer01, peer02) =
             open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17449").await;
-        test_session_pubsub(&peer01, &peer02).await;
+        test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
         close_session(peer01, peer02).await;
     });
 }

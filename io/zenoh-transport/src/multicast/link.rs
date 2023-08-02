@@ -290,7 +290,7 @@ async fn tx_task(
                 .into();
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.write_transport_message(&message).await?;
+                let n = link.send(&message).await?;
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(1);
@@ -303,7 +303,7 @@ async fn tx_task(
                 let message: TransportMessage = KeepAlive.into();
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.write_transport_message(&message).await?;
+                let n = link.send(&message).await?;
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(1);

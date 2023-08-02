@@ -18,7 +18,7 @@ use crate::{
 };
 use rand::Rng;
 use std::sync::Arc;
-use zenoh_core::{zasynclock, zlock};
+use zenoh_core::zasynclock;
 use zenoh_link::LinkMulticast;
 use zenoh_protocol::{
     core::{Field, Priority},
@@ -67,26 +67,25 @@ pub(crate) async fn open_link(
     ti.start_tx()?;
 
     // Store the active transport
-    zlock!(manager.state.multicast.transports).insert(locator.clone(), ti.clone());
+    zasynclock!(manager.state.multicast.transports).insert(locator.clone(), ti.clone());
 
     // Notify the transport event handler
     let transport: TransportMulticast = (&ti).into();
 
-    let callback = manager
-        .config
-        .handler
-        .new_multicast(transport.clone())
-        .map_err(|e| {
-            zlock!(manager.state.multicast.transports).remove(&locator);
+    let callback = match manager.config.handler.new_multicast(transport.clone()) {
+        Ok(c) => c,
+        Err(e) => {
+            zasynclock!(manager.state.multicast.transports).remove(&locator);
             let _ = ti.stop_tx();
-            e
-        })?;
+            return Err(e);
+        }
+    };
     ti.set_callback(callback);
-    ti.start_rx().map_err(|e| {
-        zlock!(manager.state.multicast.transports).remove(&locator);
+    if let Err(e) = ti.start_rx() {
+        zasynclock!(manager.state.multicast.transports).remove(&locator);
         let _ = ti.stop_rx();
-        e
-    })?;
+        return Err(e);
+    }
 
     Ok(transport)
 }

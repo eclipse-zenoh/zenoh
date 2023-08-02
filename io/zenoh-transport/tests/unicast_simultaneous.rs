@@ -192,13 +192,13 @@ mod tests {
             // These open should succeed
             for e in c_ep02.iter() {
                 println!("[Simultaneous 01c] => Opening transport with {e:?}...");
-                let _ = ztimeout!(c_p01m.open_transport(e.clone())).unwrap();
+                let _ = ztimeout!(c_p01m.open_transport_unicast(e.clone())).unwrap();
             }
 
             // These open should fails
             for e in c_ep02.iter() {
                 println!("[Simultaneous 01d] => Exceeding transport with {e:?}...");
-                let res = ztimeout!(c_p01m.open_transport(e.clone()));
+                let res = ztimeout!(c_p01m.open_transport_unicast(e.clone()));
                 assert!(res.is_err());
             }
 
@@ -210,9 +210,9 @@ mod tests {
                     task::sleep(SLEEP).await;
                     println!(
                         "[Simultaneous 01e] => Transports: {:?}",
-                        peer01_manager.get_transports()
+                        peer01_manager.get_transports_unicast()
                     );
-                    tp02 = peer01_manager.get_transport(&peer_id02);
+                    tp02 = peer01_manager.get_transport_unicast(&peer_id02);
                 }
 
                 tp02.unwrap()
@@ -247,13 +247,13 @@ mod tests {
             // These open should succeed
             for e in c_ep01.iter() {
                 println!("[Simultaneous 02c] => Opening transport with {e:?}...");
-                let _ = ztimeout!(c_p02m.open_transport(e.clone())).unwrap();
+                let _ = ztimeout!(c_p02m.open_transport_unicast(e.clone())).unwrap();
             }
 
             // These open should fails
             for e in c_ep01.iter() {
                 println!("[Simultaneous 02d] => Exceeding transport with {e:?}...");
-                let res = ztimeout!(c_p02m.open_transport(e.clone()));
+                let res = ztimeout!(c_p02m.open_transport_unicast(e.clone()));
                 assert!(res.is_err());
             }
 
@@ -266,9 +266,9 @@ mod tests {
                     task::sleep(SLEEP).await;
                     println!(
                         "[Simultaneous 02e] => Transports: {:?}",
-                        peer02_manager.get_transports()
+                        peer02_manager.get_transports_unicast()
                     );
-                    tp01 = peer02_manager.get_transport(&peer_id01);
+                    tp01 = peer02_manager.get_transport_unicast(&peer_id01);
                 }
                 tp01.unwrap()
             });
