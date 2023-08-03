@@ -497,15 +497,13 @@ impl TransportManager {
     }
 
     pub(super) async fn del_transport_unicast(&self, peer: &ZenohId) -> ZResult<()> {
-        task::block_on(async {
-            zasynclock!(self.state.unicast.transports)
-                .remove(peer)
-                .ok_or_else(|| {
-                    let e = zerror!("Can not delete the transport of peer: {}", peer);
-                    log::trace!("{}", e);
-                    e
-                })
-        })?;
+        zasynclock!(self.state.unicast.transports)
+            .remove(peer)
+            .ok_or_else(|| {
+                let e = zerror!("Can not delete the transport of peer: {}", peer);
+                log::trace!("{}", e);
+                e
+            })?;
         Ok(())
     }
 
