@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::{App, Arg};
+#[cfg(not(feature = "shared-memory"))]
 use log::warn;
 use std::time::{Duration, Instant};
 use zenoh::config::Config;

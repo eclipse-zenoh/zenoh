@@ -14,6 +14,8 @@ use std::io::{stdin, Read};
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::{App, Arg};
+#[cfg(not(feature = "shared-memory"))]
+use log::warn;
 use zenoh::config::Config;
 use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
