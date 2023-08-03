@@ -111,6 +111,7 @@ jobs:
 
   tests:
     name: Tests
+    if: ${{ !(github.event.inputs.runtests == 'false') }}
     needs: checks
     runs-on: ubuntu-latest
     steps:

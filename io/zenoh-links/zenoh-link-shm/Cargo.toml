@@ -33,16 +33,12 @@ async-trait = { workspace = true }
 async-io = ">= 1.13.0"
 log = { workspace = true }
 rand = { workspace = true }
-socket2 = { workspace = true }
 zenoh-buffers = { workspace = true }
-zenoh-collections = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-link-commons = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
-zenoh-sync = { workspace = true }
-zenoh-util = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]
 advisory-lock = ">= 0.3.0"

@@ -12,8 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::common::ZExtBody;
-
-pub type OamId = u16;
+use crate::transport::oam::OamId;
 
 pub mod flag {
     pub const T: u8 = 1 << 5; // 0x20 Transport
@@ -22,9 +21,11 @@ pub mod flag {
 }
 
 pub mod id {
-    pub const OAM_LINKSTATE: crate::transport::oam::OamId = 0x0001;
-    pub const OAM_KEEPALIVE: crate::transport::oam::OamId = 0x0002;
-    pub const OAM_CLOSE: crate::transport::oam::OamId = 0x0003;
+    use super::OamId;
+
+    pub const OAM_LINKSTATE: OamId = 0x0001;
+    pub const OAM_KEEPALIVE: OamId = 0x0002;
+    pub const OAM_CLOSE: OamId = 0x0003;
 }
 
 /// ```text

@@ -34,7 +34,7 @@ default = [
 ]
 
 # Unfortunately, the feature "transport_shm" is always
-# enabled for the lines below. It looks like a bug :(
+# enabled for the lines below. It looks like a Cargo bug :(
 #
 # [target.'cfg(unix)'.dependencies]
 # zenoh = { workspace = true, features = ["transport_shm"] }

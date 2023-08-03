@@ -84,9 +84,11 @@ fn parse_args() -> Config {
     if args.is_present("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
-    #[cfg(feature = "shared-memory")]
     if args.is_present("enable-shm") {
+        #[cfg(feature = "shared-memory")]
         config.transport.shared_memory.set_enabled(true).unwrap();
+        #[cfg(not(feature = "shared-memory"))]
+        warn!("enable-shm argument: SHM cannot be enabled, because Zenoh is compiled without shared-memory feature!");
     }
 
     config

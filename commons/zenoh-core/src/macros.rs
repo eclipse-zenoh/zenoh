@@ -65,8 +65,8 @@ macro_rules! zasyncread {
 }
 
 // This macro performs an async read with upgrade to write option on RwLock<T>
-// For performance reasons, it first performs a try_read() and,
-// if it fails, it falls back on read().await
+// For performance reasons, it first performs a try_upgradable_read() and,
+// if it fails, it falls back on upgradable_read().await
 #[macro_export]
 macro_rules! zasyncread_upgradable {
     ($var:expr) => {

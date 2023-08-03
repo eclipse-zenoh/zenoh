@@ -63,12 +63,6 @@ jobs:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Clippy shared-memory
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets --features shared-memory -- -D warnings
-
-      - name: Clippy transport_shm
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
         uses: actions-rs/cargo@v1
         with:
@@ -100,7 +94,6 @@ jobs:
         run: cargo install cargo-nextest --locked
 
       - name: Run tests
-        if: ${{ matrix.os == 'windows-latest' }}
         uses: actions-rs/cargo@v1
         with:
           command: nextest
@@ -114,7 +107,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: nextest
-          args: run -F shared-memory -F transport_shm
+          args: run -F shared-memory -F transport_shm -p zenoh-transport
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4

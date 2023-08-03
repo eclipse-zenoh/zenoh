@@ -21,8 +21,9 @@ use zenoh_protocol::{
     common::{iext, imsg, ZExtBody},
     network::{
         id,
-        oam::{ext, flag, Oam, OamId},
+        oam::{ext, flag, Oam},
     },
+    transport::oam::OamId,
 };
 
 impl<W> WCodec<&Oam, &mut W> for Zenoh080

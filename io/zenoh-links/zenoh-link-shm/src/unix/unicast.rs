@@ -1,5 +1,3 @@
-use crate::config;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -13,6 +11,7 @@ use crate::config;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::config;
 use advisory_lock::{AdvisoryFileLock, FileLockMode};
 use async_io::Async;
 use async_std::fs::remove_file;
@@ -27,6 +26,8 @@ use std::fmt;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::sync::Arc;
+use zenoh_core::{zasyncread, zasyncwrite};
+use zenoh_protocol::core::{EndPoint, Locator};
 
 use unix_named_pipe::{create, open_read, open_write};
 
@@ -34,7 +35,6 @@ use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     NewLinkChannelSender,
 };
-use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, ZResult};
 
 use super::SHM_ACCESS_MASK;
@@ -139,15 +139,15 @@ impl PipeR {
     async fn create_and_open_unique_pipe_for_read(path_r: &str, access_mode: u32) -> ZResult<File> {
         let r_was_created = create(path_r, Some(access_mode));
         let open_result = Self::open_unique_pipe_for_read(path_r);
-        match (open_result.is_ok(), r_was_created.is_ok()) {
-            (false, true) => {
+        match (open_result.as_ref(), r_was_created) {
+            (Err(_), Ok(_)) => {
                 // clean-up in case of failure
                 let _ = remove_file(path_r).await;
             }
-            (true, false) => {
+            (Ok(mut pipe_file), Err(_)) => {
                 // drop all the data from the pipe in case if it already exists
                 let mut buf: [u8; 1] = [0; 1];
-                while let Ok(val) = open_result.as_ref().unwrap().read(&mut buf) {
+                while let Ok(val) = pipe_file.read(&mut buf) {
                     if val == 0 {
                         break;
                     }
@@ -502,14 +502,14 @@ impl fmt::Debug for UnicastPipe {
 
 pub struct LinkManagerUnicastPipe {
     manager: Arc<NewLinkChannelSender>,
-    listeners: std::sync::RwLock<HashMap<EndPoint, UnicastPipeListener>>,
+    listeners: async_std::sync::RwLock<HashMap<EndPoint, UnicastPipeListener>>,
 }
 
 impl LinkManagerUnicastPipe {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager: Arc::new(manager),
-            listeners: std::sync::RwLock::new(HashMap::new()),
+            listeners: async_std::sync::RwLock::new(HashMap::new()),
         }
     }
 }
@@ -529,12 +529,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastPipe {
     async fn new_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
         let listener = UnicastPipeListener::listen(endpoint.clone(), self.manager.clone()).await?;
         let locator = listener.uplink_locator.clone();
-        self.listeners.write().unwrap().insert(endpoint, listener);
+        zasyncwrite!(self.listeners).insert(endpoint, listener);
         Ok(locator)
     }
 
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let removed = self.listeners.write().unwrap().remove(endpoint);
+        let removed = zasyncwrite!(self.listeners).remove(endpoint);
         match removed {
             Some(val) => {
                 val.stop_listening().await;
@@ -545,13 +545,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastPipe {
     }
 
     fn get_listeners(&self) -> Vec<EndPoint> {
-        self.listeners.read().unwrap().keys().cloned().collect()
+        async_std::task::block_on(async { zasyncread!(self.listeners) })
+            .keys()
+            .cloned()
+            .collect()
     }
 
     fn get_locators(&self) -> Vec<Locator> {
-        self.listeners
-            .read()
-            .unwrap()
+        async_std::task::block_on(async { zasyncread!(self.listeners) })
             .values()
             .map(|v| v.uplink_locator.clone())
             .collect()

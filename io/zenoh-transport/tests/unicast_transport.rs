@@ -929,8 +929,12 @@ fn transport_unicast_shm_only_with_shm() {
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
-        "shm//tmp/transport_unicast_shm_only".parse().unwrap(),
-        "shm//tmp/transport_unicast_shm_only2".parse().unwrap(),
+        "shm//tmp/transport_unicast_shm_only_with_shm"
+            .parse()
+            .unwrap(),
+        "shm//tmp/transport_unicast_shm_only_with_shm2"
+            .parse()
+            .unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
