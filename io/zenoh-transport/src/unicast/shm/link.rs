@@ -96,7 +96,7 @@ impl ShmTransportUnicastInner {
 
     pub(super) async fn stop_keepalive(&self) {
         if let Some(handle) = zasyncwrite!(self.handle_keepalive).take() {
-            handle.cancel().await;
+            task::spawn(async move { handle.cancel().await });
         }
     }
 
@@ -121,7 +121,7 @@ impl ShmTransportUnicastInner {
 
     pub(super) async fn stop_rx(&self) {
         if let Some(handle) = zasyncwrite!(self.handle_rx).take() {
-            handle.cancel().await;
+            task::spawn(async move { handle.cancel().await });
         }
     }
 }
