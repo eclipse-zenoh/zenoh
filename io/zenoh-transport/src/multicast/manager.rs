@@ -170,11 +170,7 @@ impl TransportManager {
 
         zasynclock!(self.state.multicast.protocols).clear();
 
-        let mut tm_guard = zasynclock!(self.state.multicast.transports)
-            .drain()
-            .map(|(_, v)| v)
-            .collect::<Vec<Arc<TransportMulticastInner>>>();
-        for tm in tm_guard.drain(..) {
+        for (_, tm) in zasynclock!(self.state.multicast.transports).drain() {
             let _ = tm.close(close::reason::GENERIC).await;
         }
     }

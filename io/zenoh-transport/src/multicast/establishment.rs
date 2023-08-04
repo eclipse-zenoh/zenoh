@@ -24,7 +24,7 @@ use zenoh_protocol::{
     core::{Field, Priority},
     transport::PrioritySn,
 };
-use zenoh_result::ZResult;
+use zenoh_result::{bail, ZResult};
 
 pub(crate) async fn open_link(
     manager: &TransportManager,
@@ -52,6 +52,9 @@ pub(crate) async fn open_link(
     }
     .into_boxed_slice();
 
+    // Release the lock
+    drop(prng);
+
     // Create the transport
     let locator = link.get_dst().to_owned();
     let config = TransportConfigMulticast {
@@ -67,7 +70,12 @@ pub(crate) async fn open_link(
     ti.start_tx()?;
 
     // Store the active transport
-    zasynclock!(manager.state.multicast.transports).insert(locator.clone(), ti.clone());
+    let mut w_guard = zasynclock!(manager.state.multicast.transports);
+    if w_guard.get(&locator).is_some() {
+        bail!("A Multicast transport on {} already exist!", locator);
+    }
+    w_guard.insert(locator.clone(), ti.clone());
+    drop(w_guard);
 
     // Notify the transport event handler
     let transport: TransportMulticast = (&ti).into();
