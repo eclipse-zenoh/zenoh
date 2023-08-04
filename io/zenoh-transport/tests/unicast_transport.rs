@@ -643,7 +643,12 @@ fn transport_unicast_tcp_only() {
         },
     ];
     // Run
-    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
 }
 
 #[cfg(all(feature = "transport_tcp", feature = "shared-memory",))]
@@ -704,7 +709,12 @@ fn transport_unicast_udp_only() {
         },
     ];
     // Run
-    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NOFRAG,
+    ));
 }
 
 #[cfg(all(feature = "transport_udp", feature = "shared-memory",))]
@@ -764,7 +774,12 @@ fn transport_unicast_unix_only() {
         },
     ];
     // Run
-    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -840,7 +855,12 @@ fn transport_unicast_ws_only() {
         },
     ];
     // Run
-    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
 }
 
 #[cfg(all(feature = "transport_ws", feature = "shared-memory",))]
@@ -909,7 +929,12 @@ fn transport_unicast_shm_only() {
         },
     ];
     // Run
-    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NOFRAG,
+    ));
 }
 
 #[cfg(all(feature = "transport_shm", feature = "shared-memory",))]
@@ -976,7 +1001,12 @@ fn transport_unicast_tcp_udp() {
         },
     ];
     // Run
-    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NOFRAG,
+    ));
 }
 
 #[cfg(all(
@@ -1011,7 +1041,12 @@ fn transport_unicast_tcp_unix() {
         },
     ];
     // Run
-    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -1048,7 +1083,12 @@ fn transport_unicast_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NOFRAG,
+    ));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -1088,7 +1128,12 @@ fn transport_unicast_tcp_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NOFRAG,
+    ));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -1139,7 +1184,12 @@ fn transport_unicast_tls_only_server() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
 }
 
 #[cfg(feature = "transport_quic")]
@@ -1188,7 +1238,12 @@ fn transport_unicast_quic_only_server() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
