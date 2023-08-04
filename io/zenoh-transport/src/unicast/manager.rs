@@ -479,21 +479,17 @@ impl TransportManager {
         super::establishment::open::open_link(&link, self).await
     }
 
-    pub fn get_transport_unicast(&self, peer: &ZenohId) -> Option<TransportUnicast> {
-        task::block_on(async {
-            zasynclock!(self.state.unicast.transports)
-                .get(peer)
-                .map(|t| t.into())
-        })
+    pub async fn get_transport_unicast(&self, peer: &ZenohId) -> Option<TransportUnicast> {
+        zasynclock!(self.state.unicast.transports)
+            .get(peer)
+            .map(|t| t.into())
     }
 
-    pub fn get_transports_unicast(&self) -> Vec<TransportUnicast> {
-        task::block_on(async {
-            zasynclock!(self.state.unicast.transports)
-                .values()
-                .map(|t| t.into())
-                .collect()
-        })
+    pub async fn get_transports_unicast(&self) -> Vec<TransportUnicast> {
+        zasynclock!(self.state.unicast.transports)
+            .values()
+            .map(|t| t.into())
+            .collect()
     }
 
     pub(super) async fn del_transport_unicast(&self, peer: &ZenohId) -> ZResult<()> {

@@ -15,7 +15,7 @@
 use crate::multicast::shm::SharedMemoryMulticast;
 use crate::multicast::{transport::TransportMulticastInner, TransportMulticast};
 use crate::TransportManager;
-use async_std::{sync::Mutex, task};
+use async_std::sync::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
@@ -255,21 +255,17 @@ impl TransportManager {
         super::establishment::open_link(self, link).await
     }
 
-    pub fn get_transport_multicast(&self, locator: &Locator) -> Option<TransportMulticast> {
-        task::block_on(async {
-            zasynclock!(self.state.multicast.transports)
-                .get(locator)
-                .map(|t| t.into())
-        })
+    pub async fn get_transport_multicast(&self, locator: &Locator) -> Option<TransportMulticast> {
+        zasynclock!(self.state.multicast.transports)
+            .get(locator)
+            .map(|t| t.into())
     }
 
-    pub fn get_transports_multicast(&self) -> Vec<TransportMulticast> {
-        task::block_on(async {
-            zasynclock!(self.state.multicast.transports)
-                .values()
-                .map(|t| t.into())
-                .collect()
-        })
+    pub async fn get_transports_multicast(&self) -> Vec<TransportMulticast> {
+        zasynclock!(self.state.multicast.transports)
+            .values()
+            .map(|t| t.into())
+            .collect()
     }
 
     pub(super) async fn del_transport_multicast(&self, locator: &Locator) -> ZResult<()> {

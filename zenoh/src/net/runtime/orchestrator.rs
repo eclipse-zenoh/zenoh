@@ -14,6 +14,7 @@
 use super::{Runtime, RuntimeSession};
 use async_std::net::UdpSocket;
 use async_std::prelude::FutureExt;
+use async_std::task;
 use futures::prelude::*;
 use socket2::{Domain, Socket, Type};
 use std::net::{IpAddr, Ipv6Addr, SocketAddr};
@@ -245,7 +246,7 @@ impl Runtime {
 
     pub(crate) async fn update_peers(&self) -> ZResult<()> {
         let peers = { self.config.lock().connect().endpoints().clone() };
-        let tranports = self.manager().get_transports_unicast();
+        let tranports = task::block_on(self.manager().get_transports_unicast());
 
         if self.whatami == WhatAmI::Client {
             for transport in tranports {
@@ -656,7 +657,7 @@ impl Runtime {
 
     pub async fn connect_peer(&self, zid: &ZenohId, locators: &[Locator]) {
         if zid != &self.manager().zid() {
-            if self.manager().get_transport_unicast(zid).is_none() {
+            if task::block_on(self.manager().get_transport_unicast(zid)).is_none() {
                 log::debug!("Try to connect to peer {} via any of {:?}", zid, locators);
                 if let Some(transport) = self.connect(locators).await {
                     log::debug!(

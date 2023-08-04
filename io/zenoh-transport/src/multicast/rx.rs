@@ -122,7 +122,7 @@ impl TransportMulticastInner {
             return Ok(());
         }
 
-        if join.resolution > self.manager.config.resolution {
+        if join.resolution != self.manager.config.resolution {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. Unsupported SN resolution: {:?}. Expected: <= {:?}.",
                 locator,

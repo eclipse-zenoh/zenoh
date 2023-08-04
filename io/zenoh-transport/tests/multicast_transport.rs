@@ -173,19 +173,22 @@ mod tests {
         let _ = ztimeout!(peer01_manager.open_transport_multicast(endpoint.clone())).unwrap();
         assert!(peer01_manager
             .get_transport_multicast(&endpoint.to_locator())
+            .await
             .is_some());
-        println!("\t{:?}", peer01_manager.get_transports_multicast());
+        println!("\t{:?}", peer01_manager.get_transports_multicast().await);
 
         println!("Opening transport with {endpoint}");
         let _ = ztimeout!(peer02_manager.open_transport_multicast(endpoint.clone())).unwrap();
         assert!(peer02_manager
             .get_transport_multicast(&endpoint.to_locator())
+            .await
             .is_some());
-        println!("\t{:?}", peer02_manager.get_transports_multicast());
+        println!("\t{:?}", peer02_manager.get_transports_multicast().await);
 
         // Wait to for peer 01 and 02 to join each other
         let peer01_transport = peer01_manager
             .get_transport_multicast(&endpoint.to_locator())
+            .await
             .unwrap();
         ztimeout!(async {
             while peer01_transport.get_peers().unwrap().is_empty() {
@@ -199,6 +202,7 @@ mod tests {
 
         let peer02_transport = peer02_manager
             .get_transport_multicast(&endpoint.to_locator())
+            .await
             .unwrap();
         ztimeout!(async {
             while peer02_transport.get_peers().unwrap().is_empty() {
@@ -232,13 +236,13 @@ mod tests {
         // Close the peer01 transport
         println!("Closing transport with {endpoint}");
         ztimeout!(peer01.transport.close()).unwrap();
-        assert!(peer01.manager.get_transports_multicast().is_empty());
+        assert!(peer01.manager.get_transports_multicast().await.is_empty());
         assert!(peer02.transport.get_peers().unwrap().is_empty());
 
         // Close the peer02 transport
         println!("Closing transport with {endpoint}");
         ztimeout!(peer02.transport.close()).unwrap();
-        assert!(peer02.manager.get_transports_multicast().is_empty());
+        assert!(peer02.manager.get_transports_multicast().await.is_empty());
 
         // Wait a little bit
         task::sleep(SLEEP).await;

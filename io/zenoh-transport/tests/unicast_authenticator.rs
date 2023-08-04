@@ -361,7 +361,7 @@ async fn auth_pubkey(endpoint: &EndPoint) {
     assert!(res.is_ok());
 
     ztimeout!(async {
-        while !router_manager.get_transports_unicast().is_empty() {
+        while !router_manager.get_transports_unicast().await.is_empty() {
             task::sleep(SLEEP).await;
         }
     });
@@ -496,7 +496,7 @@ async fn auth_usrpwd(endpoint: &EndPoint) {
     assert!(res.is_ok());
 
     ztimeout!(async {
-        while !router_manager.get_transports_unicast().is_empty() {
+        while !router_manager.get_transports_unicast().await.is_empty() {
             task::sleep(SLEEP).await;
         }
     });
@@ -553,7 +553,7 @@ async fn auth_usrpwd(endpoint: &EndPoint) {
     assert!(res.is_ok());
 
     ztimeout!(async {
-        while !router_manager.get_transports_unicast().is_empty() {
+        while !router_manager.get_transports_unicast().await.is_empty() {
             task::sleep(SLEEP).await;
         }
     });
