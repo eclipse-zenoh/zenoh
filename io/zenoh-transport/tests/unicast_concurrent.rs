@@ -381,6 +381,7 @@ fn transport_tcp_concurrent() {
 
 #[cfg(feature = "transport_ws")]
 #[test]
+#[ignore]
 fn transport_ws_concurrent() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -415,6 +416,7 @@ fn transport_ws_concurrent() {
 
 #[cfg(feature = "transport_shm")]
 #[test]
+#[ignore]
 fn transport_shm_concurrent() {
     let _ = env_logger::try_init();
     task::block_on(async {

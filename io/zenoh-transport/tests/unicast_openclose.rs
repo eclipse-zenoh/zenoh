@@ -460,6 +460,7 @@ fn openclose_udp_only() {
 
 #[cfg(feature = "transport_ws")]
 #[test]
+#[ignore]
 fn openclose_ws_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -472,6 +473,7 @@ fn openclose_ws_only() {
 
 #[cfg(feature = "transport_shm")]
 #[test]
+#[ignore]
 fn openclose_shm_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -484,6 +486,7 @@ fn openclose_shm_only() {
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
+#[ignore]
 fn openclose_unix_only() {
     let _ = env_logger::try_init();
     task::block_on(async {

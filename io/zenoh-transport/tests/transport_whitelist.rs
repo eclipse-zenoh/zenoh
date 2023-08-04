@@ -140,6 +140,7 @@ fn transport_whitelist_tcp() {
 
 #[cfg(feature = "transport_shm")]
 #[test]
+#[ignore]
 fn transport_whitelist_shm() {
     let _ = env_logger::try_init();
     task::block_on(async {

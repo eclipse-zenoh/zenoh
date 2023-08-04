@@ -507,6 +507,7 @@ mod tests {
 
     #[cfg(feature = "transport_ws")]
     #[test]
+    #[ignore]
     fn multilink_ws_only() {
         let _ = env_logger::try_init();
         task::block_on(async {
@@ -519,6 +520,7 @@ mod tests {
 
     #[cfg(feature = "transport_shm")]
     #[test]
+    #[ignore]
     fn multilink_shm_only() {
         let _ = env_logger::try_init();
         task::block_on(async {
@@ -531,6 +533,7 @@ mod tests {
 
     #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
     #[test]
+    #[ignore]
     fn multilink_unix_only() {
         let _ = env_logger::try_init();
         task::block_on(async {

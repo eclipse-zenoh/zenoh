@@ -12,9 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::{App, Arg};
-#[cfg(not(feature = "shared-memory"))]
-use log::warn;
 use std::convert::TryInto;
+#[cfg(not(feature = "shared-memory"))]
+use std::process::exit;
 use zenoh::config::Config;
 use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
@@ -117,7 +117,10 @@ fn parse_args() -> (Config, usize, Priority, bool, usize) {
         #[cfg(feature = "shared-memory")]
         config.transport.shared_memory.set_enabled(true).unwrap();
         #[cfg(not(feature = "shared-memory"))]
-        warn!("enable-shm argument: SHM cannot be enabled, because Zenoh is compiled without shared-memory feature!");
+        {
+            println!("enable-shm argument: SHM cannot be enabled, because Zenoh is compiled without shared-memory feature!");
+            exit(-1);
+        }
     }
 
     let number: usize = args.value_of("number").unwrap().parse().unwrap();

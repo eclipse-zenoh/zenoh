@@ -404,14 +404,7 @@ async fn open_transport(
     // Open transport -> This should be accepted
     for e in client_endpoints.iter() {
         println!("Opening transport with {}", e);
-        //let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
-        let e = client_manager.open_transport(e.clone()).await;
-        match e {
-            Ok(_) => {}
-            Err(e) => {
-                println!("Error opening transport: {}", e);
-            }
-        }
+        let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
     }
 
     let client_transport = client_manager.get_transport(&router_id).unwrap();
@@ -595,7 +588,7 @@ async fn run_internal(
     }
 }
 
-async fn run(
+async fn run_with_net(
     client_endpoints: &[EndPoint],
     server_endpoints: &[EndPoint],
     channel: &[Channel],
@@ -650,7 +643,7 @@ fn transport_unicast_tcp_only() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
 }
 
 #[cfg(all(feature = "transport_tcp", feature = "shared-memory",))]
@@ -663,8 +656,8 @@ fn transport_unicast_tcp_only_with_shm() {
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        format!("tcp/127.0.0.1:{}", 16000).parse().unwrap(),
-        format!("tcp/[::1]:{}", 16001).parse().unwrap(),
+        format!("tcp/127.0.0.1:{}", 16100).parse().unwrap(),
+        format!("tcp/[::1]:{}", 16101).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -711,7 +704,7 @@ fn transport_unicast_udp_only() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
 }
 
 #[cfg(all(feature = "transport_udp", feature = "shared-memory",))]
@@ -724,8 +717,8 @@ fn transport_unicast_udp_only_with_shm() {
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
-        format!("udp/127.0.0.1:{}", 16010).parse().unwrap(),
-        format!("udp/[::1]:{}", 16011).parse().unwrap(),
+        format!("udp/127.0.0.1:{}", 16110).parse().unwrap(),
+        format!("udp/[::1]:{}", 16111).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -771,7 +764,7 @@ fn transport_unicast_unix_only() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -788,7 +781,7 @@ fn transport_unicast_unix_only_with_shm() {
         zasync_executor_init!();
     });
 
-    let f1 = "zenoh-test-unix-socket-5.sock";
+    let f1 = "zenoh-test-unix-socket-5-shm.sock";
     let _ = std::fs::remove_file(f1);
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![format!("unixsock-stream/{f1}").parse().unwrap()];
@@ -847,7 +840,7 @@ fn transport_unicast_ws_only() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
 }
 
 #[cfg(all(feature = "transport_ws", feature = "shared-memory",))]
@@ -860,8 +853,8 @@ fn transport_unicast_ws_only_with_shm() {
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        format!("ws/127.0.0.1:{}", 16020).parse().unwrap(),
-        format!("ws/[::1]:{}", 16021).parse().unwrap(),
+        format!("ws/127.0.0.1:{}", 16120).parse().unwrap(),
+        format!("ws/[::1]:{}", 16121).parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -916,7 +909,7 @@ fn transport_unicast_shm_only() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
 }
 
 #[cfg(all(feature = "transport_shm", feature = "shared-memory",))]
@@ -983,7 +976,7 @@ fn transport_unicast_tcp_udp() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
 }
 
 #[cfg(all(
@@ -1018,7 +1011,7 @@ fn transport_unicast_tcp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -1055,7 +1048,7 @@ fn transport_unicast_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -1095,7 +1088,7 @@ fn transport_unicast_tcp_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -1146,7 +1139,7 @@ fn transport_unicast_tls_only_server() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
 }
 
 #[cfg(feature = "transport_quic")]
@@ -1195,7 +1188,7 @@ fn transport_unicast_quic_only_server() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
@@ -1262,7 +1255,7 @@ fn transport_unicast_tls_only_mutual_success() {
     // Run
     let client_endpoints = vec![client_endpoint];
     let server_endpoints = vec![server_endpoint];
-    task::block_on(run(
+    task::block_on(run_with_net(
         &client_endpoints,
         &server_endpoints,
         &channel,
@@ -1341,7 +1334,7 @@ fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
     let client_endpoints = vec![client_endpoint];
     let server_endpoints = vec![server_endpoint];
     let result = std::panic::catch_unwind(|| {
-        task::block_on(run(
+        task::block_on(run_with_net(
             &client_endpoints,
             &server_endpoints,
             &channel,
@@ -1423,7 +1416,7 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
     let client_endpoints = vec![client_endpoint];
     let server_endpoints = vec![server_endpoint];
     let result = std::panic::catch_unwind(|| {
-        task::block_on(run(
+        task::block_on(run_with_net(
             &client_endpoints,
             &server_endpoints,
             &channel,

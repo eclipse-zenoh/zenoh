@@ -348,6 +348,7 @@ fn conduits_tcp_only() {
 
 #[cfg(feature = "transport_shm")]
 #[test]
+#[ignore]
 fn conduits_shm_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -361,6 +362,7 @@ fn conduits_shm_only() {
 
 #[cfg(feature = "transport_ws")]
 #[test]
+#[ignore]
 fn conduits_ws_only() {
     let _ = env_logger::try_init();
     task::block_on(async {

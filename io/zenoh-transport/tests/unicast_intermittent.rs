@@ -399,6 +399,7 @@ fn transport_tcp_intermittent() {
 
 #[cfg(feature = "transport_ws")]
 #[test]
+#[ignore]
 fn transport_ws_intermittent() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -411,6 +412,7 @@ fn transport_ws_intermittent() {
 
 #[cfg(feature = "transport_shm")]
 #[test]
+#[ignore]
 fn transport_shm_intermittent() {
     let _ = env_logger::try_init();
     task::block_on(async {

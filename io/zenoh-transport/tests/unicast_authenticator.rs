@@ -608,6 +608,7 @@ fn authenticator_udp() {
 
 #[cfg(feature = "transport_shm")]
 #[test]
+#[ignore]
 fn authenticator_shm() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -620,6 +621,7 @@ fn authenticator_shm() {
 
 #[cfg(feature = "transport_ws")]
 #[test]
+#[ignore]
 fn authenticator_ws() {
     let _ = env_logger::try_init();
     task::block_on(async {

@@ -29,9 +29,6 @@ readme = "README.md"
 shared-memory = ["zenoh/shared-memory"]
 unstable = ["zenoh/unstable"]
 transport_shm = ["zenoh/transport_shm"]
-default = [
-    "shared-memory",
-]
 
 # Unfortunately, the feature "transport_shm" is always
 # enabled for the lines below. It looks like a Cargo bug :(

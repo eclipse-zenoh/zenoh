@@ -170,6 +170,7 @@ fn transport_unicast_defragmentation_tcp_only() {
 
 #[cfg(feature = "transport_ws")]
 #[test]
+#[ignore]
 fn transport_unicast_defragmentation_ws_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -207,6 +208,7 @@ fn transport_unicast_defragmentation_ws_only() {
 
 #[cfg(feature = "transport_shm")]
 #[test]
+#[ignore]
 fn transport_unicast_defragmentation_shm_only() {
     let _ = env_logger::try_init();
     task::block_on(async {

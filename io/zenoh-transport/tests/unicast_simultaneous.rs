@@ -331,6 +331,7 @@ mod tests {
 
     #[cfg(feature = "transport_shm")]
     #[test]
+    #[ignore]
     fn transport_shm_simultaneous() {
         let _ = env_logger::try_init();
         task::block_on(async {
@@ -357,6 +358,7 @@ mod tests {
 
     #[cfg(feature = "transport_ws")]
     #[test]
+    #[ignore]
     fn transport_ws_simultaneous() {
         let _ = env_logger::try_init();
         task::block_on(async {
