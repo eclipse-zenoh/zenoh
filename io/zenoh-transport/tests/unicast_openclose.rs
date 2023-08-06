@@ -18,9 +18,9 @@ use zenoh_link::EndPoint;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
-    TransportManagerBuilderUnicast, TransportMulticast, TransportMulticastEventHandler,
-    TransportPeer, TransportPeerEventHandler, TransportUnicast, test_helpers::make_transport_builder,
+    test_helpers::make_transport_manager_builder, DummyTransportPeerEventHandler,
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -88,12 +88,13 @@ async fn openclose_transport(
 
     let router_handler = Arc::new(SHRouterOpenClose);
     // Create the router transport manager
-    let unicast = make_transport_builder(
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
         2,
-        1,
         #[cfg(feature = "shared-memory")]
         shm_transport,
-    );
+    )
+    .max_sessions(1);
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
         .zid(router_id)
@@ -106,12 +107,13 @@ async fn openclose_transport(
     let client02_id = ZenohId::try_from([3]).unwrap();
 
     // Create the transport transport manager for the first client
-    let unicast = make_transport_builder(
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
         2,
-        1,
         #[cfg(feature = "shared-memory")]
         shm_transport,
-    );
+    )
+    .max_sessions(1);
     let client01_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client01_id)
@@ -120,12 +122,13 @@ async fn openclose_transport(
         .unwrap();
 
     // Create the transport transport manager for the second client
-    let unicast = make_transport_builder(
-        1,
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
         1,
         #[cfg(feature = "shared-memory")]
         shm_transport,
-    );
+    )
+    .max_sessions(1);
     let client02_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client02_id)

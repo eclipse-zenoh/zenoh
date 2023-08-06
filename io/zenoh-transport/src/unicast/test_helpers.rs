@@ -12,20 +12,39 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::{TransportManagerBuilderUnicast, TransportManager};
+use zenoh_core::zcondfeat;
 
-pub fn make_transport_builder(
-    max_links: usize,
-    max_sessions: usize,
+use crate::{TransportManager, TransportManagerBuilderUnicast};
+
+pub fn make_transport_manager_builder(
+    #[cfg(feature = "transport_multilink")] max_links: usize,
     #[cfg(feature = "shared-memory")] shm_transport: bool,
 ) -> TransportManagerBuilderUnicast {
-    #[allow(unused_mut)] // unused mut when shared-memory is disabled
-    let mut transport = TransportManager::config_unicast()
-        .max_links(max_links)
-        .max_sessions(max_sessions);
-    #[cfg(feature = "shared-memory")]
-    {
-        transport = transport.shm(shm_transport);
-    }
-    transport
+    let transport = make_basic_transport_manager_builder(
+        #[cfg(feature = "shared-memory")]
+        shm_transport,
+    );
+
+    zcondfeat!(
+        "transport_multilink",
+        {
+            println!("...with max links: {}...", max_links);
+            transport.max_links(max_links)
+        },
+        transport
+    )
+}
+
+pub fn make_basic_transport_manager_builder(
+    #[cfg(feature = "shared-memory")] shm_transport: bool,
+) -> TransportManagerBuilderUnicast {
+    println!("Create transport manager builder...");
+    zcondfeat!(
+        "shared-memory",
+        {
+            println!("...with SHM...");
+            TransportManager::config_unicast().shm(shm_transport)
+        },
+        TransportManager::config_unicast()
+    )
 }

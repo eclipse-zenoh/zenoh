@@ -35,8 +35,9 @@ use zenoh_protocol::{
     zenoh_new::Put,
 };
 use zenoh_result::ZResult;
+use zenoh_transport::test_helpers::make_transport_manager_builder;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportManagerBuilderUnicast, TransportMulticast,
+    TransportEventHandler, TransportManager, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 
@@ -332,25 +333,6 @@ impl TransportPeerEventHandler for SCClient {
     }
 }
 
-fn transport_manager(
-    #[cfg(feature = "transport_multilink")] max_links: usize,
-    #[cfg(feature = "shared-memory")] shm_transport: bool,
-) -> TransportManagerBuilderUnicast {
-    println!("Create transport manager builder...");
-    let mut unicast = TransportManager::config_unicast();
-    #[cfg(feature = "shared-memory")]
-    {
-        println!("...with SHM...");
-        unicast = unicast.shm(shm_transport);
-    }
-    #[cfg(feature = "transport_multilink")]
-    {
-        println!("...with max links: {}...", max_links);
-        unicast = unicast.max_links(max_links);
-    }
-    unicast
-}
-
 async fn open_transport(
     client_endpoints: &[EndPoint],
     server_endpoints: &[EndPoint],
@@ -367,7 +349,7 @@ async fn open_transport(
 
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::default());
-    let unicast = transport_manager(
+    let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         server_endpoints.len(),
         #[cfg(feature = "shared-memory")]
@@ -387,7 +369,7 @@ async fn open_transport(
     }
 
     // Create the client transport manager
-    let unicast = transport_manager(
+    let unicast = make_transport_manager_builder(
         #[cfg(feature = "transport_multilink")]
         client_endpoints.len(),
         #[cfg(feature = "shared-memory")]

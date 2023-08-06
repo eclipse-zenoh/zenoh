@@ -34,7 +34,7 @@ use zenoh_protocol::{
     zenoh_new::Put,
 };
 use zenoh_result::ZResult;
-use zenoh_transport::test_helpers::make_transport_builder;
+use zenoh_transport::test_helpers::make_transport_manager_builder;
 use zenoh_transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -157,12 +157,13 @@ async fn transport_intermittent(
 
     let router_handler = Arc::new(SHRouterIntermittent);
     // Create the router transport manager
-    let unicast = make_transport_builder(
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
         1,
-        3,
         #[cfg(feature = "shared-memory")]
         shm_transport,
-    );
+    )
+    .max_sessions(3);
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
         .zid(router_id)
@@ -177,12 +178,13 @@ async fn transport_intermittent(
 
     // Create the transport transport manager for the first client
     let counter = Arc::new(AtomicUsize::new(0));
-    let unicast = make_transport_builder(
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
         1,
-        3,
         #[cfg(feature = "shared-memory")]
         shm_transport,
-    );
+    )
+    .max_sessions(3);
     let client01_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client01_id)
@@ -191,12 +193,13 @@ async fn transport_intermittent(
         .unwrap();
 
     // Create the transport transport manager for the second client
-    let unicast = make_transport_builder(
-        1,
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
         1,
         #[cfg(feature = "shared-memory")]
         shm_transport,
-    );
+    )
+    .max_sessions(1);
     let client02_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client02_id)
@@ -205,12 +208,13 @@ async fn transport_intermittent(
         .unwrap();
 
     // Create the transport transport manager for the third client
-    let unicast = make_transport_builder(
-        1,
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
         1,
         #[cfg(feature = "shared-memory")]
         shm_transport,
-    );
+    )
+    .max_sessions(1);
     let client03_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client03_id)
