@@ -12,7 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::common::ZExtBody;
-use crate::transport::oam::OamId;
+
+pub type OamId = u16;
 
 pub mod flag {
     pub const T: u8 = 1 << 5; // 0x20 Transport
