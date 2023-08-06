@@ -424,72 +424,57 @@ impl TransportManager {
                     is_shm: config.is_shm,
                 };
 
-                // select and create transport implementation depending on the cfg
-                let a_t: Result<Arc<dyn TransportUnicastTrait>, (Error, Option<u8>)> = {
-                    #[cfg(feature = "shared-memory")]
-                    {
-                        match stc.is_shm {
-                            false => {
-                                log::info!("Will use NET transport!");
-                                let t: Arc<dyn TransportUnicastTrait> =
-                                    TransportUnicastNet::make(self.clone(), stc)
-                                        .map_err(|e| (e, Some(close::reason::INVALID)))
-                                        .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?;
-                                // Add the link to the transport
-                                t.add_link(link, direction)
-                                    .await
-                                    .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
-                                Ok(t)
-                            }
-                            true => {
-                                log::info!("Will use SHM transport!");
-                                Ok(TransportUnicastShm::make(self.clone(), stc, link)
-                                    .map_err(|e| (e, Some(close::reason::INVALID)))
-                                    .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?)
-                            }
-                        }
-                    }
-                    #[cfg(not(feature = "shared-memory"))]
-                    {
-                        log::info!("Will use the only NET transport!");
+                // select and create transport implementation depending on the cfg and enabled features
+                let a_t: Arc<dyn TransportUnicastTrait> =
+                    if zcondfeat!("shared-memory", stc.is_shm, false) {
+                        log::debug!("Will use SHM transport!");
+                        Ok(TransportUnicastShm::make(self.clone(), stc, link)
+                            .map_err(|e| (e, Some(close::reason::INVALID)))
+                            .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?)
+                    } else {
+                        log::debug!("Will use NET transport!");
                         let t: Arc<dyn TransportUnicastTrait> =
                             TransportUnicastNet::make(self.clone(), stc)
                                 .map_err(|e| (e, Some(close::reason::INVALID)))
                                 .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?;
                         // Add the link to the transport
                         t.add_link(link, direction)
+                            .await
                             .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
                         Ok(t)
-                    }
-                };
-                let a_t = a_t?;
+                    }?;
 
                 // Add the transport transport to the list of active transports
                 let transport = TransportUnicast(Arc::downgrade(&a_t));
                 guard.insert(config.zid, a_t);
 
-                #[cfg(feature = "shared-memory")]
-                log::debug!(
-                    "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, shm: {}, multilink: {}",
-                    self.config.zid,
-                    config.zid,
-                    config.whatami,
-                    config.sn_resolution,
-                    config.tx_initial_sn,
-                    config.is_qos,
-                    config.is_shm,
-                    is_multilink
-                );
-                #[cfg(not(feature = "shared-memory"))]
-                log::debug!(
-                    "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, multilink: {}",
-                    self.config.zid,
-                    config.zid,
-                    config.whatami,
-                    config.sn_resolution,
-                    config.tx_initial_sn,
-                    config.is_qos,
-                    is_multilink
+                zcondfeat!(
+                    "shared-memory",
+                    {
+                        log::debug!(
+                            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, shm: {}, multilink: {}",
+                            self.config.zid,
+                            config.zid,
+                            config.whatami,
+                            config.sn_resolution,
+                            config.tx_initial_sn,
+                            config.is_qos,
+                            config.is_shm,
+                            is_multilink
+                        );
+                    },
+                    {
+                        log::debug!(
+                            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, multilink: {}",
+                            self.config.zid,
+                            config.zid,
+                            config.whatami,
+                            config.sn_resolution,
+                            config.tx_initial_sn,
+                            config.is_qos,
+                            is_multilink
+                        );
+                    }
                 );
 
                 Ok(transport)
