@@ -48,7 +48,7 @@ pub(crate) trait TransportUnicastInnerTrait: Send + Sync {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    fn add_link(&self, link: LinkUnicast, direction: LinkUnicastDirection) -> ZResult<()>;
+    async fn add_link(&self, link: LinkUnicast, direction: LinkUnicastDirection) -> ZResult<()>;
 
     /*************************************/
     /*                TX                 */

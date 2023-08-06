@@ -221,7 +221,7 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    fn add_link(&self, link: LinkUnicast, _direction: LinkUnicastDirection) -> ZResult<()> {
+    async fn add_link(&self, link: LinkUnicast, _direction: LinkUnicastDirection) -> ZResult<()> {
         log::trace!("Adding link: {}", link);
 
         #[cfg(not(feature = "transport_shm"))]
@@ -232,7 +232,7 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
         );
 
         #[cfg(feature = "transport_shm")]
-        async_std::task::block_on(async {
+        {
             let guard = zasyncread_upgradable!(self.link);
 
             let shm_protocol = "shm";
@@ -276,7 +276,7 @@ impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
                     Err(e.into())
                 }
             }
-        })
+        }
     }
 
     /*************************************/

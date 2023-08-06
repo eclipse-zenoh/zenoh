@@ -391,6 +391,7 @@ impl TransportManager {
                 // Add the link to the transport
                 transport
                     .add_link(link, direction)
+                    .await
                     .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
 
                 Ok(TransportUnicast(Arc::downgrade(transport)))
@@ -438,6 +439,7 @@ impl TransportManager {
                                         })?;
                                 // Add the link to the transport
                                 t.add_link(link, direction)
+                                    .await
                                     .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
                                 Ok(t)
                             }

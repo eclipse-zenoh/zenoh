@@ -243,7 +243,7 @@ impl TransportUnicastInnerTrait for TransportUnicastInner {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    fn add_link(&self, link: LinkUnicast, direction: LinkUnicastDirection) -> ZResult<()> {
+    async fn add_link(&self, link: LinkUnicast, direction: LinkUnicastDirection) -> ZResult<()> {
         // Add the link to the channel
         let mut guard = zwrite!(self.links);
 
