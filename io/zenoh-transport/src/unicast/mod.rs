@@ -16,6 +16,9 @@ pub(crate) mod manager;
 pub(crate) mod net;
 pub(crate) mod transport_unicast_inner;
 
+#[cfg(feature = "test")]
+pub mod test_helpers;
+
 #[cfg(feature = "shared-memory")]
 pub(crate) mod shared_memory_unicast;
 #[cfg(feature = "shared-memory")]

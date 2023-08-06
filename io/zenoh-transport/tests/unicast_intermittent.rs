@@ -34,6 +34,7 @@ use zenoh_protocol::{
     zenoh_new::Put,
 };
 use zenoh_result::ZResult;
+use zenoh_transport::test_helpers::make_transport_builder;
 use zenoh_transport::{
     DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
     TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -147,15 +148,21 @@ impl TransportPeerEventHandler for SCClient {
     }
 }
 
-async fn transport_intermittent(endpoint: &EndPoint) {
+async fn transport_intermittent(
+    endpoint: &EndPoint,
+    #[cfg(feature = "shared-memory")] shm_transport: bool,
+) {
     /* [ROUTER] */
     let router_id = ZenohId::try_from([1]).unwrap();
 
     let router_handler = Arc::new(SHRouterIntermittent);
     // Create the router transport manager
-    let unicast = TransportManager::config_unicast()
-        .max_links(1)
-        .max_sessions(3);
+    let unicast = make_transport_builder(
+        1,
+        3,
+        #[cfg(feature = "shared-memory")]
+        shm_transport,
+    );
     let router_manager = TransportManager::builder()
         .whatami(WhatAmI::Router)
         .zid(router_id)
@@ -170,9 +177,12 @@ async fn transport_intermittent(endpoint: &EndPoint) {
 
     // Create the transport transport manager for the first client
     let counter = Arc::new(AtomicUsize::new(0));
-    let unicast = TransportManager::config_unicast()
-        .max_links(1)
-        .max_sessions(3);
+    let unicast = make_transport_builder(
+        1,
+        3,
+        #[cfg(feature = "shared-memory")]
+        shm_transport,
+    );
     let client01_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client01_id)
@@ -181,9 +191,12 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         .unwrap();
 
     // Create the transport transport manager for the second client
-    let unicast = TransportManager::config_unicast()
-        .max_links(1)
-        .max_sessions(1);
+    let unicast = make_transport_builder(
+        1,
+        1,
+        #[cfg(feature = "shared-memory")]
+        shm_transport,
+    );
     let client02_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client02_id)
@@ -192,9 +205,12 @@ async fn transport_intermittent(endpoint: &EndPoint) {
         .unwrap();
 
     // Create the transport transport manager for the third client
-    let unicast = TransportManager::config_unicast()
-        .max_links(1)
-        .max_sessions(1);
+    let unicast = make_transport_builder(
+        1,
+        1,
+        #[cfg(feature = "shared-memory")]
+        shm_transport,
+    );
     let client03_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client03_id)
@@ -385,6 +401,20 @@ async fn transport_intermittent(endpoint: &EndPoint) {
     task::sleep(SLEEP).await;
 }
 
+async fn net_transport_intermittent(endpoint: &EndPoint) {
+    transport_intermittent(
+        endpoint,
+        #[cfg(feature = "shared-memory")]
+        false,
+    )
+    .await
+}
+
+#[cfg(feature = "shared-memory")]
+async fn shm_transport_intermittent(endpoint: &EndPoint) {
+    transport_intermittent(endpoint, true).await
+}
+
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn transport_tcp_intermittent() {
@@ -394,7 +424,19 @@ fn transport_tcp_intermittent() {
     });
 
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12000).parse().unwrap();
-    task::block_on(transport_intermittent(&endpoint));
+    task::block_on(net_transport_intermittent(&endpoint));
+}
+
+#[cfg(all(feature = "transport_tcp", feature = "shared-memory"))]
+#[test]
+fn transport_tcp_intermittent_for_shm_transport() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12100).parse().unwrap();
+    task::block_on(shm_transport_intermittent(&endpoint));
 }
 
 #[cfg(feature = "transport_ws")]
@@ -407,7 +449,20 @@ fn transport_ws_intermittent() {
     });
 
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12010).parse().unwrap();
-    task::block_on(transport_intermittent(&endpoint));
+    task::block_on(net_transport_intermittent(&endpoint));
+}
+
+#[cfg(all(feature = "transport_ws", feature = "shared-memory"))]
+#[test]
+#[ignore]
+fn transport_ws_intermittent_for_shm_transport() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12110).parse().unwrap();
+    task::block_on(shm_transport_intermittent(&endpoint));
 }
 
 #[cfg(feature = "transport_shm")]
@@ -420,5 +475,20 @@ fn transport_shm_intermittent() {
     });
 
     let endpoint: EndPoint = "shm//tmp/transport_shm_intermittent".parse().unwrap();
-    task::block_on(transport_intermittent(&endpoint));
+    task::block_on(net_transport_intermittent(&endpoint));
+}
+
+#[cfg(all(feature = "transport_shm", feature = "shared-memory"))]
+#[test]
+#[ignore]
+fn transport_shm_intermittent_for_shm_transport() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let endpoint: EndPoint = "shm//tmp/transport_shm_intermittent_for_shm_transport"
+        .parse()
+        .unwrap();
+    task::block_on(shm_transport_intermittent(&endpoint));
 }

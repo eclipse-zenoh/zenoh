@@ -613,7 +613,8 @@ async fn run_with_shm(
     msg_size: &[usize],
 ) {
     if client_endpoints.len() > 1 || server_endpoints.len() > 1 {
-        println!("SHM transport doesn't support more than one link, so this test would produce MAX_LINKS error but still be working!")
+        println!("SHM transport doesn't support more than one link, so this test would produce MAX_LINKS error!");
+        panic!();
     }
     run_internal(client_endpoints, server_endpoints, channel, msg_size, true).await;
 }
@@ -660,10 +661,7 @@ fn transport_unicast_tcp_only_with_shm() {
     });
 
     // Define the locators
-    let endpoints: Vec<EndPoint> = vec![
-        format!("tcp/127.0.0.1:{}", 16100).parse().unwrap(),
-        format!("tcp/[::1]:{}", 16101).parse().unwrap(),
-    ];
+    let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 16100).parse().unwrap()];
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -726,10 +724,7 @@ fn transport_unicast_udp_only_with_shm() {
     });
 
     // Define the locator
-    let endpoints: Vec<EndPoint> = vec![
-        format!("udp/127.0.0.1:{}", 16110).parse().unwrap(),
-        format!("udp/[::1]:{}", 16111).parse().unwrap(),
-    ];
+    let endpoints: Vec<EndPoint> = vec![format!("udp/127.0.0.1:{}", 16110).parse().unwrap()];
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -872,10 +867,7 @@ fn transport_unicast_ws_only_with_shm() {
     });
 
     // Define the locators
-    let endpoints: Vec<EndPoint> = vec![
-        format!("ws/127.0.0.1:{}", 16120).parse().unwrap(),
-        format!("ws/[::1]:{}", 16121).parse().unwrap(),
-    ];
+    let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", 16120).parse().unwrap()];
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -946,14 +938,9 @@ fn transport_unicast_shm_only_with_shm() {
     });
 
     // Define the locator
-    let endpoints: Vec<EndPoint> = vec![
-        "shm//tmp/transport_unicast_shm_only_with_shm"
-            .parse()
-            .unwrap(),
-        "shm//tmp/transport_unicast_shm_only_with_shm2"
-            .parse()
-            .unwrap(),
-    ];
+    let endpoints: Vec<EndPoint> = vec!["shm//tmp/transport_unicast_shm_only_with_shm"
+        .parse()
+        .unwrap()];
     // Define the reliability and congestion control
     let channel = [
         Channel {
