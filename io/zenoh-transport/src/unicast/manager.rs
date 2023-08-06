@@ -14,14 +14,14 @@
 #[cfg(feature = "shared-memory")]
 use super::shared_memory_unicast::SharedMemoryUnicast;
 #[cfg(feature = "shared-memory")]
-use super::shm::transport::ShmTransportUnicastInner;
+use super::shm::transport::TransportUnicastShm;
 #[cfg(feature = "transport_auth")]
 use crate::unicast::establishment::ext::auth::Auth;
 #[cfg(feature = "transport_multilink")]
 use crate::unicast::establishment::ext::multilink::MultiLink;
 use crate::{
-    net::transport::TransportUnicastInner,
-    transport_unicast_inner::TransportUnicastInnerTrait,
+    net::transport::TransportUnicastNet,
+    transport_unicast_inner::TransportUnicastTrait,
     unicast::{TransportConfigUnicast, TransportUnicast},
     TransportManager,
 };
@@ -63,7 +63,7 @@ pub struct TransportManagerStateUnicast {
     // Established listeners
     pub(super) protocols: Arc<Mutex<HashMap<String, LinkManagerUnicast>>>,
     // Established transports
-    pub(super) transports: Arc<Mutex<HashMap<ZenohId, Arc<dyn TransportUnicastInnerTrait>>>>,
+    pub(super) transports: Arc<Mutex<HashMap<ZenohId, Arc<dyn TransportUnicastTrait>>>>,
     // Multilink
     #[cfg(feature = "transport_multilink")]
     pub(super) multilink: Arc<MultiLink>,
@@ -275,7 +275,7 @@ impl TransportManager {
         let mut tu_guard = zasynclock!(self.state.unicast.transports)
             .drain()
             .map(|(_, v)| v)
-            .collect::<Vec<Arc<dyn TransportUnicastInnerTrait>>>();
+            .collect::<Vec<Arc<dyn TransportUnicastTrait>>>();
         for tu in tu_guard.drain(..) {
             let _ = tu.close(close::reason::GENERIC).await;
         }
@@ -425,18 +425,16 @@ impl TransportManager {
                 };
 
                 // select and create transport implementation depending on the cfg
-                let a_t: Result<Arc<dyn TransportUnicastInnerTrait>, (Error, Option<u8>)> = {
+                let a_t: Result<Arc<dyn TransportUnicastTrait>, (Error, Option<u8>)> = {
                     #[cfg(feature = "shared-memory")]
                     {
                         match stc.is_shm {
                             false => {
                                 log::info!("Will use NET transport!");
-                                let t: Arc<dyn TransportUnicastInnerTrait> =
-                                    TransportUnicastInner::make(self.clone(), stc)
+                                let t: Arc<dyn TransportUnicastTrait> =
+                                    TransportUnicastNet::make(self.clone(), stc)
                                         .map_err(|e| (e, Some(close::reason::INVALID)))
-                                        .map(|v| {
-                                            Arc::new(v) as Arc<dyn TransportUnicastInnerTrait>
-                                        })?;
+                                        .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?;
                                 // Add the link to the transport
                                 t.add_link(link, direction)
                                     .await
@@ -445,19 +443,19 @@ impl TransportManager {
                             }
                             true => {
                                 log::info!("Will use SHM transport!");
-                                Ok(ShmTransportUnicastInner::make(self.clone(), stc, link)
+                                Ok(TransportUnicastShm::make(self.clone(), stc, link)
                                     .map_err(|e| (e, Some(close::reason::INVALID)))
-                                    .map(|v| Arc::new(v) as Arc<dyn TransportUnicastInnerTrait>)?)
+                                    .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?)
                             }
                         }
                     }
                     #[cfg(not(feature = "shared-memory"))]
                     {
                         log::info!("Will use the only NET transport!");
-                        let t: Arc<dyn TransportUnicastInnerTrait> =
-                            TransportUnicastInner::make(self.clone(), stc)
+                        let t: Arc<dyn TransportUnicastTrait> =
+                            TransportUnicastNet::make(self.clone(), stc)
                                 .map_err(|e| (e, Some(close::reason::INVALID)))
-                                .map(|v| Arc::new(v) as Arc<dyn TransportUnicastInnerTrait>)?;
+                                .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?;
                         // Add the link to the transport
                         t.add_link(link, direction)
                             .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
@@ -548,7 +546,7 @@ impl TransportManager {
         zasynclock!(self.state.unicast.transports)
             .get(peer)
             .map(|t| {
-                // todo: I cannot find a way to make transport.into() work for TransportUnicastInnerTrait
+                // todo: I cannot find a way to make transport.into() work for TransportUnicastTrait
                 let weak = Arc::downgrade(t);
                 TransportUnicast(weak)
             })
@@ -558,7 +556,7 @@ impl TransportManager {
         zasynclock!(self.state.unicast.transports)
             .values()
             .map(|t| {
-                // todo: I cannot find a way to make transport.into() work for TransportUnicastInnerTrait
+                // todo: I cannot find a way to make transport.into() work for TransportUnicastTrait
                 let weak = Arc::downgrade(t);
                 TransportUnicast(weak)
             })

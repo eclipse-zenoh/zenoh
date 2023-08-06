@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::ShmTransportUnicastInner;
+use super::transport::TransportUnicastShm;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
 use zenoh_protocol::network::NetworkMessage;
@@ -19,7 +19,7 @@ use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::zenoh::ZenohBody;
 use zenoh_result::{bail, ZResult};
 
-impl ShmTransportUnicastInner {
+impl TransportUnicastShm {
     fn schedule_on_link(&self, msg: NetworkMessage) -> ZResult<()> {
         self.send(msg)
     }

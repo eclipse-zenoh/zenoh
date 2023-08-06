@@ -13,7 +13,7 @@
 //
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
-use super::{oam_extensions::pack_oam_keepalive, transport::ShmTransportUnicastInner};
+use super::{oam_extensions::pack_oam_keepalive, transport::TransportUnicastShm};
 use crate::TransportExecutor;
 use async_std::prelude::FutureExt;
 use async_std::task;
@@ -64,7 +64,7 @@ pub(crate) async fn send_with_link(link: &LinkUnicast, msg: NetworkMessage) -> Z
     Ok(())
 }
 
-impl ShmTransportUnicastInner {
+impl TransportUnicastShm {
     pub(super) fn send(&self, msg: NetworkMessage) -> ZResult<()> {
         async_std::task::block_on(async move {
             let guard = zasyncread!(self.link);
@@ -148,7 +148,7 @@ async fn keepalive_task(
 
 async fn rx_task_stream(
     link: LinkUnicast,
-    transport: ShmTransportUnicastInner,
+    transport: TransportUnicastShm,
     lease: Duration,
     rx_batch_size: BatchSize,
     rx_buffer_size: usize,
@@ -191,7 +191,7 @@ async fn rx_task_stream(
 
 async fn rx_task_dgram(
     link: LinkUnicast,
-    transport: ShmTransportUnicastInner,
+    transport: TransportUnicastShm,
     lease: Duration,
     rx_batch_size: BatchSize,
     rx_buffer_size: usize,
@@ -225,7 +225,7 @@ async fn rx_task_dgram(
 
 async fn rx_task(
     link: LinkUnicast,
-    transport: ShmTransportUnicastInner,
+    transport: TransportUnicastShm,
     lease: Duration,
     rx_batch_size: u16,
     rx_buffer_size: usize,

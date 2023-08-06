@@ -13,7 +13,7 @@ use super::oam_extensions::unpack_oam_close;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::ShmTransportUnicastInner;
+use super::transport::TransportUnicastShm;
 use async_std::task;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
@@ -38,7 +38,7 @@ use zenoh_result::{zerror, ZResult};
 /*************************************/
 /*            TRANSPORT RX           */
 /*************************************/
-impl ShmTransportUnicastInner {
+impl TransportUnicastShm {
     fn trigger_callback(
         &self,
         #[allow(unused_mut)] // shared-memory feature requires mut

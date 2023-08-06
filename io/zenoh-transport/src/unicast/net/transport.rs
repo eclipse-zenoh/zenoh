@@ -15,7 +15,7 @@ use super::link::TransportLinkUnicast;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
 use crate::common::conduit::{TransportConduitRx, TransportConduitTx};
-use crate::transport_unicast_inner::TransportUnicastInnerTrait;
+use crate::transport_unicast_inner::TransportUnicastTrait;
 use crate::TransportConfigUnicast;
 use crate::{TransportExecutor, TransportManager, TransportPeerEventHandler};
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
@@ -54,7 +54,7 @@ macro_rules! zlinkindex {
 /*             TRANSPORT             */
 /*************************************/
 #[derive(Clone)]
-pub(crate) struct TransportUnicastInner {
+pub(crate) struct TransportUnicastNet {
     // Transport Manager
     pub(crate) manager: TransportManager,
     // Transport config
@@ -74,11 +74,11 @@ pub(crate) struct TransportUnicastInner {
     pub(super) stats: Arc<TransportUnicastStatsAtomic>,
 }
 
-impl TransportUnicastInner {
+impl TransportUnicastNet {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
-    ) -> ZResult<TransportUnicastInner> {
+    ) -> ZResult<TransportUnicastNet> {
         let mut conduit_tx = vec![];
         let mut conduit_rx = vec![];
 
@@ -102,7 +102,7 @@ impl TransportUnicastInner {
             c.sync(initial_sn)?;
         }
 
-        let t = TransportUnicastInner {
+        let t = TransportUnicastNet {
             manager,
             config,
             conduit_tx: conduit_tx.into_boxed_slice().into(),
@@ -239,7 +239,7 @@ impl TransportUnicastInner {
 }
 
 #[async_trait]
-impl TransportUnicastInnerTrait for TransportUnicastInner {
+impl TransportUnicastTrait for TransportUnicastNet {
     /*************************************/
     /*               LINK                */
     /*************************************/

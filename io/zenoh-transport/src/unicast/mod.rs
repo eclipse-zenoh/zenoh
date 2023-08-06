@@ -24,7 +24,7 @@ pub(crate) mod shared_memory_unicast;
 #[cfg(feature = "shared-memory")]
 pub(crate) mod shm;
 
-use self::transport_unicast_inner::TransportUnicastInnerTrait;
+use self::transport_unicast_inner::TransportUnicastTrait;
 
 #[cfg(feature = "stats")]
 use super::common::stats::stats_struct;
@@ -103,11 +103,11 @@ pub(crate) struct TransportConfigUnicast {
 /// [`TransportUnicast`] is the transport handler returned
 /// when opening a new unicast transport
 #[derive(Clone)]
-pub struct TransportUnicast(Weak<dyn TransportUnicastInnerTrait>);
+pub struct TransportUnicast(Weak<dyn TransportUnicastTrait>);
 
 impl TransportUnicast {
     #[inline(always)]
-    pub(super) fn get_inner(&self) -> ZResult<Arc<dyn TransportUnicastInnerTrait>> {
+    pub(super) fn get_inner(&self) -> ZResult<Arc<dyn TransportUnicastTrait>> {
         self.0
             .upgrade()
             .ok_or_else(|| zerror!("Transport unicast closed").into())
@@ -198,8 +198,8 @@ impl TransportUnicast {
     }
 }
 
-impl From<&Arc<dyn TransportUnicastInnerTrait>> for TransportUnicast {
-    fn from(link: &Arc<dyn TransportUnicastInnerTrait>) -> TransportUnicast {
+impl From<&Arc<dyn TransportUnicastTrait>> for TransportUnicast {
+    fn from(link: &Arc<dyn TransportUnicastTrait>) -> TransportUnicast {
         TransportUnicast(Arc::downgrade(link))
     }
 }

@@ -30,7 +30,7 @@ use crate::{TransportConfigUnicast, TransportExecutor, TransportPeerEventHandler
 /*      UNICAST TRANSPORT TRAIT      */
 /*************************************/
 #[async_trait]
-pub(crate) trait TransportUnicastInnerTrait: Send + Sync {
+pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/

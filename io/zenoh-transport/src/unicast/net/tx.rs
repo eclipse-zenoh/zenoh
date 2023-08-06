@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::TransportUnicastInner;
+use super::transport::TransportUnicastNet;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
 use zenoh_core::zread;
@@ -19,7 +19,7 @@ use zenoh_protocol::network::NetworkMessage;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
 
-impl TransportUnicastInner {
+impl TransportUnicastNet {
     fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
         macro_rules! zpush {
             ($guard:expr, $pipeline:expr, $msg:expr) => {

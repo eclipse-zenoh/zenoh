@@ -15,7 +15,7 @@ use super::link::send_with_link;
 use super::oam_extensions::pack_oam_close;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
-use crate::transport_unicast_inner::TransportUnicastInnerTrait;
+use crate::transport_unicast_inner::TransportUnicastTrait;
 use crate::TransportConfigUnicast;
 use crate::TransportManager;
 use crate::{TransportExecutor, TransportPeerEventHandler};
@@ -43,7 +43,7 @@ use zenoh_result::{bail, zerror, ZResult};
 /*             TRANSPORT             */
 /*************************************/
 #[derive(Clone)]
-pub(crate) struct ShmTransportUnicastInner {
+pub(crate) struct TransportUnicastShm {
     // Transport Manager
     pub(super) manager: TransportManager,
     // Transport config
@@ -63,13 +63,13 @@ pub(crate) struct ShmTransportUnicastInner {
     pub(crate) handle_rx: Arc<RwLock<Option<JoinHandle<()>>>>,
 }
 
-impl ShmTransportUnicastInner {
+impl TransportUnicastShm {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
         link: LinkUnicast,
-    ) -> ZResult<ShmTransportUnicastInner> {
-        let t = ShmTransportUnicastInner {
+    ) -> ZResult<TransportUnicastShm> {
+        let t = TransportUnicastShm {
             manager,
             config,
             link: Arc::new(RwLock::new(link)),
@@ -152,7 +152,7 @@ impl ShmTransportUnicastInner {
 }
 
 #[async_trait]
-impl TransportUnicastInnerTrait for ShmTransportUnicastInner {
+impl TransportUnicastTrait for TransportUnicastShm {
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
