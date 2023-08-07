@@ -32,11 +32,12 @@ use std::{
     sync::{Arc, Weak},
 };
 use transport::TransportMulticastInner;
-use zenoh_core::zread;
-use zenoh_link::Link;
+use zenoh_core::{zcondfeat, zread};
+use zenoh_link::{Link, LinkMulticast};
 use zenoh_protocol::{
+    core::Bits,
     network::NetworkMessage,
-    transport::{close, TransportSn},
+    transport::{close, PrioritySn},
 };
 use zenoh_result::{zerror, ZResult};
 
@@ -84,6 +85,15 @@ stats_struct! {
 /*************************************/
 /*       TRANSPORT MULTICAST         */
 /*************************************/
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TransportConfigMulticast {
+    pub(crate) sn_resolution: Bits,
+    pub(crate) initial_sns: Box<[PrioritySn]>,
+    pub(crate) link: LinkMulticast,
+    #[cfg(feature = "shared-memory")]
+    pub(crate) is_shm: bool,
+}
+
 #[derive(Clone)]
 pub struct TransportMulticast(Weak<TransportMulticastInner>);
 
@@ -96,11 +106,12 @@ impl TransportMulticast {
     }
 
     #[inline(always)]
-    pub fn get_sn_resolution(&self) -> ZResult<TransportSn> {
+    pub fn get_sn_resolution(&self) -> ZResult<Bits> {
         let transport = self.get_transport()?;
         Ok(transport.get_sn_resolution())
     }
 
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub fn is_shm(&self) -> ZResult<bool> {
         let transport = self.get_transport()?;
@@ -176,6 +187,7 @@ impl fmt::Debug for TransportMulticast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.get_transport() {
             Ok(transport) => {
+                let is_shm = zcondfeat!("shared-memory", transport.is_shm(), false);
                 let peers: String = zread!(transport.peers)
                     .iter()
                     .map(|(l, p)| {
@@ -186,7 +198,7 @@ impl fmt::Debug for TransportMulticast {
                 f.debug_struct("Transport Multicast")
                     .field("sn_resolution", &transport.get_sn_resolution())
                     .field("is_qos", &transport.is_qos())
-                    .field("is_shm", &transport.is_shm())
+                    .field("is_shm", &is_shm)
                     .field("peers", &peers)
                     .finish()
             }

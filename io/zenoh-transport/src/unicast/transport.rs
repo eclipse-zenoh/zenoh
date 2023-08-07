@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::super::{TransportExecutor, TransportManager, TransportPeerEventHandler};
-use super::common::conduit::{TransportConduitRx, TransportConduitTx};
+use super::common::priority::{TransportPriorityRx, TransportPriorityTx};
 use super::link::TransportLinkUnicast;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
@@ -24,7 +24,7 @@ use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::{
     core::{Bits, Priority, WhatAmI, ZenohId},
-    transport::{Close, ConduitSn, TransportMessage, TransportSn},
+    transport::{Close, PrioritySn, TransportMessage, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -55,10 +55,10 @@ pub(crate) struct TransportUnicastInner {
     pub(crate) manager: TransportManager,
     // Transport config
     pub(super) config: TransportConfigUnicast,
-    // Tx conduits
-    pub(super) conduit_tx: Arc<[TransportConduitTx]>,
-    // Rx conduits
-    pub(super) conduit_rx: Arc<[TransportConduitRx]>,
+    // Tx priorities
+    pub(super) priority_tx: Arc<[TransportPriorityTx]>,
+    // Rx priorities
+    pub(super) priority_rx: Arc<[TransportPriorityRx]>,
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Box<[TransportLinkUnicast]>>>,
     // The callback
@@ -75,34 +75,34 @@ impl TransportUnicastInner {
         manager: TransportManager,
         config: TransportConfigUnicast,
     ) -> ZResult<TransportUnicastInner> {
-        let mut conduit_tx = vec![];
-        let mut conduit_rx = vec![];
+        let mut priority_tx = vec![];
+        let mut priority_rx = vec![];
 
         let num = if config.is_qos { Priority::NUM } else { 1 };
         for _ in 0..num {
-            conduit_tx.push(TransportConduitTx::make(config.sn_resolution)?);
+            priority_tx.push(TransportPriorityTx::make(config.sn_resolution)?);
         }
 
         for _ in 0..Priority::NUM {
-            conduit_rx.push(TransportConduitRx::make(
+            priority_rx.push(TransportPriorityRx::make(
                 config.sn_resolution,
                 manager.config.defrag_buff_size,
             )?);
         }
 
-        let initial_sn = ConduitSn {
+        let initial_sn = PrioritySn {
             reliable: config.tx_initial_sn,
             best_effort: config.tx_initial_sn,
         };
-        for c in conduit_tx.iter() {
+        for c in priority_tx.iter() {
             c.sync(initial_sn)?;
         }
 
         let t = TransportUnicastInner {
             manager,
             config,
-            conduit_tx: conduit_tx.into_boxed_slice().into(),
-            conduit_rx: conduit_rx.into_boxed_slice().into(),
+            priority_tx: priority_tx.into_boxed_slice().into(),
+            priority_rx: priority_rx.into_boxed_slice().into(),
             links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
             callback: Arc::new(RwLock::new(None)),
             alive: Arc::new(AsyncMutex::new(false)),
@@ -137,11 +137,11 @@ impl TransportUnicastInner {
 
         *a_guard = true;
 
-        let csn = ConduitSn {
+        let csn = PrioritySn {
             reliable: initial_sn_rx,
             best_effort: initial_sn_rx,
         };
-        for c in self.conduit_rx.iter() {
+        for c in self.priority_rx.iter() {
             c.sync(csn)?;
         }
 
@@ -247,8 +247,8 @@ impl TransportUnicastInner {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, link) {
             Some(l) => {
-                assert!(!self.conduit_tx.is_empty());
-                l.start_tx(executor, keep_alive, batch_size, &self.conduit_tx);
+                assert!(!self.priority_tx.is_empty());
+                l.start_tx(executor, keep_alive, batch_size, &self.priority_tx);
                 Ok(())
             }
             None => {

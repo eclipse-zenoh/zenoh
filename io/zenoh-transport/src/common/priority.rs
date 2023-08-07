@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 use zenoh_core::zlock;
 use zenoh_protocol::{
     core::{Bits, Reliability},
-    transport::{ConduitSn, TransportSn},
+    transport::{PrioritySn, TransportSn},
 };
 use zenoh_result::ZResult;
 
@@ -71,46 +71,46 @@ impl TransportChannelRx {
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct TransportConduitTx {
+pub(crate) struct TransportPriorityTx {
     pub(crate) reliable: Arc<Mutex<TransportChannelTx>>,
     pub(crate) best_effort: Arc<Mutex<TransportChannelTx>>,
 }
 
-impl TransportConduitTx {
-    pub(crate) fn make(resolution: Bits) -> ZResult<TransportConduitTx> {
+impl TransportPriorityTx {
+    pub(crate) fn make(resolution: Bits) -> ZResult<TransportPriorityTx> {
         let rch = TransportChannelTx::make(resolution)?;
         let bch = TransportChannelTx::make(resolution)?;
-        let ctx = TransportConduitTx {
+        let ctx = TransportPriorityTx {
             reliable: Arc::new(Mutex::new(rch)),
             best_effort: Arc::new(Mutex::new(bch)),
         };
         Ok(ctx)
     }
 
-    pub(crate) fn sync(&self, sn: ConduitSn) -> ZResult<()> {
+    pub(crate) fn sync(&self, sn: PrioritySn) -> ZResult<()> {
         zlock!(self.reliable).sync(sn.reliable)?;
         zlock!(self.best_effort).sync(sn.best_effort)
     }
 }
 
 #[derive(Clone, Debug)]
-pub(crate) struct TransportConduitRx {
+pub(crate) struct TransportPriorityRx {
     pub(crate) reliable: Arc<Mutex<TransportChannelRx>>,
     pub(crate) best_effort: Arc<Mutex<TransportChannelRx>>,
 }
 
-impl TransportConduitRx {
-    pub(crate) fn make(resolution: Bits, defrag_buff_size: usize) -> ZResult<TransportConduitRx> {
+impl TransportPriorityRx {
+    pub(crate) fn make(resolution: Bits, defrag_buff_size: usize) -> ZResult<TransportPriorityRx> {
         let rch = TransportChannelRx::make(Reliability::Reliable, resolution, defrag_buff_size)?;
         let bch = TransportChannelRx::make(Reliability::BestEffort, resolution, defrag_buff_size)?;
-        let ctr = TransportConduitRx {
+        let ctr = TransportPriorityRx {
             reliable: Arc::new(Mutex::new(rch)),
             best_effort: Arc::new(Mutex::new(bch)),
         };
         Ok(ctr)
     }
 
-    pub(crate) fn sync(&self, sn: ConduitSn) -> ZResult<()> {
+    pub(crate) fn sync(&self, sn: PrioritySn) -> ZResult<()> {
         zlock!(self.reliable).sync(sn.reliable)?;
         zlock!(self.best_effort).sync(sn.best_effort)
     }

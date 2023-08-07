@@ -11,11 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::unicast::{
-    manager::{
-        TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
-    },
-    TransportUnicast,
+use super::unicast::manager::{
+    TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
 };
 use super::TransportEventHandler;
 use crate::multicast::manager::{
@@ -406,7 +403,6 @@ impl TransportManager {
     }
 
     pub async fn close(&self) {
-        log::trace!("TransportManager::clear())");
         self.close_unicast().await;
         self.tx_executor.stop().await;
     }
@@ -415,27 +411,12 @@ impl TransportManager {
     /*              LISTENER             */
     /*************************************/
     pub async fn add_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
-        let p = endpoint.protocol();
-        if !self
-            .config
-            .protocols
-            .iter()
-            .any(|x| x.as_str() == p.as_str())
-        {
-            bail!(
-                "Unsupported protocol: {}. Supported protocols are: {:?}",
-                p,
-                self.config.protocols
-            );
-        }
-
         if self
             .locator_inspector
             .is_multicast(&endpoint.to_locator())
             .await?
         {
-            // @TODO: multicast
-            bail!("Unimplemented");
+            self.add_listener_multicast(endpoint).await
         } else {
             self.add_listener_unicast(endpoint).await
         }
@@ -447,51 +428,23 @@ impl TransportManager {
             .is_multicast(&endpoint.to_locator())
             .await?
         {
-            // @TODO: multicast
-            bail!("Unimplemented");
+            self.del_listener_multicast(endpoint).await
         } else {
             self.del_listener_unicast(endpoint).await
         }
     }
 
     pub fn get_listeners(&self) -> Vec<EndPoint> {
-        task::block_on(self.get_listeners_unicast())
-        // @TODO: multicast
+        let mut lsu = task::block_on(self.get_listeners_unicast());
+        let mut lsm = task::block_on(self.get_listeners_multicast());
+        lsu.append(&mut lsm);
+        lsu
     }
 
     pub fn get_locators(&self) -> Vec<Locator> {
-        task::block_on(self.get_locators_unicast())
-        // @TODO: multicast
-    }
-
-    /*************************************/
-    /*             TRANSPORT             */
-    /*************************************/
-    pub fn get_transport(&self, peer: &ZenohId) -> Option<TransportUnicast> {
-        task::block_on(self.get_transport_unicast(peer))
-        // @TODO: multicast
-    }
-
-    pub fn get_transports(&self) -> Vec<TransportUnicast> {
-        task::block_on(self.get_transports_unicast())
-        // @TODO: multicast
-    }
-
-    pub async fn open_transport(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
-        let p = endpoint.protocol();
-        if !self
-            .config
-            .protocols
-            .iter()
-            .any(|x| x.as_str() == p.as_str())
-        {
-            bail!(
-                "Unsupported protocol: {}. Supported protocols are: {:?}",
-                p,
-                self.config.protocols
-            );
-        }
-
-        self.open_transport_unicast(endpoint).await
+        let mut lsu = task::block_on(self.get_locators_unicast());
+        let mut lsm = task::block_on(self.get_locators_multicast());
+        lsu.append(&mut lsm);
+        lsu
     }
 }

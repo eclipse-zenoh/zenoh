@@ -55,10 +55,10 @@ impl TransportMulticastInner {
     pub(super) fn schedule(&self, mut msg: NetworkMessage) -> bool {
         #[cfg(feature = "shared-memory")]
         {
-            let res = if self._manager.config.multicast.is_shm {
+            let res = if self.manager.config.multicast.is_shm {
                 crate::shm::map_zmsg_to_shminfo(&mut msg)
             } else {
-                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self._manager.state.multicast.shm.reader)
+                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.state.multicast.shm.reader)
             };
             if let Err(e) = res {
                 log::trace!("Failed SHM conversion: {}", e);

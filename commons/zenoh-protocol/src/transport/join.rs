@@ -12,49 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    core::{Resolution, WhatAmI, ZenohId},
-    transport::{BatchSize, TransportSn},
+    core::{Priority, Resolution, WhatAmI, ZenohId},
+    transport::{BatchSize, PrioritySn},
 };
 use core::time::Duration;
 
-/// # Join message
-///
-/// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
-///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
-///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the length of a message must not exceed 65_535 bytes.
-///
-/// The JOIN message is sent on a multicast Locator to advertise the transport parameters.
-///
-///  7 6 5 4 3 2 1 0
-/// +-+-+-+-+-+-+-+-+
-/// |O|S|T|   JOIN  |
-/// +-+-+-+-+-------+
-/// ~             |Q~ if O==1
-/// +---------------+
-/// | v_maj | v_min | -- Protocol Version VMaj.VMin
-/// +-------+-------+
-/// ~    whatami    ~ -- Router, Peer or a combination of them
-/// +---------------+
-/// ~    node_id    ~ -- PID of the sender of the JOIN message
-/// +---------------+
-/// ~     lease     ~ -- Lease period of the sender of the JOIN message(*)
-/// +---------------+
-/// ~ sn_resolution ~ if S==1(*) -- Otherwise 2^28 is assumed(**)
-/// +---------------+
-/// ~   [next_sn]   ~ (***)
-/// +---------------+
-///
-/// - if Q==1 then the sender supports QoS.
-///
-/// (*)   if T==1 then the lease period is expressed in seconds, otherwise in milliseconds
-/// (**)  if S==0 then 2^28 is assumed.
-/// (***) if Q==1 then 8 sequence numbers are present: one for each priority.
-///       if Q==0 then only one sequence number is present.
-///
-/// ```
 /// # Join message
 ///
 /// The JOIN message is sent on a multicast Locator to advertise the transport parameters.
@@ -146,19 +108,21 @@ pub struct Join {
     pub resolution: Resolution,
     pub batch_size: BatchSize,
     pub lease: Duration,
-    pub next_sn: TransportSn,
-    pub ext_qos: Option<ext::QoS>,
+    pub next_sn: PrioritySn,
+    pub ext_qos: Option<ext::QoSType>,
     pub ext_shm: Option<ext::Shm>,
 }
 
 // Extensions
 pub mod ext {
-    use crate::{common::ZExtZBuf, core::Priority, transport::TransportSn, zextzbuf};
+    use super::{Priority, PrioritySn};
+    use crate::{common::ZExtZBuf, zextzbuf};
+    use alloc::boxed::Box;
 
     /// # QoS extension
     /// Used to announce next sn when QoS is enabled
     pub type QoS = zextzbuf!(0x1, true);
-    pub type QoSType = [TransportSn; Priority::NUM];
+    pub type QoSType = Box<[PrioritySn; Priority::NUM]>;
 
     /// # Shm extension
     /// Used to advertise shared memory capabilities
@@ -183,8 +147,10 @@ impl Join {
         } else {
             Duration::from_millis(rng.gen())
         };
-        let next_sn: TransportSn = rng.gen();
-        let ext_qos = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
+        let next_sn = PrioritySn::rand();
+        let ext_qos = rng
+            .gen_bool(0.5)
+            .then_some(Box::new([PrioritySn::rand(); Priority::NUM]));
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
 
         Self {

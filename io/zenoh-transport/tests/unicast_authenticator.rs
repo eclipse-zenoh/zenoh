@@ -304,14 +304,14 @@ async fn auth_pubkey(endpoint: &EndPoint) {
     // Open a first transport from client01 to the router
     // -> This should be accepted
     println!("Transport Authenticator PubKey [2a1]");
-    let c_ses1 = ztimeout!(client01_manager.open_transport(endpoint.clone())).unwrap();
+    let c_ses1 = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone())).unwrap();
     assert_eq!(c_ses1.get_links().unwrap().len(), 1);
 
     /* [2b] */
     // Open a first transport from client02 to the router
     // -> This should be rejected
     println!("Transport Authenticator PubKey [2b1]");
-    let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
+    let res = ztimeout!(client02_manager.open_transport_unicast(endpoint.clone()));
     println!("Transport Authenticator PubKey [2b2]: {res:?}");
     assert!(res.is_err());
 
@@ -319,7 +319,7 @@ async fn auth_pubkey(endpoint: &EndPoint) {
     // Open a first transport from client03 to the router
     // -> This should be rejected
     println!("Transport Authenticator PubKey [2c1]");
-    let res = ztimeout!(client03_manager.open_transport(endpoint.clone()));
+    let res = ztimeout!(client03_manager.open_transport_unicast(endpoint.clone()));
     println!("Transport Authenticator PubKey [2c2]: {res:?}");
     assert!(res.is_err());
 
@@ -334,13 +334,13 @@ async fn auth_pubkey(endpoint: &EndPoint) {
     // Open a first transport from client02 to the router
     // -> This should be accepted
     println!("Transport Authenticator PubKey [3a1]");
-    let c_ses2 = ztimeout!(client02_manager.open_transport(endpoint.clone())).unwrap();
+    let c_ses2 = ztimeout!(client02_manager.open_transport_unicast(endpoint.clone())).unwrap();
     assert_eq!(c_ses2.get_links().unwrap().len(), 1);
 
     // Open a first transport from client03 to the router
     // -> This should be accepted
     println!("Transport Authenticator PubKey [3b1]");
-    let c_ses3 = ztimeout!(client03_manager.open_transport(endpoint.clone())).unwrap();
+    let c_ses3 = ztimeout!(client03_manager.open_transport_unicast(endpoint.clone())).unwrap();
     assert_eq!(c_ses3.get_links().unwrap().len(), 1);
 
     // /* [4a] */
@@ -361,7 +361,7 @@ async fn auth_pubkey(endpoint: &EndPoint) {
     assert!(res.is_ok());
 
     ztimeout!(async {
-        while !router_manager.get_transports().is_empty() {
+        while !router_manager.get_transports_unicast().await.is_empty() {
             task::sleep(SLEEP).await;
         }
     });
@@ -484,7 +484,7 @@ async fn auth_usrpwd(endpoint: &EndPoint) {
     // Open a first transport from the client to the router
     // -> This should be accepted
     println!("Transport Authenticator UserPassword [2a1]");
-    let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
+    let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
     println!("Transport Authenticator UserPassword [2a1]: {res:?}");
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -496,7 +496,7 @@ async fn auth_usrpwd(endpoint: &EndPoint) {
     assert!(res.is_ok());
 
     ztimeout!(async {
-        while !router_manager.get_transports().is_empty() {
+        while !router_manager.get_transports_unicast().await.is_empty() {
             task::sleep(SLEEP).await;
         }
     });
@@ -505,7 +505,7 @@ async fn auth_usrpwd(endpoint: &EndPoint) {
     // Open a second transport from the client to the router
     // -> This should be rejected
     println!("Transport Authenticator UserPassword [4a1]");
-    let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
+    let res = ztimeout!(client02_manager.open_transport_unicast(endpoint.clone()));
     println!("Transport Authenticator UserPassword [4a1]: {res:?}");
     assert!(res.is_err());
 
@@ -513,7 +513,7 @@ async fn auth_usrpwd(endpoint: &EndPoint) {
     // Open a third transport from the client to the router
     // -> This should be accepted
     println!("Transport Authenticator UserPassword [5a1]");
-    let res = ztimeout!(client01_manager.open_transport(endpoint.clone()));
+    let res = ztimeout!(client01_manager.open_transport_unicast(endpoint.clone()));
     println!("Transport Authenticator UserPassword [5a1]: {res:?}");
     assert!(res.is_ok());
     let c_ses1 = res.unwrap();
@@ -529,7 +529,7 @@ async fn auth_usrpwd(endpoint: &EndPoint) {
     // Open a fourth transport from the client to the router
     // -> This should be accepted
     println!("Transport Authenticator UserPassword [6a1]");
-    let res = ztimeout!(client02_manager.open_transport(endpoint.clone()));
+    let res = ztimeout!(client02_manager.open_transport_unicast(endpoint.clone()));
     println!("Transport Authenticator UserPassword [6a1]: {res:?}");
     assert!(res.is_ok());
     let c_ses2 = res.unwrap();
@@ -538,7 +538,7 @@ async fn auth_usrpwd(endpoint: &EndPoint) {
     // Open a fourth transport from the client to the router
     // -> This should be rejected
     println!("Transport Authenticator UserPassword [7a1]");
-    let res = ztimeout!(client03_manager.open_transport(endpoint.clone()));
+    let res = ztimeout!(client03_manager.open_transport_unicast(endpoint.clone()));
     println!("Transport Authenticator UserPassword [7a1]: {res:?}");
     assert!(res.is_err());
 
@@ -553,7 +553,7 @@ async fn auth_usrpwd(endpoint: &EndPoint) {
     assert!(res.is_ok());
 
     ztimeout!(async {
-        while !router_manager.get_transports().is_empty() {
+        while !router_manager.get_transports_unicast().await.is_empty() {
             task::sleep(SLEEP).await;
         }
     });
