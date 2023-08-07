@@ -411,6 +411,14 @@ impl UnicastPipeClient {
 }
 
 struct UnicastPipe {
+    // The underlying pipes wrapped into async_io
+    // SAFETY: Async requires &mut for read and write operations. This means
+    //         that concurrent reads and writes are not possible. To achieve that,
+    //         we use an UnsafeCell for interior mutability. Using an UnsafeCell
+    //         is safe in our case since the transmission and reception logic
+    //         already ensures that no concurrent reads or writes can happen on
+    //         the same stream: there is only one task at the time that writes on
+    //         the stream and only one task at the time that reads from the stream.
     r: UnsafeCell<PipeR>,
     w: UnsafeCell<PipeW>,
     local: Locator,
@@ -418,6 +426,9 @@ struct UnicastPipe {
 }
 
 impl UnicastPipe {
+    // SAFETY: It is safe to suppress Clippy warning since no concurrent access will ever happen.
+    // The write and read pipes are independent and support full-duplex operation,
+    // and single-direction operations are aligned at the transport side and will never access link concurrently
     #[allow(clippy::mut_from_ref)]
     fn get_r_mut(&self) -> &mut PipeR {
         unsafe { &mut *self.r.get() }
