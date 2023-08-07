@@ -424,25 +424,39 @@ impl TransportManager {
                     is_shm: config.is_shm,
                 };
 
-                // select and create transport implementation depending on the cfg and enabled features
-                let a_t: Arc<dyn TransportUnicastTrait> =
-                    if zcondfeat!("shared-memory", stc.is_shm, false) {
-                        log::debug!("Will use SHM transport!");
-                        Ok(TransportUnicastShm::make(self.clone(), stc, link)
+                async fn make_net_transport(
+                    manager: &TransportManager,
+                    stc: TransportConfigUnicast,
+                    link: LinkUnicast,
+                    direction: LinkUnicastDirection,
+                ) -> Result<Arc<dyn TransportUnicastTrait>, (Error, Option<u8>)> {
+                    log::debug!("Will use NET transport!");
+                    let t: Arc<dyn TransportUnicastTrait> =
+                        TransportUnicastNet::make(manager.clone(), stc)
                             .map_err(|e| (e, Some(close::reason::INVALID)))
-                            .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?)
-                    } else {
-                        log::debug!("Will use NET transport!");
-                        let t: Arc<dyn TransportUnicastTrait> =
-                            TransportUnicastNet::make(self.clone(), stc)
+                            .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?;
+                    // Add the link to the transport
+                    t.add_link(link, direction)
+                        .await
+                        .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
+                    Ok(t)
+                }
+
+                // select and create transport implementation depending on the cfg and enabled features
+                let a_t: Arc<dyn TransportUnicastTrait> = zcondfeat!(
+                    "shared-memory",
+                    {
+                        if stc.is_shm {
+                            log::debug!("Will use SHM transport!");
+                            TransportUnicastShm::make(self.clone(), stc, link)
                                 .map_err(|e| (e, Some(close::reason::INVALID)))
-                                .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?;
-                        // Add the link to the transport
-                        t.add_link(link, direction)
-                            .await
-                            .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
-                        Ok(t)
-                    }?;
+                                .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?
+                        } else {
+                            make_net_transport(self, stc, link, direction).await?
+                        }
+                    },
+                    make_net_transport(self, stc, link, direction).await?
+                );
 
                 // Add the transport transport to the list of active transports
                 let transport = TransportUnicast(Arc::downgrade(&a_t));
