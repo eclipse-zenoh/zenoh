@@ -16,9 +16,9 @@
 
 # -- Project information -----------------------------------------------------
 project = 'zenoh-rust'
-copyright = "2022 ZettaScale Technology"
-author = 'ZettaScale zenoh team'
-release = '0.5.O-dev'
+copyright = "2022 ZettaScale Technology Inc"
+author = 'ZettaScale Zenoh team'
+release = '0.10.0-dev'
 
 # -- General configuration ---------------------------------------------------
 master_doc = 'index'
