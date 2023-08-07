@@ -452,10 +452,14 @@ async fn test_transport(
         "Sending {} messages... {:?} {}",
         MSG_COUNT, channel, msg_size
     );
+    let cctrl = match channel.reliability {
+        Reliability::Reliable => CongestionControl::Block,
+        Reliability::BestEffort => CongestionControl::Drop,
+    };
     // Create the message to send
     let message: NetworkMessage = Push {
         wire_expr: "test".into(),
-        ext_qos: QoSType::new(channel.priority, CongestionControl::Block, false),
+        ext_qos: QoSType::new(channel.priority, cctrl, false),
         ext_tstamp: None,
         ext_nodeid: NodeIdType::default(),
         payload: Put {
@@ -471,7 +475,7 @@ async fn test_transport(
     }
     .into();
     for _ in 0..MSG_COUNT {
-        client_transport.schedule(message.clone()).unwrap();
+        let _ = client_transport.schedule(message.clone());
         // print!("S-{i} ");
         use std::io::Write;
         std::io::stdout().flush().unwrap();
