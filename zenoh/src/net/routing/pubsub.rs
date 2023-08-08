@@ -17,14 +17,14 @@ use super::resource::{DataRoutes, Direction, PullCaches, Resource, Route, Sessio
 use super::router::{RoutingExpr, Tables, TablesLock};
 use crate::prelude::sync::KeyExpr;
 use petgraph::graph::NodeIndex;
-use zenoh_protocol::network::DeclareInterest;
-use zenoh_protocol::network::declare::Interest;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::sync::RwLock;
 use std::sync::{Arc, RwLockReadGuard, RwLockWriteGuard};
 use zenoh_core::zread;
+use zenoh_protocol::network::declare::Interest;
+use zenoh_protocol::network::DeclareInterest;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
