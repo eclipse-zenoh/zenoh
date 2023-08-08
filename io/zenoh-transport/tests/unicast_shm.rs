@@ -37,8 +37,8 @@ mod tests {
     use zenoh_result::ZResult;
     use zenoh_shm::{SharedMemoryBuf, SharedMemoryManager};
     use zenoh_transport::{
-        TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
-        TransportUnicast,
+        TransportEventHandler, TransportManager, TransportMulticast,
+        TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -81,6 +81,13 @@ mod tests {
         ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
             let arc = Arc::new(SCPeer::new(self.count.clone(), self.is_shm));
             Ok(arc)
+        }
+
+        fn new_multicast(
+            &self,
+            _transport: TransportMulticast,
+        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+            panic!();
         }
     }
 
@@ -192,22 +199,28 @@ mod tests {
         // Create a transport with the peer
         println!("Transport SHM [1b]");
         let peer_shm01_transport =
-            ztimeout!(peer_shm02_manager.open_transport(endpoint.clone())).unwrap();
+            ztimeout!(peer_shm02_manager.open_transport_unicast(endpoint.clone())).unwrap();
         assert!(peer_shm01_transport.is_shm().unwrap());
 
         // Create a transport with the peer
         println!("Transport SHM [1c]");
         let peer_net02_transport =
-            ztimeout!(peer_net01_manager.open_transport(endpoint.clone())).unwrap();
+            ztimeout!(peer_net01_manager.open_transport_unicast(endpoint.clone())).unwrap();
         assert!(!peer_net02_transport.is_shm().unwrap());
 
         // Retrieve the transports
         println!("Transport SHM [2a]");
-        let peer_shm02_transport = peer_shm01_manager.get_transport(&peer_shm02).unwrap();
+        let peer_shm02_transport = peer_shm01_manager
+            .get_transport_unicast(&peer_shm02)
+            .await
+            .unwrap();
         assert!(peer_shm02_transport.is_shm().unwrap());
 
         println!("Transport SHM [2b]");
-        let peer_net01_transport = peer_shm01_manager.get_transport(&peer_net01).unwrap();
+        let peer_net01_transport = peer_shm01_manager
+            .get_transport_unicast(&peer_net01)
+            .await
+            .unwrap();
         assert!(!peer_net01_transport.is_shm().unwrap());
 
         // Send the message
@@ -316,7 +329,7 @@ mod tests {
         ztimeout!(peer_net01_transport.close()).unwrap();
 
         ztimeout!(async {
-            while !peer_shm01_manager.get_transports().is_empty() {
+            while !peer_shm01_manager.get_transports_unicast().await.is_empty() {
                 task::sleep(SLEEP).await;
             }
         });

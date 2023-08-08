@@ -19,7 +19,7 @@ use crate::{
     SplitBuffer, ZSlice,
 };
 use alloc::{sync::Arc, vec::Vec};
-use core::{cmp, iter, mem, num::NonZeroUsize, slice};
+use core::{cmp, iter, mem, num::NonZeroUsize, ptr, slice};
 use zenoh_collections::SingleOrVec;
 
 fn get_mut_unchecked<T>(arc: &mut Arc<T>) -> &mut T {
@@ -32,6 +32,7 @@ pub struct ZBuf {
 }
 
 impl ZBuf {
+    #[must_use]
     pub fn empty() -> Self {
         Self::default()
     }
@@ -88,18 +89,25 @@ impl PartialEq for ZBuf {
                 (None, _) | (_, None) => return false,
                 (Some(l), Some(r)) => {
                     let cmp_len = l.len().min(r.len());
-                    if l[..cmp_len] != r[..cmp_len] {
+                    // SAFETY: cmp_len is the minimum lenght between l and r slices.
+                    let lhs = crate::unsafe_slice!(l, ..cmp_len);
+                    let rhs = crate::unsafe_slice!(r, ..cmp_len);
+                    if lhs != rhs {
                         return false;
                     }
                     if cmp_len == l.len() {
-                        current_self = self_slices.next()
+                        current_self = self_slices.next();
                     } else {
-                        current_self = Some(&l[cmp_len..])
+                        // SAFETY: cmp_len is the minimum lenght between l and r slices.
+                        let lhs = crate::unsafe_slice!(l, cmp_len..);
+                        current_self = Some(lhs);
                     }
                     if cmp_len == r.len() {
-                        current_other = other_slices.next()
+                        current_other = other_slices.next();
                     } else {
-                        current_other = Some(&r[cmp_len..])
+                        // SAFETY: cmp_len is the minimum lenght between l and r slices.
+                        let rhs = crate::unsafe_slice!(r, cmp_len..);
+                        current_other = Some(rhs);
                     }
                 }
             }
@@ -112,9 +120,9 @@ impl<T> From<T> for ZBuf
 where
     T: Into<ZSlice>,
 {
-    fn from(buf: T) -> Self {
+    fn from(t: T) -> Self {
         let mut zbuf = ZBuf::empty();
-        let zslice: ZSlice = buf.into();
+        let zslice: ZSlice = t.into();
         zbuf.push_zslice(zslice);
         zbuf
     }
@@ -148,13 +156,18 @@ impl<'a> Reader for ZBufReader<'a> {
         let mut read = 0;
         while let Some(slice) = self.inner.slices.get(self.cursor.slice) {
             // Subslice from the current read slice
-            let from = &slice.as_slice()[self.cursor.byte..];
+            // SAFETY: validity of self.cursor.byte is ensured by the read logic.
+            let from = crate::unsafe_slice!(slice.as_slice(), self.cursor.byte..);
             // Take the minimum length among read and write slices
             let len = from.len().min(into.len());
             // Copy the slice content
-            into[..len].copy_from_slice(&from[..len]);
+            // SAFETY: len is the minimum lenght between from and into slices.
+            let lhs = crate::unsafe_slice_mut!(into, ..len);
+            let rhs = crate::unsafe_slice!(from, ..len);
+            lhs.copy_from_slice(rhs);
             // Advance the write slice
-            into = &mut into[len..];
+            // SAFETY: len is the minimum lenght between from and into slices.
+            into = crate::unsafe_slice_mut!(into, len..);
             // Update the counter
             read += len;
             // Move the byte cursor
@@ -194,10 +207,9 @@ impl<'a> Reader for ZBufReader<'a> {
     }
 
     fn remaining(&self) -> usize {
-        self.inner.slices.as_ref()[self.cursor.slice..]
-            .iter()
-            .fold(0, |acc, it| acc + it.len())
-            - self.cursor.byte
+        // SAFETY: self.cursor.slice validity is ensured by the reader
+        let s = crate::unsafe_slice!(self.inner.slices.as_ref(), self.cursor.slice..);
+        s.iter().fold(0, |acc, it| acc + it.len()) - self.cursor.byte
     }
 
     fn read_zslices<F: FnMut(ZSlice)>(&mut self, len: usize, mut f: F) -> Result<(), DidntRead> {
@@ -267,7 +279,8 @@ impl<'a> SiphonableReader for ZBufReader<'a> {
         let mut read = 0;
         while let Some(slice) = self.inner.slices.get(self.cursor.slice) {
             // Subslice from the current read slice
-            let from = &slice.as_slice()[self.cursor.byte..];
+            // SAFETY: self.cursor.byte is ensured by the reader.
+            let from = crate::unsafe_slice!(slice.as_slice(), self.cursor.byte..);
             // Copy the slice content
             match writer.write(from) {
                 Ok(len) => {
@@ -317,19 +330,22 @@ impl Iterator for ZBufSliceIterator<'_, '_> {
             return None;
         }
 
-        let slice = &self.reader.inner.slices[self.reader.cursor.slice];
+        // SAFETY: self.reader.cursor.slice is ensured by the reader.
+        let slice =
+            crate::unsafe_slice!(self.reader.inner.slices.as_ref(), self.reader.cursor.slice);
         let start = self.reader.cursor.byte;
-        let current = &slice[start..];
+        // SAFETY: self.reader.cursor.byte is ensured by the reader.
+        let current = crate::unsafe_slice!(slice, start..);
         let len = current.len();
         match self.remaining.cmp(&len) {
-            core::cmp::Ordering::Less => {
+            cmp::Ordering::Less => {
                 let end = start + self.remaining;
                 let slice = slice.subslice(start, end);
                 self.reader.cursor.byte = end;
                 self.remaining = 0;
                 slice
             }
-            core::cmp::Ordering::Equal => {
+            cmp::Ordering::Equal => {
                 let end = start + self.remaining;
                 let slice = slice.subslice(start, end);
                 self.reader.cursor.slice += 1;
@@ -337,7 +353,7 @@ impl Iterator for ZBufSliceIterator<'_, '_> {
                 self.remaining = 0;
                 slice
             }
-            core::cmp::Ordering::Greater => {
+            cmp::Ordering::Greater => {
                 let end = start + len;
                 let slice = slice.subslice(start, end);
                 self.reader.cursor.slice += 1;
@@ -377,7 +393,7 @@ impl Writer for ZBufWriter<'_> {
             return Err(DidntWrite);
         }
         self.write_exact(bytes)?;
-        // Safety: this operation is safe since we check if bytes is empty
+        // SAFETY: this operation is safe since we check if bytes is empty
         Ok(unsafe { NonZeroUsize::new_unchecked(bytes.len()) })
     }
 
@@ -436,10 +452,15 @@ impl Writer for ZBufWriter<'_> {
         let cache = get_mut_unchecked(&mut self.cache);
         let prev_cache_len = cache.len();
         cache.reserve(len);
-        unsafe {
-            len = f(mem::transmute(&mut cache.spare_capacity_mut()[..len]));
-            cache.set_len(prev_cache_len + len);
-        }
+
+        // SAFETY: we already reserved len elements on the vector.
+        let s = crate::unsafe_slice_mut!(cache.spare_capacity_mut(), ..len);
+        // SAFETY: converting MaybeUninit<u8> into [u8] is safe because we are going to write on it.
+        //         The returned len tells us how many bytes have been written so as to update the len accordingly.
+        len = unsafe { f(&mut *(s as *mut [mem::MaybeUninit<u8>] as *mut [u8])) };
+        // SAFETY: we already reserved len elements on the vector.
+        unsafe { cache.set_len(prev_cache_len + len) };
+
         let cache_len = cache.len();
 
         // Verify we are writing on the cache
@@ -452,7 +473,7 @@ impl Writer for ZBufWriter<'_> {
                 // Verify the ZSlice is actually a Vec<u8>
                 if let Some(b) = buf.as_any().downcast_ref::<Vec<u8>>() {
                     // Verify the Vec<u8> of the ZSlice is exactly the one from the cache
-                    if core::ptr::eq(cache.as_ptr(), b.as_ptr()) {
+                    if ptr::eq(cache.as_ptr(), b.as_ptr()) {
                         // Simply update the slice length
                         *end = cache_len;
                         return NonZeroUsize::new(len).ok_or(DidntWrite);
@@ -489,9 +510,9 @@ impl BacktrackableWriter for ZBufWriter<'_> {
     fn rewind(&mut self, mark: Self::Mark) -> bool {
         self.inner
             .slices
-            .truncate(mark.slice + (mark.byte != 0) as usize);
+            .truncate(mark.slice + usize::from(mark.byte != 0));
         if let Some(slice) = self.inner.slices.last_mut() {
-            slice.end = mark.byte
+            slice.end = mark.byte;
         }
         true
     }

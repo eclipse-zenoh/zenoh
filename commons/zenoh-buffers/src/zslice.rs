@@ -107,6 +107,7 @@ impl ZSlice {
     }
 
     #[inline]
+    #[must_use]
     pub fn downcast_ref<T>(&self) -> Option<&T>
     where
         T: Any,
@@ -115,25 +116,31 @@ impl ZSlice {
     }
 
     #[inline]
-    pub fn range(&self) -> Range<usize> {
+    #[must_use]
+    pub const fn range(&self) -> Range<usize> {
         self.start..self.end
     }
 
     #[inline]
-    pub fn len(&self) -> usize {
+    #[must_use]
+    pub const fn len(&self) -> usize {
         self.end - self.start
     }
 
     #[inline]
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     #[inline]
+    #[must_use]
     pub fn as_slice(&self) -> &[u8] {
-        &self.buf.as_slice()[self.range()]
+        // SAFETY: bounds checks are performed at `ZSlice` construction via `make()` or `subslice()`.
+        crate::unsafe_slice!(self.buf.as_slice(), self.range())
     }
 
+    #[must_use]
     pub fn subslice(&self, start: usize, end: usize) -> Option<ZSlice> {
         if start <= end && end <= self.len() {
             Some(ZSlice {
@@ -159,7 +166,7 @@ impl Deref for ZSlice {
 
 impl AsRef<[u8]> for ZSlice {
     fn as_ref(&self) -> &[u8] {
-        self.deref()
+        self
     }
 }
 
@@ -191,7 +198,7 @@ impl Index<RangeFull> for ZSlice {
     type Output = [u8];
 
     fn index(&self, _range: RangeFull) -> &Self::Output {
-        self.deref()
+        self
     }
 }
 

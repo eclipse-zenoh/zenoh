@@ -49,11 +49,15 @@ pub struct Reply {
     pub encoding: Encoding,
     pub ext_sinfo: Option<ext::SourceInfoType>,
     pub ext_consolidation: ext::ConsolidationType,
+    #[cfg(feature = "shared-memory")]
+    pub ext_shm: Option<ext::ShmType>,
     pub ext_unknown: Vec<ZExtUnknown>,
     pub payload: ZBuf,
 }
 
 pub mod ext {
+    #[cfg(feature = "shared-memory")]
+    use crate::{common::ZExtUnit, zextunit};
     use crate::{
         common::{ZExtZ64, ZExtZBuf},
         zextz64, zextzbuf,
@@ -67,6 +71,13 @@ pub mod ext {
     /// # Consolidation extension
     pub type Consolidation = zextz64!(0x2, true);
     pub type ConsolidationType = crate::zenoh_new::query::ext::ConsolidationType;
+
+    /// # Shared Memory extension
+    /// Used to carry additional information about the shared-memory layour of data
+    #[cfg(feature = "shared-memory")]
+    pub type Shm = zextunit!(0x3, true);
+    #[cfg(feature = "shared-memory")]
+    pub type ShmType = crate::zenoh_new::ext::ShmType<{ Shm::ID }>;
 }
 
 impl Reply {
@@ -84,7 +95,8 @@ impl Reply {
         let encoding = Encoding::rand();
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
         let ext_consolidation = Consolidation::rand();
-        let payload = ZBuf::rand(rng.gen_range(1..=64));
+        #[cfg(feature = "shared-memory")]
+        let ext_shm = rng.gen_bool(0.5).then_some(ext::ShmType::rand());
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
             ext_unknown.push(ZExtUnknown::rand2(
@@ -92,12 +104,15 @@ impl Reply {
                 false,
             ));
         }
+        let payload = ZBuf::rand(rng.gen_range(1..=64));
 
         Self {
             timestamp,
             encoding,
             ext_sinfo,
             ext_consolidation,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
             ext_unknown,
             payload,
         }

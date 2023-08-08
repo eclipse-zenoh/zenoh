@@ -54,8 +54,6 @@ pub use endpoint::*;
 pub mod resolution;
 pub use resolution::*;
 
-use crate::transport::TransportSn;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Property {
     pub key: u64,
@@ -238,7 +236,7 @@ impl From<&ZenohId> for uhlc::ID {
 
 impl From<ZenohId> for OwnedKeyExpr {
     fn from(zid: ZenohId) -> Self {
-        // Safety: zid.to_string() returns an stringified hexadecimal
+        // SAFETY: zid.to_string() returns an stringified hexadecimal
         // representation of the zid. Therefore, building a OwnedKeyExpr
         // by calling from_string_unchecked() is safe because it is
         // guaranteed that no wildcards nor reserved chars will be present.
@@ -327,8 +325,8 @@ impl Priority {
 impl TryFrom<u8> for Priority {
     type Error = zenoh_result::Error;
 
-    fn try_from(conduit: u8) -> Result<Self, Self::Error> {
-        match conduit {
+    fn try_from(v: u8) -> Result<Self, Self::Error> {
+        match v {
             0 => Ok(Priority::Control),
             1 => Ok(Priority::RealTime),
             2 => Ok(Priority::InteractiveHigh),
@@ -374,50 +372,6 @@ impl Reliability {
 pub struct Channel {
     pub priority: Priority,
     pub reliability: Reliability,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ConduitSnList {
-    Plain(ConduitSn),
-    QoS(Box<[ConduitSn; Priority::NUM]>),
-}
-
-impl fmt::Display for ConduitSnList {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[ ")?;
-        match self {
-            ConduitSnList::Plain(sn) => {
-                write!(
-                    f,
-                    "{:?} {{ reliable: {}, best effort: {} }}",
-                    Priority::default(),
-                    sn.reliable,
-                    sn.best_effort
-                )?;
-            }
-            ConduitSnList::QoS(ref sns) => {
-                for (prio, sn) in sns.iter().enumerate() {
-                    let p: Priority = (prio as u8).try_into().unwrap();
-                    write!(
-                        f,
-                        "{:?} {{ reliable: {}, best effort: {} }}",
-                        p, sn.reliable, sn.best_effort
-                    )?;
-                    if p != Priority::Background {
-                        write!(f, ", ")?;
-                    }
-                }
-            }
-        }
-        write!(f, " ]")
-    }
-}
-
-/// The kind of reliability.
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-pub struct ConduitSn {
-    pub reliable: TransportSn,
-    pub best_effort: TransportSn,
 }
 
 /// The kind of congestion control.

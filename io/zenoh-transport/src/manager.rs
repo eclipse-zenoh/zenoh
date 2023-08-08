@@ -14,8 +14,11 @@
 use super::unicast::manager::{
     TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
 };
-use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
+use crate::multicast::manager::{
+    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
+    TransportManagerStateMulticast,
+};
 use async_std::{sync::Mutex as AsyncMutex, task};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
@@ -48,7 +51,14 @@ use zenoh_result::{bail, ZResult};
 ///         _peer: TransportPeer,
 ///         _transport: TransportUnicast
 ///     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-///         Ok(Arc::new(DummyTransportPeerEventHandler::default()))
+///         Ok(Arc::new(DummyTransportPeerEventHandler))
+///     }
+///
+///     fn new_multicast(
+///         &self,
+///         _transport: TransportMulticast,
+///     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+///         Ok(Arc::new(DummyTransportMulticastEventHandler))
 ///     }
 /// }
 ///
@@ -64,7 +74,6 @@ use zenoh_result::{bail, ZResult};
 ///         .keep_alive(4)      // Send a KeepAlive every 250 ms
 ///         .accept_timeout(Duration::from_secs(1))
 ///         .accept_pending(10) // Set to 10 the number of simultanous pending incoming transports        
-///         .max_links(1)       // Allow max 1 inbound link per transport
 ///         .max_sessions(5);   // Allow max 5 transports open
 /// let mut resolution = Resolution::default();
 /// resolution.set(Field::FrameSN, Bits::U8);
@@ -89,6 +98,7 @@ pub struct TransportManagerConfig {
     pub defrag_buff_size: usize,
     pub link_rx_buffer_size: usize,
     pub unicast: TransportManagerConfigUnicast,
+    pub multicast: TransportManagerConfigMulticast,
     pub endpoints: HashMap<String, String>, // (protocol, config)
     pub handler: Arc<dyn TransportEventHandler>,
     pub tx_threads: usize,
@@ -97,6 +107,7 @@ pub struct TransportManagerConfig {
 
 pub struct TransportManagerState {
     pub unicast: TransportManagerStateUnicast,
+    pub multicast: TransportManagerStateMulticast,
 }
 
 pub struct TransportManagerParams {
@@ -115,6 +126,7 @@ pub struct TransportManagerBuilder {
     defrag_buff_size: usize,
     link_rx_buffer_size: usize,
     unicast: TransportManagerBuilderUnicast,
+    multicast: TransportManagerBuilderMulticast,
     endpoints: HashMap<String, String>, // (protocol, config)
     tx_threads: usize,
     protocols: Option<Vec<String>>,
@@ -171,6 +183,11 @@ impl TransportManagerBuilder {
         self
     }
 
+    pub fn multicast(mut self, multicast: TransportManagerBuilderMulticast) -> Self {
+        self.multicast = multicast;
+        self
+    }
+
     pub fn tx_threads(mut self, num: usize) -> Self {
         self.tx_threads = num;
         self
@@ -215,6 +232,11 @@ impl TransportManagerBuilder {
                 .from_config(config)
                 .await?,
         );
+        self = self.multicast(
+            TransportManagerBuilderMulticast::default()
+                .from_config(config)
+                .await?,
+        );
 
         Ok(self)
     }
@@ -224,6 +246,7 @@ impl TransportManagerBuilder {
         let mut prng = PseudoRng::from_entropy();
 
         let unicast = self.unicast.build(&mut prng)?;
+        let multicast = self.multicast.build()?;
 
         let mut queue_size = [0; Priority::NUM];
         queue_size[Priority::Control as usize] = *self.queue_size.control();
@@ -246,6 +269,7 @@ impl TransportManagerBuilder {
             defrag_buff_size: self.defrag_buff_size,
             link_rx_buffer_size: self.link_rx_buffer_size,
             unicast: unicast.config,
+            multicast: multicast.config,
             endpoints: self.endpoints,
             handler,
             tx_threads: self.tx_threads,
@@ -259,6 +283,7 @@ impl TransportManagerBuilder {
 
         let state = TransportManagerState {
             unicast: unicast.state,
+            multicast: multicast.state,
         };
 
         let params = TransportManagerParams { config, state };
@@ -284,6 +309,7 @@ impl Default for TransportManagerBuilder {
             link_rx_buffer_size: *link_rx.buffer_size(),
             endpoints: HashMap::new(),
             unicast: TransportManagerBuilderUnicast::default(),
+            multicast: TransportManagerBuilderMulticast::default(),
             tx_threads: 1,
             protocols: None,
         }
@@ -377,7 +403,6 @@ impl TransportManager {
     }
 
     pub async fn close(&self) {
-        log::trace!("TransportManager::clear())");
         self.close_unicast().await;
         self.tx_executor.stop().await;
     }
@@ -386,27 +411,12 @@ impl TransportManager {
     /*              LISTENER             */
     /*************************************/
     pub async fn add_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
-        let p = endpoint.protocol();
-        if !self
-            .config
-            .protocols
-            .iter()
-            .any(|x| x.as_str() == p.as_str())
-        {
-            bail!(
-                "Unsupported protocol: {}. Supported protocols are: {:?}",
-                p,
-                self.config.protocols
-            );
-        }
-
         if self
             .locator_inspector
             .is_multicast(&endpoint.to_locator())
             .await?
         {
-            // @TODO: multicast
-            bail!("Unimplemented");
+            self.add_listener_multicast(endpoint).await
         } else {
             self.add_listener_unicast(endpoint).await
         }
@@ -418,60 +428,23 @@ impl TransportManager {
             .is_multicast(&endpoint.to_locator())
             .await?
         {
-            // @TODO: multicast
-            bail!("Unimplemented");
+            self.del_listener_multicast(endpoint).await
         } else {
             self.del_listener_unicast(endpoint).await
         }
     }
 
     pub fn get_listeners(&self) -> Vec<EndPoint> {
-        task::block_on(self.get_listeners_unicast())
-        // @TODO: multicast
+        let mut lsu = task::block_on(self.get_listeners_unicast());
+        let mut lsm = task::block_on(self.get_listeners_multicast());
+        lsu.append(&mut lsm);
+        lsu
     }
 
     pub fn get_locators(&self) -> Vec<Locator> {
-        task::block_on(self.get_locators_unicast())
-        // @TODO: multicast
-    }
-
-    /*************************************/
-    /*             TRANSPORT             */
-    /*************************************/
-    pub fn get_transport(&self, peer: &ZenohId) -> Option<TransportUnicast> {
-        task::block_on(self.get_transport_unicast(peer))
-        // @TODO: multicast
-    }
-
-    pub fn get_transports(&self) -> Vec<TransportUnicast> {
-        task::block_on(self.get_transports_unicast())
-        // @TODO: multicast
-    }
-
-    pub async fn open_transport(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
-        let p = endpoint.protocol();
-        if !self
-            .config
-            .protocols
-            .iter()
-            .any(|x| x.as_str() == p.as_str())
-        {
-            bail!(
-                "Unsupported protocol: {}. Supported protocols are: {:?}",
-                p,
-                self.config.protocols
-            );
-        }
-
-        if self
-            .locator_inspector
-            .is_multicast(&endpoint.to_locator())
-            .await?
-        {
-            // @TODO: multicast
-            bail!("Unimplemented");
-        } else {
-            self.open_transport_unicast(endpoint).await
-        }
+        let mut lsu = task::block_on(self.get_locators_unicast());
+        let mut lsm = task::block_on(self.get_locators_multicast());
+        lsu.append(&mut lsm);
+        lsu
     }
 }

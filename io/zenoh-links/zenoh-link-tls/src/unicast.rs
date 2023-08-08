@@ -12,13 +12,17 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    config::*, get_tls_addr, get_tls_host, get_tls_server_name, TLS_ACCEPT_THROTTLE_TIME,
-    TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
+    config::*, get_tls_addr, get_tls_host, get_tls_server_name,
+    verify::WebPkiVerifierAnyServerName, TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU,
+    TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
-use async_rustls::rustls::server::AllowAnyAuthenticatedClient;
-use async_rustls::rustls::version::TLS13;
-pub use async_rustls::rustls::*;
-use async_rustls::{TlsAcceptor, TlsConnector, TlsStream};
+use async_rustls::{
+    rustls::{
+        server::AllowAnyAuthenticatedClient, version::TLS13, Certificate, ClientConfig,
+        OwnedTrustAnchor, PrivateKey, RootCertStore, ServerConfig,
+    },
+    TlsAcceptor, TlsConnector, TlsStream,
+};
 use async_std::fs;
 use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::FutureExt;
@@ -38,7 +42,7 @@ use std::net::{IpAddr, Shutdown};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-pub use webpki::*;
+use webpki::TrustAnchor;
 use zenoh_core::{zasynclock, zread, zwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
@@ -606,11 +610,30 @@ impl TlsClientConfig {
             None => false,
         };
 
-        let root_cert_store =
-            load_trust_anchors(config)?.map_or_else(|| {
-                log::debug!("Field 'root_ca_certificate' not specified. Loading default Web PKI certificates instead.");
-                load_default_webpki_certs()
-            }, |certs| certs);
+        let tls_server_name_verification: bool = match config.get(TLS_SERVER_NAME_VERIFICATION) {
+            Some(s) => {
+                let s: bool = s
+                    .parse()
+                    .map_err(|_| zerror!("Unknown server name verification argument: {}", s))?;
+                if s {
+                    log::warn!("Skipping name verification of servers");
+                }
+                s
+            }
+            None => false,
+        };
+
+        // Allows mixed user-generated CA and webPKI CA
+        log::debug!("Loading default Web PKI certificates.");
+        let mut root_cert_store: RootCertStore = RootCertStore {
+            roots: load_default_webpki_certs().roots,
+        };
+
+        if let Some(custom_root_cert) = load_trust_anchors(config)? {
+            log::debug!("Loading user-generated certificates.");
+            root_cert_store.add_trust_anchors(custom_root_cert.roots.into_iter());
+        }
+
         let cc = if tls_client_server_auth {
             log::debug!("Loading client authentication key and certificate...");
             let tls_client_private_key = TlsClientConfig::load_tls_private_key(config).await?;
@@ -637,19 +660,37 @@ impl TlsClientConfig {
                 bail!("No private key found");
             }
 
-            ClientConfig::builder()
+            let builder = ClientConfig::builder()
                 .with_safe_default_cipher_suites()
                 .with_safe_default_kx_groups()
                 .with_protocol_versions(&[&TLS13])
-                .unwrap()
-                .with_root_certificates(root_cert_store)
-                .with_single_cert(certs, keys.remove(0))
-                .expect("bad certificate/key")
+                .map_err(|e| zerror!("Config parameters should be valid: {}", e))?;
+
+            if tls_server_name_verification {
+                builder
+                    .with_root_certificates(root_cert_store)
+                    .with_client_auth_cert(certs, keys.remove(0))
+            } else {
+                builder
+                    .with_custom_certificate_verifier(Arc::new(WebPkiVerifierAnyServerName::new(
+                        root_cert_store,
+                    )))
+                    .with_client_auth_cert(certs, keys.remove(0))
+            }
+            .map_err(|e| zerror!("Bad certificate/key: {}", e))?
         } else {
-            ClientConfig::builder()
-                .with_safe_defaults()
-                .with_root_certificates(root_cert_store)
-                .with_no_client_auth()
+            let builder = ClientConfig::builder().with_safe_defaults();
+            if tls_server_name_verification {
+                builder
+                    .with_root_certificates(root_cert_store)
+                    .with_no_client_auth()
+            } else {
+                builder
+                    .with_custom_certificate_verifier(Arc::new(WebPkiVerifierAnyServerName::new(
+                        root_cert_store,
+                    )))
+                    .with_no_client_auth()
+            }
         };
         Ok(TlsClientConfig { client_config: cc })
     }
@@ -723,7 +764,7 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
                 ta.name_constraints,
             )
         });
-        root_cert_store.add_server_trust_anchors(trust_anchors.into_iter());
+        root_cert_store.add_trust_anchors(trust_anchors.into_iter());
         return Ok(Some(root_cert_store));
     }
     if let Some(filename) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
@@ -737,7 +778,7 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
                 ta.name_constraints,
             )
         });
-        root_cert_store.add_server_trust_anchors(trust_anchors.into_iter());
+        root_cert_store.add_trust_anchors(trust_anchors.into_iter());
         return Ok(Some(root_cert_store));
     }
     Ok(None)
@@ -745,7 +786,7 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
 
 fn load_default_webpki_certs() -> RootCertStore {
     let mut root_cert_store = RootCertStore::empty();
-    root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+    root_cert_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
         OwnedTrustAnchor::from_subject_spki_name_constraints(
             ta.subject,
             ta.spki,

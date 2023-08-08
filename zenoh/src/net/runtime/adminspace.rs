@@ -28,16 +28,15 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::SplitBuffer;
 use zenoh_config::ValidatedMap;
-use zenoh_protocol::core::{
-    key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID,
+use zenoh_protocol::{
+    core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
+    network::{
+        declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo},
+        ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
+        ResponseFinal,
+    },
+    zenoh_new::{PushBody, RequestBody},
 };
-use zenoh_protocol::network::queryable::ext::QueryableInfo;
-use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::{
-    ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
-    ResponseFinal,
-};
-use zenoh_protocol::zenoh_new::{PushBody, RequestBody};
 use zenoh_result::ZResult;
 use zenoh_transport::{Primitives, TransportUnicast};
 
@@ -414,7 +413,7 @@ fn router_data(context: &AdminContext, query: Query) {
     let locators: Vec<serde_json::Value> = transport_mgr
         .get_locators()
         .iter()
-        .map(|locator| json!(locator.to_string()))
+        .map(|locator| json!(locator.as_str()))
         .collect();
 
     // transports info
@@ -443,8 +442,7 @@ fn router_data(context: &AdminContext, query: Query) {
         }
         json
     };
-    let transports: Vec<serde_json::Value> = transport_mgr
-        .get_transports()
+    let transports: Vec<serde_json::Value> = task::block_on(transport_mgr.get_transports_unicast())
         .iter()
         .map(transport_to_json)
         .collect();

@@ -17,15 +17,18 @@ use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
-use zenoh_protocol::network::declare::ext;
-use zenoh_protocol::network::queryable::ext::QueryableInfo;
 #[cfg(feature = "complete_n")]
 use zenoh_protocol::network::request::ext::TargetType;
-use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::{Declare, DeclareBody, DeclareKeyExpr, Mapping};
 use zenoh_protocol::zenoh_new::PushBody;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr, ZenohId},
+    network::{
+        declare::{
+            ext, queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo, Declare,
+            DeclareBody, DeclareKeyExpr,
+        },
+        Mapping,
+    },
     zenoh::{QueryId, RoutingContext},
 };
 use zenoh_sync::get_mut_unchecked;

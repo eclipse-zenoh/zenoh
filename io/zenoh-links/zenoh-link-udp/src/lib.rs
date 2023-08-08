@@ -85,7 +85,7 @@ impl LocatorInspector for UdpLocatorInspector {
 }
 
 pub mod config {
-    pub const UDP_MULTICAST_SRC_IFACE: &str = "src_iface";
+    pub const UDP_MULTICAST_IFACE: &str = "iface";
 }
 
 pub async fn get_udp_addrs(address: Address<'_>) -> ZResult<impl Iterator<Item = SocketAddr>> {

@@ -1,5 +1,3 @@
-use crate::common::batch::WError;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -13,9 +11,8 @@ use crate::common::batch::WError;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// use super::batch::SerializationBatch;
-use super::batch::{Encode, WBatch};
-use super::conduit::{TransportChannelTx, TransportConduitTx};
+use super::batch::{Encode, WBatch, WError};
+use super::priority::{TransportChannelTx, TransportPriorityTx};
 use async_std::prelude::FutureExt;
 use flume::{bounded, Receiver, Sender};
 use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
@@ -93,7 +90,7 @@ impl StageInOut {
 // Inner structure containing mutexes for current serialization batch and SNs
 struct StageInMutex {
     current: Arc<Mutex<Option<WBatch>>>,
-    conduit: TransportConduitTx,
+    priority: TransportPriorityTx,
 }
 
 impl StageInMutex {
@@ -105,9 +102,9 @@ impl StageInMutex {
     #[inline]
     fn channel(&self, is_reliable: bool) -> MutexGuard<'_, TransportChannelTx> {
         if is_reliable {
-            zlock!(self.conduit.reliable)
+            zlock!(self.priority.reliable)
         } else {
-            zlock!(self.conduit.best_effort)
+            zlock!(self.priority.best_effort)
         }
     }
 }
@@ -498,13 +495,13 @@ impl TransmissionPipeline {
     // A MPSC pipeline
     pub(crate) fn make(
         config: TransmissionPipelineConf,
-        conduit: &[TransportConduitTx],
+        priority: &[TransportPriorityTx],
     ) -> (TransmissionPipelineProducer, TransmissionPipelineConsumer) {
         let mut stage_in = vec![];
         let mut stage_out = vec![];
 
         let default_queue_size = [config.queue_size[Priority::default() as usize]];
-        let size_iter = if conduit.len() == 1 {
+        let size_iter = if priority.len() == 1 {
             default_queue_size.iter()
         } else {
             config.queue_size.iter()
@@ -547,7 +544,7 @@ impl TransmissionPipeline {
                 },
                 mutex: StageInMutex {
                     current: current.clone(),
-                    conduit: conduit[prio].clone(),
+                    priority: priority[prio].clone(),
                 },
                 fragbuf: ZBuf::empty(),
             }));
@@ -812,9 +809,9 @@ mod tests {
             );
         }
 
-        // Pipeline conduits
-        let tct = TransportConduitTx::make(Bits::from(TransportSn::MAX)).unwrap();
-        let conduits = vec![tct];
+        // Pipeline priorities
+        let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX)).unwrap();
+        let priorities = vec![tct];
 
         // Total amount of bytes to send in each test
         let bytes: usize = 100_000_000;
@@ -833,7 +830,7 @@ mod tests {
 
                 let (producer, consumer) = TransmissionPipeline::make(
                     TransmissionPipelineConf::default(),
-                    conduits.as_slice(),
+                    priorities.as_slice(),
                 );
 
                 let t_c = task::spawn(async move {
@@ -898,10 +895,10 @@ mod tests {
         }
 
         // Pipeline
-        let tct = TransportConduitTx::make(Bits::from(TransportSn::MAX)).unwrap();
-        let conduits = vec![tct];
+        let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX)).unwrap();
+        let priorities = vec![tct];
         let (producer, mut consumer) =
-            TransmissionPipeline::make(TransmissionPipelineConf::default(), conduits.as_slice());
+            TransmissionPipeline::make(TransmissionPipelineConf::default(), priorities.as_slice());
 
         let counter = Arc::new(AtomicUsize::new(0));
 
@@ -950,9 +947,9 @@ mod tests {
     #[ignore]
     fn tx_pipeline_thr() {
         // Queue
-        let tct = TransportConduitTx::make(Bits::from(TransportSn::MAX)).unwrap();
-        let conduits = vec![tct];
-        let (producer, mut consumer) = TransmissionPipeline::make(CONFIG, conduits.as_slice());
+        let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX)).unwrap();
+        let priorities = vec![tct];
+        let (producer, mut consumer) = TransmissionPipeline::make(CONFIG, priorities.as_slice());
         let count = Arc::new(AtomicUsize::new(0));
         let size = Arc::new(AtomicUsize::new(0));
 

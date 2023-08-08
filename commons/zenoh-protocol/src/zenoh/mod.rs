@@ -115,7 +115,7 @@ pub mod zmsg {
         pub const LOC: u64 = 1 << 2; // 0x04
     }
 
-    pub mod conduit {
+    pub mod priority {
         use super::{imsg, Priority};
 
         pub const CONTROL: u8 = (Priority::Control as u8) << imsg::HEADER_BITS;

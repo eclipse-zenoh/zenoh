@@ -36,8 +36,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
-    TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 
 // These keys and certificates below are purposedly generated to run TLS and mTLS tests.
@@ -256,6 +256,13 @@ impl TransportEventHandler for SHRouter {
         let arc = Arc::new(SCRouter::new(self.count.clone()));
         Ok(arc)
     }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
+    }
 }
 
 // Transport Callback for the router
@@ -295,7 +302,14 @@ impl TransportEventHandler for SHClient {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        Ok(Arc::new(SCClient::default()))
+        Ok(Arc::new(SCClient))
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -318,7 +332,7 @@ impl TransportPeerEventHandler for SCClient {
     }
 }
 
-async fn open_transport(
+async fn open_transport_unicast(
     client_endpoints: &[EndPoint],
     server_endpoints: &[EndPoint],
 ) -> (
@@ -354,17 +368,20 @@ async fn open_transport(
         .whatami(WhatAmI::Client)
         .zid(client_id)
         .unicast(unicast)
-        .build(Arc::new(SHClient::default()))
+        .build(Arc::new(SHClient))
         .unwrap();
 
     // Create an empty transport with the client
     // Open transport -> This should be accepted
     for e in client_endpoints.iter() {
         println!("Opening transport with {}", e);
-        let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
+        let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap();
     }
 
-    let client_transport = client_manager.get_transport(&router_id).unwrap();
+    let client_transport = client_manager
+        .get_transport_unicast(&router_id)
+        .await
+        .unwrap();
 
     // Return the handlers
     (
@@ -390,7 +407,7 @@ async fn close_transport(
     ztimeout!(client_transport.close()).unwrap();
 
     ztimeout!(async {
-        while !router_manager.get_transports().is_empty() {
+        while !router_manager.get_transports_unicast().await.is_empty() {
             task::sleep(SLEEP).await;
         }
     });
@@ -490,7 +507,7 @@ async fn run_single(
 
     #[allow(unused_variables)] // Used when stats feature is enabled
     let (router_manager, router_handler, client_manager, client_transport) =
-        open_transport(client_endpoints, server_endpoints).await;
+        open_transport_unicast(client_endpoints, server_endpoints).await;
 
     test_transport(
         router_handler.clone(),

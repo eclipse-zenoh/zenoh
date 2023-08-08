@@ -21,8 +21,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
-    TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -45,6 +45,13 @@ impl TransportEventHandler for SHRouter {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         let arc = Arc::new(SCRouter);
         Ok(arc)
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -80,11 +87,11 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the listener on the router
     for e in endpoints.iter() {
         println!("Listener endpoint: {e}");
-        let res = ztimeout!(router_manager.add_listener(e.clone()));
+        let res = ztimeout!(router_manager.add_listener_unicast(e.clone()));
         assert!(res.is_err());
 
         println!("Open endpoint: {e}");
-        let res = ztimeout!(router_manager.open_transport(e.clone()));
+        let res = ztimeout!(router_manager.open_transport_unicast(e.clone()));
         assert!(res.is_err());
     }
 
@@ -103,12 +110,12 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the listener on the router
     for e in endpoints.iter() {
         println!("Listener endpoint: {e}");
-        let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
+        let _ = ztimeout!(router_manager.add_listener_unicast(e.clone())).unwrap();
 
         task::sleep(SLEEP).await;
 
         println!("Open endpoint: {e}");
-        let _ = ztimeout!(router_manager.open_transport(e.clone())).unwrap();
+        let _ = ztimeout!(router_manager.open_transport_unicast(e.clone())).unwrap();
 
         task::sleep(SLEEP).await;
     }

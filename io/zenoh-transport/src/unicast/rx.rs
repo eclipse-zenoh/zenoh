@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::common::conduit::TransportChannelRx;
+use super::common::priority::TransportChannelRx;
 use super::transport::TransportUnicastInner;
 use async_std::task;
 use std::sync::MutexGuard;
@@ -121,12 +121,12 @@ impl TransportUnicastInner {
 
         let priority = ext_qos.priority();
         let c = if self.is_qos() {
-            &self.conduit_rx[priority as usize]
+            &self.priority_rx[priority as usize]
         } else if priority == Priority::default() {
-            &self.conduit_rx[0]
+            &self.priority_rx[0]
         } else {
             bail!(
-                "Transport: {}. Unknown conduit: {:?}.",
+                "Transport: {}. Unknown priority: {:?}.",
                 self.config.zid,
                 priority
             );
@@ -155,12 +155,12 @@ impl TransportUnicastInner {
         } = fragment;
 
         let c = if self.is_qos() {
-            &self.conduit_rx[qos.priority() as usize]
+            &self.priority_rx[qos.priority() as usize]
         } else if qos.priority() == Priority::default() {
-            &self.conduit_rx[0]
+            &self.priority_rx[0]
         } else {
             bail!(
-                "Transport: {}. Unknown conduit: {:?}.",
+                "Transport: {}. Unknown priority: {:?}.",
                 self.config.zid,
                 qos.priority()
             );

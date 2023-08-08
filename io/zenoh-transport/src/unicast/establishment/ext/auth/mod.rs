@@ -16,7 +16,7 @@ pub(crate) mod pubkey;
 #[cfg(feature = "auth_usrpwd")]
 pub(crate) mod usrpwd;
 
-use crate::establishment::{AcceptFsm, OpenFsm};
+use crate::unicast::establishment::{AcceptFsm, OpenFsm};
 use async_std::sync::{Mutex, RwLock};
 use async_trait::async_trait;
 #[cfg(feature = "auth_pubkey")]

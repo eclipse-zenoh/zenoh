@@ -17,14 +17,15 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use std::{convert::TryFrom, net::SocketAddr};
-
+use async_rustls::rustls::ServerName;
 use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 use config::{
     TLS_CLIENT_AUTH, TLS_CLIENT_CERTIFICATE_FILE, TLS_CLIENT_PRIVATE_KEY_FILE,
-    TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_PRIVATE_KEY_FILE,
+    TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_NAME_VERIFICATION,
+    TLS_SERVER_PRIVATE_KEY_FILE,
 };
+use std::{convert::TryFrom, net::SocketAddr};
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::{ConfigurationInspector, LocatorInspector};
@@ -35,6 +36,7 @@ use zenoh_protocol::core::{
 use zenoh_result::{bail, zerror, ZResult};
 
 mod unicast;
+mod verify;
 pub use unicast::*;
 
 // Default MTU (TLS PDU) in bytes.
@@ -88,6 +90,12 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
         if let Some(client_certificate) = c.client_certificate() {
             ps.push((TLS_CLIENT_CERTIFICATE_FILE, client_certificate));
         }
+        if let Some(server_name_verification) = c.server_name_verification() {
+            match server_name_verification {
+                true => ps.push((TLS_SERVER_NAME_VERIFICATION, "true")),
+                false => ps.push((TLS_SERVER_NAME_VERIFICATION, "false")),
+            };
+        }
 
         let mut s = String::new();
         endpoint::Parameters::extend(ps.drain(..), &mut s);
@@ -126,6 +134,8 @@ pub mod config {
     pub const TLS_CLIENT_CERTIFICATE_RAW: &str = "client_certificate_raw";
 
     pub const TLS_CLIENT_AUTH: &str = "client_auth";
+
+    pub const TLS_SERVER_NAME_VERIFICATION: &str = "server_name_verification";
 }
 
 pub async fn get_tls_addr(address: &Address<'_>) -> ZResult<SocketAddr> {

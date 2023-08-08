@@ -38,7 +38,7 @@ impl SharedMemoryUnicast {
     pub fn make() -> ZResult<SharedMemoryUnicast> {
         // Create a challenge for session establishment
         let mut prng = PseudoRng::from_entropy();
-        let nonce = prng.gen::<u64>();
+        let nonce = prng.gen::<Challenge>();
         let size = std::mem::size_of::<Challenge>();
 
         let mut _manager = SharedMemoryManager::make(format!("{NAME}.{nonce}"), size)?;

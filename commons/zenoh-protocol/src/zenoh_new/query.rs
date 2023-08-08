@@ -90,10 +90,8 @@ pub struct Query {
 pub mod ext {
     use crate::{
         common::{ZExtZ64, ZExtZBuf},
-        core::Encoding,
         zextz64, zextzbuf,
     };
-    use zenoh_buffers::ZBuf;
 
     /// # SourceInfo extension
     /// Used to carry additional information about the source of data
@@ -106,32 +104,9 @@ pub mod ext {
 
     /// # QueryBody extension
     /// Used to carry a body attached to the query
-    pub type QueryBody = zextzbuf!(0x03, false);
-
-    ///   7 6 5 4 3 2 1 0
-    ///  +-+-+-+-+-+-+-+-+
-    ///  ~   encoding    ~
-    ///  +---------------+
-    ///  ~ pl: [u8;z32]  ~  -- Payload
-    ///  +---------------+
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct QueryBodyType {
-        pub encoding: Encoding,
-        pub payload: ZBuf,
-    }
-
-    impl QueryBodyType {
-        #[cfg(feature = "test")]
-        pub fn rand() -> Self {
-            use rand::Rng;
-            let mut rng = rand::thread_rng();
-
-            let encoding = Encoding::rand();
-            let payload = ZBuf::rand(rng.gen_range(1..=64));
-
-            Self { encoding, payload }
-        }
-    }
+    /// Shared Memory extension is automatically defined by ValueType extension if
+    /// #[cfg(feature = "shared-memory")] is defined.
+    pub type QueryBodyType = crate::zenoh_new::ext::ValueType<0x03, 0x04>;
 }
 
 impl Query {
@@ -158,7 +133,10 @@ impl Query {
         let ext_body = rng.gen_bool(0.5).then_some(ext::QueryBodyType::rand());
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
-            ext_unknown.push(ZExtUnknown::rand2(iext::mid(ext::QueryBody::ID) + 1, false));
+            ext_unknown.push(ZExtUnknown::rand2(
+                iext::mid(ext::QueryBodyType::SID) + 1,
+                false,
+            ));
         }
 
         Self {

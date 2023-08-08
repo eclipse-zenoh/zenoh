@@ -22,13 +22,12 @@ use zenoh_buffers::reader::DidntRead;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_config::{unwrap_or_default, ModeDependent};
-use zenoh_link::Locator;
+use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
     core::{whatami::WhatAmIMatcher, EndPoint, WhatAmI, ZenohId},
     scouting::{Hello, Scout, ScoutingBody, ScoutingMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
-use zenoh_transport::TransportUnicast;
 
 const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
@@ -93,7 +92,7 @@ impl Runtime {
                 for locator in &peers {
                     match self
                         .manager()
-                        .open_transport(locator.clone())
+                        .open_transport_unicast(locator.clone())
                         .timeout(CONNECTION_TIMEOUT)
                         .await
                     {
@@ -245,21 +244,22 @@ impl Runtime {
 
     pub(crate) async fn update_peers(&self) -> ZResult<()> {
         let peers = { self.config.lock().connect().endpoints().clone() };
-        let tranports = self.manager().get_transports();
+        let tranports = self.manager().get_transports_unicast().await;
 
         if self.whatami == WhatAmI::Client {
             for transport in tranports {
-                let should_close = if let Some(orch_transport) = transport
-                    .get_callback()
-                    .unwrap()
-                    .unwrap()
-                    .as_any()
-                    .downcast_ref::<super::RuntimeSession>()
-                {
-                    if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
-                        !peers.contains(endpoint)
+                let should_close = if let Ok(Some(orch_transport)) = transport.get_callback() {
+                    if let Some(orch_transport) = orch_transport
+                        .as_any()
+                        .downcast_ref::<super::RuntimeSession>()
+                    {
+                        if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
+                            !peers.contains(endpoint)
+                        } else {
+                            true
+                        }
                     } else {
-                        true
+                        false
                     }
                 } else {
                     false
@@ -271,15 +271,14 @@ impl Runtime {
         } else {
             for peer in peers {
                 if !tranports.iter().any(|transport| {
-                    if let Some(orch_transport) = transport
-                        .get_callback()
-                        .unwrap()
-                        .unwrap()
-                        .as_any()
-                        .downcast_ref::<super::RuntimeSession>()
-                    {
-                        if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
-                            return *endpoint == peer;
+                    if let Ok(Some(orch_transport)) = transport.get_callback() {
+                        if let Some(orch_transport) = orch_transport
+                            .as_any()
+                            .downcast_ref::<super::RuntimeSession>()
+                        {
+                            if let Some(endpoint) = &*zread!(orch_transport.endpoint) {
+                                return *endpoint == peer;
+                            }
                         }
                     }
                     false
@@ -453,46 +452,93 @@ impl Runtime {
         loop {
             log::trace!("Trying to connect to configured peer {}", peer);
             let endpoint = peer.clone();
-            match self
-                .manager()
-                .open_transport(endpoint)
-                .timeout(CONNECTION_TIMEOUT)
+            if let Ok(is_mcast) = LocatorInspector::default()
+                .is_multicast(&endpoint.to_locator())
                 .await
             {
-                Ok(Ok(transport)) => {
-                    log::debug!("Successfully connected to configured peer {}", peer);
-                    if let Some(orch_transport) = transport
-                        .get_callback()
-                        .unwrap()
-                        .unwrap()
-                        .as_any()
-                        .downcast_ref::<super::RuntimeSession>()
+                if is_mcast {
+                    match self
+                        .manager()
+                        .open_transport_multicast(endpoint)
+                        .timeout(CONNECTION_TIMEOUT)
+                        .await
                     {
-                        *zwrite!(orch_transport.endpoint) = Some(peer);
+                        Ok(Ok(transport)) => {
+                            log::debug!("Successfully connected to configured peer {}", peer);
+                            if let Ok(Some(orch_transport)) = transport.get_callback() {
+                                if let Some(orch_transport) = orch_transport
+                                    .as_any()
+                                    .downcast_ref::<super::RuntimeSession>(
+                                ) {
+                                    *zwrite!(orch_transport.endpoint) = Some(peer);
+                                }
+                            }
+                            break;
+                        }
+                        Ok(Err(e)) => {
+                            log::debug!(
+                                "Unable to connect to configured peer {}! {}. Retry in {:?}.",
+                                peer,
+                                e,
+                                delay
+                            );
+                        }
+                        Err(e) => {
+                            log::debug!(
+                                "Unable to connect to configured peer {}! {}. Retry in {:?}.",
+                                peer,
+                                e,
+                                delay
+                            );
+                        }
                     }
-                    break;
+                    async_std::task::sleep(delay).await;
+                    delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
+                    if delay > CONNECTION_RETRY_MAX_PERIOD {
+                        delay = CONNECTION_RETRY_MAX_PERIOD;
+                    }
+                } else {
+                    match self
+                        .manager()
+                        .open_transport_unicast(endpoint)
+                        .timeout(CONNECTION_TIMEOUT)
+                        .await
+                    {
+                        Ok(Ok(transport)) => {
+                            log::debug!("Successfully connected to configured peer {}", peer);
+                            if let Ok(Some(orch_transport)) = transport.get_callback() {
+                                if let Some(orch_transport) = orch_transport
+                                    .as_any()
+                                    .downcast_ref::<super::RuntimeSession>(
+                                ) {
+                                    *zwrite!(orch_transport.endpoint) = Some(peer);
+                                }
+                            }
+                            break;
+                        }
+                        Ok(Err(e)) => {
+                            log::debug!(
+                                "Unable to connect to configured peer {}! {}. Retry in {:?}.",
+                                peer,
+                                e,
+                                delay
+                            );
+                        }
+                        Err(e) => {
+                            log::debug!(
+                                "Unable to connect to configured peer {}! {}. Retry in {:?}.",
+                                peer,
+                                e,
+                                delay
+                            );
+                        }
+                    }
+                    async_std::task::sleep(delay).await;
+                    delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
+                    if delay > CONNECTION_RETRY_MAX_PERIOD {
+                        delay = CONNECTION_RETRY_MAX_PERIOD;
+                    }
                 }
-                Ok(Err(e)) => {
-                    log::debug!(
-                        "Unable to connect to configured peer {}! {}. Retry in {:?}.",
-                        peer,
-                        e,
-                        delay
-                    );
-                }
-                Err(e) => {
-                    log::debug!(
-                        "Unable to connect to configured peer {}! {}. Retry in {:?}.",
-                        peer,
-                        e,
-                        delay
-                    );
-                }
-            }
-            async_std::task::sleep(delay).await;
-            delay *= CONNECTION_RETRY_PERIOD_INCREASE_FACTOR;
-            if delay > CONNECTION_RETRY_MAX_PERIOD {
-                delay = CONNECTION_RETRY_MAX_PERIOD;
             }
         }
     }
@@ -590,40 +636,84 @@ impl Runtime {
         async_std::prelude::FutureExt::race(send, recvs).await;
     }
 
-    async fn connect(&self, locators: &[Locator]) -> Option<TransportUnicast> {
+    #[must_use]
+    async fn connect(&self, zid: &ZenohId, locators: &[Locator]) -> bool {
+        const ERR: &str = "Unable to connect to newly scouted peer ";
+
+        let inspector = LocatorInspector::default();
         for locator in locators {
-            let endpoint = locator.clone().into();
-            match self
-                .manager()
-                .open_transport(endpoint)
-                .timeout(CONNECTION_TIMEOUT)
-                .await
-            {
-                Ok(Ok(transport)) => return Some(transport),
-                Ok(Err(e)) => log::trace!("Unable to connect to {}! {}", locator, e),
-                Err(e) => log::trace!("Unable to connect to {}! {}", locator, e),
+            let is_multicast = match inspector.is_multicast(locator).await {
+                Ok(im) => im,
+                Err(e) => {
+                    log::trace!("{} {} on {}: {}", ERR, zid, locator, e);
+                    continue;
+                }
+            };
+
+            let endpoint = locator.to_owned().into();
+            let manager = self.manager();
+            if is_multicast {
+                match manager
+                    .open_transport_multicast(endpoint)
+                    .timeout(CONNECTION_TIMEOUT)
+                    .await
+                {
+                    Ok(Ok(transport)) => {
+                        log::debug!(
+                            "Successfully connected to newly scouted peer: {:?}",
+                            transport
+                        );
+                        return true;
+                    }
+                    Ok(Err(e)) => log::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                    Err(e) => log::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                }
+            } else {
+                match manager
+                    .open_transport_unicast(endpoint)
+                    .timeout(CONNECTION_TIMEOUT)
+                    .await
+                {
+                    Ok(Ok(transport)) => {
+                        log::debug!(
+                            "Successfully connected to newly scouted peer: {:?}",
+                            transport
+                        );
+                        return true;
+                    }
+                    Ok(Err(e)) => log::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                    Err(e) => log::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                }
             }
         }
-        None
+
+        log::warn!(
+            "Unable to connect to any locator of scouted peer {}: {:?}",
+            zid,
+            locators
+        );
+        false
     }
 
     pub async fn connect_peer(&self, zid: &ZenohId, locators: &[Locator]) {
-        if zid != &self.manager().zid() {
-            if self.manager().get_transport(zid).is_none() {
-                log::debug!("Try to connect to peer {} via any of {:?}", zid, locators);
-                if let Some(transport) = self.connect(locators).await {
-                    log::debug!(
-                        "Successfully connected to newly scouted peer {} via {:?}",
-                        zid,
-                        transport
-                    );
-                } else {
-                    log::warn!(
-                        "Unable to connect any locator of scouted peer {}: {:?}",
-                        zid,
-                        locators
-                    );
+        let manager = self.manager();
+        if zid != &manager.zid() {
+            let has_unicast = manager.get_transport_unicast(zid).await.is_some();
+            let has_multicast = {
+                let mut hm = manager.get_transport_multicast(zid).await.is_some();
+                for t in manager.get_transports_multicast().await {
+                    if let Ok(l) = t.get_link() {
+                        if let Some(g) = l.group.as_ref() {
+                            hm |= locators.iter().any(|l| l == g);
+                        }
+                    }
                 }
+                hm
+            };
+
+            if !has_unicast && !has_multicast {
+                log::debug!("Try to connect to peer {} via any of {:?}", zid, locators);
+                let _ = self.connect(zid, locators).await;
             } else {
                 log::trace!("Already connected scouted peer: {}", zid);
             }
@@ -641,15 +731,9 @@ impl Runtime {
             Runtime::scout(sockets, what, addr, move |hello| async move {
                 log::info!("Found {:?}", hello);
                 if !hello.locators.is_empty() {
-                    if let Some(transport) = self.connect(&hello.locators).await {
-                        log::debug!(
-                            "Successfully connected to newly scouted {:?} via {:?}",
-                            hello,
-                            transport
-                        );
+                    if self.connect(&hello.zid, &hello.locators).await {
                         return Loop::Break;
                     }
-                    log::warn!("Unable to connect to scouted {:?}", hello);
                 } else {
                     log::warn!("Received Hello with no locators: {:?}", hello);
                 }

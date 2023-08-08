@@ -33,8 +33,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
-    TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 
 const MSG_COUNT: usize = 1_000;
@@ -73,6 +73,13 @@ impl TransportEventHandler for SHPeer {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         let mh = Arc::new(MHPeer::new(self.count.clone()));
         Ok(mh)
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -160,7 +167,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
                 println!("[Transport Peer 01c] => Waiting for opening transport");
                 // Syncrhonize before opening the transports
                 ztimeout!(cc_barow.wait());
-                let res = ztimeout!(c_p01m.open_transport(c_end.clone()));
+                let res = ztimeout!(c_p01m.open_transport_unicast(c_end.clone()));
                 println!("[Transport Peer 01d] => Opening transport with {c_end:?}: {res:?}");
                 assert!(res.is_ok());
 
@@ -174,8 +181,11 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         println!("[Transport Peer 01e] => Waiting... OK");
 
         // Verify that the transport has been correctly open
-        assert_eq!(peer01_manager.get_transports().len(), 1);
-        let s02 = peer01_manager.get_transport(&c_zid02).unwrap();
+        assert_eq!(peer01_manager.get_transports_unicast().await.len(), 1);
+        let s02 = peer01_manager
+            .get_transport_unicast(&c_zid02)
+            .await
+            .unwrap();
         assert_eq!(
             s02.get_links().unwrap().len(),
             c_end01.len() + c_end02.len()
@@ -258,7 +268,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
                 // Syncrhonize before opening the transports
                 ztimeout!(cc_barow.wait());
 
-                let res = ztimeout!(c_p02m.open_transport(c_end.clone()));
+                let res = ztimeout!(c_p02m.open_transport_unicast(c_end.clone()));
                 println!("[Transport Peer 02d] => Opening transport with {c_end:?}: {res:?}");
                 assert!(res.is_ok());
 
@@ -273,10 +283,13 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         // Verify that the transport has been correctly open
         println!(
             "[Transport Peer 02e] => Transports: {:?}",
-            peer02_manager.get_transports()
+            peer02_manager.get_transports_unicast().await
         );
-        assert_eq!(peer02_manager.get_transports().len(), 1);
-        let s01 = peer02_manager.get_transport(&c_zid01).unwrap();
+        assert_eq!(peer02_manager.get_transports_unicast().await.len(), 1);
+        let s01 = peer02_manager
+            .get_transport_unicast(&c_zid01)
+            .await
+            .unwrap();
         assert_eq!(
             s01.get_links().unwrap().len(),
             c_end01.len() + c_end02.len()

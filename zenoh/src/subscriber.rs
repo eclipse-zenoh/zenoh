@@ -23,8 +23,7 @@ use std::future::Ready;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
-use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::Mode;
+use zenoh_protocol::network::declare::{subscriber::ext::SubscriberInfo, Mode};
 
 /// The subscription mode.
 pub use zenoh_protocol::zenoh::SubMode;

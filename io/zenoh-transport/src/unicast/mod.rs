@@ -25,7 +25,7 @@ use super::common;
 use super::common::stats::stats_struct;
 use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "transport_multilink")]
-use crate::establishment::ext::auth::ZPublicKey;
+use establishment::ext::auth::ZPublicKey;
 pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};
@@ -122,9 +122,9 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub fn get_sn_resolution(&self) -> ZResult<u64> {
+    pub fn get_sn_resolution(&self) -> ZResult<Bits> {
         let transport = self.get_inner()?;
-        Ok(transport.get_sn_resolution().mask())
+        Ok(transport.get_sn_resolution())
     }
 
     #[cfg(feature = "shared-memory")]
@@ -234,7 +234,7 @@ impl fmt::Debug for TransportUnicast {
                 f.debug_struct("Transport Unicast")
                     .field("zid", &transport.get_zid())
                     .field("whatami", &transport.get_whatami())
-                    .field("sn_resolution", &transport.get_sn_resolution())
+                    .field("resolution", &transport.get_sn_resolution())
                     .field("is_qos", &transport.is_qos())
                     .field("is_shm", &is_shm)
                     .field("links", &transport.get_links())

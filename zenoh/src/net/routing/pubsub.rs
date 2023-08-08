@@ -17,24 +17,28 @@ use super::resource::{DataRoutes, Direction, PullCaches, Resource, Route, Sessio
 use super::router::{RoutingExpr, Tables, TablesLock};
 use crate::prelude::sync::KeyExpr;
 use petgraph::graph::NodeIndex;
+use zenoh_protocol::network::DeclareInterest;
+use zenoh_protocol::network::declare::Interest;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::convert::TryFrom;
 use std::sync::RwLock;
 use std::sync::{Arc, RwLockReadGuard, RwLockWriteGuard};
 use zenoh_core::zread;
-use zenoh_protocol::core::key_expr::keyexpr;
-use zenoh_protocol::network::common::ext::WireExprType;
-use zenoh_protocol::network::declare::ext;
-use zenoh_protocol::network::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::{
-    Declare, DeclareBody, DeclareInterest, DeclareSubscriber, Interest, Mode, Push,
-    UndeclareSubscriber,
-};
-use zenoh_protocol::zenoh_new::PushBody;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, Reliability, WhatAmI, WireExpr, ZenohId},
+    core::{
+        key_expr::{keyexpr, OwnedKeyExpr},
+        Reliability, WhatAmI, WireExpr, ZenohId,
+    },
+    network::{
+        declare::{
+            common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
+            DeclareSubscriber, Mode, UndeclareSubscriber,
+        },
+        Push,
+    },
     zenoh::RoutingContext,
+    zenoh_new::PushBody,
 };
 use zenoh_sync::get_mut_unchecked;
 
@@ -1443,6 +1447,16 @@ fn compute_data_route(
             }
         }
     }
+    for mcast_group in &tables.mcast_groups {
+        route.insert(
+            mcast_group.id,
+            (
+                mcast_group.clone(),
+                expr.full_expr().to_string().into(),
+                None,
+            ),
+        );
+    }
     Arc::new(route)
 }
 
@@ -1595,7 +1609,7 @@ pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) 
     }
 }
 
-fn compute_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
+pub(super) fn compute_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
     compute_data_routes(tables, res);
     let res = get_mut_unchecked(res);
     for child in res.childs.values_mut() {
@@ -1777,7 +1791,12 @@ fn should_route(
     outface: &Arc<FaceState>,
     expr: &mut RoutingExpr,
 ) -> bool {
-    if src_face.id != outface.id {
+    if src_face.id != outface.id
+        && match (src_face.mcast_group.as_ref(), outface.mcast_group.as_ref()) {
+            (Some(l), Some(r)) => l != r,
+            _ => true,
+        }
+    {
         let dst_master = tables.whatami != WhatAmI::Router
             || outface.whatami != WhatAmI::Peer
             || tables.peers_net.is_none()
@@ -1891,7 +1910,15 @@ pub fn full_reentrant_route_data(
                         } else {
                             drop(tables);
                             for (outface, key_expr, context) in route.values() {
-                                if face.id != outface.id {
+                                if face.id != outface.id
+                                    && match (
+                                        face.mcast_group.as_ref(),
+                                        outface.mcast_group.as_ref(),
+                                    ) {
+                                        (Some(l), Some(r)) => l != r,
+                                        _ => true,
+                                    }
+                                {
                                     outface.primitives.send_push(Push {
                                         wire_expr: key_expr.into(),
                                         ext_qos: ext::QoSType::default(),

@@ -15,11 +15,15 @@ use super::router::*;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
-use zenoh_protocol::core::{ExprId, WhatAmI, ZenohId};
-use zenoh_protocol::network::queryable::ext::QueryableInfo;
-use zenoh_protocol::network::{Mapping, Push, Request, RequestId, Response, ResponseFinal};
 use zenoh_protocol::zenoh_new::RequestBody;
-use zenoh_transport::Primitives;
+use zenoh_protocol::{
+    core::{ExprId, WhatAmI, ZenohId},
+    network::{
+        declare::queryable::ext::QueryableInfo, Mapping, Push, Request, RequestId, Response,
+        ResponseFinal,
+    },
+};
+use zenoh_transport::{Primitives, TransportMulticast};
 
 pub struct FaceState {
     pub(super) id: usize,
@@ -36,6 +40,7 @@ pub struct FaceState {
     pub(super) remote_qabls: HashSet<Arc<Resource>>,
     pub(super) next_qid: RequestId,
     pub(super) pending_queries: HashMap<RequestId, Arc<Query>>,
+    pub(super) mcast_group: Option<TransportMulticast>,
 }
 
 impl FaceState {
@@ -45,6 +50,7 @@ impl FaceState {
         whatami: WhatAmI,
         primitives: Arc<dyn Primitives + Send + Sync>,
         link_id: usize,
+        mcast_group: Option<TransportMulticast>,
     ) -> Arc<FaceState> {
         Arc::new(FaceState {
             id,
@@ -61,6 +67,7 @@ impl FaceState {
             remote_qabls: HashSet::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
+            mcast_group,
         })
     }
 

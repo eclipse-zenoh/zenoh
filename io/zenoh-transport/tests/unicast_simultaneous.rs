@@ -32,8 +32,8 @@ mod tests {
     };
     use zenoh_result::ZResult;
     use zenoh_transport::{
-        TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
-        TransportUnicast,
+        TransportEventHandler, TransportManager, TransportMulticast,
+        TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -100,6 +100,13 @@ mod tests {
 
             let mh = Arc::new(MHPeer::new(self.count.clone()));
             Ok(mh)
+        }
+
+        fn new_multicast(
+            &self,
+            _transport: TransportMulticast,
+        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+            panic!();
         }
     }
 
@@ -185,13 +192,13 @@ mod tests {
             // These open should succeed
             for e in c_ep02.iter() {
                 println!("[Simultaneous 01c] => Opening transport with {e:?}...");
-                let _ = ztimeout!(c_p01m.open_transport(e.clone())).unwrap();
+                let _ = ztimeout!(c_p01m.open_transport_unicast(e.clone())).unwrap();
             }
 
             // These open should fails
             for e in c_ep02.iter() {
                 println!("[Simultaneous 01d] => Exceeding transport with {e:?}...");
-                let res = ztimeout!(c_p01m.open_transport(e.clone()));
+                let res = ztimeout!(c_p01m.open_transport_unicast(e.clone()));
                 assert!(res.is_err());
             }
 
@@ -203,9 +210,9 @@ mod tests {
                     task::sleep(SLEEP).await;
                     println!(
                         "[Simultaneous 01e] => Transports: {:?}",
-                        peer01_manager.get_transports()
+                        peer01_manager.get_transports_unicast().await
                     );
-                    tp02 = peer01_manager.get_transport(&peer_id02);
+                    tp02 = peer01_manager.get_transport_unicast(&peer_id02).await;
                 }
 
                 tp02.unwrap()
@@ -240,13 +247,13 @@ mod tests {
             // These open should succeed
             for e in c_ep01.iter() {
                 println!("[Simultaneous 02c] => Opening transport with {e:?}...");
-                let _ = ztimeout!(c_p02m.open_transport(e.clone())).unwrap();
+                let _ = ztimeout!(c_p02m.open_transport_unicast(e.clone())).unwrap();
             }
 
             // These open should fails
             for e in c_ep01.iter() {
                 println!("[Simultaneous 02d] => Exceeding transport with {e:?}...");
-                let res = ztimeout!(c_p02m.open_transport(e.clone()));
+                let res = ztimeout!(c_p02m.open_transport_unicast(e.clone()));
                 assert!(res.is_err());
             }
 
@@ -259,9 +266,9 @@ mod tests {
                     task::sleep(SLEEP).await;
                     println!(
                         "[Simultaneous 02e] => Transports: {:?}",
-                        peer02_manager.get_transports()
+                        peer02_manager.get_transports_unicast().await
                     );
-                    tp01 = peer02_manager.get_transport(&peer_id01);
+                    tp01 = peer02_manager.get_transport_unicast(&peer_id01).await;
                 }
                 tp01.unwrap()
             });

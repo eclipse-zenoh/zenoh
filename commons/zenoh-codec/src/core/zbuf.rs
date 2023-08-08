@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded};
+use crate::{LCodec, RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
@@ -21,6 +21,12 @@ use zenoh_buffers::{
 // ZBuf bounded
 macro_rules! zbuf_impl {
     ($bound:ty) => {
+        impl LCodec<&ZBuf> for Zenoh080Bounded<$bound> {
+            fn w_len(self, message: &ZBuf) -> usize {
+                message.len()
+            }
+        }
+
         impl<W> WCodec<&ZBuf, &mut W> for Zenoh080Bounded<$bound>
         where
             W: Writer,
@@ -83,6 +89,13 @@ where
     }
 }
 
+impl LCodec<&ZBuf> for Zenoh080 {
+    fn w_len(self, message: &ZBuf) -> usize {
+        let zodec = Zenoh080Bounded::<usize>::new();
+        zodec.w_len(message)
+    }
+}
+
 // ZBuf sliced
 #[cfg(feature = "shared-memory")]
 mod shm {
@@ -95,6 +108,16 @@ mod shm {
 
     macro_rules! zbuf_sliced_impl {
         ($bound:ty) => {
+            impl LCodec<&ZBuf> for Zenoh080Sliced<$bound> {
+                fn w_len(self, message: &ZBuf) -> usize {
+                    if self.is_sliced {
+                        message.zslices().fold(0, |acc, x| acc + 1 + x.len())
+                    } else {
+                        self.codec.w_len(message)
+                    }
+                }
+            }
+
             impl<W> WCodec<&ZBuf, &mut W> for Zenoh080Sliced<$bound>
             where
                 W: Writer,

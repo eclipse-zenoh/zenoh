@@ -21,8 +21,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportPeer, TransportPeerEventHandler,
-    TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -46,8 +46,15 @@ impl TransportEventHandler for SH {
         _peer: TransportPeer,
         _transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        let arc = Arc::new(SC::default());
+        let arc = Arc::new(SC);
         Ok(arc)
+    }
+
+    fn new_multicast(
+        &self,
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+        panic!();
     }
 }
 
@@ -74,7 +81,7 @@ async fn run(endpoints: &[EndPoint]) {
     let sm = TransportManager::builder()
         .whatami(WhatAmI::Peer)
         .zid(ZenohId::try_from([1]).unwrap())
-        .build(Arc::new(SH::default()))
+        .build(Arc::new(SH))
         .unwrap();
 
     for _ in 0..RUNS {
