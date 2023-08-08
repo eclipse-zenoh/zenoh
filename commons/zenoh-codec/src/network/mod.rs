@@ -71,13 +71,24 @@ where
         let header: u8 = self.codec.read(&mut *reader)?;
 
         let codec = Zenoh080Header::new(header);
-        let body = match imsg::mid(codec.header) {
-            id::PUSH => NetworkBody::Push(codec.read(&mut *reader)?),
-            id::REQUEST => NetworkBody::Request(codec.read(&mut *reader)?),
-            id::RESPONSE => NetworkBody::Response(codec.read(&mut *reader)?),
-            id::RESPONSE_FINAL => NetworkBody::ResponseFinal(codec.read(&mut *reader)?),
-            id::DECLARE => NetworkBody::Declare(codec.read(&mut *reader)?),
-            id::OAM => NetworkBody::OAM(codec.read(&mut *reader)?),
+        codec.read(&mut *reader)
+    }
+}
+
+impl<R> RCodec<NetworkMessage, &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<NetworkMessage, Self::Error> {
+        let body = match imsg::mid(self.header) {
+            id::PUSH => NetworkBody::Push(self.read(&mut *reader)?),
+            id::REQUEST => NetworkBody::Request(self.read(&mut *reader)?),
+            id::RESPONSE => NetworkBody::Response(self.read(&mut *reader)?),
+            id::RESPONSE_FINAL => NetworkBody::ResponseFinal(self.read(&mut *reader)?),
+            id::DECLARE => NetworkBody::Declare(self.read(&mut *reader)?),
+            id::OAM => NetworkBody::OAM(self.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 

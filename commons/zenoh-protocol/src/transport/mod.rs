@@ -29,6 +29,8 @@ pub use keepalive::KeepAlive;
 pub use oam::Oam;
 pub use open::{OpenAck, OpenSyn};
 
+use crate::network::NetworkMessage;
+
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
 ///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
 ///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
@@ -47,6 +49,19 @@ pub mod id {
     pub const FRAME: u8 = 0x05;
     pub const FRAGMENT: u8 = 0x06;
     pub const JOIN: u8 = 0x07; // For multicast communications only
+}
+
+#[cfg(feature = "shared-memory")]
+#[derive(Debug)]
+pub struct TransportMessageShm {
+    pub body: TransportBodyShm,
+}
+#[cfg(feature = "shared-memory")]
+#[derive(Debug)]
+pub enum TransportBodyShm {
+    Close(Close),
+    KeepAlive(KeepAlive),
+    Network(Box<NetworkMessage>),
 }
 
 pub type TransportSn = u32;

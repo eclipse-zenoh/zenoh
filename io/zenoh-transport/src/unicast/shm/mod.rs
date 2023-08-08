@@ -14,6 +14,5 @@
 pub(crate) mod transport;
 
 mod link;
-mod oam_extensions;
 mod rx;
 mod tx;

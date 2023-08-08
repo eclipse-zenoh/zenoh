@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use super::transport::TransportUnicastShm;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
-use super::{oam_extensions::pack_oam_keepalive, transport::TransportUnicastShm};
 use crate::TransportExecutor;
 use async_std::prelude::FutureExt;
 use async_std::task;
@@ -24,18 +24,18 @@ use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::{writer::HasWriter, ZSlice};
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::{network::NetworkMessage, transport::BatchSize};
+use zenoh_protocol::transport::{BatchSize, KeepAlive, TransportBodyShm, TransportMessageShm};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::RecyclingObjectPool;
 
-pub(crate) async fn send_with_link(link: &LinkUnicast, msg: NetworkMessage) -> ZResult<()> {
+pub(crate) async fn send_with_link(link: &LinkUnicast, msg: TransportMessageShm) -> ZResult<()> {
     if link.is_streamed() {
         let mut buffer = vec![0, 0];
         let codec = Zenoh080::new();
         let mut writer = buffer.writer();
         codec
             .write(&mut writer, &msg)
-            .map_err(|_| zerror!("Error serializing message {}", msg))?;
+            .map_err(|_| zerror!("Error serializing message {:?}", msg))?;
 
         let len = buffer.len() - 2;
         let le = BatchSize::to_le_bytes(len.try_into()?);
@@ -50,7 +50,7 @@ pub(crate) async fn send_with_link(link: &LinkUnicast, msg: NetworkMessage) -> Z
         let mut writer = buffer.writer();
         codec
             .write(&mut writer, &msg)
-            .map_err(|_| zerror!("Error serializing message {}", msg))?;
+            .map_err(|_| zerror!("Error serializing message {:?}", msg))?;
 
         link.write_all(&buffer).await?;
     }
@@ -65,7 +65,7 @@ pub(crate) async fn send_with_link(link: &LinkUnicast, msg: NetworkMessage) -> Z
 }
 
 impl TransportUnicastShm {
-    pub(super) fn send(&self, msg: NetworkMessage) -> ZResult<()> {
+    pub(super) fn send(&self, msg: TransportMessageShm) -> ZResult<()> {
         async_std::task::block_on(async move {
             let guard = zasyncread!(self.link);
             send_with_link(&guard, msg).await
@@ -136,9 +136,14 @@ async fn keepalive_task(
 ) -> ZResult<()> {
     loop {
         async_std::task::sleep(keep_alive).await;
+
+        let keepailve = TransportMessageShm {
+            body: TransportBodyShm::KeepAlive(KeepAlive),
+        };
+
         let _ = send_with_link(
             &link,
-            pack_oam_keepalive(),
+            keepailve,
             #[cfg(feature = "stats")]
             &stats,
         )
@@ -185,7 +190,7 @@ async fn rx_task_stream(
 
         // Deserialize all the messages from the current ZBuf
         let zslice = ZSlice::make(Arc::new(buffer), 0, bytes).unwrap();
-        transport.read_messages(zslice, &link)?;
+        transport.read_messages(zslice, &link).await?;
     }
 }
 
@@ -219,7 +224,7 @@ async fn rx_task_dgram(
 
         // Deserialize all the messages from the current ZBuf
         let zslice = ZSlice::make(Arc::new(buffer), 0, bytes).unwrap();
-        transport.read_messages(zslice, &link)?;
+        transport.read_messages(zslice, &link).await?;
     }
 }
 

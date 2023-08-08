@@ -25,8 +25,6 @@ pub mod id {
     use super::OamId;
 
     pub const OAM_LINKSTATE: OamId = 0x0001;
-    pub const OAM_KEEPALIVE: OamId = 0x0002;
-    pub const OAM_CLOSE: OamId = 0x0003;
 }
 
 /// ```text

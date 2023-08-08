@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::link::send_with_link;
-use super::oam_extensions::pack_oam_close;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
 use crate::transport_unicast_inner::TransportUnicastTrait;
@@ -36,6 +35,8 @@ use zenoh_core::{zasynclock, zasyncread, zread, zwrite};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
+use zenoh_protocol::transport::TransportBodyShm;
+use zenoh_protocol::transport::TransportMessageShm;
 use zenoh_protocol::transport::{Close, TransportSn};
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -250,10 +251,12 @@ impl TransportUnicastTrait for TransportUnicastShm {
 
                     // Prepare and send close message on old link
                     {
-                        let close = pack_oam_close(Close {
-                            reason: 0,
-                            session: false,
-                        })?;
+                        let close = TransportMessageShm {
+                            body: TransportBodyShm::Close(Close {
+                                reason: 0,
+                                session: false,
+                            }),
+                        };
                         let _ = send_with_link(&guard, close).await;
                     };
                     // Notify the callback
@@ -302,10 +305,12 @@ impl TransportUnicastTrait for TransportUnicastShm {
     async fn close_link(&self, link: &LinkUnicast, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.config.zid);
 
-        let close = pack_oam_close(Close {
-            reason,
-            session: false,
-        })?;
+        let close = TransportMessageShm {
+            body: TransportBodyShm::Close(Close {
+                reason,
+                session: false,
+            }),
+        };
         let guard = zasyncread!(self.link);
         let _ = send_with_link(&guard, close).await;
 
@@ -316,10 +321,12 @@ impl TransportUnicastTrait for TransportUnicastShm {
     async fn close(&self, reason: u8) -> ZResult<()> {
         log::trace!("Closing transport with peer: {}", self.config.zid);
 
-        let close = pack_oam_close(Close {
-            reason,
-            session: false,
-        })?;
+        let close = TransportMessageShm {
+            body: TransportBodyShm::Close(Close {
+                reason,
+                session: false,
+            }),
+        };
         let guard = zasyncread!(self.link);
         let _ = send_with_link(&guard, close).await;
 

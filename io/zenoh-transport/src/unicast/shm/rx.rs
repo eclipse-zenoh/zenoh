@@ -1,5 +1,3 @@
-use super::oam_extensions::unpack_oam_close;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -27,11 +25,8 @@ use zenoh_link::LinkUnicast;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
 use zenoh_protocol::{
-    network::{
-        oam::id::{OAM_CLOSE, OAM_KEEPALIVE},
-        NetworkMessage,
-    },
-    transport::Close,
+    network::NetworkMessage,
+    transport::{Close, TransportMessageShm},
 };
 use zenoh_result::{zerror, ZResult};
 
@@ -110,11 +105,15 @@ impl TransportUnicastShm {
         Ok(())
     }
 
-    pub(super) fn read_messages(&self, mut zslice: ZSlice, link: &LinkUnicast) -> ZResult<()> {
+    pub(super) async fn read_messages(
+        &self,
+        mut zslice: ZSlice,
+        link: &LinkUnicast,
+    ) -> ZResult<()> {
         let codec = Zenoh080::new();
         let mut reader = zslice.reader();
         while reader.can_read() {
-            let msg: NetworkMessage = codec
+            let msg: TransportMessageShm = codec
                 .read(&mut reader)
                 .map_err(|_| zerror!("{}: decoding error", link))?;
 
@@ -126,18 +125,12 @@ impl TransportUnicastShm {
             }
 
             match msg.body {
-                zenoh_protocol::network::NetworkBody::OAM(ref oam) => match oam.id {
-                    OAM_KEEPALIVE => {}
-                    OAM_CLOSE => {
-                        let oam_close = unpack_oam_close(oam)?;
-                        async_std::task::block_on(self.handle_close(link, oam_close))?;
-                    }
-                    _ => {
-                        self.trigger_callback(msg)?;
-                    }
-                },
-                _ => {
-                    self.trigger_callback(msg)?;
+                zenoh_protocol::transport::TransportBodyShm::Close(close) => {
+                    self.handle_close(link, close).await?
+                }
+                zenoh_protocol::transport::TransportBodyShm::KeepAlive(_) => {}
+                zenoh_protocol::transport::TransportBodyShm::Network(msg) => {
+                    self.trigger_callback(*msg)?
                 }
             }
         }

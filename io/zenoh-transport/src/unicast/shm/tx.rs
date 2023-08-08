@@ -14,16 +14,15 @@
 use super::transport::TransportUnicastShm;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
-use zenoh_protocol::network::NetworkMessage;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
+use zenoh_protocol::{
+    network::NetworkMessage,
+    transport::{TransportBodyShm, TransportMessageShm},
+};
 use zenoh_result::{bail, ZResult};
 
 impl TransportUnicastShm {
-    fn schedule_on_link(&self, msg: NetworkMessage) -> ZResult<()> {
-        self.send(msg)
-    }
-
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
@@ -63,7 +62,10 @@ impl TransportUnicastShm {
             ZenohBody::LinkStateList(_) => self.stats.inc_tx_z_linkstate_msgs(1),
         }
 
-        let res = self.schedule_on_link(msg);
+        let msg = TransportMessageShm {
+            body: TransportBodyShm::Network(Box::new(msg)),
+        };
+        let res = self.send(msg);
 
         #[cfg(feature = "stats")]
         if res {
