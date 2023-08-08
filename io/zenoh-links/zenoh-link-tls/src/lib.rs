@@ -23,7 +23,8 @@ use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 use config::{
     TLS_CLIENT_AUTH, TLS_CLIENT_CERTIFICATE_FILE, TLS_CLIENT_PRIVATE_KEY_FILE,
-    TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_PRIVATE_KEY_FILE,
+    TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_NAME_VERIFICATION,
+    TLS_SERVER_PRIVATE_KEY_FILE,
 };
 use zenoh_cfg_properties::Properties;
 use zenoh_config::{Config, ZN_FALSE, ZN_TRUE};
@@ -33,6 +34,7 @@ use zenoh_protocol::core::{endpoint::Address, Locator};
 use zenoh_result::{bail, zerror, ZResult};
 
 mod unicast;
+mod verify;
 pub use unicast::*;
 
 // Default MTU (TLS PDU) in bytes.
@@ -99,6 +101,12 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
                 tls_client_certificate.into(),
             );
         }
+        if let Some(server_name_verification) = c.server_name_verification() {
+            match server_name_verification {
+                true => properties.insert(TLS_SERVER_NAME_VERIFICATION.into(), ZN_TRUE.into()),
+                false => properties.insert(TLS_SERVER_NAME_VERIFICATION.into(), ZN_FALSE.into()),
+            };
+        }
 
         Ok(properties)
     }
@@ -136,6 +144,9 @@ pub mod config {
 
     pub const TLS_CLIENT_AUTH: &str = ZN_TLS_CLIENT_AUTH_STR;
     pub const TLS_CLIENT_AUTH_DEFAULT: &str = ZN_TLS_CLIENT_AUTH_DEFAULT;
+
+    pub const TLS_SERVER_NAME_VERIFICATION: &str = ZN_TLS_SERVER_NAME_VERIFICATION_STR;
+    pub const TLS_SERVER_NAME_VERIFICATION_DEFAULT: &str = ZN_TLS_SERVER_NAME_VERIFICATION_DEFAULT;
 }
 
 pub async fn get_tls_addr(address: &Address<'_>) -> ZResult<SocketAddr> {

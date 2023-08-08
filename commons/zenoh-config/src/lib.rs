@@ -282,6 +282,7 @@ validated_struct::validator! {
                     client_auth: Option<bool>,
                     client_private_key: Option<String>,
                     client_certificate: Option<String>,
+                    server_name_verification: Option<bool>
                 },
                 pub compression: #[derive(Default)]
                 /// **Experimental** compression feature.

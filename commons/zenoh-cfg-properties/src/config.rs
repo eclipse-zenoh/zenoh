@@ -343,24 +343,15 @@ pub const ZN_MAX_SESSIONS_MULTICAST_KEY: u64 = 0x84;
 pub const ZN_MAX_SESSIONS_MULTICAST_STR: &str = "max_sessions_multicast";
 pub const ZN_MAX_SESSIONS_MULTICAST_DEFAULT: &str = "1024";
 
-/// The file path containing the TLS server private key.
-/// String key: `"tls_client_private_key"`.
-/// Accepted values: `<file path>`.
-/// Default value: None.
+/// The file path containing the TLS client private key.
 pub const ZN_TLS_CLIENT_PRIVATE_KEY_KEY: u64 = 0x85;
 pub const ZN_TLS_CLIENT_PRIVATE_KEY_STR: &str = "tls_client_private_key";
 
-/// The file path containing the TLS server certificate.
-/// String key: `"tls_client_private_key"`.
-/// Accepted values: `<file path>`.
-/// Default value: None.
+/// The file path containing the TLS client certificate.
 pub const ZN_TLS_CLIENT_CERTIFICATE_KEY: u64 = 0x86;
 pub const ZN_TLS_CLIENT_CERTIFICATE_STR: &str = "tls_client_certificate";
 
-/// The file path containing the TLS server certificate.
-/// String key: `"tls_private_key"`.
-/// Accepted values: `"true"`, `"false"`.
-/// Default value: `"false"`.
+/// Whether to use tls with client authentication
 pub const ZN_TLS_CLIENT_AUTH_KEY: u64 = 0x87;
 pub const ZN_TLS_CLIENT_AUTH_STR: &str = "tls_client_auth";
 pub const ZN_TLS_CLIENT_AUTH_DEFAULT: &str = ZN_FALSE;
@@ -372,3 +363,8 @@ pub const ZN_TLS_CLIENT_AUTH_DEFAULT: &str = ZN_FALSE;
 pub const ZN_QUERIES_DEFAULT_TIMEOUT_KEY: u64 = 0x88;
 pub const ZN_QUERIES_DEFAULT_TIMEOUT_STR: &str = "local_routing";
 pub const ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT: &str = "10000";
+
+/// Whether or not to verify that servers have certs valid for their ip or common name
+pub const ZN_TLS_SERVER_NAME_VERIFICATION_KEY: u64 = 0x89;
+pub const ZN_TLS_SERVER_NAME_VERIFICATION_STR: &str = "server_name_verification";
+pub const ZN_TLS_SERVER_NAME_VERIFICATION_DEFAULT: &str = ZN_TRUE;

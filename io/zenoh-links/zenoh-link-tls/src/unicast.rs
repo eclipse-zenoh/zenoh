@@ -12,8 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    config::*, get_tls_addr, get_tls_host, get_tls_server_name, TLS_ACCEPT_THROTTLE_TIME,
-    TLS_DEFAULT_MTU, TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
+    config::*, get_tls_addr, get_tls_host, get_tls_server_name,
+    verify::WebPkiVerifierAnyServerName, TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU,
+    TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
 use async_rustls::rustls::server::AllowAnyAuthenticatedClient;
 use async_rustls::rustls::version::TLS13;
@@ -598,9 +599,18 @@ struct TlsClientConfig {
 
 impl TlsClientConfig {
     pub async fn new(config: &Config<'_>) -> ZResult<TlsClientConfig> {
-        let mut client_auth: bool = TLS_CLIENT_AUTH_DEFAULT.parse().unwrap();
-        if let Some(value) = config.get(TLS_CLIENT_AUTH) {
-            client_auth = value.parse()?
+        let client_auth: bool = config
+            .get(TLS_CLIENT_AUTH)
+            .unwrap_or(TLS_CLIENT_AUTH_DEFAULT)
+            .parse()?;
+
+        let server_name_verification: bool = config
+            .get(TLS_SERVER_NAME_VERIFICATION)
+            .unwrap_or(TLS_SERVER_NAME_VERIFICATION_DEFAULT)
+            .parse()?;
+
+        if !server_name_verification {
+            log::warn!("Skipping name verification of servers");
         }
 
         // Allows mixed user-generated CA and webPKI CA
@@ -611,7 +621,7 @@ impl TlsClientConfig {
 
         if let Some(custom_root_cert) = load_trust_anchors(config)? {
             log::debug!("Loading user-generated certificates.");
-            root_cert_store.add_server_trust_anchors(custom_root_cert.roots.into_iter());
+            root_cert_store.add_trust_anchors(custom_root_cert.roots.into_iter());
         }
 
         let cc = if client_auth {
@@ -640,19 +650,37 @@ impl TlsClientConfig {
                 bail!("No private key found");
             }
 
-            ClientConfig::builder()
+            let builder = ClientConfig::builder()
                 .with_safe_default_cipher_suites()
                 .with_safe_default_kx_groups()
                 .with_protocol_versions(&[&TLS13])
-                .unwrap()
-                .with_root_certificates(root_cert_store)
-                .with_single_cert(certs, keys.remove(0))
-                .expect("bad certificate/key")
+                .expect("Config parameters should be valid");
+
+            if server_name_verification {
+                builder
+                    .with_root_certificates(root_cert_store)
+                    .with_client_auth_cert(certs, keys.remove(0))
+            } else {
+                builder
+                    .with_custom_certificate_verifier(Arc::new(WebPkiVerifierAnyServerName::new(
+                        root_cert_store,
+                    )))
+                    .with_client_auth_cert(certs, keys.remove(0))
+            }
+            .expect("bad certificate/key")
         } else {
-            ClientConfig::builder()
-                .with_safe_defaults()
-                .with_root_certificates(root_cert_store)
-                .with_no_client_auth()
+            let builder = ClientConfig::builder().with_safe_defaults();
+            if server_name_verification {
+                builder
+                    .with_root_certificates(root_cert_store)
+                    .with_no_client_auth()
+            } else {
+                builder
+                    .with_custom_certificate_verifier(Arc::new(WebPkiVerifierAnyServerName::new(
+                        root_cert_store,
+                    )))
+                    .with_no_client_auth()
+            }
         };
         Ok(TlsClientConfig { client_config: cc })
     }
@@ -726,7 +754,7 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
                 ta.name_constraints,
             )
         });
-        root_cert_store.add_server_trust_anchors(trust_anchors.into_iter());
+        root_cert_store.add_trust_anchors(trust_anchors.into_iter());
         return Ok(Some(root_cert_store));
     }
     if let Some(filename) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
@@ -740,7 +768,7 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
                 ta.name_constraints,
             )
         });
-        root_cert_store.add_server_trust_anchors(trust_anchors.into_iter());
+        root_cert_store.add_trust_anchors(trust_anchors.into_iter());
         return Ok(Some(root_cert_store));
     }
     Ok(None)
@@ -748,7 +776,7 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
 
 fn load_default_webpki_certs() -> RootCertStore {
     let mut root_cert_store = RootCertStore::empty();
-    root_cert_store.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+    root_cert_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
         OwnedTrustAnchor::from_subject_spki_name_constraints(
             ta.subject,
             ta.spki,
