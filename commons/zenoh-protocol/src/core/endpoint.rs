@@ -125,7 +125,7 @@ impl Parameters {
 
 // Protocol
 #[repr(transparent)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Protocol<'a>(pub(super) &'a str);
 
 impl<'a> Protocol<'a> {
@@ -146,8 +146,14 @@ impl fmt::Display for Protocol<'_> {
     }
 }
 
+impl fmt::Debug for Protocol<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash)]
 pub struct ProtocolMut<'a>(&'a mut EndPoint);
 
 impl<'a> ProtocolMut<'a> {
@@ -175,9 +181,15 @@ impl fmt::Display for ProtocolMut<'_> {
     }
 }
 
+impl fmt::Debug for ProtocolMut<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 // Address
 #[repr(transparent)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Address<'a>(pub(super) &'a str);
 
 impl<'a> Address<'a> {
@@ -198,8 +210,14 @@ impl fmt::Display for Address<'_> {
     }
 }
 
+impl fmt::Debug for Address<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash)]
 pub struct AddressMut<'a>(&'a mut EndPoint);
 
 impl<'a> AddressMut<'a> {
@@ -227,9 +245,15 @@ impl fmt::Display for AddressMut<'_> {
     }
 }
 
+impl fmt::Debug for AddressMut<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 // Metadata
 #[repr(transparent)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Metadata<'a>(pub(super) &'a str);
 
 impl<'a> Metadata<'a> {
@@ -262,8 +286,14 @@ impl fmt::Display for Metadata<'_> {
     }
 }
 
+impl fmt::Debug for Metadata<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash)]
 pub struct MetadataMut<'a>(&'a mut EndPoint);
 
 impl<'a> MetadataMut<'a> {
@@ -328,9 +358,15 @@ impl fmt::Display for MetadataMut<'_> {
     }
 }
 
+impl fmt::Debug for MetadataMut<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 // Config
 #[repr(transparent)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Config<'a>(pub(super) &'a str);
 
 impl<'a> Config<'a> {
@@ -363,8 +399,14 @@ impl fmt::Display for Config<'_> {
     }
 }
 
+impl fmt::Debug for Config<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 #[repr(transparent)]
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash)]
 pub struct ConfigMut<'a>(&'a mut EndPoint);
 
 impl<'a> ConfigMut<'a> {
@@ -428,8 +470,15 @@ impl fmt::Display for ConfigMut<'_> {
         f.write_str(self.as_str())
     }
 }
+
+impl fmt::Debug for ConfigMut<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
 /// A `String` that respects the [`EndPoint`] canon form: `<locator>#<config>`, such that `<locator>` is a valid [`Locator`] `<config>` is of the form `<key1>=<value1>;...;<keyN>=<valueN>` where keys are alphabetically sorted.
-#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(into = "String")]
 #[serde(try_from = "String")]
 pub struct EndPoint {
@@ -525,6 +574,12 @@ impl From<Locator> for EndPoint {
 impl fmt::Display for EndPoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.inner)
+    }
+}
+
+impl fmt::Debug for EndPoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self)
     }
 }
 
