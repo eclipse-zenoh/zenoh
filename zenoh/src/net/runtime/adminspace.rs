@@ -44,6 +44,7 @@ pub struct AdminContext {
     plugins_mgr: Mutex<plugins::PluginsManager>,
     zid_str: String,
     version: String,
+    metadata: String,
 }
 
 type Handler = Arc<dyn Fn(&AdminContext, Query) + Send + Sync>;
@@ -65,6 +66,7 @@ enum PluginDiff {
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: plugins::PluginsManager, version: String) {
         let zid_str = runtime.zid.to_string();
+        let metadata = runtime.metadata.to_string();
         let root_key: OwnedKeyExpr = format!("@/router/{zid_str}").try_into().unwrap();
 
         let mut handlers: HashMap<_, Handler> = HashMap::new();
@@ -111,6 +113,7 @@ impl AdminSpace {
             plugins_mgr: Mutex::new(plugins_mgr),
             zid_str,
             version,
+            metadata,
         });
         let admin = Arc::new(AdminSpace {
             zid: runtime.zid,
@@ -530,6 +533,7 @@ fn router_data(context: &AdminContext, query: Query) {
     let json = json!({
         "zid": context.zid_str,
         "version": context.version,
+        "metadata": context.metadata,
         "locators": locators,
         "sessions": transports,
         "plugins": plugins,
