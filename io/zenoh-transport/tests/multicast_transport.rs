@@ -171,44 +171,46 @@ mod tests {
         // Open transport -> This should be accepted
         println!("Opening transport with {endpoint}");
         let _ = ztimeout!(peer01_manager.open_transport_multicast(endpoint.clone())).unwrap();
-        assert!(peer01_manager
-            .get_transport_multicast(&endpoint.to_locator())
-            .await
-            .is_some());
+        assert!(!peer01_manager.get_transports_multicast().await.is_empty());
         println!("\t{:?}", peer01_manager.get_transports_multicast().await);
 
         println!("Opening transport with {endpoint}");
         let _ = ztimeout!(peer02_manager.open_transport_multicast(endpoint.clone())).unwrap();
-        assert!(peer02_manager
-            .get_transport_multicast(&endpoint.to_locator())
-            .await
-            .is_some());
+        assert!(!peer02_manager.get_transports_multicast().await.is_empty());
         println!("\t{:?}", peer02_manager.get_transports_multicast().await);
 
         // Wait to for peer 01 and 02 to join each other
-        let peer01_transport = peer01_manager
-            .get_transport_multicast(&endpoint.to_locator())
-            .await
-            .unwrap();
         ztimeout!(async {
-            while peer01_transport.get_peers().unwrap().is_empty() {
+            while peer01_manager
+                .get_transport_multicast(&peer02_id)
+                .await
+                .is_none()
+            {
                 task::sleep(SLEEP_COUNT).await;
             }
         });
+        let peer01_transport = peer01_manager
+            .get_transport_multicast(&peer02_id)
+            .await
+            .unwrap();
         println!(
             "\tPeer01 peers: {:?}",
             peer01_transport.get_peers().unwrap()
         );
 
-        let peer02_transport = peer02_manager
-            .get_transport_multicast(&endpoint.to_locator())
-            .await
-            .unwrap();
         ztimeout!(async {
-            while peer02_transport.get_peers().unwrap().is_empty() {
+            while peer02_manager
+                .get_transport_multicast(&peer01_id)
+                .await
+                .is_none()
+            {
                 task::sleep(SLEEP_COUNT).await;
             }
         });
+        let peer02_transport = peer02_manager
+            .get_transport_multicast(&peer01_id)
+            .await
+            .unwrap();
         println!(
             "\tPeer02 peers: {:?}",
             peer02_transport.get_peers().unwrap()

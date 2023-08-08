@@ -24,6 +24,7 @@ use zenoh_config::SharedMemoryConf;
 use zenoh_config::{Config, LinkTxConf};
 use zenoh_core::zasynclock;
 use zenoh_link::*;
+use zenoh_protocol::core::ZenohId;
 use zenoh_protocol::{core::endpoint, transport::close};
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -255,10 +256,13 @@ impl TransportManager {
         super::establishment::open_link(self, link).await
     }
 
-    pub async fn get_transport_multicast(&self, locator: &Locator) -> Option<TransportMulticast> {
-        zasynclock!(self.state.multicast.transports)
-            .get(locator)
-            .map(|t| t.into())
+    pub async fn get_transport_multicast(&self, zid: &ZenohId) -> Option<TransportMulticast> {
+        for t in zasynclock!(self.state.multicast.transports).values() {
+            if t.get_peers().iter().any(|p| p.zid == *zid) {
+                return Some(t.into());
+            }
+        }
+        None
     }
 
     pub async fn get_transports_multicast(&self) -> Vec<TransportMulticast> {
@@ -291,19 +295,39 @@ impl TransportManager {
     /*************************************/
     /*              LISTENER             */
     /*************************************/
-    const ERR: &str =
-        "Listeners are not supperted on multicast endpoints. This may be caused by a wrong configuration: use `connect.endpoints` instead of `listen.endpoints` for";
     pub async fn add_listener_multicast(&self, endpoint: EndPoint) -> ZResult<Locator> {
-        bail!("{}: {}", Self::ERR, endpoint)
+        let locator = endpoint.to_locator().to_owned();
+        self.open_transport_multicast(endpoint).await?;
+        Ok(locator)
     }
 
     pub async fn del_listener_multicast(&self, endpoint: &EndPoint) -> ZResult<()> {
-        bail!("{}: {}", Self::ERR, endpoint)
+        let locator = endpoint.to_locator();
+
+        let mut guard = zasynclock!(self.state.multicast.transports);
+        let res = guard.remove(&locator);
+
+        if !guard
+            .iter()
+            .any(|(l, _)| l.protocol() == locator.protocol())
+        {
+            let _ = self
+                .del_link_manager_multicast(locator.protocol().as_str())
+                .await;
+        }
+
+        res.map(|_| ()).ok_or_else(|| {
+            let e = zerror!("Can not delete the transport for locator: {}", locator);
+            log::trace!("{}", e);
+            e.into()
+        })
     }
 
     pub async fn get_listeners_multicast(&self) -> Vec<EndPoint> {
-        // Multicast has no listeners, only locators
-        vec![]
+        zasynclock!(self.state.multicast.transports)
+            .values()
+            .map(|t| t.locator.clone().into())
+            .collect()
     }
 
     pub async fn get_locators_multicast(&self) -> Vec<Locator> {

@@ -110,11 +110,6 @@
 
   /// Configure internal transport parameters
   transport: {
-    // /// An optional whitelist of protocols to be used for accepting and opening sessions.
-    // /// If not configured, all the supported protocols are automatically whitelisted.
-    // /// The supported protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream"]
-    // /// For example, to only enable "tls" and "quic":
-    // protocols: ["tls", "quic"],
     unicast: {
       /// Timeout in milliseconds when opening a link
       accept_timeout: 10000,
@@ -128,11 +123,11 @@
     qos: {
       enabled: true,
     },
-    link: {
-      //   /// An optional whitelist of protocols to be used for accepting and opening sessions.
-      //   /// If not configured, all the supported protocols are automatically whitelisted.
-      //   /// The supported protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream"]
-      //   /// For example, to only enable "tls" and "quic":
+    link: {        
+      /// An optional whitelist of protocols to be used for accepting and opening sessions.
+      /// If not configured, all the supported protocols are automatically whitelisted.
+      /// The supported protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream"]
+      /// For example, to only enable "tls" and "quic":
       //   protocols: ["tls", "quic"],
       /// Configure the zenoh TX parameters of a link
       tx: {
