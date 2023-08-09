@@ -11,6 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+<<<<<<< HEAD:io/zenoh-transport/src/unicast/net/transport.rs
+=======
+use super::super::{TransportExecutor, TransportManager, TransportPeerEventHandler};
+use super::common::priority::{TransportPriorityRx, TransportPriorityTx};
+>>>>>>> a784ec6863246449d21a41c8a29dd701507867e9:io/zenoh-transport/src/unicast/transport.rs
 use super::link::TransportLinkUnicast;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
@@ -27,8 +32,13 @@ use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::{
+<<<<<<< HEAD:io/zenoh-transport/src/unicast/net/transport.rs
     core::{Priority, WhatAmI, ZenohId},
     transport::{Close, ConduitSn, TransportMessage, TransportSn},
+=======
+    core::{Bits, Priority, WhatAmI, ZenohId},
+    transport::{Close, PrioritySn, TransportMessage, TransportSn},
+>>>>>>> a784ec6863246449d21a41c8a29dd701507867e9:io/zenoh-transport/src/unicast/transport.rs
 };
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -59,10 +69,10 @@ pub(crate) struct TransportUnicastNet {
     pub(crate) manager: TransportManager,
     // Transport config
     pub(super) config: TransportConfigUnicast,
-    // Tx conduits
-    pub(super) conduit_tx: Arc<[TransportConduitTx]>,
-    // Rx conduits
-    pub(super) conduit_rx: Arc<[TransportConduitRx]>,
+    // Tx priorities
+    pub(super) priority_tx: Arc<[TransportPriorityTx]>,
+    // Rx priorities
+    pub(super) priority_rx: Arc<[TransportPriorityRx]>,
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Box<[TransportLinkUnicast]>>>,
     // The callback
@@ -78,35 +88,41 @@ impl TransportUnicastNet {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
+<<<<<<< HEAD:io/zenoh-transport/src/unicast/net/transport.rs
     ) -> ZResult<TransportUnicastNet> {
         let mut conduit_tx = vec![];
         let mut conduit_rx = vec![];
+=======
+    ) -> ZResult<TransportUnicastInner> {
+        let mut priority_tx = vec![];
+        let mut priority_rx = vec![];
+>>>>>>> a784ec6863246449d21a41c8a29dd701507867e9:io/zenoh-transport/src/unicast/transport.rs
 
         let num = if config.is_qos { Priority::NUM } else { 1 };
         for _ in 0..num {
-            conduit_tx.push(TransportConduitTx::make(config.sn_resolution)?);
+            priority_tx.push(TransportPriorityTx::make(config.sn_resolution)?);
         }
 
         for _ in 0..Priority::NUM {
-            conduit_rx.push(TransportConduitRx::make(
+            priority_rx.push(TransportPriorityRx::make(
                 config.sn_resolution,
                 manager.config.defrag_buff_size,
             )?);
         }
 
-        let initial_sn = ConduitSn {
+        let initial_sn = PrioritySn {
             reliable: config.tx_initial_sn,
             best_effort: config.tx_initial_sn,
         };
-        for c in conduit_tx.iter() {
+        for c in priority_tx.iter() {
             c.sync(initial_sn)?;
         }
 
         let t = TransportUnicastNet {
             manager,
             config,
-            conduit_tx: conduit_tx.into_boxed_slice().into(),
-            conduit_rx: conduit_rx.into_boxed_slice().into(),
+            priority_tx: priority_tx.into_boxed_slice().into(),
+            priority_rx: priority_rx.into_boxed_slice().into(),
             links: Arc::new(RwLock::new(vec![].into_boxed_slice())),
             callback: Arc::new(RwLock::new(None)),
             alive: Arc::new(AsyncMutex::new(false)),
@@ -169,6 +185,7 @@ impl TransportUnicastNet {
         let target = {
             let mut guard = zwrite!(self.links);
 
+<<<<<<< HEAD:io/zenoh-transport/src/unicast/net/transport.rs
             if let Some(index) = zlinkindex!(guard, link) {
                 let is_last = guard.len() == 1;
                 if is_last {
@@ -184,6 +201,23 @@ impl TransportUnicastNet {
                     Target::Link(stl.into())
                 }
             } else {
+=======
+    pub(super) fn start_tx(
+        &self,
+        link: &LinkUnicast,
+        executor: &TransportExecutor,
+        keep_alive: Duration,
+        batch_size: u16,
+    ) -> ZResult<()> {
+        let mut guard = zwrite!(self.links);
+        match zlinkgetmut!(guard, link) {
+            Some(l) => {
+                assert!(!self.priority_tx.is_empty());
+                l.start_tx(executor, keep_alive, batch_size, &self.priority_tx);
+                Ok(())
+            }
+            None => {
+>>>>>>> a784ec6863246449d21a41c8a29dd701507867e9:io/zenoh-transport/src/unicast/transport.rs
                 bail!(
                     "Can not delete Link {} with peer: {}",
                     link,

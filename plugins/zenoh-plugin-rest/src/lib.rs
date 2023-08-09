@@ -47,7 +47,9 @@ lazy_static::lazy_static! {
 fn value_to_json(value: Value) -> String {
     // @TODO: transcode to JSON when implemented in Value
     match &value.encoding {
-        p if p.starts_with(KnownEncoding::TextPlain) => {
+        p if p.starts_with(KnownEncoding::TextPlain)
+            || p.starts_with(KnownEncoding::AppXWwwFormUrlencoded) =>
+        {
             // convert to Json string for special characters escaping
             serde_json::json!(value.to_string()).to_string()
         }
@@ -56,7 +58,6 @@ fn value_to_json(value: Value) -> String {
             serde_json::json!(*Properties::from(value.to_string())).to_string()
         }
         p if p.starts_with(KnownEncoding::AppJson)
-            || p.starts_with(KnownEncoding::AppXWwwFormUrlencoded)
             || p.starts_with(KnownEncoding::AppInteger)
             || p.starts_with(KnownEncoding::AppFloat) =>
         {

@@ -110,11 +110,6 @@
 
   /// Configure internal transport parameters
   transport: {
-    // /// An optional whitelist of protocols to be used for accepting and opening sessions.
-    // /// If not configured, all the supported protocols are automatically whitelisted.
-    // /// The supported protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream"]
-    // /// For example, to only enable "tls" and "quic":
-    // protocols: ["tls", "quic"],
     unicast: {
       /// Timeout in milliseconds when opening a link
       accept_timeout: 10000,
@@ -128,11 +123,11 @@
     qos: {
       enabled: true,
     },
-    link: {
-      //   /// An optional whitelist of protocols to be used for accepting and opening sessions.
-      //   /// If not configured, all the supported protocols are automatically whitelisted.
-      //   /// The supported protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream"]
-      //   /// For example, to only enable "tls" and "quic":
+    link: {        
+      /// An optional whitelist of protocols to be used for accepting and opening sessions.
+      /// If not configured, all the supported protocols are automatically whitelisted.
+      /// The supported protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream"]
+      /// For example, to only enable "tls" and "quic":
       //   protocols: ["tls", "quic"],
       /// Configure the zenoh TX parameters of a link
       tx: {
@@ -206,6 +201,10 @@
         client_private_key: null,
         /// Path to the TLS client public certificate
         client_certificate: null,
+        // Whether or not to use server name verification, if set to false zenoh will disregard the common names of the certificates when verifying servers.
+        // This could be dangerous because your CA can have signed a server cert for foo.com, that's later being used to host a server at baz.com. If you wan't your
+        // ca to verify that the server at baz.com is actually baz.com, let this be true (default).
+        server_name_verification: null,
       },
 
       /// **Experimental** compression feature.

@@ -119,7 +119,7 @@ pub enum Field {
 }
 
 #[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Resolution(u8);
 
 impl Resolution {

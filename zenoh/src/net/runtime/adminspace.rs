@@ -413,7 +413,7 @@ fn router_data(context: &AdminContext, query: Query) {
     let locators: Vec<serde_json::Value> = transport_mgr
         .get_locators()
         .iter()
-        .map(|locator| json!(locator.to_string()))
+        .map(|locator| json!(locator.as_str()))
         .collect();
 
     // transports info
@@ -442,8 +442,7 @@ fn router_data(context: &AdminContext, query: Query) {
         }
         json
     };
-    let transports: Vec<serde_json::Value> = transport_mgr
-        .get_transports()
+    let transports: Vec<serde_json::Value> = task::block_on(transport_mgr.get_transports_unicast())
         .iter()
         .map(transport_to_json)
         .collect();

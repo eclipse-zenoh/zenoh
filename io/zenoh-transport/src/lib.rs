@@ -102,7 +102,7 @@ impl TransportMulticastEventHandler for DummyTransportMulticastEventHandler {
 /*************************************/
 /*             CALLBACK              */
 /*************************************/
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename = "Transport")]
 pub struct TransportPeer {
     pub zid: ZenohId,

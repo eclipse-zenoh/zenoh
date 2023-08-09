@@ -66,11 +66,23 @@ pub enum TransportBodyShm {
 
 pub type TransportSn = u32;
 
-/// The kind of reliability.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-pub struct ConduitSn {
+pub struct PrioritySn {
     pub reliable: TransportSn,
     pub best_effort: TransportSn,
+}
+
+impl PrioritySn {
+    #[cfg(feature = "test")]
+    pub fn rand() -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+
+        Self {
+            reliable: rng.gen(),
+            best_effort: rng.gen(),
+        }
+    }
 }
 
 // Zenoh messages at zenoh-transport level

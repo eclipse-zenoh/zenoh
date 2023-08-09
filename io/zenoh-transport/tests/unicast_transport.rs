@@ -333,7 +333,7 @@ impl TransportPeerEventHandler for SCClient {
     }
 }
 
-async fn open_transport(
+async fn open_transport_unicast(
     client_endpoints: &[EndPoint],
     server_endpoints: &[EndPoint],
     #[cfg(feature = "shared-memory")] shm_transport: bool,
@@ -386,10 +386,13 @@ async fn open_transport(
     // Open transport -> This should be accepted
     for e in client_endpoints.iter() {
         println!("Opening transport with {}", e);
-        let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
+        let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap();
     }
 
-    let client_transport = client_manager.get_transport(&router_id).unwrap();
+    let client_transport = client_manager
+        .get_transport_unicast(&router_id)
+        .await
+        .unwrap();
 
     // Return the handlers
     (
@@ -415,7 +418,7 @@ async fn close_transport(
     ztimeout!(client_transport.close()).unwrap();
 
     ztimeout!(async {
-        while !router_manager.get_transports().is_empty() {
+        while !router_manager.get_transports_unicast().await.is_empty() {
             task::sleep(SLEEP).await;
         }
     });

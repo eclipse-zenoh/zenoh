@@ -25,6 +25,10 @@ use zenoh_protocol::{
     transport::TransportMessage,
 };
 use zenoh_result::{zerror, ZResult};
+
+/*************************************/
+/*             MANAGER               */
+/*************************************/
 #[async_trait]
 pub trait LinkManagerMulticastTrait: Send + Sync {
     async fn new_link(&self, endpoint: &EndPoint) -> ZResult<LinkMulticast>;
@@ -32,6 +36,9 @@ pub trait LinkManagerMulticastTrait: Send + Sync {
 
 pub type LinkManagerMulticast = Arc<dyn LinkManagerMulticastTrait>;
 
+/*************************************/
+/*              LINK                 */
+/*************************************/
 #[derive(Clone)]
 pub struct LinkMulticast(pub Arc<dyn LinkMulticastTrait>);
 

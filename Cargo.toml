@@ -122,7 +122,7 @@ regex = "1.7.1"
 ringbuffer-spsc = "0.1.9"
 rsa = "0.8.2"
 rustc_version = "0.4.0"
-rustls = "0.21.1"
+rustls = { version = "0.21.5", features = ["dangerous_configuration"] }
 rustls-native-certs = "0.6.2"
 rustls-pemfile = "1.0.2"
 serde = { version = "1.0.154", default-features = false, features = [

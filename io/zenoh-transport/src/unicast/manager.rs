@@ -285,6 +285,14 @@ impl TransportManager {
     /*            LINK MANAGER           */
     /*************************************/
     async fn new_link_manager_unicast(&self, protocol: &str) -> ZResult<LinkManagerUnicast> {
+        if !self.config.protocols.iter().any(|x| x.as_str() == protocol) {
+            bail!(
+                "Unsupported protocol: {}. Supported protocols are: {:?}",
+                protocol,
+                self.config.protocols
+            );
+        }
+
         let mut w_guard = zasynclock!(self.state.unicast.protocols);
         if let Some(lm) = w_guard.get(protocol) {
             Ok(lm.clone())
@@ -320,6 +328,17 @@ impl TransportManager {
     /*              LISTENER             */
     /*************************************/
     pub async fn add_listener_unicast(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
+        if self
+            .locator_inspector
+            .is_multicast(&endpoint.to_locator())
+            .await?
+        {
+            bail!(
+                "Can not listen on unicast endpoint with a multicast endpoint: {}.",
+                endpoint
+            )
+        }
+
         let manager = self
             .new_link_manager_unicast(endpoint.protocol().as_str())
             .await?;
@@ -500,19 +519,6 @@ impl TransportManager {
         &self,
         mut endpoint: EndPoint,
     ) -> ZResult<TransportUnicast> {
-        let p = endpoint.protocol();
-        if !self
-            .config
-            .protocols
-            .iter()
-            .any(|x| x.as_str() == p.as_str())
-        {
-            bail!(
-                "Unsupported protocol: {}. Supported protocols are: {:?}",
-                p,
-                self.config.protocols
-            );
-        }
         if self
             .locator_inspector
             .is_multicast(&endpoint.to_locator())
@@ -562,15 +568,14 @@ impl TransportManager {
             .collect()
     }
 
-    pub async fn del_transport_unicast(&self, peer: &ZenohId) -> ZResult<()> {
-        let _ = zasynclock!(self.state.unicast.transports)
+    pub(super) async fn del_transport_unicast(&self, peer: &ZenohId) -> ZResult<()> {
+        zasynclock!(self.state.unicast.transports)
             .remove(peer)
             .ok_or_else(|| {
                 let e = zerror!("Can not delete the transport of peer: {}", peer);
                 log::trace!("{}", e);
                 e
             })?;
-
         Ok(())
     }
 

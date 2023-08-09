@@ -87,11 +87,11 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the listener on the router
     for e in endpoints.iter() {
         println!("Listener endpoint: {e}");
-        let res = ztimeout!(router_manager.add_listener(e.clone()));
+        let res = ztimeout!(router_manager.add_listener_unicast(e.clone()));
         assert!(res.is_err());
 
         println!("Open endpoint: {e}");
-        let res = ztimeout!(router_manager.open_transport(e.clone()));
+        let res = ztimeout!(router_manager.open_transport_unicast(e.clone()));
         assert!(res.is_err());
     }
 
@@ -110,12 +110,12 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the listener on the router
     for e in endpoints.iter() {
         println!("Listener endpoint: {e}");
-        let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
+        let _ = ztimeout!(router_manager.add_listener_unicast(e.clone())).unwrap();
 
         task::sleep(SLEEP).await;
 
         println!("Open endpoint: {e}");
-        let _ = ztimeout!(router_manager.open_transport(e.clone())).unwrap();
+        let _ = ztimeout!(router_manager.open_transport_unicast(e.clone())).unwrap();
 
         task::sleep(SLEEP).await;
     }
