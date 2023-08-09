@@ -11,15 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-<<<<<<< HEAD:io/zenoh-transport/src/unicast/net/transport.rs
-=======
-use super::super::{TransportExecutor, TransportManager, TransportPeerEventHandler};
-use super::common::priority::{TransportPriorityRx, TransportPriorityTx};
->>>>>>> a784ec6863246449d21a41c8a29dd701507867e9:io/zenoh-transport/src/unicast/transport.rs
 use super::link::TransportLinkUnicast;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
-use crate::common::conduit::{TransportConduitRx, TransportConduitTx};
+use crate::common::priority::{TransportPriorityRx, TransportPriorityTx};
 use crate::transport_unicast_inner::TransportUnicastTrait;
 use crate::TransportConfigUnicast;
 use crate::{TransportExecutor, TransportManager, TransportPeerEventHandler};
@@ -32,13 +27,8 @@ use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::{
-<<<<<<< HEAD:io/zenoh-transport/src/unicast/net/transport.rs
     core::{Priority, WhatAmI, ZenohId},
-    transport::{Close, ConduitSn, TransportMessage, TransportSn},
-=======
-    core::{Bits, Priority, WhatAmI, ZenohId},
     transport::{Close, PrioritySn, TransportMessage, TransportSn},
->>>>>>> a784ec6863246449d21a41c8a29dd701507867e9:io/zenoh-transport/src/unicast/transport.rs
 };
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -88,15 +78,9 @@ impl TransportUnicastNet {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
-<<<<<<< HEAD:io/zenoh-transport/src/unicast/net/transport.rs
     ) -> ZResult<TransportUnicastNet> {
-        let mut conduit_tx = vec![];
-        let mut conduit_rx = vec![];
-=======
-    ) -> ZResult<TransportUnicastInner> {
         let mut priority_tx = vec![];
         let mut priority_rx = vec![];
->>>>>>> a784ec6863246449d21a41c8a29dd701507867e9:io/zenoh-transport/src/unicast/transport.rs
 
         let num = if config.is_qos { Priority::NUM } else { 1 };
         for _ in 0..num {
@@ -185,7 +169,6 @@ impl TransportUnicastNet {
         let target = {
             let mut guard = zwrite!(self.links);
 
-<<<<<<< HEAD:io/zenoh-transport/src/unicast/net/transport.rs
             if let Some(index) = zlinkindex!(guard, link) {
                 let is_last = guard.len() == 1;
                 if is_last {
@@ -201,23 +184,6 @@ impl TransportUnicastNet {
                     Target::Link(stl.into())
                 }
             } else {
-=======
-    pub(super) fn start_tx(
-        &self,
-        link: &LinkUnicast,
-        executor: &TransportExecutor,
-        keep_alive: Duration,
-        batch_size: u16,
-    ) -> ZResult<()> {
-        let mut guard = zwrite!(self.links);
-        match zlinkgetmut!(guard, link) {
-            Some(l) => {
-                assert!(!self.priority_tx.is_empty());
-                l.start_tx(executor, keep_alive, batch_size, &self.priority_tx);
-                Ok(())
-            }
-            None => {
->>>>>>> a784ec6863246449d21a41c8a29dd701507867e9:io/zenoh-transport/src/unicast/transport.rs
                 bail!(
                     "Can not delete Link {} with peer: {}",
                     link,
@@ -369,11 +335,11 @@ impl TransportUnicastTrait for TransportUnicastNet {
 
         *a_guard = true;
 
-        let csn = ConduitSn {
+        let csn = PrioritySn {
             reliable: initial_sn_rx,
             best_effort: initial_sn_rx,
         };
-        for c in self.conduit_rx.iter() {
+        for c in self.priority_rx.iter() {
             c.sync(csn)?;
         }
 
@@ -453,8 +419,8 @@ impl TransportUnicastTrait for TransportUnicastNet {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, link) {
             Some(l) => {
-                assert!(!self.conduit_tx.is_empty());
-                l.start_tx(executor, keep_alive, batch_size, &self.conduit_tx);
+                assert!(!self.priority_tx.is_empty());
+                l.start_tx(executor, keep_alive, batch_size, &self.priority_tx);
                 Ok(())
             }
             None => {

@@ -365,12 +365,7 @@ fn conduits_shm_only() {
 
 #[cfg(feature = "transport_ws")]
 #[test]
-<<<<<<< HEAD:io/zenoh-transport/tests/unicast_conduits.rs
-#[ignore]
-fn conduits_ws_only() {
-=======
 fn priorities_ws_only() {
->>>>>>> a784ec6863246449d21a41c8a29dd701507867e9:io/zenoh-transport/tests/unicast_priorities.rs
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();

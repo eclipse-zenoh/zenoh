@@ -14,11 +14,11 @@
 use super::transport::TransportUnicastNet;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
-use crate::common::conduit::TransportConduitTx;
 use crate::common::pipeline::{
     TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
     TransmissionPipelineProducer,
 };
+use crate::common::priority::TransportPriorityTx;
 use crate::TransportExecutor;
 use async_std::prelude::FutureExt;
 use async_std::task;

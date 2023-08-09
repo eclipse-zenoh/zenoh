@@ -518,13 +518,14 @@ async fn run_single(
     );
 
     #[allow(unused_variables)] // Used when stats feature is enabled
-    let (router_manager, router_handler, client_manager, client_transport) = open_transport(
-        client_endpoints,
-        server_endpoints,
-        #[cfg(feature = "shared-memory")]
-        shm_transport,
-    )
-    .await;
+    let (router_manager, router_handler, client_manager, client_transport) =
+        open_transport_unicast(
+            client_endpoints,
+            server_endpoints,
+            #[cfg(feature = "shared-memory")]
+            shm_transport,
+        )
+        .await;
 
     test_transport(
         router_handler.clone(),
