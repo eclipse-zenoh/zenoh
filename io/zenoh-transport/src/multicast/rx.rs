@@ -21,7 +21,7 @@ use zenoh_core::{zlock, zread};
 use zenoh_link::LinkMulticast;
 use zenoh_protocol::core::{Priority, Reliability};
 use zenoh_protocol::transport::{
-    Close, Fragment, Frame, Join, KeepAlive, TransportBody, TransportSn,
+    BatchSize, Close, Fragment, Frame, Join, KeepAlive, TransportBody, TransportSn,
 };
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
@@ -100,7 +100,12 @@ impl TransportMulticastInner {
         Ok(())
     }
 
-    pub(super) fn handle_join_from_unknown(&self, join: Join, locator: &Locator) -> ZResult<()> {
+    pub(super) fn handle_join_from_unknown(
+        &self,
+        join: Join,
+        locator: &Locator,
+        batch_size: BatchSize,
+    ) -> ZResult<()> {
         if zread!(self.peers).len() >= self.manager.config.multicast.max_sessions {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. Max sessions reached: {}.",
@@ -124,11 +129,22 @@ impl TransportMulticastInner {
 
         if join.resolution != self.manager.config.resolution {
             log::debug!(
-                "Ingoring Join on {} from peer: {}. Unsupported SN resolution: {:?}. Expected: <= {:?}.",
+                "Ingoring Join on {} from peer: {}. Unsupported SN resolution: {:?}. Expected: {:?}.",
                 locator,
                 join.zid,
                 join.resolution,
                 self.manager.config.resolution,
+            );
+            return Ok(());
+        }
+
+        if join.batch_size != batch_size {
+            log::debug!(
+                "Ingoring Join on {} from peer: {}. Unsupported Batch Size: {:?}. Expected: {:?}.",
+                locator,
+                join.zid,
+                join.batch_size,
+                batch_size,
             );
             return Ok(());
         }
@@ -262,6 +278,7 @@ impl TransportMulticastInner {
         &self,
         mut zslice: ZSlice,
         link: &LinkMulticast,
+        batch_size: BatchSize,
         locator: &Locator,
     ) -> ZResult<()> {
         let codec = Zenoh080::new();
@@ -305,7 +322,7 @@ impl TransportMulticastInner {
                 None => {
                     drop(r_guard);
                     if let TransportBody::Join(join) = msg.body {
-                        self.handle_join_from_unknown(join, locator)?;
+                        self.handle_join_from_unknown(join, locator, batch_size)?;
                     }
                 }
             }

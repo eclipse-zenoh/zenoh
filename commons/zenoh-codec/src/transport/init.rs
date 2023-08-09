@@ -23,7 +23,7 @@ use zenoh_protocol::{
     common::{iext, imsg},
     core::{Resolution, WhatAmI, ZenohId},
     transport::{
-        id,
+        batch_size, id,
         init::{ext, flag, InitAck, InitSyn},
         BatchSize,
     },
@@ -39,7 +39,7 @@ where
     fn write(self, writer: &mut W, x: &InitSyn) -> Self::Output {
         // Header
         let mut header = id::INIT;
-        if x.resolution != Resolution::default() || x.batch_size != BatchSize::MAX {
+        if x.resolution != Resolution::default() || x.batch_size != batch_size::UNICAST {
             header |= flag::S;
         }
         let mut n_exts = (x.ext_qos.is_some() as u8)
@@ -131,7 +131,7 @@ where
         let zid: ZenohId = lodec.read(&mut *reader)?;
 
         let mut resolution = Resolution::default();
-        let mut batch_size = BatchSize::MAX.to_le_bytes();
+        let mut batch_size = batch_size::UNICAST.to_le_bytes();
         if imsg::has_flag(self.header, flag::S) {
             let flags: u8 = self.codec.read(&mut *reader)?;
             resolution = Resolution::from(flags & 0b00111111);
@@ -200,7 +200,7 @@ where
     fn write(self, writer: &mut W, x: &InitAck) -> Self::Output {
         // Header
         let mut header = id::INIT | flag::A;
-        if x.resolution != Resolution::default() || x.batch_size != BatchSize::MAX {
+        if x.resolution != Resolution::default() || x.batch_size != batch_size::UNICAST {
             header |= flag::S;
         }
         let mut n_exts = (x.ext_qos.is_some() as u8)
@@ -295,7 +295,7 @@ where
         let zid: ZenohId = lodec.read(&mut *reader)?;
 
         let mut resolution = Resolution::default();
-        let mut batch_size = BatchSize::MAX.to_le_bytes();
+        let mut batch_size = batch_size::UNICAST.to_le_bytes();
         if imsg::has_flag(self.header, flag::S) {
             let flags: u8 = self.codec.read(&mut *reader)?;
             resolution = Resolution::from(flags & 0b00111111);

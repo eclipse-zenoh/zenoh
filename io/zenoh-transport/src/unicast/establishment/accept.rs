@@ -32,6 +32,7 @@ use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::{
     core::{Field, Resolution, WhatAmI, ZenohId},
     transport::{
+        batch_size,
         close::{self, Close},
         BatchSize, InitAck, OpenAck, TransportBody, TransportMessage, TransportSn,
     },
@@ -174,7 +175,11 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         };
 
         // Compute the minimum batch size
-        state.zenoh.batch_size = state.zenoh.batch_size.min(init_syn.batch_size);
+        state.zenoh.batch_size = state
+            .zenoh
+            .batch_size
+            .min(init_syn.batch_size)
+            .min(batch_size::UNICAST);
 
         // Extension QoS
         self.ext_qos

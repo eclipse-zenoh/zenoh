@@ -29,7 +29,8 @@ use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::{
     core::{Field, Resolution, WhatAmI, ZenohId},
     transport::{
-        close, BatchSize, Close, InitSyn, OpenSyn, TransportBody, TransportMessage, TransportSn,
+        batch_size, close, BatchSize, Close, InitSyn, OpenSyn, TransportBody, TransportMessage,
+        TransportSn,
     },
 };
 use zenoh_result::ZResult;
@@ -445,7 +446,7 @@ pub(crate) async fn open_link(
 
     let mut state = State {
         zenoh: StateZenoh {
-            batch_size: manager.config.batch_size,
+            batch_size: manager.config.batch_size.min(batch_size::UNICAST),
             resolution: manager.config.resolution,
         },
         ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos),

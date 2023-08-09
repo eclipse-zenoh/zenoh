@@ -28,7 +28,7 @@ use std::time::Duration;
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::{
     core::{Field, Resolution, ZenohId},
-    transport::{Close, TransportMessage, TransportSn},
+    transport::{BatchSize, Close, TransportMessage, TransportSn},
 };
 use zenoh_result::ZResult;
 
@@ -135,7 +135,7 @@ pub(super) async fn close_link(link: &LinkUnicast, reason: Option<u8>) {
 pub(super) struct InputFinalize {
     pub(super) transport: TransportUnicast,
     pub(super) other_lease: Duration,
-    pub(super) agreed_batch_size: u16,
+    pub(super) agreed_batch_size: BatchSize,
 }
 // Finalize the transport, notify the callback and start the link tasks
 pub(super) async fn finalize_transport(

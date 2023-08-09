@@ -22,7 +22,7 @@ use zenoh_protocol::{
     common::{iext, imsg, ZExtZBufHeader},
     core::{Priority, Resolution, WhatAmI, ZenohId},
     transport::{
-        id,
+        batch_size, id,
         join::{ext, flag, Join},
         BatchSize, PrioritySn, TransportSn,
     },
@@ -134,7 +134,7 @@ where
         if x.lease.as_millis() % 1_000 == 0 {
             header |= flag::T;
         }
-        if x.resolution != Resolution::default() || x.batch_size != BatchSize::MAX {
+        if x.resolution != Resolution::default() || x.batch_size != batch_size::MULTICAST {
             header |= flag::S;
         }
         let mut n_exts = (x.ext_qos.is_some() as u8) + (x.ext_shm.is_some() as u8);
@@ -222,7 +222,7 @@ where
         let zid: ZenohId = lodec.read(&mut *reader)?;
 
         let mut resolution = Resolution::default();
-        let mut batch_size = BatchSize::MAX.to_le_bytes();
+        let mut batch_size = batch_size::MULTICAST.to_le_bytes();
         if imsg::has_flag(self.header, flag::S) {
             let flags: u8 = self.codec.read(&mut *reader)?;
             resolution = Resolution::from(flags & 0b00111111);
