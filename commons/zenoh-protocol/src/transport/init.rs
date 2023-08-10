@@ -90,7 +90,7 @@ use zenoh_buffers::ZSlice;
 ///     - 0b11: 64 bits
 ///
 /// ($) Batch Size. It indicates the maximum size of a batch the sender of the INIT message is willing
-///     to accept when reading from the network.
+///     to accept when reading from the network. Default on unicast: 65535.
 ///
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
 ///       in bytes of the message, resulting in the maximum length of a message being 65535 bytes.

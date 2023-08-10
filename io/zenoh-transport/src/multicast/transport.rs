@@ -31,7 +31,7 @@ use std::{
 use zenoh_core::{zcondfeat, zread, zwrite};
 use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::core::Resolution;
-use zenoh_protocol::transport::{Close, TransportMessage};
+use zenoh_protocol::transport::{batch_size, Close, TransportMessage};
 use zenoh_protocol::{
     core::{Bits, Field, Priority, WhatAmI, ZenohId},
     transport::{close, Join},
@@ -235,7 +235,14 @@ impl TransportMulticastInner {
         let mut guard = zwrite!(self.link);
         match guard.as_mut() {
             Some(l) => {
-                assert!(!self.priority_tx.is_empty());
+                // For cross-system compatibility reasons we set the default minimal
+                // batch size to 8192 bytes unless explicitly configured smaller.
+                let batch_size = self
+                    .manager
+                    .config
+                    .batch_size
+                    .min(l.link.get_mtu())
+                    .min(batch_size::MULTICAST);
                 let config = TransportLinkMulticastConfig {
                     version: self.manager.config.version,
                     zid: self.manager.config.zid,
@@ -244,7 +251,7 @@ impl TransportMulticastInner {
                     keep_alive: self.manager.config.multicast.keep_alive,
                     join_interval: self.manager.config.multicast.join_interval,
                     sn_resolution: self.manager.config.resolution.get(Field::FrameSN),
-                    batch_size: self.manager.config.batch_size.min(l.link.get_mtu()),
+                    batch_size,
                 };
                 l.start_tx(config, self.priority_tx.clone());
                 Ok(())
@@ -280,7 +287,15 @@ impl TransportMulticastInner {
         let mut guard = zwrite!(self.link);
         match guard.as_mut() {
             Some(l) => {
-                l.start_rx();
+                // For cross-system compatibility reasons we set the default minimal
+                // batch size to 8192 bytes unless explicitly configured smaller.
+                let batch_size = self
+                    .manager
+                    .config
+                    .batch_size
+                    .min(l.link.get_mtu())
+                    .min(batch_size::MULTICAST);
+                l.start_rx(batch_size);
                 Ok(())
             }
             None => {

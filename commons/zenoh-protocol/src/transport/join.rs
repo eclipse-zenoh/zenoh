@@ -87,8 +87,8 @@ use core::time::Duration;
 ///     - 0b10: 32 bits
 ///     - 0b11: 64 bits
 ///
-/// ($) Batch Size. It indicates the maximum size of a batch the sender of the INIT message is willing
-///     to accept when reading from the network.
+/// ($) Batch Size. It indicates the maximum size of a batch the sender of the JOIN message is willing
+///     to accept when reading from the network. Default on multicast: 8192.
 ///
 /// (^) The next sequence number MUST be compatible with the adverstised Sequence Number resolution
 /// ```

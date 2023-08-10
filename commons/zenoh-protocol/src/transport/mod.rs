@@ -39,6 +39,13 @@ use crate::network::NetworkMessage;
 ///       In any case, the length of a message must not exceed 65_535 bytes.
 pub type BatchSize = u16;
 
+pub mod batch_size {
+    use super::BatchSize;
+
+    pub const UNICAST: BatchSize = BatchSize::MAX;
+    pub const MULTICAST: BatchSize = 8_192;
+}
+
 pub mod id {
     // WARNING: it's crucial that these IDs do NOT collide with the IDs
     //          defined in `crate::network::id`.

@@ -145,7 +145,7 @@ impl TransportLinkMulticast {
         }
     }
 
-    pub(super) fn start_rx(&mut self) {
+    pub(super) fn start_rx(&mut self, batch_size: BatchSize) {
         if self.handle_rx.is_none() {
             // Spawn the RX task
             let c_link = self.link.clone();
@@ -160,6 +160,7 @@ impl TransportLinkMulticast {
                     ctransport.clone(),
                     c_signal.clone(),
                     c_rx_buffer_size,
+                    batch_size,
                 )
                 .await;
                 c_signal.trigger();
@@ -344,6 +345,7 @@ async fn rx_task(
     transport: TransportMulticastInner,
     signal: Signal,
     rx_buffer_size: usize,
+    batch_size: BatchSize,
 ) -> ZResult<()> {
     enum Action {
         Read((usize, Locator)),
@@ -385,7 +387,7 @@ async fn rx_task(
                 // Deserialize all the messages from the current ZBuf
                 let zslice = ZSlice::make(Arc::new(buffer), 0, n)
                     .map_err(|_| zerror!("Read {} bytes but buffer is {} bytes", n, mtu))?;
-                transport.read_messages(zslice, &link, &loc)?;
+                transport.read_messages(zslice, &link, batch_size, &loc)?;
             }
             Action::Stop => break,
         }
