@@ -30,7 +30,7 @@ use zenoh_protocol::{
 
 impl LCodec<&PrioritySn> for Zenoh080 {
     fn w_len(self, p: &PrioritySn) -> usize {
-        self.w_len(p.best_effort) + self.w_len(p.reliable)
+        self.w_len(p.reliable) + self.w_len(p.best_effort)
     }
 }
 
@@ -41,8 +41,8 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &PrioritySn) -> Self::Output {
-        self.write(&mut *writer, x.best_effort)?;
         self.write(&mut *writer, x.reliable)?;
+        self.write(&mut *writer, x.best_effort)?;
         Ok(())
     }
 }
@@ -54,12 +54,12 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<PrioritySn, Self::Error> {
-        let best_effort: TransportSn = self.read(&mut *reader)?;
         let reliable: TransportSn = self.read(&mut *reader)?;
+        let best_effort: TransportSn = self.read(&mut *reader)?;
 
         Ok(PrioritySn {
-            best_effort,
             reliable,
+            best_effort,
         })
     }
 }
