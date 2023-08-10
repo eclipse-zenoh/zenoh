@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::config;
+#[cfg(not(target_os = "macos"))]
 use advisory_lock::{AdvisoryFileLock, FileLockMode};
 use async_io::Async;
 use async_std::fs::remove_file;
@@ -161,6 +162,7 @@ impl PipeR {
 
     fn open_unique_pipe_for_read(path: &str) -> ZResult<File> {
         let read = open_read(path)?;
+        #[cfg(not(target_os = "macos"))]
         read.try_lock(FileLockMode::Exclusive)?;
         Ok(read)
     }
@@ -211,13 +213,12 @@ impl PipeW {
     fn open_unique_pipe_for_write(path: &str) -> ZResult<File> {
         let write = open_write(path)?;
         // the file must be already locked at the other side...
-        match write.try_lock(FileLockMode::Exclusive) {
-            Ok(_) => {
-                let _ = write.unlock();
-                bail!("no listener...")
-            }
-            Err(_) => Ok(write),
+        #[cfg(not(target_os = "macos"))]
+        if write.try_lock(FileLockMode::Exclusive).is_ok() {
+            let _ = write.unlock();
+            bail!("no listener...")
         }
+        Ok(write)
     }
 }
 
