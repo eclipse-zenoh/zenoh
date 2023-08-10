@@ -78,7 +78,7 @@ impl Invitation {
         let recived_suffix = Self::receive(pipe).await?;
         if recived_suffix != expected_suffix {
             bail!(
-                "Suffix mismatch: expected {} gor {}",
+                "Suffix mismatch: expected {} got {}",
                 expected_suffix,
                 recived_suffix
             )
