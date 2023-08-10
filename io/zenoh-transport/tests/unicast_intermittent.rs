@@ -479,7 +479,7 @@ fn transport_shm_intermittent() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "shm//tmp/transport_shm_intermittent".parse().unwrap();
+    let endpoint: EndPoint = "shm/transport_shm_intermittent".parse().unwrap();
     task::block_on(net_transport_intermittent(&endpoint));
 }
 
@@ -492,7 +492,7 @@ fn transport_shm_intermittent_for_shm_transport() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "shm//tmp/transport_shm_intermittent_for_shm_transport"
+    let endpoint: EndPoint = "shm/transport_shm_intermittent_for_shm_transport"
         .parse()
         .unwrap();
     task::block_on(shm_transport_intermittent(&endpoint));

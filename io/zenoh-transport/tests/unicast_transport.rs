@@ -221,6 +221,7 @@ const SLEEP_COUNT: Duration = Duration::from_millis(10);
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
+#[cfg(feature = "shared-memory")]
 const MSG_SIZE_SHM: [usize; 2] = [1_024, 65000];
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
 
@@ -897,8 +898,8 @@ fn transport_unicast_shm_only() {
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
-        "shm//tmp/transport_unicast_shm_only".parse().unwrap(),
-        "shm//tmp/transport_unicast_shm_only2".parse().unwrap(),
+        "shm/transport_unicast_shm_only".parse().unwrap(),
+        "shm/transport_unicast_shm_only2".parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -929,9 +930,7 @@ fn transport_unicast_shm_only_with_shm() {
     });
 
     // Define the locator
-    let endpoints: Vec<EndPoint> = vec!["shm//tmp/transport_unicast_shm_only_with_shm"
-        .parse()
-        .unwrap()];
+    let endpoints: Vec<EndPoint> = vec!["shm/transport_unicast_shm_only_with_shm".parse().unwrap()];
     // Define the reliability and congestion control
     let channel = [
         Channel {

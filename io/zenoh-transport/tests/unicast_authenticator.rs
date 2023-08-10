@@ -697,7 +697,7 @@ fn authenticator_shm() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "shm//tmp/authenticator_shm_test".parse().unwrap();
+    let endpoint: EndPoint = "shm/authenticator_shm_test".parse().unwrap();
     task::block_on(run_with_net(&endpoint));
 }
 
@@ -710,9 +710,7 @@ fn authenticator_shm_with_shm_transport() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "shm//tmp/authenticator_shm_with_shm_transport"
-        .parse()
-        .unwrap();
+    let endpoint: EndPoint = "shm/authenticator_shm_with_shm_transport".parse().unwrap();
     task::block_on(run_with_shm(&endpoint));
 }
 

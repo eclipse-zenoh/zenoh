@@ -527,7 +527,7 @@ mod tests {
             zasync_executor_init!();
         });
 
-        let endpoint: EndPoint = "shm//tmp/multilink_shm_only".parse().unwrap();
+        let endpoint: EndPoint = "shm/multilink_shm_only".parse().unwrap();
         task::block_on(multilink_transport(&endpoint));
     }
 

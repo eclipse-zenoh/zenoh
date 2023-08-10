@@ -189,10 +189,10 @@ fn endpoint_shm() {
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "shm//tmp/endpoint_shm".parse().unwrap(),
-        "shm//tmp/endpoint_shm2".parse().unwrap(),
-        "shm//tmp/endpoint_shm3".parse().unwrap(),
-        "shm//tmp/endpoint_shm4".parse().unwrap(),
+        "shm/endpoint_shm".parse().unwrap(),
+        "shm/endpoint_shm2".parse().unwrap(),
+        "shm/endpoint_shm3".parse().unwrap(),
+        "shm/endpoint_shm4".parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
 }

@@ -358,7 +358,7 @@ fn conduits_shm_only() {
         zasync_executor_init!();
     });
     // Define the locators
-    let endpoints: Vec<EndPoint> = vec!["shm//tmp/conduits_shm_only".to_string().parse().unwrap()];
+    let endpoints: Vec<EndPoint> = vec!["shm/conduits_shm_only".to_string().parse().unwrap()];
     // Run
     task::block_on(run(&endpoints));
 }

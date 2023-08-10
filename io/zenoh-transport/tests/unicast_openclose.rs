@@ -552,7 +552,7 @@ fn openclose_shm_only() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "shm//tmp/openclose_shm_only".parse().unwrap();
+    let endpoint: EndPoint = "shm/openclose_shm_only".parse().unwrap();
     task::block_on(openclose_net_transport(&endpoint));
 }
 
@@ -565,9 +565,7 @@ fn openclose_shm_only_with_shm_transport() {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "shm//tmp/openclose_shm_only_with_shm_transport"
-        .parse()
-        .unwrap();
+    let endpoint: EndPoint = "shm/openclose_shm_only_with_shm_transport".parse().unwrap();
     task::block_on(openclose_shm_transport(&endpoint));
 }
 

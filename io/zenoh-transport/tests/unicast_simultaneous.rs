@@ -339,16 +339,16 @@ mod tests {
         });
 
         let endpoint01: Vec<EndPoint> = vec![
-            "shm//tmp/transport_shm_simultaneous".parse().unwrap(),
-            "shm//tmp/transport_shm_simultaneous2".parse().unwrap(),
-            "shm//tmp/transport_shm_simultaneous3".parse().unwrap(),
-            "shm//tmp/transport_shm_simultaneous4".parse().unwrap(),
+            "shm/transport_shm_simultaneous".parse().unwrap(),
+            "shm/transport_shm_simultaneous2".parse().unwrap(),
+            "shm/transport_shm_simultaneous3".parse().unwrap(),
+            "shm/transport_shm_simultaneous4".parse().unwrap(),
         ];
         let endpoint02: Vec<EndPoint> = vec![
-            "shm//tmp/transport_shm_simultaneous5".parse().unwrap(),
-            "shm//tmp/transport_shm_simultaneous6".parse().unwrap(),
-            "shm//tmp/transport_shm_simultaneous7".parse().unwrap(),
-            "shm//tmp/transport_shm_simultaneous8".parse().unwrap(),
+            "shm/transport_shm_simultaneous5".parse().unwrap(),
+            "shm/transport_shm_simultaneous6".parse().unwrap(),
+            "shm/transport_shm_simultaneous7".parse().unwrap(),
+            "shm/transport_shm_simultaneous8".parse().unwrap(),
         ];
 
         task::block_on(async {

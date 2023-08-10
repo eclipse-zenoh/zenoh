@@ -219,7 +219,7 @@ fn transport_unicast_defragmentation_shm_only() {
     });
 
     // Define the locators
-    let endpoint: EndPoint = "shm//tmp/transport_unicast_defragmentation_shm_only"
+    let endpoint: EndPoint = "shm/transport_unicast_defragmentation_shm_only"
         .parse()
         .unwrap();
     // Define the reliability and congestion control

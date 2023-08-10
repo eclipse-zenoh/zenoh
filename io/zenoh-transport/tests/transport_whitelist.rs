@@ -149,8 +149,8 @@ fn transport_whitelist_shm() {
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "shm//tmp/transport_whitelist_shm".parse().unwrap(),
-        "shm//tmp/transport_whitelist_shm2".parse().unwrap(),
+        "shm/transport_whitelist_shm".parse().unwrap(),
+        "shm/transport_whitelist_shm2".parse().unwrap(),
     ];
     // Run
     task::block_on(run(&endpoints));
