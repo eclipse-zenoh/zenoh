@@ -63,7 +63,12 @@ Then you can start run `zenohd`.
 
 > :warning: **WARNING** :warning: : Zenoh and its ecosystem are under active development. When you build from git, make sure you also build from git any other Zenoh repository you plan to use (e.g. binding, plugin, backend, etc.). It may happen that some changes in git are not compatible with the most recent packaged Zenoh release (e.g. deb, docker, pip). We put particular effort in mantaining compatibility between the various git repositories in the Zenoh project.
 
-Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). Zenoh can be succesfully compiled with Rust stable (>= 1.65.0), so no special configuration is required from your side.  
+Install [Cargo and Rust](https://doc.rust-lang.org/cargo/getting-started/installation.html). Zenoh can be succesfully compiled with Rust stable (>= 1.71.0), so no special configuration is required from your side. If you already have the Rust toolchain installed, make sure it is up-to-date with:
+
+```bash
+$ rustup update
+```
+
 To build Zenoh, just type the following command after having followed the previous instructions:
 
 ```bash
