@@ -96,6 +96,10 @@ impl AdminSpace {
             Arc::new(queryables_data),
         );
         handlers.insert(
+            format!("@/router/{zid_str}/status").try_into().unwrap(),
+            Arc::new(router_status),
+        );
+        handlers.insert(
             format!("@/router/{zid_str}/status/plugins/**")
                 .try_into()
                 .unwrap(),
@@ -704,6 +708,14 @@ fn plugins_status(context: &AdminContext, query: Query) {
             }
         });
     }
+}
+
+fn router_status(context: &AdminContext, query: Query) {
+    let key = KeyExpr::try_from(format!("@/router/{}/status", &context.zid_str)).unwrap();
+    let value = Value::from("what?");
+    if let Err(e) = query.reply(Ok(Sample::new(key, value))).res() {
+        log::error!("Error sending AdminSpace reply: {:?}", e);
+    };
 }
 
 fn with_extended_string<R, F: FnMut(&mut String) -> R>(
