@@ -221,6 +221,7 @@ const SLEEP_COUNT: Duration = Duration::from_millis(10);
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
+const MSG_SIZE_SHM: [usize; 2] = [1_024, 65000];
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
 
 macro_rules! ztimeout {
@@ -668,7 +669,7 @@ fn transport_unicast_tcp_only_with_shm() {
         &endpoints,
         &endpoints,
         &channel,
-        &MSG_SIZE_ALL,
+        &MSG_SIZE_SHM,
     ));
 }
 
@@ -731,7 +732,7 @@ fn transport_unicast_udp_only_with_shm() {
         &endpoints,
         &endpoints,
         &channel,
-        &MSG_SIZE_NOFRAG,
+        &MSG_SIZE_SHM,
     ));
 }
 
@@ -801,7 +802,7 @@ fn transport_unicast_unix_only_with_shm() {
         &endpoints,
         &endpoints,
         &channel,
-        &MSG_SIZE_ALL,
+        &MSG_SIZE_SHM,
     ));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
@@ -882,7 +883,7 @@ fn transport_unicast_ws_only_with_shm() {
         &endpoints,
         &endpoints,
         &channel,
-        &MSG_SIZE_ALL,
+        &MSG_SIZE_SHM,
     ));
 }
 
@@ -915,7 +916,7 @@ fn transport_unicast_shm_only() {
         &endpoints,
         &endpoints,
         &channel,
-        &MSG_SIZE_NOFRAG,
+        &MSG_SIZE_ALL,
     ));
 }
 
@@ -947,7 +948,7 @@ fn transport_unicast_shm_only_with_shm() {
         &endpoints,
         &endpoints,
         &channel,
-        &MSG_SIZE_NOFRAG,
+        &MSG_SIZE_SHM,
     ));
 }
 

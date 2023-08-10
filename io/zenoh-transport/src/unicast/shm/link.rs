@@ -30,18 +30,17 @@ use zenoh_sync::RecyclingObjectPool;
 
 pub(crate) async fn send_with_link(link: &LinkUnicast, msg: TransportMessageShm) -> ZResult<()> {
     if link.is_streamed() {
-        let mut buffer = vec![0, 0];
+        let mut buffer = vec![0, 0, 0, 0];
         let codec = Zenoh080::new();
         let mut writer = buffer.writer();
         codec
             .write(&mut writer, &msg)
             .map_err(|_| zerror!("Error serializing message {:?}", msg))?;
 
-        let len = buffer.len() - 2;
-        let le = BatchSize::to_le_bytes(len.try_into()?);
+        let len = (buffer.len() - 4) as u32;
+        let le = len.to_le_bytes();
 
-        buffer[0] = le[0];
-        buffer[1] = le[1];
+        buffer[0..4].copy_from_slice(&le);
 
         link.write_all(&buffer).await?;
     } else {
@@ -95,8 +94,12 @@ impl TransportUnicastShm {
     }
 
     pub(super) async fn stop_keepalive(&self) {
-        if let Some(handle) = zasyncwrite!(self.handle_keepalive).take() {
-            task::spawn(async move { handle.cancel().await });
+        let mut guard = zasyncwrite!(self.handle_keepalive);
+        let handle = guard.take();
+        drop(guard);
+
+        if let Some(handle) = handle {
+            async_std::task::spawn(handle.cancel());
         }
     }
 
@@ -120,8 +123,12 @@ impl TransportUnicastShm {
     }
 
     pub(super) async fn stop_rx(&self) {
-        if let Some(handle) = zasyncwrite!(self.handle_rx).take() {
-            task::spawn(async move { handle.cancel().await });
+        let mut guard = zasyncwrite!(self.handle_rx);
+        let handle = guard.take();
+        drop(guard);
+
+        if let Some(handle) = handle {
+            async_std::task::spawn(handle.cancel());
         }
     }
 }
@@ -160,9 +167,9 @@ async fn rx_task_stream(
 ) -> ZResult<()> {
     async fn read(link: &LinkUnicast, buffer: &mut [u8]) -> ZResult<usize> {
         // 16 bits for reading the batch length
-        let mut length = [0_u8, 0_u8];
+        let mut length = [0_u8, 0_u8, 0_u8, 0_u8];
         link.read_exact(&mut length).await?;
-        let n = BatchSize::from_le_bytes(length) as usize;
+        let n = u32::from_le_bytes(length) as usize;
 
         link.read_exact(&mut buffer[0..n]).await?;
         Ok(n)
