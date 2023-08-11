@@ -121,7 +121,7 @@ jobs:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
-    - name: Run tests with SHM for macOS
+      - name: Run tests with SHM for macOS
         if: ${{ matrix.os == 'macOS-latest' }}
         uses: actions-rs/cargo@v1
         with:
