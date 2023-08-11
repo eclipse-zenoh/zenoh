@@ -15,8 +15,8 @@ use super::transport::TransportUnicastShm;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
 use crate::TransportExecutor;
-use async_std::prelude::FutureExt;
 use async_std::task;
+use async_std::{prelude::FutureExt, sync::RwLock};
 use zenoh_codec::*;
 use zenoh_core::{zasyncread, zasyncwrite};
 
@@ -53,6 +53,7 @@ pub(crate) async fn send_with_link(link: &LinkUnicast, msg: TransportMessageShm)
 
         link.write_all(&buffer).await?;
     }
+    log::trace!("Sent: {:?}", msg);
 
     #[cfg(feature = "stats")]
     {
@@ -75,9 +76,8 @@ impl TransportUnicastShm {
         let mut guard = async_std::task::block_on(async { zasyncwrite!(self.handle_keepalive) });
         let c_transport = self.clone();
         let handle = executor.spawn(async move {
-            let link = zasyncread!(c_transport.link).clone();
             let res = keepalive_task(
-                link,
+                c_transport.link.clone(),
                 keep_alive,
                 #[cfg(feature = "stats")]
                 c_transport.stats,
@@ -107,7 +107,9 @@ impl TransportUnicastShm {
         let mut guard = async_std::task::block_on(async { zasyncwrite!(self.handle_rx) });
         let c_transport = self.clone();
         let handle = task::spawn(async move {
-            let link = zasyncread!(c_transport.link).clone();
+            let guard = zasyncread!(c_transport.link);
+            let link = guard.clone();
+            drop(guard);
             let rx_buffer_size = c_transport.manager.config.link_rx_buffer_size;
 
             // Start the consume task
@@ -137,7 +139,7 @@ impl TransportUnicastShm {
 /*              TASKS                */
 /*************************************/
 async fn keepalive_task(
-    link: LinkUnicast,
+    link: Arc<RwLock<LinkUnicast>>,
     keep_alive: Duration,
     #[cfg(feature = "stats")] stats: Arc<TransportUnicastStatsAtomic>,
 ) -> ZResult<()> {
@@ -148,13 +150,15 @@ async fn keepalive_task(
             body: TransportBodyShm::KeepAlive(KeepAlive),
         };
 
+        let guard = zasyncwrite!(link);
         let _ = send_with_link(
-            &link,
+            &guard,
             keepailve,
             #[cfg(feature = "stats")]
             &stats,
         )
         .await;
+        drop(guard);
     }
 }
 

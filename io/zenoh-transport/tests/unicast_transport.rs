@@ -733,7 +733,7 @@ fn transport_unicast_udp_only_with_shm() {
         &endpoints,
         &endpoints,
         &channel,
-        &MSG_SIZE_SHM,
+        &MSG_SIZE_NOFRAG,
     ));
 }
 
