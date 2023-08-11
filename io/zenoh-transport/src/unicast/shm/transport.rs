@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "transport_shm")]
 use super::link::send_with_link;
 #[cfg(feature = "stats")]
 use super::TransportUnicastStatsAtomic;
@@ -29,12 +30,16 @@ use std::time::Duration;
 #[cfg(feature = "transport_shm")]
 use zenoh_core::zasyncread_upgradable;
 use zenoh_core::{zasynclock, zasyncread, zread, zwrite};
-use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
+#[cfg(feature = "transport_shm")]
+use zenoh_link::Link;
+use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::transport::TransportBodyShm;
 use zenoh_protocol::transport::TransportMessageShm;
 use zenoh_protocol::transport::{Close, TransportSn};
+#[cfg(not(feature = "transport_shm"))]
+use zenoh_result::bail;
 use zenoh_result::{zerror, ZResult};
 
 /*************************************/
