@@ -1466,7 +1466,7 @@ impl Session {
                 let mut state = zwrite!(state);
                 if let Some(query) = state.queries.remove(&qid) {
                     std::mem::drop(state);
-                    log::debug!("Timout on query {}! Send error and close.", qid);
+                    log::debug!("Timeout on query {}! Send error and close.", qid);
                     if query.reception_mode == ConsolidationMode::Latest {
                         for (_, reply) in query.replies.unwrap().into_iter() {
                             (query.callback)(reply);
