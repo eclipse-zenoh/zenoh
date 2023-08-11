@@ -21,12 +21,9 @@ use crate::{TransportExecutor, TransportPeerEventHandler};
 use async_executor::Task;
 #[cfg(feature = "transport_shm")]
 use async_std::sync::RwLockUpgradableReadGuard;
-use async_std::sync::{
-    Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock, RwLockReadGuard,
-};
+use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
-use std::ops::Deref;
 use std::sync::{Arc, RwLock as SyncRwLock};
 use std::time::Duration;
 #[cfg(feature = "transport_shm")]
@@ -38,7 +35,7 @@ use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::transport::TransportBodyShm;
 use zenoh_protocol::transport::TransportMessageShm;
 use zenoh_protocol::transport::{Close, TransportSn};
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_result::{zerror, ZResult};
 
 /*************************************/
 /*             TRANSPORT             */
@@ -85,24 +82,32 @@ impl TransportUnicastShm {
         Ok(t)
     }
 
-    #[inline(always)]
-    async fn zlinkget_complementary(
-        &self,
-        that_link: &LinkUnicast,
-    ) -> ZResult<RwLockReadGuard<'_, LinkUnicast>> {
-        let link = zasyncread!(self.link);
-        match link.deref() == that_link {
-            true => Ok(link),
-            false => bail!("not my link!"),
-        }
-    }
-
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
+    pub(super) async fn finalize(&self, reason: u8) -> ZResult<()> {
+        log::debug!(
+            "[{}] Finalizing transport with peer: {}",
+            self.manager.config.zid,
+            self.config.zid
+        );
+
+        // Send close message on the link
+        let close = TransportMessageShm {
+            body: TransportBodyShm::Close(Close {
+                reason,
+                session: false,
+            }),
+        };
+        let _ = self.send_async(close).await;
+
+        // Terminate and clean up the transport
+        self.delete().await
+    }
+
     pub(super) async fn delete(&self) -> ZResult<()> {
         log::debug!(
-            "[{}] Closing transport with peer: {}",
+            "[{}] Deleting transport with peer: {}",
             self.manager.config.zid,
             self.config.zid
         );
@@ -131,24 +136,6 @@ impl TransportUnicastShm {
         }
 
         Ok(())
-    }
-
-    pub(crate) async fn del_link(&self, link: &LinkUnicast) -> ZResult<()> {
-        // check if the link is ours
-        if self.zlinkget_complementary(link).await.is_err() {
-            bail!(
-                "Can not delete Link {} with peer: {}",
-                link,
-                self.config.zid
-            )
-        }
-
-        // Notify the callback
-        if let Some(callback) = zread!(self.callback).as_ref() {
-            callback.del_link(Link::from(link));
-        }
-
-        self.delete().await
     }
 }
 
@@ -304,33 +291,11 @@ impl TransportUnicastTrait for TransportUnicastShm {
     /*************************************/
     async fn close_link(&self, link: &LinkUnicast, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.config.zid);
-
-        let close = TransportMessageShm {
-            body: TransportBodyShm::Close(Close {
-                reason,
-                session: false,
-            }),
-        };
-        let guard = zasyncread!(self.link);
-        let _ = send_with_link(&guard, close).await;
-
-        // Terminate and clean up the transport
-        self.delete().await
+        self.finalize(reason).await
     }
 
     async fn close(&self, reason: u8) -> ZResult<()> {
         log::trace!("Closing transport with peer: {}", self.config.zid);
-
-        let close = TransportMessageShm {
-            body: TransportBodyShm::Close(Close {
-                reason,
-                session: false,
-            }),
-        };
-        let guard = zasyncread!(self.link);
-        let _ = send_with_link(&guard, close).await;
-
-        // Terminate and clean up the transport
-        self.delete().await
+        self.finalize(reason).await
     }
 }

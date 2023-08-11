@@ -66,10 +66,12 @@ pub(crate) async fn send_with_link(link: &LinkUnicast, msg: TransportMessageShm)
 
 impl TransportUnicastShm {
     pub(super) fn send(&self, msg: TransportMessageShm) -> ZResult<()> {
-        async_std::task::block_on(async move {
-            let guard = zasyncread!(self.link);
-            send_with_link(&guard, msg).await
-        })
+        async_std::task::block_on(self.send_async(msg))
+    }
+
+    pub(super) async fn send_async(&self, msg: TransportMessageShm) -> ZResult<()> {
+        let guard = zasyncwrite!(self.link);
+        send_with_link(&guard, msg).await
     }
 
     pub(super) fn start_keepalive(&self, executor: &TransportExecutor, keep_alive: Duration) {
@@ -83,23 +85,33 @@ impl TransportUnicastShm {
                 c_transport.stats,
             )
             .await;
-            if let Err(e) = res {
-                log::debug!("{}", e);
-                // Spawn a task to avoid a deadlock waiting for this same task
-                // to finish in the close() joining its handle
-                task::spawn(async move { c_transport.delete().await });
+            log::debug!(
+                "[{}] Keepalive task finished with result {:?}",
+                c_transport.manager.config.zid,
+                res
+            );
+            if res.is_err() {
+                log::debug!(
+                    "[{}] <on keepalive exit> finalizing transport with peer: {}",
+                    c_transport.manager.config.zid,
+                    c_transport.config.zid
+                );
+                let _ = c_transport.finalize(0).await;
             }
         });
         *guard = Some(handle);
     }
 
     pub(super) async fn stop_keepalive(&self) {
+        let zid = self.manager.config.zid;
+        log::debug!("[{}] Stopping keepalive task...", zid,);
         let mut guard = zasyncwrite!(self.handle_keepalive);
         let handle = guard.take();
         drop(guard);
 
         if let Some(handle) = handle {
-            async_std::task::spawn(handle.cancel());
+            let _ = handle.cancel().await;
+            log::debug!("[{}] keepalive task stopped...", zid,);
         }
     }
 
@@ -112,25 +124,35 @@ impl TransportUnicastShm {
             drop(guard);
             let rx_buffer_size = c_transport.manager.config.link_rx_buffer_size;
 
-            // Start the consume task
+            // Start the rx task
             let res = rx_task(link, c_transport.clone(), lease, batch_size, rx_buffer_size).await;
-            if let Err(e) = res {
-                log::debug!("{}", e);
-                // Spawn a task to avoid a deadlock waiting for this same task
-                // to finish in the close() joining its handle
-                task::spawn(async move { c_transport.delete().await });
+            log::debug!(
+                "[{}] Rx task finished with result {:?}",
+                c_transport.manager.config.zid,
+                res
+            );
+            if res.is_err() {
+                log::debug!(
+                    "[{}] <on rx exit> finalizing transport with peer: {}",
+                    c_transport.manager.config.zid,
+                    c_transport.config.zid
+                );
+                let _ = c_transport.finalize(0).await;
             }
         });
         *guard = Some(handle);
     }
 
     pub(super) async fn stop_rx(&self) {
+        let zid = self.manager.config.zid;
+        log::debug!("[{}] Stopping rx task...", zid,);
         let mut guard = zasyncwrite!(self.handle_rx);
         let handle = guard.take();
         drop(guard);
 
         if let Some(handle) = handle {
-            async_std::task::spawn(handle.cancel());
+            let _ = handle.cancel().await;
+            log::debug!("[{}] rx task stopped...", zid,);
         }
     }
 }

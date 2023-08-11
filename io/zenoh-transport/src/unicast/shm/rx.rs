@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::TransportUnicastShm;
-use async_std::task;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
 use zenoh_buffers::{
@@ -24,10 +23,7 @@ use zenoh_core::zread;
 use zenoh_link::LinkUnicast;
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
-use zenoh_protocol::{
-    network::NetworkMessage,
-    transport::{Close, TransportMessageShm},
-};
+use zenoh_protocol::{network::NetworkMessage, transport::TransportMessageShm};
 use zenoh_result::{zerror, ZResult};
 
 /*************************************/
@@ -84,27 +80,6 @@ impl TransportUnicastShm {
         }
     }
 
-    async fn handle_close(&self, link: &LinkUnicast, close: Close) -> ZResult<()> {
-        // Stop now rx and tx tasks before doing the proper cleanup
-        self.stop_rx().await;
-        self.stop_keepalive().await;
-
-        // Delete and clean up
-        let c_transport = self.clone();
-        let c_link = link.clone();
-        // Spawn a task to avoid a deadlock waiting for this same task
-        // to finish in the link close() joining the rx handle
-        task::spawn(async move {
-            if close.session {
-                let _ = c_transport.delete().await;
-            } else {
-                let _ = c_transport.del_link(&c_link).await;
-            }
-        });
-
-        Ok(())
-    }
-
     pub(super) async fn read_messages(
         &self,
         mut zslice: ZSlice,
@@ -125,12 +100,12 @@ impl TransportUnicastShm {
             }
 
             match msg.body {
-                zenoh_protocol::transport::TransportBodyShm::Close(close) => {
-                    self.handle_close(link, close).await?
+                zenoh_protocol::transport::TransportBodyShm::Close(_) => {
+                    let _ = self.delete().await;
                 }
                 zenoh_protocol::transport::TransportBodyShm::KeepAlive(_) => {}
                 zenoh_protocol::transport::TransportBodyShm::Network(msg) => {
-                    self.trigger_callback(*msg)?
+                    let _ = self.trigger_callback(*msg);
                 }
             }
         }
