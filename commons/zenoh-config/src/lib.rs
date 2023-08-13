@@ -34,6 +34,7 @@ pub use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_cfg_properties::config::*;
 use zenoh_core::zlock;
 use zenoh_protocol::core::{
+    endpoint::CONFIG_SEPARATOR,
     key_expr::OwnedKeyExpr,
     whatami::{WhatAmIMatcher, WhatAmIMatcherVisitor},
 };
@@ -817,7 +818,7 @@ pub struct PluginsConfig {
     values: Value,
     validators: HashMap<String, ValidationFunction>,
 }
-pub fn sift_privates(value: &mut serde_json::Value) {
+fn sift_privates(value: &mut serde_json::Value) {
     match value {
         Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
         Value::Array(a) => a.iter_mut().for_each(sift_privates),
@@ -827,6 +828,62 @@ pub fn sift_privates(value: &mut serde_json::Value) {
         }
     }
 }
+
+fn load_external_plugin_config(name: &str, value: &mut Value) {
+    let value = value
+        .as_object_mut()
+        .unwrap_or_else(|| panic!("Plugin '{}' configurations must be objects", name));
+
+    let config = if let Some(config) = value.get("__config__") {
+        config
+    } else {
+        return;
+    };
+    let config = config.as_str().unwrap_or_else(|| {
+        panic!(
+            "Plugin '{}' '__config__' property must have string type",
+            name
+        )
+    });
+    let config = Path::new(config);
+    let extension = config.extension().map(|s| s.to_str().unwrap());
+    if extension != Some("json") && extension != Some("json5") {
+        panic!("Plugin '{}' `__config__` property: unsupported file type. Configuration files must have an extension (.json and .json5 supported)", name);
+    }
+    let mut f = std::fs::File::open(config).unwrap_or_else(|e| {
+        panic!(
+            "Plugin '{}' `__config__` property: failed to open configuration file '{}': {}",
+            name,
+            config.display(),
+            e
+        )
+    });
+    let mut content = String::new();
+    f.read_to_string(&mut content).unwrap_or_else(|e| {
+        panic!(
+            "Plugin '{}' `__config__` property: failed to read configuration file '{}': {}",
+            name,
+            config.display(),
+            e
+        )
+    });
+    let mut config_value: Value = json5::from_str(&content).unwrap_or_else(|e| {
+        panic!(
+            "Plugin '{}' `__config__` property: failed to parse configuration file '{}': {}",
+            name,
+            config.display(),
+            e
+        )
+    });
+    let mut config_value = config_value.as_object_mut().unwrap_or_else(|| {
+        panic!(
+            "Plugin '{}' `__config__` property: configuration file must be an object",
+            name
+        )
+    });
+    value.append(&mut config_value);
+}
+
 #[derive(Debug, Clone)]
 pub struct PluginLoad {
     pub name: String,
@@ -836,6 +893,11 @@ pub struct PluginLoad {
 impl PluginsConfig {
     pub fn sift_privates(&mut self) {
         sift_privates(&mut self.values);
+    }
+    fn load_external_plugin_configs(&mut self) {
+        for (name, value) in self.values.as_object_mut().unwrap().iter_mut() {
+            load_external_plugin_config(name, value);
+        }
     }
     pub fn load_requests(&'_ self) -> impl Iterator<Item = PluginLoad> + '_ {
         self.values.as_object().unwrap().iter().map(|(name, value)| {

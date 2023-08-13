@@ -257,6 +257,15 @@
     },
   },
 
+  plugins: {
+    rest: {
+      __schema__: "./zenoh-plugin-rest/config_schema.json5",
+      __config__: "./zenoh-plugin-rest/config.json5",
+      __path__: "./target/debug/libzenoh_plugin_rest.so",
+      http_port: 8080
+    }
+  },
+
   ///
   /// Plugins configurations
   ///
