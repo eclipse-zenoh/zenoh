@@ -157,6 +157,9 @@ fn config_from_args(args: &ArgMatches) -> Config {
         .map_or_else(Config::default, |conf_file| {
             Config::from_file(conf_file).unwrap()
         });
+
+    config.load_external_plugin_config();
+
     if config.mode().is_none() {
         config
             .set_mode(Some(zenoh::config::WhatAmI::Router))

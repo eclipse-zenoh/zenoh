@@ -34,7 +34,6 @@ pub use validated_struct::{GetError, ValidatedMap};
 pub use zenoh_cfg_properties::config::*;
 use zenoh_core::zlock;
 use zenoh_protocol::core::{
-    endpoint::CONFIG_SEPARATOR,
     key_expr::OwnedKeyExpr,
     whatami::{WhatAmIMatcher, WhatAmIMatcherVisitor},
 };
@@ -528,6 +527,10 @@ impl Config {
     pub fn from_file<P: AsRef<Path>>(path: P) -> ZResult<Self> {
         let path = path.as_ref();
         Self::_from_file(path)
+    }
+
+    pub fn load_external_plugin_config(&mut self) {
+        self.plugins.load_external_plugin_configs();
     }
 
     fn _from_file(path: &Path) -> ZResult<Config> {
