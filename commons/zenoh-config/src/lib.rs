@@ -529,8 +529,8 @@ impl Config {
         Self::_from_file(path)
     }
 
-    pub fn load_external_plugin_config(&mut self) {
-        self.plugins.load_external_plugin_configs();
+    pub fn load_external_plugin_configs(&mut self) -> ZResult<()> {
+        self.plugins.load_external_configs()
     }
 
     fn _from_file(path: &Path) -> ZResult<Config> {
@@ -832,59 +832,58 @@ fn sift_privates(value: &mut serde_json::Value) {
     }
 }
 
-fn load_external_plugin_config(name: &str, value: &mut Value) {
-    let value = value
-        .as_object_mut()
-        .unwrap_or_else(|| panic!("Plugin '{}' configurations must be objects", name));
-
-    let config = if let Some(config) = value.get("__config__") {
-        config
-    } else {
-        return;
-    };
-    let config = config.as_str().unwrap_or_else(|| {
-        panic!(
-            "Plugin '{}' '__config__' property must have string type",
-            name
-        )
-    });
-    let config = Path::new(config);
-    let extension = config.extension().map(|s| s.to_str().unwrap());
-    if extension != Some("json") && extension != Some("json5") {
-        panic!("Plugin '{}' `__config__` property: unsupported file type. Configuration files must have an extension (.json and .json5 supported)", name);
+fn deserialize_from_file<T, P>(path: P) -> ZResult<T>
+where
+    for<'de> T: Deserialize<'de>,
+    P: AsRef<Path>,
+{
+    match std::fs::File::open(path.as_ref()) {
+        Ok(mut f) => {
+            let mut content = String::new();
+            if let Err(e) = f.read_to_string(&mut content) {
+                bail!(e)
+            }
+            match path.as_ref()
+                .extension()
+                .map(|s| s.to_str().unwrap())
+            {
+                Some("json") | Some("json5") => match json5::Deserializer::from_str(&content) {
+                    Ok(mut d) => T::deserialize(&mut d).map_err(|e| zerror!("JSON5 error: {}", e).into()),
+                    Err(e) => Err(zerror!("JSON5 error: {}", e).into()),
+                },
+                Some("yaml") => {
+                    let d = serde_yaml::Deserializer::from_str(&content);
+                    T::deserialize(d).map_err(|e| zerror!("YAML error: {}", e).into())
+                },
+                Some(other) => bail!("Unsupported file type '.{}' (.json, .json5 and .yaml are supported)", other),
+                None => bail!("Unsupported file type. File must have an extension (.json, .json5 and .yaml supported)")
+            }
+        }
+        Err(e) => bail!(e),
     }
-    let mut f = std::fs::File::open(config).unwrap_or_else(|e| {
-        panic!(
-            "Plugin '{}' `__config__` property: failed to open configuration file '{}': {}",
-            name,
-            config.display(),
-            e
-        )
-    });
-    let mut content = String::new();
-    f.read_to_string(&mut content).unwrap_or_else(|e| {
-        panic!(
-            "Plugin '{}' `__config__` property: failed to read configuration file '{}': {}",
-            name,
-            config.display(),
-            e
-        )
-    });
-    let mut config_value: Value = json5::from_str(&content).unwrap_or_else(|e| {
-        panic!(
-            "Plugin '{}' `__config__` property: failed to parse configuration file '{}': {}",
-            name,
-            config.display(),
-            e
-        )
-    });
-    let mut config_value = config_value.as_object_mut().unwrap_or_else(|| {
-        panic!(
-            "Plugin '{}' `__config__` property: configuration file must be an object",
-            name
-        )
-    });
-    value.append(&mut config_value);
+}
+
+fn load_external_plugin_config(name: &str, value: &mut Value) -> ZResult<()> {
+    let Some(value) = value
+        .as_object_mut() else {
+            bail!("Plugin '{}' configurations must be object", name);
+        };
+
+    let Some(config) = value.get("__config__") else { return Ok(()) };
+
+    let Some(config )= config.as_str() else {
+        bail!("Plugin '{}' '__config__' property must have string type", name);
+    };
+
+    let mut config: Value = deserialize_from_file(config)?;
+
+    let Some(mut config) = config.as_object_mut() else {
+        bail!("Plugin '{}' `__config__` property: configuration file must be an object", name);
+    };
+
+    value.append(&mut config);
+
+    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -897,10 +896,14 @@ impl PluginsConfig {
     pub fn sift_privates(&mut self) {
         sift_privates(&mut self.values);
     }
-    fn load_external_plugin_configs(&mut self) {
-        for (name, value) in self.values.as_object_mut().unwrap().iter_mut() {
-            load_external_plugin_config(name, value);
+    fn load_external_configs(&mut self) -> ZResult<()> {
+        let Some(values) = self.values.as_object_mut() else {
+            bail!("plugins configuration must be an object")
+        };
+        for (name, value) in values.iter_mut() {
+            load_external_plugin_config(name, value)?;
         }
+        Ok(())
     }
     pub fn load_requests(&'_ self) -> impl Iterator<Item = PluginLoad> + '_ {
         self.values.as_object().unwrap().iter().map(|(name, value)| {
