@@ -900,11 +900,11 @@ fn load_external_plugin_config(name: &str, value: &mut Value) -> ZResult<()> {
         };
     }
 
-    let Some(mut config) = config.as_object_mut() else {
+    let Some(config) = config.as_object_mut() else {
         bail!("Plugin '{}' `__config__` property: configuration file must be an object", name);
     };
 
-    value.append(&mut config);
+    value.append(config);
 
     Ok(())
 }
