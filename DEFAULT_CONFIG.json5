@@ -257,14 +257,6 @@
     },
   },
 
-  plugins: {
-    rest: {
-      __schema__: "./plugins/zenoh-plugin-rest/schema.json5",
-      __config__: "./plugins/zenoh-plugin-rest/config.json5",
-      //__path__: "./target/debug/libzenoh_plugin_rest.so",
-    }
-  },
-
   ///
   /// Plugins configurations
   ///
@@ -275,10 +267,21 @@
   //  plugins: {
   //    /// If no `__path__` is given to a plugin, zenohd will automatically search for a shared library matching the plugin's name (here, `libzenoh_plugin_rest.so` would be searched for on linux)
   //
+  //    /// Plugin settings may contain fields `__config__` and `__schema__`
+  //    /// - If `__config__` is specified, it's content is merged into plugin configuration. 
+  //    ///   Settings from `__config_`_ overrides values in plugin configuration.
+  //    /// - If `__schema__` is specified, the additional verification of `__config__` file is performed accordingly to the json schema. 
+  //    ///   `__schema__` doesn't affect plugin settings in zenohd config itself
+  //
   //    /// Configure the REST API plugin
   //    rest: {
   //      /// Setting this option to true allows zenohd to panic should it detect issues with this plugin. Setting it to false politely asks the plugin not to panic.
   //      __required__: true, // defaults to false
+  //      /// load configuration from the file
+  //      __config__: "./plugins/zenoh-plugin-rest/config.json5",
+  //      /// validate configuration accordingly to schema     
+  //      __schema__: "./plugins/zenoh-plugin-rest/schema.json5",
+  //      /// http port to answer to rest requests
   //      http_port: 8000,
   //    },
   //
