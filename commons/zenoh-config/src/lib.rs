@@ -14,6 +14,7 @@
 
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
+use jsonschema::JSONSchema;
 use serde::{
     de::{self, MapAccess, Visitor},
     Deserialize, Serialize,
@@ -870,12 +871,34 @@ fn load_external_plugin_config(name: &str, value: &mut Value) -> ZResult<()> {
         };
 
     let Some(config) = value.get("__config__") else { return Ok(()) };
-
     let Some(config )= config.as_str() else {
         bail!("Plugin '{}' '__config__' property must have string type", name);
     };
 
     let mut config: Value = deserialize_from_file(config)?;
+
+    if let Some(schema) = value.get("__schema__") {
+        let Some(schema )= schema.as_str() else {
+            bail!("Plugin '{}' '__schema__' property must have string type", name);
+        };
+        let schema: Value = deserialize_from_file(schema)?;
+        let schema = JSONSchema::compile(&schema).map_err(|e| -> zenoh_result::Error {
+            zerror!(
+                "Plugin '{}' configuration file schema is invalid: {}",
+                name,
+                e
+            )
+            .into()
+        })?;
+        if let Err(es) = schema.validate(&config) {
+            let es = es.map(|e| format!("{}", e)).collect::<Vec<_>>().join("\n");
+            bail!(
+                "Plugin '{}' configuration file does not match its schema: {}",
+                name,
+                es
+            );
+        };
+    }
 
     let Some(mut config) = config.as_object_mut() else {
         bail!("Plugin '{}' `__config__` property: configuration file must be an object", name);
