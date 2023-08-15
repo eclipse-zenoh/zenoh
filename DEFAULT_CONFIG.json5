@@ -259,7 +259,7 @@
 
   plugins: {
     rest: {
-      __config_schema__: "./plugins/zenoh-plugin-rest/config_schema.json5",
+      __schema__: "./plugins/zenoh-plugin-rest/schema.json5",
       __config__: "./plugins/zenoh-plugin-rest/config.json5",
       //__path__: "./target/debug/libzenoh_plugin_rest.so",
     }
