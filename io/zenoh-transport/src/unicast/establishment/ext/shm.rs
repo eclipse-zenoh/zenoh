@@ -13,7 +13,7 @@
 //
 use crate::unicast::{
     establishment::{AcceptFsm, OpenFsm},
-    shm::{Challenge, SharedMemoryUnicast},
+    shared_memory_unicast::{Challenge, SharedMemoryUnicast},
 };
 use async_trait::async_trait;
 use std::convert::TryInto;

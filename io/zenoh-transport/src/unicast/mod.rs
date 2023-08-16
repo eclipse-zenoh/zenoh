@@ -12,15 +12,20 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod establishment;
-pub(crate) mod link;
 pub(crate) mod manager;
-pub(crate) mod rx;
+pub(crate) mod net;
+pub(crate) mod transport_unicast_inner;
+
+#[cfg(feature = "test")]
+pub mod test_helpers;
+
+#[cfg(feature = "shared-memory")]
+pub(crate) mod shared_memory_unicast;
 #[cfg(feature = "shared-memory")]
 pub(crate) mod shm;
-pub(crate) mod transport;
-pub(crate) mod tx;
 
-use super::common;
+use self::transport_unicast_inner::TransportUnicastTrait;
+
 #[cfg(feature = "stats")]
 use super::common::stats::stats_struct;
 use super::{TransportPeer, TransportPeerEventHandler};
@@ -29,7 +34,6 @@ use establishment::ext::auth::ZPublicKey;
 pub use manager::*;
 use std::fmt;
 use std::sync::{Arc, Weak};
-use transport::TransportUnicastInner;
 use zenoh_core::zcondfeat;
 use zenoh_link::Link;
 use zenoh_protocol::network::NetworkMessage;
@@ -99,11 +103,11 @@ pub(crate) struct TransportConfigUnicast {
 /// [`TransportUnicast`] is the transport handler returned
 /// when opening a new unicast transport
 #[derive(Clone)]
-pub struct TransportUnicast(Weak<TransportUnicastInner>);
+pub struct TransportUnicast(Weak<dyn TransportUnicastTrait>);
 
 impl TransportUnicast {
     #[inline(always)]
-    pub(super) fn get_inner(&self) -> ZResult<Arc<TransportUnicastInner>> {
+    pub(super) fn get_inner(&self) -> ZResult<Arc<dyn TransportUnicastTrait>> {
         self.0
             .upgrade()
             .ok_or_else(|| zerror!("Transport unicast closed").into())
@@ -121,23 +125,11 @@ impl TransportUnicast {
         Ok(transport.get_whatami())
     }
 
-    #[inline(always)]
-    pub fn get_sn_resolution(&self) -> ZResult<Bits> {
-        let transport = self.get_inner()?;
-        Ok(transport.get_sn_resolution())
-    }
-
     #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub fn is_shm(&self) -> ZResult<bool> {
         let transport = self.get_inner()?;
         Ok(transport.is_shm())
-    }
-
-    #[inline(always)]
-    pub fn is_qos(&self) -> ZResult<bool> {
-        let transport = self.get_inner()?;
-        Ok(transport.is_qos())
     }
 
     #[inline(always)]
@@ -176,8 +168,7 @@ impl TransportUnicast {
     #[inline(always)]
     pub fn schedule(&self, message: NetworkMessage) -> ZResult<()> {
         let transport = self.get_inner()?;
-        transport.schedule(message);
-        Ok(())
+        transport.schedule(message)
     }
 
     #[inline(always)]
@@ -201,20 +192,15 @@ impl TransportUnicast {
         }
     }
 
-    #[inline(always)]
-    pub fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
-        self.schedule(message)
-    }
-
     #[cfg(feature = "stats")]
     pub fn get_stats(&self) -> ZResult<TransportUnicastStats> {
         Ok(self.get_inner()?.stats.snapshot())
     }
 }
 
-impl From<&Arc<TransportUnicastInner>> for TransportUnicast {
-    fn from(s: &Arc<TransportUnicastInner>) -> TransportUnicast {
-        TransportUnicast(Arc::downgrade(s))
+impl From<&Arc<dyn TransportUnicastTrait>> for TransportUnicast {
+    fn from(link: &Arc<dyn TransportUnicastTrait>) -> TransportUnicast {
+        TransportUnicast(Arc::downgrade(link))
     }
 }
 
@@ -231,13 +217,16 @@ impl fmt::Debug for TransportUnicast {
         match self.get_inner() {
             Ok(transport) => {
                 let is_shm = zcondfeat!("shared-memory", transport.is_shm(), false);
-                f.debug_struct("Transport Unicast")
-                    .field("zid", &transport.get_zid())
-                    .field("whatami", &transport.get_whatami())
-                    .field("resolution", &transport.get_sn_resolution())
-                    .field("is_qos", &transport.is_qos())
-                    .field("is_shm", &is_shm)
-                    .field("links", &transport.get_links())
+
+                transport
+                    .add_debug_fields(
+                        f.debug_struct("Transport Unicast")
+                            .field("zid", &transport.get_zid())
+                            .field("whatami", &transport.get_whatami())
+                            .field("is_qos", &transport.is_qos())
+                            .field("is_shm", &is_shm)
+                            .field("links", &transport.get_links()),
+                    )
                     .finish()
             }
             Err(e) => {

@@ -288,6 +288,10 @@ validated_struct::validator! {
                     client_certificate: Option<String>,
                     server_name_verification: Option<bool>
                 },
+                pub shared_memory: #[derive(Default)]
+                SHMConf {
+                    shm_access_mask: Option<u32>
+                },
                 pub compression: #[derive(Default)]
                 /// **Experimental** compression feature.
                 /// Will compress the batches hop to hop (as opposed to end to end). May cause errors when

@@ -18,7 +18,7 @@ pub use super::queries::*;
 pub use super::resource::*;
 use super::runtime::Runtime;
 use crate::net::codec::Zenoh080Routing;
-use crate::net::protocol::{linkstate::LinkStateList, OAM_LINKSTATE};
+use crate::net::protocol::linkstate::LinkStateList;
 use async_std::task::JoinHandle;
 use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
@@ -32,6 +32,7 @@ use uhlc::HLC;
 use zenoh_link::Link;
 use zenoh_protocol::common::ZExtBody;
 use zenoh_protocol::core::{ExprId, WhatAmI, WhatAmIMatcher, ZenohId};
+use zenoh_protocol::network::oam::id::OAM_LINKSTATE;
 use zenoh_protocol::network::{Mapping, NetworkBody, NetworkMessage};
 use zenoh_transport::{
     DeMux, DummyPrimitives, McastMux, Mux, Primitives, TransportMulticast, TransportPeer,

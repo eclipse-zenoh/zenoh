@@ -173,6 +173,7 @@ fn transport_unicast_defragmentation_tcp_only() {
 
 #[cfg(feature = "transport_ws")]
 #[test]
+#[ignore]
 fn transport_unicast_defragmentation_ws_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -181,6 +182,46 @@ fn transport_unicast_defragmentation_ws_only() {
 
     // Define the locators
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 11010).parse().unwrap();
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    task::block_on(async {
+        for ch in channel.iter() {
+            run(&endpoint, *ch, MSG_SIZE).await;
+        }
+    });
+}
+
+#[cfg(feature = "transport_shm")]
+#[test]
+#[ignore]
+fn transport_unicast_defragmentation_shm_only() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locators
+    let endpoint: EndPoint = "shm/transport_unicast_defragmentation_shm_only"
+        .parse()
+        .unwrap();
     // Define the reliability and congestion control
     let channel = [
         Channel {

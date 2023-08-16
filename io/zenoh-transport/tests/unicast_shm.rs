@@ -377,4 +377,16 @@ mod tests {
         let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14010).parse().unwrap();
         task::block_on(run(&endpoint));
     }
+
+    #[cfg(all(feature = "transport_shm", feature = "shared-memory"))]
+    #[test]
+    fn transport_shm_shm() {
+        let _ = env_logger::try_init();
+        task::block_on(async {
+            zasync_executor_init!();
+        });
+
+        let endpoint: EndPoint = "shm/transport_shm_shm".parse().unwrap();
+        task::block_on(run(&endpoint));
+    }
 }

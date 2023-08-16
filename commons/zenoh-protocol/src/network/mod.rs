@@ -24,7 +24,7 @@ pub use declare::{
     DeclareToken, UndeclareInterest, UndeclareKeyExpr, UndeclareQueryable, UndeclareSubscriber,
     UndeclareToken,
 };
-pub use oam::{Oam, OamId};
+pub use oam::Oam;
 pub use push::Push;
 pub use request::{AtomicRequestId, Request, RequestId};
 pub use response::{Response, ResponseFinal};

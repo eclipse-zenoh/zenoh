@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #[cfg(feature = "shared-memory")]
-use crate::unicast::shm::Challenge;
+use crate::unicast::shared_memory_unicast::Challenge;
 use crate::{
     unicast::establishment::{
         close_link, compute_sn, ext, finalize_transport, InputFinalize, OpenFsm,
@@ -513,18 +513,12 @@ pub(crate) async fn open_link(
         #[cfg(feature = "shared-memory")]
         is_shm: state.ext_shm.is_shm(),
     };
-    let transport = step!(manager
-        .init_transport_unicast(config)
-        .await
-        .map_err(|e| (e, Some(close::reason::INVALID))));
 
-    // Finalize the transport
-    // Add the link to the transport
-    step!(step!(transport
-        .get_inner()
-        .map_err(|e| (e, Some(close::reason::INVALID))))
-    .add_link(link.clone(), LinkUnicastDirection::Outbound)
-    .map_err(|e| (e, Some(close::reason::MAX_LINKS))));
+    let transport = step!(
+        manager
+            .init_transport_unicast(config, link.clone(), LinkUnicastDirection::Outbound)
+            .await
+    );
 
     // Sync the RX sequence number
     let _ = step!(transport

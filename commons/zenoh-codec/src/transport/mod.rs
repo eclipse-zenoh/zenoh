@@ -25,10 +25,52 @@ use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
+#[cfg(feature = "shared-memory")]
+use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::{
     common::{imsg, ZExtZ64},
     transport::*,
 };
+
+// TransportMessageShm
+#[cfg(feature = "shared-memory")]
+impl<W> WCodec<&TransportMessageShm, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &TransportMessageShm) -> Self::Output {
+        match &x.body {
+            TransportBodyShm::Network(b) => self.write(&mut *writer, b.as_ref()),
+            TransportBodyShm::KeepAlive(b) => self.write(&mut *writer, b),
+            TransportBodyShm::Close(b) => self.write(&mut *writer, b),
+        }
+    }
+}
+#[cfg(feature = "shared-memory")]
+impl<R> RCodec<TransportMessageShm, &mut R> for Zenoh080
+where
+    R: Reader + BacktrackableReader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<TransportMessageShm, Self::Error> {
+        let header: u8 = self.read(&mut *reader)?;
+
+        let codec = Zenoh080Header::new(header);
+        let body = match imsg::mid(codec.header) {
+            id::KEEP_ALIVE => TransportBodyShm::KeepAlive(codec.read(&mut *reader)?),
+            id::CLOSE => TransportBodyShm::Close(codec.read(&mut *reader)?),
+            _ => {
+                let nw: NetworkMessage = codec.read(&mut *reader)?;
+                TransportBodyShm::Network(Box::new(nw))
+            }
+        };
+
+        Ok(TransportMessageShm { body })
+    }
+}
 
 // TransportMessage
 impl<W> WCodec<&TransportMessage, &mut W> for Zenoh080

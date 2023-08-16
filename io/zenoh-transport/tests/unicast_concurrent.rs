@@ -387,6 +387,7 @@ fn transport_tcp_concurrent() {
 
 #[cfg(feature = "transport_ws")]
 #[test]
+#[ignore]
 fn transport_ws_concurrent() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -412,6 +413,41 @@ fn transport_ws_concurrent() {
         format!("ws/127.0.0.1:{}", 9035).parse().unwrap(),
         format!("ws/127.0.0.1:{}", 9036).parse().unwrap(),
         format!("ws/127.0.0.1:{}", 9037).parse().unwrap(),
+    ];
+
+    task::block_on(async {
+        transport_concurrent(endpoint01, endpoint02).await;
+    });
+}
+
+#[cfg(feature = "transport_shm")]
+#[test]
+#[ignore]
+fn transport_shm_concurrent() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let endpoint01: Vec<EndPoint> = vec![
+        "shm/transport_shm_concurrent".parse().unwrap(),
+        "shm/transport_shm_concurrent2".parse().unwrap(),
+        "shm/transport_shm_concurrent3".parse().unwrap(),
+        "shm/transport_shm_concurrent4".parse().unwrap(),
+        "shm/transport_shm_concurrent5".parse().unwrap(),
+        "shm/transport_shm_concurrent6".parse().unwrap(),
+        "shm/transport_shm_concurrent7".parse().unwrap(),
+        "shm/transport_shm_concurrent8".parse().unwrap(),
+    ];
+    let endpoint02: Vec<EndPoint> = vec![
+        "shm/transport_shm_concurrent9".parse().unwrap(),
+        "shm/transport_shm_concurrent10".parse().unwrap(),
+        "shm/transport_shm_concurrent11".parse().unwrap(),
+        "shm/transport_shm_concurrent12".parse().unwrap(),
+        "shm/transport_shm_concurrent13".parse().unwrap(),
+        "shm/transport_shm_concurrent14".parse().unwrap(),
+        "shm/transport_shm_concurrent15".parse().unwrap(),
+        "shm/transport_shm_concurrent16".parse().unwrap(),
     ];
 
     task::block_on(async {

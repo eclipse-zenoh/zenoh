@@ -11,4 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub(crate) mod linkstate;
+
+//! ⚠️ WARNING ⚠️
+//!
+//! This crate is intended for Zenoh's internal use.
+//!
+//! [Click here for Zenoh's documentation](../zenoh/index.html)
+
+#[cfg(unix)]
+mod unix;
+#[cfg(unix)]
+pub use unix::*;

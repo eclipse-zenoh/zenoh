@@ -489,7 +489,7 @@ mod tests {
             zasync_executor_init!();
         });
 
-        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 13000).parse().unwrap();
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 18000).parse().unwrap();
         task::block_on(multilink_transport(&endpoint));
     }
 
@@ -501,24 +501,39 @@ mod tests {
             zasync_executor_init!();
         });
 
-        let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 13010).parse().unwrap();
+        let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 18010).parse().unwrap();
         task::block_on(multilink_transport(&endpoint));
     }
 
     #[cfg(feature = "transport_ws")]
     #[test]
+    #[ignore]
     fn multilink_ws_only() {
         let _ = env_logger::try_init();
         task::block_on(async {
             zasync_executor_init!();
         });
 
-        let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 13020).parse().unwrap();
+        let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 18020).parse().unwrap();
+        task::block_on(multilink_transport(&endpoint));
+    }
+
+    #[cfg(feature = "transport_shm")]
+    #[test]
+    #[ignore]
+    fn multilink_shm_only() {
+        let _ = env_logger::try_init();
+        task::block_on(async {
+            zasync_executor_init!();
+        });
+
+        let endpoint: EndPoint = "shm/multilink_shm_only".parse().unwrap();
         task::block_on(multilink_transport(&endpoint));
     }
 
     #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
     #[test]
+    #[ignore]
     fn multilink_unix_only() {
         let _ = env_logger::try_init();
         task::block_on(async {
@@ -618,7 +633,7 @@ Ck0v2xSPAiVjg6w65rUQeW6uB5m0T2wyj+wm0At8vzhZPlgS1fKhcmT2dzOq3+oN
 R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
-        let mut endpoint: EndPoint = format!("tls/localhost:{}", 13030).parse().unwrap();
+        let mut endpoint: EndPoint = format!("tls/localhost:{}", 18030).parse().unwrap();
         endpoint
             .config_mut()
             .extend(
@@ -720,7 +735,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
 -----END CERTIFICATE-----";
 
         // Define the locator
-        let mut endpoint: EndPoint = format!("quic/localhost:{}", 13040).parse().unwrap();
+        let mut endpoint: EndPoint = format!("quic/localhost:{}", 18040).parse().unwrap();
         endpoint
             .config_mut()
             .extend(

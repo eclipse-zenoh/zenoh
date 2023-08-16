@@ -11,14 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(feature = "shared-memory")]
+use super::shared_memory_unicast::SharedMemoryUnicast;
+#[cfg(feature = "shared-memory")]
+use super::shm::transport::TransportUnicastShm;
 #[cfg(feature = "transport_auth")]
 use crate::unicast::establishment::ext::auth::Auth;
 #[cfg(feature = "transport_multilink")]
 use crate::unicast::establishment::ext::multilink::MultiLink;
-#[cfg(feature = "shared-memory")]
-use crate::unicast::shm::SharedMemoryUnicast;
 use crate::{
-    unicast::{transport::TransportUnicastInner, TransportConfigUnicast, TransportUnicast},
+    net::transport::TransportUnicastNet,
+    transport_unicast_inner::TransportUnicastTrait,
+    unicast::{TransportConfigUnicast, TransportUnicast},
     TransportManager,
 };
 use async_std::{prelude::FutureExt, sync::Mutex, task};
@@ -33,7 +37,7 @@ use zenoh_protocol::{
     core::{endpoint, ZenohId},
     transport::close,
 };
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_result::{bail, zerror, Error, ZResult};
 
 /*************************************/
 /*         TRANSPORT CONFIG          */
@@ -59,7 +63,7 @@ pub struct TransportManagerStateUnicast {
     // Established listeners
     pub(super) protocols: Arc<Mutex<HashMap<String, LinkManagerUnicast>>>,
     // Established transports
-    pub(super) transports: Arc<Mutex<HashMap<ZenohId, Arc<TransportUnicastInner>>>>,
+    pub(super) transports: Arc<Mutex<HashMap<ZenohId, Arc<dyn TransportUnicastTrait>>>>,
     // Multilink
     #[cfg(feature = "transport_multilink")]
     pub(super) multilink: Arc<MultiLink>,
@@ -249,6 +253,11 @@ impl TransportManager {
         TransportManagerBuilderUnicast::default()
     }
 
+    #[cfg(feature = "shared-memory")]
+    pub(crate) fn shm(&self) -> &Arc<SharedMemoryUnicast> {
+        &self.state.unicast.shm
+    }
+
     pub async fn close_unicast(&self) {
         log::trace!("TransportManagerUnicast::clear())");
 
@@ -266,7 +275,7 @@ impl TransportManager {
         let mut tu_guard = zasynclock!(self.state.unicast.transports)
             .drain()
             .map(|(_, v)| v)
-            .collect::<Vec<Arc<TransportUnicastInner>>>();
+            .collect::<Vec<Arc<dyn TransportUnicastTrait>>>();
         for tu in tu_guard.drain(..) {
             let _ = tu.close(close::reason::GENERIC).await;
         }
@@ -376,26 +385,35 @@ impl TransportManager {
     pub(super) async fn init_transport_unicast(
         &self,
         config: TransportConfigUnicast,
-    ) -> ZResult<TransportUnicast> {
+        link: LinkUnicast,
+        direction: LinkUnicastDirection,
+    ) -> Result<TransportUnicast, (Error, Option<u8>)> {
         let mut guard = zasynclock!(self.state.unicast.transports);
 
         // First verify if the transport already exists
         match guard.get(&config.zid) {
             Some(transport) => {
+                let existing_config = transport.get_config();
                 // If it exists, verify that fundamental parameters like are correct.
                 // Ignore the non fundamental parameters like initial SN.
-                if transport.config != config {
+                if *existing_config != config {
                     let e = zerror!(
                         "Transport with peer {} already exist. Invalid config: {:?}. Expected: {:?}.",
                         config.zid,
                         config,
-                        transport.config
+                        existing_config
                     );
                     log::trace!("{}", e);
-                    return Err(e.into());
+                    return Err((e.into(), Some(close::reason::INVALID)));
                 }
 
-                Ok(transport.into())
+                // Add the link to the transport
+                transport
+                    .add_link(link, direction)
+                    .await
+                    .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
+
+                Ok(TransportUnicast(Arc::downgrade(transport)))
             }
             None => {
                 // Then verify that we haven't reached the transport number limit
@@ -406,13 +424,12 @@ impl TransportManager {
                         config.zid
                     );
                     log::trace!("{}", e);
-                    return Err(e.into());
+                    return Err((e.into(), Some(close::reason::INVALID)));
                 }
 
                 // Create the transport
                 let is_multilink =
                     zcondfeat!("transport_multilink", config.multilink.is_some(), false);
-                let is_shm = zcondfeat!("shared-memory", config.is_shm, false);
 
                 let stc = TransportConfigUnicast {
                     zid: config.zid,
@@ -425,21 +442,72 @@ impl TransportManager {
                     #[cfg(feature = "shared-memory")]
                     is_shm: config.is_shm,
                 };
-                let a_t = Arc::new(TransportUnicastInner::make(self.clone(), stc)?);
+
+                async fn make_net_transport(
+                    manager: &TransportManager,
+                    stc: TransportConfigUnicast,
+                    link: LinkUnicast,
+                    direction: LinkUnicastDirection,
+                ) -> Result<Arc<dyn TransportUnicastTrait>, (Error, Option<u8>)> {
+                    log::debug!("Will use NET transport!");
+                    let t: Arc<dyn TransportUnicastTrait> =
+                        TransportUnicastNet::make(manager.clone(), stc)
+                            .map_err(|e| (e, Some(close::reason::INVALID)))
+                            .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?;
+                    // Add the link to the transport
+                    t.add_link(link, direction)
+                        .await
+                        .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
+                    Ok(t)
+                }
+
+                // select and create transport implementation depending on the cfg and enabled features
+                let a_t: Arc<dyn TransportUnicastTrait> = zcondfeat!(
+                    "shared-memory",
+                    {
+                        if stc.is_shm {
+                            log::debug!("Will use SHM transport!");
+                            TransportUnicastShm::make(self.clone(), stc, link)
+                                .map_err(|e| (e, Some(close::reason::INVALID)))
+                                .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?
+                        } else {
+                            make_net_transport(self, stc, link, direction).await?
+                        }
+                    },
+                    make_net_transport(self, stc, link, direction).await?
+                );
 
                 // Add the transport transport to the list of active transports
-                let transport: TransportUnicast = (&a_t).into();
+                let transport = TransportUnicast(Arc::downgrade(&a_t));
                 guard.insert(config.zid, a_t);
 
-                log::debug!(
-                    "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, shm: {}, multilink: {}",
-                    self.config.zid,
-                    config.zid,
-                    config.whatami,
-                    config.sn_resolution,
-                    config.tx_initial_sn,
-                    config.is_qos,
-                    is_multilink,                    is_shm
+                zcondfeat!(
+                    "shared-memory",
+                    {
+                        log::debug!(
+                            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, shm: {}, multilink: {}",
+                            self.config.zid,
+                            config.zid,
+                            config.whatami,
+                            config.sn_resolution,
+                            config.tx_initial_sn,
+                            config.is_qos,
+                            config.is_shm,
+                            is_multilink
+                        );
+                    },
+                    {
+                        log::debug!(
+                            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, multilink: {}",
+                            self.config.zid,
+                            config.zid,
+                            config.whatami,
+                            config.sn_resolution,
+                            config.tx_initial_sn,
+                            config.is_qos,
+                            is_multilink
+                        );
+                    }
                 );
 
                 Ok(transport)
@@ -482,13 +550,21 @@ impl TransportManager {
     pub async fn get_transport_unicast(&self, peer: &ZenohId) -> Option<TransportUnicast> {
         zasynclock!(self.state.unicast.transports)
             .get(peer)
-            .map(|t| t.into())
+            .map(|t| {
+                // todo: I cannot find a way to make transport.into() work for TransportUnicastTrait
+                let weak = Arc::downgrade(t);
+                TransportUnicast(weak)
+            })
     }
 
     pub async fn get_transports_unicast(&self) -> Vec<TransportUnicast> {
         zasynclock!(self.state.unicast.transports)
             .values()
-            .map(|t| t.into())
+            .map(|t| {
+                // todo: I cannot find a way to make transport.into() work for TransportUnicastTrait
+                let weak = Arc::downgrade(t);
+                TransportUnicast(weak)
+            })
             .collect()
     }
 

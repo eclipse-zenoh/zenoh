@@ -63,10 +63,11 @@ jobs:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Clippy shared-memory
+        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets --features shared-memory -- -D warnings
+          args: --all-targets --features shared-memory --features transport_shm -- -D warnings
 
   test:
     name: Run tests on ${{ matrix.os }}
@@ -101,11 +102,31 @@ jobs:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
-      - name: Run tests shared-memory
+      - name: Run tests with SHM
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        uses: actions-rs/cargo@v1
+        with:
+          command: nextest
+          args: run -F shared-memory -F transport_shm -p zenoh-transport
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+          ASYNC_STD_THREAD_COUNT: 4
+
+      - name: Run doctests
         uses: actions-rs/cargo@v1
         with:
           command: test
-          args: --features "transport_tcp,shared-memory" -p zenoh-transport --test unicast_shm
+          args: --doc
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+          ASYNC_STD_THREAD_COUNT: 4
+
+      - name: Run tests with SHM for macOS
+        if: ${{ matrix.os == 'macOS-latest' }}
+        uses: actions-rs/cargo@v1
+        with:
+          command: nextest
+          args: run -F shared-memory -F transport_tcp -p zenoh-transport
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4

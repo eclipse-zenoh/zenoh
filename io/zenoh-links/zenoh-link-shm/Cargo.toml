@@ -13,7 +13,7 @@
 #
 [package]
 rust-version = { workspace = true }
-name = "zenoh-link"
+name = "zenoh-link-shm"
 version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
@@ -25,28 +25,25 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-transport_quic = ["zenoh-link-quic"]
-transport_tcp = ["zenoh-link-tcp"]
-transport_tls = ["zenoh-link-tls"]
-transport_udp = ["zenoh-link-udp"]
-transport_unixsock-stream = ["zenoh-link-unixsock_stream"]
-transport_ws = ["zenoh-link-ws"]
-transport_serial = ["zenoh-link-serial"]
-transport_shm = ["zenoh-link-shm", "zenoh-link-shm/transport_shm"]
+transport_shm = []
 
 [dependencies]
 async-std = { workspace = true }
 async-trait = { workspace = true }
-rcgen = { workspace = true, optional = true }
+async-io = ">= 1.13.0"
+log = { workspace = true }
+rand = { workspace = true }
+zenoh-buffers = { workspace = true }
+zenoh-core = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-link-commons = { workspace = true }
-zenoh-link-quic = { workspace = true, optional = true }
-zenoh-link-serial = { workspace = true, optional = true }
-zenoh-link-tcp = { workspace = true, optional = true }
-zenoh-link-tls = { workspace = true, optional = true }
-zenoh-link-udp = { workspace = true, optional = true }
-zenoh-link-unixsock_stream = { workspace = true, optional = true }
-zenoh-link-ws = { workspace = true, optional = true }
-zenoh-link-shm = { workspace = true, optional = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+unix-named-pipe = ">= 0.2.0"
+nix = { workspace = true }
+filepath = ">=0.1.2"
+
+[target.'cfg(all(not(target_os="macos"), unix))'.dependencies]
+advisory-lock = ">= 0.3.0"

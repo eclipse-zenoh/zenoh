@@ -13,7 +13,6 @@
 //
 use crate::net::codec::Zenoh080Routing;
 use crate::net::protocol::linkstate::{LinkState, LinkStateList};
-use crate::net::protocol::OAM_LINKSTATE;
 use crate::net::runtime::Runtime;
 use async_std::task;
 use petgraph::graph::NodeIndex;
@@ -26,6 +25,7 @@ use zenoh_codec::WCodec;
 use zenoh_link::Locator;
 use zenoh_protocol::common::ZExtBody;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, ZenohId};
+use zenoh_protocol::network::oam::id::OAM_LINKSTATE;
 use zenoh_protocol::network::{oam, NetworkBody, NetworkMessage, Oam};
 use zenoh_transport::TransportUnicast;
 
@@ -285,7 +285,7 @@ impl Network {
     fn send_on_link(&self, idxs: Vec<(NodeIndex, Details)>, transport: &TransportUnicast) {
         if let Ok(msg) = self.make_msg(idxs) {
             log::trace!("{} Send to {:?} {:?}", self.name, transport.get_zid(), msg);
-            if let Err(e) = transport.handle_message(msg) {
+            if let Err(e) = transport.schedule(msg) {
                 log::debug!("{} Error sending LinkStateList: {}", self.name, e);
             }
         } else {
@@ -301,7 +301,7 @@ impl Network {
             for link in self.links.values() {
                 if parameters(link) {
                     log::trace!("{} Send to {} {:?}", self.name, link.zid, msg);
-                    if let Err(e) = link.transport.handle_message(msg.clone()) {
+                    if let Err(e) = link.transport.schedule(msg.clone()) {
                         log::debug!("{} Error sending LinkStateList: {}", self.name, e);
                     }
                 }

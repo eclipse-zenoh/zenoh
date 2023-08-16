@@ -29,7 +29,7 @@ impl Mux {
 
 impl Primitives for Mux {
     fn send_declare(&self, msg: Declare) {
-        let _ = self.handler.handle_message(NetworkMessage {
+        let _ = self.handler.schedule(NetworkMessage {
             body: NetworkBody::Declare(msg),
             #[cfg(feature = "stats")]
             size: None,
@@ -37,7 +37,7 @@ impl Primitives for Mux {
     }
 
     fn send_push(&self, msg: Push) {
-        let _ = self.handler.handle_message(NetworkMessage {
+        let _ = self.handler.schedule(NetworkMessage {
             body: NetworkBody::Push(msg),
             #[cfg(feature = "stats")]
             size: None,
@@ -45,7 +45,7 @@ impl Primitives for Mux {
     }
 
     fn send_request(&self, msg: Request) {
-        let _ = self.handler.handle_message(NetworkMessage {
+        let _ = self.handler.schedule(NetworkMessage {
             body: NetworkBody::Request(msg),
             #[cfg(feature = "stats")]
             size: None,
@@ -53,7 +53,7 @@ impl Primitives for Mux {
     }
 
     fn send_response(&self, msg: Response) {
-        let _ = self.handler.handle_message(NetworkMessage {
+        let _ = self.handler.schedule(NetworkMessage {
             body: NetworkBody::Response(msg),
             #[cfg(feature = "stats")]
             size: None,
@@ -61,7 +61,7 @@ impl Primitives for Mux {
     }
 
     fn send_response_final(&self, msg: ResponseFinal) {
-        let _ = self.handler.handle_message(NetworkMessage {
+        let _ = self.handler.schedule(NetworkMessage {
             body: NetworkBody::ResponseFinal(msg),
             #[cfg(feature = "stats")]
             size: None,

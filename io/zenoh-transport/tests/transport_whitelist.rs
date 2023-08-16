@@ -137,3 +137,21 @@ fn transport_whitelist_tcp() {
     // Run
     task::block_on(run(&endpoints));
 }
+
+#[cfg(feature = "transport_shm")]
+#[test]
+#[ignore]
+fn transport_whitelist_shm() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locators
+    let endpoints: Vec<EndPoint> = vec![
+        "shm/transport_whitelist_shm".parse().unwrap(),
+        "shm/transport_whitelist_shm2".parse().unwrap(),
+    ];
+    // Run
+    task::block_on(run(&endpoints));
+}

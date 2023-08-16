@@ -14,6 +14,8 @@ use std::io::{stdin, Read};
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::{App, Arg};
+#[cfg(not(feature = "shared-memory"))]
+use std::process::exit;
 use zenoh::config::Config;
 use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
@@ -61,6 +63,7 @@ fn parse_args() -> Config {
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
+        .arg(Arg::from_usage("--enable-shm 'Enable SHM transport.'"))
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
         ))
@@ -82,6 +85,15 @@ fn parse_args() -> Config {
     }
     if args.is_present("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    }
+    if args.is_present("enable-shm") {
+        #[cfg(feature = "shared-memory")]
+        config.transport.shared_memory.set_enabled(true).unwrap();
+        #[cfg(not(feature = "shared-memory"))]
+        {
+            println!("enable-shm argument: SHM cannot be enabled, because Zenoh is compiled without shared-memory feature!");
+            exit(-1);
+        }
     }
 
     config
