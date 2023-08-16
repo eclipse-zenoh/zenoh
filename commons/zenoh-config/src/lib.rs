@@ -527,11 +527,9 @@ impl Config {
 
     pub fn from_file<P: AsRef<Path>>(path: P) -> ZResult<Self> {
         let path = path.as_ref();
-        Self::_from_file(path)
-    }
-
-    pub fn load_external_plugin_configs(&mut self) -> ZResult<()> {
-        self.plugins.load_external_configs()
+        let mut config = Self::_from_file(path)?;
+        config.plugins.load_external_configs()?;
+        Ok(config)
     }
 
     fn _from_file(path: &Path) -> ZResult<Config> {
