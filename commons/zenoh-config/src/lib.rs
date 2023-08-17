@@ -14,7 +14,8 @@
 
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
-use jsonschema::JSONSchema;
+mod include;
+use include::recursive_include;
 use serde::{
     de::{self, MapAccess, Visitor},
     Deserialize, Serialize,
@@ -22,7 +23,7 @@ use serde::{
 use serde_json::Value;
 use std::{
     any::Any,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt,
     io::Read,
     marker::PhantomData,
@@ -831,80 +832,12 @@ fn sift_privates(value: &mut serde_json::Value) {
     }
 }
 
-fn deserialize_from_file<T, P>(path: P) -> ZResult<T>
-where
-    for<'de> T: Deserialize<'de>,
-    P: AsRef<Path>,
-{
-    match std::fs::File::open(path.as_ref()) {
-        Ok(mut f) => {
-            let mut content = String::new();
-            if let Err(e) = f.read_to_string(&mut content) {
-                bail!(e)
-            }
-            match path.as_ref()
-                .extension()
-                .map(|s| s.to_str().unwrap())
-            {
-                Some("json") | Some("json5") => match json5::Deserializer::from_str(&content) {
-                    Ok(mut d) => T::deserialize(&mut d).map_err(|e| zerror!("JSON5 error: {}", e).into()),
-                    Err(e) => Err(zerror!("JSON5 error: {}", e).into()),
-                },
-                Some("yaml") => {
-                    let d = serde_yaml::Deserializer::from_str(&content);
-                    T::deserialize(d).map_err(|e| zerror!("YAML error: {}", e).into())
-                },
-                Some(other) => bail!("Unsupported file type '.{}' (.json, .json5 and .yaml are supported)", other),
-                None => bail!("Unsupported file type. File must have an extension (.json, .json5 and .yaml supported)")
-            }
-        }
-        Err(e) => bail!(e),
-    }
-}
-
-fn load_external_plugin_config(name: &str, value: &mut Value) -> ZResult<()> {
-    let Some(value) = value
+fn load_external_plugin_config(title: &str, value: &mut Value) -> ZResult<()> {
+    let Some(values) = value
         .as_object_mut() else {
-            bail!("Plugin '{}' configurations must be object", name);
+            bail!("{} must be object", title);
         };
-
-    let Some(config) = value.get("__config__") else { return Ok(()) };
-    let Some(config )= config.as_str() else {
-        bail!("Plugin '{}' '__config__' property must have string type", name);
-    };
-
-    let mut config: Value = deserialize_from_file(config)?;
-
-    if let Some(schema) = value.get("__schema__") {
-        let Some(schema )= schema.as_str() else {
-            bail!("Plugin '{}' '__schema__' property must have string type", name);
-        };
-        let schema: Value = deserialize_from_file(schema)?;
-        let schema = JSONSchema::compile(&schema).map_err(|e| -> zenoh_result::Error {
-            zerror!(
-                "Plugin '{}' configuration file schema is invalid: {}",
-                name,
-                e
-            )
-            .into()
-        })?;
-        if let Err(es) = schema.validate(&config) {
-            let es = es.map(|e| format!("{}", e)).collect::<Vec<_>>().join("\n");
-            bail!(
-                "Plugin '{}' configuration file does not match its schema: {}",
-                name,
-                es
-            );
-        };
-    }
-
-    let Some(config) = config.as_object_mut() else {
-        bail!("Plugin '{}' `__config__` property: configuration file must be an object", name);
-    };
-
-    value.append(config);
-
-    Ok(())
+    recursive_include(title, values, &mut HashSet::new(), "__config__")
 }
 
 #[derive(Debug, Clone)]

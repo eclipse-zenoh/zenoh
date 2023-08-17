@@ -267,11 +267,11 @@
   //  plugins: {
   //    /// If no `__path__` is given to a plugin, zenohd will automatically search for a shared library matching the plugin's name (here, `libzenoh_plugin_rest.so` would be searched for on linux)
   //
-  //    /// Plugin settings may contain fields `__config__` and `__schema__`
-  //    /// - If `__config__` is specified, it's content is merged into plugin configuration. 
-  //    ///   Settings from `__config_`_ overrides values in plugin configuration.
-  //    /// - If `__schema__` is specified, the additional verification of `__config__` file is performed accordingly to the json schema. 
-  //    ///   `__schema__` doesn't affect plugin settings in zenohd config itself
+  //    /// Plugin settings may contain field `__config__`
+  //    /// - If `__config__` is specified, it's content is merged into plugin configuration
+  //    /// - Properties loaded from `__config__` file overrides existing properties
+  //    /// - If json objects in loaded file contains `__config__` properties, they are processed recursively
+  //    ///   This is used in the 'storcge_manager' which supports subplugins, each with it's own config
   //
   //    /// Configure the REST API plugin
   //    rest: {
@@ -279,8 +279,6 @@
   //      __required__: true, // defaults to false
   //      /// load configuration from the file
   //      __config__: "./plugins/zenoh-plugin-rest/config.json5",
-  //      /// validate configuration accordingly to schema     
-  //      __schema__: "./plugins/zenoh-plugin-rest/schema.json5",
   //      /// http port to answer to rest requests
   //      http_port: 8000,
   //    },

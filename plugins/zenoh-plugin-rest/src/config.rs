@@ -25,7 +25,6 @@ pub struct Config {
     __path__: Option<String>,
     __required__: Option<bool>,
     __config__: Option<String>,
-    __schema__: Option<String>,
 }
 
 impl From<&Config> for serde_json::Value {
