@@ -4557,6 +4557,7 @@ dependencies = [
 name = "zenoh-link-quic"
 version = "0.10.0-dev"
 dependencies = [
+ "async-rustls",
  "async-std",
  "async-trait",
  "futures",
