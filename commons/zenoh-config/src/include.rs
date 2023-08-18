@@ -105,6 +105,17 @@ where
         };
         let include_path = include_path.to_string();
         for (k, v) in include_values.iter_mut() {
+            // disallow include property on the top level - this would overwrite the include property from the parent file
+            if k == include_property_name {
+                bail!(
+                    "{}.{} -> {}::{} : include property on the top level is not allowed",
+                    title,
+                    include_property_name,
+                    include_path,
+                    k,
+                );
+            }
+
             values.remove(k);
             if let Some(include_values) = v.as_object_mut() {
                 let title = format!(
