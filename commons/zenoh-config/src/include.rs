@@ -45,12 +45,14 @@ where
                 None => bail!("Unsupported file type. File must have an extension (.json, .json5 and .yaml supported)")
             }
         }
-        Err(e) => bail!(e),
+        Err(e) => {
+            bail!(e)
+        }
     }
 }
 
 pub(crate) fn recursive_include(
-    title: &str, // path in format "filename::object -> filename::object -> ..." for error reporting
+    title: &str, // path in format "filename::object.object.object -> filename::object.object... -> ..." for error reporting
     values: &mut Map<String, Value>,
     loop_detector: &mut HashSet<String>,
     include_property_name: &str,
@@ -58,20 +60,54 @@ pub(crate) fn recursive_include(
     if !loop_detector.insert(title.to_string()) {
         bail!("{} : include loop detected", title,);
     }
-    let Some(include_path) = values.get(include_property_name) else { return Ok(()) };
-    let Some(include_path)= include_path.as_str() else {
-        bail!("{} : '{}' property must have string type", title, include_property_name);
+    // if include property is present, read the file and remove properites found in file from values
+    let include_object = if let Some(include_path) = values.get(include_property_name) {
+        let Some(include_path)= include_path.as_str() else {
+            bail!("{}.{} : property must have string type", title, include_property_name);
+        };
+        let mut include_object: Value = match deserialize_from_file(include_path) {
+            Ok(v) => v,
+            Err(e) => bail!(
+                "{}.{} : failed to read file '{}' - {}",
+                title,
+                include_property_name,
+                include_path,
+                e
+            ),
+        };
+        let Some(include_values) = include_object.as_object_mut() else {
+            bail!("{}.{}: included file '{}' must be an object", title, include_property_name, include_path);
+        };
+        let include_path = include_path.to_string();
+        for (k, v) in include_values.iter_mut() {
+            values.remove(k);
+            if let Some(include_values) = v.as_object_mut() {
+                let title = format!("{}.{} -> {}::{}", title, include_property_name, include_path, k);
+                recursive_include(
+                    title.as_str(),
+                    include_values,
+                    loop_detector,
+                    include_property_name,
+                )?;
+            }
+        }
+        Some(include_object)
+    } else {
+        None
     };
-    let mut include_values: Value = deserialize_from_file(include_path)?;
-    let Some(include_values) = include_values.as_object_mut() else {
-        bail!("{} : '{}' property: included file '{}' must be an object", title, include_property_name, include_path);
-    };
-    for (k, v) in include_values.iter_mut() {
-        if let Some(values) = v.as_object_mut() {
-            let title = format!("{} -> {}::{}", title, include_path, k);
-            recursive_include(title.as_str(), values, loop_detector, include_property_name)?;
+
+    // process remaining object values
+    for (k, v) in values.iter_mut() {
+        if let Some(object) = v.as_object_mut() {
+            let title = format!("{}.{}", title, k);
+            recursive_include(title.as_str(), object, loop_detector, include_property_name)?;
         }
     }
-    values.append(include_values);
+
+    // if external file was incluided, add it's content to values
+    if let Some(mut include_values) = include_object {
+        values.append(include_values.as_object_mut().unwrap());
+    }
+
     Ok(())
 }

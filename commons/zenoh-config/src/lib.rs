@@ -855,7 +855,7 @@ impl PluginsConfig {
             bail!("plugins configuration must be an object")
         };
         for (name, value) in values.iter_mut() {
-            load_external_plugin_config(name, value)?;
+            load_external_plugin_config(format!("plugins.{}",name.as_str()).as_str(), value)?;
         }
         Ok(())
     }
