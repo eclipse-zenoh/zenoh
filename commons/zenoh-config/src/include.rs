@@ -12,7 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::HashSet, io::Read, path::{Path, PathBuf}};
+use std::{
+    collections::HashSet,
+    io::Read,
+    path::{Path, PathBuf},
+};
 
 use serde::Deserialize;
 use serde_json::{Map, Value};
