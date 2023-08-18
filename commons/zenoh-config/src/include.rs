@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{collections::HashSet, io::Read, path::Path};
+use std::{collections::HashSet, io::Read, path::{Path, PathBuf}};
 
 use serde::Deserialize;
 use serde_json::{Map, Value};
@@ -51,21 +51,46 @@ where
     }
 }
 
-pub(crate) fn recursive_include(
+pub(crate) fn recursive_include<P>(
     title: &str, // path in format "filename::object.object.object -> filename::object.object... -> ..." for error reporting
     values: &mut Map<String, Value>,
-    loop_detector: &mut HashSet<String>,
+    mut loop_detector: HashSet<PathBuf>,
     include_property_name: &str,
-) -> ZResult<()> {
-    if !loop_detector.insert(title.to_string()) {
-        bail!("{} : include loop detected", title,);
-    }
+    local_path: P,
+) -> ZResult<()>
+where
+    P: AsRef<Path>,
+{
     // if include property is present, read the file and remove properites found in file from values
     let include_object = if let Some(include_path) = values.get(include_property_name) {
         let Some(include_path)= include_path.as_str() else {
             bail!("{}.{} : property must have string type", title, include_property_name);
         };
-        let mut include_object: Value = match deserialize_from_file(include_path) {
+        let include_path_adjusted = Path::new(local_path.as_ref()).join(include_path);
+        let include_path_canonical = match include_path_adjusted.canonicalize() {
+            Ok(p) => p,
+            Err(e) => bail!(
+                "{}.{} : failed to canonicalize path '{}' - {}",
+                title,
+                include_property_name,
+                include_path,
+                e
+            ),
+        };
+
+        if !loop_detector.insert(include_path_canonical) {
+            bail!(
+                "{}.{} : loop detected while including file '{}'",
+                title,
+                include_property_name,
+                include_path
+            );
+        }
+
+        let Some(new_local_path) = include_path_adjusted.parent() else {
+            bail!("{}.{} : cannot get directory part for '{}' value", title, include_property_name, include_path);
+        };
+        let mut include_object: Value = match deserialize_from_file(&include_path_adjusted) {
             Ok(v) => v,
             Err(e) => bail!(
                 "{}.{} : failed to read file '{}' - {}",
@@ -76,18 +101,22 @@ pub(crate) fn recursive_include(
             ),
         };
         let Some(include_values) = include_object.as_object_mut() else {
-            bail!("{}.{}: included file '{}' must be an object", title, include_property_name, include_path);
+            bail!("{}.{}: included file '{}' must contain an object", title, include_property_name, include_path);
         };
         let include_path = include_path.to_string();
         for (k, v) in include_values.iter_mut() {
             values.remove(k);
             if let Some(include_values) = v.as_object_mut() {
-                let title = format!("{}.{} -> {}::{}", title, include_property_name, include_path, k);
+                let title = format!(
+                    "{}.{} -> {}::{}",
+                    title, include_property_name, include_path, k
+                );
                 recursive_include(
                     title.as_str(),
                     include_values,
-                    loop_detector,
+                    loop_detector.clone(),
                     include_property_name,
+                    new_local_path,
                 )?;
             }
         }
@@ -100,7 +129,13 @@ pub(crate) fn recursive_include(
     for (k, v) in values.iter_mut() {
         if let Some(object) = v.as_object_mut() {
             let title = format!("{}.{}", title, k);
-            recursive_include(title.as_str(), object, loop_detector, include_property_name)?;
+            recursive_include(
+                title.as_str(),
+                object,
+                loop_detector.clone(),
+                include_property_name,
+                local_path.as_ref(),
+            )?;
         }
     }
 

@@ -264,7 +264,7 @@
     storage_manager: {
       __config__: "./plugins/zenoh-plugin-storage-manager/config.json5",
     }
-  },`
+  },
 
   ///
   /// Plugins configurations

@@ -837,7 +837,7 @@ fn load_external_plugin_config(title: &str, value: &mut Value) -> ZResult<()> {
         .as_object_mut() else {
             bail!("{} must be object", title);
         };
-    recursive_include(title, values, &mut HashSet::new(), "__config__")
+    recursive_include(title, values, HashSet::new(), "__config__", ".")
 }
 
 #[derive(Debug, Clone)]
