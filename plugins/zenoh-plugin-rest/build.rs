@@ -11,6 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+use schemars::schema_for;
+
+use crate::config::Config;
+
+#[path = "src/config.rs"]
+mod config;
+
 fn main() {
     // Add rustc version to zenohd
     let version_meta = rustc_version::version_meta().unwrap();
@@ -18,4 +26,11 @@ fn main() {
         "cargo:rustc-env=RUSTC_VERSION={}",
         version_meta.short_version_string
     );
+    // Generate default config schema
+    let schema = schema_for!(Config);
+    std::fs::write(
+        "config_schema.json5",
+        serde_json::to_string_pretty(&schema).unwrap(),
+    )
+    .unwrap();
 }
