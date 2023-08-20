@@ -34,3 +34,4 @@ serde_json = { workspace = true }
 zenoh = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
+schemars = { workspace = true }

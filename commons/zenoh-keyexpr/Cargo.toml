@@ -30,6 +30,7 @@ std = ["zenoh-result/std"]
 [dependencies]
 keyed-set = { workspace = true }
 rand = { workspace = true, features = ["alloc", "getrandom"] }
+schemars = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
 token-cell = { workspace = true }
 zenoh-result = { workspace = true }

@@ -58,6 +58,10 @@ zenoh_backend_traits = { workspace = true }
 
 [build-dependencies]
 rustc_version = { workspace = true }
+zenoh_backend_traits = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true, features = ["default"] }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 async-global-executor = { workspace = true }

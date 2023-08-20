@@ -11,6 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use schemars::schema_for;
+use zenoh_backend_traits::config::PluginConfig;
+
 fn main() {
     // Add rustc version to zenohd
     let version_meta = rustc_version::version_meta().unwrap();
@@ -18,4 +21,11 @@ fn main() {
         "cargo:rustc-env=RUSTC_VERSION={}",
         version_meta.short_version_string
     );
+    // Generate default config schema
+    let schema = schema_for!(PluginConfig);
+    std::fs::write(
+        "config_schema.json5",
+        serde_json::to_string_pretty(&schema).unwrap(),
+    )
+    .unwrap();
 }
