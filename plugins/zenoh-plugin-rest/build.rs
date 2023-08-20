@@ -31,5 +31,5 @@ fn main() {
         "config_schema.json5",
         serde_json::to_string_pretty(&schema).unwrap(),
     )
-    .unwrap();    
+    .unwrap();
 }
