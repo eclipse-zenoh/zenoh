@@ -27,6 +27,7 @@ use core::{
 ///
 /// See [`keyexpr`](super::borrowed::keyexpr).
 #[derive(Clone, PartialEq, Eq, Hash, serde::Deserialize)]
+#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 #[serde(try_from = "String")]
 pub struct OwnedKeyExpr(pub(crate) Arc<str>);
 impl serde::Serialize for OwnedKeyExpr {

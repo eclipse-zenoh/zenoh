@@ -1,0 +1,7 @@
+{
+  "volumes": {},
+  "storages": {},
+  "name" : "test",
+  "required" : true,
+  "rest": {}
+}
