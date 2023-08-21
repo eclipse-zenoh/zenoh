@@ -11,13 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use lazy_static::lazy_static;
 use shared_memory::{Shmem, ShmemConf, ShmemError};
 use std::{
     any::Any,
     cmp,
     collections::{binary_heap::BinaryHeap, HashMap},
     fmt, mem,
-    sync::atomic::{AtomicPtr, AtomicUsize, Ordering},
+    ops::Add,
+    sync::{
+        atomic::{AtomicPtr, AtomicUsize, Ordering},
+        Arc, Weak,
+    },
 };
 use zenoh_buffers::ZSliceBuffer;
 use zenoh_result::{zerror, ShmError, ZResult};
@@ -271,6 +276,74 @@ impl fmt::Debug for SharedMemoryReader {
         f.debug_struct("SharedMemoryReader").finish()?;
         f.debug_list().entries(self.segments.keys()).finish()
     }
+}
+
+/// A pool of shared memory managers.
+///
+/// Allows to create, store and access shared managers
+#[derive(Default)]
+pub struct SharedMemoryManagerPool {
+    pool: HashMap<String, Weak<std::sync::Mutex<SharedMemoryManager>>>,
+    defrag_score: usize,
+}
+
+impl SharedMemoryManagerPool {
+    pub fn ensure_manager(
+        &mut self,
+        name: String,
+    ) -> ZResult<Arc<std::sync::Mutex<SharedMemoryManager>>> {
+        fn make_manager(name: String) -> ZResult<Arc<std::sync::Mutex<SharedMemoryManager>>> {
+            //todo: the allocation size must be configurable (or auto-configurable?)
+            Ok(Arc::new(std::sync::Mutex::new(SharedMemoryManager::make(
+                name,
+                1024 * 1024,
+            )?)))
+        }
+
+        match self.pool.entry(name.clone()) {
+            std::collections::hash_map::Entry::Occupied(mut e) => {
+                let entry_mut = e.get_mut();
+                match entry_mut.upgrade() {
+                    Some(v) => Ok(v),
+                    None => {
+                        let manager = make_manager(name)?;
+                        *entry_mut = Arc::downgrade(&manager);
+                        Ok(manager)
+                    }
+                }
+            }
+            std::collections::hash_map::Entry::Vacant(e) => {
+                let manager = make_manager(name)?;
+                e.insert(Arc::downgrade(&manager));
+                self.defrag();
+                Ok(manager)
+            }
+        }
+    }
+
+    pub fn global_manager(&mut self) -> ZResult<Arc<std::sync::Mutex<SharedMemoryManager>>> {
+        self.ensure_manager(String::default())
+    }
+
+    fn defrag(&mut self) {
+        // todo: think about lifetime management
+        // SharedMemoryManager instances are stored as Weak in order to preserve drop-when-unused logic.
+        // Some logic needed to clean-up dead Weak entries from the Pool. I'm planning to rely on
+        // SharedMemoryManager::drop method and make some smart clean-up triggering there
+        if self.defrag_score.add(1) > self.pool.len() / 2 {
+            self.defrag_score = 0;
+            self.pool.retain(|_, val| val.strong_count() > 0);
+        }
+    }
+}
+
+lazy_static! {
+    /// Global managers pool
+    ///
+    /// Sessions created with SHM enabled in config will take manager from this pool
+    /// identified by it's name their in config
+    pub static ref MANAGERS_POOL: std::sync::RwLock<SharedMemoryManagerPool> =
+        std::sync::RwLock::new(SharedMemoryManagerPool::default());
 }
 
 /// A shared memory segment manager.

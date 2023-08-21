@@ -24,6 +24,7 @@ mod tests {
         time::Duration,
     };
     use zenoh_buffers::SplitBuffer;
+    use zenoh_config::SharedMemoryConf;
     use zenoh_core::zasync_executor_init;
     use zenoh_link::Link;
     use zenoh_protocol::{
@@ -35,7 +36,7 @@ mod tests {
         zenoh_new::{PushBody, Put},
     };
     use zenoh_result::ZResult;
-    use zenoh_shm::{SharedMemoryBuf, SharedMemoryManager};
+    use zenoh_shm::{SharedMemoryBuf, MANAGERS_POOL};
     use zenoh_transport::{
         TransportEventHandler, TransportManager, TransportMulticast,
         TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -157,17 +158,23 @@ mod tests {
         let peer_shm02 = ZenohId::try_from([2]).unwrap();
         let peer_net01 = ZenohId::try_from([3]).unwrap();
 
-        // Create the SharedMemoryManager
-        let mut shm01 =
-            SharedMemoryManager::make(format!("peer_shm01_{}", endpoint.protocol()), 2 * MSG_SIZE)
-                .unwrap();
+        // Declare and configure the custom SharedMemoryManager
+        let shmman_name = format!("peer_shm01_{}", endpoint.protocol());
+        let shm01 = MANAGERS_POOL
+            .write()
+            .unwrap()
+            .ensure_manager(shmman_name.clone())
+            .unwrap();
+
+        // Create shared memory config for transport managers
+        let shm_conf = SharedMemoryConf::new(true, shmman_name).unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(true));
         let peer_shm01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_shm01)
-            .unicast(TransportManager::config_unicast().shm(true))
+            .unicast(TransportManager::config_unicast().shm(&shm_conf))
             .build(peer_shm01_handler.clone())
             .unwrap();
 
@@ -176,7 +183,7 @@ mod tests {
         let peer_shm02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_shm02)
-            .unicast(TransportManager::config_unicast().shm(true))
+            .unicast(TransportManager::config_unicast().shm(&shm_conf))
             .build(peer_shm02_handler.clone())
             .unwrap();
 
@@ -185,7 +192,7 @@ mod tests {
         let peer_net01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_net01)
-            .unicast(TransportManager::config_unicast().shm(false))
+            .unicast(TransportManager::config_unicast().shm(&SharedMemoryConf::default()))
             .build(peer_net01_handler.clone())
             .unwrap();
 
@@ -230,7 +237,10 @@ mod tests {
             // Create the message to send
             let mut sbuf = ztimeout!(async {
                 loop {
-                    match shm01.alloc(MSG_SIZE) {
+                    let mut guard = shm01.lock().unwrap();
+                    let res = guard.alloc(MSG_SIZE);
+                    drop(guard);
+                    match res {
                         Ok(sbuf) => break sbuf,
                         Err(_) => task::sleep(USLEEP).await,
                     }
@@ -278,7 +288,10 @@ mod tests {
             // Create the message to send
             let mut sbuf = ztimeout!(async {
                 loop {
-                    match shm01.alloc(MSG_SIZE) {
+                    let mut guard = shm01.lock().unwrap();
+                    let res = guard.alloc(MSG_SIZE);
+                    drop(guard);
+                    match res {
                         Ok(sbuf) => break sbuf,
                         Err(_) => task::sleep(USLEEP).await,
                     }

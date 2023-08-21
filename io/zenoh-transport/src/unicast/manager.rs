@@ -38,6 +38,8 @@ use zenoh_protocol::{
     transport::close,
 };
 use zenoh_result::{bail, zerror, Error, ZResult};
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::MANAGERS_POOL;
 
 /*************************************/
 /*         TRANSPORT CONFIG          */
@@ -96,6 +98,8 @@ pub struct TransportManagerBuilderUnicast {
     pub(super) max_links: usize,
     #[cfg(feature = "shared-memory")]
     pub(super) is_shm: bool,
+    #[cfg(feature = "shared-memory")]
+    pub(super) shared_memory_manager: String,
     #[cfg(feature = "transport_auth")]
     pub(super) authenticator: Auth,
 }
@@ -144,8 +148,9 @@ impl TransportManagerBuilderUnicast {
     }
 
     #[cfg(feature = "shared-memory")]
-    pub fn shm(mut self, is_shm: bool) -> Self {
-        self.is_shm = is_shm;
+    pub fn shm(mut self, shm: &SharedMemoryConf) -> Self {
+        self.is_shm = *shm.enabled();
+        self.shared_memory_manager = shm.shared_memory_manager().clone();
         self
     }
 
@@ -173,7 +178,7 @@ impl TransportManagerBuilderUnicast {
         }
         #[cfg(feature = "shared-memory")]
         {
-            self = self.shm(*config.transport().shared_memory().enabled());
+            self = self.shm(config.transport().shared_memory());
         }
         #[cfg(feature = "transport_auth")]
         {
@@ -209,7 +214,12 @@ impl TransportManagerBuilderUnicast {
             #[cfg(feature = "transport_multilink")]
             multilink: Arc::new(MultiLink::make(prng)?),
             #[cfg(feature = "shared-memory")]
-            shm: Arc::new(SharedMemoryUnicast::make()?),
+            shm: Arc::new(SharedMemoryUnicast::make(
+                MANAGERS_POOL
+                    .write()
+                    .map_err(|e| zerror!("{e}"))?
+                    .ensure_manager(self.shared_memory_manager)?,
+            )?),
             #[cfg(feature = "transport_auth")]
             authenticator: Arc::new(self.authenticator),
         };
@@ -239,6 +249,8 @@ impl Default for TransportManagerBuilderUnicast {
             max_links: *transport.max_links(),
             #[cfg(feature = "shared-memory")]
             is_shm: *shm.enabled(),
+            #[cfg(feature = "shared-memory")]
+            shared_memory_manager: shm.shared_memory_manager().clone(),
             #[cfg(feature = "transport_auth")]
             authenticator: Auth::default(),
         }

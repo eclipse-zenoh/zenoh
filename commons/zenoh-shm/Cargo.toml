@@ -35,3 +35,4 @@ serde = { workspace = true, features = ["default"] }
 shared_memory = { workspace = true }
 zenoh-buffers = { workspace = true }
 zenoh-result = { workspace = true }
+lazy_static = { workspace = true }

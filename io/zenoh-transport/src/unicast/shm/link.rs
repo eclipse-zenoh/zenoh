@@ -96,7 +96,7 @@ impl TransportUnicastShm {
                     c_transport.manager.config.zid,
                     c_transport.config.zid
                 );
-                let _ = c_transport.finalize(0).await;
+                async_std::task::spawn(async move { c_transport.finalize(0).await });
             }
         });
         *guard = Some(handle);
@@ -137,7 +137,7 @@ impl TransportUnicastShm {
                     c_transport.manager.config.zid,
                     c_transport.config.zid
                 );
-                let _ = c_transport.finalize(0).await;
+                async_std::task::spawn(async move { c_transport.finalize(0).await });
             }
         });
         *guard = Some(handle);

@@ -310,6 +310,9 @@ validated_struct::validator! {
                 /// Whether shared memory is enabled or not.
                 /// If set to `true`, the shared-memory transport will be enabled. (default `false`).
                 enabled: bool,
+                /// String identifier of shared memory manager instance.
+                /// Allows to share or split shared memory managers between Sessions. (default is empty string which means the default instance).
+                shared_memory_manager: String,
             },
             pub auth: #[derive(Default)]
             AuthConf {

@@ -12,17 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use zenoh_config::SharedMemoryConf;
 use zenoh_core::zcondfeat;
 
 use crate::{TransportManager, TransportManagerBuilderUnicast};
 
 pub fn make_transport_manager_builder(
     #[cfg(feature = "transport_multilink")] max_links: usize,
-    #[cfg(feature = "shared-memory")] shm_transport: bool,
+    #[cfg(feature = "shared-memory")] shm: &SharedMemoryConf,
 ) -> TransportManagerBuilderUnicast {
     let transport = make_basic_transport_manager_builder(
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        shm,
     );
 
     zcondfeat!(
@@ -36,14 +37,14 @@ pub fn make_transport_manager_builder(
 }
 
 pub fn make_basic_transport_manager_builder(
-    #[cfg(feature = "shared-memory")] shm_transport: bool,
+    #[cfg(feature = "shared-memory")] shm: &SharedMemoryConf,
 ) -> TransportManagerBuilderUnicast {
     println!("Create transport manager builder...");
     zcondfeat!(
         "shared-memory",
         {
             println!("...with SHM...");
-            TransportManager::config_unicast().shm(shm_transport)
+            TransportManager::config_unicast().shm(shm)
         },
         TransportManager::config_unicast()
     )

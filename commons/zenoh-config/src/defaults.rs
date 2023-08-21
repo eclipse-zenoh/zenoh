@@ -182,6 +182,9 @@ impl Default for LinkRxConf {
 #[allow(clippy::derivable_impls)]
 impl Default for SharedMemoryConf {
     fn default() -> Self {
-        Self { enabled: false }
+        Self {
+            enabled: false,
+            shared_memory_manager: String::default(),
+        }
     }
 }

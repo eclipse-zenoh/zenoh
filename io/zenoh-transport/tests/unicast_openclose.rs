@@ -13,6 +13,8 @@
 //
 use async_std::{prelude::FutureExt, task};
 use std::{convert::TryFrom, sync::Arc, time::Duration};
+#[cfg(feature = "shared-memory")]
+use zenoh_config::SharedMemoryConf;
 use zenoh_core::{zasync_executor_init, zcondfeat};
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
@@ -81,7 +83,7 @@ impl TransportEventHandler for SHClientOpenClose {
 
 async fn openclose_transport(
     endpoint: &EndPoint,
-    #[cfg(feature = "shared-memory")] shm_transport: bool,
+    #[cfg(feature = "shared-memory")] shm_conf: &SharedMemoryConf,
 ) {
     /* [ROUTER] */
     let router_id = ZenohId::try_from([1]).unwrap();
@@ -92,7 +94,7 @@ async fn openclose_transport(
         #[cfg(feature = "transport_multilink")]
         2,
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        shm_conf,
     )
     .max_sessions(1);
     let router_manager = TransportManager::builder()
@@ -111,7 +113,7 @@ async fn openclose_transport(
         #[cfg(feature = "transport_multilink")]
         2,
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        shm_conf,
     )
     .max_sessions(1);
     let client01_manager = TransportManager::builder()
@@ -126,7 +128,7 @@ async fn openclose_transport(
         #[cfg(feature = "transport_multilink")]
         1,
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        shm_conf,
     )
     .max_sessions(1);
     let client02_manager = TransportManager::builder()
@@ -190,7 +192,7 @@ async fn openclose_transport(
     // Open a second transport from the client to the router
     // -> This should be accepted
     // (this stage is ignored for SHM transport, because it supports only one link)
-    if zcondfeat!("shared-memory", !shm_transport, true) {
+    if zcondfeat!("shared-memory", !shm_conf.enabled(), true) {
         links_num = 2;
 
         println!("\nTransport Open Close [2a1]");
@@ -459,14 +461,18 @@ async fn openclose_net_transport(endpoint: &EndPoint) {
     openclose_transport(
         endpoint,
         #[cfg(feature = "shared-memory")]
-        false,
+        &SharedMemoryConf::default(),
     )
     .await
 }
 
 #[cfg(feature = "shared-memory")]
-async fn openclose_shm_transport(endpoint: &EndPoint) {
-    openclose_transport(endpoint, true).await
+async fn openclose_shm_conf(endpoint: &EndPoint) {
+    openclose_transport(
+        endpoint,
+        &SharedMemoryConf::new(true, String::default()).unwrap(),
+    )
+    .await
 }
 
 #[cfg(feature = "transport_tcp")]
@@ -483,14 +489,14 @@ fn openclose_tcp_only() {
 
 #[cfg(all(feature = "transport_tcp", feature = "shared-memory"))]
 #[test]
-fn openclose_tcp_only_with_shm_transport() {
+fn openclose_tcp_only_with_shm_conf() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 13100).parse().unwrap();
-    task::block_on(openclose_shm_transport(&endpoint));
+    task::block_on(openclose_shm_conf(&endpoint));
 }
 
 #[cfg(feature = "transport_udp")]
@@ -507,14 +513,14 @@ fn openclose_udp_only() {
 
 #[cfg(all(feature = "transport_udp", feature = "shared-memory"))]
 #[test]
-fn openclose_udp_only_with_shm_transport() {
+fn openclose_udp_only_with_shm_conf() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 13110).parse().unwrap();
-    task::block_on(openclose_shm_transport(&endpoint));
+    task::block_on(openclose_shm_conf(&endpoint));
 }
 
 #[cfg(feature = "transport_ws")]
@@ -533,14 +539,14 @@ fn openclose_ws_only() {
 #[cfg(all(feature = "transport_ws", feature = "shared-memory"))]
 #[test]
 #[ignore]
-fn openclose_ws_only_with_shm_transport() {
+fn openclose_ws_only_with_shm_conf() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 13120).parse().unwrap();
-    task::block_on(openclose_shm_transport(&endpoint));
+    task::block_on(openclose_shm_conf(&endpoint));
 }
 
 #[cfg(feature = "transport_shm")]
@@ -559,14 +565,14 @@ fn openclose_shm_only() {
 #[cfg(all(feature = "transport_shm", feature = "shared-memory"))]
 #[test]
 #[ignore]
-fn openclose_shm_only_with_shm_transport() {
+fn openclose_shm_only_with_shm_conf() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "shm/openclose_shm_only_with_shm_transport".parse().unwrap();
-    task::block_on(openclose_shm_transport(&endpoint));
+    let endpoint: EndPoint = "shm/openclose_shm_only_with_shm_conf".parse().unwrap();
+    task::block_on(openclose_shm_conf(&endpoint));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]

@@ -22,6 +22,8 @@ use std::{
     },
     time::Duration,
 };
+#[cfg(feature = "shared-memory")]
+use zenoh_config::SharedMemoryConf;
 use zenoh_core::zasync_executor_init;
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -338,7 +340,7 @@ impl TransportPeerEventHandler for SCClient {
 async fn open_transport_unicast(
     client_endpoints: &[EndPoint],
     server_endpoints: &[EndPoint],
-    #[cfg(feature = "shared-memory")] shm_transport: bool,
+    #[cfg(feature = "shared-memory")] shm_conf: &SharedMemoryConf,
 ) -> (
     TransportManager,
     Arc<SHRouter>,
@@ -355,7 +357,7 @@ async fn open_transport_unicast(
         #[cfg(feature = "transport_multilink")]
         server_endpoints.len(),
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        shm_conf,
     );
     let router_manager = TransportManager::builder()
         .zid(router_id)
@@ -375,7 +377,7 @@ async fn open_transport_unicast(
         #[cfg(feature = "transport_multilink")]
         client_endpoints.len(),
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        shm_conf,
     );
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
@@ -512,7 +514,7 @@ async fn run_single(
     server_endpoints: &[EndPoint],
     channel: Channel,
     msg_size: usize,
-    #[cfg(feature = "shared-memory")] shm_transport: bool,
+    #[cfg(feature = "shared-memory")] shm_conf: &SharedMemoryConf,
 ) {
     println!(
         "\n>>> Running test for:  {:?}, {:?}, {:?}, {}",
@@ -525,7 +527,7 @@ async fn run_single(
             client_endpoints,
             server_endpoints,
             #[cfg(feature = "shared-memory")]
-            shm_transport,
+            shm_conf,
         )
         .await;
 
@@ -563,7 +565,7 @@ async fn run_internal(
     server_endpoints: &[EndPoint],
     channel: &[Channel],
     msg_size: &[usize],
-    #[cfg(feature = "shared-memory")] shm_transport: bool,
+    #[cfg(feature = "shared-memory")] shm_conf: &SharedMemoryConf,
 ) {
     for ch in channel.iter() {
         for ms in msg_size.iter() {
@@ -573,7 +575,7 @@ async fn run_internal(
                 *ch,
                 *ms,
                 #[cfg(feature = "shared-memory")]
-                shm_transport,
+                shm_conf,
             )
             .await;
         }
@@ -592,7 +594,7 @@ async fn run_with_net(
         channel,
         msg_size,
         #[cfg(feature = "shared-memory")]
-        false,
+        &SharedMemoryConf::default(),
     )
     .await;
 }
@@ -608,7 +610,14 @@ async fn run_with_shm(
         println!("SHM transport doesn't support more than one link, so this test would produce MAX_LINKS error!");
         panic!();
     }
-    run_internal(client_endpoints, server_endpoints, channel, msg_size, true).await;
+    run_internal(
+        client_endpoints,
+        server_endpoints,
+        channel,
+        msg_size,
+        &SharedMemoryConf::new(true, String::default()).unwrap(),
+    )
+    .await;
 }
 
 #[cfg(feature = "transport_tcp")]
