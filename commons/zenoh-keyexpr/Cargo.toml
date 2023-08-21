@@ -25,12 +25,12 @@ description = "Internal crate for zenoh."
 
 [features]
 default = ["std"]
-std = ["zenoh-result/std"]
+std = ["zenoh-result/std", "dep:schemars"]
 
 [dependencies]
 keyed-set = { workspace = true }
 rand = { workspace = true, features = ["alloc", "getrandom"] }
-schemars = { workspace = true }
+schemars = { workspace = true, optional = true }
 serde = { workspace = true, features = ["alloc"] }
 token-cell = { workspace = true }
 zenoh-result = { workspace = true }

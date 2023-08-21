@@ -22,12 +22,12 @@ use core::{
     ops::{Deref, Div},
     str::FromStr,
 };
-use schemars::JsonSchema;
 
 /// A [`Arc<str>`] newtype that is statically known to be a valid key expression.
 ///
 /// See [`keyexpr`](super::borrowed::keyexpr).
-#[derive(JsonSchema, Clone, PartialEq, Eq, Hash, serde::Deserialize)]
+#[derive(Clone, PartialEq, Eq, Hash, serde::Deserialize)]
+#[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 #[serde(try_from = "String")]
 pub struct OwnedKeyExpr(pub(crate) Arc<str>);
 impl serde::Serialize for OwnedKeyExpr {
