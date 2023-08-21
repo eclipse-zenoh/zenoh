@@ -1,12 +1,13 @@
 {
-  volumes: {
-    influxdb_local: {
-        __path__: "../zenoh-backend-influxdb/target/debug/libzenoh_backend_influxdb.dylib",
-        __config__: "config_influxdb_local.json5",
+  "volumes": {
+    "influxdb_local": {
+      "__path__": "../zenoh-backend-influxdb/target/debug/libzenoh_backend_influxdb.dylib",
+      "__config__": "config_influxdb_local.json5"
     },
-    influxdb_remote: {
-        __path__: "../zenoh-backend-influxdb/target/debug/libzenoh_backend_influxdb.dylib",
-        __config__: "config_influxdb_remote.json5",
-    },
+    "influxdb_remote": {
+      "__path__": "../zenoh-backend-influxdb/target/debug/libzenoh_backend_influxdb.dylib",
+      "__config__": "config_influxdb_remote.json5"
+    }
   },
+  "storages": {}
 }
