@@ -166,18 +166,16 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
         let mut cnt = 0;
         for _ in 0..msg_count {
             let rs = ztimeout!(peer02.get(key_expr).res_async()).unwrap();
-            while let Ok(reply) = ztimeout!(rs.recv_async()) {
-                if let Ok(sample) = reply.sample {
-                    assert_eq!(sample.value.payload.len(), size);
-                    cnt += 1;
-                }
+            while let Ok(s) = ztimeout!(rs.recv_async()) {
+                assert_eq!(s.sample.unwrap().value.payload.len(), size);
+                cnt += 1;
             }
         }
         println!("[QR][02c] Got on peer02 session. {cnt}/{msg_count} msgs.");
         assert_eq!(msgs.load(Ordering::Relaxed), msg_count);
         assert_eq!(cnt, msg_count);
 
-        println!("[QR][03c] Unqueryable on peer01 session");
+        println!("[PS][03c] Unqueryable on peer01 session");
         ztimeout!(qbl.undeclare().res_async()).unwrap();
 
         // Wait for the declaration to propagate
