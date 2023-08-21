@@ -24,7 +24,9 @@ pub struct PluginConfig {
     pub name: String,
     pub required: bool,
     pub backend_search_dirs: Option<Vec<String>>,
+    #[schemars(with="Map<String, Value>")]
     pub volumes: Vec<VolumeConfig>,
+    #[schemars(with="Map<String, Value>")]
     pub storages: Vec<StorageConfig>,
     #[as_ref]
     #[as_mut]
