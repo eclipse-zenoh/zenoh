@@ -25,11 +25,12 @@ use std::{
     },
 };
 use zenoh_buffers::ZSliceBuffer;
-use zenoh_result::{zerror, ShmError, ZResult};
+use zenoh_result::{bail, zerror, ShmError, ZResult};
 
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
 const ACCOUNTED_OVERHEAD: usize = 4_096;
 const ZENOH_SHM_PREFIX: &str = "zenoh_shm_zid";
+const DEFAULT_ALLOC_SIZE: usize = 1024 * 1024;
 
 // Chunk header
 type ChunkHeaderType = AtomicUsize;
@@ -278,43 +279,82 @@ impl fmt::Debug for SharedMemoryReader {
     }
 }
 
+#[derive(Default)]
+struct PoolEntry {
+    instance: Weak<std::sync::Mutex<SharedMemoryManager>>,
+    configured_size: Option<usize>,
+}
+impl PoolEntry {
+    fn ensure_manager(
+        &mut self,
+        name: String,
+    ) -> ZResult<Arc<std::sync::Mutex<SharedMemoryManager>>> {
+        match self.instance.upgrade() {
+            Some(v) => Ok(v),
+            None => {
+                let manager = Arc::new(std::sync::Mutex::new(SharedMemoryManager::make(
+                    name,
+                    self.configured_size.unwrap_or(DEFAULT_ALLOC_SIZE),
+                )?));
+                self.instance = Arc::downgrade(&manager);
+                Ok(manager)
+            }
+        }
+    }
+
+    fn is_actual(&self) -> bool {
+        self.instance.strong_count() > 0 || self.configured_size.is_some()
+    }
+}
+
 /// A pool of shared memory managers.
 ///
 /// Allows to create, store and access shared managers
 #[derive(Default)]
 pub struct SharedMemoryManagerPool {
-    pool: HashMap<String, Weak<std::sync::Mutex<SharedMemoryManager>>>,
+    pool: HashMap<String, PoolEntry>,
+
     defrag_score: usize,
 }
 
 impl SharedMemoryManagerPool {
+    pub fn configure_manager(&mut self, name: String, size: Option<usize>) -> ZResult<&mut Self> {
+        match self.pool.entry(name.clone()) {
+            std::collections::hash_map::Entry::Occupied(mut e) => {
+                if e.get().instance.strong_count() > 0 {
+                    // the entry is already in use and cannot be reconfigured
+                    bail!("<{name}>: Cannot configure manager: already in use!")
+                }
+
+                if size.is_some() {
+                    // configure entry with new config
+                    e.get_mut().configured_size = size;
+                } else {
+                    // remove the entry in case if we drop the configuration
+                    e.remove();
+                }
+            }
+            std::collections::hash_map::Entry::Vacant(e) => {
+                let entry = PoolEntry {
+                    instance: Weak::default(),
+                    configured_size: size,
+                };
+                e.insert(entry);
+            }
+        }
+        Ok(self)
+    }
+
     pub fn ensure_manager(
         &mut self,
         name: String,
     ) -> ZResult<Arc<std::sync::Mutex<SharedMemoryManager>>> {
-        fn make_manager(name: String) -> ZResult<Arc<std::sync::Mutex<SharedMemoryManager>>> {
-            //todo: the allocation size must be configurable (or auto-configurable?)
-            Ok(Arc::new(std::sync::Mutex::new(SharedMemoryManager::make(
-                name,
-                1024 * 1024,
-            )?)))
-        }
-
         match self.pool.entry(name.clone()) {
-            std::collections::hash_map::Entry::Occupied(mut e) => {
-                let entry_mut = e.get_mut();
-                match entry_mut.upgrade() {
-                    Some(v) => Ok(v),
-                    None => {
-                        let manager = make_manager(name)?;
-                        *entry_mut = Arc::downgrade(&manager);
-                        Ok(manager)
-                    }
-                }
-            }
+            std::collections::hash_map::Entry::Occupied(mut e) => e.get_mut().ensure_manager(name),
             std::collections::hash_map::Entry::Vacant(e) => {
-                let manager = make_manager(name)?;
-                e.insert(Arc::downgrade(&manager));
+                let mut pool_entry = PoolEntry::default();
+                let manager = pool_entry.ensure_manager(name)?;
+                e.insert(pool_entry);
                 self.defrag();
                 Ok(manager)
             }
@@ -332,7 +372,7 @@ impl SharedMemoryManagerPool {
         // SharedMemoryManager::drop method and make some smart clean-up triggering there
         if self.defrag_score.add(1) > self.pool.len() / 2 {
             self.defrag_score = 0;
-            self.pool.retain(|_, val| val.strong_count() > 0);
+            self.pool.retain(|_, val| val.is_actual());
         }
     }
 }

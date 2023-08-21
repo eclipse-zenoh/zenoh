@@ -158,10 +158,13 @@ mod tests {
         let peer_shm02 = ZenohId::try_from([2]).unwrap();
         let peer_net01 = ZenohId::try_from([3]).unwrap();
 
-        // Declare and configure the custom SharedMemoryManager
+        // Construct SharedMemoryManager name
         let shmman_name = format!("peer_shm01_{}", endpoint.protocol());
+        // Confgure and create SharedMemoryManager
         let shm01 = MANAGERS_POOL
             .write()
+            .unwrap()
+            .configure_manager(shmman_name.clone(), Some(2 * MSG_SIZE))
             .unwrap()
             .ensure_manager(shmman_name.clone())
             .unwrap();
