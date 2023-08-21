@@ -20,7 +20,7 @@ use zenoh::prelude::r#async::*;
 use zenoh_core::zasync_executor_init;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
-const SLEEP: Duration = Duration::from_secs(1);
+const SLEEP: Duration = Duration::from_secs(3);
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: [usize; 2] = [1_024, 131_072];
@@ -175,7 +175,7 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
         assert_eq!(msgs.load(Ordering::Relaxed), msg_count);
         assert_eq!(cnt, msg_count);
 
-        println!("[PS][03c] Unqueryable on peer01 session");
+        println!("[QR][03c] Unqueryable on peer01 session");
         ztimeout!(qbl.undeclare().res_async()).unwrap();
 
         // Wait for the declaration to propagate
