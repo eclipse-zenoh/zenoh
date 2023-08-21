@@ -1,0 +1,41 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PluginConfig",
+  "type": "object",
+  "required": [
+    "name",
+    "required",
+    "rest",
+    "storages",
+    "volumes"
+  ],
+  "properties": {
+    "backend_search_dirs": {
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "name": {
+      "type": "string"
+    },
+    "required": {
+      "type": "boolean"
+    },
+    "rest": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "storages": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "volumes": {
+      "type": "object",
+      "additionalProperties": true
+    }
+  }
+}

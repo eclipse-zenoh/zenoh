@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Config",
+  "type": "object",
+  "required": [
+    "http_port"
+  ],
+  "properties": {
+    "__config__": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "__path__": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "__required__": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "http_port": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}
