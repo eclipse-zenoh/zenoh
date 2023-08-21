@@ -62,6 +62,7 @@ zenoh_backend_traits = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
+jsonschema = { workspace = true }
 
 [dev-dependencies]
 async-global-executor = { workspace = true }
