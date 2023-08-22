@@ -20,7 +20,7 @@ use zenoh::prelude::r#async::*;
 use zenoh_core::zasync_executor_init;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
-const SLEEP: Duration = Duration::from_secs(3);
+const SLEEP: Duration = Duration::from_secs(5);
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: [usize; 2] = [1_024, 131_072];
