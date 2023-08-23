@@ -3,9 +3,6 @@
   "title": "PluginConfig",
   "type": "object",
   "required": [
-    "name",
-    "required",
-    "rest",
     "storages",
     "volumes"
   ],
@@ -19,15 +16,11 @@
         "type": "string"
       }
     },
-    "name": {
-      "type": "string"
-    },
     "required": {
-      "type": "boolean"
-    },
-    "rest": {
-      "type": "object",
-      "additionalProperties": true
+      "type": [
+        "boolean",
+        "null"
+      ]
     },
     "storages": {
       "type": "object",

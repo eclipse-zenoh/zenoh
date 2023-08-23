@@ -6,6 +6,12 @@
     "http_port"
   ],
   "properties": {
+    "__config__": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
     "__path__": {
       "type": [
         "string",

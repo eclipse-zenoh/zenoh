@@ -267,10 +267,21 @@
   //  plugins: {
   //    /// If no `__path__` is given to a plugin, zenohd will automatically search for a shared library matching the plugin's name (here, `libzenoh_plugin_rest.so` would be searched for on linux)
   //
+  //    /// Plugin settings may contain field `__config__`
+  //    /// - If `__config__` is specified, it's content is merged into plugin configuration
+  //    /// - Properties loaded from `__config__` file overrides existing properties
+  //    /// - If json objects in loaded file contains `__config__` properties, they are processed recursively
+  //    ///   This is used in the 'storcge_manager' which supports subplugins, each with it's own config
+  //    ///
+  //    /// See below exapmle of plugin configuration using `__config__` property
+  //
   //    /// Configure the REST API plugin
   //    rest: {
   //      /// Setting this option to true allows zenohd to panic should it detect issues with this plugin. Setting it to false politely asks the plugin not to panic.
   //      __required__: true, // defaults to false
+  //      /// load configuration from the file
+  //      __config__: "./plugins/zenoh-plugin-rest/config.json5",
+  //      /// http port to answer to rest requests
   //      http_port: 8000,
   //    },
   //
@@ -373,4 +384,15 @@
   //      },
   //    },
   //  },
+
+  // /// Plugin configuration example using `__config__` property
+  // plugins: {
+  //   rest: {
+  //     __config__: "./plugins/zenoh-plugin-rest/config.json5",
+  //   },
+  //   storage_manager: {
+  //     __config__: "./plugins/zenoh-plugin-storage-manager/config.json5",
+  //   }
+  // },
+
 }

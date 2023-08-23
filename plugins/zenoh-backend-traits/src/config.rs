@@ -21,7 +21,9 @@ use zenoh_result::{bail, zerror, Error};
 
 #[derive(JsonSchema, Debug, Clone, AsMut, AsRef)]
 pub struct PluginConfig {
+    #[schemars(skip)]
     pub name: String,
+    #[schemars(with = "Option<bool>")]
     pub required: bool,
     pub backend_search_dirs: Option<Vec<String>>,
     #[schemars(with = "Map<String, Value>")]
@@ -30,16 +32,19 @@ pub struct PluginConfig {
     pub storages: Vec<StorageConfig>,
     #[as_ref]
     #[as_mut]
+    #[schemars(skip)]
     pub rest: Map<String, Value>,
 }
 #[derive(JsonSchema, Debug, Clone, AsMut, AsRef)]
 pub struct VolumeConfig {
+    #[schemars(skip)]
     pub name: String,
     pub backend: Option<String>,
     pub paths: Option<Vec<String>>,
     pub required: bool,
     #[as_ref]
     #[as_mut]
+    #[schemars(skip)]
     pub rest: Map<String, Value>,
 }
 #[derive(JsonSchema, Debug, Clone, PartialEq, Eq)]

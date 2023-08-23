@@ -25,6 +25,7 @@ pub struct Config {
     pub http_port: String,
     __path__: Option<String>,
     __required__: Option<bool>,
+    __config__: Option<String>,
 }
 
 impl From<&Config> for serde_json::Value {
