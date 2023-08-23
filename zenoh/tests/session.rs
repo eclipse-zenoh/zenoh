@@ -13,14 +13,15 @@
 //
 use async_std::prelude::FutureExt;
 use async_std::task;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use futures::FutureExt as _;
+use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh_core::zasync_executor_init;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
-const SLEEP: Duration = Duration::from_secs(5);
+const SLEEP: Duration = Duration::from_secs(1);
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: [usize; 2] = [1_024, 131_072];
@@ -134,49 +135,74 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
     }
 }
 
-async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Reliability) {
+async fn test_session_qryrep(peer01: Arc<Session>, peer02: Arc<Session>, reliability: Reliability) {
     let key_expr = "test/session";
     let msg_count = match reliability {
         Reliability::Reliable => MSG_COUNT,
         Reliability::BestEffort => 1,
     };
-    let msgs = Arc::new(AtomicUsize::new(0));
 
     for size in MSG_SIZE {
-        msgs.store(0, Ordering::Relaxed);
+        let msgs = Arc::new(AtomicUsize::new(0));
 
-        // Queryable to data
+        let sample = Sample::try_from(key_expr, vec![0u8; size]).unwrap();
         println!("[QR][01c] Queryable on peer01 session");
-        let c_msgs = msgs.clone();
         let qbl = ztimeout!(peer01
+            .clone()
             .declare_queryable(key_expr)
-            .callback(move |sample| {
-                c_msgs.fetch_add(1, Ordering::Relaxed);
-                let rep = Sample::try_from(key_expr, vec![0u8; size]).unwrap();
-                task::block_on(async { ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap() });
-            })
             .res_async())
         .unwrap();
+
+        let terminated = Arc::new(AtomicBool::new(false));
+
+        let c_msgs = msgs.clone();
+
+
+        let (tx, rx) = async_std::channel::bounded(1);
+
+        let qbl_task = task::spawn(async move {
+            loop {
+                futures::select! {
+                    query = qbl.recv_async() => {
+                        c_msgs.fetch_add(1, Ordering::Relaxed);
+                        ztimeout!(query.unwrap().reply(Ok(sample.clone())).res_async()).unwrap();
+                    },
+                    terminated = rx.recv().fuse() => {
+                        if terminated.unwrap() {
+                            break;
+                        }
+                    },
+                }
+            }
+            println!("[QR][03c] Unqueryable on peer01 session");
+            ztimeout!(qbl.undeclare().res_async()).unwrap();
+        });
 
         // Wait for the declaration to propagate
         task::sleep(SLEEP).await;
 
-        // Get data
-        println!("[QR][02c] Getting on peer02 session. {msg_count} msgs.");
-        let mut cnt = 0;
-        for _ in 0..msg_count {
-            let rs = ztimeout!(peer02.get(key_expr).res_async()).unwrap();
-            while let Ok(s) = ztimeout!(rs.recv_async()) {
-                assert_eq!(s.sample.unwrap().value.payload.len(), size);
-                cnt += 1;
+        let peer02 = peer02.clone();
+        let get_task = task::spawn(async move {
+            // Get data
+            println!("[QR][02c] Getting on peer02 session. {msg_count} msgs.");
+            let mut cnt = 0;
+            for _ in 0..msg_count {
+                let rs = ztimeout!(peer02.get(key_expr).res_async()).unwrap();
+                while let Ok(s) = ztimeout!(rs.recv_async()) {
+                    assert_eq!(s.sample.unwrap().value.payload.len(), size);
+                    cnt += 1;
+                }
             }
-        }
-        println!("[QR][02c] Got on peer02 session. {cnt}/{msg_count} msgs.");
-        assert_eq!(msgs.load(Ordering::Relaxed), msg_count);
-        assert_eq!(cnt, msg_count);
+            println!("[QR][02c] Got on peer02 session. {cnt}/{msg_count} msgs.");
+            assert_eq!(msgs.load(Ordering::Relaxed), msg_count);
+            assert_eq!(cnt, msg_count);
+            tx.send(true).await.unwrap();
+        });
 
-        println!("[QR][03c] Unqueryable on peer01 session");
-        ztimeout!(qbl.undeclare().res_async()).unwrap();
+        futures::join!(qbl_task, get_task);
+
+        // println!("[QR][03c] Unqueryable on peer01 session");
+        // ztimeout!(qbl.undeclare().res_async()).unwrap();
 
         // Wait for the declaration to propagate
         task::sleep(SLEEP).await;
@@ -190,9 +216,11 @@ fn zenoh_session_unicast() {
         let _ = env_logger::try_init();
 
         let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
+        let peer01 = peer01.into_arc();
+        let peer02 = peer02.into_arc();
         test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
-        test_session_qryrep(&peer01, &peer02, Reliability::Reliable).await;
-        close_session(peer01, peer02).await;
+        test_session_qryrep(peer01.clone(), peer02.clone(), Reliability::Reliable).await;
+        close_session(Arc::try_unwrap(peer01).unwrap(), Arc::try_unwrap(peer02).unwrap()).await;
     });
 }
 
