@@ -338,7 +338,18 @@ impl Backoff {
             self.retry_time = TSLOT;
             self.backoff.store(true, Ordering::Relaxed);
         } else {
-            self.retry_time *= 2;
+            match self.retry_time.checked_mul(2) {
+                Some(rt) => {
+                    self.retry_time = rt;
+                }
+                None => {
+                    self.retry_time = NanoSeconds::MAX;
+                    log::warn!(
+                        "Pipeline pull backoff overflow detected! Retrying in {}ns.",
+                        self.retry_time
+                    );
+                }
+            }
         }
     }
 
