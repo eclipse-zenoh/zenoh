@@ -139,7 +139,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
-        run: rustup override set nightly
+        run: rustup show
       - name: generate doc
         env:
           RUSTDOCFLAGS: -Dwarnings
@@ -230,7 +230,7 @@ jobs:
       - name: Install Rust toolchain
         run: |
           rustup show
-          rustup rustup target add ${{ matrix.job.target }}
+          rustup target add ${{ matrix.job.target }}
 
       - name: Build
         uses: actions-rs/cargo@v1
