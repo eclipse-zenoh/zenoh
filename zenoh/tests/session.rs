@@ -24,10 +24,10 @@ const SLEEP: Duration = Duration::from_secs(1);
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: [usize; 2] = [
-    1,
-    2,
-    // 1_024,
-    // 131_072,
+    // 1,
+    // 2,
+    1_024,
+    131_072,
 ];
 
 macro_rules! ztimeout {
