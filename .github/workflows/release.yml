@@ -21,16 +21,16 @@ on:
   workflow_dispatch:
     inputs:
       runtests:
-        description: 'run tests'
+        description: "run tests"
         type: boolean
       dockerhub:
-        description: 'publish to dockerhub'
+        description: "publish to dockerhub"
         type: boolean
       doc:
-        description: 'generate doc'
+        description: "generate doc"
         type: boolean
       features:
-        description: 'build with specified features (comma separated, no space)'
+        description: "build with specified features (comma separated, no space)"
         type: string
 
 jobs:
@@ -40,9 +40,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          components: rustfmt, clippy
+        run: |
+          rustup show
+          rustup component add rustfmt clippy
       - name: Code format check
         uses: actions-rs/cargo@v1
         with:
@@ -141,7 +141,7 @@ jobs:
       - name: Install Rust toolchain
         uses: actions-rs/toolchain@v1
         with:
-            toolchain: nightly
+          toolchain: nightly
       - name: generate doc
         env:
           RUSTDOCFLAGS: -Dwarnings
