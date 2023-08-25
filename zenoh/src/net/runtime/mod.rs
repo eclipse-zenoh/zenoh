@@ -49,6 +49,7 @@ use zenoh_transport::{
 pub struct RuntimeState {
     pub zid: ZenohId,
     pub whatami: WhatAmI,
+    pub metadata: serde_json::Value,
     pub router: Arc<Router>,
     pub config: Notifier<Config>,
     pub manager: TransportManager,
@@ -90,6 +91,7 @@ impl Runtime {
         log::info!("Using PID: {}", zid);
 
         let whatami = unwrap_or_default!(config.mode());
+        let metadata = config.metadata().clone();
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
         let drop_future_timestamp =
@@ -137,6 +139,7 @@ impl Runtime {
             state: Arc::new(RuntimeState {
                 zid,
                 whatami,
+                metadata,
                 router,
                 config: config.clone(),
                 manager: transport_manager,

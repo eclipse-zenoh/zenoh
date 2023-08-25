@@ -156,6 +156,7 @@ fn config_from_args(args: &ArgMatches) -> Config {
         .map_or_else(Config::default, |conf_file| {
             Config::from_file(conf_file).unwrap()
         });
+
     if config.mode().is_none() {
         config.set_mode(Some(WhatAmI::Router)).unwrap();
     }

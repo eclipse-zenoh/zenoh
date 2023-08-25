@@ -1,0 +1,7 @@
+{
+  url: "https://myinfluxdb.example",
+  private: {
+    username: "user1",
+    password: "pw1",
+  },
+}

@@ -14,6 +14,8 @@
 
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
 pub mod defaults;
+mod include;
+use include::recursive_include;
 use serde::{
     de::{self, MapAccess, Visitor},
     Deserialize, Serialize,
@@ -23,7 +25,7 @@ use serde_json::Value;
 use std::convert::TryFrom; // This is a false positive from the rust analyser
 use std::{
     any::Any,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt,
     io::Read,
     marker::PhantomData,
@@ -113,6 +115,8 @@ validated_struct::validator! {
     Config {
         /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random u128 will be generated.
         id: ZenohId,
+        /// The metadata of the instance. Arbitrary json data available from the admin space
+        metadata: Value,
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
         /// Which zenoh nodes to connect to.
@@ -533,7 +537,9 @@ impl Config {
 
     pub fn from_file<P: AsRef<Path>>(path: P) -> ZResult<Self> {
         let path = path.as_ref();
-        Self::_from_file(path)
+        let mut config = Self::_from_file(path)?;
+        config.plugins.load_external_configs()?;
+        Ok(config)
     }
 
     fn _from_file(path: &Path) -> ZResult<Config> {
@@ -828,7 +834,7 @@ pub struct PluginsConfig {
     values: Value,
     validators: HashMap<String, ValidationFunction>,
 }
-pub fn sift_privates(value: &mut serde_json::Value) {
+fn sift_privates(value: &mut serde_json::Value) {
     match value {
         Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
         Value::Array(a) => a.iter_mut().for_each(sift_privates),
@@ -838,6 +844,15 @@ pub fn sift_privates(value: &mut serde_json::Value) {
         }
     }
 }
+
+fn load_external_plugin_config(title: &str, value: &mut Value) -> ZResult<()> {
+    let Some(values) = value
+        .as_object_mut() else {
+            bail!("{} must be object", title);
+        };
+    recursive_include(title, values, HashSet::new(), "__config__", ".")
+}
+
 #[derive(Debug, Clone)]
 pub struct PluginLoad {
     pub name: String,
@@ -847,6 +862,15 @@ pub struct PluginLoad {
 impl PluginsConfig {
     pub fn sift_privates(&mut self) {
         sift_privates(&mut self.values);
+    }
+    fn load_external_configs(&mut self) -> ZResult<()> {
+        let Some(values) = self.values.as_object_mut() else {
+            bail!("plugins configuration must be an object")
+        };
+        for (name, value) in values.iter_mut() {
+            load_external_plugin_config(format!("plugins.{}", name.as_str()).as_str(), value)?;
+        }
+        Ok(())
     }
     pub fn load_requests(&'_ self) -> impl Iterator<Item = PluginLoad> + '_ {
         self.values.as_object().unwrap().iter().map(|(name, value)| {

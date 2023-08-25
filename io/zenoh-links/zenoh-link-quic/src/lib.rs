@@ -20,7 +20,8 @@
 use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 use config::{
-    TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_PRIVATE_KEY_FILE,
+    TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_NAME_VERIFICATION,
+    TLS_SERVER_PRIVATE_KEY_FILE,
 };
 use std::net::SocketAddr;
 use zenoh_config::Config;
@@ -33,6 +34,7 @@ use zenoh_protocol::core::{
 use zenoh_result::{bail, ZResult};
 
 mod unicast;
+mod verify;
 pub use unicast::*;
 
 // Default ALPN protocol
@@ -79,6 +81,12 @@ impl ConfigurationInspector<Config> for QuicConfigurator {
         if let Some(tls_server_certificate) = c.server_certificate() {
             ps.push((TLS_SERVER_CERTIFICATE_FILE, tls_server_certificate));
         }
+        if let Some(server_name_verification) = c.server_name_verification() {
+            match server_name_verification {
+                true => ps.push((TLS_SERVER_NAME_VERIFICATION, "true")),
+                false => ps.push((TLS_SERVER_NAME_VERIFICATION, "false")),
+            };
+        }
 
         let mut s = String::new();
         Parameters::extend(ps.drain(..), &mut s);
@@ -107,8 +115,11 @@ pub mod config {
     pub const TLS_SERVER_PRIVATE_KEY_FILE: &str = "server_private_key_file";
     pub const TLS_SERVER_PRIVATE_KEY_RAW: &str = "server_private_key_raw";
 
-    pub const TLS_SERVER_CERTIFICATE_FILE: &str = "server_certificate_file";
-    pub const TLS_SERVER_CERTIFICATE_RAW: &str = "server_certificate_raw";
+    pub const TLS_SERVER_CERTIFICATE_FILE: &str = "tls_server_certificate_file";
+    pub const TLS_SERVER_CERTIFICATE_RAW: &str = "tls_server_certificate_raw";
+
+    pub const TLS_SERVER_NAME_VERIFICATION: &str = "server_name_verification";
+    pub const TLS_SERVER_NAME_VERIFICATION_DEFAULT: &str = "true";
 }
 
 async fn get_quic_addr(address: &Address<'_>) -> ZResult<SocketAddr> {

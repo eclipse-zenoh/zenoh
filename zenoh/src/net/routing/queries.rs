@@ -2067,7 +2067,7 @@ pub fn route_query(
                     {
                         for ((outface, key_expr, context), qid, t) in route.values() {
                             // timer.add(TimedEvent::once(
-                            //     Instant::now() + timout,
+                            //     Instant::now() + timeout,
                             //     QueryCleanup {
                             //         tables: tables_ref.clone(),
                             //         face: Arc::downgrade(&outface),
