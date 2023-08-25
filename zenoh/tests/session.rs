@@ -14,7 +14,7 @@
 use async_std::prelude::FutureExt;
 use async_std::task;
 use futures::FutureExt as _;
-use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
@@ -153,7 +153,6 @@ async fn test_session_qryrep(peer01: Arc<Session>, peer02: Arc<Session>, reliabi
             .res_async())
         .unwrap();
 
-        let terminated = Arc::new(AtomicBool::new(false));
 
         let c_msgs = msgs.clone();
 
