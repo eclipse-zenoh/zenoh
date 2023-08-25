@@ -23,8 +23,6 @@ use zenoh_protocol::core::{Priority, Reliability};
 use zenoh_protocol::transport::{
     BatchSize, Close, Fragment, Frame, Join, KeepAlive, TransportBody, TransportSn,
 };
-#[cfg(feature = "stats")]
-use zenoh_protocol::zenoh::ZenohBody;
 use zenoh_protocol::{core::Locator, network::NetworkMessage, transport::TransportMessage};
 use zenoh_result::{bail, zerror, ZResult};
 
@@ -42,27 +40,51 @@ impl TransportMulticastInner {
         #[cfg(feature = "stats")]
         {
             use zenoh_buffers::SplitBuffer;
-            self.stats.inc_rx_z_msgs(1);
+            use zenoh_protocol::network::NetworkBody;
+            use zenoh_protocol::zenoh_new::{PushBody, RequestBody, ResponseBody};
+            self.stats.inc_rx_n_msgs(1);
             match &msg.body {
-                ZenohBody::Data(data) => match data.reply_context {
-                    Some(_) => {
-                        self.stats.inc_rx_z_data_reply_msgs(1);
-                        self.stats
-                            .inc_rx_z_data_reply_payload_bytes(data.payload.len());
+                NetworkBody::Push(push) => match &push.payload {
+                    PushBody::Put(p) => {
+                        self.stats.inc_rx_z_put_user_msgs(1);
+                        self.stats.inc_rx_z_put_user_pl_bytes(p.payload.len());
                     }
-                    None => {
-                        self.stats.inc_rx_z_data_msgs(1);
-                        self.stats.inc_rx_z_data_payload_bytes(data.payload.len());
+                    PushBody::Del(_) => self.stats.inc_rx_z_del_user_msgs(1),
+                },
+                NetworkBody::Request(req) => match &req.payload {
+                    RequestBody::Put(p) => {
+                        self.stats.inc_rx_z_put_user_msgs(1);
+                        self.stats.inc_rx_z_put_user_pl_bytes(p.payload.len());
                     }
+                    RequestBody::Del(_) => self.stats.inc_rx_z_del_user_msgs(1),
+                    RequestBody::Query(q) => {
+                        self.stats.inc_rx_z_query_user_msgs(1);
+                        self.stats.inc_rx_z_query_user_pl_bytes(
+                            q.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
+                        );
+                    }
+                    RequestBody::Pull(_) => (),
                 },
-                ZenohBody::Unit(unit) => match unit.reply_context {
-                    Some(_) => self.stats.inc_rx_z_unit_reply_msgs(1),
-                    None => self.stats.inc_rx_z_unit_msgs(1),
+                NetworkBody::Response(res) => match &res.payload {
+                    ResponseBody::Put(p) => {
+                        self.stats.inc_rx_z_put_user_msgs(1);
+                        self.stats.inc_rx_z_put_user_pl_bytes(p.payload.len());
+                    }
+                    ResponseBody::Reply(r) => {
+                        self.stats.inc_rx_z_reply_user_msgs(1);
+                        self.stats.inc_rx_z_reply_user_pl_bytes(r.payload.len());
+                    }
+                    ResponseBody::Err(e) => {
+                        self.stats.inc_rx_z_reply_user_msgs(1);
+                        self.stats.inc_rx_z_reply_user_pl_bytes(
+                            e.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
+                        );
+                    }
+                    ResponseBody::Ack(_) => (),
                 },
-                ZenohBody::Pull(_) => self.stats.inc_rx_z_pull_msgs(1),
-                ZenohBody::Query(_) => self.stats.inc_rx_z_query_msgs(1),
-                ZenohBody::Declare(_) => self.stats.inc_rx_z_declare_msgs(1),
-                ZenohBody::LinkStateList(_) => self.stats.inc_rx_z_linkstate_msgs(1),
+                NetworkBody::ResponseFinal(_) => (),
+                NetworkBody::Declare(_) => (),
+                NetworkBody::OAM(_) => (),
             }
         }
 
@@ -280,6 +302,7 @@ impl TransportMulticastInner {
         link: &LinkMulticast,
         batch_size: BatchSize,
         locator: &Locator,
+        #[cfg(feature = "stats")] transport: &TransportMulticastInner,
     ) -> ZResult<()> {
         let codec = Zenoh080::new();
         let mut reader = zslice.reader();

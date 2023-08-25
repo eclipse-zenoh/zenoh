@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::TransportUnicastShm;
-#[cfg(feature = "stats")]
-use super::TransportUnicastStatsAtomic;
 use crate::TransportExecutor;
 use async_std::task;
 use async_std::{prelude::FutureExt, sync::RwLock};
@@ -55,11 +53,11 @@ pub(crate) async fn send_with_link(link: &LinkUnicast, msg: TransportMessageShm)
     }
     log::trace!("Sent: {:?}", msg);
 
-    #[cfg(feature = "stats")]
-    {
-        stats.inc_tx_t_msgs(1);
-        stats.inc_tx_bytes(buff.len() + 2);
-    }
+    // #[cfg(feature = "stats")]
+    // {
+    //     stats.inc_tx_t_msgs(1);
+    //     stats.inc_tx_bytes(buff.len() + 2);
+    // }
 
     Ok(())
 }
@@ -81,8 +79,8 @@ impl TransportUnicastShm {
             let res = keepalive_task(
                 c_transport.link.clone(),
                 keep_alive,
-                #[cfg(feature = "stats")]
-                c_transport.stats,
+                // #[cfg(feature = "stats")]
+                // c_transport.stats,
             )
             .await;
             log::debug!(
@@ -163,7 +161,7 @@ impl TransportUnicastShm {
 async fn keepalive_task(
     link: Arc<RwLock<LinkUnicast>>,
     keep_alive: Duration,
-    #[cfg(feature = "stats")] stats: Arc<TransportUnicastStatsAtomic>,
+    // #[cfg(feature = "stats")] stats: Arc<TransportUnicastStatsAtomic>,
 ) -> ZResult<()> {
     loop {
         async_std::task::sleep(keep_alive).await;
@@ -174,10 +172,9 @@ async fn keepalive_task(
 
         let guard = zasyncwrite!(link);
         let _ = send_with_link(
-            &guard,
-            keepailve,
-            #[cfg(feature = "stats")]
-            &stats,
+            &guard, keepailve,
+            // #[cfg(feature = "stats")]
+            // &stats,
         )
         .await;
         drop(guard);

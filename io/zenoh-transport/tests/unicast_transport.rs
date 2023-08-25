@@ -543,6 +543,7 @@ async fn run_single(
         println!("\tClient: {:?}", c_stats);
         let r_stats = router_manager
             .get_transport_unicast(&client_manager.config.zid)
+            .await
             .unwrap()
             .get_stats()
             .unwrap();

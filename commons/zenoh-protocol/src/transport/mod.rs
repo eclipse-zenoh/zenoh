@@ -136,7 +136,11 @@ impl TransportMessage {
             _ => unreachable!(),
         };
 
-        Self { body }
+        Self {
+            body,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
     }
 }
 

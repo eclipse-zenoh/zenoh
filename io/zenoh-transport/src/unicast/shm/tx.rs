@@ -12,10 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::TransportUnicastShm;
-#[cfg(feature = "stats")]
-use zenoh_buffers::SplitBuffer;
-#[cfg(feature = "stats")]
-use zenoh_protocol::zenoh::ZenohBody;
 use zenoh_protocol::{
     network::NetworkMessage,
     transport::{TransportBodyShm, TransportMessageShm},
@@ -39,40 +35,67 @@ impl TransportUnicastShm {
             }
         }
 
-        #[cfg(feature = "stats")]
-        match &msg.body {
-            ZenohBody::Data(data) => match data.reply_context {
-                Some(_) => {
-                    self.stats.inc_tx_z_data_reply_msgs(1);
-                    self.stats
-                        .inc_tx_z_data_reply_payload_bytes(data.payload.len());
-                }
-                None => {
-                    self.stats.inc_tx_z_data_msgs(1);
-                    self.stats.inc_tx_z_data_payload_bytes(data.payload.len());
-                }
-            },
-            ZenohBody::Unit(unit) => match unit.reply_context {
-                Some(_) => self.stats.inc_tx_z_unit_reply_msgs(1),
-                None => self.stats.inc_tx_z_unit_msgs(1),
-            },
-            ZenohBody::Pull(_) => self.stats.inc_tx_z_pull_msgs(1),
-            ZenohBody::Query(_) => self.stats.inc_tx_z_query_msgs(1),
-            ZenohBody::Declare(_) => self.stats.inc_tx_z_declare_msgs(1),
-            ZenohBody::LinkStateList(_) => self.stats.inc_tx_z_linkstate_msgs(1),
-        }
+        // #[cfg(feature = "stats")]
+        // {
+        //     use zenoh_buffers::SplitBuffer;
+        //     use zenoh_protocol::network::NetworkBody;
+        //     use zenoh_protocol::zenoh_new::{PushBody, RequestBody, ResponseBody};
+        //     match &msg.body {
+        //         NetworkBody::Push(push) => match &push.payload {
+        //             PushBody::Put(p) => {
+        //                 self.stats.inc_tx_z_put_user_msgs(1);
+        //                 self.stats.inc_tx_z_put_user_pl_bytes(p.payload.len());
+        //             }
+        //             PushBody::Del(_) => self.stats.inc_tx_z_del_user_msgs(1),
+        //         },
+        //         NetworkBody::Request(req) => match &req.payload {
+        //             RequestBody::Put(p) => {
+        //                 self.stats.inc_tx_z_put_user_msgs(1);
+        //                 self.stats.inc_tx_z_put_user_pl_bytes(p.payload.len());
+        //             }
+        //             RequestBody::Del(_) => self.stats.inc_tx_z_del_user_msgs(1),
+        //             RequestBody::Query(q) => {
+        //                 self.stats.inc_tx_z_query_user_msgs(1);
+        //                 self.stats.inc_tx_z_query_user_pl_bytes(
+        //                     q.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
+        //                 );
+        //             }
+        //             RequestBody::Pull(_) => (),
+        //         },
+        //         NetworkBody::Response(res) => match &res.payload {
+        //             ResponseBody::Put(p) => {
+        //                 self.stats.inc_tx_z_put_user_msgs(1);
+        //                 self.stats.inc_tx_z_put_user_pl_bytes(p.payload.len());
+        //             }
+        //             ResponseBody::Reply(r) => {
+        //                 self.stats.inc_tx_z_reply_user_msgs(1);
+        //                 self.stats.inc_tx_z_reply_user_pl_bytes(r.payload.len());
+        //             }
+        //             ResponseBody::Err(e) => {
+        //                 self.stats.inc_tx_z_reply_user_msgs(1);
+        //                 self.stats.inc_tx_z_reply_user_pl_bytes(
+        //                     e.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
+        //                 );
+        //             }
+        //             ResponseBody::Ack(_) => (),
+        //         },
+        //         NetworkBody::ResponseFinal(_) => (),
+        //         NetworkBody::Declare(_) => (),
+        //         NetworkBody::OAM(_) => (),
+        //     }
+        // }
 
         let msg = TransportMessageShm {
             body: TransportBodyShm::Network(Box::new(msg)),
         };
         let res = self.send(msg);
 
-        #[cfg(feature = "stats")]
-        if res {
-            self.stats.inc_tx_z_msgs(1);
-        } else {
-            self.stats.inc_tx_z_dropped(1);
-        }
+        // #[cfg(feature = "stats")]
+        // if res {
+        //     self.stats.inc_tx_z_msgs(1);
+        // } else {
+        //     self.stats.inc_tx_z_dropped(1);
+        // }
 
         res
     }

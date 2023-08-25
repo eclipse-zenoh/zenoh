@@ -12,13 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::TransportUnicastNet;
-#[cfg(feature = "stats")]
-use super::TransportUnicastStatsAtomic;
 use crate::common::pipeline::{
     TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
     TransmissionPipelineProducer,
 };
 use crate::common::priority::TransportPriorityTx;
+#[cfg(feature = "stats")]
+use crate::unicast::TransportUnicastStatsAtomic;
 use crate::TransportExecutor;
 use async_std::prelude::FutureExt;
 use async_std::task;

@@ -125,13 +125,13 @@ where
             _ => return Err(DidntRead),
         };
 
-        Ok(ZenohMessage {
+        Ok(ZenohMessage::new(
             body,
-            channel: Channel {
+            Channel {
                 priority,
                 reliability: self.reliability,
             },
             routing_context,
-        })
+        ))
     }
 }

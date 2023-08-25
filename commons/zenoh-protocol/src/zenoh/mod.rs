@@ -198,6 +198,17 @@ pub struct ZenohMessage {
 }
 
 impl ZenohMessage {
+    #[inline]
+    pub fn new(body: ZenohBody, channel: Channel, routing_context: Option<RoutingContext>) -> Self {
+        Self {
+            body,
+            channel,
+            routing_context,
+            #[cfg(feature = "stats")]
+            size: None,
+        }
+    }
+
     pub fn make_declare(
         declarations: Vec<Declaration>,
         routing_context: Option<RoutingContext>,
@@ -391,6 +402,8 @@ impl ZenohMessage {
 
         Self {
             body,
+            #[cfg(feature = "stats")]
+            size: None,
             channel,
             routing_context,
         }

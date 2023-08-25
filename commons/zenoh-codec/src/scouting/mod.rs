@@ -53,6 +53,6 @@ where
             id::HELLO => ScoutingBody::Hello(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
-        Ok(ScoutingMessage { body })
+        Ok(body.into())
     }
 }

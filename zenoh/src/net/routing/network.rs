@@ -272,14 +272,13 @@ impl Network {
         let codec = Zenoh080Routing::new();
         let mut buf = ZBuf::empty();
         codec.write(&mut buf.writer(), &LinkStateList { link_states })?;
-        Ok(NetworkMessage {
-            body: NetworkBody::OAM(Oam {
-                id: OAM_LINKSTATE,
-                body: ZExtBody::ZBuf(buf),
-                ext_qos: oam::ext::QoSType::default(),
-                ext_tstamp: None,
-            }),
+        Ok(NetworkBody::OAM(Oam {
+            id: OAM_LINKSTATE,
+            body: ZExtBody::ZBuf(buf),
+            ext_qos: oam::ext::QoSType::default(),
+            ext_tstamp: None,
         })
+        .into())
     }
 
     fn send_on_link(&self, idxs: Vec<(NodeIndex, Details)>, transport: &TransportUnicast) {

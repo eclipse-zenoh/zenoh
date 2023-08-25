@@ -11,11 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::link::TransportLinkUnicast;
-#[cfg(feature = "stats")]
-use super::TransportUnicastStatsAtomic;
 use crate::common::priority::{TransportPriorityRx, TransportPriorityTx};
 use crate::transport_unicast_inner::TransportUnicastTrait;
+use crate::unicast::net::link::TransportLinkUnicast;
+#[cfg(feature = "stats")]
+use crate::unicast::TransportUnicastStatsAtomic;
 use crate::TransportConfigUnicast;
 use crate::{TransportExecutor, TransportManager, TransportPeerEventHandler};
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
@@ -318,6 +318,11 @@ impl TransportUnicastTrait for TransportUnicastNet {
 
     fn get_config(&self) -> &TransportConfigUnicast {
         &self.config
+    }
+
+    #[cfg(feature = "stats")]
+    fn stats(&self) -> crate::TransportUnicastStats {
+        self.stats.snapshot()
     }
 
     /*************************************/

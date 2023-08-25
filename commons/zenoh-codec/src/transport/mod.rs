@@ -129,7 +129,7 @@ where
             _ => return Err(DidntRead),
         };
 
-        Ok(TransportMessage { body })
+        Ok(body.into())
     }
 }
 

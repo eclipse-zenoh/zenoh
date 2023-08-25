@@ -92,7 +92,7 @@ where
             _ => return Err(DidntRead),
         };
 
-        Ok(NetworkMessage { body })
+        Ok(body.into())
     }
 }
 

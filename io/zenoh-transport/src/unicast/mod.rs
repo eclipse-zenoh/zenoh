@@ -55,31 +55,40 @@ stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct TransportUnicastStats {
         pub tx_t_msgs,
-        pub tx_z_msgs,
-        pub tx_z_dropped,
-        pub tx_z_data_msgs,
-        pub tx_z_data_payload_bytes,
-        pub tx_z_data_reply_msgs,
-        pub tx_z_data_reply_payload_bytes,
-        pub tx_z_pull_msgs,
-        pub tx_z_query_msgs,
-        pub tx_z_declare_msgs,
-        pub tx_z_linkstate_msgs,
-        pub tx_z_unit_msgs,
-        pub tx_z_unit_reply_msgs,
+        pub tx_n_msgs,
+        pub tx_n_dropped,
+        pub tx_z_put_user_msgs,
+        pub tx_z_put_user_pl_bytes,
+        // pub tx_z_put_admin_msgs,
+        // pub tx_z_put_admin_pl_bytes,
+        pub tx_z_del_user_msgs,
+        // pub tx_z_del_admin_msgs,
+        pub tx_z_query_user_msgs,
+        pub tx_z_query_user_pl_bytes,
+        // pub tx_z_query_admin_msgs,
+        // pub tx_z_query_admin_pl_bytes,
+        pub tx_z_reply_user_msgs,
+        pub tx_z_reply_user_pl_bytes,
+        // pub tx_z_reply_admin_msgs,
+        // pub tx_z_reply_admin_pl_bytes,
         pub tx_bytes,
+
         pub rx_t_msgs,
-        pub rx_z_msgs,
-        pub rx_z_data_msgs,
-        pub rx_z_data_payload_bytes,
-        pub rx_z_data_reply_msgs,
-        pub rx_z_data_reply_payload_bytes,
-        pub rx_z_pull_msgs,
-        pub rx_z_query_msgs,
-        pub rx_z_declare_msgs,
-        pub rx_z_linkstate_msgs,
-        pub rx_z_unit_msgs,
-        pub rx_z_unit_reply_msgs,
+        pub rx_n_msgs,
+        pub rx_z_put_user_msgs,
+        pub rx_z_put_user_pl_bytes,
+        // pub rx_z_put_admin_msgs,
+        // pub rx_z_put_admin_pl_bytes,
+        pub rx_z_del_user_msgs,
+        // pub rx_z_del_admin_msgs,
+        pub rx_z_query_user_msgs,
+        pub rx_z_query_user_pl_bytes,
+        // pub rx_z_query_admin_msgs,
+        // pub rx_z_query_admin_pl_bytes,
+        pub rx_z_reply_user_msgs,
+        pub rx_z_reply_user_pl_bytes,
+        // pub rx_z_reply_admin_msgs,
+        // pub rx_z_reply_admin_pl_bytes,
         pub rx_bytes,
     }
 }
@@ -194,7 +203,7 @@ impl TransportUnicast {
 
     #[cfg(feature = "stats")]
     pub fn get_stats(&self) -> ZResult<TransportUnicastStats> {
-        Ok(self.get_inner()?.stats.snapshot())
+        Ok(self.get_inner()?.stats())
     }
 }
 

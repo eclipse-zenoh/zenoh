@@ -99,7 +99,7 @@ impl NetworkMessage {
             _ => unreachable!(),
         };
 
-        Self { body }
+        body.into()
     }
 
     #[inline]
@@ -146,6 +146,7 @@ impl fmt::Display for NetworkMessage {
 }
 
 impl From<NetworkBody> for NetworkMessage {
+    #[inline]
     fn from(body: NetworkBody) -> Self {
         Self {
             body,

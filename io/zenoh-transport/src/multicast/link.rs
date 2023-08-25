@@ -387,7 +387,14 @@ async fn rx_task(
                 // Deserialize all the messages from the current ZBuf
                 let zslice = ZSlice::make(Arc::new(buffer), 0, n)
                     .map_err(|_| zerror!("Read {} bytes but buffer is {} bytes", n, mtu))?;
-                transport.read_messages(zslice, &link, batch_size, &loc)?;
+                transport.read_messages(
+                    zslice,
+                    &link,
+                    batch_size,
+                    &loc,
+                    #[cfg(feature = "stats")]
+                    &transport,
+                )?;
             }
             Action::Stop => break,
         }

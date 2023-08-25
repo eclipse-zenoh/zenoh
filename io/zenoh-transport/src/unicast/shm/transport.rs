@@ -13,9 +13,9 @@
 //
 #[cfg(feature = "transport_shm")]
 use super::link::send_with_link;
-#[cfg(feature = "stats")]
-use super::TransportUnicastStatsAtomic;
 use crate::transport_unicast_inner::TransportUnicastTrait;
+#[cfg(feature = "stats")]
+use crate::unicast::TransportUnicastStatsAtomic;
 use crate::TransportConfigUnicast;
 use crate::TransportManager;
 use crate::{TransportExecutor, TransportPeerEventHandler};
@@ -186,6 +186,11 @@ impl TransportUnicastTrait for TransportUnicastShm {
 
     fn get_config(&self) -> &TransportConfigUnicast {
         &self.config
+    }
+
+    #[cfg(feature = "stats")]
+    fn stats(&self) -> crate::TransportUnicastStats {
+        self.stats.snapshot()
     }
 
     /*************************************/
