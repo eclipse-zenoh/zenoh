@@ -113,7 +113,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        run: rustup show
       - name: Install nextest
         run: cargo install cargo-nextest --locked
       - name: Run tests
@@ -139,9 +139,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
+        run: rustup override set nightly
       - name: generate doc
         env:
           RUSTDOCFLAGS: -Dwarnings
@@ -230,12 +228,9 @@ jobs:
           esac
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal
+        run: |
+          rustup show
+          rustup rustup target add ${{ matrix.job.target }}
 
       - name: Build
         uses: actions-rs/cargo@v1
@@ -354,7 +349,7 @@ jobs:
           ssh-add -D
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        run: rustup show
       - name: Check crates
         shell: bash
         run: .github/workflows/crates_check.sh
