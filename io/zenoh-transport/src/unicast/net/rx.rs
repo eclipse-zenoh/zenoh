@@ -227,7 +227,8 @@ impl TransportUnicastNet {
                 .read(&mut reader)
                 .map_err(|_| zerror!("{}: decoding error", link))?;
 
-            log::trace!("Received: {:?}", msg);
+            // log::trace!("Received: {:?}", msg);
+            log::trace!("Received");
 
             #[cfg(feature = "stats")]
             {

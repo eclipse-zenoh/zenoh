@@ -28,7 +28,8 @@ impl TransportUnicastNet {
                 // block for fairly long time
                 let pl = $pipeline.clone();
                 drop($guard);
-                log::trace!("Scheduled: {:?}", $msg);
+                // log::trace!("Scheduled: {:?}", $msg);
+                log::trace!("Scheduled");
                 return pl.push_network_message($msg);
             };
         }
