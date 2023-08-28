@@ -1364,7 +1364,11 @@ fn insert_target_for_qabls(
                                                 None
                                             },
                                         ),
-                                        complete: if complete { qabl_info.complete } else { 0 },
+                                        complete: if complete {
+                                            qabl_info.complete as u64
+                                        } else {
+                                            0
+                                        },
                                         distance: net.distances[qabl_idx.index()],
                                     });
                                 }
@@ -1483,7 +1487,11 @@ fn compute_query_route(
                     if let Some(qabl_info) = context.qabl.as_ref() {
                         route.push(QueryTargetQabl {
                             direction: (context.face.clone(), key_expr.to_owned(), None),
-                            complete: if complete { qabl_info.complete } else { 0 },
+                            complete: if complete {
+                                qabl_info.complete as u64
+                            } else {
+                                0
+                            },
                             distance: 0.5,
                         });
                     }
@@ -1772,7 +1780,7 @@ fn compute_final_route(
                         route.entry(qabl.direction.0.id).or_insert_with(|| {
                             let mut direction = qabl.direction.clone();
                             let qid = insert_pending_query(&mut direction.0, query.clone());
-                            (direction, qid, QueryTarget::Complete(nb))
+                            (direction, qid, TargetType::Complete(nb))
                         });
                         remaining -= nb;
                         if remaining == 0 {
@@ -1787,7 +1795,7 @@ fn compute_final_route(
                         route.entry(qabl.direction.0.id).or_insert_with(|| {
                             let mut direction = qabl.direction.clone();
                             let qid = insert_pending_query(&mut direction.0, query.clone());
-                            (direction, qid, QueryTarget::Complete(nb))
+                            (direction, qid, TargetType::Complete(nb))
                         });
                         remaining -= nb;
                         if remaining == 0 {
@@ -2083,7 +2091,7 @@ pub fn route_query(
                                 ext_nodeid: ext::NodeIdType {
                                     node_id: context.map(|c| c.tree_id).unwrap_or(0) as u16,
                                 },
-                                ext_target: t,
+                                ext_target: *t,
                                 ext_budget: None,
                                 ext_timeout: None,
                                 payload: body.clone(),

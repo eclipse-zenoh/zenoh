@@ -1277,7 +1277,7 @@ impl Session {
     }
 
     #[cfg(feature = "complete_n")]
-    pub(crate) fn complete_twin_qabls(state: &SessionState, key: &WireExpr) -> u64 {
+    pub(crate) fn complete_twin_qabls(state: &SessionState, key: &WireExpr) -> u8 {
         state
             .queryables
             .values()
@@ -1287,7 +1287,7 @@ impl Session {
                     && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
                         == state.local_wireexpr_to_expr(key).unwrap()
             })
-            .count() as u64
+            .count() as u8
     }
 
     pub(crate) fn close_queryable(&self, qid: usize) -> ZResult<()> {

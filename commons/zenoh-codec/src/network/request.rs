@@ -64,6 +64,7 @@ where
             2 => ext::TargetType::AllComplete,
             #[cfg(feature = "complete_n")]
             n => ext::TargetType::Complete(n - 3),
+            #[cfg(not(feature = "complete_n"))]
             _ => return Err(DidntRead),
         };
         Ok((rt, more))

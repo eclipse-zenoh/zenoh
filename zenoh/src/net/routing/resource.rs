@@ -36,12 +36,12 @@ use zenoh_sync::get_mut_unchecked;
 pub(super) type Direction = (Arc<FaceState>, WireExpr<'static>, Option<RoutingContext>);
 pub(super) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
-pub(super) type QueryRoute = HashMap<usize, (Direction, TargetType)>;
+pub(super) type QueryRoute = HashMap<usize, (Direction, QueryId, TargetType)>;
 #[cfg(not(feature = "complete_n"))]
 pub(super) type QueryRoute = HashMap<usize, (Direction, QueryId)>;
 pub(super) struct QueryTargetQabl {
     pub(super) direction: Direction,
-    pub(super) complete: u8,
+    pub(super) complete: u64,
     pub(super) distance: f64,
 }
 pub(super) type QueryTargetQablSet = Vec<QueryTargetQabl>;
