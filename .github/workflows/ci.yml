@@ -53,9 +53,9 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: nextest
-          args: run zenoh_session_unicast --no-capture
+          args: run -p zenoh zenoh_session_unicast --no-capture
 
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
-          RUST_LOG: zenoh_transport::unicast::net=trace
+          RUST_LOG: zenoh_transport::unicast::net=trace,zenoh::net::routing::queries=trace
