@@ -138,15 +138,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install Rust toolchain
-        run: rustup show
+      # Use a similar command than docs.rs build: rustdoc with nightly toolchain
       - name: generate doc
         env:
           RUSTDOCFLAGS: -Dwarnings
         uses: actions-rs/cargo@v1
         with:
-          command: doc
-          args: --no-deps --features=${{ github.event.inputs.features}}
+          toolchain: nightly
+          command: rustdoc
+          args: --manifest-path ./zenoh/Cargo.toml --lib -Zrustdoc-map --features ${{ github.event.inputs.features}} -Z unstable-options --config build.rustdocflags='["-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--disable-per-crate-search", "--extern-html-root-takes-precedence"]' -Zunstable-options -Zrustdoc-scrape-examples -j3
 
   builds:
     name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
