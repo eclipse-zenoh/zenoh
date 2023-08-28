@@ -211,7 +211,7 @@ where
 ///
 /// # Arguments
 ///
-/// * `config` - The [`Config`](crate::config::Config) for the zenoh session
+/// * `config` - The [`Config`] for the zenoh session
 ///
 /// # Examples
 /// ```

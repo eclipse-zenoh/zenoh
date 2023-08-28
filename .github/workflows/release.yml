@@ -21,16 +21,16 @@ on:
   workflow_dispatch:
     inputs:
       runtests:
-        description: 'run tests'
+        description: "run tests"
         type: boolean
       dockerhub:
-        description: 'publish to dockerhub'
+        description: "publish to dockerhub"
         type: boolean
       doc:
-        description: 'generate doc'
+        description: "generate doc"
         type: boolean
       features:
-        description: 'build with specified features (comma separated, no space)'
+        description: "build with specified features (comma separated, no space)"
         type: string
 
 jobs:
@@ -40,9 +40,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          components: rustfmt, clippy
+        run: |
+          rustup show
+          rustup component add rustfmt clippy
       - name: Code format check
         uses: actions-rs/cargo@v1
         with:
@@ -113,7 +113,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        run: rustup show
       - name: Install nextest
         run: cargo install cargo-nextest --locked
       - name: Run tests
@@ -138,17 +138,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-            toolchain: nightly
+      # Use a similar command than docs.rs build: rustdoc with nightly toolchain
+      - name: Install Rust toolchain nightly for docs gen
+        run: rustup toolchain install nightly
       - name: generate doc
         env:
           RUSTDOCFLAGS: -Dwarnings
         uses: actions-rs/cargo@v1
         with:
-          command: doc
-          args: --no-deps --features=${{ github.event.inputs.features}}
+          toolchain: nightly
+          command: rustdoc
+          args: --manifest-path ./zenoh/Cargo.toml --lib -Zrustdoc-map --features ${{ github.event.inputs.features}} -Z unstable-options --config build.rustdocflags='["-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--disable-per-crate-search", "--extern-html-root-takes-precedence"]' -Zunstable-options -Zrustdoc-scrape-examples -j3
 
   builds:
     name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
@@ -230,12 +230,9 @@ jobs:
           esac
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: ${{ matrix.job.target }}
-          override: true
-          profile: minimal
+        run: |
+          rustup show
+          rustup target add ${{ matrix.job.target }}
 
       - name: Build
         uses: actions-rs/cargo@v1
@@ -354,7 +351,7 @@ jobs:
           ssh-add -D
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
+        run: rustup show
       - name: Check crates
         shell: bash
         run: .github/workflows/crates_check.sh
