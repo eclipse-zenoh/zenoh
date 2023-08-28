@@ -30,7 +30,7 @@ use zenoh_link::LinkUnicast;
 use zenoh_protocol::zenoh::ZenohBody;
 use zenoh_protocol::{
     core::{Priority, Reliability},
-    network::NetworkMessage,
+    network::{NetworkMessage, NetworkBody},
     transport::{Close, Fragment, Frame, KeepAlive, TransportBody, TransportMessage, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -228,7 +228,7 @@ impl TransportUnicastNet {
                 .map_err(|_| zerror!("{}: decoding error", link))?;
 
             // log::trace!("Received: {:?}", msg);
-            log::trace!("Received");
+            // log::trace!("Received");
 
             #[cfg(feature = "stats")]
             {
@@ -236,7 +236,37 @@ impl TransportUnicastNet {
             }
 
             match msg.body {
-                TransportBody::Frame(msg) => self.handle_frame(msg)?,
+                TransportBody::Frame(msg) => {
+                    let info = msg
+                        .payload
+                        .iter()
+                        .map(|payload| {
+                            match &payload.body {
+                                NetworkBody::OAM(_) => {
+                                    format!("OAM")
+                                },
+                                NetworkBody::Declare(_) => {
+                                    format!("Declare")
+                                },
+                                NetworkBody::Request(request) => {
+                                    format!("Request ID: {}", request.id)
+                                },
+                                NetworkBody::Response(response) => {
+                                    format!("Response ID: {}", response.rid)
+                                },
+                                NetworkBody::ResponseFinal(rf) => {
+                                    format!("ResponseFinal ID: {}", rf.rid)
+                                },
+                                _ => {
+                                    format!("Unknown")
+                                }
+                            }
+                        })
+                        .collect::<Vec<String>>()
+                        .join(", ");
+                    log::trace!("RX: {:?}", info);
+                    self.handle_frame(msg)?
+                },
                 TransportBody::Fragment(fragment) => self.handle_fragment(fragment)?,
                 TransportBody::Close(Close { reason, session }) => {
                     self.handle_close(link, reason, session)?

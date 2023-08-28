@@ -15,7 +15,7 @@ use super::transport::TransportUnicastNet;
 #[cfg(feature = "stats")]
 use zenoh_buffers::SplitBuffer;
 use zenoh_core::zread;
-use zenoh_protocol::network::NetworkMessage;
+use zenoh_protocol::network::{NetworkMessage, NetworkBody};
 #[cfg(feature = "stats")]
 use zenoh_protocol::zenoh::ZenohBody;
 
@@ -29,7 +29,30 @@ impl TransportUnicastNet {
                 let pl = $pipeline.clone();
                 drop($guard);
                 // log::trace!("Scheduled: {:?}", $msg);
-                log::trace!("Scheduled");
+                // log::trace!("Scheduled");
+
+                let info = match &msg.body {
+                    NetworkBody::OAM(_) => {
+                        format!("OAM")
+                    },
+                    NetworkBody::Declare(_) => {
+                        format!("Declare")
+                    },
+                    NetworkBody::Request(request) => {
+                        format!("Request ID: {}", request.id)
+                    },
+                    NetworkBody::Response(response) => {
+                        format!("Response ID: {}", response.rid)
+                    },
+                    NetworkBody::ResponseFinal(rf) => {
+                        format!("ResponseFinal ID: {}", rf.rid)
+                    },
+                    _ => {
+                        format!("Unknown")
+                    }
+                };
+                log::trace!("TX: scheduled {:?}", info);
+
                 return pl.push_network_message($msg);
             };
         }
