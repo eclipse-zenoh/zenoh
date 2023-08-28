@@ -25,6 +25,7 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-rustls = { workspace = true }
 async-std = { workspace = true, features = ["unstable", "tokio1"] }
 async-trait = { workspace = true }
 futures = { workspace = true }
@@ -33,7 +34,6 @@ quinn = { workspace = true }
 rustls = { workspace = true }
 rustls-native-certs = { workspace = true }
 rustls-pemfile = { workspace = true }
-webpki = { workspace = true }
 zenoh-cfg-properties = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }

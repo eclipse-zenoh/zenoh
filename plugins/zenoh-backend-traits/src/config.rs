@@ -12,34 +12,42 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use derive_more::{AsMut, AsRef};
+use schemars::JsonSchema;
 use serde_json::{Map, Value};
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::{key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult};
 use zenoh_result::{bail, zerror, Error};
 
-#[derive(Debug, Clone, AsMut, AsRef)]
+#[derive(JsonSchema, Debug, Clone, AsMut, AsRef)]
 pub struct PluginConfig {
+    #[schemars(skip)]
     pub name: String,
+    #[schemars(with = "Option<bool>")]
     pub required: bool,
     pub backend_search_dirs: Option<Vec<String>>,
+    #[schemars(with = "Map<String, Value>")]
     pub volumes: Vec<VolumeConfig>,
+    #[schemars(with = "Map<String, Value>")]
     pub storages: Vec<StorageConfig>,
     #[as_ref]
     #[as_mut]
+    #[schemars(skip)]
     pub rest: Map<String, Value>,
 }
-#[derive(Debug, Clone, AsMut, AsRef)]
+#[derive(JsonSchema, Debug, Clone, AsMut, AsRef)]
 pub struct VolumeConfig {
+    #[schemars(skip)]
     pub name: String,
     pub backend: Option<String>,
     pub paths: Option<Vec<String>>,
     pub required: bool,
     #[as_ref]
     #[as_mut]
+    #[schemars(skip)]
     pub rest: Map<String, Value>,
 }
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(JsonSchema, Debug, Clone, PartialEq, Eq)]
 pub struct StorageConfig {
     pub name: String,
     pub key_expr: OwnedKeyExpr,
@@ -52,7 +60,7 @@ pub struct StorageConfig {
     pub replica_config: Option<ReplicaConfig>,
 }
 // Note: All parameters should be same for replicas, else will result on huge overhead
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(JsonSchema, Debug, Clone, PartialEq, Eq)]
 pub struct ReplicaConfig {
     pub publication_interval: Duration,
     pub propagation_delay: Duration,
@@ -78,7 +86,7 @@ impl Default for ReplicaConfig {
 }
 
 // The configuration for periodic garbage collection of metadata in storage manager
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(JsonSchema, Debug, Clone, PartialEq, Eq)]
 pub struct GarbageCollectionConfig {
     // The duration between two garbage collection events
     // The garbage collection will be scheduled as a periodic event with this period

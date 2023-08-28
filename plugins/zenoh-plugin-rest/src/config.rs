@@ -11,19 +11,21 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use schemars::JsonSchema;
 use serde::de::{Unexpected, Visitor};
 use serde::{de, Deserialize, Deserializer};
 use std::fmt;
 
 const DEFAULT_HTTP_INTERFACE: &str = "[::]";
 
-#[derive(Deserialize, serde::Serialize, Clone, Debug)]
+#[derive(JsonSchema, Deserialize, serde::Serialize, Clone, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
     #[serde(deserialize_with = "deserialize_http_port")]
     pub http_port: String,
     __path__: Option<String>,
     __required__: Option<bool>,
+    __config__: Option<String>,
 }
 
 impl From<&Config> for serde_json::Value {

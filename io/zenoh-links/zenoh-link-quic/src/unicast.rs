@@ -13,8 +13,8 @@
 //
 
 use crate::{
-    config::*, get_quic_addr, ALPN_QUIC_HTTP, QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU,
-    QUIC_LOCATOR_PREFIX,
+    config::*, get_quic_addr, verify::WebPkiVerifierAnyServerName, ALPN_QUIC_HTTP,
+    QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
 };
 use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 use async_std::prelude::FutureExt;
@@ -231,6 +231,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
         let addr = get_quic_addr(&epaddr).await?;
 
+        let server_name_verification: bool = epconf
+            .get(TLS_SERVER_NAME_VERIFICATION)
+            .unwrap_or(TLS_SERVER_NAME_VERIFICATION_DEFAULT)
+            .parse()?;
+
+        if !server_name_verification {
+            log::warn!("Skipping name verification of servers");
+        }
+
         // Initialize the QUIC connection
         let mut root_cert_store = rustls::RootCertStore::empty();
 
@@ -262,10 +271,20 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             root_cert_store.add(c).map_err(|e| zerror!("{}", e))?;
         }
 
-        let mut client_crypto = rustls::ClientConfig::builder()
-            .with_safe_defaults()
-            .with_root_certificates(root_cert_store)
-            .with_no_client_auth();
+        let client_crypto = rustls::ClientConfig::builder().with_safe_defaults();
+
+        let mut client_crypto = if server_name_verification {
+            client_crypto
+                .with_root_certificates(root_cert_store)
+                .with_no_client_auth()
+        } else {
+            client_crypto
+                .with_custom_certificate_verifier(Arc::new(WebPkiVerifierAnyServerName::new(
+                    root_cert_store,
+                )))
+                .with_no_client_auth()
+        };
+
         client_crypto.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
         let ip_addr: IpAddr = if addr.is_ipv4() {
