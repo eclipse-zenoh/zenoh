@@ -87,7 +87,7 @@ uuid = { workspace = true, features = ["default"] }
 vec_map = { workspace = true }
 zenoh-buffers = { workspace = true, features = ["std"] }
 zenoh-codec = { workspace = true }
-zenoh-collections = { workspace = true }
+zenoh-collections = { workspace = true, features = ["std"] }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-crypto = { workspace = true }
