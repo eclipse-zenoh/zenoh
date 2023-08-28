@@ -139,6 +139,8 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       # Use a similar command than docs.rs build: rustdoc with nightly toolchain
+      - name: Install Rust toolchain nightly for docs gen
+        run: rustup toolchain install nightly
       - name: generate doc
         env:
           RUSTDOCFLAGS: -Dwarnings
