@@ -492,7 +492,7 @@ where
     }
 }
 
-/// A builder for initializing a [`Publisher`](Publisher).
+/// A builder for initializing a [`Publisher`].
 ///
 /// # Examples
 /// ```

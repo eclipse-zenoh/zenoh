@@ -14,7 +14,7 @@
 
 //! Liveliness primitives.
 //!
-//! see [`Liveliness`](Liveliness)
+//! see [`Liveliness`]
 
 use crate::query::Reply;
 
@@ -339,7 +339,7 @@ impl<'a> AsyncResolve for LivelinessTokenUndeclaration<'a> {
 
 #[zenoh_macros::unstable]
 impl<'a> LivelinessToken<'a> {
-    /// Undeclare a [`LivelinessToken`](LivelinessToken).
+    /// Undeclare a [`LivelinessToken`].
     ///
     /// LivelinessTokens are automatically closed when dropped,
     /// but you may want to use this function to handle errors or
