@@ -32,7 +32,7 @@ async-trait = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
 rustls-pemfile = { workspace = true }
-webpki = { workspace = true }
+rustls-webpki = { workspace = true }
 webpki-roots = { workspace = true }
 zenoh-cfg-properties = { workspace = true }
 zenoh-config = { workspace = true }

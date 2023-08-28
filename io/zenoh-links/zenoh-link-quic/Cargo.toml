@@ -34,7 +34,6 @@ quinn = { workspace = true }
 rustls = { workspace = true }
 rustls-native-certs = { workspace = true }
 rustls-pemfile = { workspace = true }
-webpki = { workspace = true }
 zenoh-cfg-properties = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
