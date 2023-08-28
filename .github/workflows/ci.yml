@@ -58,4 +58,4 @@ jobs:
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
-          RUST_LOG: zenoh_transport::unicast::net=trace,zenoh::net::routing::queries=trace
+          RUST_LOG: zenoh_transport::unicast::net=trace,zenoh::net::routing::queries=trace,zenoh::session=trace
