@@ -2022,7 +2022,8 @@ impl Primitives for Session {
     }
 
     fn send_request(&self, msg: Request) {
-        trace!("recv Request {:?}", msg);
+        // trace!("recv Request {:?}", msg);
+        trace!("recv Request {:?}", msg.id);
         match msg.payload {
             RequestBody::Query(m) => self.handle_query(
                 false,
@@ -2040,7 +2041,8 @@ impl Primitives for Session {
     }
 
     fn send_response(&self, msg: Response) {
-        trace!("recv Response {:?}", msg);
+        // trace!("recv Response {:?}", msg);
+        trace!("recv Response {:?}", msg.rid);
         if let ResponseBody::Reply(m) = msg.payload {
             let mut state = zwrite!(self.state);
             let key_expr = match state.remote_key_to_expr(&msg.wire_expr) {
