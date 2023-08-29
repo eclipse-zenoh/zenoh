@@ -131,6 +131,12 @@ impl TryFrom<&std::path::Path> for Properties {
     }
 }
 
+impl From<Properties> for HashMap<String, String> {
+    fn from(props: Properties) -> Self {
+        props.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
