@@ -90,7 +90,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: nextest
-          args: run
+          args: run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
         env:
           ASYNC_STD_THREAD_COUNT: 4
 
