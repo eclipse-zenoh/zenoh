@@ -148,7 +148,8 @@ jobs:
         with:
           toolchain: nightly
           command: rustdoc
-          args: --manifest-path ./zenoh/Cargo.toml --lib -Zrustdoc-map --features ${{ github.event.inputs.features}} -Z unstable-options --config build.rustdocflags='["-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--disable-per-crate-search", "--extern-html-root-takes-precedence"]' -Zunstable-options -Zrustdoc-scrape-examples -j3
+          # NOTE: force 'unstable' feature for doc generation, as forced for docs.rs build in zenoh/Cargo.toml
+          args: --manifest-path ./zenoh/Cargo.toml --lib -Zrustdoc-map --features unstable -Z unstable-options --config build.rustdocflags='["-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--disable-per-crate-search", "--extern-html-root-takes-precedence"]' -Zunstable-options -Zrustdoc-scrape-examples -j3
 
   builds:
     name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
