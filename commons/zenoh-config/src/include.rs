@@ -67,8 +67,12 @@ where
 {
     // if include property is present, read the file and remove properites found in file from values
     let include_object = if let Some(include_path) = values.get(include_property_name) {
-        let Some(include_path)= include_path.as_str() else {
-            bail!("{}.{} : property must have string type", title, include_property_name);
+        let Some(include_path) = include_path.as_str() else {
+            bail!(
+                "{}.{} : property must have string type",
+                title,
+                include_property_name
+            );
         };
         let include_path_adjusted = Path::new(local_path.as_ref()).join(include_path);
         let include_path_canonical = match include_path_adjusted.canonicalize() {
@@ -92,7 +96,12 @@ where
         }
 
         let Some(new_local_path) = include_path_adjusted.parent() else {
-            bail!("{}.{} : cannot get directory part for '{}' value", title, include_property_name, include_path);
+            bail!(
+                "{}.{} : cannot get directory part for '{}' value",
+                title,
+                include_property_name,
+                include_path
+            );
         };
         let mut include_object: Value = match deserialize_from_file(&include_path_adjusted) {
             Ok(v) => v,
@@ -105,7 +114,12 @@ where
             ),
         };
         let Some(include_values) = include_object.as_object_mut() else {
-            bail!("{}.{}: included file '{}' must contain an object", title, include_property_name, include_path);
+            bail!(
+                "{}.{}: included file '{}' must contain an object",
+                title,
+                include_property_name,
+                include_path
+            );
         };
         let include_path = include_path.to_string();
         for (k, v) in include_values.iter_mut() {

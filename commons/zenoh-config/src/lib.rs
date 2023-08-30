@@ -845,10 +845,9 @@ fn sift_privates(value: &mut serde_json::Value) {
 }
 
 fn load_external_plugin_config(title: &str, value: &mut Value) -> ZResult<()> {
-    let Some(values) = value
-        .as_object_mut() else {
-            bail!("{} must be object", title);
-        };
+    let Some(values) = value.as_object_mut() else {
+        bail!("{} must be object", title);
+    };
     recursive_include(title, values, HashSet::new(), "__config__", ".")
 }
 

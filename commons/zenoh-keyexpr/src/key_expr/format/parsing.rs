@@ -24,7 +24,15 @@ pub struct Parsed<'s, Storage: IKeFormatStorage<'s>> {
 
 impl<'s, Storage: IKeFormatStorage<'s>> Parsed<'s, Storage> {
     pub fn get(&self, id: &str) -> ZResult<Option<&'s keyexpr>> {
-        let Some(i) = self.format.storage.segments().iter().position(|s| s.spec.id() == id) else {bail!("{} has no {id} field", self.format)};
+        let Some(i) = self
+            .format
+            .storage
+            .segments()
+            .iter()
+            .position(|s| s.spec.id() == id)
+        else {
+            bail!("{} has no {id} field", self.format)
+        };
         Ok(self.results.as_ref()[i])
     }
     pub fn values(&self) -> &[Option<&'s keyexpr>] {
@@ -92,10 +100,14 @@ impl<'s, Storage: IKeFormatStorage<'s> + 's> KeFormat<'s, Storage> {
         let mut results = self.storage.values_storage(|_| None);
         let Some(target) = target.strip_suffix(self.suffix) else {
             if !segments.is_empty()
-            && segments.iter().all(|s| s.spec.pattern() == "**")
-            && self.suffix.as_bytes()[0] == b'/'
-            && target == &self.suffix[1..] {
-                return Ok(Parsed { format: self, results });
+                && segments.iter().all(|s| s.spec.pattern() == "**")
+                && self.suffix.as_bytes()[0] == b'/'
+                && target == &self.suffix[1..]
+            {
+                return Ok(Parsed {
+                    format: self,
+                    results,
+                });
             }
             bail!("{target} is not included in {self}")
         };
@@ -118,8 +130,12 @@ fn do_parse<'s>(
 ) -> bool {
     debug_assert!(!input.starts_with('/'));
     // Parsing is finished if there are no more segments to process AND the input is now empty.
-    let [segment, segments @ ..] = segments else {return input.is_empty()};
-    let [result, results @ ..] = results else {unreachable!()};
+    let [segment, segments @ ..] = segments else {
+        return input.is_empty();
+    };
+    let [result, results @ ..] = results else {
+        unreachable!()
+    };
     // reset result to None in case of backtracking
     *result = None;
     // Inspect the pattern: we want to know how many chunks we need to have a chance of inclusion, as well as if we need to worry about double wilds
@@ -145,7 +161,9 @@ fn do_parse<'s>(
         );
     }
     // Strip the prefix (including the end-/ if the prefix is non-empty)
-    let Some(input) = input.strip_prefix(prefix) else {return false};
+    let Some(input) = input.strip_prefix(prefix) else {
+        return false;
+    };
     let mut chunks = 0;
     for i in (0..input.len()).filter(|i| input.as_bytes()[*i] == b'/') {
         chunks += 1;
@@ -190,7 +208,9 @@ fn do_parse_doublewild<'s>(
             return false;
         }
     }
-    let Some(input) = input.strip_prefix(prefix) else {return false};
+    let Some(input) = input.strip_prefix(prefix) else {
+        return false;
+    };
     let input = trim_prefix_slash(input);
     let mut chunks = 0;
     for i in (0..input.len()).filter(|i| input.as_bytes()[*i] == b'/') {

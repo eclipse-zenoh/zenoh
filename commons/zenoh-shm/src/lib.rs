@@ -233,7 +233,7 @@ impl SharedMemoryReader {
                 let base_ptr = shm.as_ptr();
                 let rc = unsafe { base_ptr.add(info.offset) as *mut ChunkHeaderType };
                 let rc_ptr = AtomicPtr::<ChunkHeaderType>::new(rc);
-                let buf = unsafe { base_ptr.add(info.offset + CHUNK_HEADER_SIZE) as *mut u8 };
+                let buf = unsafe { base_ptr.add(info.offset + CHUNK_HEADER_SIZE) };
                 let shmb = SharedMemoryBuf {
                     rc_ptr,
                     buf: AtomicPtr::new(buf),
@@ -322,7 +322,7 @@ impl SharedMemoryManager {
 
         let mut free_list = BinaryHeap::new();
         let chunk = Chunk {
-            base_addr: base_ptr as *mut u8,
+            base_addr: base_ptr,
             offset: 0,
             size: real_size,
         };
