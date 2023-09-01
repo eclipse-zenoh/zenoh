@@ -23,12 +23,16 @@ use zenoh_protocol::{
         ResponseFinal,
     },
 };
+#[cfg(feature = "stats")]
+use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{Primitives, TransportMulticast};
 
 pub struct FaceState {
     pub(super) id: usize,
     pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
+    #[cfg(feature = "stats")]
+    pub(super) stats: Option<Arc<TransportStats>>,
     pub(super) primitives: Arc<dyn Primitives + Send + Sync>,
     pub(super) link_id: usize,
     pub(super) local_mappings: HashMap<ExprId, Arc<Resource>>,
@@ -47,6 +51,7 @@ impl FaceState {
         id: usize,
         zid: ZenohId,
         whatami: WhatAmI,
+        #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn Primitives + Send + Sync>,
         link_id: usize,
         mcast_group: Option<TransportMulticast>,
@@ -55,6 +60,8 @@ impl FaceState {
             id,
             zid,
             whatami,
+            #[cfg(feature = "stats")]
+            stats,
             primitives,
             link_id,
             local_mappings: HashMap::new(),

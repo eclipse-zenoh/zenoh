@@ -34,6 +34,8 @@ use zenoh_protocol::common::ZExtBody;
 use zenoh_protocol::core::{ExprId, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::network::oam::id::OAM_LINKSTATE;
 use zenoh_protocol::network::{Mapping, NetworkBody, NetworkMessage};
+#[cfg(feature = "stats")]
+use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{
     DeMux, DummyPrimitives, McastMux, Mux, Primitives, TransportMulticast, TransportPeer,
     TransportPeerEventHandler, TransportUnicast,
@@ -256,6 +258,7 @@ impl Tables {
         &mut self,
         zid: ZenohId,
         whatami: WhatAmI,
+        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
         primitives: Arc<dyn Primitives + Send + Sync>,
         link_id: usize,
     ) -> Weak<FaceState> {
@@ -264,7 +267,18 @@ impl Tables {
         let mut newface = self
             .faces
             .entry(fid)
-            .or_insert_with(|| FaceState::new(fid, zid, whatami, primitives.clone(), link_id, None))
+            .or_insert_with(|| {
+                FaceState::new(
+                    fid,
+                    zid,
+                    whatami,
+                    #[cfg(feature = "stats")]
+                    Some(stats),
+                    primitives.clone(),
+                    link_id,
+                    None,
+                )
+            })
             .clone();
         log::debug!("New {}", newface);
 
@@ -280,7 +294,30 @@ impl Tables {
         whatami: WhatAmI,
         primitives: Arc<dyn Primitives + Send + Sync>,
     ) -> Weak<FaceState> {
-        self.open_net_face(zid, whatami, primitives, 0)
+        let fid = self.face_counter;
+        self.face_counter += 1;
+        let mut newface = self
+            .faces
+            .entry(fid)
+            .or_insert_with(|| {
+                FaceState::new(
+                    fid,
+                    zid,
+                    whatami,
+                    #[cfg(feature = "stats")]
+                    None,
+                    primitives.clone(),
+                    0,
+                    None,
+                )
+            })
+            .clone();
+        log::debug!("New {}", newface);
+
+        pubsub_new_face(self, &mut newface);
+        queries_new_face(self, &mut newface);
+
+        Arc::downgrade(&newface)
     }
 
     fn compute_routes(&mut self, res: &mut Arc<Resource>) {
@@ -576,6 +613,8 @@ impl Router {
                     .open_net_face(
                         transport.get_zid().unwrap(),
                         whatami,
+                        #[cfg(feature = "stats")]
+                        transport.get_stats().unwrap(),
                         Arc::new(Mux::new(transport)),
                         link_id,
                     )
@@ -610,6 +649,8 @@ impl Router {
             fid,
             ZenohId::from_str("1").unwrap(),
             WhatAmI::Peer,
+            #[cfg(feature = "stats")]
+            None,
             Arc::new(McastMux::new(transport.clone())),
             0,
             Some(transport),
@@ -633,6 +674,8 @@ impl Router {
             fid,
             peer.zid,
             WhatAmI::Client, // Quick hack
+            #[cfg(feature = "stats")]
+            Some(transport.get_stats().unwrap()),
             Arc::new(DummyPrimitives),
             0,
             Some(transport),

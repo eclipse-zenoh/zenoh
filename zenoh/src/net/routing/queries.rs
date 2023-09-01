@@ -1989,6 +1989,69 @@ fn get_query_route(
     }
 }
 
+#[cfg(feature = "stats")]
+macro_rules! inc_req_stats {
+    (
+        $face:expr,
+        $txrx:ident,
+        $space:ident,
+        $body:expr
+    ) => {
+        paste::paste! {
+            if let Some(stats) = $face.stats.as_ref() {
+                use zenoh_buffers::SplitBuffer;
+                match &$body {
+                    RequestBody::Put(p) => {
+                        stats.[<inc_ $txrx _z_put_ $space _msgs>](1);
+                        stats.[<inc_ $txrx _z_put_ $space _pl_bytes>](p.payload.len());
+                    }
+                    RequestBody::Del(_) => stats.[<inc_ $txrx _z_del_ $space _msgs>](1),
+                    RequestBody::Query(q) => {
+                        stats.[<inc_ $txrx _z_query_ $space _msgs>](1);
+                        stats.[<inc_ $txrx _z_query_ $space _pl_bytes>](
+                            q.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
+                        );
+                    }
+                    RequestBody::Pull(_) => (),
+                }
+            }
+        }
+    };
+}
+
+#[cfg(feature = "stats")]
+macro_rules! inc_res_stats {
+    (
+        $face:expr,
+        $txrx:ident,
+        $space:ident,
+        $body:expr
+    ) => {
+        paste::paste! {
+            if let Some(stats) = $face.stats.as_ref() {
+                use zenoh_buffers::SplitBuffer;
+                match &$body {
+                    ResponseBody::Put(p) => {
+                        stats.[<inc_ $txrx _z_put_ $space _msgs>](1);
+                        stats.[<inc_ $txrx _z_put_ $space _pl_bytes>](p.payload.len());
+                    }
+                    ResponseBody::Reply(r) => {
+                        stats.[<inc_ $txrx _z_reply_ $space _msgs>](1);
+                        stats.[<inc_ $txrx _z_reply_ $space _pl_bytes>](r.payload.len());
+                    }
+                    ResponseBody::Err(e) => {
+                        stats.[<inc_ $txrx _z_reply_ $space _msgs>](1);
+                        stats.[<inc_ $txrx _z_reply_ $space _pl_bytes>](
+                            e.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
+                        );
+                    }
+                    ResponseBody::Ack(_) => (),
+                }
+            }
+        }
+    };
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn route_query(
     tables_ref: &Arc<TablesLock>,
@@ -2011,6 +2074,15 @@ pub fn route_query(
             );
             let prefix = prefix.clone();
             let mut expr = RoutingExpr::new(&prefix, expr.suffix.as_ref());
+
+            #[cfg(feature = "stats")]
+            let admin = expr.full_expr().starts_with("@/");
+            #[cfg(feature = "stats")]
+            if !admin {
+                inc_req_stats!(face, rx, user, body)
+            } else {
+                inc_req_stats!(face, rx, admin, body)
+            }
 
             if rtables.whatami != WhatAmI::Router
                 || face.whatami != WhatAmI::Peer
@@ -2035,19 +2107,27 @@ pub fn route_query(
                 drop(rtables);
 
                 for (expr, payload) in local_replies {
+                    let payload = ResponseBody::Reply(Reply {
+                        timestamp: None,
+                        encoding: Encoding::default(),
+                        ext_sinfo: None,
+                        ext_consolidation: ConsolidationType::default(),
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
+                        ext_unknown: vec![],
+                        payload,
+                    });
+                    #[cfg(feature = "stats")]
+                    if !admin {
+                        inc_res_stats!(face, tx, user, payload)
+                    } else {
+                        inc_res_stats!(face, tx, admin, payload)
+                    }
+
                     face.primitives.clone().send_response(Response {
                         rid: qid,
                         wire_expr: expr,
-                        payload: ResponseBody::Reply(Reply {
-                            timestamp: None,
-                            encoding: Encoding::default(),
-                            ext_sinfo: None,
-                            ext_consolidation: ConsolidationType::default(),
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            ext_unknown: vec![],
-                            payload,
-                        }),
+                        payload,
                         ext_qos: response::ext::QoSType::default(),
                         ext_tstamp: None,
                         ext_respid: Some(response::ext::ResponderIdType {
@@ -2082,6 +2162,13 @@ pub fn route_query(
                             //         *qid,
                             //     },
                             // ));
+                            #[cfg(feature = "stats")]
+                            if !admin {
+                                inc_req_stats!(outface, tx, user, body)
+                            } else {
+                                inc_req_stats!(outface, tx, admin, body)
+                            }
+
                             log::trace!("Propagate query {}:{} to {}", face, qid, outface);
                             outface.primitives.send_request(Request {
                                 id: *qid,
@@ -2110,6 +2197,13 @@ pub fn route_query(
                             //         *qid,
                             //     },
                             // ));
+                            #[cfg(feature = "stats")]
+                            if !admin {
+                                inc_req_stats!(outface, tx, user, body)
+                            } else {
+                                inc_req_stats!(outface, tx, admin, body)
+                            }
+
                             log::trace!("Propagate query {}:{} to {}", face, qid, outface);
                             outface.primitives.send_request(Request {
                                 id: *qid,
@@ -2162,9 +2256,26 @@ pub(crate) fn route_send_response(
     body: ResponseBody,
 ) {
     let queries_lock = zread!(tables_ref.queries_lock);
+    #[cfg(feature = "stats")]
+    let admin = key_expr.as_str().starts_with("@/");
+    #[cfg(feature = "stats")]
+    if !admin {
+        inc_res_stats!(face, rx, user, body)
+    } else {
+        inc_res_stats!(face, rx, admin, body)
+    }
+
     match face.pending_queries.get(&qid) {
         Some(query) => {
             drop(queries_lock);
+
+            #[cfg(feature = "stats")]
+            if !admin {
+                inc_res_stats!(query.src_face, tx, user, body)
+            } else {
+                inc_res_stats!(query.src_face, tx, admin, body)
+            }
+
             query.src_face.primitives.clone().send_response(Response {
                 rid: query.src_qid,
                 wire_expr: key_expr.to_owned(),

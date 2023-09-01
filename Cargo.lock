@@ -4432,6 +4432,7 @@ dependencies = [
  "lazy_static",
  "log",
  "ordered-float",
+ "paste",
  "petgraph",
  "rand 0.8.5",
  "regex",
