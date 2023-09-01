@@ -45,7 +45,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     fn is_qos(&self) -> bool;
     fn get_config(&self) -> &TransportConfigUnicast;
     #[cfg(feature = "stats")]
-    fn stats(&self) -> crate::TransportUnicastStats;
+    fn stats(&self) -> Arc<crate::stats::TransportStats>;
 
     /*************************************/
     /*               LINK                */

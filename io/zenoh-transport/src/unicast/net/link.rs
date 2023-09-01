@@ -18,7 +18,7 @@ use crate::common::pipeline::{
 };
 use crate::common::priority::TransportPriorityTx;
 #[cfg(feature = "stats")]
-use crate::unicast::TransportUnicastStatsAtomic;
+use crate::common::stats::TransportStats;
 use crate::TransportExecutor;
 use async_std::prelude::FutureExt;
 use async_std::task;
@@ -205,7 +205,7 @@ async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
     link: LinkUnicast,
     keep_alive: Duration,
-    #[cfg(feature = "stats")] stats: Arc<TransportUnicastStatsAtomic>,
+    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
     #[cfg(all(feature = "unstable", feature = "transport_compression"))] is_compressed: bool,
 ) -> ZResult<()> {
     #[cfg(all(feature = "unstable", feature = "transport_compression"))]

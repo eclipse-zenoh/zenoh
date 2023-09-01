@@ -22,42 +22,42 @@ macro_rules! stats_struct {
      }
     ) => {
         paste::paste! {
-            $(#[$meta])*
             $vis struct $struct_name {
+                $(
+                $(#[$field_meta:meta])*
+                $field_vis $field_name: AtomicUsize,
+                )*
+            }
+
+            $(#[$meta])*
+            $vis struct [<$struct_name Report>] {
                 $(
                 $(#[$field_meta:meta])*
                 $field_vis $field_name: usize,
                 )*
             }
 
-            struct [<$struct_name Atomic>] {
-                $(
-                $(#[$field_meta:meta])*
-                $field_name: AtomicUsize,
-                )*
-            }
-
-            impl [<$struct_name Atomic>] {
-                fn snapshot(&self) -> $struct_name {
-                    $struct_name {
+            impl $struct_name {
+                $vis fn report(&self) -> [<$struct_name Report>] {
+                    [<$struct_name Report>] {
                         $($field_name: self.[<get_ $field_name>](),)*
                     }
                 }
 
                 $(
-                fn [<get_ $field_name>](&self) -> usize {
+                    $vis fn [<get_ $field_name>](&self) -> usize {
                     self.$field_name.load(Ordering::Relaxed)
                 }
 
-                fn [<inc_ $field_name>](&self, nb: usize) {
+                $vis fn [<inc_ $field_name>](&self, nb: usize) {
                     self.$field_name.fetch_add(nb, Ordering::Relaxed);
                 }
                 )*
             }
 
-            impl Default for [<$struct_name Atomic>] {
-                fn default() -> [<$struct_name Atomic>] {
-                    [<$struct_name Atomic>] {
+            impl Default for $struct_name {
+                fn default() -> $struct_name {
+                    $struct_name {
                         $($field_name: AtomicUsize::new(0),)*
                     }
                 }
@@ -65,4 +65,47 @@ macro_rules! stats_struct {
         }
     }
 }
-pub(crate) use stats_struct;
+
+use serde::{Deserialize, Serialize};
+use std::sync::atomic::{AtomicUsize, Ordering};
+stats_struct! {
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct TransportStats {
+        pub tx_t_msgs,
+        pub tx_n_msgs,
+        pub tx_n_dropped,
+        pub tx_z_put_user_msgs,
+        pub tx_z_put_user_pl_bytes,
+        // pub tx_z_put_admin_msgs,
+        // pub tx_z_put_admin_pl_bytes,
+        pub tx_z_del_user_msgs,
+        // pub tx_z_del_admin_msgs,
+        pub tx_z_query_user_msgs,
+        pub tx_z_query_user_pl_bytes,
+        // pub tx_z_query_admin_msgs,
+        // pub tx_z_query_admin_pl_bytes,
+        pub tx_z_reply_user_msgs,
+        pub tx_z_reply_user_pl_bytes,
+        // pub tx_z_reply_admin_msgs,
+        // pub tx_z_reply_admin_pl_bytes,
+        pub tx_bytes,
+
+        pub rx_t_msgs,
+        pub rx_n_msgs,
+        pub rx_z_put_user_msgs,
+        pub rx_z_put_user_pl_bytes,
+        // pub rx_z_put_admin_msgs,
+        // pub rx_z_put_admin_pl_bytes,
+        pub rx_z_del_user_msgs,
+        // pub rx_z_del_admin_msgs,
+        pub rx_z_query_user_msgs,
+        pub rx_z_query_user_pl_bytes,
+        // pub rx_z_query_admin_msgs,
+        // pub rx_z_query_admin_pl_bytes,
+        pub rx_z_reply_user_msgs,
+        pub rx_z_reply_user_pl_bytes,
+        // pub rx_z_reply_admin_msgs,
+        // pub rx_z_reply_admin_pl_bytes,
+        pub rx_bytes,
+    }
+}

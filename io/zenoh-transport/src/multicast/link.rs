@@ -13,12 +13,12 @@
 //
 use super::common::{pipeline::TransmissionPipeline, priority::TransportPriorityTx};
 use super::transport::TransportMulticastInner;
-#[cfg(feature = "stats")]
-use super::TransportMulticastStatsAtomic;
 use crate::common::batch::WBatch;
 use crate::common::pipeline::{
     TransmissionPipelineConf, TransmissionPipelineConsumer, TransmissionPipelineProducer,
 };
+#[cfg(feature = "stats")]
+use crate::stats::TransportStats;
 use async_std::prelude::FutureExt;
 use async_std::task;
 use async_std::task::JoinHandle;
@@ -207,7 +207,7 @@ async fn tx_task(
     link: LinkMulticast,
     config: TransportLinkMulticastConfig,
     mut last_sns: Vec<PrioritySn>,
-    #[cfg(feature = "stats")] stats: Arc<TransportMulticastStatsAtomic>,
+    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
     enum Action {
         Pull((WBatch, usize)),

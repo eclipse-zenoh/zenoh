@@ -26,8 +26,6 @@ pub(crate) mod shm;
 
 use self::transport_unicast_inner::TransportUnicastTrait;
 
-#[cfg(feature = "stats")]
-use super::common::stats::stats_struct;
 use super::{TransportPeer, TransportPeerEventHandler};
 #[cfg(feature = "transport_multilink")]
 use establishment::ext::auth::ZPublicKey;
@@ -42,56 +40,6 @@ use zenoh_protocol::{
     transport::{close, TransportSn},
 };
 use zenoh_result::{zerror, ZResult};
-
-/*************************************/
-/*              STATS                */
-/*************************************/
-#[cfg(feature = "stats")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "stats")]
-use std::sync::atomic::{AtomicUsize, Ordering};
-#[cfg(feature = "stats")]
-stats_struct! {
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct TransportUnicastStats {
-        pub tx_t_msgs,
-        pub tx_n_msgs,
-        pub tx_n_dropped,
-        pub tx_z_put_user_msgs,
-        pub tx_z_put_user_pl_bytes,
-        // pub tx_z_put_admin_msgs,
-        // pub tx_z_put_admin_pl_bytes,
-        pub tx_z_del_user_msgs,
-        // pub tx_z_del_admin_msgs,
-        pub tx_z_query_user_msgs,
-        pub tx_z_query_user_pl_bytes,
-        // pub tx_z_query_admin_msgs,
-        // pub tx_z_query_admin_pl_bytes,
-        pub tx_z_reply_user_msgs,
-        pub tx_z_reply_user_pl_bytes,
-        // pub tx_z_reply_admin_msgs,
-        // pub tx_z_reply_admin_pl_bytes,
-        pub tx_bytes,
-
-        pub rx_t_msgs,
-        pub rx_n_msgs,
-        pub rx_z_put_user_msgs,
-        pub rx_z_put_user_pl_bytes,
-        // pub rx_z_put_admin_msgs,
-        // pub rx_z_put_admin_pl_bytes,
-        pub rx_z_del_user_msgs,
-        // pub rx_z_del_admin_msgs,
-        pub rx_z_query_user_msgs,
-        pub rx_z_query_user_pl_bytes,
-        // pub rx_z_query_admin_msgs,
-        // pub rx_z_query_admin_pl_bytes,
-        pub rx_z_reply_user_msgs,
-        pub rx_z_reply_user_pl_bytes,
-        // pub rx_z_reply_admin_msgs,
-        // pub rx_z_reply_admin_pl_bytes,
-        pub rx_bytes,
-    }
-}
 
 /*************************************/
 /*        TRANSPORT UNICAST          */
@@ -202,7 +150,7 @@ impl TransportUnicast {
     }
 
     #[cfg(feature = "stats")]
-    pub fn get_stats(&self) -> ZResult<TransportUnicastStats> {
+    pub fn get_stats(&self) -> ZResult<Arc<crate::stats::TransportStats>> {
         Ok(self.get_inner()?.stats())
     }
 }

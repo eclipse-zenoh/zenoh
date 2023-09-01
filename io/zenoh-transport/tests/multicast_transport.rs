@@ -307,9 +307,9 @@ mod tests {
 
         #[cfg(feature = "stats")]
         {
-            let stats = peer01.transport.get_stats().unwrap();
+            let stats = peer01.transport.get_stats().unwrap().report();
             println!("\tPeer 01: {:?}", stats);
-            let stats = peer02.transport.get_stats().unwrap();
+            let stats = peer02.transport.get_stats().unwrap().report();
             println!("\tPeer 02: {:?}", stats);
         }
 
