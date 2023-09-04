@@ -43,7 +43,7 @@ transport_ws = ["zenoh-link/transport_ws"]
 transport_serial = ["zenoh-link/transport_serial"]
 transport_compression = []
 transport_shm = ["zenoh-link/transport_shm"]
-stats = []
+stats = ["zenoh-protocol/stats"]
 test = []
 unstable = []
 

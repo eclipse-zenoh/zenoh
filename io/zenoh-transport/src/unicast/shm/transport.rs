@@ -15,7 +15,7 @@
 use super::link::send_with_link;
 use crate::transport_unicast_inner::TransportUnicastTrait;
 #[cfg(feature = "stats")]
-use crate::unicast::TransportUnicastStatsAtomic;
+use crate::stats::TransportStats;
 use crate::TransportConfigUnicast;
 use crate::TransportManager;
 use crate::{TransportExecutor, TransportPeerEventHandler};
@@ -59,7 +59,7 @@ pub(crate) struct TransportUnicastShm {
     alive: Arc<AsyncMutex<bool>>,
     // Transport statistics
     #[cfg(feature = "stats")]
-    pub(super) stats: Arc<TransportUnicastStatsAtomic>,
+    pub(super) stats: Arc<TransportStats>,
 
     // The flags to stop TX/RX tasks
     pub(crate) handle_keepalive: Arc<RwLock<Option<Task<()>>>>,
@@ -79,7 +79,7 @@ impl TransportUnicastShm {
             callback: Arc::new(SyncRwLock::new(None)),
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
-            stats: Arc::new(TransportUnicastStatsAtomic::default()),
+            stats: Arc::new(TransportStats::default()),
             handle_keepalive: Arc::new(RwLock::new(None)),
             handle_rx: Arc::new(RwLock::new(None)),
         };
@@ -189,8 +189,8 @@ impl TransportUnicastTrait for TransportUnicastShm {
     }
 
     #[cfg(feature = "stats")]
-    fn stats(&self) -> crate::TransportUnicastStats {
-        self.stats.snapshot()
+    fn stats(&self) -> std::sync::Arc<crate::stats::TransportStats> {
+        self.stats.clone()
     }
 
     /*************************************/
