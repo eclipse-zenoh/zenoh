@@ -463,10 +463,34 @@ pub fn declare_client_subscription(
                         );
                     } else {
                         propagate_simple_subscription(&mut wtables, &res, &propa_sub_info, face);
+                        for mcast_group in &wtables.mcast_groups {
+                            mcast_group.primitives.send_declare(Declare {
+                                ext_qos: ext::QoSType::default(),
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::default(),
+                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                    id: 0, // TODO
+                                    wire_expr: res.expr().into(),
+                                    ext_info: *sub_info,
+                                }),
+                            })
+                        }
                     }
                 }
                 _ => {
                     propagate_simple_subscription(&mut wtables, &res, &propa_sub_info, face);
+                    for mcast_group in &wtables.mcast_groups {
+                        mcast_group.primitives.send_declare(Declare {
+                            ext_qos: ext::QoSType::default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id: 0, // TODO
+                                wire_expr: res.expr().into(),
+                                ext_info: *sub_info,
+                            }),
+                        })
+                    }
                 }
             }
             disable_matches_data_routes(&mut wtables, &mut res);
