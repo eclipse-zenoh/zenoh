@@ -13,9 +13,9 @@
 //
 #[cfg(feature = "transport_shm")]
 use super::link::send_with_link;
-use crate::transport_unicast_inner::TransportUnicastTrait;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
+use crate::transport_unicast_inner::TransportUnicastTrait;
 use crate::TransportConfigUnicast;
 use crate::TransportManager;
 use crate::{TransportExecutor, TransportPeerEventHandler};
