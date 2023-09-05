@@ -106,7 +106,8 @@ pub mod ext {
     /// Used to carry a body attached to the query
     /// Shared Memory extension is automatically defined by ValueType extension if
     /// #[cfg(feature = "shared-memory")] is defined.
-    pub type QueryBodyType = crate::zenoh_new::ext::ValueType<0x03, 0x04>;
+    pub type QueryBodyType =
+        crate::zenoh_new::ext::ValueType<{ ZExtZBuf::<0x03>::id(false) }, 0x04>;
 }
 
 impl Query {
