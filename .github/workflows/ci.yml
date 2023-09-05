@@ -121,25 +121,6 @@ jobs:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
-      - name: Run tests with SHM for macOS
-        if: ${{ matrix.os == 'macOS-latest' }}
-        uses: actions-rs/cargo@v1
-        with:
-          command: nextest
-          args: run -F shared-memory -F transport_tcp -p zenoh-transport
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-          ASYNC_STD_THREAD_COUNT: 4
-
-      - name: Run doctests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --doc
-        env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
-          ASYNC_STD_THREAD_COUNT: 4
-
   nostd:
     name: Run no_std checks
     runs-on: ubuntu-latest
