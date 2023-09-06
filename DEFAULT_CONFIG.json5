@@ -129,7 +129,7 @@
     qos: {
       enabled: true,
     },
-    link: {        
+    link: {
       /// An optional whitelist of protocols to be used for accepting and opening sessions.
       /// If not configured, all the supported protocols are automatically whitelisted.
       /// The supported protocols are: ["tcp" , "udp", "tls", "quic", "ws", "unixsock-stream"]
@@ -224,7 +224,7 @@
     },
     /// Shared memory configuration
     shared_memory: {
-      enabled: true,
+      enabled: false,
     },
     /// Access control configuration
     auth: {
