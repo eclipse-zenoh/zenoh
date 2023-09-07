@@ -23,6 +23,9 @@ mod multicast;
 mod primitives;
 pub mod unicast;
 
+#[cfg(feature = "stats")]
+pub use common::stats;
+
 #[cfg(feature = "shared-memory")]
 mod shm;
 

@@ -439,7 +439,7 @@ fn router_data(context: &AdminContext, query: Query) {
                     "stats".to_string(),
                     transport
                         .get_stats()
-                        .map_or_else(|_| json!({}), |p| json!(p)),
+                        .map_or_else(|_| json!({}), |p| json!(p.report())),
                 );
             }
         }

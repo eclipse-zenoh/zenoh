@@ -1712,6 +1712,29 @@ fn should_route(
     false
 }
 
+#[cfg(feature = "stats")]
+macro_rules! inc_stats {
+    (
+        $face:expr,
+        $txrx:ident,
+        $space:ident,
+        $body:expr
+    ) => {
+        paste::paste! {
+            if let Some(stats) = $face.stats.as_ref() {
+                use zenoh_buffers::SplitBuffer;
+                match &$body {
+                    PushBody::Put(p) => {
+                        stats.[<inc_ $txrx _z_put_ $space _msgs>](1);
+                        stats.[<inc_ $txrx _z_put_ $space _pl_bytes>](p.payload.len());
+                    }
+                    PushBody::Del(_) => stats.[<inc_ $txrx _z_del_ $space _msgs>](1),
+                }
+            }
+        }
+    };
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn full_reentrant_route_data(
     tables_ref: &RwLock<Tables>,
@@ -1731,6 +1754,15 @@ pub fn full_reentrant_route_data(
             );
             let mut expr = RoutingExpr::new(&prefix, expr.suffix.as_ref());
 
+            #[cfg(feature = "stats")]
+            let admin = expr.full_expr().starts_with("@/");
+            #[cfg(feature = "stats")]
+            if !admin {
+                inc_stats!(face, rx, user, payload)
+            } else {
+                inc_stats!(face, rx, admin, payload)
+            }
+
             if tables.whatami != WhatAmI::Router
                 || face.whatami != WhatAmI::Peer
                 || tables.peers_net.is_none()
@@ -1748,6 +1780,13 @@ pub fn full_reentrant_route_data(
                         let (outface, key_expr, context) = route.values().next().unwrap();
                         if should_route(&tables, face, outface, &mut expr) {
                             drop(tables);
+                            #[cfg(feature = "stats")]
+                            if !admin {
+                                inc_stats!(face, tx, user, payload)
+                            } else {
+                                inc_stats!(face, tx, admin, payload)
+                            }
+
                             outface.primitives.send_push(Push {
                                 wire_expr: key_expr.into(),
                                 ext_qos,
@@ -1776,6 +1815,13 @@ pub fn full_reentrant_route_data(
 
                             drop(tables);
                             for (outface, key_expr, context) in route {
+                                #[cfg(feature = "stats")]
+                                if !admin {
+                                    inc_stats!(face, tx, user, payload)
+                                } else {
+                                    inc_stats!(face, tx, admin, payload)
+                                }
+
                                 outface.primitives.send_push(Push {
                                     wire_expr: key_expr,
                                     ext_qos: ext::QoSType::default(),
@@ -1798,6 +1844,13 @@ pub fn full_reentrant_route_data(
                                         _ => true,
                                     }
                                 {
+                                    #[cfg(feature = "stats")]
+                                    if !admin {
+                                        inc_stats!(face, tx, user, payload)
+                                    } else {
+                                        inc_stats!(face, tx, admin, payload)
+                                    }
+
                                     outface.primitives.send_push(Push {
                                         wire_expr: key_expr.into(),
                                         ext_qos: ext::QoSType::default(),

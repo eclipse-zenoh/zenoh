@@ -14,7 +14,7 @@
 use super::common::priority::{TransportPriorityRx, TransportPriorityTx};
 use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
 #[cfg(feature = "stats")]
-use super::TransportMulticastStatsAtomic;
+use crate::stats::TransportStats;
 use crate::{
     TransportConfigMulticast, TransportManager, TransportMulticastEventHandler, TransportPeer,
     TransportPeerEventHandler,
@@ -103,7 +103,7 @@ pub(crate) struct TransportMulticastInner {
     pub(super) timer: Arc<Timer>,
     // Transport statistics
     #[cfg(feature = "stats")]
-    pub(super) stats: Arc<TransportMulticastStatsAtomic>,
+    pub(super) stats: Arc<TransportStats>,
 }
 
 impl TransportMulticastInner {
@@ -131,7 +131,7 @@ impl TransportMulticastInner {
             callback: Arc::new(RwLock::new(None)),
             timer: Arc::new(Timer::new(false)),
             #[cfg(feature = "stats")]
-            stats: Arc::new(TransportMulticastStatsAtomic::default()),
+            stats: Arc::new(TransportStats::default()),
         };
 
         let link = TransportLinkMulticast::new(ti.clone(), config.link);

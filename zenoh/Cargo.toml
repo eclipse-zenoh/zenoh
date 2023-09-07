@@ -75,6 +75,7 @@ hex = { workspace = true, features = ["default"] }
 lazy_static = { workspace = true }
 log = { workspace = true }
 ordered-float = { workspace = true }
+paste = { workspace = true }
 petgraph = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 regex = { workspace = true }

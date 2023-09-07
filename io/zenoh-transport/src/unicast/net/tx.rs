@@ -76,56 +76,6 @@ impl TransportUnicastNet {
             }
         }
 
-        #[cfg(feature = "stats")]
-        {
-            use zenoh_buffers::SplitBuffer;
-            use zenoh_protocol::network::NetworkBody;
-            use zenoh_protocol::zenoh_new::{PushBody, RequestBody, ResponseBody};
-            match &msg.body {
-                NetworkBody::Push(push) => match &push.payload {
-                    PushBody::Put(p) => {
-                        self.stats.inc_tx_z_put_user_msgs(1);
-                        self.stats.inc_tx_z_put_user_pl_bytes(p.payload.len());
-                    }
-                    PushBody::Del(_) => self.stats.inc_tx_z_del_user_msgs(1),
-                },
-                NetworkBody::Request(req) => match &req.payload {
-                    RequestBody::Put(p) => {
-                        self.stats.inc_tx_z_put_user_msgs(1);
-                        self.stats.inc_tx_z_put_user_pl_bytes(p.payload.len());
-                    }
-                    RequestBody::Del(_) => self.stats.inc_tx_z_del_user_msgs(1),
-                    RequestBody::Query(q) => {
-                        self.stats.inc_tx_z_query_user_msgs(1);
-                        self.stats.inc_tx_z_query_user_pl_bytes(
-                            q.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
-                        );
-                    }
-                    RequestBody::Pull(_) => (),
-                },
-                NetworkBody::Response(res) => match &res.payload {
-                    ResponseBody::Put(p) => {
-                        self.stats.inc_tx_z_put_user_msgs(1);
-                        self.stats.inc_tx_z_put_user_pl_bytes(p.payload.len());
-                    }
-                    ResponseBody::Reply(r) => {
-                        self.stats.inc_tx_z_reply_user_msgs(1);
-                        self.stats.inc_tx_z_reply_user_pl_bytes(r.payload.len());
-                    }
-                    ResponseBody::Err(e) => {
-                        self.stats.inc_tx_z_reply_user_msgs(1);
-                        self.stats.inc_tx_z_reply_user_pl_bytes(
-                            e.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
-                        );
-                    }
-                    ResponseBody::Ack(_) => (),
-                },
-                NetworkBody::ResponseFinal(_) => (),
-                NetworkBody::Declare(_) => (),
-                NetworkBody::OAM(_) => (),
-            }
-        }
-
         let res = self.schedule_on_link(msg);
 
         #[cfg(feature = "stats")]

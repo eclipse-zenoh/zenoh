@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::common::priority::{TransportPriorityRx, TransportPriorityTx};
+#[cfg(feature = "stats")]
+use crate::stats::TransportStats;
 use crate::transport_unicast_inner::TransportUnicastTrait;
 use crate::unicast::net::link::TransportLinkUnicast;
-#[cfg(feature = "stats")]
-use crate::unicast::TransportUnicastStatsAtomic;
 use crate::TransportConfigUnicast;
 use crate::{TransportExecutor, TransportManager, TransportPeerEventHandler};
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
@@ -71,7 +71,7 @@ pub(crate) struct TransportUnicastNet {
     pub(super) alive: Arc<AsyncMutex<bool>>,
     // Transport statistics
     #[cfg(feature = "stats")]
-    pub(super) stats: Arc<TransportUnicastStatsAtomic>,
+    pub(super) stats: Arc<TransportStats>,
 }
 
 impl TransportUnicastNet {
@@ -111,7 +111,7 @@ impl TransportUnicastNet {
             callback: Arc::new(RwLock::new(None)),
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
-            stats: Arc::new(TransportUnicastStatsAtomic::default()),
+            stats: Arc::new(TransportStats::default()),
         };
 
         Ok(t)
@@ -321,8 +321,8 @@ impl TransportUnicastTrait for TransportUnicastNet {
     }
 
     #[cfg(feature = "stats")]
-    fn stats(&self) -> crate::TransportUnicastStats {
-        self.stats.snapshot()
+    fn stats(&self) -> std::sync::Arc<crate::stats::TransportStats> {
+        self.stats.clone()
     }
 
     /*************************************/

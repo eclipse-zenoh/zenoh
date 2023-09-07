@@ -539,13 +539,14 @@ async fn run_single(
 
     #[cfg(feature = "stats")]
     {
-        let c_stats = client_transport.get_stats().unwrap();
+        let c_stats = client_transport.get_stats().unwrap().report();
         println!("\tClient: {:?}", c_stats);
         let r_stats = router_manager
             .get_transport_unicast(&client_manager.config.zid)
             .await
             .unwrap()
             .get_stats()
+            .map(|s| s.report())
             .unwrap();
         println!("\tRouter: {:?}", r_stats);
     }
