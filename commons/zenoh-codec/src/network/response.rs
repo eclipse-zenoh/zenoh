@@ -26,7 +26,7 @@ use zenoh_protocol::{
         response::{ext, flag},
         Mapping, RequestId, Response, ResponseFinal,
     },
-    zenoh_new::ResponseBody,
+    zenoh::ResponseBody,
 };
 
 // Response

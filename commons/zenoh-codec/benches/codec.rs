@@ -27,7 +27,7 @@ use zenoh_protocol::{
     core::{Encoding, Reliability, WireExpr},
     network::{ext, Push},
     transport::{BatchSize, Frame, FrameHeader, TransportSn},
-    zenoh_new::{PushBody, Put},
+    zenoh::{PushBody, Put},
 };
 
 fn criterion_benchmark(c: &mut Criterion) {

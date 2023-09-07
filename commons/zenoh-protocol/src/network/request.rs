@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, zenoh_new::RequestBody};
+use crate::{core::WireExpr, zenoh::RequestBody};
 use core::sync::atomic::AtomicU32;
 
 /// The resolution of a RequestId

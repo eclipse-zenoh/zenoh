@@ -722,7 +722,7 @@ mod tests {
         core::{Bits, CongestionControl, Encoding, Priority},
         network::{ext, Push},
         transport::{BatchSize, Fragment, Frame, TransportBody, TransportSn},
-        zenoh_new::{PushBody, Put},
+        zenoh::{PushBody, Put},
     };
 
     const SLEEP: Duration = Duration::from_millis(100);

@@ -25,9 +25,9 @@ use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::network::push::ext;
 use zenoh_protocol::network::Mapping;
 use zenoh_protocol::network::Push;
-use zenoh_protocol::zenoh_new::Del;
-use zenoh_protocol::zenoh_new::PushBody;
-use zenoh_protocol::zenoh_new::Put;
+use zenoh_protocol::zenoh::Del;
+use zenoh_protocol::zenoh::PushBody;
+use zenoh_protocol::zenoh::Put;
 use zenoh_result::ZResult;
 
 /// The kind of congestion control.

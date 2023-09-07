@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, network::RequestId, zenoh_new::ResponseBody};
+use crate::{core::WireExpr, network::RequestId, zenoh::ResponseBody};
 
 /// # Response message
 ///

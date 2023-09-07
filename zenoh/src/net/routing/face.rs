@@ -15,7 +15,7 @@ use super::router::*;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
-use zenoh_protocol::zenoh_new::RequestBody;
+use zenoh_protocol::zenoh::RequestBody;
 use zenoh_protocol::{
     core::{ExprId, WhatAmI, ZenohId},
     network::{

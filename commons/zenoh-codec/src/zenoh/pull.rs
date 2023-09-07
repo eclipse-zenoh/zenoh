@@ -20,7 +20,7 @@ use zenoh_buffers::{
 
 use zenoh_protocol::{
     common::imsg,
-    zenoh_new::{
+    zenoh::{
         id,
         pull::{flag, Pull},
     },

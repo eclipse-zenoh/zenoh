@@ -106,18 +106,17 @@ pub mod ext {
     /// # SourceInfo extension
     /// Used to carry additional information about the source of data
     pub type SourceInfo = zextzbuf!(0x1, false);
-    pub type SourceInfoType = crate::zenoh_new::ext::SourceInfoType<{ SourceInfo::ID }>;
+    pub type SourceInfoType = crate::zenoh::ext::SourceInfoType<{ SourceInfo::ID }>;
 
     /// # Consolidation extension
     pub type Consolidation = zextz64!(0x2, true);
-    pub type ConsolidationType = crate::zenoh_new::query::Consolidation;
+    pub type ConsolidationType = crate::zenoh::query::Consolidation;
 
     /// # QueryBody extension
     /// Used to carry a body attached to the query
     /// Shared Memory extension is automatically defined by ValueType extension if
     /// #[cfg(feature = "shared-memory")] is defined.
-    pub type QueryBodyType =
-        crate::zenoh_new::ext::ValueType<{ ZExtZBuf::<0x03>::id(false) }, 0x04>;
+    pub type QueryBodyType = crate::zenoh::ext::ValueType<{ ZExtZBuf::<0x03>::id(false) }, 0x04>;
 }
 
 impl Query {

@@ -351,7 +351,7 @@ mod tests {
             frame::{self, FrameHeader},
             KeepAlive, TransportMessage,
         },
-        zenoh_new::{PushBody, Put},
+        zenoh::{PushBody, Put},
     };
 
     #[test]

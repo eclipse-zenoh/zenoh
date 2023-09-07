@@ -34,7 +34,7 @@ use zenoh_protocol::common::{iext, ZExtUnit};
 use zenoh_protocol::{
     common::{imsg, ZExtZBufHeader},
     core::{Encoding, ZenohId},
-    zenoh_new::{ext, id, PushBody, RequestBody, ResponseBody},
+    zenoh::{ext, id, PushBody, RequestBody, ResponseBody},
 };
 
 // Push

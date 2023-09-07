@@ -28,8 +28,8 @@ use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::WireExpr;
 use zenoh_protocol::network::{response, Mapping, RequestId, Response, ResponseFinal};
-use zenoh_protocol::zenoh_new::reply::ext::ConsolidationType;
-use zenoh_protocol::zenoh_new::{self, ResponseBody};
+use zenoh_protocol::zenoh::reply::ext::ConsolidationType;
+use zenoh_protocol::zenoh::{self, ResponseBody};
 use zenoh_result::ZResult;
 use zenoh_transport::Primitives;
 
@@ -170,12 +170,12 @@ impl SyncResolve for ReplyBuilder<'_> {
                         suffix: std::borrow::Cow::Owned(key_expr.into()),
                         mapping: Mapping::Sender,
                     },
-                    payload: ResponseBody::Reply(zenoh_new::Reply {
+                    payload: ResponseBody::Reply(zenoh::Reply {
                         timestamp: data_info.timestamp,
                         encoding: data_info.encoding.unwrap_or_default(),
                         ext_sinfo: if data_info.source_id.is_some() || data_info.source_sn.is_some()
                         {
-                            Some(zenoh_new::reply::ext::SourceInfoType {
+                            Some(zenoh::reply::ext::SourceInfoType {
                                 zid: data_info.source_id.unwrap_or_default(),
                                 eid: 0, // TODO
                                 sn: data_info.source_sn.unwrap_or_default() as u32,

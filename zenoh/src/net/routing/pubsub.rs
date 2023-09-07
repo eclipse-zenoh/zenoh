@@ -36,7 +36,7 @@ use zenoh_protocol::{
         },
         Push,
     },
-    zenoh_new::PushBody,
+    zenoh::PushBody,
 };
 use zenoh_sync::get_mut_unchecked;
 

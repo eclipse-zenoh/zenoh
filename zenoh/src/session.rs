@@ -70,7 +70,7 @@ use zenoh_protocol::{
         request::{self, ext::TargetType, Request},
         Mapping, Push, Response, ResponseFinal,
     },
-    zenoh_new::{
+    zenoh::{
         query::{
             self,
             ext::{ConsolidationType, QueryBodyType},
@@ -1645,7 +1645,7 @@ impl Session {
                 ext_target: target,
                 ext_budget: None,
                 ext_timeout: Some(timeout),
-                payload: RequestBody::Query(zenoh_protocol::zenoh_new::Query {
+                payload: RequestBody::Query(zenoh_protocol::zenoh::Query {
                     parameters: selector.parameters().to_string(),
                     ext_sinfo: None,
                     ext_consolidation: consolidation.into(),

@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{core::WireExpr, zenoh_new::PushBody};
+use crate::{core::WireExpr, zenoh::PushBody};
 
 pub mod flag {
     pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix

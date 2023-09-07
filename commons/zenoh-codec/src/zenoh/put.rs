@@ -11,47 +11,57 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+#[cfg(not(feature = "shared-memory"))]
+use crate::Zenoh080Bounded;
+#[cfg(feature = "shared-memory")]
+use crate::Zenoh080Sliced;
 use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
+    ZBuf,
 };
 use zenoh_protocol::{
     common::{iext, imsg},
-    zenoh_new::{
-        err::{ext, flag, Err},
+    core::Encoding,
+    zenoh::{
         id,
+        put::{ext, flag, Put},
     },
 };
 
-impl<W> WCodec<&Err, &mut W> for Zenoh080
+impl<W> WCodec<&Put, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &Err) -> Self::Output {
+    fn write(self, writer: &mut W, x: &Put) -> Self::Output {
         // Header
-        let mut header = id::ERR;
+        let mut header = id::PUT;
         if x.timestamp.is_some() {
             header |= flag::T;
         }
-        if x.is_infrastructure {
-            header |= flag::I;
+        if x.encoding != Encoding::default() {
+            header |= flag::E;
         }
-        let mut n_exts = (x.ext_sinfo.is_some() as u8)
-            + (x.ext_body.is_some() as u8)
-            + (x.ext_unknown.len() as u8);
+        let mut n_exts = (x.ext_sinfo.is_some()) as u8 + (x.ext_unknown.len() as u8);
+        #[cfg(feature = "shared-memory")]
+        {
+            n_exts += x.ext_shm.is_some() as u8;
+        }
         if n_exts != 0 {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.code)?;
         if let Some(ts) = x.timestamp.as_ref() {
             self.write(&mut *writer, ts)?;
+        }
+        if x.encoding != Encoding::default() {
+            self.write(&mut *writer, &x.encoding)?;
         }
 
         // Extensions
@@ -59,54 +69,72 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
         }
-        if let Some(body) = x.ext_body.as_ref() {
+        #[cfg(feature = "shared-memory")]
+        if let Some(eshm) = x.ext_shm.as_ref() {
             n_exts -= 1;
-            self.write(&mut *writer, (body, n_exts != 0))?;
+            self.write(&mut *writer, (eshm, n_exts != 0))?;
         }
         for u in x.ext_unknown.iter() {
             n_exts -= 1;
             self.write(&mut *writer, (u, n_exts != 0))?;
         }
 
+        // Payload
+        #[cfg(feature = "shared-memory")]
+        {
+            let codec = Zenoh080Sliced::<u32>::new(x.ext_shm.is_some());
+            codec.write(&mut *writer, &x.payload)?;
+        }
+
+        #[cfg(not(feature = "shared-memory"))]
+        {
+            let bodec = Zenoh080Bounded::<u32>::new();
+            bodec.write(&mut *writer, &x.payload)?;
+        }
+
         Ok(())
     }
 }
 
-impl<R> RCodec<Err, &mut R> for Zenoh080
+impl<R> RCodec<Put, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<Err, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<Put, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<Err, &mut R> for Zenoh080Header
+impl<R> RCodec<Put, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<Err, Self::Error> {
-        if imsg::mid(self.header) != id::ERR {
+    fn read(self, reader: &mut R) -> Result<Put, Self::Error> {
+        if imsg::mid(self.header) != id::PUT {
             return Err(DidntRead);
         }
 
         // Body
-        let code: u16 = self.codec.read(&mut *reader)?;
-        let is_infrastructure = imsg::has_flag(self.header, flag::I);
         let mut timestamp: Option<uhlc::Timestamp> = None;
         if imsg::has_flag(self.header, flag::T) {
             timestamp = Some(self.codec.read(&mut *reader)?);
         }
 
+        let mut encoding = Encoding::default();
+        if imsg::has_flag(self.header, flag::E) {
+            encoding = self.codec.read(&mut *reader)?;
+        }
+
         // Extensions
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
-        let mut ext_body: Option<ext::ErrBodyType> = None;
+        #[cfg(feature = "shared-memory")]
+        let mut ext_shm: Option<ext::ShmType> = None;
         let mut ext_unknown = Vec::new();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
@@ -119,26 +147,43 @@ where
                     ext_sinfo = Some(s);
                     has_ext = ext;
                 }
-                ext::ErrBodyType::VID | ext::ErrBodyType::SID => {
-                    let (s, ext): (ext::ErrBodyType, bool) = eodec.read(&mut *reader)?;
-                    ext_body = Some(s);
+                #[cfg(feature = "shared-memory")]
+                ext::Shm::ID => {
+                    let (s, ext): (ext::ShmType, bool) = eodec.read(&mut *reader)?;
+                    ext_shm = Some(s);
                     has_ext = ext;
                 }
                 _ => {
-                    let (u, ext) = extension::read(reader, "Err", ext)?;
+                    let (u, ext) = extension::read(reader, "Put", ext)?;
                     ext_unknown.push(u);
                     has_ext = ext;
                 }
             }
         }
 
-        Ok(Err {
-            code,
-            is_infrastructure,
+        // Payload
+        let payload: ZBuf = {
+            #[cfg(feature = "shared-memory")]
+            {
+                let codec = Zenoh080Sliced::<u32>::new(ext_shm.is_some());
+                codec.read(&mut *reader)?
+            }
+
+            #[cfg(not(feature = "shared-memory"))]
+            {
+                let bodec = Zenoh080Bounded::<u32>::new();
+                bodec.read(&mut *reader)?
+            }
+        };
+
+        Ok(Put {
             timestamp,
+            encoding,
             ext_sinfo,
-            ext_body,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
             ext_unknown,
+            payload,
         })
     }
 }

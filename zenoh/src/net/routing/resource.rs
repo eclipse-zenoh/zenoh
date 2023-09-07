@@ -20,7 +20,7 @@ use std::sync::{Arc, Weak};
 #[cfg(feature = "complete_n")]
 use zenoh_protocol::network::request::ext::TargetType;
 use zenoh_protocol::network::RequestId;
-use zenoh_protocol::zenoh_new::PushBody;
+use zenoh_protocol::zenoh::PushBody;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr, ZenohId},
     network::{

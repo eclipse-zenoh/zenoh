@@ -42,7 +42,7 @@ use zenoh_protocol::{
         request::{ext::TargetType, Request, RequestId},
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
     },
-    zenoh_new::{reply::ext::ConsolidationType, Reply, RequestBody, ResponseBody},
+    zenoh::{reply::ext::ConsolidationType, Reply, RequestBody, ResponseBody},
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;

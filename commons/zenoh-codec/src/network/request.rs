@@ -26,7 +26,7 @@ use zenoh_protocol::{
         request::{ext, flag},
         Mapping, Request, RequestId,
     },
-    zenoh_new::RequestBody,
+    zenoh::RequestBody,
 };
 
 // Target

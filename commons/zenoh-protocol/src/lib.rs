@@ -25,7 +25,7 @@ pub mod core;
 pub mod network;
 pub mod scouting;
 pub mod transport;
-pub mod zenoh_new;
+pub mod zenoh;
 
 // Zenoh version
 pub const VERSION: u8 = 0x08;

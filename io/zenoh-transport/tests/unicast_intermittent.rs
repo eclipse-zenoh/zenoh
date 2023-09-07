@@ -30,7 +30,7 @@ use zenoh_protocol::{
         },
         NetworkMessage,
     },
-    zenoh_new::Put,
+    zenoh::Put,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::test_helpers::make_transport_manager_builder;

@@ -32,7 +32,7 @@ mod tests {
             push::ext::{NodeIdType, QoSType},
             NetworkBody, NetworkMessage, Push,
         },
-        zenoh_new::{PushBody, Put},
+        zenoh::{PushBody, Put},
     };
     use zenoh_result::ZResult;
     use zenoh_shm::{SharedMemoryBuf, SharedMemoryManager};

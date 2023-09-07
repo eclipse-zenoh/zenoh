@@ -25,7 +25,7 @@ use zenoh_protocol::{
         },
         NetworkMessage,
     },
-    zenoh_new::Put,
+    zenoh::Put,
 };
 use zenoh_transport::{DummyTransportEventHandler, TransportManager};
 

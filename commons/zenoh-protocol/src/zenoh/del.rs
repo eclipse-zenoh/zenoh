@@ -15,7 +15,7 @@ use crate::common::ZExtUnknown;
 use alloc::vec::Vec;
 use uhlc::Timestamp;
 
-/// # Ack message
+/// # Put message
 ///
 /// ```text
 /// Flags:
@@ -25,11 +25,11 @@ use uhlc::Timestamp;
 ///
 ///   7 6 5 4 3 2 1 0
 ///  +-+-+-+-+-+-+-+-+
-///  |Z|X|T|   ACK   |
+///  |Z|X|T|   DEL   |
 ///  +-+-+-+---------+
 ///  ~ ts: <u8;z16>  ~  if T==1
 ///  +---------------+
-///  ~  [err_exts]   ~  if Z==1
+///  ~  [del_exts]   ~  if Z==1
 ///  +---------------+
 /// ```
 pub mod flag {
@@ -39,7 +39,7 @@ pub mod flag {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Ack {
+pub struct Del {
     pub timestamp: Option<Timestamp>,
     pub ext_sinfo: Option<ext::SourceInfoType>,
     pub ext_unknown: Vec<ZExtUnknown>,
@@ -51,10 +51,10 @@ pub mod ext {
     /// # SourceInfo extension
     /// Used to carry additional information about the source of data
     pub type SourceInfo = zextzbuf!(0x1, false);
-    pub type SourceInfoType = crate::zenoh_new::ext::SourceInfoType<{ SourceInfo::ID }>;
+    pub type SourceInfoType = crate::zenoh::ext::SourceInfoType<{ SourceInfo::ID }>;
 }
 
-impl Ack {
+impl Del {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use crate::{common::iext, core::ZenohId};

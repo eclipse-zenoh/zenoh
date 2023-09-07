@@ -19,7 +19,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{iext, imsg},
-    zenoh_new::{
+    zenoh::{
         ack::{ext, flag, Ack},
         id,
     },

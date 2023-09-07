@@ -35,7 +35,7 @@ use zenoh_protocol::{
         ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
         ResponseFinal,
     },
-    zenoh_new::{PushBody, RequestBody},
+    zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{Primitives, TransportUnicast};

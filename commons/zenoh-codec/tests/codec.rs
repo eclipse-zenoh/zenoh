@@ -28,7 +28,7 @@ use zenoh_protocol::{
     network::{self, *},
     scouting::*,
     transport::{self, *},
-    zenoh_new, zextunit, zextz64, zextzbuf,
+    zenoh, zextunit, zextz64, zextzbuf,
 };
 
 const NUM_ITER: usize = 100;
@@ -559,35 +559,35 @@ fn codec_network() {
 // Zenoh new
 #[test]
 fn codec_put() {
-    run!(zenoh_new::Put, zenoh_new::Put::rand());
+    run!(zenoh::Put, zenoh::Put::rand());
 }
 
 #[test]
 fn codec_del() {
-    run!(zenoh_new::Del, zenoh_new::Del::rand());
+    run!(zenoh::Del, zenoh::Del::rand());
 }
 
 #[test]
 fn codec_query() {
-    run!(zenoh_new::Query, zenoh_new::Query::rand());
+    run!(zenoh::Query, zenoh::Query::rand());
 }
 
 #[test]
 fn codec_reply() {
-    run!(zenoh_new::Reply, zenoh_new::Reply::rand());
+    run!(zenoh::Reply, zenoh::Reply::rand());
 }
 
 #[test]
 fn codec_err() {
-    run!(zenoh_new::Err, zenoh_new::Err::rand());
+    run!(zenoh::Err, zenoh::Err::rand());
 }
 
 #[test]
 fn codec_ack() {
-    run!(zenoh_new::Ack, zenoh_new::Ack::rand());
+    run!(zenoh::Ack, zenoh::Ack::rand());
 }
 
 #[test]
 fn codec_pull() {
-    run!(zenoh_new::Pull, zenoh_new::Pull::rand());
+    run!(zenoh::Pull, zenoh::Pull::rand());
 }

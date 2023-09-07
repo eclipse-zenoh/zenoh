@@ -25,7 +25,7 @@ pub mod core;
 pub mod network;
 pub mod scouting;
 pub mod transport;
-pub mod zenoh_new;
+pub mod zenoh;
 
 use ::core::marker::PhantomData;
 use zenoh_protocol::core::Reliability;

@@ -25,28 +25,30 @@ use zenoh_buffers::{
 use zenoh_protocol::{
     common::{iext, imsg},
     core::Encoding,
-    zenoh_new::{
+    zenoh::{
         id,
-        put::{ext, flag, Put},
+        reply::{ext, flag, Reply},
     },
 };
 
-impl<W> WCodec<&Put, &mut W> for Zenoh080
+impl<W> WCodec<&Reply, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &Put) -> Self::Output {
+    fn write(self, writer: &mut W, x: &Reply) -> Self::Output {
         // Header
-        let mut header = id::PUT;
+        let mut header = id::REPLY;
         if x.timestamp.is_some() {
             header |= flag::T;
         }
         if x.encoding != Encoding::default() {
             header |= flag::E;
         }
-        let mut n_exts = (x.ext_sinfo.is_some()) as u8 + (x.ext_unknown.len() as u8);
+        let mut n_exts = (x.ext_sinfo.is_some()) as u8
+            + ((x.ext_consolidation != ext::ConsolidationType::default()) as u8)
+            + (x.ext_unknown.len() as u8);
         #[cfg(feature = "shared-memory")]
         {
             n_exts += x.ext_shm.is_some() as u8;
@@ -68,6 +70,10 @@ where
         if let Some(sinfo) = x.ext_sinfo.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
+        }
+        if x.ext_consolidation != ext::ConsolidationType::default() {
+            n_exts -= 1;
+            self.write(&mut *writer, (x.ext_consolidation, n_exts != 0))?;
         }
         #[cfg(feature = "shared-memory")]
         if let Some(eshm) = x.ext_shm.as_ref() {
@@ -96,27 +102,27 @@ where
     }
 }
 
-impl<R> RCodec<Put, &mut R> for Zenoh080
+impl<R> RCodec<Reply, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<Put, Self::Error> {
+    fn read(self, reader: &mut R) -> Result<Reply, Self::Error> {
         let header: u8 = self.read(&mut *reader)?;
         let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<Put, &mut R> for Zenoh080Header
+impl<R> RCodec<Reply, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<Put, Self::Error> {
-        if imsg::mid(self.header) != id::PUT {
+    fn read(self, reader: &mut R) -> Result<Reply, Self::Error> {
+        if imsg::mid(self.header) != id::REPLY {
             return Err(DidntRead);
         }
 
@@ -133,6 +139,7 @@ where
 
         // Extensions
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
+        let mut ext_consolidation = ext::ConsolidationType::default();
         #[cfg(feature = "shared-memory")]
         let mut ext_shm: Option<ext::ShmType> = None;
         let mut ext_unknown = Vec::new();
@@ -147,6 +154,11 @@ where
                     ext_sinfo = Some(s);
                     has_ext = ext;
                 }
+                ext::Consolidation::ID => {
+                    let (c, ext): (ext::ConsolidationType, bool) = eodec.read(&mut *reader)?;
+                    ext_consolidation = c;
+                    has_ext = ext;
+                }
                 #[cfg(feature = "shared-memory")]
                 ext::Shm::ID => {
                     let (s, ext): (ext::ShmType, bool) = eodec.read(&mut *reader)?;
@@ -154,7 +166,7 @@ where
                     has_ext = ext;
                 }
                 _ => {
-                    let (u, ext) = extension::read(reader, "Put", ext)?;
+                    let (u, ext) = extension::read(reader, "Reply", ext)?;
                     ext_unknown.push(u);
                     has_ext = ext;
                 }
@@ -176,10 +188,11 @@ where
             }
         };
 
-        Ok(Put {
+        Ok(Reply {
             timestamp,
             encoding,
             ext_sinfo,
+            ext_consolidation,
             #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_unknown,

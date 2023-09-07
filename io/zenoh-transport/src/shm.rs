@@ -17,7 +17,7 @@ use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::{zasyncread, zasyncwrite, zerror};
 use zenoh_protocol::{
     network::{NetworkBody, NetworkMessage, Push, Request, Response},
-    zenoh_new::{
+    zenoh::{
         err::{ext::ErrBodyType, Err},
         ext::ShmType,
         query::{ext::QueryBodyType, Query},

@@ -38,7 +38,7 @@ mod tests {
             },
             NetworkMessage,
         },
-        zenoh_new::Put,
+        zenoh::Put,
     };
     use zenoh_result::ZResult;
     use zenoh_transport::{

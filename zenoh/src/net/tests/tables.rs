@@ -26,7 +26,7 @@ use zenoh_protocol::core::{
 use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
 use zenoh_protocol::network::declare::Mode;
 use zenoh_protocol::network::{ext, Declare, DeclareBody, DeclareKeyExpr};
-use zenoh_protocol::zenoh_new::{PushBody, Put};
+use zenoh_protocol::zenoh::{PushBody, Put};
 use zenoh_transport::{DummyPrimitives, Primitives};
 
 #[test]

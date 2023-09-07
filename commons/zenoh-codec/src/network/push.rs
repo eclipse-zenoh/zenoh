@@ -24,7 +24,7 @@ use zenoh_protocol::{
         push::{ext, flag},
         Mapping, Push,
     },
-    zenoh_new::PushBody,
+    zenoh::PushBody,
 };
 
 impl<W> WCodec<&Push, &mut W> for Zenoh080

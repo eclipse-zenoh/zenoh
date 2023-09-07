@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 use uhlc::Timestamp;
 use zenoh_buffers::ZBuf;
 
-/// # Put message
+/// # Reply message
 ///
 /// ```text
 /// Flags:
@@ -26,13 +26,13 @@ use zenoh_buffers::ZBuf;
 ///
 ///   7 6 5 4 3 2 1 0
 ///  +-+-+-+-+-+-+-+-+
-///  |Z|E|T|   PUT   |
+///  |Z|E|T|  REPLY  |
 ///  +-+-+-+---------+
 ///  ~ ts: <u8;z16>  ~  if T==1
 ///  +---------------+
 ///  ~   encoding    ~  if E==1
 ///  +---------------+
-///  ~  [put_exts]   ~  if Z==1
+///  ~  [repl_exts]  ~  if Z==1
 ///  +---------------+
 ///  ~ pl: <u8;z32>  ~  -- Payload
 ///  +---------------+
@@ -44,10 +44,11 @@ pub mod flag {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Put {
+pub struct Reply {
     pub timestamp: Option<Timestamp>,
     pub encoding: Encoding,
     pub ext_sinfo: Option<ext::SourceInfoType>,
+    pub ext_consolidation: ext::ConsolidationType,
     #[cfg(feature = "shared-memory")]
     pub ext_shm: Option<ext::ShmType>,
     pub ext_unknown: Vec<ZExtUnknown>,
@@ -57,25 +58,32 @@ pub struct Put {
 pub mod ext {
     #[cfg(feature = "shared-memory")]
     use crate::{common::ZExtUnit, zextunit};
-    use crate::{common::ZExtZBuf, zextzbuf};
+    use crate::{
+        common::{ZExtZ64, ZExtZBuf},
+        zextz64, zextzbuf,
+    };
 
     /// # SourceInfo extension
     /// Used to carry additional information about the source of data
     pub type SourceInfo = zextzbuf!(0x1, false);
-    pub type SourceInfoType = crate::zenoh_new::ext::SourceInfoType<{ SourceInfo::ID }>;
+    pub type SourceInfoType = crate::zenoh::ext::SourceInfoType<{ SourceInfo::ID }>;
+
+    /// # Consolidation extension
+    pub type Consolidation = zextz64!(0x2, true);
+    pub type ConsolidationType = crate::zenoh::query::ext::ConsolidationType;
 
     /// # Shared Memory extension
     /// Used to carry additional information about the shared-memory layour of data
     #[cfg(feature = "shared-memory")]
-    pub type Shm = zextunit!(0x2, true);
+    pub type Shm = zextunit!(0x3, true);
     #[cfg(feature = "shared-memory")]
-    pub type ShmType = crate::zenoh_new::ext::ShmType<{ Shm::ID }>;
+    pub type ShmType = crate::zenoh::ext::ShmType<{ Shm::ID }>;
 }
 
-impl Put {
+impl Reply {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::{common::iext, core::ZenohId};
+        use crate::{common::iext, core::ZenohId, zenoh::Consolidation};
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
@@ -86,12 +94,13 @@ impl Put {
         });
         let encoding = Encoding::rand();
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
+        let ext_consolidation = Consolidation::rand();
         #[cfg(feature = "shared-memory")]
         let ext_shm = rng.gen_bool(0.5).then_some(ext::ShmType::rand());
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
             ext_unknown.push(ZExtUnknown::rand2(
-                iext::mid(ext::SourceInfo::ID) + 1,
+                iext::mid(ext::Consolidation::ID) + 1,
                 false,
             ));
         }
@@ -101,6 +110,7 @@ impl Put {
             timestamp,
             encoding,
             ext_sinfo,
+            ext_consolidation,
             #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_unknown,
