@@ -14,7 +14,8 @@
 use super::face::FaceState;
 use super::network::Network;
 use super::resource::{
-    QueryRoute, QueryRoutes, QueryTargetQabl, QueryTargetQablSet, Resource, SessionContext,
+    QueryRoute, QueryRoutes, QueryTargetQabl, QueryTargetQablSet, Resource, RoutingContext,
+    SessionContext,
 };
 use super::router::{RoutingExpr, Tables, TablesLock};
 use async_trait::async_trait;
@@ -41,7 +42,6 @@ use zenoh_protocol::{
         request::{ext::TargetType, Request, RequestId},
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
     },
-    zenoh::{QueryId, RoutingContext},
     zenoh_new::{reply::ext::ConsolidationType, Reply, RequestBody, ResponseBody},
 };
 use zenoh_sync::get_mut_unchecked;
@@ -49,7 +49,7 @@ use zenoh_util::Timed;
 
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
-    src_qid: QueryId,
+    src_qid: RequestId,
 }
 
 #[cfg(feature = "complete_n")]
@@ -222,7 +222,7 @@ fn send_sourced_queryable_to_net_childs(
                             ext_qos: ext::QoSType::default(),
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType {
-                                node_id: routing_context.map(|c| c.tree_id).unwrap_or(0) as u16,
+                                node_id: routing_context.unwrap_or(0),
                             },
                             body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                 id: 0, // TODO
@@ -318,7 +318,7 @@ fn propagate_sourced_queryable(
                     res,
                     qabl_info,
                     src_face,
-                    Some(RoutingContext::new(tree_sid.index() as u64)),
+                    Some(tree_sid.index() as u16),
                 );
             } else {
                 log::trace!(
@@ -700,7 +700,7 @@ fn send_forget_sourced_queryable_to_net_childs(
                             ext_qos: ext::QoSType::default(),
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType {
-                                node_id: routing_context.map(|c| c.tree_id).unwrap_or(0) as u16,
+                                node_id: routing_context.unwrap_or(0),
                             },
                             body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                 id: 0, // TODO
@@ -789,7 +789,7 @@ fn propagate_forget_sourced_queryable(
                     &net.trees[tree_sid.index()].childs,
                     res,
                     src_face,
-                    Some(RoutingContext::new(tree_sid.index() as u64)),
+                    Some(tree_sid.index() as u16),
                 );
             } else {
                 log::trace!(
@@ -1321,7 +1321,7 @@ pub(crate) fn queries_tree_change(
                             res,
                             qabl_info,
                             None,
-                            Some(RoutingContext::new(tree_sid as u64)),
+                            Some(tree_sid as u16),
                         );
                     }
                 }
@@ -1359,7 +1359,7 @@ fn insert_target_for_qabls(
                                             face.clone(),
                                             key_expr.to_owned(),
                                             if source != 0 {
-                                                Some(RoutingContext::new(source as u64))
+                                                Some(source as u16)
                                             } else {
                                                 None
                                             },
@@ -2211,7 +2211,7 @@ pub fn route_query(
                                 ext_qos: ext::QoSType::default(), // TODO
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
-                                    node_id: context.map(|c| c.tree_id).unwrap_or(0) as u16,
+                                    node_id: context.unwrap_or(0),
                                 },
                                 ext_target: target,
                                 ext_budget: None,
@@ -2250,7 +2250,7 @@ pub fn route_query(
 pub(crate) fn route_send_response(
     tables_ref: &Arc<TablesLock>,
     face: &mut Arc<FaceState>,
-    qid: QueryId,
+    qid: RequestId,
     ext_respid: Option<ResponderIdType>,
     key_expr: WireExpr,
     body: ResponseBody,
@@ -2297,7 +2297,7 @@ pub(crate) fn route_send_response(
 pub(crate) fn route_send_response_final(
     tables_ref: &Arc<TablesLock>,
     face: &mut Arc<FaceState>,
-    qid: QueryId,
+    qid: RequestId,
 ) {
     let queries_lock = zwrite!(tables_ref.queries_lock);
     match get_mut_unchecked(face).pending_queries.remove(&qid) {

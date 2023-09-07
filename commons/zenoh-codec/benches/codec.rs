@@ -24,9 +24,10 @@ use zenoh_buffers::{
 };
 use zenoh_codec::*;
 use zenoh_protocol::{
-    core::{CongestionControl, Reliability, WireExpr},
+    core::{Encoding, Reliability, WireExpr},
+    network::{ext, Push},
     transport::{BatchSize, Frame, FrameHeader, TransportSn},
-    zenoh::Data,
+    zenoh_new::{PushBody, Put},
 };
 
 fn criterion_benchmark(c: &mut Criterion) {
@@ -79,12 +80,20 @@ fn criterion_benchmark(c: &mut Criterion) {
         ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
     };
 
-    let data = Data {
-        key: WireExpr::empty(),
-        data_info: None,
-        payload: ZBuf::from(vec![0u8; 8]),
-        congestion_control: CongestionControl::default(),
-        reply_context: None,
+    let data = Push {
+        wire_expr: WireExpr::empty(),
+        ext_qos: ext::QoSType::default(),
+        ext_tstamp: None,
+        ext_nodeid: ext::NodeIdType::default(),
+        payload: PushBody::Put(Put {
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
+            ext_unknown: vec![],
+            payload: ZBuf::from(vec![0u8; 8]),
+        }),
     };
 
     // Calculate the number of messages
@@ -116,12 +125,20 @@ fn criterion_benchmark(c: &mut Criterion) {
         ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
     };
 
-    let data = Data {
-        key: WireExpr::empty(),
-        data_info: None,
-        payload: ZBuf::from(vec![0u8; 8]),
-        congestion_control: CongestionControl::default(),
-        reply_context: None,
+    let data = Push {
+        wire_expr: WireExpr::empty(),
+        ext_qos: ext::QoSType::default(),
+        ext_tstamp: None,
+        ext_nodeid: ext::NodeIdType::default(),
+        payload: PushBody::Put(Put {
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
+            ext_unknown: vec![],
+            payload: ZBuf::from(vec![0u8; 8]),
+        }),
     };
 
     let mut writer = buff.writer();
@@ -148,12 +165,20 @@ fn criterion_benchmark(c: &mut Criterion) {
         ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
     };
 
-    let data = Data {
-        key: WireExpr::empty(),
-        data_info: None,
-        payload: ZBuf::from(vec![0u8; 8]),
-        congestion_control: CongestionControl::default(),
-        reply_context: None,
+    let data = Push {
+        wire_expr: WireExpr::empty(),
+        ext_qos: ext::QoSType::default(),
+        ext_tstamp: None,
+        ext_nodeid: ext::NodeIdType::default(),
+        payload: PushBody::Put(Put {
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
+            ext_unknown: vec![],
+            payload: ZBuf::from(vec![0u8; 8]),
+        }),
     };
 
     let mut writer = buff.writer();
@@ -168,7 +193,7 @@ fn criterion_benchmark(c: &mut Criterion) {
 
             let _header: FrameHeader = codec.read(&mut reader).unwrap();
             loop {
-                let res: Result<Data, DidntRead> = codec.read(&mut reader);
+                let res: Result<Push, DidntRead> = codec.read(&mut reader);
                 if res.is_err() {
                     break;
                 }
@@ -180,13 +205,22 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut buff = ZBuf::empty();
     let codec = Zenoh080::new();
 
-    let data = Data {
-        key: WireExpr::empty(),
-        data_info: None,
-        payload: ZBuf::from(vec![0u8; 1_000_000]),
-        congestion_control: CongestionControl::default(),
-        reply_context: None,
+    let data = Push {
+        wire_expr: WireExpr::empty(),
+        ext_qos: ext::QoSType::default(),
+        ext_tstamp: None,
+        ext_nodeid: ext::NodeIdType::default(),
+        payload: PushBody::Put(Put {
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
+            ext_unknown: vec![],
+            payload: ZBuf::from(vec![0u8; 1_000_000]),
+        }),
     };
+
     c.bench_function("Fragmentation ZBuf Write", |b| {
         b.iter(|| {
             let mut writer = buff.writer();
@@ -198,12 +232,20 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut buff = vec![];
     let codec = Zenoh080::new();
 
-    let data = Data {
-        key: WireExpr::empty(),
-        data_info: None,
-        payload: ZBuf::from(vec![0u8; 1_000_000]),
-        congestion_control: CongestionControl::default(),
-        reply_context: None,
+    let data = Push {
+        wire_expr: WireExpr::empty(),
+        ext_qos: ext::QoSType::default(),
+        ext_tstamp: None,
+        ext_nodeid: ext::NodeIdType::default(),
+        payload: PushBody::Put(Put {
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
+            ext_unknown: vec![],
+            payload: ZBuf::from(vec![0u8; 1_000_000]),
+        }),
     };
 
     let mut writer = buff.writer();
@@ -220,7 +262,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("Fragmentation ZBuf Read", |b| {
         b.iter(|| {
             let mut reader = zbuf.reader();
-            let _data: Data = codec.read(&mut reader).unwrap();
+            let _data: Push = codec.read(&mut reader).unwrap();
         })
     });
 
@@ -228,12 +270,20 @@ fn criterion_benchmark(c: &mut Criterion) {
     let mut buff = vec![];
     let codec = Zenoh080::new();
 
-    let data = Data {
-        key: WireExpr::empty(),
-        data_info: None,
-        payload: ZBuf::from(vec![0u8; 1_000_000]),
-        congestion_control: CongestionControl::default(),
-        reply_context: None,
+    let data = Push {
+        wire_expr: WireExpr::empty(),
+        ext_qos: ext::QoSType::default(),
+        ext_tstamp: None,
+        ext_nodeid: ext::NodeIdType::default(),
+        payload: PushBody::Put(Put {
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
+            ext_unknown: vec![],
+            payload: ZBuf::from(vec![0u8; 1_000_000]),
+        }),
     };
 
     let mut writer = buff.writer();
@@ -254,7 +304,7 @@ fn criterion_benchmark(c: &mut Criterion) {
             }
 
             let mut reader = zbuf.reader();
-            let _data: Data = codec.read(&mut reader).unwrap();
+            let _data: Push = codec.read(&mut reader).unwrap();
         })
     });
 }

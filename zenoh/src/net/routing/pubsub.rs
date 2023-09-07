@@ -13,7 +13,9 @@
 //
 use super::face::FaceState;
 use super::network::Network;
-use super::resource::{DataRoutes, Direction, PullCaches, Resource, Route, SessionContext};
+use super::resource::{
+    DataRoutes, Direction, PullCaches, Resource, Route, RoutingContext, SessionContext,
+};
 use super::router::{RoutingExpr, Tables, TablesLock};
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
@@ -34,7 +36,6 @@ use zenoh_protocol::{
         },
         Push,
     },
-    zenoh::RoutingContext,
     zenoh_new::PushBody,
 };
 use zenoh_sync::get_mut_unchecked;
@@ -62,7 +63,7 @@ fn send_sourced_subscription_to_net_childs(
                             ext_qos: ext::QoSType::default(),
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType {
-                                node_id: routing_context.map(|c| c.tree_id).unwrap_or(0) as u16,
+                                node_id: routing_context.unwrap_or(0),
                             },
                             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                                 id: 0, // TODO
@@ -168,7 +169,7 @@ fn propagate_sourced_subscription(
                     res,
                     src_face,
                     sub_info,
-                    Some(RoutingContext::new(tree_sid.index() as u64)),
+                    Some(tree_sid.index() as u16),
                 );
             } else {
                 log::trace!(
@@ -568,7 +569,7 @@ fn send_forget_sourced_subscription_to_net_childs(
                             ext_qos: ext::QoSType::default(),
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType {
-                                node_id: routing_context.map(|c| c.tree_id).unwrap_or(0) as u16,
+                                node_id: routing_context.unwrap_or(0),
                             },
                             body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                                 id: 0, // TODO
@@ -656,7 +657,7 @@ fn propagate_forget_sourced_subscription(
                     &net.trees[tree_sid.index()].childs,
                     res,
                     src_face,
-                    Some(RoutingContext::new(tree_sid.index() as u64)),
+                    Some(tree_sid.index() as u16),
                 );
             } else {
                 log::trace!(
@@ -1109,7 +1110,7 @@ pub(crate) fn pubsub_tree_change(
                                 res,
                                 None,
                                 &sub_info,
-                                Some(RoutingContext::new(tree_sid as u64)),
+                                Some(tree_sid as u16),
                             );
                         }
                     }
@@ -1223,7 +1224,7 @@ fn insert_faces_for_subs(
                                         face.clone(),
                                         key_expr.to_owned(),
                                         if source != 0 {
-                                            Some(RoutingContext::new(source as u64))
+                                            Some(source as u16)
                                         } else {
                                             None
                                         },
@@ -1792,7 +1793,7 @@ pub fn full_reentrant_route_data(
                                 ext_qos,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
-                                    node_id: context.map(|c| c.tree_id).unwrap_or(0) as u16,
+                                    node_id: context.unwrap_or(0),
                                 },
                                 payload,
                             })
@@ -1827,7 +1828,7 @@ pub fn full_reentrant_route_data(
                                     ext_qos: ext::QoSType::default(),
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType {
-                                        node_id: context.map(|c| c.tree_id).unwrap_or(0) as u16,
+                                        node_id: context.unwrap_or(0),
                                     },
                                     payload: payload.clone(),
                                 })
@@ -1856,7 +1857,7 @@ pub fn full_reentrant_route_data(
                                         ext_qos: ext::QoSType::default(),
                                         ext_tstamp: None,
                                         ext_nodeid: ext::NodeIdType {
-                                            node_id: context.map(|c| c.tree_id).unwrap_or(0) as u16,
+                                            node_id: context.unwrap_or(0),
                                         },
                                         payload: payload.clone(),
                                     })

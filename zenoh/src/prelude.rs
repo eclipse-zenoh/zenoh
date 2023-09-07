@@ -47,7 +47,7 @@ pub(crate) mod common {
     pub(crate) use crate::sample::Locality;
     pub use crate::sample::Sample;
 
-    pub use zenoh_protocol::zenoh::{ConsolidationMode, SampleKind};
+    pub use zenoh_protocol::core::SampleKind;
 
     pub use crate::publication::Priority;
     pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};

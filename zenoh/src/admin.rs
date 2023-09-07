@@ -13,8 +13,9 @@
 //
 use crate::{
     keyexpr,
-    prelude::sync::{KeyExpr, Locality},
+    prelude::sync::{KeyExpr, Locality, SampleKind},
     queryable::Query,
+    sample::DataInfo,
     Sample, Session, ZResult,
 };
 use async_std::task;
@@ -27,7 +28,6 @@ use zenoh_core::SyncResolve;
 use zenoh_protocol::{
     core::{Encoding, KnownEncoding, WireExpr},
     network::NetworkMessage,
-    zenoh::{DataInfo, SampleKind},
 };
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,

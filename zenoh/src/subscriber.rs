@@ -26,7 +26,7 @@ use zenoh_core::{AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::network::declare::{subscriber::ext::SubscriberInfo, Mode};
 
 /// The subscription mode.
-pub use zenoh_protocol::zenoh::SubMode;
+pub use zenoh_protocol::core::SubMode;
 
 /// The kind of reliability.
 pub use zenoh_protocol::core::Reliability;

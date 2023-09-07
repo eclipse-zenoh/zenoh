@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{transport::TransportSn, zenoh::QueryId};
+use crate::{network::RequestId, transport::TransportSn};
 use alloc::string::String;
 use core::{fmt, str::FromStr};
 use zenoh_result::{bail, ZError};
@@ -150,7 +150,7 @@ impl Resolution {
 impl Default for Resolution {
     fn default() -> Self {
         let frame_sn = Bits::from(TransportSn::MAX) as u8;
-        let request_id = (Bits::from(QueryId::MAX) as u8) << 2;
+        let request_id = (Bits::from(RequestId::MAX) as u8) << 2;
         Self(frame_sn | request_id)
     }
 }

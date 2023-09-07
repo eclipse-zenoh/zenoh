@@ -28,6 +28,7 @@ use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
+use crate::sample::DataInfo;
 use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
 use crate::Id;
@@ -52,6 +53,8 @@ use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
+use zenoh_protocol::network::AtomicRequestId;
+use zenoh_protocol::network::RequestId;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -67,7 +70,6 @@ use zenoh_protocol::{
         request::{self, ext::TargetType, Request},
         Mapping, Push, Response, ResponseFinal,
     },
-    zenoh::{AtomicQueryId, DataInfo, QueryId, QueryTarget},
     zenoh_new::{
         query::{
             self,
@@ -90,7 +92,7 @@ zconfigurable! {
 pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
-    pub(crate) qid_counter: AtomicQueryId,
+    pub(crate) qid_counter: AtomicRequestId,
     pub(crate) decl_id_counter: AtomicUsize,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
     pub(crate) remote_resources: HashMap<ExprId, Resource>,
@@ -99,7 +101,7 @@ pub(crate) struct SessionState {
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     #[cfg(feature = "unstable")]
     pub(crate) tokens: HashMap<Id, Arc<LivelinessTokenState>>,
-    pub(crate) queries: HashMap<QueryId, QueryState>,
+    pub(crate) queries: HashMap<RequestId, QueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     //pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
 }
@@ -112,7 +114,7 @@ impl SessionState {
         SessionState {
             primitives: None,
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
-            qid_counter: AtomicQueryId::new(0),
+            qid_counter: AtomicRequestId::new(0),
             decl_id_counter: AtomicUsize::new(0),
             local_resources: HashMap::new(),
             remote_resources: HashMap::new(),
@@ -1640,7 +1642,7 @@ impl Session {
                 ext_qos: request::ext::QoSType::default(),
                 ext_tstamp: None,
                 ext_nodeid: request::ext::NodeIdType::default(),
-                ext_target: target.into(),
+                ext_target: target,
                 ext_budget: None,
                 ext_timeout: Some(timeout),
                 payload: RequestBody::Query(zenoh_protocol::zenoh_new::Query {
@@ -1663,7 +1665,7 @@ impl Session {
                 &wexpr,
                 selector.parameters(),
                 qid,
-                target.into(),
+                target,
                 consolidation.into(),
                 value.as_ref().map(|v| query::ext::QueryBodyType {
                     #[cfg(feature = "shared-memory")]
@@ -1682,7 +1684,7 @@ impl Session {
         local: bool,
         key_expr: &WireExpr,
         parameters: &str,
-        qid: QueryId,
+        qid: RequestId,
         _target: TargetType,
         _consolidation: ConsolidationType,
         body: Option<QueryBodyType>,

@@ -25,11 +25,10 @@ pub mod core;
 pub mod network;
 pub mod scouting;
 pub mod transport;
-pub mod zenoh;
 pub mod zenoh_new;
 
 use ::core::marker::PhantomData;
-use zenoh_protocol::{core::Reliability, zenoh::ReplyContext};
+use zenoh_protocol::core::Reliability;
 
 pub trait WCodec<Message, Buffer> {
     type Output;
@@ -113,13 +112,6 @@ impl Zenoh080Reliability {
             codec: Zenoh080,
         }
     }
-}
-
-#[derive(Clone)]
-pub struct Zenoh080HeaderReplyContext {
-    pub header: u8,
-    pub reply_context: Option<ReplyContext>,
-    pub codec: Zenoh080,
 }
 
 #[derive(Clone, Copy)]

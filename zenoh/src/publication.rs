@@ -16,6 +16,7 @@
 
 use crate::net::transport::Primitives;
 use crate::prelude::*;
+use crate::sample::DataInfo;
 use crate::Encoding;
 use crate::SessionRef;
 use crate::Undeclarable;
@@ -24,7 +25,6 @@ use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::network::push::ext;
 use zenoh_protocol::network::Mapping;
 use zenoh_protocol::network::Push;
-use zenoh_protocol::zenoh::DataInfo;
 use zenoh_protocol::zenoh_new::Del;
 use zenoh_protocol::zenoh_new::PushBody;
 use zenoh_protocol::zenoh_new::Put;

@@ -19,6 +19,7 @@ use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
 #[cfg(feature = "complete_n")]
 use zenoh_protocol::network::request::ext::TargetType;
+use zenoh_protocol::network::RequestId;
 use zenoh_protocol::zenoh_new::PushBody;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, ExprId, WireExpr, ZenohId},
@@ -29,16 +30,17 @@ use zenoh_protocol::{
         },
         Mapping,
     },
-    zenoh::{QueryId, RoutingContext},
 };
 use zenoh_sync::get_mut_unchecked;
+
+pub(super) type RoutingContext = u16;
 
 pub(super) type Direction = (Arc<FaceState>, WireExpr<'static>, Option<RoutingContext>);
 pub(super) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
-pub(super) type QueryRoute = HashMap<usize, (Direction, QueryId, TargetType)>;
+pub(super) type QueryRoute = HashMap<usize, (Direction, RequestId, TargetType)>;
 #[cfg(not(feature = "complete_n"))]
-pub(super) type QueryRoute = HashMap<usize, (Direction, QueryId)>;
+pub(super) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
 pub(super) struct QueryTargetQabl {
     pub(super) direction: Direction,
     pub(super) complete: u64,

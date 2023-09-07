@@ -25,7 +25,6 @@ pub mod core;
 pub mod network;
 pub mod scouting;
 pub mod transport;
-pub mod zenoh;
 pub mod zenoh_new;
 
 // Zenoh version

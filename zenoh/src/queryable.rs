@@ -26,10 +26,10 @@ use std::future::Ready;
 use std::ops::Deref;
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-use zenoh_protocol::network::{response, Mapping, Response, ResponseFinal};
+use zenoh_protocol::core::WireExpr;
+use zenoh_protocol::network::{response, Mapping, RequestId, Response, ResponseFinal};
 use zenoh_protocol::zenoh_new::reply::ext::ConsolidationType;
 use zenoh_protocol::zenoh_new::{self, ResponseBody};
-use zenoh_protocol::{core::WireExpr, zenoh::QueryId};
 use zenoh_result::ZResult;
 use zenoh_transport::Primitives;
 
@@ -41,7 +41,7 @@ pub(crate) struct QueryInner {
     /// This Query's body.
     pub(crate) value: Option<Value>,
 
-    pub(crate) qid: QueryId,
+    pub(crate) qid: RequestId,
     pub(crate) zid: ZenohId,
     pub(crate) primitives: Arc<dyn Primitives>,
 }
