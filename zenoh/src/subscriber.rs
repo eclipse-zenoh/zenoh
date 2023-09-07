@@ -280,7 +280,7 @@ impl From<PushMode> for Mode {
     }
 }
 
-/// A builder for initializing a [`FlumeSubscriber`](FlumeSubscriber).
+/// A builder for initializing a [`FlumeSubscriber`].
 ///
 /// # Examples
 /// ```

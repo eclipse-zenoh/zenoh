@@ -34,9 +34,9 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          components: rustfmt, clippy
+        run: |
+          rustup show
+          rustup component add rustfmt clippy
 
       - name: Code format check
         uses: actions-rs/cargo@v1
@@ -81,7 +81,7 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Install latest Rust toolchain
-        uses: actions-rs/toolchain@v1
+        run: rustup show
 
       - name: Set rustflags
         shell: bash
@@ -97,7 +97,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: nextest
-          args: run
+          args: run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
@@ -151,12 +151,11 @@ jobs:
       - uses: actions/checkout@v2
 
       - name: Install nightly Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          target: x86_64-unknown-none # Generic no_std target architecture
-          override: true
-      
+        # Generic no_std target architecture is x86_64-unknown-none
+        run: |
+          rustup override set nightly
+          rustup target add --toolchain nightly x86_64-unknown-none
+
       - name: Perform no_std checks
         uses: actions-rs/cargo@v1
         with:

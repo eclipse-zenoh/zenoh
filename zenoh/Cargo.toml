@@ -108,5 +108,7 @@ rustc_version = { workspace = true }
 [lib]
 name = "zenoh"
 
+# For doc generation on docs.rs, activate the "unstable" feature to generate their documentation
+# NOTE: if you change this, also change it in .github/workflows/release.yml in "doc" job.
 [package.metadata.docs.rs]
 features = ["unstable"]

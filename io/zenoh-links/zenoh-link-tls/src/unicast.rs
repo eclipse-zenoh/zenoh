@@ -786,7 +786,7 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
 
 fn load_default_webpki_certs() -> RootCertStore {
     let mut root_cert_store = RootCertStore::empty();
-    root_cert_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+    root_cert_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
         OwnedTrustAnchor::from_subject_spki_name_constraints(
             ta.subject,
             ta.spki,
