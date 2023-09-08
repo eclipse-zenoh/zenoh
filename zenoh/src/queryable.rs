@@ -50,7 +50,7 @@ impl Drop for QueryInner {
     fn drop(&mut self) {
         self.primitives.send_response_final(ResponseFinal {
             rid: self.qid,
-            ext_qos: response::ext::QoSType::default(),
+            ext_qos: response::ext::QoSType::response_final_default(),
             ext_tstamp: None,
         });
     }
@@ -189,7 +189,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                         ext_unknown: vec![],
                         payload,
                     }),
-                    ext_qos: response::ext::QoSType::default(),
+                    ext_qos: response::ext::QoSType::response_default(),
                     ext_tstamp: None,
                     ext_respid: Some(response::ext::ResponderIdType {
                         zid: self.query.inner.zid,

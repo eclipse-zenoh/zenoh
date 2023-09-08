@@ -219,7 +219,7 @@ fn send_sourced_queryable_to_net_childs(
                         log::debug!("Send queryable {} on {}", res.expr(), someface);
 
                         someface.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::default(),
+                            ext_qos: ext::QoSType::declare_default(),
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType {
                                 node_id: routing_context.unwrap_or(0),
@@ -286,7 +286,7 @@ fn propagate_simple_queryable(
                 .insert(res.clone(), info);
             let key_expr = Resource::decl_key(res, &mut dst_face);
             dst_face.primitives.send_declare(Declare {
-                ext_qos: ext::QoSType::default(),
+                ext_qos: ext::QoSType::declare_default(),
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
                 body: DeclareBody::DeclareQueryable(DeclareQueryable {
@@ -697,7 +697,7 @@ fn send_forget_sourced_queryable_to_net_childs(
                         log::debug!("Send forget queryable {}  on {}", res.expr(), someface);
 
                         someface.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::default(),
+                            ext_qos: ext::QoSType::declare_default(),
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType {
                                 node_id: routing_context.unwrap_or(0),
@@ -720,7 +720,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
         if face.local_qabls.contains_key(res) {
             let wire_expr = Resource::get_best_key(res, "", face.id);
             face.primitives.send_declare(Declare {
-                ext_qos: ext::QoSType::default(),
+                ext_qos: ext::QoSType::declare_default(),
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
                 body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
@@ -757,7 +757,7 @@ fn propagate_forget_simple_queryable_to_peers(tables: &mut Tables, res: &mut Arc
             {
                 let wire_expr = Resource::get_best_key(res, "", face.id);
                 face.primitives.send_declare(Declare {
-                    ext_qos: ext::QoSType::default(),
+                    ext_qos: ext::QoSType::declare_default(),
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
@@ -1004,7 +1004,7 @@ pub(crate) fn undeclare_client_queryable(
         if face.local_qabls.contains_key(res) {
             let wire_expr = Resource::get_best_key(res, "", face.id);
             face.primitives.send_declare(Declare {
-                ext_qos: ext::QoSType::default(),
+                ext_qos: ext::QoSType::declare_default(),
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
                 body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
@@ -1064,7 +1064,7 @@ pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                             .insert(qabl.clone(), info);
                         let key_expr = Resource::decl_key(qabl, face);
                         face.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::default(),
+                            ext_qos: ext::QoSType::declare_default(),
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::default(),
                             body: DeclareBody::DeclareQueryable(DeclareQueryable {
@@ -1092,7 +1092,7 @@ pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                             .insert(qabl.clone(), info);
                         let key_expr = Resource::decl_key(qabl, face);
                         face.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::default(),
+                            ext_qos: ext::QoSType::declare_default(),
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::default(),
                             body: DeclareBody::DeclareQueryable(DeclareQueryable {
@@ -1116,7 +1116,7 @@ pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                                 .insert(qabl.clone(), info);
                             let key_expr = Resource::decl_key(qabl, face);
                             face.primitives.send_declare(Declare {
-                                ext_qos: ext::QoSType::default(),
+                                ext_qos: ext::QoSType::declare_default(),
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::default(),
                                 body: DeclareBody::DeclareQueryable(DeclareQueryable {
@@ -1253,7 +1253,7 @@ pub(crate) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                                 if forget {
                                     let wire_expr = Resource::get_best_key(res, "", dst_face.id);
                                     dst_face.primitives.send_declare(Declare {
-                                        ext_qos: ext::QoSType::default(),
+                                        ext_qos: ext::QoSType::declare_default(),
                                         ext_tstamp: None,
                                         ext_nodeid: ext::NodeIdType::default(),
                                         body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
@@ -1272,7 +1272,7 @@ pub(crate) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                                     .insert(res.clone(), info);
                                 let key_expr = Resource::decl_key(res, dst_face);
                                 dst_face.primitives.send_declare(Declare {
-                                    ext_qos: ext::QoSType::default(),
+                                    ext_qos: ext::QoSType::declare_default(),
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType::default(),
                                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
@@ -2128,7 +2128,7 @@ pub fn route_query(
                         rid: qid,
                         wire_expr: expr,
                         payload,
-                        ext_qos: response::ext::QoSType::default(),
+                        ext_qos: response::ext::QoSType::declare_default(),
                         ext_tstamp: None,
                         ext_respid: Some(response::ext::ResponderIdType {
                             zid,
@@ -2145,7 +2145,7 @@ pub fn route_query(
                     );
                     face.primitives.clone().send_response_final(ResponseFinal {
                         rid: qid,
-                        ext_qos: response::ext::QoSType::default(),
+                        ext_qos: response::ext::QoSType::response_final_default(),
                         ext_tstamp: None,
                     });
                 } else {
@@ -2173,7 +2173,7 @@ pub fn route_query(
                             outface.primitives.send_request(Request {
                                 id: *qid,
                                 wire_expr: key_expr.into(),
-                                ext_qos: ext::QoSType::default(), // TODO
+                                ext_qos: ext::QoSType::request_default(), // TODO
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
                                     node_id: context.map(|c| c.tree_id).unwrap_or(0) as u16,
@@ -2208,7 +2208,7 @@ pub fn route_query(
                             outface.primitives.send_request(Request {
                                 id: *qid,
                                 wire_expr: key_expr.into(),
-                                ext_qos: ext::QoSType::default(), // TODO
+                                ext_qos: ext::QoSType::request_default(),
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
                                     node_id: context.unwrap_or(0),
@@ -2226,7 +2226,7 @@ pub fn route_query(
                 drop(rtables);
                 face.primitives.clone().send_response_final(ResponseFinal {
                     rid: qid,
-                    ext_qos: response::ext::QoSType::default(),
+                    ext_qos: response::ext::QoSType::response_final_default(),
                     ext_tstamp: None,
                 });
             }
@@ -2239,7 +2239,7 @@ pub fn route_query(
             drop(rtables);
             face.primitives.clone().send_response_final(ResponseFinal {
                 rid: qid,
-                ext_qos: response::ext::QoSType::default(),
+                ext_qos: response::ext::QoSType::response_final_default(),
                 ext_tstamp: None,
             });
         }
@@ -2280,7 +2280,7 @@ pub(crate) fn route_send_response(
                 rid: query.src_qid,
                 wire_expr: key_expr.to_owned(),
                 payload: body,
-                ext_qos: response::ext::QoSType::default(),
+                ext_qos: response::ext::QoSType::response_default(),
                 ext_tstamp: None,
                 ext_respid,
             });
@@ -2337,7 +2337,7 @@ pub(crate) fn finalize_pending_query(query: Arc<Query>) {
             .clone()
             .send_response_final(ResponseFinal {
                 rid: query.src_qid,
-                ext_qos: response::ext::QoSType::default(),
+                ext_qos: response::ext::QoSType::response_final_default(),
                 ext_tstamp: None,
             });
     }

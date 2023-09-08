@@ -485,7 +485,7 @@ fn client_test() {
         &"test/client".into(),
     );
     primitives0.send_declare(Declare {
-        ext_qos: ext::QoSType::default(),
+        ext_qos: ext::QoSType::declare_default(),
         ext_tstamp: None,
         ext_nodeid: ext::NodeIdType::default(),
         body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
@@ -507,7 +507,7 @@ fn client_test() {
         &WireExpr::from(11).with_suffix("/z1_pub1"),
     );
     primitives0.send_declare(Declare {
-        ext_qos: ext::QoSType::default(),
+        ext_qos: ext::QoSType::declare_default(),
         ext_tstamp: None,
         ext_nodeid: ext::NodeIdType::default(),
         body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
@@ -529,7 +529,7 @@ fn client_test() {
         &"test/client".into(),
     );
     primitives1.send_declare(Declare {
-        ext_qos: ext::QoSType::default(),
+        ext_qos: ext::QoSType::declare_default(),
         ext_tstamp: None,
         ext_nodeid: ext::NodeIdType::default(),
         body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
@@ -551,7 +551,7 @@ fn client_test() {
         &WireExpr::from(21).with_suffix("/z2_pub1"),
     );
     primitives1.send_declare(Declare {
-        ext_qos: ext::QoSType::default(),
+        ext_qos: ext::QoSType::declare_default(),
         ext_tstamp: None,
         ext_nodeid: ext::NodeIdType::default(),
         body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
@@ -573,7 +573,7 @@ fn client_test() {
         &"test/client".into(),
     );
     primitives2.send_declare(Declare {
-        ext_qos: ext::QoSType::default(),
+        ext_qos: ext::QoSType::declare_default(),
         ext_tstamp: None,
         ext_nodeid: ext::NodeIdType::default(),
         body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {

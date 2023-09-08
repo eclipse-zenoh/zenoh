@@ -267,6 +267,30 @@ pub mod ext {
             let inner: u8 = rng.gen();
             Self { inner }
         }
+
+        pub fn declare_default() -> Self {
+            Self::new(Priority::default(), CongestionControl::Block, false)
+        }
+
+        pub fn push_default() -> Self {
+            Self::new(Priority::default(), CongestionControl::Drop, false)
+        }
+
+        pub fn request_default() -> Self {
+            Self::new(Priority::default(), CongestionControl::Block, false)
+        }
+
+        pub fn response_default() -> Self {
+            Self::new(Priority::default(), CongestionControl::Block, false)
+        }
+
+        pub fn response_final_default() -> Self {
+            Self::new(Priority::default(), CongestionControl::Block, false)
+        }
+
+        pub fn oam_default() -> Self {
+            Self::new(Priority::default(), CongestionControl::Block, false)
+        }
     }
 
     impl<const ID: u8> Default for QoSType<{ ID }> {

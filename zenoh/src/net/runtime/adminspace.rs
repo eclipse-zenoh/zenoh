@@ -221,7 +221,7 @@ impl AdminSpace {
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(Declare {
-            ext_qos: ext::QoSType::default(),
+            ext_qos: ext::QoSType::declare_default(),
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::default(),
             body: DeclareBody::DeclareQueryable(DeclareQueryable {
@@ -235,7 +235,7 @@ impl AdminSpace {
         });
 
         primitives.send_declare(Declare {
-            ext_qos: ext::QoSType::default(),
+            ext_qos: ext::QoSType::declare_default(),
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::default(),
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
@@ -342,7 +342,7 @@ impl Primitives for AdminSpace {
                     );
                     primitives.send_response_final(ResponseFinal {
                         rid: msg.id,
-                        ext_qos: ext::QoSType::default(),
+                        ext_qos: ext::QoSType::response_final_default(),
                         ext_tstamp: None,
                     });
                     return;
@@ -355,7 +355,7 @@ impl Primitives for AdminSpace {
                     log::error!("Unknown KeyExpr: {}", e);
                     primitives.send_response_final(ResponseFinal {
                         rid: msg.id,
-                        ext_qos: ext::QoSType::default(),
+                        ext_qos: ext::QoSType::response_final_default(),
                         ext_tstamp: None,
                     });
                     return;

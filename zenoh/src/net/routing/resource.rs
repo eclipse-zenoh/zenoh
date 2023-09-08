@@ -516,7 +516,7 @@ impl Resource {
                         .local_mappings
                         .insert(expr_id, nonwild_prefix.clone());
                     face.primitives.send_declare(Declare {
-                        ext_qos: ext::QoSType::default(),
+                        ext_qos: ext::QoSType::declare_default(),
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::default(),
                         body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {

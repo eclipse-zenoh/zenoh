@@ -431,7 +431,7 @@ impl SyncResolve for Publication<'_> {
         if publisher.destination != Locality::SessionLocal {
             primitives.send_push(Push {
                 wire_expr: publisher.key_expr.to_wire(&publisher.session).to_owned(),
-                ext_qos: ext::QoSType::default(), // TODO
+                ext_qos: ext::QoSType::push_default(), // TODO
                 // use publisher.priority
                 // use publisher.congestion_control
                 // need to check subscriptions to determine the right reliability value
