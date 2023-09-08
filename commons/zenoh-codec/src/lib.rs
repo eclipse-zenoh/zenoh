@@ -20,13 +20,15 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
-mod common;
-mod core;
-mod scouting;
-mod transport;
-mod zenoh;
+pub mod common;
+pub mod core;
+pub mod network;
+pub mod scouting;
+pub mod transport;
+pub mod zenoh;
 
-use zenoh_protocol::{core::Reliability, zenoh::ReplyContext};
+use ::core::marker::PhantomData;
+use zenoh_protocol::core::Reliability;
 
 pub trait WCodec<Message, Buffer> {
     type Output;
@@ -38,53 +40,104 @@ pub trait RCodec<Message, Buffer> {
     fn read(self, buffer: Buffer) -> Result<Message, Self::Error>;
 }
 
-#[derive(Clone, Copy, Default)]
-#[non_exhaustive]
-pub struct Zenoh060;
+// Calculate the length of the value once serialized
+pub trait LCodec<Message> {
+    fn w_len(self, message: Message) -> usize;
+}
 
-#[derive(Clone, Copy, Default)]
-#[non_exhaustive]
-pub struct Zenoh060Header {
+#[derive(Clone, Copy)]
+pub struct Zenoh080;
+
+impl Zenoh080 {
+    pub const fn new() -> Self {
+        Self
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Zenoh080Header {
     pub header: u8,
-    pub codec: Zenoh060,
+    pub codec: Zenoh080,
 }
 
-#[derive(Clone, Copy, Default)]
-#[non_exhaustive]
-pub struct Zenoh060Condition {
+impl Zenoh080Header {
+    pub const fn new(header: u8) -> Self {
+        Self {
+            header,
+            codec: Zenoh080,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Zenoh080Condition {
     pub condition: bool,
-    pub codec: Zenoh060,
+    pub codec: Zenoh080,
 }
 
-impl Zenoh060Condition {
+impl Zenoh080Condition {
     pub const fn new(condition: bool) -> Self {
         Self {
             condition,
-            codec: Zenoh060,
+            codec: Zenoh080,
         }
     }
 }
 
-#[derive(Clone, Copy, Default)]
-#[non_exhaustive]
-pub struct Zenoh060Reliability {
-    pub reliability: Reliability,
-    pub codec: Zenoh060,
+#[derive(Clone, Copy)]
+pub struct Zenoh080Length {
+    pub length: usize,
+    pub codec: Zenoh080,
 }
 
-impl Zenoh060Reliability {
+impl Zenoh080Length {
+    pub const fn new(length: usize) -> Self {
+        Self {
+            length,
+            codec: Zenoh080,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub struct Zenoh080Reliability {
+    pub reliability: Reliability,
+    pub codec: Zenoh080,
+}
+
+impl Zenoh080Reliability {
     pub const fn new(reliability: Reliability) -> Self {
         Self {
             reliability,
-            codec: Zenoh060,
+            codec: Zenoh080,
         }
     }
 }
 
-#[derive(Clone, Default)]
-#[non_exhaustive]
-pub struct Zenoh060HeaderReplyContext {
-    pub header: u8,
-    pub reply_context: Option<ReplyContext>,
-    pub codec: Zenoh060,
+#[derive(Clone, Copy)]
+pub struct Zenoh080Bounded<T> {
+    _t: PhantomData<T>,
+}
+
+impl<T> Zenoh080Bounded<T> {
+    pub const fn new() -> Self {
+        Self { _t: PhantomData }
+    }
+}
+
+#[cfg(feature = "shared-memory")]
+#[derive(Clone, Copy)]
+pub struct Zenoh080Sliced<T> {
+    is_sliced: bool,
+    codec: Zenoh080Bounded<T>,
+}
+
+#[cfg(feature = "shared-memory")]
+impl<T> Zenoh080Sliced<T> {
+    pub const fn new(is_sliced: bool) -> Self {
+        Self {
+            is_sliced,
+            codec: Zenoh080Bounded::<T>::new(),
+        }
+    }
 }

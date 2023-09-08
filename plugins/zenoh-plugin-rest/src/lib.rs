@@ -29,11 +29,11 @@ use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
+use zenoh::properties::Properties;
 use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
 use zenoh::Session;
-use zenoh_cfg_properties::Properties;
 use zenoh_result::{bail, zerror, ZResult};
 
 mod config;

@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use serde::{Deserialize, Serialize};
 use shared_memory::{Shmem, ShmemConf, ShmemError};
 use std::{
     any::Any,
@@ -21,7 +20,7 @@ use std::{
     sync::atomic::{AtomicPtr, AtomicUsize, Ordering},
 };
 use zenoh_buffers::ZSliceBuffer;
-use zenoh_result::{bail, zerror, ShmError, ZResult};
+use zenoh_result::{zerror, ShmError, ZResult};
 
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
 const ACCOUNTED_OVERHEAD: usize = 4_096;
@@ -67,7 +66,7 @@ impl PartialEq for Chunk {
 ///
 /// This that can be serialized and can be used to retrieve the [`SharedMemoryBuf`] in a remote process.
 #[non_exhaustive]
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SharedMemoryBufInfo {
     /// The index of the beginning of the buffer in the shm segment.
     pub offset: usize,
@@ -86,31 +85,6 @@ impl SharedMemoryBufInfo {
             length,
             shm_manager: manager,
             kind,
-        }
-    }
-}
-
-impl SharedMemoryBufInfo {
-    pub fn serialize(&self) -> ZResult<Vec<u8>> {
-        bincode::serialize(self)
-            .map_err(|e| zerror!("Unable to serialize SharedMemoryBufInfo: {}", e).into())
-    }
-
-    pub fn deserialize(bs: &[u8]) -> ZResult<SharedMemoryBufInfo> {
-        match bincode::deserialize::<SharedMemoryBufInfo>(bs) {
-            Ok(info) => Ok(info),
-            Err(e) => bail!("Unable to deserialize SharedMemoryBufInfo: {}", e),
-        }
-    }
-}
-
-impl Clone for SharedMemoryBufInfo {
-    fn clone(&self) -> SharedMemoryBufInfo {
-        SharedMemoryBufInfo {
-            shm_manager: self.shm_manager.clone(),
-            kind: self.kind,
-            offset: self.offset,
-            length: self.length,
         }
     }
 }
@@ -525,43 +499,6 @@ impl fmt::Debug for SharedMemoryManager {
 }
 
 // Buffer impls
-// - SharedMemoryBufInfoSerialized
-#[derive(Debug)]
-#[repr(transparent)]
-pub struct SharedMemoryBufInfoSerialized(Vec<u8>);
-
-impl AsRef<[u8]> for SharedMemoryBufInfoSerialized {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_slice()
-    }
-}
-
-impl AsMut<[u8]> for SharedMemoryBufInfoSerialized {
-    fn as_mut(&mut self) -> &mut [u8] {
-        self.0.as_mut_slice()
-    }
-}
-
-impl ZSliceBuffer for SharedMemoryBufInfoSerialized {
-    fn as_slice(&self) -> &[u8] {
-        self.as_ref()
-    }
-
-    fn as_mut_slice(&mut self) -> &mut [u8] {
-        self.as_mut()
-    }
-
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-}
-
-impl From<Vec<u8>> for SharedMemoryBufInfoSerialized {
-    fn from(v: Vec<u8>) -> Self {
-        Self(v)
-    }
-}
-
 // - SharedMemoryBuf
 impl AsRef<[u8]> for SharedMemoryBuf {
     fn as_ref(&self) -> &[u8] {

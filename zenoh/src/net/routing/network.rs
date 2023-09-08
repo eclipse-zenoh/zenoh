@@ -11,17 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::runtime::Runtime;
+use crate::net::codec::Zenoh080Routing;
+use crate::net::protocol::linkstate::{LinkState, LinkStateList};
+use crate::net::runtime::Runtime;
+use async_std::task;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
 use std::convert::TryInto;
 use vec_map::VecMap;
-use zenoh_config::whatami::WhatAmIMatcher;
+use zenoh_buffers::writer::{DidntWrite, HasWriter};
+use zenoh_buffers::ZBuf;
+use zenoh_codec::WCodec;
 use zenoh_link::Locator;
-use zenoh_protocol::{
-    core::{WhatAmI, ZInt, ZenohId},
-    zenoh::{LinkState, ZenohMessage},
-};
+use zenoh_protocol::common::ZExtBody;
+use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, ZenohId};
+use zenoh_protocol::network::oam::id::OAM_LINKSTATE;
+use zenoh_protocol::network::{oam, NetworkBody, NetworkMessage, Oam};
 use zenoh_transport::TransportUnicast;
 
 #[derive(Clone)]
@@ -36,7 +41,7 @@ pub(crate) struct Node {
     pub(crate) zid: ZenohId,
     pub(crate) whatami: Option<WhatAmI>,
     pub(crate) locators: Option<Vec<Locator>>,
-    pub(crate) sn: ZInt,
+    pub(crate) sn: u64,
     pub(crate) links: Vec<ZenohId>,
 }
 
@@ -50,7 +55,7 @@ pub(crate) struct Link {
     pub(crate) transport: TransportUnicast,
     zid: ZenohId,
     mappings: VecMap<ZenohId>,
-    local_mappings: VecMap<ZInt>,
+    local_mappings: VecMap<u64>,
 }
 
 impl Link {
@@ -65,23 +70,23 @@ impl Link {
     }
 
     #[inline]
-    pub(crate) fn set_zid_mapping(&mut self, psid: ZInt, zid: ZenohId) {
+    pub(crate) fn set_zid_mapping(&mut self, psid: u64, zid: ZenohId) {
         self.mappings.insert(psid.try_into().unwrap(), zid);
     }
 
     #[inline]
-    pub(crate) fn get_zid(&self, psid: &ZInt) -> Option<&ZenohId> {
+    pub(crate) fn get_zid(&self, psid: &u64) -> Option<&ZenohId> {
         self.mappings.get((*psid).try_into().unwrap())
     }
 
     #[inline]
-    pub(crate) fn set_local_psid_mapping(&mut self, psid: ZInt, local_psid: ZInt) {
+    pub(crate) fn set_local_psid_mapping(&mut self, psid: u64, local_psid: u64) {
         self.local_mappings
             .insert(psid.try_into().unwrap(), local_psid);
     }
 
     #[inline]
-    pub(crate) fn get_local_psid(&self, psid: &ZInt) -> Option<&ZInt> {
+    pub(crate) fn get_local_psid(&self, psid: &u64) -> Option<&u64> {
         self.local_mappings.get((*psid).try_into().unwrap())
     }
 }
@@ -185,8 +190,7 @@ impl Network {
     }
 
     #[inline]
-    pub(crate) fn get_local_context(&self, context: Option<ZInt>, link_id: usize) -> usize {
-        let context = context.unwrap_or(0);
+    pub(crate) fn get_local_context(&self, context: u64, link_id: usize) -> usize {
         match self.get_link(link_id) {
             Some(link) => match link.get_local_psid(&context) {
                 Some(psid) => (*psid).try_into().unwrap_or(0),
@@ -211,7 +215,7 @@ impl Network {
         let idx = self.graph.add_node(node);
         for link in self.links.values_mut() {
             if let Some((psid, _)) = link.mappings.iter().find(|(_, p)| **p == zid) {
-                link.local_mappings.insert(psid, idx.index() as ZInt);
+                link.local_mappings.insert(psid, idx.index() as u64);
             }
         }
         idx
@@ -260,19 +264,31 @@ impl Network {
         }
     }
 
-    fn make_msg(&self, idxs: Vec<(NodeIndex, Details)>) -> ZenohMessage {
-        let mut list = vec![];
+    fn make_msg(&self, idxs: Vec<(NodeIndex, Details)>) -> Result<NetworkMessage, DidntWrite> {
+        let mut link_states = vec![];
         for (idx, details) in idxs {
-            list.push(self.make_link_state(idx, details));
+            link_states.push(self.make_link_state(idx, details));
         }
-        ZenohMessage::make_link_state_list(list, None)
+        let codec = Zenoh080Routing::new();
+        let mut buf = ZBuf::empty();
+        codec.write(&mut buf.writer(), &LinkStateList { link_states })?;
+        Ok(NetworkBody::OAM(Oam {
+            id: OAM_LINKSTATE,
+            body: ZExtBody::ZBuf(buf),
+            ext_qos: oam::ext::QoSType::oam_default(),
+            ext_tstamp: None,
+        })
+        .into())
     }
 
     fn send_on_link(&self, idxs: Vec<(NodeIndex, Details)>, transport: &TransportUnicast) {
-        let msg = self.make_msg(idxs);
-        log::trace!("{} Send to {:?} {:?}", self.name, transport.get_zid(), msg);
-        if let Err(e) = transport.handle_message(msg) {
-            log::debug!("{} Error sending LinkStateList: {}", self.name, e);
+        if let Ok(msg) = self.make_msg(idxs) {
+            log::trace!("{} Send to {:?} {:?}", self.name, transport.get_zid(), msg);
+            if let Err(e) = transport.schedule(msg) {
+                log::debug!("{} Error sending LinkStateList: {}", self.name, e);
+            }
+        } else {
+            log::error!("Failed to encode Linkstate message");
         }
     }
 
@@ -280,14 +296,17 @@ impl Network {
     where
         P: FnMut(&Link) -> bool,
     {
-        let msg = self.make_msg(idxs);
-        for link in self.links.values() {
-            if parameters(link) {
-                log::trace!("{} Send to {} {:?}", self.name, link.zid, msg);
-                if let Err(e) = link.transport.handle_message(msg.clone()) {
-                    log::debug!("{} Error sending LinkStateList: {}", self.name, e);
+        if let Ok(msg) = self.make_msg(idxs) {
+            for link in self.links.values() {
+                if parameters(link) {
+                    log::trace!("{} Send to {} {:?}", self.name, link.zid, msg);
+                    if let Err(e) = link.transport.schedule(msg.clone()) {
+                        log::debug!("{} Error sending LinkStateList: {}", self.name, e);
+                    }
                 }
             }
+        } else {
+            log::error!("Failed to encode Linkstate message");
         }
     }
 
@@ -474,7 +493,8 @@ impl Network {
 
                         if !self.autoconnect.is_empty() {
                             // Connect discovered peers
-                            if self.runtime.manager().get_transport(&zid).is_none()
+                            if task::block_on(self.runtime.manager().get_transport_unicast(&zid))
+                                .is_none()
                                 && self.autoconnect.matches(whatami)
                             {
                                 if let Some(locators) = locators {
@@ -592,7 +612,8 @@ impl Network {
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
                 if let Some(whatami) = node.whatami {
-                    if self.runtime.manager().get_transport(&node.zid).is_none()
+                    if task::block_on(self.runtime.manager().get_transport_unicast(&node.zid))
+                        .is_none()
                         && self.autoconnect.matches(whatami)
                     {
                         if let Some(locators) = &node.locators {

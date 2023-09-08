@@ -11,15 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060};
+use crate::{RCodec, WCodec, Zenoh080};
 use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_protocol::core::{Property, ZInt};
+use zenoh_protocol::core::Property;
 
-impl<W> WCodec<&Property, &mut W> for Zenoh060
+impl<W> WCodec<&Property, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -32,21 +32,21 @@ where
     }
 }
 
-impl<R> RCodec<Property, &mut R> for Zenoh060
+impl<R> RCodec<Property, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Property, Self::Error> {
-        let key: ZInt = self.read(&mut *reader)?;
+        let key: u64 = self.read(&mut *reader)?;
         let value: Vec<u8> = self.read(&mut *reader)?;
 
         Ok(Property { key, value })
     }
 }
 
-impl<W> WCodec<&[Property], &mut W> for Zenoh060
+impl<W> WCodec<&[Property], &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -62,7 +62,7 @@ where
     }
 }
 
-impl<R> RCodec<Vec<Property>, &mut R> for Zenoh060
+impl<R> RCodec<Vec<Property>, &mut R> for Zenoh080
 where
     R: Reader,
 {

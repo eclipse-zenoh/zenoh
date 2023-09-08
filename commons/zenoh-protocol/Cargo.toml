@@ -36,10 +36,12 @@ std = [
     "zenoh-result/std",
 ]
 test = ["rand", "zenoh-buffers/test"]
-shared-memory = ["std"]
+shared-memory = ["std", "zenoh-buffers/shared-memory"]
+stats = []
 complete_n = []
 
 [dependencies]
+const_format = { workspace = true }
 hex = { workspace = true, features = ["alloc"] }
 rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
 serde = { workspace = true, features = ["alloc"] }

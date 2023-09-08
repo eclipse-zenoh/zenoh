@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2022 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -11,130 +11,63 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Condition, Zenoh060Header};
-use alloc::string::String;
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
+use alloc::{string::String, vec::Vec};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
-    ZBuf,
 };
+
 use zenoh_protocol::{
-    common::imsg,
-    core::{ConsolidationMode, QueryTarget, WireExpr, ZInt},
-    zenoh::{zmsg, DataInfo, Query, QueryBody},
+    common::{iext, imsg},
+    zenoh::{
+        id,
+        query::{ext, flag, Query},
+    },
 };
 
-// QueryTarget
-impl<W> WCodec<&QueryTarget, &mut W> for Zenoh060
+// Extension Consolidation
+impl<W> WCodec<(ext::ConsolidationType, bool), &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &QueryTarget) -> Self::Output {
-        #![allow(clippy::unnecessary_cast)]
-        match x {
-            QueryTarget::BestMatching => self.write(&mut *writer, 0 as ZInt)?,
-            QueryTarget::All => self.write(&mut *writer, 1 as ZInt)?,
-            QueryTarget::AllComplete => self.write(&mut *writer, 2 as ZInt)?,
-            #[cfg(feature = "complete_n")]
-            QueryTarget::Complete(n) => {
-                self.write(&mut *writer, 3 as ZInt)?;
-                self.write(&mut *writer, *n)?;
-            }
-        }
-        Ok(())
+    fn write(self, writer: &mut W, x: (ext::ConsolidationType, bool)) -> Self::Output {
+        let (x, more) = x;
+        let v: u64 = match x {
+            ext::ConsolidationType::Auto => 0,
+            ext::ConsolidationType::None => 1,
+            ext::ConsolidationType::Monotonic => 2,
+            ext::ConsolidationType::Latest => 3,
+            ext::ConsolidationType::Unique => 4,
+        };
+        let v = ext::Consolidation::new(v);
+        self.write(&mut *writer, (&v, more))
     }
 }
 
-impl<R> RCodec<QueryTarget, &mut R> for Zenoh060
+impl<R> RCodec<(ext::ConsolidationType, bool), &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
-    fn read(self, reader: &mut R) -> Result<QueryTarget, Self::Error> {
-        let t: ZInt = self.read(&mut *reader)?;
-        let t = match t {
-            0 => QueryTarget::BestMatching,
-            1 => QueryTarget::All,
-            2 => QueryTarget::AllComplete,
-            #[cfg(feature = "complete_n")]
-            3 => {
-                let n: ZInt = self.read(&mut *reader)?;
-                QueryTarget::Complete(n)
-            }
+    fn read(self, reader: &mut R) -> Result<(ext::ConsolidationType, bool), Self::Error> {
+        let (ext, more): (ext::Consolidation, bool) = self.read(&mut *reader)?;
+        let c = match ext.value {
+            0 => ext::ConsolidationType::Auto,
+            1 => ext::ConsolidationType::None,
+            2 => ext::ConsolidationType::Monotonic,
+            3 => ext::ConsolidationType::Latest,
+            4 => ext::ConsolidationType::Unique,
             _ => return Err(DidntRead),
         };
-        Ok(t)
+        Ok((c, more))
     }
 }
 
-// ConsolidationMode
-impl<W> WCodec<&ConsolidationMode, &mut W> for Zenoh060
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: &ConsolidationMode) -> Self::Output {
-        let cm: ZInt = match x {
-            ConsolidationMode::None => 0,
-            ConsolidationMode::Monotonic => 1,
-            ConsolidationMode::Latest => 2,
-        };
-        self.write(&mut *writer, cm)?;
-        Ok(())
-    }
-}
-
-impl<R> RCodec<ConsolidationMode, &mut R> for Zenoh060
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<ConsolidationMode, Self::Error> {
-        let cm: ZInt = self.read(&mut *reader)?;
-        let cm = match cm {
-            0 => ConsolidationMode::None,
-            1 => ConsolidationMode::Monotonic,
-            2 => ConsolidationMode::Latest,
-            _ => return Err(DidntRead),
-        };
-        Ok(cm)
-    }
-}
-
-// QueryBody
-impl<W> WCodec<&QueryBody, &mut W> for Zenoh060
-where
-    W: Writer,
-{
-    type Output = Result<(), DidntWrite>;
-
-    fn write(self, writer: &mut W, x: &QueryBody) -> Self::Output {
-        self.write(&mut *writer, &x.data_info)?;
-        self.write(&mut *writer, &x.payload)?;
-        Ok(())
-    }
-}
-
-impl<R> RCodec<QueryBody, &mut R> for Zenoh060
-where
-    R: Reader,
-{
-    type Error = DidntRead;
-
-    fn read(self, reader: &mut R) -> Result<QueryBody, Self::Error> {
-        let data_info: DataInfo = self.read(&mut *reader)?;
-        let payload: ZBuf = self.read(&mut *reader)?;
-        Ok(QueryBody { data_info, payload })
-    }
-}
-
-// Query
-impl<W> WCodec<&Query, &mut W> for Zenoh060
+impl<W> WCodec<&Query, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -142,89 +75,116 @@ where
 
     fn write(self, writer: &mut W, x: &Query) -> Self::Output {
         // Header
-        let mut header = zmsg::id::QUERY;
-        if x.target.is_some() {
-            header |= zmsg::flag::T;
+        let mut header = id::QUERY;
+        if !x.parameters.is_empty() {
+            header |= flag::P;
         }
-        if x.body.is_some() {
-            header |= zmsg::flag::B;
-        }
-        if x.key.has_suffix() {
-            header |= zmsg::flag::K;
+        let mut n_exts = (x.ext_sinfo.is_some() as u8)
+            + ((x.ext_consolidation != ext::ConsolidationType::default()) as u8)
+            + (x.ext_body.is_some() as u8)
+            + (x.ext_unknown.len() as u8);
+        if n_exts != 0 {
+            header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, &x.key)?;
-        self.write(&mut *writer, x.parameters.as_str())?;
-        self.write(&mut *writer, x.qid)?;
-        if let Some(t) = x.target.as_ref() {
-            self.write(&mut *writer, t)?;
+        if !x.parameters.is_empty() {
+            self.write(&mut *writer, &x.parameters)?;
         }
-        self.write(&mut *writer, &x.consolidation)?;
-        if let Some(b) = x.body.as_ref() {
-            self.write(&mut *writer, b)?;
+
+        // Extensions
+        if let Some(sinfo) = x.ext_sinfo.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (sinfo, n_exts != 0))?;
+        }
+        if x.ext_consolidation != ext::ConsolidationType::default() {
+            n_exts -= 1;
+            self.write(&mut *writer, (x.ext_consolidation, n_exts != 0))?;
+        }
+        if let Some(body) = x.ext_body.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (body, n_exts != 0))?;
+        }
+        for u in x.ext_unknown.iter() {
+            n_exts -= 1;
+            self.write(&mut *writer, (u, n_exts != 0))?;
         }
 
         Ok(())
     }
 }
 
-impl<R> RCodec<Query, &mut R> for Zenoh060
+impl<R> RCodec<Query, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Query, Self::Error> {
-        let codec = Zenoh060Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<Query, &mut R> for Zenoh060Header
+impl<R> RCodec<Query, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Query, Self::Error> {
-        if imsg::mid(self.header) != zmsg::id::QUERY {
+        if imsg::mid(self.header) != id::QUERY {
             return Err(DidntRead);
         }
 
-        let ccond = Zenoh060Condition {
-            condition: imsg::has_flag(self.header, zmsg::flag::K),
-            codec: self.codec,
-        };
-        let key: WireExpr<'static> = ccond.read(&mut *reader)?;
+        // Body
+        let mut parameters = String::new();
+        if imsg::has_flag(self.header, flag::P) {
+            parameters = self.codec.read(&mut *reader)?;
+        }
 
-        let parameters: String = self.codec.read(&mut *reader)?;
-        let qid: ZInt = self.codec.read(&mut *reader)?;
-        let target = if imsg::has_flag(self.header, zmsg::flag::T) {
-            let qt: QueryTarget = self.codec.read(&mut *reader)?;
-            Some(qt)
-        } else {
-            None
-        };
-        let consolidation: ConsolidationMode = self.codec.read(&mut *reader)?;
-        let body = if imsg::has_flag(self.header, zmsg::flag::B) {
-            let qb: QueryBody = self.codec.read(&mut *reader)?;
-            Some(qb)
-        } else {
-            None
-        };
+        // Extensions
+        let mut ext_sinfo: Option<ext::SourceInfoType> = None;
+        let mut ext_consolidation = ext::ConsolidationType::default();
+        let mut ext_body: Option<ext::QueryBodyType> = None;
+        let mut ext_unknown = Vec::new();
+
+        let mut has_ext = imsg::has_flag(self.header, flag::Z);
+        while has_ext {
+            let ext: u8 = self.codec.read(&mut *reader)?;
+            let eodec = Zenoh080Header::new(ext);
+            match iext::eid(ext) {
+                ext::SourceInfo::ID => {
+                    let (s, ext): (ext::SourceInfoType, bool) = eodec.read(&mut *reader)?;
+                    ext_sinfo = Some(s);
+                    has_ext = ext;
+                }
+                ext::Consolidation::ID => {
+                    let (c, ext): (ext::ConsolidationType, bool) = eodec.read(&mut *reader)?;
+                    ext_consolidation = c;
+                    has_ext = ext;
+                }
+                ext::QueryBodyType::SID | ext::QueryBodyType::VID => {
+                    let (s, ext): (ext::QueryBodyType, bool) = eodec.read(&mut *reader)?;
+                    ext_body = Some(s);
+                    has_ext = ext;
+                }
+                _ => {
+                    let (u, ext) = extension::read(reader, "Query", ext)?;
+                    ext_unknown.push(u);
+                    has_ext = ext;
+                }
+            }
+        }
 
         Ok(Query {
-            key,
             parameters,
-            qid,
-            target,
-            consolidation,
-            body,
+            ext_sinfo,
+            ext_consolidation,
+            ext_body,
+            ext_unknown,
         })
     }
 }

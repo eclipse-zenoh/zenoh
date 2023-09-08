@@ -20,12 +20,15 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
-    use zenoh_buffers::ZBuf;
     use zenoh_core::zasync_executor_init;
     use zenoh_link::Link;
     use zenoh_protocol::{
-        core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
-        zenoh::ZenohMessage,
+        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
+        network::{
+            push::ext::{NodeIdType, QoSType},
+            NetworkMessage, Push,
+        },
+        zenoh::Put,
     };
     use zenoh_result::ZResult;
     use zenoh_transport::{
@@ -71,32 +74,27 @@ mod tests {
             transport: TransportUnicast,
         ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
             // Create the message to send
-            let key = "test".into();
-            let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
-            let channel = Channel {
-                priority: Priority::Control,
-                reliability: Reliability::Reliable,
-            };
-            let congestion_control = CongestionControl::Block;
-            let data_info = None;
-            let routing_context = None;
-            let reply_context = None;
-            let attachment = None;
-
-            let message = ZenohMessage::make_data(
-                key,
-                payload,
-                channel,
-                congestion_control,
-                data_info,
-                routing_context,
-                reply_context,
-                attachment,
-            );
+            let message: NetworkMessage = Push {
+                wire_expr: "test".into(),
+                ext_qos: QoSType::new(Priority::Control, CongestionControl::Block, false),
+                ext_tstamp: None,
+                ext_nodeid: NodeIdType::default(),
+                payload: Put {
+                    payload: vec![0u8; MSG_SIZE].into(),
+                    timestamp: None,
+                    encoding: Encoding::default(),
+                    ext_sinfo: None,
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: None,
+                    ext_unknown: vec![],
+                }
+                .into(),
+            }
+            .into();
 
             println!("[Simultaneous {}] Sending {}...", self.zid, MSG_COUNT);
             for _ in 0..MSG_COUNT {
-                transport.handle_message(message.clone()).unwrap();
+                transport.schedule(message.clone()).unwrap();
             }
             println!("[Simultaneous {}] ... sent {}", self.zid, MSG_COUNT);
 
@@ -123,7 +121,7 @@ mod tests {
     }
 
     impl TransportPeerEventHandler for MHPeer {
-        fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
+        fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
             self.count.fetch_add(1, Ordering::AcqRel);
             Ok(())
         }
@@ -194,13 +192,13 @@ mod tests {
             // These open should succeed
             for e in c_ep02.iter() {
                 println!("[Simultaneous 01c] => Opening transport with {e:?}...");
-                let _ = ztimeout!(c_p01m.open_transport(e.clone())).unwrap();
+                let _ = ztimeout!(c_p01m.open_transport_unicast(e.clone())).unwrap();
             }
 
             // These open should fails
             for e in c_ep02.iter() {
                 println!("[Simultaneous 01d] => Exceeding transport with {e:?}...");
-                let res = ztimeout!(c_p01m.open_transport(e.clone()));
+                let res = ztimeout!(c_p01m.open_transport_unicast(e.clone()));
                 assert!(res.is_err());
             }
 
@@ -212,9 +210,9 @@ mod tests {
                     task::sleep(SLEEP).await;
                     println!(
                         "[Simultaneous 01e] => Transports: {:?}",
-                        peer01_manager.get_transports()
+                        peer01_manager.get_transports_unicast().await
                     );
-                    tp02 = peer01_manager.get_transport(&peer_id02);
+                    tp02 = peer01_manager.get_transport_unicast(&peer_id02).await;
                 }
 
                 tp02.unwrap()
@@ -249,13 +247,13 @@ mod tests {
             // These open should succeed
             for e in c_ep01.iter() {
                 println!("[Simultaneous 02c] => Opening transport with {e:?}...");
-                let _ = ztimeout!(c_p02m.open_transport(e.clone())).unwrap();
+                let _ = ztimeout!(c_p02m.open_transport_unicast(e.clone())).unwrap();
             }
 
             // These open should fails
             for e in c_ep01.iter() {
                 println!("[Simultaneous 02d] => Exceeding transport with {e:?}...");
-                let res = ztimeout!(c_p02m.open_transport(e.clone()));
+                let res = ztimeout!(c_p02m.open_transport_unicast(e.clone()));
                 assert!(res.is_err());
             }
 
@@ -268,9 +266,9 @@ mod tests {
                     task::sleep(SLEEP).await;
                     println!(
                         "[Simultaneous 02e] => Transports: {:?}",
-                        peer02_manager.get_transports()
+                        peer02_manager.get_transports_unicast().await
                     );
-                    tp01 = peer02_manager.get_transport(&peer_id01);
+                    tp01 = peer02_manager.get_transport_unicast(&peer_id01).await;
                 }
                 tp01.unwrap()
             });
@@ -331,8 +329,36 @@ mod tests {
         });
     }
 
+    #[cfg(feature = "transport_shm")]
+    #[test]
+    #[ignore]
+    fn transport_shm_simultaneous() {
+        let _ = env_logger::try_init();
+        task::block_on(async {
+            zasync_executor_init!();
+        });
+
+        let endpoint01: Vec<EndPoint> = vec![
+            "shm/transport_shm_simultaneous".parse().unwrap(),
+            "shm/transport_shm_simultaneous2".parse().unwrap(),
+            "shm/transport_shm_simultaneous3".parse().unwrap(),
+            "shm/transport_shm_simultaneous4".parse().unwrap(),
+        ];
+        let endpoint02: Vec<EndPoint> = vec![
+            "shm/transport_shm_simultaneous5".parse().unwrap(),
+            "shm/transport_shm_simultaneous6".parse().unwrap(),
+            "shm/transport_shm_simultaneous7".parse().unwrap(),
+            "shm/transport_shm_simultaneous8".parse().unwrap(),
+        ];
+
+        task::block_on(async {
+            transport_simultaneous(endpoint01, endpoint02).await;
+        });
+    }
+
     #[cfg(feature = "transport_ws")]
     #[test]
+    #[ignore]
     fn transport_ws_simultaneous() {
         let _ = env_logger::try_init();
         task::block_on(async {

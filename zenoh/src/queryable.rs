@@ -27,6 +27,9 @@ use std::ops::Deref;
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::WireExpr;
+use zenoh_protocol::network::{response, Mapping, RequestId, Response, ResponseFinal};
+use zenoh_protocol::zenoh::reply::ext::ConsolidationType;
+use zenoh_protocol::zenoh::{self, ResponseBody};
 use zenoh_result::ZResult;
 use zenoh_transport::Primitives;
 
@@ -38,14 +41,18 @@ pub(crate) struct QueryInner {
     /// This Query's body.
     pub(crate) value: Option<Value>,
 
-    pub(crate) qid: ZInt,
+    pub(crate) qid: RequestId,
     pub(crate) zid: ZenohId,
     pub(crate) primitives: Arc<dyn Primitives>,
 }
 
 impl Drop for QueryInner {
     fn drop(&mut self) {
-        self.primitives.send_reply_final(self.qid);
+        self.primitives.send_response_final(ResponseFinal {
+            rid: self.qid,
+            ext_qos: response::ext::QoSType::response_final_default(),
+            ext_tstamp: None,
+        });
     }
 }
 
@@ -156,16 +163,39 @@ impl SyncResolve for ReplyBuilder<'_> {
                     bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.query.key_expr())
                 }
                 let (key_expr, payload, data_info) = sample.split();
-                self.query.inner.primitives.send_reply_data(
-                    self.query.inner.qid,
-                    self.query.inner.zid,
-                    WireExpr {
+                self.query.inner.primitives.send_response(Response {
+                    rid: self.query.inner.qid,
+                    wire_expr: WireExpr {
                         scope: 0,
-                        suffix: std::borrow::Cow::Borrowed(key_expr.as_str()),
+                        suffix: std::borrow::Cow::Owned(key_expr.into()),
+                        mapping: Mapping::Sender,
                     },
-                    Some(data_info),
-                    payload,
-                );
+                    payload: ResponseBody::Reply(zenoh::Reply {
+                        timestamp: data_info.timestamp,
+                        encoding: data_info.encoding.unwrap_or_default(),
+                        ext_sinfo: if data_info.source_id.is_some() || data_info.source_sn.is_some()
+                        {
+                            Some(zenoh::reply::ext::SourceInfoType {
+                                zid: data_info.source_id.unwrap_or_default(),
+                                eid: 0, // TODO
+                                sn: data_info.source_sn.unwrap_or_default() as u32,
+                            })
+                        } else {
+                            None
+                        },
+                        ext_consolidation: ConsolidationType::default(),
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
+                        ext_unknown: vec![],
+                        payload,
+                    }),
+                    ext_qos: response::ext::QoSType::response_default(),
+                    ext_tstamp: None,
+                    ext_respid: Some(response::ext::ResponderIdType {
+                        zid: self.query.inner.zid,
+                        eid: 0, // TODO
+                    }),
+                });
                 Ok(())
             }
             Err(_) => Err(zerror!("Replying errors is not yet supported!").into()),

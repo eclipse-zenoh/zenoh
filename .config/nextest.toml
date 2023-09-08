@@ -1,0 +1,3 @@
+[[profile.default.overrides]]
+filter = 'test(/zenoh_session_unicast/)'
+threads-required = 'num-cpus'

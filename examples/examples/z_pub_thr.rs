@@ -13,6 +13,8 @@
 //
 use clap::{App, Arg};
 use std::convert::TryInto;
+#[cfg(not(feature = "shared-memory"))]
+use std::process::exit;
 use zenoh::config::Config;
 use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
@@ -82,6 +84,7 @@ fn parse_args() -> (Config, usize, Priority, bool, usize) {
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
+        .arg(Arg::from_usage("--enable-shm 'Enable SHM transport.'"))
         .arg(Arg::from_usage(
             "<PAYLOAD_SIZE>          'Sets the size of the payload to publish'",
         ))
@@ -106,8 +109,18 @@ fn parse_args() -> (Config, usize, Priority, bool, usize) {
     if let Some(values) = args.values_of("listen") {
         config.listen.endpoints = values.map(|v| v.parse().unwrap()).collect();
     }
+
     if args.is_present("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    }
+    if args.is_present("enable-shm") {
+        #[cfg(feature = "shared-memory")]
+        config.transport.shared_memory.set_enabled(true).unwrap();
+        #[cfg(not(feature = "shared-memory"))]
+        {
+            println!("enable-shm argument: SHM cannot be enabled, because Zenoh is compiled without shared-memory feature!");
+            exit(-1);
+        }
     }
 
     let number: usize = args.value_of("number").unwrap().parse().unwrap();

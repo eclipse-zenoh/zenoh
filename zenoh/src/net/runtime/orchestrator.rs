@@ -20,15 +20,14 @@ use std::net::{IpAddr, Ipv6Addr, SocketAddr};
 use std::time::Duration;
 use zenoh_buffers::reader::DidntRead;
 use zenoh_buffers::{reader::HasReader, writer::HasWriter};
-use zenoh_codec::{RCodec, WCodec, Zenoh060};
-use zenoh_config::{unwrap_or_default, EndPoint, ModeDependent};
+use zenoh_codec::{RCodec, WCodec, Zenoh080};
+use zenoh_config::{unwrap_or_default, ModeDependent};
 use zenoh_link::{Locator, LocatorInspector};
 use zenoh_protocol::{
-    core::{whatami::WhatAmIMatcher, WhatAmI, ZenohId},
+    core::{whatami::WhatAmIMatcher, EndPoint, WhatAmI, ZenohId},
     scouting::{Hello, Scout, ScoutingBody, ScoutingMessage},
 };
 use zenoh_result::{bail, zerror, ZResult};
-use zenoh_transport::TransportUnicast;
 
 const RCV_BUF_SIZE: usize = u16::MAX as usize;
 const SCOUT_INITIAL_PERIOD: Duration = Duration::from_millis(1_000);
@@ -93,7 +92,7 @@ impl Runtime {
                 for locator in &peers {
                     match self
                         .manager()
-                        .open_transport(locator.clone())
+                        .open_transport_unicast(locator.clone())
                         .timeout(CONNECTION_TIMEOUT)
                         .await
                     {
@@ -245,7 +244,7 @@ impl Runtime {
 
     pub(crate) async fn update_peers(&self) -> ZResult<()> {
         let peers = { self.config.lock().connect().endpoints().clone() };
-        let tranports = self.manager().get_transports();
+        let tranports = self.manager().get_transports_unicast().await;
 
         if self.whatami == WhatAmI::Client {
             for transport in tranports {
@@ -501,7 +500,7 @@ impl Runtime {
                 } else {
                     match self
                         .manager()
-                        .open_transport(endpoint)
+                        .open_transport_unicast(endpoint)
                         .timeout(CONNECTION_TIMEOUT)
                         .await
                     {
@@ -557,10 +556,15 @@ impl Runtime {
         let send = async {
             let mut delay = SCOUT_INITIAL_PERIOD;
 
-            let scout = ScoutingMessage::make_scout(Some(matcher), true, None);
+            let scout: ScoutingMessage = Scout {
+                version: zenoh_protocol::VERSION,
+                what: matcher,
+                zid: None,
+            }
+            .into();
             let mut wbuf = vec![];
             let mut writer = wbuf.writer();
-            let codec = Zenoh060::default();
+            let codec = Zenoh080::new();
             codec.write(&mut writer, &scout).unwrap();
 
             loop {
@@ -602,7 +606,7 @@ impl Runtime {
                     match socket.recv_from(&mut buf).await {
                         Ok((n, peer)) => {
                             let mut reader = buf.as_slice()[..n].reader();
-                            let codec = Zenoh060::default();
+                            let codec = Zenoh080::new();
                             let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
                             if let Ok(msg) = res {
                                 log::trace!("Received {:?} from {}", msg.body, peer);
@@ -632,40 +636,84 @@ impl Runtime {
         async_std::prelude::FutureExt::race(send, recvs).await;
     }
 
-    async fn connect(&self, locators: &[Locator]) -> Option<TransportUnicast> {
+    #[must_use]
+    async fn connect(&self, zid: &ZenohId, locators: &[Locator]) -> bool {
+        const ERR: &str = "Unable to connect to newly scouted peer ";
+
+        let inspector = LocatorInspector::default();
         for locator in locators {
-            let endpoint = locator.clone().into();
-            match self
-                .manager()
-                .open_transport(endpoint)
-                .timeout(CONNECTION_TIMEOUT)
-                .await
-            {
-                Ok(Ok(transport)) => return Some(transport),
-                Ok(Err(e)) => log::trace!("Unable to connect to {}! {}", locator, e),
-                Err(e) => log::trace!("Unable to connect to {}! {}", locator, e),
+            let is_multicast = match inspector.is_multicast(locator).await {
+                Ok(im) => im,
+                Err(e) => {
+                    log::trace!("{} {} on {}: {}", ERR, zid, locator, e);
+                    continue;
+                }
+            };
+
+            let endpoint = locator.to_owned().into();
+            let manager = self.manager();
+            if is_multicast {
+                match manager
+                    .open_transport_multicast(endpoint)
+                    .timeout(CONNECTION_TIMEOUT)
+                    .await
+                {
+                    Ok(Ok(transport)) => {
+                        log::debug!(
+                            "Successfully connected to newly scouted peer: {:?}",
+                            transport
+                        );
+                        return true;
+                    }
+                    Ok(Err(e)) => log::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                    Err(e) => log::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                }
+            } else {
+                match manager
+                    .open_transport_unicast(endpoint)
+                    .timeout(CONNECTION_TIMEOUT)
+                    .await
+                {
+                    Ok(Ok(transport)) => {
+                        log::debug!(
+                            "Successfully connected to newly scouted peer: {:?}",
+                            transport
+                        );
+                        return true;
+                    }
+                    Ok(Err(e)) => log::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                    Err(e) => log::trace!("{} {} on {}: {}", ERR, zid, locator, e),
+                }
             }
         }
-        None
+
+        log::warn!(
+            "Unable to connect to any locator of scouted peer {}: {:?}",
+            zid,
+            locators
+        );
+        false
     }
 
     pub async fn connect_peer(&self, zid: &ZenohId, locators: &[Locator]) {
-        if zid != &self.manager().zid() {
-            if self.manager().get_transport(zid).is_none() {
-                log::debug!("Try to connect to peer {} via any of {:?}", zid, locators);
-                if let Some(transport) = self.connect(locators).await {
-                    log::debug!(
-                        "Successfully connected to newly scouted peer {} via {:?}",
-                        zid,
-                        transport
-                    );
-                } else {
-                    log::warn!(
-                        "Unable to connect any locator of scouted peer {}: {:?}",
-                        zid,
-                        locators
-                    );
+        let manager = self.manager();
+        if zid != &manager.zid() {
+            let has_unicast = manager.get_transport_unicast(zid).await.is_some();
+            let has_multicast = {
+                let mut hm = manager.get_transport_multicast(zid).await.is_some();
+                for t in manager.get_transports_multicast().await {
+                    if let Ok(l) = t.get_link() {
+                        if let Some(g) = l.group.as_ref() {
+                            hm |= locators.iter().any(|l| l == g);
+                        }
+                    }
                 }
+                hm
+            };
+
+            if !has_unicast && !has_multicast {
+                log::debug!("Try to connect to peer {} via any of {:?}", zid, locators);
+                let _ = self.connect(zid, locators).await;
             } else {
                 log::trace!("Already connected scouted peer: {}", zid);
             }
@@ -683,15 +731,9 @@ impl Runtime {
             Runtime::scout(sockets, what, addr, move |hello| async move {
                 log::info!("Found {:?}", hello);
                 if !hello.locators.is_empty() {
-                    if let Some(transport) = self.connect(&hello.locators).await {
-                        log::debug!(
-                            "Successfully connected to newly scouted {:?} via {:?}",
-                            hello,
-                            transport
-                        );
+                    if self.connect(&hello.zid, &hello.locators).await {
                         return Loop::Break;
                     }
-                    log::warn!("Unable to connect to scouted {:?}", hello);
                 } else {
                     log::warn!("Received Hello with no locators: {:?}", hello);
                 }
@@ -714,17 +756,10 @@ impl Runtime {
         addr: &SocketAddr,
     ) {
         Runtime::scout(ucast_sockets, what, addr, move |hello| async move {
-            match &hello.zid {
-                Some(zid) => {
-                    if !hello.locators.is_empty() {
-                        self.connect_peer(zid, &hello.locators).await
-                    } else {
-                        log::warn!("Received Hello with no locators: {:?}", hello);
-                    }
-                }
-                None => {
-                    log::warn!("Received Hello with no zid: {:?}", hello);
-                }
+            if !hello.locators.is_empty() {
+                self.connect_peer(&hello.zid, &hello.locators).await
+            } else {
+                log::warn!("Received Hello with no locators: {:?}", hello);
             }
             Loop::Continue
         })
@@ -769,31 +804,24 @@ impl Runtime {
             }
 
             let mut reader = buf.as_slice()[..n].reader();
-            let codec = Zenoh060::default();
+            let codec = Zenoh080::new();
             let res: Result<ScoutingMessage, DidntRead> = codec.read(&mut reader);
             if let Ok(msg) = res {
                 log::trace!("Received {:?} from {}", msg.body, peer);
-                if let ScoutingBody::Scout(Scout {
-                    what, zid_request, ..
-                }) = &msg.body
-                {
-                    let what = what.or(Some(WhatAmI::Router.into())).unwrap();
+                if let ScoutingBody::Scout(Scout { what, .. }) = &msg.body {
                     if what.matches(self.whatami) {
                         let mut wbuf = vec![];
                         let mut writer = wbuf.writer();
-                        let codec = Zenoh060::default();
+                        let codec = Zenoh080::new();
 
-                        let zid = if *zid_request {
-                            Some(self.manager().zid())
-                        } else {
-                            None
-                        };
-                        let hello = ScoutingMessage::make_hello(
+                        let zid = self.manager().zid();
+                        let hello: ScoutingMessage = Hello {
+                            version: zenoh_protocol::VERSION,
+                            whatami: self.whatami,
                             zid,
-                            Some(self.whatami),
-                            Some(self.get_locators()),
-                            None,
-                        );
+                            locators: self.get_locators(),
+                        }
+                        .into();
                         let socket = get_best_match(&peer.ip(), ucast_sockets).unwrap();
                         log::trace!(
                             "Send {:?} to {} on interface {}",

@@ -37,9 +37,11 @@ shared-memory = [
     "zenoh-protocol/shared-memory",
     "zenoh-transport/shared-memory",
 ]
-stats = ["zenoh-transport/stats"]
+stats = ["zenoh-transport/stats", "zenoh-protocol/stats"]
+transport_multilink = ["zenoh-transport/transport_multilink"]
 transport_quic = ["zenoh-transport/transport_quic"]
 transport_serial = ["zenoh-transport/transport_serial"]
+transport_shm = ["zenoh-transport/transport_shm"]
 transport_tcp = ["zenoh-transport/transport_tcp"]
 transport_tls = ["zenoh-transport/transport_tls"]
 transport_udp = ["zenoh-transport/transport_udp"]
@@ -49,6 +51,7 @@ unstable = []
 default = [
     "auth_pubkey",
     "auth_usrpwd",
+    "transport_multilink",
     "transport_quic",
     "transport_tcp",
     "transport_tls",
@@ -72,6 +75,7 @@ hex = { workspace = true, features = ["default"] }
 lazy_static = { workspace = true }
 log = { workspace = true }
 ordered-float = { workspace = true }
+paste = { workspace = true }
 petgraph = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 regex = { workspace = true }
@@ -83,9 +87,8 @@ uhlc = { workspace = true, features = ["default"] }
 uuid = { workspace = true, features = ["default"] }
 vec_map = { workspace = true }
 zenoh-buffers = { workspace = true, features = ["std"] }
-zenoh-cfg-properties = { workspace = true }
 zenoh-codec = { workspace = true }
-zenoh-collections = { workspace = true }
+zenoh-collections = { workspace = true, features = ["std"] }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-crypto = { workspace = true }

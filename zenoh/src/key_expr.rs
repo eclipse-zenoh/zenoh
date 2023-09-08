@@ -21,7 +21,10 @@ use std::{
 };
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 pub use zenoh_protocol::core::key_expr::*;
-use zenoh_protocol::core::{key_expr::canon::Canonizable, WireExpr};
+use zenoh_protocol::{
+    core::{key_expr::canon::Canonizable, ExprId, WireExpr},
+    network::{declare, DeclareBody, Mapping, UndeclareKeyExpr},
+};
 use zenoh_result::ZResult;
 use zenoh_transport::Primitives;
 
@@ -32,14 +35,16 @@ pub(crate) enum KeyExprInner<'a> {
     Borrowed(&'a keyexpr),
     BorrowedWire {
         key_expr: &'a keyexpr,
-        expr_id: u64,
+        expr_id: ExprId,
+        mapping: Mapping,
         prefix_len: u32,
         session_id: u16,
     },
     Owned(OwnedKeyExpr),
     Wire {
         key_expr: OwnedKeyExpr,
-        expr_id: u64,
+        expr_id: ExprId,
+        mapping: Mapping,
         prefix_len: u32,
         session_id: u16,
     },
@@ -107,11 +112,13 @@ impl<'a> KeyExpr<'a> {
             KeyExprInner::BorrowedWire {
                 key_expr,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             } => KeyExprInner::BorrowedWire {
                 key_expr,
                 expr_id: *expr_id,
+                mapping: *mapping,
                 prefix_len: *prefix_len,
                 session_id: *session_id,
             },
@@ -119,11 +126,13 @@ impl<'a> KeyExpr<'a> {
             KeyExprInner::Wire {
                 key_expr,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             } => KeyExprInner::BorrowedWire {
                 key_expr,
                 expr_id: *expr_id,
+                mapping: *mapping,
                 prefix_len: *prefix_len,
                 session_id: *session_id,
             },
@@ -164,22 +173,26 @@ impl<'a> KeyExpr<'a> {
             KeyExprInner::BorrowedWire {
                 key_expr,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             } => KeyExpr(KeyExprInner::Wire {
                 key_expr: key_expr.into(),
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             }),
             KeyExprInner::Wire {
                 key_expr,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             } => KeyExpr(KeyExprInner::Wire {
                 key_expr,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             }),
@@ -202,6 +215,7 @@ impl<'a> KeyExpr<'a> {
         let r = self.as_keyexpr().join(s)?;
         if let KeyExprInner::Wire {
             expr_id,
+            mapping,
             prefix_len,
             session_id,
             ..
@@ -210,6 +224,7 @@ impl<'a> KeyExpr<'a> {
             Ok(KeyExpr(KeyExprInner::Wire {
                 key_expr: r,
                 expr_id: *expr_id,
+                mapping: *mapping,
                 prefix_len: *prefix_len,
                 session_id: *session_id,
             }))
@@ -233,12 +248,14 @@ impl<'a> KeyExpr<'a> {
         let r = OwnedKeyExpr::try_from(format!("{self}{s}"))?;
         if let KeyExprInner::Wire {
             expr_id,
+            mapping,
             prefix_len,
             session_id,
             ..
         }
         | KeyExprInner::BorrowedWire {
             expr_id,
+            mapping,
             prefix_len,
             session_id,
             ..
@@ -247,6 +264,7 @@ impl<'a> KeyExpr<'a> {
             Ok(KeyExpr(KeyExprInner::Wire {
                 key_expr: r,
                 expr_id: *expr_id,
+                mapping: *mapping,
                 prefix_len: *prefix_len,
                 session_id: *session_id,
             }))
@@ -318,11 +336,13 @@ impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {
             KeyExprInner::BorrowedWire {
                 key_expr,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             } => Self(KeyExprInner::BorrowedWire {
                 key_expr,
                 expr_id: *expr_id,
+                mapping: *mapping,
                 prefix_len: *prefix_len,
                 session_id: *session_id,
             }),
@@ -330,11 +350,13 @@ impl<'a> From<&'a KeyExpr<'a>> for KeyExpr<'a> {
             KeyExprInner::Wire {
                 key_expr,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             } => Self(KeyExprInner::BorrowedWire {
                 key_expr,
                 expr_id: *expr_id,
+                mapping: *mapping,
                 prefix_len: *prefix_len,
                 session_id: *session_id,
             }),
@@ -417,11 +439,13 @@ impl std::ops::Div<&keyexpr> for KeyExpr<'_> {
             KeyExprInner::BorrowedWire {
                 key_expr,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             } => KeyExpr(KeyExprInner::Wire {
                 key_expr: key_expr / rhs,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             }),
@@ -429,11 +453,13 @@ impl std::ops::Div<&keyexpr> for KeyExpr<'_> {
             KeyExprInner::Wire {
                 key_expr,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             } => KeyExpr(KeyExprInner::Wire {
                 key_expr: key_expr / rhs,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             }),
@@ -449,11 +475,13 @@ impl std::ops::Div<&keyexpr> for &KeyExpr<'_> {
             KeyExprInner::BorrowedWire {
                 key_expr,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             } => KeyExpr(KeyExprInner::Wire {
                 key_expr: *key_expr / rhs,
                 expr_id: *expr_id,
+                mapping: *mapping,
                 prefix_len: *prefix_len,
                 session_id: *session_id,
             }),
@@ -461,11 +489,13 @@ impl std::ops::Div<&keyexpr> for &KeyExpr<'_> {
             KeyExprInner::Wire {
                 key_expr,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             } => KeyExpr(KeyExprInner::Wire {
                 key_expr: key_expr / rhs,
                 expr_id: *expr_id,
+                mapping: *mapping,
                 prefix_len: *prefix_len,
                 session_id: *session_id,
             }),
@@ -499,29 +529,35 @@ impl<'a> KeyExpr<'a> {
             KeyExprInner::Wire {
                 key_expr,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             } if session.id == *session_id => WireExpr {
                 scope: *expr_id,
                 suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[((*prefix_len) as usize)..]),
+                mapping: *mapping,
             },
             KeyExprInner::BorrowedWire {
                 key_expr,
                 expr_id,
+                mapping,
                 prefix_len,
                 session_id,
             } if session.id == *session_id => WireExpr {
                 scope: *expr_id,
                 suffix: std::borrow::Cow::Borrowed(&key_expr.as_str()[((*prefix_len) as usize)..]),
+                mapping: *mapping,
             },
             KeyExprInner::Owned(key_expr) | KeyExprInner::Wire { key_expr, .. } => WireExpr {
                 scope: 0,
                 suffix: std::borrow::Cow::Borrowed(key_expr.as_str()),
+                mapping: Mapping::Sender,
             },
             KeyExprInner::Borrowed(key_expr) | KeyExprInner::BorrowedWire { key_expr, .. } => {
                 WireExpr {
                     scope: 0,
                     suffix: std::borrow::Cow::Borrowed(key_expr.as_str()),
+                    mapping: Mapping::Sender,
                 }
             }
         }
@@ -566,7 +602,8 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
                 key_expr,
                 expr_id,
                 prefix_len,
-                session_id
+                session_id,
+                ..
             } if *prefix_len as usize == key_expr.len() => {
                 if *session_id == session.id {
                     *expr_id
@@ -578,7 +615,8 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
                 key_expr,
                 expr_id,
                 prefix_len,
-                session_id
+                session_id,
+                ..
             } if *prefix_len as usize == key_expr.len() => {
                 if *session_id == session.id {
                     *expr_id
@@ -594,7 +632,12 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
 
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
-        primitives.forget_resource(expr_id);
+        primitives.send_declare(zenoh_protocol::network::Declare {
+            ext_qos: declare::ext::QoSType::declare_default(),
+            ext_tstamp: None,
+            ext_nodeid: declare::ext::NodeIdType::default(),
+            body: DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr { id: expr_id }),
+        });
 
         Ok(())
     }

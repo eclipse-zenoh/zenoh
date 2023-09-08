@@ -17,6 +17,8 @@ pub use super::pubsub::*;
 pub use super::queries::*;
 pub use super::resource::*;
 use super::runtime::Runtime;
+use crate::net::codec::Zenoh080Routing;
+use crate::net::protocol::linkstate::LinkStateList;
 use async_std::task::JoinHandle;
 use std::any::Any;
 use std::collections::hash_map::DefaultHasher;
@@ -27,12 +29,13 @@ use std::sync::{Arc, Weak};
 use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 use uhlc::HLC;
-use zenoh_config::whatami::WhatAmIMatcher;
 use zenoh_link::Link;
-use zenoh_protocol::{
-    core::{WhatAmI, ZInt, ZenohId},
-    zenoh::{ZenohBody, ZenohMessage},
-};
+use zenoh_protocol::common::ZExtBody;
+use zenoh_protocol::core::{ExprId, WhatAmI, WhatAmIMatcher, ZenohId};
+use zenoh_protocol::network::oam::id::OAM_LINKSTATE;
+use zenoh_protocol::network::{Mapping, NetworkBody, NetworkMessage};
+#[cfg(feature = "stats")]
+use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{
     DeMux, DummyPrimitives, McastMux, Mux, Primitives, TransportMulticast, TransportPeer,
     TransportPeerEventHandler, TransportUnicast,
@@ -146,11 +149,12 @@ impl Tables {
     pub(crate) fn get_mapping<'a>(
         &'a self,
         face: &'a FaceState,
-        expr_id: &ZInt,
+        expr_id: &ExprId,
+        mapping: Mapping,
     ) -> Option<&'a Arc<Resource>> {
         match expr_id {
             0 => Some(&self.root_res),
-            expr_id => face.get_mapping(expr_id),
+            expr_id => face.get_mapping(expr_id, mapping),
         }
     }
 
@@ -254,6 +258,7 @@ impl Tables {
         &mut self,
         zid: ZenohId,
         whatami: WhatAmI,
+        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
         primitives: Arc<dyn Primitives + Send + Sync>,
         link_id: usize,
     ) -> Weak<FaceState> {
@@ -262,7 +267,18 @@ impl Tables {
         let mut newface = self
             .faces
             .entry(fid)
-            .or_insert_with(|| FaceState::new(fid, zid, whatami, primitives.clone(), link_id, None))
+            .or_insert_with(|| {
+                FaceState::new(
+                    fid,
+                    zid,
+                    whatami,
+                    #[cfg(feature = "stats")]
+                    Some(stats),
+                    primitives.clone(),
+                    link_id,
+                    None,
+                )
+            })
             .clone();
         log::debug!("New {}", newface);
 
@@ -278,7 +294,30 @@ impl Tables {
         whatami: WhatAmI,
         primitives: Arc<dyn Primitives + Send + Sync>,
     ) -> Weak<FaceState> {
-        self.open_net_face(zid, whatami, primitives, 0)
+        let fid = self.face_counter;
+        self.face_counter += 1;
+        let mut newface = self
+            .faces
+            .entry(fid)
+            .or_insert_with(|| {
+                FaceState::new(
+                    fid,
+                    zid,
+                    whatami,
+                    #[cfg(feature = "stats")]
+                    None,
+                    primitives.clone(),
+                    0,
+                    None,
+                )
+            })
+            .clone();
+        log::debug!("New {}", newface);
+
+        pubsub_new_face(self, &mut newface);
+        queries_new_face(self, &mut newface);
+
+        Arc::downgrade(&newface)
     }
 
     fn compute_routes(&mut self, res: &mut Arc<Resource>) {
@@ -574,6 +613,8 @@ impl Router {
                     .open_net_face(
                         transport.get_zid().unwrap(),
                         whatami,
+                        #[cfg(feature = "stats")]
+                        transport.get_stats().unwrap(),
                         Arc::new(Mux::new(transport)),
                         link_id,
                     )
@@ -608,6 +649,8 @@ impl Router {
             fid,
             ZenohId::from_str("1").unwrap(),
             WhatAmI::Peer,
+            #[cfg(feature = "stats")]
+            None,
             Arc::new(McastMux::new(transport.clone())),
             0,
             Some(transport),
@@ -631,6 +674,8 @@ impl Router {
             fid,
             peer.zid,
             WhatAmI::Client, // Quick hack
+            #[cfg(feature = "stats")]
+            Some(transport.get_stats().unwrap()),
             Arc::new(DummyPrimitives),
             0,
             Some(transport),
@@ -666,88 +711,107 @@ impl LinkStateInterceptor {
 }
 
 impl TransportPeerEventHandler for LinkStateInterceptor {
-    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
         log::trace!("Recv {:?}", msg);
         match msg.body {
-            ZenohBody::LinkStateList(list) => {
-                if let Ok(zid) = self.transport.get_zid() {
-                    let ctrl_lock = zlock!(self.tables.ctrl_lock);
-                    let mut tables = zwrite!(self.tables.tables);
-                    let whatami = self.transport.get_whatami()?;
-                    match (tables.whatami, whatami) {
-                        (WhatAmI::Router, WhatAmI::Router) => {
-                            for (_, removed_node) in tables
-                                .routers_net
-                                .as_mut()
-                                .unwrap()
-                                .link_states(list.link_states, zid)
-                                .removed_nodes
-                            {
-                                pubsub_remove_node(&mut tables, &removed_node.zid, WhatAmI::Router);
-                                queries_remove_node(
-                                    &mut tables,
-                                    &removed_node.zid,
-                                    WhatAmI::Router,
-                                );
-                            }
+            NetworkBody::OAM(oam) => {
+                if oam.id == OAM_LINKSTATE {
+                    if let ZExtBody::ZBuf(buf) = oam.body {
+                        if let Ok(zid) = self.transport.get_zid() {
+                            use zenoh_buffers::reader::HasReader;
+                            use zenoh_codec::RCodec;
+                            let codec = Zenoh080Routing::new();
+                            let mut reader = buf.reader();
+                            let list: LinkStateList = codec.read(&mut reader).unwrap();
 
-                            if tables.full_net(WhatAmI::Peer) {
-                                tables.shared_nodes = shared_nodes(
-                                    tables.routers_net.as_ref().unwrap(),
-                                    tables.peers_net.as_ref().unwrap(),
-                                );
-                            }
-
-                            tables.schedule_compute_trees(self.tables.clone(), WhatAmI::Router);
-                        }
-                        (WhatAmI::Router, WhatAmI::Peer)
-                        | (WhatAmI::Peer, WhatAmI::Router)
-                        | (WhatAmI::Peer, WhatAmI::Peer) => {
-                            if let Some(net) = tables.peers_net.as_mut() {
-                                let changes = net.link_states(list.link_states, zid);
-                                if tables.full_net(WhatAmI::Peer) {
-                                    for (_, removed_node) in changes.removed_nodes {
+                            let ctrl_lock = zlock!(self.tables.ctrl_lock);
+                            let mut tables = zwrite!(self.tables.tables);
+                            let whatami = self.transport.get_whatami()?;
+                            match (tables.whatami, whatami) {
+                                (WhatAmI::Router, WhatAmI::Router) => {
+                                    for (_, removed_node) in tables
+                                        .routers_net
+                                        .as_mut()
+                                        .unwrap()
+                                        .link_states(list.link_states, zid)
+                                        .removed_nodes
+                                    {
                                         pubsub_remove_node(
                                             &mut tables,
                                             &removed_node.zid,
-                                            WhatAmI::Peer,
+                                            WhatAmI::Router,
                                         );
                                         queries_remove_node(
                                             &mut tables,
                                             &removed_node.zid,
-                                            WhatAmI::Peer,
+                                            WhatAmI::Router,
                                         );
                                     }
 
-                                    if tables.whatami == WhatAmI::Router {
+                                    if tables.full_net(WhatAmI::Peer) {
                                         tables.shared_nodes = shared_nodes(
                                             tables.routers_net.as_ref().unwrap(),
                                             tables.peers_net.as_ref().unwrap(),
                                         );
                                     }
 
-                                    tables
-                                        .schedule_compute_trees(self.tables.clone(), WhatAmI::Peer);
-                                } else {
-                                    for (_, updated_node) in changes.updated_nodes {
-                                        pubsub_linkstate_change(
-                                            &mut tables,
-                                            &updated_node.zid,
-                                            &updated_node.links,
-                                        );
-                                        queries_linkstate_change(
-                                            &mut tables,
-                                            &updated_node.zid,
-                                            &updated_node.links,
-                                        );
+                                    tables.schedule_compute_trees(
+                                        self.tables.clone(),
+                                        WhatAmI::Router,
+                                    );
+                                }
+                                (WhatAmI::Router, WhatAmI::Peer)
+                                | (WhatAmI::Peer, WhatAmI::Router)
+                                | (WhatAmI::Peer, WhatAmI::Peer) => {
+                                    if let Some(net) = tables.peers_net.as_mut() {
+                                        let changes = net.link_states(list.link_states, zid);
+                                        if tables.full_net(WhatAmI::Peer) {
+                                            for (_, removed_node) in changes.removed_nodes {
+                                                pubsub_remove_node(
+                                                    &mut tables,
+                                                    &removed_node.zid,
+                                                    WhatAmI::Peer,
+                                                );
+                                                queries_remove_node(
+                                                    &mut tables,
+                                                    &removed_node.zid,
+                                                    WhatAmI::Peer,
+                                                );
+                                            }
+
+                                            if tables.whatami == WhatAmI::Router {
+                                                tables.shared_nodes = shared_nodes(
+                                                    tables.routers_net.as_ref().unwrap(),
+                                                    tables.peers_net.as_ref().unwrap(),
+                                                );
+                                            }
+
+                                            tables.schedule_compute_trees(
+                                                self.tables.clone(),
+                                                WhatAmI::Peer,
+                                            );
+                                        } else {
+                                            for (_, updated_node) in changes.updated_nodes {
+                                                pubsub_linkstate_change(
+                                                    &mut tables,
+                                                    &updated_node.zid,
+                                                    &updated_node.links,
+                                                );
+                                                queries_linkstate_change(
+                                                    &mut tables,
+                                                    &updated_node.zid,
+                                                    &updated_node.links,
+                                                );
+                                            }
+                                        }
                                     }
                                 }
-                            }
+                                _ => (),
+                            };
+                            drop(tables);
+                            drop(ctrl_lock);
                         }
-                        _ => (),
-                    };
-                    drop(tables);
-                    drop(ctrl_lock);
+                    }
                 }
 
                 Ok(())

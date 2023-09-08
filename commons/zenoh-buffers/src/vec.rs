@@ -19,8 +19,10 @@ use alloc::vec::Vec;
 use core::{mem, num::NonZeroUsize};
 
 /// Allocate a vector with a given capacity and sets the length to that capacity.
+#[must_use]
 pub fn uninit(capacity: usize) -> Vec<u8> {
     let mut vbuf = Vec::with_capacity(capacity);
+    // SAFETY: this operation is safe since we are setting the length equal to the allocated capacity.
     #[allow(clippy::uninit_vec)]
     unsafe {
         vbuf.set_len(capacity);
@@ -43,7 +45,7 @@ impl Writer for &mut Vec<u8> {
             return Err(DidntWrite);
         }
         self.extend_from_slice(bytes);
-        // Safety: this operation is safe since we early return if bytes is empty
+        // SAFETY: this operation is safe since we early return in case bytes is empty
         Ok(unsafe { NonZeroUsize::new_unchecked(bytes.len()) })
     }
 
@@ -65,10 +67,15 @@ impl Writer for &mut Vec<u8> {
         F: FnOnce(&mut [u8]) -> usize,
     {
         self.reserve(len);
-        unsafe {
-            len = f(mem::transmute(&mut self.spare_capacity_mut()[..len]));
-            self.set_len(self.len() + len);
-        }
+
+        // SAFETY: we already reserved len elements on the vector.
+        let s = crate::unsafe_slice_mut!(self.spare_capacity_mut(), ..len);
+        // SAFETY: converting MaybeUninit<u8> into [u8] is safe because we are going to write on it.
+        //         The returned len tells us how many bytes have been written so as to update the len accordingly.
+        len = unsafe { f(&mut *(s as *mut [mem::MaybeUninit<u8>] as *mut [u8])) };
+        // SAFETY: we already reserved len elements on the vector.
+        unsafe { self.set_len(self.len() + len) };
+
         NonZeroUsize::new(len).ok_or(DidntWrite)
     }
 }

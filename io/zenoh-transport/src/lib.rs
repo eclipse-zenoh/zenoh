@@ -21,9 +21,13 @@ mod common;
 mod manager;
 mod multicast;
 mod primitives;
+pub mod unicast;
+
+#[cfg(feature = "stats")]
+pub use common::stats;
+
 #[cfg(feature = "shared-memory")]
 mod shm;
-pub mod unicast;
 
 pub use manager::*;
 pub use multicast::*;
@@ -34,7 +38,7 @@ use std::sync::Arc;
 pub use unicast::*;
 use zenoh_link::Link;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
-use zenoh_protocol::zenoh::ZenohMessage;
+use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
 
 /*************************************/
@@ -49,7 +53,7 @@ pub trait TransportEventHandler: Send + Sync {
 
     fn new_multicast(
         &self,
-        transport: TransportMulticast,
+        _transport: TransportMulticast,
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>>;
 }
 
@@ -101,19 +105,20 @@ impl TransportMulticastEventHandler for DummyTransportMulticastEventHandler {
 /*************************************/
 /*             CALLBACK              */
 /*************************************/
-#[derive(Clone, Serialize)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename = "Transport")]
 pub struct TransportPeer {
     pub zid: ZenohId,
     pub whatami: WhatAmI,
     pub is_qos: bool,
-    pub is_shm: bool,
     #[serde(skip)]
     pub links: Vec<Link>,
+    #[cfg(feature = "shared-memory")]
+    pub is_shm: bool,
 }
 
 pub trait TransportPeerEventHandler: Send + Sync {
-    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()>;
+    fn handle_message(&self, msg: NetworkMessage) -> ZResult<()>;
     fn new_link(&self, src: Link);
     fn del_link(&self, link: Link);
     fn closing(&self);
@@ -126,7 +131,7 @@ pub trait TransportPeerEventHandler: Send + Sync {
 pub struct DummyTransportPeerEventHandler;
 
 impl TransportPeerEventHandler for DummyTransportPeerEventHandler {
-    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
 

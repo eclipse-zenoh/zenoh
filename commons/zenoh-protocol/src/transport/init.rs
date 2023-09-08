@@ -11,58 +11,142 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{WhatAmI, ZInt, ZenohId};
+use crate::{
+    core::{Resolution, WhatAmI, ZenohId},
+    transport::BatchSize,
+};
 use zenoh_buffers::ZSlice;
 
 /// # Init message
 ///
-/// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
-///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
-///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the length of a message must not exceed 65_535 bytes.
+/// The INIT message is sent on a specific Locator to initiate a transport with the zenoh node
+/// associated with that Locator. The initiator MUST send an INIT message with the A flag set to 0.
+/// If the corresponding zenohd node deems appropriate to accept the INIT message, the corresponding
+/// peer MUST reply with an INIT message with the A flag set to 1. Alternatively, it MAY reply with
+/// a [`super::Close`] message. For convenience, we call [`InitSyn`] and [`InitAck`] an INIT message
+/// when the A flag is set to 0 and 1, respectively.
 ///
-/// The INIT message is sent on a specific Locator to initiate a transport with the peer associated
-/// with that Locator. The initiator MUST send an INIT message with the A flag set to 0.  If the
-/// corresponding peer deems appropriate to initialize a transport with the initiator, the corresponding
-/// peer MUST reply with an INIT message with the A flag set to 1.
+/// The [`InitSyn`]/[`InitAck`] message flow is the following:
+///
+/// ```text
+///     A                   B
+///     |      INIT SYN     |
+///     |------------------>|
+///     |                   |
+///     |      INIT ACK     |
+///     |<------------------|
+///     |                   |
+/// ```
+///
+/// The INIT message structure is defined as follows:
+///
+/// ```text
+/// Flags:
+/// - A: Ack            If A==0 then the message is an InitSyn else it is an InitAck
+/// - S: Size params    If S==1 then size parameters are exchanged
+/// - Z: Extensions     If Z==1 then zenoh extensions will follow.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |O|S|A|   INIT  |
-/// +-+-+-+-+-------+
-/// ~             |Q~ if O==1
+/// |Z|S|A|   INIT  |
+/// +-+-+-+---------+
+/// |    version    |
 /// +---------------+
-/// | v_maj | v_min | if A==0 -- Protocol Version VMaj.VMin
-/// +-------+-------+
-/// ~    whatami    ~ -- Client, Router, Peer or a combination of them
+/// |zid_len|x|x|wai| (#)(*)
+/// +-------+-+-+---+
+/// ~      [u8]     ~ -- ZenohID of the sender of the INIT message
 /// +---------------+
-/// ~    peer_id    ~ -- PID of the sender of the INIT message
+/// |x|x|x|x|rid|fsn| \                -- SN/ID resolution (+)
+/// +---------------+  | if Flag(S)==1
+/// |      u16      |  |               -- Batch Size ($)
+/// |               | /
 /// +---------------+
-/// ~ sn_resolution ~ if S==1 -- the sequence number resolution(*)
+/// ~    <u8;z16>   ~ -- if Flag(A)==1 -- Cookie
 /// +---------------+
-/// ~     cookie    ~ if A==1
+/// ~   [InitExts]  ~ -- if Flag(Z)==1
 /// +---------------+
 ///
-/// (*) if A==0 and S==0 then 2^28 is assumed.
-///     if A==1 and S==0 then the agreed resolution is the one communicated by the initiator.
+/// If A==1 and S==0 then size parameters are (ie. S flag) are accepted.
 ///
-/// - if Q==1 then the initiator/responder support QoS.
+/// (*) WhatAmI. It indicates the role of the zenoh node sending the INIT message.
+///    The valid WhatAmI values are:
+///    - 0b00: Router
+///    - 0b01: Peer
+///    - 0b10: Client
+///    - 0b11: Reserved
+///
+/// (#) ZID length. It indicates how many bytes are used for the ZenohID bytes.
+///     A ZenohID is minimum 1 byte and maximum 16 bytes. Therefore, the actual lenght is computed as:
+///         real_zid_len := 1 + zid_len
+///
+/// (+) Sequence Number/ID resolution. It indicates the resolution and consequently the wire overhead
+///     of various SN and ID in Zenoh.
+///     - fsn: frame/fragment sequence number resolution. Used in Frame/Fragment messages.
+///     - rid: request ID resolution. Used in Request/Response messages.
+///     The valid SN/ID resolution values are:
+///     - 0b00: 8 bits
+///     - 0b01: 16 bits
+///     - 0b10: 32 bits
+///     - 0b11: 64 bits
+///
+/// ($) Batch Size. It indicates the maximum size of a batch the sender of the INIT message is willing
+///     to accept when reading from the network. Default on unicast: 65535.
+///
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65535 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the length of a message must not exceed 65535 bytes.
 /// ```
+///
+
+pub mod flag {
+    pub const A: u8 = 1 << 5; // 0x20 Ack           if A==0 then the message is an InitSyn else it is an InitAck
+    pub const S: u8 = 1 << 6; // 0x40 Size params   if S==1 then size parameters are exchanged
+    pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitSyn {
     pub version: u8,
     pub whatami: WhatAmI,
     pub zid: ZenohId,
-    pub sn_resolution: ZInt,
-    pub is_qos: bool,
+    pub resolution: Resolution,
+    pub batch_size: BatchSize,
+    pub ext_qos: Option<ext::QoS>,
+    pub ext_shm: Option<ext::Shm>,
+    pub ext_auth: Option<ext::Auth>,
+    pub ext_mlink: Option<ext::MultiLink>,
+}
+
+// Extensions
+pub mod ext {
+    use crate::{
+        common::{ZExtUnit, ZExtZBuf},
+        zextunit, zextzbuf,
+    };
+
+    /// # QoS extension
+    /// Used to negotiate the use of QoS
+    pub type QoS = zextunit!(0x1, false);
+
+    /// # Shm extension
+    /// Used as challenge for probing shared memory capabilities
+    pub type Shm = zextzbuf!(0x2, false);
+
+    /// # Auth extension
+    /// Used as challenge for probing authentication rights
+    pub type Auth = zextzbuf!(0x3, false);
+
+    /// # Multilink extension
+    /// Used as challenge for probing multilink capabilities
+    pub type MultiLink = zextzbuf!(0x4, false);
 }
 
 impl InitSyn {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::defaults::SEQ_NUM_RES;
+        use crate::common::{ZExtUnit, ZExtZBuf};
         use rand::Rng;
 
         let mut rng = rand::thread_rng();
@@ -70,58 +154,75 @@ impl InitSyn {
         let version: u8 = rng.gen();
         let whatami = WhatAmI::rand();
         let zid = ZenohId::default();
-        let sn_resolution = if rng.gen_bool(0.5) {
-            rng.gen()
-        } else {
-            SEQ_NUM_RES
-        };
-        let is_qos = rng.gen_bool(0.5);
+        let resolution = Resolution::rand();
+        let batch_size: u16 = rng.gen();
+        let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
+        let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
+        let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
 
         Self {
             version,
             whatami,
             zid,
-            sn_resolution,
-            is_qos,
+            resolution,
+            batch_size,
+            ext_qos,
+            ext_shm,
+            ext_auth,
+            ext_mlink,
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InitAck {
+    pub version: u8,
     pub whatami: WhatAmI,
     pub zid: ZenohId,
-    pub sn_resolution: Option<ZInt>,
-    pub is_qos: bool,
+    pub resolution: Resolution,
+    pub batch_size: BatchSize,
     pub cookie: ZSlice,
+    pub ext_qos: Option<ext::QoS>,
+    pub ext_shm: Option<ext::Shm>,
+    pub ext_auth: Option<ext::Auth>,
+    pub ext_mlink: Option<ext::MultiLink>,
 }
 
 impl InitAck {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
+        use crate::common::{ZExtUnit, ZExtZBuf};
         use rand::Rng;
-
-        const MIN: usize = 32;
-        const MAX: usize = 1_024;
 
         let mut rng = rand::thread_rng();
 
+        let version: u8 = rng.gen();
         let whatami = WhatAmI::rand();
         let zid = ZenohId::default();
-        let sn_resolution = if rng.gen_bool(0.5) {
-            Some(rng.gen())
+        let resolution = if rng.gen_bool(0.5) {
+            Resolution::default()
         } else {
-            None
+            Resolution::rand()
         };
-        let is_qos = rng.gen_bool(0.5);
-        let cookie = ZSlice::rand(rng.gen_range(MIN..=MAX));
+        let batch_size: u16 = rng.gen();
+        let cookie = ZSlice::rand(64);
+        let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
+        let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
+        let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
 
         Self {
+            version,
             whatami,
             zid,
-            sn_resolution,
-            is_qos,
+            resolution,
+            batch_size,
             cookie,
+            ext_qos,
+            ext_shm,
+            ext_auth,
+            ext_mlink,
         }
     }
 }

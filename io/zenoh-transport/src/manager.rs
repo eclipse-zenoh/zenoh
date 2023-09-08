@@ -11,40 +11,34 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::multicast::manager::{
-    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
-    TransportManagerStateMulticast,
-};
 use super::unicast::manager::{
     TransportManagerBuilderUnicast, TransportManagerConfigUnicast, TransportManagerStateUnicast,
 };
-use super::unicast::TransportUnicast;
 use super::TransportEventHandler;
-use async_std::sync::Mutex as AsyncMutex;
+use crate::multicast::manager::{
+    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
+    TransportManagerStateMulticast,
+};
+use async_std::{sync::Mutex as AsyncMutex, task};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
 use std::sync::Arc;
-#[cfg(feature = "shared-memory")]
-use std::sync::RwLock;
 use std::time::Duration;
-use zenoh_cfg_properties::{config::*, Properties};
-use zenoh_config::{Config, QueueConf, QueueSizeConf};
-use zenoh_core::zparse;
+use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
 use zenoh_protocol::{
-    core::{EndPoint, Locator, Priority, WhatAmI, ZInt, ZenohId},
-    defaults::{BATCH_SIZE, SEQ_NUM_RES, VERSION},
+    core::{EndPoint, Field, Locator, Priority, Resolution, WhatAmI, ZenohId},
+    transport::BatchSize,
+    VERSION,
 };
 use zenoh_result::{bail, ZResult};
-#[cfg(feature = "shared-memory")]
-use zenoh_shm::SharedMemoryReader;
 
 /// # Examples
 /// ```
 /// use std::sync::Arc;
 /// use std::time::Duration;
-/// use zenoh_protocol::core::{ZenohId, WhatAmI, whatami};
+/// use zenoh_protocol::core::{ZenohId, Resolution, Field, Bits, WhatAmI, whatami};
 /// use zenoh_transport::*;
 /// use zenoh_result::ZResult;
 ///
@@ -60,10 +54,11 @@ use zenoh_shm::SharedMemoryReader;
 ///         Ok(Arc::new(DummyTransportPeerEventHandler))
 ///     }
 ///
-///     fn new_multicast(&self,
-///         _transport: TransportMulticast
+///     fn new_multicast(
+///         &self,
+///         _transport: TransportMulticast,
 ///     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-///         Ok(Arc::new(DummyTransportMulticastEventHandler::default()))
+///         Ok(Arc::new(DummyTransportMulticastEventHandler))
 ///     }
 /// }
 ///
@@ -79,13 +74,14 @@ use zenoh_shm::SharedMemoryReader;
 ///         .keep_alive(4)      // Send a KeepAlive every 250 ms
 ///         .accept_timeout(Duration::from_secs(1))
 ///         .accept_pending(10) // Set to 10 the number of simultanous pending incoming transports        
-///         .max_links(1)       // Allow max 1 inbound link per transport
 ///         .max_sessions(5);   // Allow max 5 transports open
+/// let mut resolution = Resolution::default();
+/// resolution.set(Field::FrameSN, Bits::U8);
 /// let manager = TransportManager::builder()
 ///         .zid(ZenohId::rand())
 ///         .whatami(WhatAmI::Peer)
 ///         .batch_size(1_024)              // Use a batch size of 1024 bytes
-///         .sn_resolution(128)             // Use a sequence number resolution of 128
+///         .resolution(resolution)         // Use a sequence number resolution of 128
 ///         .unicast(unicast)               // Configure unicast parameters
 ///         .build(Arc::new(MySH::default()))
 ///         .unwrap();
@@ -95,7 +91,7 @@ pub struct TransportManagerConfig {
     pub version: u8,
     pub zid: ZenohId,
     pub whatami: WhatAmI,
-    pub sn_resolution: ZInt,
+    pub resolution: Resolution,
     pub batch_size: u16,
     pub queue_size: [usize; Priority::NUM],
     pub queue_backoff: Duration,
@@ -103,7 +99,7 @@ pub struct TransportManagerConfig {
     pub link_rx_buffer_size: usize,
     pub unicast: TransportManagerConfigUnicast,
     pub multicast: TransportManagerConfigMulticast,
-    pub endpoint: HashMap<String, Properties>,
+    pub endpoints: HashMap<String, String>, // (protocol, config)
     pub handler: Arc<dyn TransportEventHandler>,
     pub tx_threads: usize,
     pub protocols: Vec<String>,
@@ -123,7 +119,7 @@ pub struct TransportManagerBuilder {
     version: u8,
     zid: ZenohId,
     whatami: WhatAmI,
-    sn_resolution: ZInt,
+    resolution: Resolution,
     batch_size: u16,
     queue_size: QueueSizeConf,
     queue_backoff: Duration,
@@ -131,7 +127,7 @@ pub struct TransportManagerBuilder {
     link_rx_buffer_size: usize,
     unicast: TransportManagerBuilderUnicast,
     multicast: TransportManagerBuilderMulticast,
-    endpoint: HashMap<String, Properties>,
+    endpoints: HashMap<String, String>, // (protocol, config)
     tx_threads: usize,
     protocols: Option<Vec<String>>,
 }
@@ -147,8 +143,8 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn sn_resolution(mut self, sn_resolution: ZInt) -> Self {
-        self.sn_resolution = sn_resolution;
+    pub fn resolution(mut self, resolution: Resolution) -> Self {
+        self.resolution = resolution;
         self
     }
 
@@ -177,8 +173,8 @@ impl TransportManagerBuilder {
         self
     }
 
-    pub fn endpoint(mut self, endpoint: HashMap<String, Properties>) -> Self {
-        self.endpoint = endpoint;
+    pub fn endpoints(mut self, endpoints: HashMap<String, String>) -> Self {
+        self.endpoints = endpoints;
         self
     }
 
@@ -208,20 +204,16 @@ impl TransportManagerBuilder {
             self = self.whatami(*v);
         }
 
-        self = self.sn_resolution(
-            config
-                .transport()
-                .link()
-                .tx()
-                .sequence_number_resolution()
-                .unwrap(),
-        );
-        self = self.batch_size(config.transport().link().tx().batch_size().unwrap());
-        self = self.defrag_buff_size(config.transport().link().rx().max_message_size().unwrap());
-        self = self.link_rx_buffer_size(config.transport().link().rx().buffer_size().unwrap());
-        self = self.queue_size(config.transport().link().tx().queue().size().clone());
-        self = self.tx_threads(config.transport().link().tx().threads().unwrap());
-        self = self.protocols(config.transport().link().protocols().clone());
+        let link = config.transport().link();
+        let mut resolution = Resolution::default();
+        resolution.set(Field::FrameSN, *link.tx().sequence_number_resolution());
+        self = self.resolution(resolution);
+        self = self.batch_size(*link.tx().batch_size());
+        self = self.defrag_buff_size(*link.rx().max_message_size());
+        self = self.link_rx_buffer_size(*link.rx().buffer_size());
+        self = self.queue_size(link.tx().queue().size().clone());
+        self = self.tx_threads(*link.tx().threads());
+        self = self.protocols(link.protocols().clone());
 
         let (c, errors) = zenoh_link::LinkConfigurator::default()
             .configurations(config)
@@ -234,7 +226,7 @@ impl TransportManagerBuilder {
             }
             bail!("{}", formatter);
         }
-        self = self.endpoint(c);
+        self = self.endpoints(c);
         self = self.unicast(
             TransportManagerBuilderUnicast::default()
                 .from_config(config)
@@ -250,7 +242,10 @@ impl TransportManagerBuilder {
     }
 
     pub fn build(self, handler: Arc<dyn TransportEventHandler>) -> ZResult<TransportManager> {
-        let unicast = self.unicast.build()?;
+        // Initialize the PRNG and the Cipher
+        let mut prng = PseudoRng::from_entropy();
+
+        let unicast = self.unicast.build(&mut prng)?;
         let multicast = self.multicast.build()?;
 
         let mut queue_size = [0; Priority::NUM];
@@ -267,7 +262,7 @@ impl TransportManagerBuilder {
             version: self.version,
             zid: self.zid,
             whatami: self.whatami,
-            sn_resolution: self.sn_resolution,
+            resolution: self.resolution,
             batch_size: self.batch_size,
             queue_size,
             queue_backoff: self.queue_backoff,
@@ -275,7 +270,7 @@ impl TransportManagerBuilder {
             link_rx_buffer_size: self.link_rx_buffer_size,
             unicast: unicast.config,
             multicast: multicast.config,
-            endpoint: self.endpoint,
+            endpoints: self.endpoints,
             handler,
             tx_threads: self.tx_threads,
             protocols: self.protocols.unwrap_or_else(|| {
@@ -293,25 +288,26 @@ impl TransportManagerBuilder {
 
         let params = TransportManagerParams { config, state };
 
-        Ok(TransportManager::new(params))
+        Ok(TransportManager::new(params, prng))
     }
 }
 
 impl Default for TransportManagerBuilder {
     fn default() -> Self {
+        let link_rx = LinkRxConf::default();
         let queue = QueueConf::default();
-        let backoff = queue.backoff().unwrap();
+        let backoff = *queue.backoff();
         Self {
             version: VERSION,
             zid: ZenohId::rand(),
-            whatami: ZN_MODE_DEFAULT.parse().unwrap(),
-            sn_resolution: SEQ_NUM_RES,
-            batch_size: BATCH_SIZE,
+            whatami: zenoh_config::defaults::mode,
+            resolution: Resolution::default(),
+            batch_size: BatchSize::MAX,
             queue_size: queue.size,
             queue_backoff: Duration::from_nanos(backoff),
-            defrag_buff_size: zparse!(ZN_DEFRAG_BUFF_SIZE_DEFAULT).unwrap(),
-            link_rx_buffer_size: zparse!(ZN_LINK_RX_BUFF_SIZE_DEFAULT).unwrap(),
-            endpoint: HashMap::new(),
+            defrag_buff_size: *link_rx.max_message_size(),
+            link_rx_buffer_size: *link_rx.buffer_size(),
+            endpoints: HashMap::new(),
             unicast: TransportManagerBuilderUnicast::default(),
             multicast: TransportManagerBuilderMulticast::default(),
             tx_threads: 1,
@@ -359,17 +355,14 @@ pub struct TransportManager {
     pub(crate) state: Arc<TransportManagerState>,
     pub(crate) prng: Arc<AsyncMutex<PseudoRng>>,
     pub(crate) cipher: Arc<BlockCipher>,
-    #[cfg(feature = "shared-memory")]
-    pub(crate) shmr: Arc<RwLock<SharedMemoryReader>>,
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
     pub(crate) tx_executor: TransportExecutor,
 }
 
 impl TransportManager {
-    pub fn new(params: TransportManagerParams) -> TransportManager {
-        // Initialize the PRNG and the Cipher
-        let mut prng = PseudoRng::from_entropy();
+    pub fn new(params: TransportManagerParams, mut prng: PseudoRng) -> TransportManager {
+        // Initialize the Cipher
         let mut key = [0_u8; BlockCipher::BLOCK_SIZE];
         prng.fill_bytes(&mut key);
         let cipher = BlockCipher::new(key);
@@ -383,8 +376,6 @@ impl TransportManager {
             state: Arc::new(params.state),
             prng: Arc::new(AsyncMutex::new(prng)),
             cipher: Arc::new(cipher),
-            #[cfg(feature = "shared-memory")]
-            shmr: Arc::new(RwLock::new(SharedMemoryReader::new())),
             locator_inspector: Default::default(),
             new_unicast_link_sender,
             tx_executor: TransportExecutor::new(tx_threads),
@@ -412,9 +403,7 @@ impl TransportManager {
     }
 
     pub async fn close(&self) {
-        log::trace!("TransportManager::clear())");
         self.close_unicast().await;
-        self.close_multicast().await;
         self.tx_executor.stop().await;
     }
 
@@ -422,27 +411,12 @@ impl TransportManager {
     /*              LISTENER             */
     /*************************************/
     pub async fn add_listener(&self, endpoint: EndPoint) -> ZResult<Locator> {
-        let p = endpoint.protocol();
-        if !self
-            .config
-            .protocols
-            .iter()
-            .any(|x| x.as_str() == p.as_str())
-        {
-            bail!(
-                "Unsupported protocol: {}. Supported protocols are: {:?}",
-                p,
-                self.config.protocols
-            );
-        }
-
         if self
             .locator_inspector
             .is_multicast(&endpoint.to_locator())
             .await?
         {
-            // @TODO: multicast
-            bail!("Unimplemented");
+            self.add_listener_multicast(endpoint).await
         } else {
             self.add_listener_unicast(endpoint).await
         }
@@ -454,51 +428,23 @@ impl TransportManager {
             .is_multicast(&endpoint.to_locator())
             .await?
         {
-            // @TODO: multicast
-            bail!("Unimplemented");
+            self.del_listener_multicast(endpoint).await
         } else {
             self.del_listener_unicast(endpoint).await
         }
     }
 
     pub fn get_listeners(&self) -> Vec<EndPoint> {
-        self.get_listeners_unicast()
-        // @TODO: multicast
+        let mut lsu = task::block_on(self.get_listeners_unicast());
+        let mut lsm = task::block_on(self.get_listeners_multicast());
+        lsu.append(&mut lsm);
+        lsu
     }
 
     pub fn get_locators(&self) -> Vec<Locator> {
-        self.get_locators_unicast()
-        // @TODO: multicast
-    }
-
-    /*************************************/
-    /*             TRANSPORT             */
-    /*************************************/
-    pub fn get_transport(&self, peer: &ZenohId) -> Option<TransportUnicast> {
-        self.get_transport_unicast(peer)
-        // @TODO: multicast
-    }
-
-    pub fn get_transports(&self) -> Vec<TransportUnicast> {
-        self.get_transports_unicast()
-        // @TODO: multicast
-    }
-
-    pub async fn open_transport(&self, endpoint: EndPoint) -> ZResult<TransportUnicast> {
-        let p = endpoint.protocol();
-        if !self
-            .config
-            .protocols
-            .iter()
-            .any(|x| x.as_str() == p.as_str())
-        {
-            bail!(
-                "Unsupported protocol: {}. Supported protocols are: {:?}",
-                p,
-                self.config.protocols
-            );
-        }
-
-        self.open_transport_unicast(endpoint).await
+        let mut lsu = task::block_on(self.get_locators_unicast());
+        let mut lsm = task::block_on(self.get_locators_multicast());
+        lsu.append(&mut lsm);
+        lsu
     }
 }

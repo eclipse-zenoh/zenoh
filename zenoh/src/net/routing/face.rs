@@ -15,30 +15,34 @@ use super::router::*;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
-use zenoh_buffers::ZBuf;
+use zenoh_protocol::zenoh::RequestBody;
 use zenoh_protocol::{
-    core::{
-        Channel, CongestionControl, ConsolidationMode, QueryTarget, QueryableInfo, SubInfo,
-        WhatAmI, WireExpr, ZInt, ZenohId,
+    core::{ExprId, WhatAmI, ZenohId},
+    network::{
+        declare::queryable::ext::QueryableInfo, Mapping, Push, Request, RequestId, Response,
+        ResponseFinal,
     },
-    zenoh::{DataInfo, QueryBody, RoutingContext},
 };
+#[cfg(feature = "stats")]
+use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{Primitives, TransportMulticast};
 
 pub struct FaceState {
     pub(super) id: usize,
     pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
+    #[cfg(feature = "stats")]
+    pub(super) stats: Option<Arc<TransportStats>>,
     pub(super) primitives: Arc<dyn Primitives + Send + Sync>,
     pub(super) link_id: usize,
-    pub(super) local_mappings: HashMap<ZInt, Arc<Resource>>,
-    pub(super) remote_mappings: HashMap<ZInt, Arc<Resource>>,
+    pub(super) local_mappings: HashMap<ExprId, Arc<Resource>>,
+    pub(super) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(super) local_subs: HashSet<Arc<Resource>>,
     pub(super) remote_subs: HashSet<Arc<Resource>>,
     pub(super) local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
     pub(super) remote_qabls: HashSet<Arc<Resource>>,
-    pub(super) next_qid: ZInt,
-    pub(super) pending_queries: HashMap<ZInt, Arc<Query>>,
+    pub(super) next_qid: RequestId,
+    pub(super) pending_queries: HashMap<RequestId, Arc<Query>>,
     pub(super) mcast_group: Option<TransportMulticast>,
 }
 
@@ -47,6 +51,7 @@ impl FaceState {
         id: usize,
         zid: ZenohId,
         whatami: WhatAmI,
+        #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn Primitives + Send + Sync>,
         link_id: usize,
         mcast_group: Option<TransportMulticast>,
@@ -55,6 +60,8 @@ impl FaceState {
             id,
             zid,
             whatami,
+            #[cfg(feature = "stats")]
+            stats,
             primitives,
             link_id,
             local_mappings: HashMap::new(),
@@ -71,14 +78,18 @@ impl FaceState {
 
     #[inline]
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub(super) fn get_mapping(&self, prefixid: &ZInt) -> Option<&std::sync::Arc<Resource>> {
-        match self.remote_mappings.get(prefixid) {
-            Some(prefix) => Some(prefix),
-            None => self.local_mappings.get(prefixid),
+    pub(super) fn get_mapping(
+        &self,
+        prefixid: &ExprId,
+        mapping: Mapping,
+    ) -> Option<&std::sync::Arc<Resource>> {
+        match mapping {
+            Mapping::Sender => self.remote_mappings.get(prefixid),
+            Mapping::Receiver => self.local_mappings.get(prefixid),
         }
     }
 
-    pub(super) fn get_next_local_id(&self) -> ZInt {
+    pub(super) fn get_next_local_id(&self) -> ExprId {
         let mut id = 1;
         while self.local_mappings.get(&id).is_some() || self.remote_mappings.get(&id).is_some() {
             id += 1;
@@ -86,69 +97,45 @@ impl FaceState {
         id
     }
 
-    pub(super) fn get_router(
-        &self,
-        tables: &Tables,
-        routing_context: Option<RoutingContext>,
-    ) -> Option<ZenohId> {
-        match routing_context {
-            Some(routing_context) => {
-                match tables.routers_net.as_ref().unwrap().get_link(self.link_id) {
-                    Some(link) => match link.get_zid(&routing_context.tree_id) {
-                        Some(router) => Some(*router),
-                        None => {
-                            log::error!(
-                                "Received router declaration with unknown routing context id {}",
-                                routing_context.tree_id
-                            );
-                            None
-                        }
-                    },
-                    None => {
-                        log::error!(
-                            "Could not find corresponding link in routers network for {}",
-                            self
-                        );
-                        None
-                    }
+    pub(super) fn get_router(&self, tables: &Tables, nodeid: &u64) -> Option<ZenohId> {
+        match tables.routers_net.as_ref().unwrap().get_link(self.link_id) {
+            Some(link) => match link.get_zid(nodeid) {
+                Some(router) => Some(*router),
+                None => {
+                    log::error!(
+                        "Received router declaration with unknown routing context id {}",
+                        nodeid
+                    );
+                    None
                 }
-            }
+            },
             None => {
-                log::error!("Received router declaration with no routing context");
+                log::error!(
+                    "Could not find corresponding link in routers network for {}",
+                    self
+                );
                 None
             }
         }
     }
 
-    pub(super) fn get_peer(
-        &self,
-        tables: &Tables,
-        routing_context: Option<RoutingContext>,
-    ) -> Option<ZenohId> {
-        match routing_context {
-            Some(routing_context) => {
-                match tables.peers_net.as_ref().unwrap().get_link(self.link_id) {
-                    Some(link) => match link.get_zid(&routing_context.tree_id) {
-                        Some(router) => Some(*router),
-                        None => {
-                            log::error!(
-                                "Received peer declaration with unknown routing context id {}",
-                                routing_context.tree_id
-                            );
-                            None
-                        }
-                    },
-                    None => {
-                        log::error!(
-                            "Could not find corresponding link in peers network for {}",
-                            self
-                        );
-                        None
-                    }
+    pub(super) fn get_peer(&self, tables: &Tables, nodeid: &u64) -> Option<ZenohId> {
+        match tables.peers_net.as_ref().unwrap().get_link(self.link_id) {
+            Some(link) => match link.get_zid(nodeid) {
+                Some(router) => Some(*router),
+                None => {
+                    log::error!(
+                        "Received peer declaration with unknown routing context id {}",
+                        nodeid
+                    );
+                    None
                 }
-            }
+            },
             None => {
-                log::error!("Received peer declaration with no routing context");
+                log::error!(
+                    "Could not find corresponding link in peers network for {}",
+                    self
+                );
                 None
             }
         }
@@ -168,304 +155,280 @@ pub struct Face {
 }
 
 impl Primitives for Face {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
+    fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
-        register_expr(&self.tables, &mut self.state.clone(), expr_id, key_expr);
-        drop(ctrl_lock);
-    }
-
-    fn forget_resource(&self, expr_id: ZInt) {
-        let ctrl_lock = zlock!(self.tables.ctrl_lock);
-        unregister_expr(&self.tables, &mut self.state.clone(), expr_id);
-        drop(ctrl_lock);
-    }
-
-    fn decl_subscriber(
-        &self,
-        key_expr: &WireExpr,
-        sub_info: &SubInfo,
-        routing_context: Option<RoutingContext>,
-    ) {
-        let ctrl_lock = zlock!(self.tables.ctrl_lock);
-        let rtables = zread!(self.tables.tables);
-        match (rtables.whatami, self.state.whatami) {
-            (WhatAmI::Router, WhatAmI::Router) => {
-                if let Some(router) = self.state.get_router(&rtables, routing_context) {
-                    declare_router_subscription(
-                        &self.tables,
-                        rtables,
-                        &mut self.state.clone(),
-                        key_expr,
-                        sub_info,
-                        router,
-                    );
-                }
+        match msg.body {
+            zenoh_protocol::network::DeclareBody::DeclareKeyExpr(m) => {
+                register_expr(&self.tables, &mut self.state.clone(), m.id, &m.wire_expr);
             }
-            (WhatAmI::Router, WhatAmI::Peer)
-            | (WhatAmI::Peer, WhatAmI::Router)
-            | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if rtables.full_net(WhatAmI::Peer) {
-                    if let Some(peer) = self.state.get_peer(&rtables, routing_context) {
-                        declare_peer_subscription(
-                            &self.tables,
-                            rtables,
-                            &mut self.state.clone(),
-                            key_expr,
-                            sub_info,
-                            peer,
-                        );
+            zenoh_protocol::network::DeclareBody::UndeclareKeyExpr(m) => {
+                unregister_expr(&self.tables, &mut self.state.clone(), m.id);
+            }
+            zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
+                let rtables = zread!(self.tables.tables);
+                match (rtables.whatami, self.state.whatami) {
+                    (WhatAmI::Router, WhatAmI::Router) => {
+                        if let Some(router) = self
+                            .state
+                            .get_router(&rtables, &(msg.ext_nodeid.node_id as u64))
+                        {
+                            declare_router_subscription(
+                                &self.tables,
+                                rtables,
+                                &mut self.state.clone(),
+                                &m.wire_expr,
+                                &m.ext_info,
+                                router,
+                            )
+                        }
                     }
-                } else {
-                    declare_client_subscription(
+                    (WhatAmI::Router, WhatAmI::Peer)
+                    | (WhatAmI::Peer, WhatAmI::Router)
+                    | (WhatAmI::Peer, WhatAmI::Peer) => {
+                        if rtables.full_net(WhatAmI::Peer) {
+                            if let Some(peer) = self
+                                .state
+                                .get_peer(&rtables, &(msg.ext_nodeid.node_id as u64))
+                            {
+                                declare_peer_subscription(
+                                    &self.tables,
+                                    rtables,
+                                    &mut self.state.clone(),
+                                    &m.wire_expr,
+                                    &m.ext_info,
+                                    peer,
+                                )
+                            }
+                        } else {
+                            declare_client_subscription(
+                                &self.tables,
+                                rtables,
+                                &mut self.state.clone(),
+                                &m.wire_expr,
+                                &m.ext_info,
+                            )
+                        }
+                    }
+                    _ => declare_client_subscription(
                         &self.tables,
                         rtables,
                         &mut self.state.clone(),
-                        key_expr,
-                        sub_info,
-                    );
+                        &m.wire_expr,
+                        &m.ext_info,
+                    ),
                 }
             }
-            _ => {
-                declare_client_subscription(
-                    &self.tables,
-                    rtables,
-                    &mut self.state.clone(),
-                    key_expr,
-                    sub_info,
-                );
+            zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
+                let rtables = zread!(self.tables.tables);
+                match (rtables.whatami, self.state.whatami) {
+                    (WhatAmI::Router, WhatAmI::Router) => {
+                        if let Some(router) = self
+                            .state
+                            .get_router(&rtables, &(msg.ext_nodeid.node_id as u64))
+                        {
+                            forget_router_subscription(
+                                &self.tables,
+                                rtables,
+                                &mut self.state.clone(),
+                                &m.ext_wire_expr.wire_expr,
+                                &router,
+                            )
+                        }
+                    }
+                    (WhatAmI::Router, WhatAmI::Peer)
+                    | (WhatAmI::Peer, WhatAmI::Router)
+                    | (WhatAmI::Peer, WhatAmI::Peer) => {
+                        if rtables.full_net(WhatAmI::Peer) {
+                            if let Some(peer) = self
+                                .state
+                                .get_peer(&rtables, &(msg.ext_nodeid.node_id as u64))
+                            {
+                                forget_peer_subscription(
+                                    &self.tables,
+                                    rtables,
+                                    &mut self.state.clone(),
+                                    &m.ext_wire_expr.wire_expr,
+                                    &peer,
+                                )
+                            }
+                        } else {
+                            forget_client_subscription(
+                                &self.tables,
+                                rtables,
+                                &mut self.state.clone(),
+                                &m.ext_wire_expr.wire_expr,
+                            )
+                        }
+                    }
+                    _ => forget_client_subscription(
+                        &self.tables,
+                        rtables,
+                        &mut self.state.clone(),
+                        &m.ext_wire_expr.wire_expr,
+                    ),
+                }
             }
+            zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
+                let rtables = zread!(self.tables.tables);
+                match (rtables.whatami, self.state.whatami) {
+                    (WhatAmI::Router, WhatAmI::Router) => {
+                        if let Some(router) = self
+                            .state
+                            .get_router(&rtables, &(msg.ext_nodeid.node_id as u64))
+                        {
+                            declare_router_queryable(
+                                &self.tables,
+                                rtables,
+                                &mut self.state.clone(),
+                                &m.wire_expr,
+                                &m.ext_info,
+                                router,
+                            )
+                        }
+                    }
+                    (WhatAmI::Router, WhatAmI::Peer)
+                    | (WhatAmI::Peer, WhatAmI::Router)
+                    | (WhatAmI::Peer, WhatAmI::Peer) => {
+                        if rtables.full_net(WhatAmI::Peer) {
+                            if let Some(peer) = self
+                                .state
+                                .get_peer(&rtables, &(msg.ext_nodeid.node_id as u64))
+                            {
+                                declare_peer_queryable(
+                                    &self.tables,
+                                    rtables,
+                                    &mut self.state.clone(),
+                                    &m.wire_expr,
+                                    &m.ext_info,
+                                    peer,
+                                )
+                            }
+                        } else {
+                            declare_client_queryable(
+                                &self.tables,
+                                rtables,
+                                &mut self.state.clone(),
+                                &m.wire_expr,
+                                &m.ext_info,
+                            )
+                        }
+                    }
+                    _ => declare_client_queryable(
+                        &self.tables,
+                        rtables,
+                        &mut self.state.clone(),
+                        &m.wire_expr,
+                        &m.ext_info,
+                    ),
+                }
+            }
+            zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
+                let rtables = zread!(self.tables.tables);
+                match (rtables.whatami, self.state.whatami) {
+                    (WhatAmI::Router, WhatAmI::Router) => {
+                        if let Some(router) = self
+                            .state
+                            .get_router(&rtables, &(msg.ext_nodeid.node_id as u64))
+                        {
+                            forget_router_queryable(
+                                &self.tables,
+                                rtables,
+                                &mut self.state.clone(),
+                                &m.ext_wire_expr.wire_expr,
+                                &router,
+                            )
+                        }
+                    }
+                    (WhatAmI::Router, WhatAmI::Peer)
+                    | (WhatAmI::Peer, WhatAmI::Router)
+                    | (WhatAmI::Peer, WhatAmI::Peer) => {
+                        if rtables.full_net(WhatAmI::Peer) {
+                            if let Some(peer) = self
+                                .state
+                                .get_peer(&rtables, &(msg.ext_nodeid.node_id as u64))
+                            {
+                                forget_peer_queryable(
+                                    &self.tables,
+                                    rtables,
+                                    &mut self.state.clone(),
+                                    &m.ext_wire_expr.wire_expr,
+                                    &peer,
+                                )
+                            }
+                        } else {
+                            forget_client_queryable(
+                                &self.tables,
+                                rtables,
+                                &mut self.state.clone(),
+                                &m.ext_wire_expr.wire_expr,
+                            )
+                        }
+                    }
+                    _ => forget_client_queryable(
+                        &self.tables,
+                        rtables,
+                        &mut self.state.clone(),
+                        &m.ext_wire_expr.wire_expr,
+                    ),
+                }
+            }
+            zenoh_protocol::network::DeclareBody::DeclareToken(_m) => todo!(),
+            zenoh_protocol::network::DeclareBody::UndeclareToken(_m) => todo!(),
+            zenoh_protocol::network::DeclareBody::DeclareInterest(_m) => todo!(),
+            zenoh_protocol::network::DeclareBody::FinalInterest(_m) => todo!(),
+            zenoh_protocol::network::DeclareBody::UndeclareInterest(_m) => todo!(),
         }
         drop(ctrl_lock);
     }
 
-    fn forget_subscriber(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
-        let ctrl_lock = zlock!(self.tables.ctrl_lock);
-        let rtables = zread!(self.tables.tables);
-        match (rtables.whatami, self.state.whatami) {
-            (WhatAmI::Router, WhatAmI::Router) => {
-                if let Some(router) = self.state.get_router(&rtables, routing_context) {
-                    forget_router_subscription(
-                        &self.tables,
-                        rtables,
-                        &mut self.state.clone(),
-                        key_expr,
-                        &router,
-                    )
-                }
-            }
-            (WhatAmI::Router, WhatAmI::Peer)
-            | (WhatAmI::Peer, WhatAmI::Router)
-            | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if rtables.full_net(WhatAmI::Peer) {
-                    if let Some(peer) = self.state.get_peer(&rtables, routing_context) {
-                        forget_peer_subscription(
-                            &self.tables,
-                            rtables,
-                            &mut self.state.clone(),
-                            key_expr,
-                            &peer,
-                        )
-                    }
-                } else {
-                    forget_client_subscription(
-                        &self.tables,
-                        rtables,
-                        &mut self.state.clone(),
-                        key_expr,
-                    )
-                }
-            }
-            _ => {
-                forget_client_subscription(&self.tables, rtables, &mut self.state.clone(), key_expr)
-            }
-        }
-        drop(ctrl_lock);
-    }
-
-    fn decl_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
-
-    fn forget_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
-
-    fn decl_queryable(
-        &self,
-        key_expr: &WireExpr,
-        qabl_info: &QueryableInfo,
-        routing_context: Option<RoutingContext>,
-    ) {
-        let ctrl_lock = zlock!(self.tables.ctrl_lock);
-        let rtables = zread!(self.tables.tables);
-        match (rtables.whatami, self.state.whatami) {
-            (WhatAmI::Router, WhatAmI::Router) => {
-                if let Some(router) = self.state.get_router(&rtables, routing_context) {
-                    declare_router_queryable(
-                        &self.tables,
-                        rtables,
-                        &mut self.state.clone(),
-                        key_expr,
-                        qabl_info,
-                        router,
-                    )
-                }
-            }
-            (WhatAmI::Router, WhatAmI::Peer)
-            | (WhatAmI::Peer, WhatAmI::Router)
-            | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if rtables.full_net(WhatAmI::Peer) {
-                    if let Some(peer) = self.state.get_peer(&rtables, routing_context) {
-                        declare_peer_queryable(
-                            &self.tables,
-                            rtables,
-                            &mut self.state.clone(),
-                            key_expr,
-                            qabl_info,
-                            peer,
-                        )
-                    }
-                } else {
-                    declare_client_queryable(
-                        &self.tables,
-                        rtables,
-                        &mut self.state.clone(),
-                        key_expr,
-                        qabl_info,
-                    )
-                }
-            }
-            _ => declare_client_queryable(
-                &self.tables,
-                rtables,
-                &mut self.state.clone(),
-                key_expr,
-                qabl_info,
-            ),
-        }
-        drop(ctrl_lock);
-    }
-
-    fn forget_queryable(&self, key_expr: &WireExpr, routing_context: Option<RoutingContext>) {
-        let ctrl_lock = zlock!(self.tables.ctrl_lock);
-        let rtables = zread!(self.tables.tables);
-        match (rtables.whatami, self.state.whatami) {
-            (WhatAmI::Router, WhatAmI::Router) => {
-                if let Some(router) = self.state.get_router(&rtables, routing_context) {
-                    forget_router_queryable(
-                        &self.tables,
-                        rtables,
-                        &mut self.state.clone(),
-                        key_expr,
-                        &router,
-                    )
-                }
-            }
-            (WhatAmI::Router, WhatAmI::Peer)
-            | (WhatAmI::Peer, WhatAmI::Router)
-            | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if rtables.full_net(WhatAmI::Peer) {
-                    if let Some(peer) = self.state.get_peer(&rtables, routing_context) {
-                        forget_peer_queryable(
-                            &self.tables,
-                            rtables,
-                            &mut self.state.clone(),
-                            key_expr,
-                            &peer,
-                        )
-                    }
-                } else {
-                    forget_client_queryable(
-                        &self.tables,
-                        rtables,
-                        &mut self.state.clone(),
-                        key_expr,
-                    )
-                }
-            }
-            _ => forget_client_queryable(&self.tables, rtables, &mut self.state.clone(), key_expr),
-        }
-        drop(ctrl_lock);
-    }
-
-    fn send_data(
-        &self,
-        key_expr: &WireExpr,
-        payload: ZBuf,
-        channel: Channel,
-        congestion_control: CongestionControl,
-        data_info: Option<DataInfo>,
-        routing_context: Option<RoutingContext>,
-    ) {
+    fn send_push(&self, msg: Push) {
         full_reentrant_route_data(
             &self.tables.tables,
             &self.state,
-            key_expr,
-            channel,
-            congestion_control,
-            data_info,
-            payload,
-            routing_context,
+            &msg.wire_expr,
+            msg.ext_qos,
+            msg.payload,
+            msg.ext_nodeid.node_id as u64,
         );
     }
 
-    fn send_query(
-        &self,
-        key_expr: &WireExpr,
-        parameters: &str,
-        qid: ZInt,
-        target: QueryTarget,
-        consolidation: ConsolidationMode,
-        body: Option<QueryBody>,
-        routing_context: Option<RoutingContext>,
-    ) {
-        route_query(
-            &self.tables,
-            &self.state,
-            key_expr,
-            parameters,
-            qid,
-            target,
-            consolidation,
-            body,
-            routing_context,
-        );
+    fn send_request(&self, msg: Request) {
+        match msg.payload {
+            RequestBody::Query(_) => {
+                route_query(
+                    &self.tables,
+                    &self.state,
+                    &msg.wire_expr,
+                    // parameters,
+                    msg.id,
+                    msg.ext_target,
+                    // consolidation,
+                    msg.payload,
+                    msg.ext_nodeid.node_id as u64,
+                );
+            }
+            RequestBody::Pull(_) => {
+                pull_data(&self.tables.tables, &self.state.clone(), msg.wire_expr);
+            }
+            _ => {
+                log::error!("Unsupported request");
+            }
+        }
     }
 
-    fn send_reply_data(
-        &self,
-        qid: ZInt,
-        replier_id: ZenohId,
-        key_expr: WireExpr,
-        info: Option<DataInfo>,
-        payload: ZBuf,
-    ) {
-        route_send_reply_data(
+    fn send_response(&self, msg: Response) {
+        route_send_response(
             &self.tables,
             &mut self.state.clone(),
-            qid,
-            replier_id,
-            key_expr,
-            info,
-            payload,
+            msg.rid,
+            msg.ext_respid,
+            msg.wire_expr,
+            msg.payload,
         );
     }
 
-    fn send_reply_final(&self, qid: ZInt) {
-        route_send_reply_final(&self.tables, &mut self.state.clone(), qid);
-    }
-
-    fn send_pull(
-        &self,
-        is_final: bool,
-        key_expr: &WireExpr,
-        pull_id: ZInt,
-        max_samples: &Option<ZInt>,
-    ) {
-        pull_data(
-            &self.tables.tables,
-            &self.state.clone(),
-            is_final,
-            key_expr,
-            pull_id,
-            max_samples,
-        );
+    fn send_response_final(&self, msg: ResponseFinal) {
+        route_send_response_final(&self.tables, &mut self.state.clone(), msg.rid);
     }
 
     fn send_close(&self) {

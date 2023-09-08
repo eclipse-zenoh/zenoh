@@ -18,6 +18,10 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 #[doc(hidden)]
+pub(crate) mod codec;
+#[doc(hidden)]
+pub(crate) mod protocol;
+#[doc(hidden)]
 pub(crate) mod routing;
 #[doc(hidden)]
 pub mod runtime;

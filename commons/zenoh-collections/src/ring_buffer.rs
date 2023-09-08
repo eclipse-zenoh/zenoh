@@ -20,6 +20,7 @@ pub struct RingBuffer<T> {
 }
 
 impl<T> RingBuffer<T> {
+    #[must_use]
     pub fn new(capacity: usize) -> RingBuffer<T> {
         let buffer = VecDeque::<T>::with_capacity(capacity);
         RingBuffer {
@@ -50,21 +51,25 @@ impl<T> RingBuffer<T> {
 
     #[allow(dead_code)]
     #[inline]
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.buffer.is_empty()
     }
 
     #[inline]
+    #[must_use]
     pub fn is_full(&self) -> bool {
         self.len() == self.capacity()
     }
 
     #[inline]
+    #[must_use]
     pub fn len(&self) -> usize {
         self.len
     }
 
     #[inline]
+    #[must_use]
     pub fn capacity(&self) -> usize {
         self.capacity
     }

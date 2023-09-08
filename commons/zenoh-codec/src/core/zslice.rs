@@ -11,41 +11,72 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Bounded};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
     ZSlice,
 };
 
-#[cfg(feature = "shared-memory")]
-pub(crate) mod kind {
-    pub(crate) const RAW: u8 = 0;
-    pub(crate) const SHM_INFO: u8 = 1;
+// ZSlice - Bounded
+macro_rules! zslice_impl {
+    ($bound:ty) => {
+        impl<W> WCodec<&ZSlice, &mut W> for Zenoh080Bounded<$bound>
+        where
+            W: Writer,
+        {
+            type Output = Result<(), DidntWrite>;
+
+            fn write(self, writer: &mut W, x: &ZSlice) -> Self::Output {
+                self.write(&mut *writer, x.len())?;
+                writer.write_zslice(x)?;
+                Ok(())
+            }
+        }
+
+        impl<R> RCodec<ZSlice, &mut R> for Zenoh080Bounded<$bound>
+        where
+            R: Reader,
+        {
+            type Error = DidntRead;
+
+            #[allow(clippy::uninit_vec)]
+            fn read(self, reader: &mut R) -> Result<ZSlice, Self::Error> {
+                let len: usize = self.read(&mut *reader)?;
+                let zslice = reader.read_zslice(len)?;
+                Ok(zslice)
+            }
+        }
+    };
 }
 
-impl<W> WCodec<&ZSlice, &mut W> for Zenoh060
+zslice_impl!(u8);
+zslice_impl!(u16);
+zslice_impl!(u32);
+zslice_impl!(u64);
+zslice_impl!(usize);
+
+// ZSlice
+impl<W> WCodec<&ZSlice, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &ZSlice) -> Self::Output {
-        self.write(&mut *writer, x.len())?;
-        writer.write_zslice(x)?;
-        Ok(())
+        let zodec = Zenoh080Bounded::<usize>::new();
+        zodec.write(&mut *writer, x)
     }
 }
 
-impl<R> RCodec<ZSlice, &mut R> for Zenoh060
+impl<R> RCodec<ZSlice, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<ZSlice, Self::Error> {
-        let len: usize = self.read(&mut *reader)?;
-        let zslice = reader.read_zslice(len)?;
-        Ok(zslice)
+        let zodec = Zenoh080Bounded::<usize>::new();
+        zodec.read(&mut *reader)
     }
 }

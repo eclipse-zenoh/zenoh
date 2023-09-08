@@ -17,16 +17,16 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
-use zenoh_config::ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT;
+use zenoh_config::defaults::queries_default_timeout;
 use zenoh_core::zlock;
-use zenoh_protocol::{
-    core::{
-        key_expr::keyexpr, Channel, CongestionControl, ConsolidationMode, QueryTarget,
-        QueryableInfo, Reliability, SubInfo, SubMode, WhatAmI, WireExpr, ZInt, ZenohId,
-        EMPTY_EXPR_ID,
-    },
-    zenoh::{DataInfo, QueryBody, RoutingContext},
+use zenoh_protocol::core::Encoding;
+use zenoh_protocol::core::{
+    key_expr::keyexpr, ExprId, Reliability, WhatAmI, WireExpr, ZenohId, EMPTY_EXPR_ID,
 };
+use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
+use zenoh_protocol::network::declare::Mode;
+use zenoh_protocol::network::{ext, Declare, DeclareBody, DeclareKeyExpr};
+use zenoh_protocol::zenoh::{PushBody, Put};
 use zenoh_transport::{DummyPrimitives, Primitives};
 
 #[test]
@@ -38,7 +38,7 @@ fn base_test() {
             Some(Arc::new(HLC::default())),
             false,
             true,
-            Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+            Duration::from_millis(queries_default_timeout),
         )),
         ctrl_lock: Mutex::new(()),
         queries_lock: RwLock::new(()),
@@ -63,9 +63,9 @@ fn base_test() {
         &"one/deux/trois".into(),
     );
 
-    let sub_info = SubInfo {
+    let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable,
-        mode: SubMode::Push,
+        mode: Mode::Push,
     };
     declare_client_subscription(
         &tables,
@@ -139,7 +139,7 @@ fn match_test() {
             Some(Arc::new(HLC::default())),
             false,
             true,
-            Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+            Duration::from_millis(queries_default_timeout),
         )),
         ctrl_lock: Mutex::new(()),
         queries_lock: RwLock::new(()),
@@ -185,7 +185,7 @@ fn clean_test() {
             Some(Arc::new(HLC::default())),
             false,
             true,
-            Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+            Duration::from_millis(queries_default_timeout),
         )),
         ctrl_lock: Mutex::new(()),
         queries_lock: RwLock::new(()),
@@ -249,9 +249,9 @@ fn clean_test() {
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
 
-    let sub_info = SubInfo {
+    let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable,
-        mode: SubMode::Push,
+        mode: Mode::Push,
     };
 
     declare_client_subscription(
@@ -375,7 +375,7 @@ fn clean_test() {
 
 pub struct ClientPrimitives {
     data: std::sync::Mutex<Option<WireExpr<'static>>>,
-    mapping: std::sync::Mutex<std::collections::HashMap<ZInt, String>>,
+    mapping: std::sync::Mutex<std::collections::HashMap<ExprId, String>>,
 }
 
 impl ClientPrimitives {
@@ -425,79 +425,28 @@ impl ClientPrimitives {
 }
 
 impl Primitives for ClientPrimitives {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
-        let name = self.get_name(key_expr);
-        zlock!(self.mapping).insert(expr_id, name);
+    fn send_declare(&self, msg: zenoh_protocol::network::Declare) {
+        match msg.body {
+            DeclareBody::DeclareKeyExpr(d) => {
+                let name = self.get_name(&d.wire_expr);
+                zlock!(self.mapping).insert(d.id, name);
+            }
+            DeclareBody::UndeclareKeyExpr(u) => {
+                zlock!(self.mapping).remove(&u.id);
+            }
+            _ => (),
+        }
     }
 
-    fn forget_resource(&self, expr_id: ZInt) {
-        zlock!(self.mapping).remove(&expr_id);
+    fn send_push(&self, msg: zenoh_protocol::network::Push) {
+        *zlock!(self.data) = Some(msg.wire_expr.to_owned());
     }
 
-    fn decl_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
-    fn forget_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
+    fn send_request(&self, _msg: zenoh_protocol::network::Request) {}
 
-    fn decl_subscriber(
-        &self,
-        _key_expr: &WireExpr,
-        _sub_info: &SubInfo,
-        _routing_context: Option<RoutingContext>,
-    ) {
-    }
-    fn forget_subscriber(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
+    fn send_response(&self, _msg: zenoh_protocol::network::Response) {}
 
-    fn decl_queryable(
-        &self,
-        _key_expr: &WireExpr,
-        _qabl_info: &QueryableInfo,
-        _routing_context: Option<RoutingContext>,
-    ) {
-    }
-    fn forget_queryable(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {}
-
-    fn send_data(
-        &self,
-        key_expr: &WireExpr,
-        _payload: ZBuf,
-        _channel: Channel,
-        _congestion_control: CongestionControl,
-        _info: Option<DataInfo>,
-        _routing_context: Option<RoutingContext>,
-    ) {
-        *zlock!(self.data) = Some(key_expr.to_owned());
-    }
-
-    fn send_query(
-        &self,
-        _key_expr: &WireExpr,
-        _parameters: &str,
-        _qid: ZInt,
-        _target: QueryTarget,
-        _consolidation: ConsolidationMode,
-        _body: Option<QueryBody>,
-        _routing_context: Option<RoutingContext>,
-    ) {
-    }
-
-    fn send_reply_data(
-        &self,
-        _qid: ZInt,
-        _replier_id: ZenohId,
-        _key_expr: WireExpr,
-        _info: Option<DataInfo>,
-        _payload: ZBuf,
-    ) {
-    }
-    fn send_reply_final(&self, _qid: ZInt) {}
-
-    fn send_pull(
-        &self,
-        _is_final: bool,
-        _key_expr: &WireExpr,
-        _pull_id: ZInt,
-        _max_samples: &Option<ZInt>,
-    ) {
-    }
+    fn send_response_final(&self, _msg: zenoh_protocol::network::ResponseFinal) {}
 
     fn send_close(&self) {}
 }
@@ -511,15 +460,15 @@ fn client_test() {
             Some(Arc::new(HLC::default())),
             false,
             true,
-            Duration::from_millis(ZN_QUERIES_DEFAULT_TIMEOUT_DEFAULT.parse().unwrap()),
+            Duration::from_millis(queries_default_timeout),
         )),
         ctrl_lock: Mutex::new(()),
         queries_lock: RwLock::new(()),
     };
 
-    let sub_info = SubInfo {
+    let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable,
-        mode: SubMode::Push,
+        mode: Mode::Push,
     };
 
     let primitives0 = Arc::new(ClientPrimitives::new());
@@ -535,7 +484,15 @@ fn client_test() {
         11,
         &"test/client".into(),
     );
-    primitives0.decl_resource(11, &"test/client".into());
+    primitives0.send_declare(Declare {
+        ext_qos: ext::QoSType::declare_default(),
+        ext_tstamp: None,
+        ext_nodeid: ext::NodeIdType::default(),
+        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+            id: 11,
+            wire_expr: "test/client".into(),
+        }),
+    });
     declare_client_subscription(
         &tables,
         zread!(tables.tables),
@@ -549,7 +506,15 @@ fn client_test() {
         12,
         &WireExpr::from(11).with_suffix("/z1_pub1"),
     );
-    primitives0.decl_resource(12, &WireExpr::from(11).with_suffix("/z1_pub1"));
+    primitives0.send_declare(Declare {
+        ext_qos: ext::QoSType::declare_default(),
+        ext_tstamp: None,
+        ext_nodeid: ext::NodeIdType::default(),
+        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+            id: 12,
+            wire_expr: WireExpr::from(11).with_suffix("/z1_pub1"),
+        }),
+    });
 
     let primitives1 = Arc::new(ClientPrimitives::new());
     let face1 = zwrite!(tables.tables).open_face(
@@ -563,7 +528,15 @@ fn client_test() {
         21,
         &"test/client".into(),
     );
-    primitives1.decl_resource(21, &"test/client".into());
+    primitives1.send_declare(Declare {
+        ext_qos: ext::QoSType::declare_default(),
+        ext_tstamp: None,
+        ext_nodeid: ext::NodeIdType::default(),
+        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+            id: 21,
+            wire_expr: "test/client".into(),
+        }),
+    });
     declare_client_subscription(
         &tables,
         zread!(tables.tables),
@@ -577,7 +550,15 @@ fn client_test() {
         22,
         &WireExpr::from(21).with_suffix("/z2_pub1"),
     );
-    primitives1.decl_resource(22, &WireExpr::from(21).with_suffix("/z2_pub1"));
+    primitives1.send_declare(Declare {
+        ext_qos: ext::QoSType::declare_default(),
+        ext_tstamp: None,
+        ext_nodeid: ext::NodeIdType::default(),
+        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+            id: 22,
+            wire_expr: WireExpr::from(21).with_suffix("/z2_pub1"),
+        }),
+    });
 
     let primitives2 = Arc::new(ClientPrimitives::new());
     let face2 = zwrite!(tables.tables).open_face(
@@ -591,7 +572,15 @@ fn client_test() {
         31,
         &"test/client".into(),
     );
-    primitives2.decl_resource(31, &"test/client".into());
+    primitives2.send_declare(Declare {
+        ext_qos: ext::QoSType::declare_default(),
+        ext_tstamp: None,
+        ext_nodeid: ext::NodeIdType::default(),
+        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+            id: 31,
+            wire_expr: "test/client".into(),
+        }),
+    });
     declare_client_subscription(
         &tables,
         zread!(tables.tables),
@@ -603,15 +592,22 @@ fn client_test() {
     primitives0.clear_data();
     primitives1.clear_data();
     primitives2.clear_data();
+
     full_reentrant_route_data(
         &tables.tables,
         &face0.upgrade().unwrap(),
         &"test/client/z1_wr1".into(),
-        Channel::default(),
-        CongestionControl::default(),
-        None,
-        ZBuf::default(),
-        None,
+        ext::QoSType::default(),
+        PushBody::Put(Put {
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
+            ext_unknown: vec![],
+            payload: ZBuf::empty(),
+        }),
+        0,
     );
 
     // functionnal check
@@ -633,11 +629,17 @@ fn client_test() {
         &tables.tables,
         &face0.upgrade().unwrap(),
         &WireExpr::from(11).with_suffix("/z1_wr2"),
-        Channel::default(),
-        CongestionControl::default(),
-        None,
-        ZBuf::default(),
-        None,
+        ext::QoSType::default(),
+        PushBody::Put(Put {
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
+            ext_unknown: vec![],
+            payload: ZBuf::empty(),
+        }),
+        0,
     );
 
     // functionnal check
@@ -659,11 +661,17 @@ fn client_test() {
         &tables.tables,
         &face1.upgrade().unwrap(),
         &"test/client/**".into(),
-        Channel::default(),
-        CongestionControl::default(),
-        None,
-        ZBuf::default(),
-        None,
+        ext::QoSType::default(),
+        PushBody::Put(Put {
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
+            ext_unknown: vec![],
+            payload: ZBuf::empty(),
+        }),
+        0,
     );
 
     // functionnal check
@@ -685,11 +693,17 @@ fn client_test() {
         &tables.tables,
         &face0.upgrade().unwrap(),
         &12.into(),
-        Channel::default(),
-        CongestionControl::default(),
-        None,
-        ZBuf::default(),
-        None,
+        ext::QoSType::default(),
+        PushBody::Put(Put {
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
+            ext_unknown: vec![],
+            payload: ZBuf::empty(),
+        }),
+        0,
     );
 
     // functionnal check
@@ -711,11 +725,17 @@ fn client_test() {
         &tables.tables,
         &face1.upgrade().unwrap(),
         &22.into(),
-        Channel::default(),
-        CongestionControl::default(),
-        None,
-        ZBuf::default(),
-        None,
+        ext::QoSType::default(),
+        PushBody::Put(Put {
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
+            ext_unknown: vec![],
+            payload: ZBuf::empty(),
+        }),
+        0,
     );
 
     // functionnal check

@@ -13,13 +13,11 @@
 //
 use super::transport::TransportMulticastInner;
 use zenoh_core::zread;
-#[cfg(feature = "stats")]
-use zenoh_protocol::zenoh::ZenohBody;
-use zenoh_protocol::zenoh::ZenohMessage;
+use zenoh_protocol::network::NetworkMessage;
 
 //noinspection ALL
 impl TransportMulticastInner {
-    fn schedule_on_link(&self, msg: ZenohMessage) -> bool {
+    fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
         macro_rules! zpush {
             ($guard:expr, $pipeline:expr, $msg:expr) => {
                 // Drop the guard before the push_zenoh_message since
@@ -27,7 +25,7 @@ impl TransportMulticastInner {
                 // block for fairly long time
                 let pl = $pipeline.clone();
                 drop($guard);
-                return pl.push_zenoh_message($msg);
+                return pl.push_network_message($msg);
             };
         }
 
@@ -49,41 +47,30 @@ impl TransportMulticastInner {
         false
     }
 
+    #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
-    pub(super) fn schedule_first_fit(&self, msg: ZenohMessage) -> bool {
-        #[cfg(feature = "stats")]
-        use zenoh_buffers::SplitBuffer;
-        #[cfg(feature = "stats")]
-        match &msg.body {
-            ZenohBody::Data(data) => match data.reply_context {
-                Some(_) => {
-                    self.stats.inc_tx_z_data_reply_msgs(1);
-                    self.stats
-                        .inc_tx_z_data_reply_payload_bytes(data.payload.len());
-                }
-                None => {
-                    self.stats.inc_tx_z_data_msgs(1);
-                    self.stats.inc_tx_z_data_payload_bytes(data.payload.len());
-                }
-            },
-            ZenohBody::Unit(unit) => match unit.reply_context {
-                Some(_) => self.stats.inc_tx_z_unit_reply_msgs(1),
-                None => self.stats.inc_tx_z_unit_msgs(1),
-            },
-            ZenohBody::Pull(_) => self.stats.inc_tx_z_pull_msgs(1),
-            ZenohBody::Query(_) => self.stats.inc_tx_z_query_msgs(1),
-            ZenohBody::Declare(_) => self.stats.inc_tx_z_declare_msgs(1),
-            ZenohBody::LinkStateList(_) => self.stats.inc_tx_z_linkstate_msgs(1),
+    pub(super) fn schedule(&self, mut msg: NetworkMessage) -> bool {
+        #[cfg(feature = "shared-memory")]
+        {
+            let res = if self.manager.config.multicast.is_shm {
+                crate::shm::map_zmsg_to_shminfo(&mut msg)
+            } else {
+                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.state.multicast.shm.reader)
+            };
+            if let Err(e) = res {
+                log::trace!("Failed SHM conversion: {}", e);
+                return false;
+            }
         }
 
         let res = self.schedule_on_link(msg);
 
         #[cfg(feature = "stats")]
         if res {
-            self.stats.inc_tx_z_msgs(1);
+            self.stats.inc_tx_n_msgs(1);
         } else {
-            self.stats.inc_tx_z_dropped(1);
+            self.stats.inc_tx_n_dropped(1);
         }
 
         res

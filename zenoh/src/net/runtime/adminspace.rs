@@ -14,7 +14,7 @@ use super::routing::face::Face;
 use super::Runtime;
 use crate::key_expr::KeyExpr;
 use crate::plugins::sealed as plugins;
-use crate::prelude::sync::Sample;
+use crate::prelude::sync::{Sample, SyncResolve};
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
 use crate::value::Value;
@@ -26,15 +26,16 @@ use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::Mutex;
-use zenoh_buffers::{SplitBuffer, ZBuf};
+use zenoh_buffers::SplitBuffer;
 use zenoh_config::ValidatedMap;
-use zenoh_core::SyncResolve;
 use zenoh_protocol::{
-    core::{
-        key_expr::OwnedKeyExpr, Channel, CongestionControl, ConsolidationMode, KnownEncoding,
-        QueryTarget, QueryableInfo, SampleKind, SubInfo, WireExpr, ZInt, ZenohId, EMPTY_EXPR_ID,
+    core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
+    network::{
+        declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo},
+        ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
+        ResponseFinal,
     },
-    zenoh::{DataInfo, QueryBody, RoutingContext},
+    zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{Primitives, TransportUnicast};
@@ -52,7 +53,7 @@ type Handler = Arc<dyn Fn(&AdminContext, Query) + Send + Sync>;
 pub struct AdminSpace {
     zid: ZenohId,
     primitives: Mutex<Option<Arc<Face>>>,
-    mappings: Mutex<HashMap<ZInt, String>>,
+    mappings: Mutex<HashMap<ExprId, String>>,
     handlers: HashMap<OwnedKeyExpr, Handler>,
     context: Arc<AdminContext>,
 }
@@ -219,20 +220,30 @@ impl AdminSpace {
         let primitives = runtime.router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
-        primitives.decl_queryable(
-            &[&root_key, "/**"].concat().into(),
-            &QueryableInfo {
-                complete: 0,
-                distance: 0,
-            },
-            None,
-        );
+        primitives.send_declare(Declare {
+            ext_qos: ext::QoSType::declare_default(),
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::default(),
+            body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                id: 0, // TODO
+                wire_expr: [&root_key, "/**"].concat().into(),
+                ext_info: QueryableInfo {
+                    complete: 0,
+                    distance: 0,
+                },
+            }),
+        });
 
-        primitives.decl_subscriber(
-            &[&root_key, "/config/**"].concat().into(),
-            &SubInfo::default(),
-            None,
-        );
+        primitives.send_declare(Declare {
+            ext_qos: ext::QoSType::declare_default(),
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::default(),
+            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                id: 0, // TODO
+                wire_expr: [&root_key, "/config/**"].concat().into(),
+                ext_info: SubscriberInfo::default(),
+            }),
+        });
     }
 
     pub fn key_expr_to_string<'a>(&self, key_expr: &'a WireExpr) -> ZResult<KeyExpr<'a>> {
@@ -253,102 +264,38 @@ impl AdminSpace {
 }
 
 impl Primitives for AdminSpace {
-    fn decl_resource(&self, expr_id: ZInt, key_expr: &WireExpr) {
-        trace!("recv Resource {} {:?}", expr_id, key_expr);
-        match self.key_expr_to_string(key_expr) {
-            Ok(s) => {
-                zlock!(self.mappings).insert(expr_id, s.into());
+    fn send_declare(&self, msg: Declare) {
+        log::trace!("Recv declare {:?}", msg);
+        if let DeclareBody::DeclareKeyExpr(m) = msg.body {
+            match self.key_expr_to_string(&m.wire_expr) {
+                Ok(s) => {
+                    zlock!(self.mappings).insert(m.id, s.into());
+                }
+                Err(e) => error!("Unknown expr_id {}! ({})", m.id, e),
             }
-            Err(e) => error!("Unknown expr_id {}! ({})", expr_id, e),
         }
     }
 
-    fn forget_resource(&self, _expr_id: ZInt) {
-        trace!("recv Forget Resource {}", _expr_id);
-    }
-
-    fn decl_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
-        trace!("recv Publisher {:?}", _key_expr);
-    }
-
-    fn forget_publisher(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
-        trace!("recv Forget Publisher {:?}", _key_expr);
-    }
-
-    fn decl_subscriber(
-        &self,
-        _key_expr: &WireExpr,
-        _sub_info: &SubInfo,
-        _routing_context: Option<RoutingContext>,
-    ) {
-        trace!("recv Subscriber {:?} , {:?}", _key_expr, _sub_info);
-    }
-
-    fn forget_subscriber(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
-        trace!("recv Forget Subscriber {:?}", _key_expr);
-    }
-
-    fn decl_queryable(
-        &self,
-        _key_expr: &WireExpr,
-        _qabl_info: &QueryableInfo,
-        _routing_context: Option<RoutingContext>,
-    ) {
-        trace!("recv Queryable {:?}", _key_expr);
-    }
-
-    fn forget_queryable(&self, _key_expr: &WireExpr, _routing_context: Option<RoutingContext>) {
-        trace!("recv Forget Queryable {:?}", _key_expr);
-    }
-
-    fn send_data(
-        &self,
-        key_expr: &WireExpr,
-        payload: ZBuf,
-        channel: Channel,
-        congestion_control: CongestionControl,
-        data_info: Option<DataInfo>,
-        _routing_context: Option<RoutingContext>,
-    ) {
-        trace!(
-            "recv Data {:?} {:?} {:?} {:?} {:?}",
-            key_expr,
-            payload,
-            channel,
-            congestion_control,
-            data_info,
-        );
-
+    fn send_push(&self, msg: Push) {
+        trace!("recv Push {:?}", msg);
         {
             let conf = self.context.runtime.config.lock();
             if !conf.adminspace.permissions().write {
                 log::error!(
                     "Received PUT on '{}' but adminspace.permissions.write=false in configuration",
-                    key_expr
+                    msg.wire_expr
                 );
                 return;
             }
         }
 
-        if let Some(key) = key_expr
+        if let Some(key) = msg
+            .wire_expr
             .as_str()
             .strip_prefix(&format!("@/router/{}/config/", &self.context.zid_str))
         {
-            if let Some(DataInfo {
-                kind: SampleKind::Delete,
-                ..
-            }) = data_info
-            {
-                log::trace!(
-                    "Deleting conf value /@/router/{}/config/{}",
-                    &self.context.zid_str,
-                    key
-                );
-                if let Err(e) = self.context.runtime.config.remove(key) {
-                    log::error!("Error deleting conf value {} : {}", key_expr, e)
-                }
-            } else {
-                match std::str::from_utf8(&payload.contiguous()) {
+            match msg.payload {
+                PushBody::Put(put) => match std::str::from_utf8(&put.payload.contiguous()) {
                     Ok(json) => {
                         log::trace!(
                             "Insert conf value /@/router/{}/config/{} : {}",
@@ -367,109 +314,83 @@ impl Primitives for AdminSpace {
                         "Received non utf8 conf value on /@/router/{}/config/{} : {}",
                         &self.context.zid_str, key, e
                     ),
+                },
+                PushBody::Del(_) => {
+                    log::trace!(
+                        "Deleting conf value /@/router/{}/config/{}",
+                        &self.context.zid_str,
+                        key
+                    );
+                    if let Err(e) = self.context.runtime.config.remove(key) {
+                        log::error!("Error deleting conf value {} : {}", msg.wire_expr, e)
+                    }
                 }
             }
         }
     }
 
-    fn send_query(
-        &self,
-        key_expr: &WireExpr,
-        parameters: &str,
-        qid: ZInt,
-        target: QueryTarget,
-        _consolidation: ConsolidationMode,
-        body: Option<QueryBody>,
-        _routing_context: Option<RoutingContext>,
-    ) {
-        trace!(
-            "recv Query {:?} {:?} {:?} {:?}",
-            key_expr,
-            parameters,
-            target,
-            _consolidation
-        );
-        let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
-
-        {
-            let conf = self.context.runtime.config.lock();
-            if !conf.adminspace.permissions().read {
-                log::error!(
-                    "Received GET on '{}' but adminspace.permissions.read=false in configuration",
-                    key_expr
-                );
-                primitives.send_reply_final(qid);
-                return;
+    fn send_request(&self, msg: Request) {
+        trace!("recv Request {:?}", msg);
+        if let RequestBody::Query(query) = msg.payload {
+            let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
+            {
+                let conf = self.context.runtime.config.lock();
+                if !conf.adminspace.permissions().read {
+                    log::error!(
+                        "Received GET on '{}' but adminspace.permissions.read=false in configuration",
+                        msg.wire_expr
+                    );
+                    primitives.send_response_final(ResponseFinal {
+                        rid: msg.id,
+                        ext_qos: ext::QoSType::response_final_default(),
+                        ext_tstamp: None,
+                    });
+                    return;
+                }
             }
-        }
 
-        let key_expr = match self.key_expr_to_string(key_expr) {
-            Ok(key_expr) => key_expr.into_owned(),
-            Err(e) => {
-                log::error!("Unknown KeyExpr: {}", e);
-                primitives.send_reply_final(qid);
-                return;
-            }
-        };
+            let key_expr = match self.key_expr_to_string(&msg.wire_expr) {
+                Ok(key_expr) => key_expr.into_owned(),
+                Err(e) => {
+                    log::error!("Unknown KeyExpr: {}", e);
+                    primitives.send_response_final(ResponseFinal {
+                        rid: msg.id,
+                        ext_qos: ext::QoSType::response_final_default(),
+                        ext_tstamp: None,
+                    });
+                    return;
+                }
+            };
 
-        let zid = self.zid;
-        let parameters = parameters.to_owned();
-        let query = Query {
-            inner: Arc::new(QueryInner {
-                key_expr: key_expr.clone(),
-                parameters,
-                value: body.map(|b| {
-                    Value::from(b.payload).encoding(b.data_info.encoding.unwrap_or_default())
+            let zid = self.zid;
+            let parameters = query.parameters.to_owned();
+            let query = Query {
+                inner: Arc::new(QueryInner {
+                    key_expr: key_expr.clone(),
+                    parameters,
+                    value: query
+                        .ext_body
+                        .map(|b| Value::from(b.payload).encoding(b.encoding)),
+                    qid: msg.id,
+                    zid,
+                    primitives,
                 }),
-                qid,
-                zid,
-                primitives,
-            }),
-        };
+            };
 
-        for (key, handler) in &self.handlers {
-            if key_expr.intersects(key) {
-                handler(&self.context, query.clone());
+            for (key, handler) in &self.handlers {
+                if key_expr.intersects(key) {
+                    handler(&self.context, query.clone());
+                }
             }
         }
     }
 
-    fn send_reply_data(
-        &self,
-        qid: ZInt,
-        replier_id: ZenohId,
-        key_expr: WireExpr,
-        info: Option<DataInfo>,
-        payload: ZBuf,
-    ) {
-        trace!(
-            "recv ReplyData {:?} {:?} {:?} {:?} {:?}",
-            qid,
-            replier_id,
-            key_expr,
-            info,
-            payload
-        );
+    fn send_response(&self, msg: Response) {
+        trace!("recv Response {:?}", msg);
     }
 
-    fn send_reply_final(&self, qid: ZInt) {
-        trace!("recv ReplyFinal {:?}", qid);
-    }
-
-    fn send_pull(
-        &self,
-        _is_final: bool,
-        _key_expr: &WireExpr,
-        _pull_id: ZInt,
-        _max_samples: &Option<ZInt>,
-    ) {
-        trace!(
-            "recv Pull {:?} {:?} {:?} {:?}",
-            _is_final,
-            _key_expr,
-            _pull_id,
-            _max_samples
-        );
+    fn send_response_final(&self, msg: ResponseFinal) {
+        trace!("recv ResponseFinal {:?}", msg);
     }
 
     fn send_close(&self) {
@@ -495,7 +416,7 @@ fn router_data(context: &AdminContext, query: Query) {
     let locators: Vec<serde_json::Value> = transport_mgr
         .get_locators()
         .iter()
-        .map(|locator| json!(locator.to_string()))
+        .map(|locator| json!(locator.as_str()))
         .collect();
 
     // transports info
@@ -518,14 +439,13 @@ fn router_data(context: &AdminContext, query: Query) {
                     "stats".to_string(),
                     transport
                         .get_stats()
-                        .map_or_else(|_| json!({}), |p| json!(p)),
+                        .map_or_else(|_| json!({}), |p| json!(p.report())),
                 );
             }
         }
         json
     };
-    let transports: Vec<serde_json::Value> = transport_mgr
-        .get_transports()
+    let transports: Vec<serde_json::Value> = task::block_on(transport_mgr.get_transports_unicast())
         .iter()
         .map(transport_to_json)
         .collect();

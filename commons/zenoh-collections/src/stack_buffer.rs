@@ -18,6 +18,7 @@ pub struct StackBuffer<T> {
 }
 
 impl<T> StackBuffer<T> {
+    #[must_use]
     pub fn new(capacity: usize) -> StackBuffer<T> {
         let buffer = VecDeque::<T>::with_capacity(capacity);
         StackBuffer { buffer }
@@ -40,21 +41,25 @@ impl<T> StackBuffer<T> {
 
     #[allow(dead_code)]
     #[inline]
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.buffer.is_empty()
     }
 
     #[inline]
+    #[must_use]
     pub fn is_full(&self) -> bool {
         self.len() == self.capacity()
     }
 
     #[inline]
+    #[must_use]
     pub fn len(&self) -> usize {
         self.buffer.len()
     }
 
     #[inline]
+    #[must_use]
     pub fn capacity(&self) -> usize {
         self.buffer.capacity()
     }

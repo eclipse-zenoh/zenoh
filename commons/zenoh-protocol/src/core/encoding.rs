@@ -11,13 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::{CowStr, ZInt};
+use crate::core::CowStr;
 use alloc::{borrow::Cow, string::String};
 use core::{
     convert::TryFrom,
     fmt::{self, Debug},
     mem,
 };
+use zenoh_result::{bail, zerror, ZError, ZResult};
 
 mod consts {
     pub(super) const MIMES: [&str; 21] = [
@@ -74,50 +75,33 @@ pub enum KnownEncoding {
 
 impl From<KnownEncoding> for u8 {
     fn from(val: KnownEncoding) -> Self {
-        unsafe { mem::transmute(val) }
+        val as u8
     }
 }
 
 impl From<KnownEncoding> for &str {
     fn from(val: KnownEncoding) -> Self {
-        consts::MIMES[usize::from(val)]
-    }
-}
-
-impl From<KnownEncoding> for usize {
-    fn from(val: KnownEncoding) -> Self {
-        u8::from(val) as usize
+        consts::MIMES[u8::from(val) as usize]
     }
 }
 
 impl TryFrom<u8> for KnownEncoding {
-    type Error = ();
+    type Error = ZError;
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         if value < consts::MIMES.len() as u8 + 1 {
             Ok(unsafe { mem::transmute(value) })
         } else {
-            Err(())
-        }
-    }
-}
-
-impl TryFrom<ZInt> for KnownEncoding {
-    type Error = ();
-
-    fn try_from(value: ZInt) -> Result<Self, Self::Error> {
-        if value < consts::MIMES.len() as ZInt + 1 {
-            Ok(unsafe { mem::transmute(value as u8) })
-        } else {
-            Err(())
+            Err(zerror!("Unknown encoding"))
         }
     }
 }
 
 impl AsRef<str> for KnownEncoding {
     fn as_ref(&self) -> &str {
-        consts::MIMES[usize::from(*self)]
+        consts::MIMES[u8::from(*self) as usize]
     }
 }
+
 /// The encoding of a zenoh `zenoh::Value`.
 ///
 /// A zenoh encoding is a HTTP Mime type represented, for wire efficiency,
@@ -129,26 +113,30 @@ pub enum Encoding {
 }
 
 impl Encoding {
-    pub fn new<IntoCowStr>(prefix: ZInt, suffix: IntoCowStr) -> Option<Self>
+    pub fn new<IntoCowStr>(prefix: u8, suffix: IntoCowStr) -> ZResult<Self>
     where
         IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
     {
-        let prefix = KnownEncoding::try_from(prefix).ok()?;
+        let prefix = KnownEncoding::try_from(prefix)?;
+        let suffix = suffix.into();
+        if suffix.as_bytes().len() > u8::MAX as usize {
+            bail!("Suffix length is limited to 255 characters")
+        }
         if suffix.as_ref().is_empty() {
-            Some(Encoding::Exact(prefix))
+            Ok(Encoding::Exact(prefix))
         } else {
-            Some(Encoding::WithSuffix(prefix, suffix.into().into()))
+            Ok(Encoding::WithSuffix(prefix, suffix.into()))
         }
     }
 
     /// Sets the suffix of this encoding.
-    pub fn with_suffix<IntoCowStr>(self, suffix: IntoCowStr) -> Self
+    pub fn with_suffix<IntoCowStr>(self, suffix: IntoCowStr) -> ZResult<Self>
     where
         IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
     {
         match self {
-            Encoding::Exact(e) => Encoding::WithSuffix(e, suffix.into().into()),
-            Encoding::WithSuffix(e, s) => Encoding::WithSuffix(e, (s + suffix.as_ref()).into()),
+            Encoding::Exact(e) => Encoding::new(e as u8, suffix),
+            Encoding::WithSuffix(e, s) => Encoding::new(e as u8, s + suffix.as_ref()),
         }
     }
 
@@ -290,7 +278,7 @@ impl Encoding {
 
         let mut rng = rand::thread_rng();
 
-        let prefix: ZInt = rng.gen_range(0..20);
+        let prefix: u8 = rng.gen_range(0..20);
         let suffix: String = if rng.gen_bool(0.5) {
             let len = rng.gen_range(MIN..MAX);
             Alphanumeric.sample_string(&mut rng, len)

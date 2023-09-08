@@ -2,7 +2,6 @@ cargo login $1
 (cd commons/zenoh-result && cargo publish)
 (cd commons/zenoh-core && cargo publish)
 (cd commons/zenoh-keyexpr && cargo publish)
-(cd commons/zenoh-cfg-properties && cargo publish)
 (cd commons/zenoh-collections && cargo publish)
 (cd commons/zenoh-crypto && cargo publish)
 (cd commons/zenoh-buffers && cargo publish)

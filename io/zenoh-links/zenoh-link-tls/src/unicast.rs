@@ -16,10 +16,13 @@ use crate::{
     verify::WebPkiVerifierAnyServerName, TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU,
     TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
-use async_rustls::rustls::server::AllowAnyAuthenticatedClient;
-use async_rustls::rustls::version::TLS13;
-pub use async_rustls::rustls::*;
-use async_rustls::{TlsAcceptor, TlsConnector, TlsStream};
+use async_rustls::{
+    rustls::{
+        server::AllowAnyAuthenticatedClient, version::TLS13, Certificate, ClientConfig,
+        OwnedTrustAnchor, PrivateKey, RootCertStore, ServerConfig,
+    },
+    TlsAcceptor, TlsConnector, TlsStream,
+};
 use async_std::fs;
 use async_std::net::{SocketAddr, TcpListener, TcpStream};
 use async_std::prelude::FutureExt;
@@ -513,7 +516,12 @@ struct TlsServerConfig {
 
 impl TlsServerConfig {
     pub async fn new(config: &Config<'_>) -> ZResult<TlsServerConfig> {
-        let mut client_auth: bool = TLS_CLIENT_AUTH_DEFAULT.parse().unwrap();
+        let tls_server_client_auth: bool = match config.get(TLS_CLIENT_AUTH) {
+            Some(s) => s
+                .parse()
+                .map_err(|_| zerror!("Unknown client auth argument: {}", s))?,
+            None => false,
+        };
         let tls_server_private_key = TlsServerConfig::load_tls_private_key(config).await?;
         let tls_server_certificate = TlsServerConfig::load_tls_certificate(config).await?;
 
@@ -543,11 +551,7 @@ impl TlsServerConfig {
                 .map_err(|e| zerror!(e))
                 .map(|mut certs| certs.drain(..).map(Certificate).collect())?;
 
-        if let Some(value) = config.get(TLS_CLIENT_AUTH) {
-            client_auth = value.parse()?
-        }
-
-        let sc = if client_auth {
+        let sc = if tls_server_client_auth {
             let root_cert_store = load_trust_anchors(config)?.map_or_else(
                 || {
                     Err(zerror!(
@@ -599,19 +603,25 @@ struct TlsClientConfig {
 
 impl TlsClientConfig {
     pub async fn new(config: &Config<'_>) -> ZResult<TlsClientConfig> {
-        let client_auth: bool = config
-            .get(TLS_CLIENT_AUTH)
-            .unwrap_or(TLS_CLIENT_AUTH_DEFAULT)
-            .parse()?;
+        let tls_client_server_auth: bool = match config.get(TLS_CLIENT_AUTH) {
+            Some(s) => s
+                .parse()
+                .map_err(|_| zerror!("Unknown client auth argument: {}", s))?,
+            None => false,
+        };
 
-        let server_name_verification: bool = config
-            .get(TLS_SERVER_NAME_VERIFICATION)
-            .unwrap_or(TLS_SERVER_NAME_VERIFICATION_DEFAULT)
-            .parse()?;
-
-        if !server_name_verification {
-            log::warn!("Skipping name verification of servers");
-        }
+        let tls_server_name_verification: bool = match config.get(TLS_SERVER_NAME_VERIFICATION) {
+            Some(s) => {
+                let s: bool = s
+                    .parse()
+                    .map_err(|_| zerror!("Unknown server name verification argument: {}", s))?;
+                if s {
+                    log::warn!("Skipping name verification of servers");
+                }
+                s
+            }
+            None => false,
+        };
 
         // Allows mixed user-generated CA and webPKI CA
         log::debug!("Loading default Web PKI certificates.");
@@ -624,7 +634,7 @@ impl TlsClientConfig {
             root_cert_store.add_trust_anchors(custom_root_cert.roots.into_iter());
         }
 
-        let cc = if client_auth {
+        let cc = if tls_client_server_auth {
             log::debug!("Loading client authentication key and certificate...");
             let tls_client_private_key = TlsClientConfig::load_tls_private_key(config).await?;
             let tls_client_certificate = TlsClientConfig::load_tls_certificate(config).await?;
@@ -654,9 +664,9 @@ impl TlsClientConfig {
                 .with_safe_default_cipher_suites()
                 .with_safe_default_kx_groups()
                 .with_protocol_versions(&[&TLS13])
-                .expect("Config parameters should be valid");
+                .map_err(|e| zerror!("Config parameters should be valid: {}", e))?;
 
-            if server_name_verification {
+            if tls_server_name_verification {
                 builder
                     .with_root_certificates(root_cert_store)
                     .with_client_auth_cert(certs, keys.remove(0))
@@ -667,10 +677,10 @@ impl TlsClientConfig {
                     )))
                     .with_client_auth_cert(certs, keys.remove(0))
             }
-            .expect("bad certificate/key")
+            .map_err(|e| zerror!("Bad certificate/key: {}", e))?
         } else {
             let builder = ClientConfig::builder().with_safe_defaults();
-            if server_name_verification {
+            if tls_server_name_verification {
                 builder
                     .with_root_certificates(root_cert_store)
                     .with_no_client_auth()

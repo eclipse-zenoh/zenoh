@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2023 ZettaScale Technology
+// Copyright (c) 2022 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
 // terms of the Eclipse Public License 2.0 which is available at
@@ -11,18 +11,22 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Condition, Zenoh060Header};
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
+use alloc::vec::Vec;
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
+
 use zenoh_protocol::{
     common::imsg,
-    core::{WireExpr, ZInt},
-    zenoh::{zmsg, Pull},
+    zenoh::{
+        id,
+        pull::{flag, Pull},
+    },
 };
 
-impl<W> WCodec<&Pull, &mut W> for Zenoh060
+impl<W> WCodec<&Pull, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -30,74 +34,58 @@ where
 
     fn write(self, writer: &mut W, x: &Pull) -> Self::Output {
         // Header
-        let mut header = zmsg::id::PULL;
-        if x.is_final {
-            header |= zmsg::flag::F;
-        }
-        if x.max_samples.is_some() {
-            header |= zmsg::flag::N;
-        }
-        if x.key.has_suffix() {
-            header |= zmsg::flag::K;
+        let mut header = id::PULL;
+        let mut n_exts = x.ext_unknown.len() as u8;
+        if n_exts != 0 {
+            header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
-        // Body
-        self.write(&mut *writer, &x.key)?;
-        self.write(&mut *writer, x.pull_id)?;
-        if let Some(n) = x.max_samples {
-            self.write(&mut *writer, n)?;
+        // Extensions
+        for u in x.ext_unknown.iter() {
+            n_exts -= 1;
+            self.write(&mut *writer, (u, n_exts != 0))?;
         }
 
         Ok(())
     }
 }
 
-impl<R> RCodec<Pull, &mut R> for Zenoh060
+impl<R> RCodec<Pull, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Pull, Self::Error> {
-        let codec = Zenoh060Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<Pull, &mut R> for Zenoh060Header
+impl<R> RCodec<Pull, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Pull, Self::Error> {
-        if imsg::mid(self.header) != zmsg::id::PULL {
+        if imsg::mid(self.header) != id::PULL {
             return Err(DidntRead);
         }
 
-        let ccond = Zenoh060Condition {
-            condition: imsg::has_flag(self.header, zmsg::flag::K),
-            codec: self.codec,
-        };
-        let key: WireExpr<'static> = ccond.read(&mut *reader)?;
-        let pull_id: ZInt = self.codec.read(&mut *reader)?;
-        let max_samples = if imsg::has_flag(self.header, zmsg::flag::N) {
-            let n: ZInt = self.codec.read(&mut *reader)?;
-            Some(n)
-        } else {
-            None
-        };
-        let is_final = imsg::has_flag(self.header, zmsg::flag::F);
+        // Extensions
+        let mut ext_unknown = Vec::new();
 
-        Ok(Pull {
-            key,
-            pull_id,
-            max_samples,
-            is_final,
-        })
+        let mut has_ext = imsg::has_flag(self.header, flag::Z);
+        while has_ext {
+            let ext: u8 = self.codec.read(&mut *reader)?;
+            let (u, ext) = extension::read(reader, "Pull", ext)?;
+            ext_unknown.push(u);
+            has_ext = ext;
+        }
+
+        Ok(Pull { ext_unknown })
     }
 }

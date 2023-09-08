@@ -22,14 +22,20 @@ use std::{
     },
     time::Duration,
 };
-use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
-    zenoh::ZenohMessage,
+    core::{
+        Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI, ZenohId,
+    },
+    network::{
+        push::ext::{NodeIdType, QoSType},
+        NetworkMessage, Push,
+    },
+    zenoh::Put,
 };
 use zenoh_result::ZResult;
+use zenoh_transport::test_helpers::make_transport_manager_builder;
 use zenoh_transport::{
     TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
     TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -215,6 +221,8 @@ const SLEEP_COUNT: Duration = Duration::from_millis(10);
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
+#[cfg(feature = "shared-memory")]
+const MSG_SIZE_SHM: [usize; 2] = [1_024, 65000];
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
 
 macro_rules! ztimeout {
@@ -272,7 +280,7 @@ impl SCRouter {
 }
 
 impl TransportPeerEventHandler for SCRouter {
-    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::SeqCst);
         Ok(())
     }
@@ -313,7 +321,7 @@ impl TransportEventHandler for SHClient {
 pub struct SCClient;
 
 impl TransportPeerEventHandler for SCClient {
-    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
 
@@ -327,9 +335,10 @@ impl TransportPeerEventHandler for SCClient {
     }
 }
 
-async fn open_transport(
+async fn open_transport_unicast(
     client_endpoints: &[EndPoint],
     server_endpoints: &[EndPoint],
+    #[cfg(feature = "shared-memory")] shm_transport: bool,
 ) -> (
     TransportManager,
     Arc<SHRouter>,
@@ -342,8 +351,12 @@ async fn open_transport(
 
     // Create the router transport manager
     let router_handler = Arc::new(SHRouter::default());
-    let unicast = TransportManager::config_unicast().max_links(server_endpoints.len());
-
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        server_endpoints.len(),
+        #[cfg(feature = "shared-memory")]
+        shm_transport,
+    );
     let router_manager = TransportManager::builder()
         .zid(router_id)
         .whatami(WhatAmI::Router)
@@ -353,12 +366,17 @@ async fn open_transport(
 
     // Create the listener on the router
     for e in server_endpoints.iter() {
-        println!("Add endpoint: {e}\n");
+        println!("Add endpoint: {}", e);
         let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
     }
 
     // Create the client transport manager
-    let unicast = TransportManager::config_unicast().max_links(client_endpoints.len());
+    let unicast = make_transport_manager_builder(
+        #[cfg(feature = "transport_multilink")]
+        client_endpoints.len(),
+        #[cfg(feature = "shared-memory")]
+        shm_transport,
+    );
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
         .zid(client_id)
@@ -369,11 +387,14 @@ async fn open_transport(
     // Create an empty transport with the client
     // Open transport -> This should be accepted
     for e in client_endpoints.iter() {
-        println!("Opening transport with {e}");
-        let _ = ztimeout!(client_manager.open_transport(e.clone())).unwrap();
+        println!("Opening transport with {}", e);
+        let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap();
     }
 
-    let client_transport = client_manager.get_transport(&router_id).unwrap();
+    let client_transport = client_manager
+        .get_transport_unicast(&router_id)
+        .await
+        .unwrap();
 
     // Return the handlers
     (
@@ -395,18 +416,18 @@ async fn close_transport(
     for e in endpoints.iter() {
         let _ = write!(ee, "{e} ");
     }
-    println!("Closing transport with {ee}");
+    println!("Closing transport with {}", ee);
     ztimeout!(client_transport.close()).unwrap();
 
     ztimeout!(async {
-        while !router_manager.get_transports().is_empty() {
+        while !router_manager.get_transports_unicast().await.is_empty() {
             task::sleep(SLEEP).await;
         }
     });
 
     // Stop the locators on the manager
     for e in endpoints.iter() {
-        println!("Del locator: {e}");
+        println!("Del locator: {}", e);
         ztimeout!(router_manager.del_listener(e)).unwrap();
     }
 
@@ -432,27 +453,37 @@ async fn test_transport(
     channel: Channel,
     msg_size: usize,
 ) {
-    // Create the message to send
-    let key = "test".into();
-    let payload = ZBuf::from(vec![0_u8; msg_size]);
-    let data_info = None;
-    let routing_context = None;
-    let reply_context = None;
-    let attachment = None;
-    let message = ZenohMessage::make_data(
-        key,
-        payload,
-        channel,
-        CongestionControl::Block,
-        data_info,
-        routing_context,
-        reply_context,
-        attachment,
+    println!(
+        "Sending {} messages... {:?} {}",
+        MSG_COUNT, channel, msg_size
     );
-
-    println!("Sending {MSG_COUNT} messages... {channel:?} {msg_size}");
+    let cctrl = match channel.reliability {
+        Reliability::Reliable => CongestionControl::Block,
+        Reliability::BestEffort => CongestionControl::Drop,
+    };
+    // Create the message to send
+    let message: NetworkMessage = Push {
+        wire_expr: "test".into(),
+        ext_qos: QoSType::new(channel.priority, cctrl, false),
+        ext_tstamp: None,
+        ext_nodeid: NodeIdType::default(),
+        payload: Put {
+            payload: vec![0u8; msg_size].into(),
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
+            ext_unknown: vec![],
+        }
+        .into(),
+    }
+    .into();
     for _ in 0..MSG_COUNT {
-        client_transport.schedule(message.clone()).unwrap();
+        let _ = client_transport.schedule(message.clone());
+        // print!("S-{i} ");
+        use std::io::Write;
+        std::io::stdout().flush().unwrap();
     }
 
     match channel.reliability {
@@ -481,10 +512,22 @@ async fn run_single(
     server_endpoints: &[EndPoint],
     channel: Channel,
     msg_size: usize,
+    #[cfg(feature = "shared-memory")] shm_transport: bool,
 ) {
+    println!(
+        "\n>>> Running test for:  {:?}, {:?}, {:?}, {}",
+        client_endpoints, server_endpoints, channel, msg_size
+    );
+
     #[allow(unused_variables)] // Used when stats feature is enabled
     let (router_manager, router_handler, client_manager, client_transport) =
-        open_transport(client_endpoints, server_endpoints).await;
+        open_transport_unicast(
+            client_endpoints,
+            server_endpoints,
+            #[cfg(feature = "shared-memory")]
+            shm_transport,
+        )
+        .await;
 
     test_transport(
         router_handler.clone(),
@@ -496,14 +539,16 @@ async fn run_single(
 
     #[cfg(feature = "stats")]
     {
-        let c_stats = client_transport.get_stats().unwrap();
-        println!("\tClient: {c_stats:?}");
+        let c_stats = client_transport.get_stats().unwrap().report();
+        println!("\tClient: {:?}", c_stats);
         let r_stats = router_manager
             .get_transport_unicast(&client_manager.config.zid)
+            .await
             .unwrap()
             .get_stats()
+            .map(|s| s.report())
             .unwrap();
-        println!("\tRouter: {r_stats:?}");
+        println!("\tRouter: {:?}", r_stats);
     }
 
     close_transport(
@@ -515,17 +560,57 @@ async fn run_single(
     .await;
 }
 
-async fn run(
+async fn run_internal(
+    client_endpoints: &[EndPoint],
+    server_endpoints: &[EndPoint],
+    channel: &[Channel],
+    msg_size: &[usize],
+    #[cfg(feature = "shared-memory")] shm_transport: bool,
+) {
+    for ch in channel.iter() {
+        for ms in msg_size.iter() {
+            run_single(
+                client_endpoints,
+                server_endpoints,
+                *ch,
+                *ms,
+                #[cfg(feature = "shared-memory")]
+                shm_transport,
+            )
+            .await;
+        }
+    }
+}
+
+async fn run_with_net(
     client_endpoints: &[EndPoint],
     server_endpoints: &[EndPoint],
     channel: &[Channel],
     msg_size: &[usize],
 ) {
-    for ch in channel.iter() {
-        for ms in msg_size.iter() {
-            run_single(client_endpoints, server_endpoints, *ch, *ms).await;
-        }
+    run_internal(
+        client_endpoints,
+        server_endpoints,
+        channel,
+        msg_size,
+        #[cfg(feature = "shared-memory")]
+        false,
+    )
+    .await;
+}
+
+#[cfg(feature = "shared-memory")]
+async fn run_with_shm(
+    client_endpoints: &[EndPoint],
+    server_endpoints: &[EndPoint],
+    channel: &[Channel],
+    msg_size: &[usize],
+) {
+    if client_endpoints.len() > 1 || server_endpoints.len() > 1 {
+        println!("SHM transport doesn't support more than one link, so this test would produce MAX_LINKS error!");
+        panic!();
     }
+    run_internal(client_endpoints, server_endpoints, channel, msg_size, true).await;
 }
 
 #[cfg(feature = "transport_tcp")]
@@ -548,20 +633,47 @@ fn transport_unicast_tcp_only() {
             reliability: Reliability::Reliable,
         },
         Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+    ];
+    // Run
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
+}
+
+#[cfg(all(feature = "transport_tcp", feature = "shared-memory",))]
+#[test]
+fn transport_unicast_tcp_only_with_shm() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locators
+    let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 16100).parse().unwrap()];
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
             priority: Priority::default(),
-            reliability: Reliability::BestEffort,
+            reliability: Reliability::Reliable,
         },
         Channel {
             priority: Priority::RealTime,
             reliability: Reliability::Reliable,
         },
-        Channel {
-            priority: Priority::RealTime,
-            reliability: Reliability::BestEffort,
-        },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_shm(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_SHM,
+    ));
 }
 
 #[cfg(feature = "transport_udp")]
@@ -589,7 +701,42 @@ fn transport_unicast_udp_only() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NOFRAG,
+    ));
+}
+
+#[cfg(all(feature = "transport_udp", feature = "shared-memory",))]
+#[test]
+fn transport_unicast_udp_only_with_shm() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locator
+    let endpoints: Vec<EndPoint> = vec![format!("udp/127.0.0.1:{}", 16110).parse().unwrap()];
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    task::block_on(run_with_shm(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NOFRAG,
+    ));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -616,7 +763,50 @@ fn transport_unicast_unix_only() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
+    let _ = std::fs::remove_file(f1);
+    let _ = std::fs::remove_file(format!("{f1}.lock"));
+}
+
+#[cfg(all(
+    feature = "transport_unixsock-stream",
+    feature = "shared-memory",
+    target_family = "unix"
+))]
+#[test]
+fn transport_unicast_unix_only_with_shm() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let f1 = "zenoh-test-unix-socket-5-shm.sock";
+    let _ = std::fs::remove_file(f1);
+    // Define the locator
+    let endpoints: Vec<EndPoint> = vec![format!("unixsock-stream/{f1}").parse().unwrap()];
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    task::block_on(run_with_shm(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_SHM,
+    ));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -654,7 +844,113 @@ fn transport_unicast_ws_only() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
+}
+
+#[cfg(all(feature = "transport_ws", feature = "shared-memory",))]
+#[test]
+fn transport_unicast_ws_only_with_shm() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locators
+    let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", 16120).parse().unwrap()];
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    task::block_on(run_with_shm(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_SHM,
+    ));
+}
+
+#[cfg(feature = "transport_shm")]
+#[test]
+fn transport_unicast_shm_only() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locator
+    let endpoints: Vec<EndPoint> = vec![
+        "shm/transport_unicast_shm_only".parse().unwrap(),
+        "shm/transport_unicast_shm_only2".parse().unwrap(),
+    ];
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+    ];
+    // Run
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
+}
+
+#[cfg(all(feature = "transport_shm", feature = "shared-memory",))]
+#[test]
+fn transport_unicast_shm_only_with_shm() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locator
+    let endpoints: Vec<EndPoint> = vec!["shm/transport_unicast_shm_only_with_shm".parse().unwrap()];
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+    ];
+    // Run
+    task::block_on(run_with_shm(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_SHM,
+    ));
 }
 
 #[cfg(all(feature = "transport_tcp", feature = "transport_udp"))]
@@ -684,7 +980,12 @@ fn transport_unicast_tcp_udp() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NOFRAG,
+    ));
 }
 
 #[cfg(all(
@@ -719,7 +1020,12 @@ fn transport_unicast_tcp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -756,7 +1062,12 @@ fn transport_unicast_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NOFRAG,
+    ));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -796,7 +1107,12 @@ fn transport_unicast_tcp_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_NOFRAG,
+    ));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -847,7 +1163,12 @@ fn transport_unicast_tls_only_server() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
 }
 
 #[cfg(feature = "transport_quic")]
@@ -896,7 +1217,12 @@ fn transport_unicast_quic_only_server() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    task::block_on(run(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL));
+    task::block_on(run_with_net(
+        &endpoints,
+        &endpoints,
+        &channel,
+        &MSG_SIZE_ALL,
+    ));
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
@@ -963,7 +1289,7 @@ fn transport_unicast_tls_only_mutual_success() {
     // Run
     let client_endpoints = vec![client_endpoint];
     let server_endpoints = vec![server_endpoint];
-    task::block_on(run(
+    task::block_on(run_with_net(
         &client_endpoints,
         &server_endpoints,
         &channel,
@@ -1042,7 +1368,7 @@ fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
     let client_endpoints = vec![client_endpoint];
     let server_endpoints = vec![server_endpoint];
     let result = std::panic::catch_unwind(|| {
-        task::block_on(run(
+        task::block_on(run_with_net(
             &client_endpoints,
             &server_endpoints,
             &channel,
@@ -1124,7 +1450,7 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
     let client_endpoints = vec![client_endpoint];
     let server_endpoints = vec![server_endpoint];
     let result = std::panic::catch_unwind(|| {
-        task::block_on(run(
+        task::block_on(run_with_net(
             &client_endpoints,
             &server_endpoints,
             &channel,

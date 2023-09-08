@@ -22,7 +22,86 @@ extern crate alloc;
 
 pub mod common;
 pub mod core;
-pub mod defaults;
+pub mod network;
 pub mod scouting;
 pub mod transport;
 pub mod zenoh;
+
+// Zenoh version
+pub const VERSION: u8 = 0x08;
+
+// Zenoh protocol uses the following conventions for message definition and representation.
+//
+//
+// # Single byte field
+//
+// A fixed size field of 8 bits.
+//
+// ```text
+//  7 6 5 4 3 2 1 0
+// +-+-+-+-+-+-+-+-+
+// |      u8       |
+// +---------------+
+// ```
+//
+//
+// # Variable length field
+//
+// The field size depends on the element definition and/or actual encoding. An example of variable
+// lenght element is an array of bytes (e.g., a payload or a string).
+//
+// ```text
+//  7 6 5 4 3 2 1 0
+// +-+-+-+-+-+-+-+-+
+// ~    element    ~
+// +---------------+
+// ```
+//
+//
+// # u64 field
+//
+// A u64 is a specialized variable lenght field that is used to encode an unsigned integer.
+//
+// ```text
+//  7 6 5 4 3 2 1 0
+// +-+-+-+-+-+-+-+-+
+// %     u64      %
+// +---------------+
+// ```
+//
+//
+// # Array field
+//
+// An array contains a fixed number of elements whose number is known a priori or indicated by
+// another field. Each element can be either a single byte field or a variable legnth field.
+//
+// ```text
+//  7 6 5 4 3 2 1 0
+// +-+-+-+-+-+-+-+-+
+// ~   [element]   ~
+// +---------------+
+// ```
+//
+//
+// # Vector field
+//
+// A vector contains a variable number of elements and is represented as follows:
+//
+// ```text
+//  7 6 5 4 3 2 1 0
+// +-+-+-+-+-+-+-+-+
+// ~   <element>   ~
+// +---------------+
+// ```
+//
+// A vector field is always expanded as follows:
+//
+//  ```text
+//  7 6 5 4 3 2 1 0
+// +-+-+-+-+-+-+-+-+
+// %      num      %
+// +---------------+
+// ~   [element]   ~
+// +---------------+
+// ```
+//

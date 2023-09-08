@@ -11,40 +11,78 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::core::ZenohId;
 
 /// # Close message
 ///
-/// ```text
-/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
-///       in bytes of the message, resulting in the maximum length of a message being 65_535 bytes.
-///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
-///       the boundary of the serialized messages. The length is encoded as little-endian.
-///       In any case, the length of a message must not exceed 65_535 bytes.
+/// The [`Close`] message is sent in any of the following two cases:
+///     1) in response to an INIT or OPEN message which are not accepted;
+///     2) at any time to arbitrarly close the transport with the corresponding zenoh node.
 ///
-/// The CLOSE message is sent in any of the following two cases:
-///     1) in response to an OPEN message which is not accepted;
-///     2) at any time to arbitrarly close the transport with the corresponding peer.
+/// The [`Close`] message flow is the following:
+///
+/// ```text
+///     A                   B
+///     |       CLOSE       |
+///     |------------------>|
+///     |                   |
+/// ```
+///
+/// The [`Close`] message structure is defined as follows:
+///
+/// ```text
+/// Flags:
+/// - S: Session close  If S==1 close the whole session, close only the link otherwise
+/// - X: Reserved
+/// - Z: Extensions     If Z==1 then zenoh extensions will follow.
 ///
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// |X|K|I|  CLOSE  |
-/// +-+-+-+-+-------+
-/// ~    peer_id    ~  if I==1 -- PID of the target peer.
-/// +---------------+
+/// |Z|X|S|  CLOSE  |
+/// +-+-+-+---------+
 /// |     reason    |
 /// +---------------+
-///
-/// - if K==0 then close the whole zenoh transport.
-/// - if K==1 then close the transport link the CLOSE message was sent on (e.g., TCP socket) but
-///           keep the whole transport open. NOTE: the transport will be automatically closed when
-///           the transport's lease period expires.
+/// ~  [CloseExts]  ~ if Flag(Z)==1
+/// +---------------+
 /// ```
+/// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
+///       in bytes of the message, resulting in the maximum length of a message being 65535 bytes.
+///       This is necessary in those stream-oriented transports (e.g., TCP) that do not preserve
+///       the boundary of the serialized messages. The length is encoded as little-endian.
+///       In any case, the length of a message must not exceed 65535 bytes.
+///
+
+pub mod flag {
+    pub const S: u8 = 1 << 5; // 0x20 Session close if S==1 close the whole session, close only the link otherwise
+                              // pub const X: u8 = 1 << 6; // 0x40       Reserved
+    pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
+}
+
+// Reason for the Close message
+pub mod reason {
+    pub const GENERIC: u8 = 0x00;
+    pub const UNSUPPORTED: u8 = 0x01;
+    pub const INVALID: u8 = 0x02;
+    pub const MAX_SESSIONS: u8 = 0x03;
+    pub const MAX_LINKS: u8 = 0x04;
+    pub const EXPIRED: u8 = 0x05;
+}
+
+pub fn reason_to_str(reason: u8) -> &'static str {
+    match reason {
+        reason::GENERIC => "GENERIC",
+        reason::UNSUPPORTED => "UNSUPPORTED",
+        reason::INVALID => "INVALID",
+        reason::MAX_SESSIONS => "MAX_SESSIONS",
+        reason::MAX_LINKS => "MAX_LINKS",
+        reason::EXPIRED => "EXPIRED",
+        _ => "UNKNOWN",
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Close {
-    pub zid: Option<ZenohId>,
     pub reason: u8,
-    pub link_only: bool,
+    pub session: bool,
 }
 
 impl Close {
@@ -54,18 +92,9 @@ impl Close {
 
         let mut rng = rand::thread_rng();
 
-        let zid = if rng.gen_bool(0.5) {
-            Some(ZenohId::default())
-        } else {
-            None
-        };
         let reason: u8 = rng.gen();
-        let link_only = rng.gen_bool(0.5);
+        let session = rng.gen_bool(0.5);
 
-        Self {
-            zid,
-            reason,
-            link_only,
-        }
+        Self { reason, session }
     }
 }

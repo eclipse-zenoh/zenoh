@@ -16,11 +16,8 @@ use std::{
     ops::{Deref, DerefMut},
 };
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf};
-use zenoh_codec::{RCodec, WCodec, Zenoh060};
-use zenoh_protocol::{
-    common::Attachment,
-    core::{Property, ZInt},
-};
+use zenoh_codec::{RCodec, WCodec, Zenoh080};
+use zenoh_protocol::core::Property;
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -53,7 +50,7 @@ impl EstablishmentProperties {
         Ok(())
     }
 
-    pub(super) fn remove(&mut self, key: ZInt) -> Option<Property> {
+    pub(super) fn remove(&mut self, key: u64) -> Option<Property> {
         self.0
             .iter()
             .position(|x| x.key == key)
@@ -69,9 +66,9 @@ impl TryFrom<&EstablishmentProperties> for Attachment {
             bail!("Can not create an attachment with zero properties")
         }
 
-        let mut zbuf = ZBuf::default();
+        let mut zbuf = ZBuf::empty();
         let mut writer = zbuf.writer();
-        let codec = Zenoh060::default();
+        let codec = Zenoh080::new();
 
         codec
             .write(&mut writer, eps.0.as_slice())
@@ -100,7 +97,7 @@ impl TryFrom<&Attachment> for EstablishmentProperties {
 
     fn try_from(att: &Attachment) -> Result<Self, Self::Error> {
         let mut reader = att.buffer.reader();
-        let codec = Zenoh060::default();
+        let codec = Zenoh080::new();
 
         let ps: Vec<Property> = codec.read(&mut reader).map_err(|_| zerror!(""))?;
         EstablishmentProperties::try_from(ps)
@@ -120,7 +117,7 @@ impl EstablishmentProperties {
         let mut eps = EstablishmentProperties::new();
         for _ in MIN..=MAX {
             loop {
-                let key: ZInt = rng.gen();
+                let key: u64 = rng.gen();
                 let mut value = vec![0u8; rng.gen_range(MIN..=MAX)];
                 rng.fill(&mut value[..]);
                 let p = Property { key, value };

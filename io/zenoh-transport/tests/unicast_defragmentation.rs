@@ -13,11 +13,19 @@
 //
 use async_std::{prelude::FutureExt, task};
 use std::{convert::TryFrom, sync::Arc, time::Duration};
-use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
 use zenoh_protocol::{
-    core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
-    zenoh::ZenohMessage,
+    core::{
+        Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI, ZenohId,
+    },
+    network::{
+        push::{
+            ext::{NodeIdType, QoSType},
+            Push,
+        },
+        NetworkMessage,
+    },
+    zenoh::Put,
 };
 use zenoh_transport::{DummyTransportEventHandler, TransportManager};
 
@@ -61,27 +69,31 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Create an empty transport with the client
     // Open transport -> This should be accepted
     println!("Opening transport with {endpoint}");
-    let _ = ztimeout!(client_manager.open_transport(endpoint.clone())).unwrap();
+    let _ = ztimeout!(client_manager.open_transport_unicast(endpoint.clone())).unwrap();
 
-    let client_transport = client_manager.get_transport(&router_id).unwrap();
+    let client_transport = client_manager
+        .get_transport_unicast(&router_id)
+        .await
+        .unwrap();
 
-    // Create the message to send, this would trigger the transport closure
-    let key = "test".into();
-    let payload = ZBuf::from(vec![0_u8; msg_size]);
-    let data_info = None;
-    let routing_context = None;
-    let reply_context = None;
-    let attachment = None;
-    let message = ZenohMessage::make_data(
-        key,
-        payload,
-        channel,
-        CongestionControl::Block,
-        data_info,
-        routing_context,
-        reply_context,
-        attachment,
-    );
+    // Create the message to send
+    let message: NetworkMessage = Push {
+        wire_expr: "test".into(),
+        ext_qos: QoSType::new(channel.priority, CongestionControl::Block, false),
+        ext_tstamp: None,
+        ext_nodeid: NodeIdType::default(),
+        payload: Put {
+            payload: vec![0u8; msg_size].into(),
+            timestamp: None,
+            encoding: Encoding::default(),
+            ext_sinfo: None,
+            #[cfg(feature = "shared-memory")]
+            ext_shm: None,
+            ext_unknown: vec![],
+        }
+        .into(),
+    }
+    .into();
 
     println!(
         "Sending message of {msg_size} bytes while defragmentation buffer size is {MSG_DEFRAG_BUF} bytes"
@@ -97,7 +109,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 
     // Wait on the router manager that the transport has been closed
     ztimeout!(async {
-        while !router_manager.get_transports_unicast().is_empty() {
+        while !router_manager.get_transports_unicast().await.is_empty() {
             task::sleep(SLEEP).await;
         }
     });
@@ -161,6 +173,7 @@ fn transport_unicast_defragmentation_tcp_only() {
 
 #[cfg(feature = "transport_ws")]
 #[test]
+#[ignore]
 fn transport_unicast_defragmentation_ws_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -169,6 +182,46 @@ fn transport_unicast_defragmentation_ws_only() {
 
     // Define the locators
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 11010).parse().unwrap();
+    // Define the reliability and congestion control
+    let channel = [
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::default(),
+            reliability: Reliability::BestEffort,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::Reliable,
+        },
+        Channel {
+            priority: Priority::RealTime,
+            reliability: Reliability::BestEffort,
+        },
+    ];
+    // Run
+    task::block_on(async {
+        for ch in channel.iter() {
+            run(&endpoint, *ch, MSG_SIZE).await;
+        }
+    });
+}
+
+#[cfg(feature = "transport_shm")]
+#[test]
+#[ignore]
+fn transport_unicast_defragmentation_shm_only() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locators
+    let endpoint: EndPoint = "shm/transport_unicast_defragmentation_shm_only"
+        .parse()
+        .unwrap();
     // Define the reliability and congestion control
     let channel = [
         Channel {

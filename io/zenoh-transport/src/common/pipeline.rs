@@ -1,5 +1,3 @@
-use crate::common::batch::WError;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -13,9 +11,8 @@ use crate::common::batch::WError;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-// use super::batch::SerializationBatch;
-use super::batch::{Encode, WBatch};
-use super::conduit::{TransportChannelTx, TransportConduitTx};
+use super::batch::{Encode, WBatch, WError};
+use super::priority::{TransportChannelTx, TransportPriorityTx};
 use async_std::prelude::FutureExt;
 use flume::{bounded, Receiver, Sender};
 use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
@@ -28,13 +25,18 @@ use zenoh_buffers::{
     writer::HasWriter,
     ZBuf,
 };
-use zenoh_codec::{WCodec, Zenoh060};
+use zenoh_codec::{WCodec, Zenoh080};
 use zenoh_config::QueueSizeConf;
 use zenoh_core::zlock;
+use zenoh_protocol::core::Reliability;
+use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::{
-    core::{Channel, Priority},
-    transport::TransportMessage,
-    zenoh::ZenohMessage,
+    core::Priority,
+    transport::{
+        fragment::FragmentHeader,
+        frame::{self, FrameHeader},
+        BatchSize, TransportMessage,
+    },
 };
 
 // It's faster to work directly with nanoseconds.
@@ -70,7 +72,7 @@ struct StageInOut {
 
 impl StageInOut {
     #[inline]
-    fn notify(&self, bytes: u16) {
+    fn notify(&self, bytes: BatchSize) {
         self.bytes.store(bytes, Ordering::Relaxed);
         if !self.backoff.load(Ordering::Relaxed) {
             let _ = self.n_out_w.try_send(());
@@ -88,7 +90,7 @@ impl StageInOut {
 // Inner structure containing mutexes for current serialization batch and SNs
 struct StageInMutex {
     current: Arc<Mutex<Option<WBatch>>>,
-    conduit: TransportConduitTx,
+    priority: TransportPriorityTx,
 }
 
 impl StageInMutex {
@@ -100,9 +102,9 @@ impl StageInMutex {
     #[inline]
     fn channel(&self, is_reliable: bool) -> MutexGuard<'_, TransportChannelTx> {
         if is_reliable {
-            zlock!(self.conduit.reliable)
+            zlock!(self.priority.reliable)
         } else {
-            zlock!(self.conduit.best_effort)
+            zlock!(self.priority.best_effort)
         }
     }
 }
@@ -116,7 +118,7 @@ struct StageIn {
 }
 
 impl StageIn {
-    fn push_zenoh_message(&mut self, msg: &mut ZenohMessage, priority: Priority) -> bool {
+    fn push_network_message(&mut self, msg: &mut NetworkMessage, priority: Priority) -> bool {
         // Lock the current serialization batch.
         let mut c_guard = self.mutex.current();
 
@@ -175,18 +177,19 @@ impl StageIn {
         // Lock the channel. We are the only one that will be writing on it.
         let mut tch = self.mutex.channel(msg.is_reliable());
 
-        // Create the channel
-        let channel = Channel {
-            reliability: msg.channel.reliability,
-            priority,
-        };
-
         // Retrieve the next SN
-        let mut sn = tch.sn.get();
+        let sn = tch.sn.get();
+
+        // The Frame
+        let frame = FrameHeader {
+            reliability: Reliability::Reliable, // TODO
+            sn,
+            ext_qos: frame::ext::QoSType::new(priority),
+        };
 
         if let WError::NewFrame = e {
             // Attempt a serialization with a new frame
-            if batch.encode((&*msg, channel, sn)).is_ok() {
+            if batch.encode((&*msg, frame)).is_ok() {
                 zretok!(batch);
             };
         }
@@ -198,7 +201,7 @@ impl StageIn {
         }
 
         // Attempt a second serialization on fully empty batch
-        if batch.encode((&*msg, channel, sn)).is_ok() {
+        if batch.encode((&*msg, frame)).is_ok() {
             zretok!(batch);
         };
 
@@ -211,10 +214,16 @@ impl StageIn {
         self.fragbuf.clear();
 
         let mut writer = self.fragbuf.writer();
-        let codec = Zenoh060::default();
+        let codec = Zenoh080::new();
         codec.write(&mut writer, &*msg).unwrap();
 
         // Fragment the whole message
+        let mut fragment = FragmentHeader {
+            reliability: frame.reliability,
+            more: true,
+            sn,
+            ext_qos: frame.ext_qos,
+        };
         let mut reader = self.fragbuf.reader();
         while reader.can_read() {
             // Get the current serialization batch
@@ -222,10 +231,10 @@ impl StageIn {
             batch = zgetbatch_rets!(true);
 
             // Serialize the message fragmnet
-            match batch.encode((&mut reader, channel, sn)) {
+            match batch.encode((&mut reader, fragment)) {
                 Ok(_) => {
                     // Update the SN
-                    sn = tch.sn.get();
+                    fragment.sn = tch.sn.get();
                     // Move the serialization batch into the OUT pipeline
                     self.s_out.move_batch(batch);
                 }
@@ -318,7 +327,7 @@ enum Pull {
 #[derive(Clone)]
 struct Backoff {
     retry_time: NanoSeconds,
-    last_bytes: u16,
+    last_bytes: BatchSize,
     bytes: Arc<AtomicU16>,
     backoff: Arc<AtomicBool>,
 }
@@ -475,7 +484,7 @@ impl StageOut {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TransmissionPipelineConf {
     pub(crate) is_streamed: bool,
-    pub(crate) batch_size: u16,
+    pub(crate) batch_size: BatchSize,
     pub(crate) queue_size: [usize; Priority::NUM],
     pub(crate) backoff: Duration,
 }
@@ -484,7 +493,7 @@ impl Default for TransmissionPipelineConf {
     fn default() -> Self {
         Self {
             is_streamed: false,
-            batch_size: u16::MAX,
+            batch_size: BatchSize::MAX,
             queue_size: [1; Priority::NUM],
             backoff: Duration::from_micros(1),
         }
@@ -497,13 +506,13 @@ impl TransmissionPipeline {
     // A MPSC pipeline
     pub(crate) fn make(
         config: TransmissionPipelineConf,
-        conduit: &[TransportConduitTx],
+        priority: &[TransportPriorityTx],
     ) -> (TransmissionPipelineProducer, TransmissionPipelineConsumer) {
         let mut stage_in = vec![];
         let mut stage_out = vec![];
 
         let default_queue_size = [config.queue_size[Priority::default() as usize]];
-        let size_iter = if conduit.len() == 1 {
+        let size_iter = if priority.len() == 1 {
             default_queue_size.iter()
         } else {
             config.queue_size.iter()
@@ -546,9 +555,9 @@ impl TransmissionPipeline {
                 },
                 mutex: StageInMutex {
                     current: current.clone(),
-                    conduit: conduit[prio].clone(),
+                    priority: priority[prio].clone(),
                 },
-                fragbuf: ZBuf::default(),
+                fragbuf: ZBuf::empty(),
             }));
 
             // The stage out for this priority
@@ -586,16 +595,17 @@ pub(crate) struct TransmissionPipelineProducer {
 
 impl TransmissionPipelineProducer {
     #[inline]
-    pub(crate) fn push_zenoh_message(&self, mut msg: ZenohMessage) -> bool {
+    pub(crate) fn push_network_message(&self, mut msg: NetworkMessage) -> bool {
         // If the queue is not QoS, it means that we only have one priority with index 0.
         let (idx, priority) = if self.stage_in.len() > 1 {
-            (msg.channel.priority as usize, msg.channel.priority)
+            let priority = msg.priority();
+            (priority as usize, priority)
         } else {
             (0, Priority::default())
         };
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
-        queue.push_zenoh_message(&mut msg, priority)
+        queue.push_network_message(&mut msg, priority)
     }
 
     #[inline]
@@ -621,7 +631,7 @@ impl TransmissionPipelineProducer {
 
         // Unblock waiting pullers
         for ig in in_guards.iter_mut() {
-            ig.s_out.notify(u16::MAX);
+            ig.s_out.notify(BatchSize::MAX);
         }
     }
 }
@@ -707,12 +717,12 @@ mod tests {
         reader::{DidntRead, HasReader},
         ZBuf,
     };
-    use zenoh_codec::{RCodec, Zenoh060};
+    use zenoh_codec::{RCodec, Zenoh080};
     use zenoh_protocol::{
-        core::{Channel, CongestionControl, Priority, Reliability, ZInt},
-        defaults::{BATCH_SIZE, SEQ_NUM_RES},
-        transport::{Frame, FramePayload, TransportBody},
-        zenoh::ZenohMessage,
+        core::{Bits, CongestionControl, Encoding, Priority},
+        network::{ext, Push},
+        transport::{BatchSize, Fragment, Frame, TransportBody, TransportSn},
+        zenoh::{PushBody, Put},
     };
 
     const SLEEP: Duration = Duration::from_millis(100);
@@ -720,7 +730,7 @@ mod tests {
 
     const CONFIG: TransmissionPipelineConf = TransmissionPipelineConf {
         is_streamed: true,
-        batch_size: BATCH_SIZE,
+        batch_size: BatchSize::MAX,
         queue_size: [1; Priority::NUM],
         backoff: Duration::from_micros(1),
     };
@@ -731,33 +741,33 @@ mod tests {
             // Send reliable messages
             let key = "test".into();
             let payload = ZBuf::from(vec![0_u8; payload_size]);
-            let data_info = None;
-            let routing_context = None;
-            let reply_context = None;
-            let attachment = None;
-            let channel = Channel {
-                priority: Priority::Control,
-                reliability: Reliability::Reliable,
-            };
-            let congestion_control = CongestionControl::Block;
 
-            let message = ZenohMessage::make_data(
-                key,
-                payload,
-                channel,
-                congestion_control,
-                data_info,
-                routing_context,
-                reply_context,
-                attachment,
-            );
+            let message: NetworkMessage = Push {
+                wire_expr: key,
+                ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::default(),
+                payload: PushBody::Put(Put {
+                    timestamp: None,
+                    encoding: Encoding::default(),
+                    ext_sinfo: None,
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: None,
+                    ext_unknown: vec![],
+                    payload,
+                }),
+            }
+            .into();
 
             println!(
                 "Pipeline Flow [>>>]: Sending {num_msg} messages with payload size of {payload_size} bytes"
             );
             for i in 0..num_msg {
-                println!("Pipeline Flow [>>>]: Pushed {} msgs", i + 1);
-                queue.push_zenoh_message(message.clone());
+                println!(
+                    "Pipeline Flow [>>>]: Pushed {} msgs ({payload_size} bytes)",
+                    i + 1
+                );
+                queue.push_network_message(message.clone());
             }
         }
 
@@ -775,24 +785,22 @@ mod tests {
                 let bytes = batch.as_bytes();
                 // Deserialize the messages
                 let mut reader = bytes.reader();
-                let codec = Zenoh060::default();
+                let codec = Zenoh080::new();
 
                 loop {
                     let res: Result<TransportMessage, DidntRead> = codec.read(&mut reader);
                     match res {
                         Ok(msg) => {
                             match msg.body {
-                                TransportBody::Frame(Frame { payload, .. }) => match payload {
-                                    FramePayload::Messages { messages } => {
-                                        msgs += messages.len();
+                                TransportBody::Frame(Frame { payload, .. }) => {
+                                    msgs += payload.len()
+                                }
+                                TransportBody::Fragment(Fragment { more, .. }) => {
+                                    fragments += 1;
+                                    if !more {
+                                        msgs += 1;
                                     }
-                                    FramePayload::Fragment { is_final, .. } => {
-                                        fragments += 1;
-                                        if is_final {
-                                            msgs += 1;
-                                        }
-                                    }
-                                },
+                                }
                                 _ => {
                                     msgs += 1;
                                 }
@@ -812,9 +820,9 @@ mod tests {
             );
         }
 
-        // Pipeline conduits
-        let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
-        let conduits = vec![tct];
+        // Pipeline priorities
+        let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX)).unwrap();
+        let priorities = vec![tct];
 
         // Total amount of bytes to send in each test
         let bytes: usize = 100_000_000;
@@ -824,7 +832,7 @@ mod tests {
 
         task::block_on(async {
             for ps in payload_sizes.iter() {
-                if ZInt::try_from(*ps).is_err() {
+                if u64::try_from(*ps).is_err() {
                     break;
                 }
 
@@ -833,7 +841,7 @@ mod tests {
 
                 let (producer, consumer) = TransmissionPipeline::make(
                     TransmissionPipelineConf::default(),
-                    conduits.as_slice(),
+                    priorities.as_slice(),
                 );
 
                 let t_c = task::spawn(async move {
@@ -862,26 +870,23 @@ mod tests {
             // Send reliable messages
             let key = "test".into();
             let payload = ZBuf::from(vec![0_u8; payload_size]);
-            let channel = Channel {
-                priority: Priority::Control,
-                reliability: Reliability::Reliable,
-            };
-            let congestion_control = CongestionControl::Block;
-            let data_info = None;
-            let routing_context = None;
-            let reply_context = None;
-            let attachment = None;
 
-            let message = ZenohMessage::make_data(
-                key,
-                payload,
-                channel,
-                congestion_control,
-                data_info,
-                routing_context,
-                reply_context,
-                attachment,
-            );
+            let message: NetworkMessage = Push {
+                wire_expr: key,
+                ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::default(),
+                payload: PushBody::Put(Put {
+                    timestamp: None,
+                    encoding: Encoding::default(),
+                    ext_sinfo: None,
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: None,
+                    ext_unknown: vec![],
+                    payload,
+                }),
+            }
+            .into();
 
             // The last push should block since there shouldn't any more batches
             // available for serialization.
@@ -890,7 +895,7 @@ mod tests {
                 println!(
                     "Pipeline Blocking [>>>]: ({id}) Scheduling message #{i} with payload size of {payload_size} bytes"
                 );
-                queue.push_zenoh_message(message.clone());
+                queue.push_network_message(message.clone());
                 let c = counter.fetch_add(1, Ordering::AcqRel);
                 println!(
                     "Pipeline Blocking [>>>]: ({}) Scheduled message #{} (tot {}) with payload size of {} bytes",
@@ -901,10 +906,10 @@ mod tests {
         }
 
         // Pipeline
-        let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
-        let conduits = vec![tct];
+        let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX)).unwrap();
+        let priorities = vec![tct];
         let (producer, mut consumer) =
-            TransmissionPipeline::make(TransmissionPipelineConf::default(), conduits.as_slice());
+            TransmissionPipeline::make(TransmissionPipelineConf::default(), priorities.as_slice());
 
         let counter = Arc::new(AtomicUsize::new(0));
 
@@ -953,9 +958,9 @@ mod tests {
     #[ignore]
     fn tx_pipeline_thr() {
         // Queue
-        let tct = TransportConduitTx::make(SEQ_NUM_RES).unwrap();
-        let conduits = vec![tct];
-        let (producer, mut consumer) = TransmissionPipeline::make(CONFIG, conduits.as_slice());
+        let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX)).unwrap();
+        let priorities = vec![tct];
+        let (producer, mut consumer) = TransmissionPipeline::make(CONFIG, priorities.as_slice());
         let count = Arc::new(AtomicUsize::new(0));
         let size = Arc::new(AtomicUsize::new(0));
 
@@ -972,31 +977,32 @@ mod tests {
                     // Send reliable messages
                     let key = "pipeline/thr".into();
                     let payload = ZBuf::from(vec![0_u8; *size]);
-                    let channel = Channel {
-                        priority: Priority::Control,
-                        reliability: Reliability::Reliable,
-                    };
-                    let congestion_control = CongestionControl::Block;
-                    let data_info = None;
-                    let routing_context = None;
-                    let reply_context = None;
-                    let attachment = None;
 
-                    let message = ZenohMessage::make_data(
-                        key,
-                        payload,
-                        channel,
-                        congestion_control,
-                        data_info,
-                        routing_context,
-                        reply_context,
-                        attachment,
-                    );
+                    let message: NetworkMessage = Push {
+                        wire_expr: key,
+                        ext_qos: ext::QoSType::new(
+                            Priority::Control,
+                            CongestionControl::Block,
+                            false,
+                        ),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        payload: PushBody::Put(Put {
+                            timestamp: None,
+                            encoding: Encoding::default(),
+                            ext_sinfo: None,
+                            #[cfg(feature = "shared-memory")]
+                            ext_shm: None,
+                            ext_unknown: vec![],
+                            payload,
+                        }),
+                    }
+                    .into();
 
                     let duration = Duration::from_millis(5_500);
                     let start = Instant::now();
                     while start.elapsed() < duration {
-                        producer.push_zenoh_message(message.clone());
+                        producer.push_network_message(message.clone());
                     }
                 }
             }

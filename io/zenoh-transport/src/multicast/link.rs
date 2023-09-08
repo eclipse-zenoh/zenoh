@@ -11,31 +11,29 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::common::{conduit::TransportConduitTx, pipeline::TransmissionPipeline};
+use super::common::{pipeline::TransmissionPipeline, priority::TransportPriorityTx};
 use super::transport::TransportMulticastInner;
-#[cfg(feature = "stats")]
-use super::TransportMulticastStatsAtomic;
 use crate::common::batch::WBatch;
 use crate::common::pipeline::{
     TransmissionPipelineConf, TransmissionPipelineConsumer, TransmissionPipelineProducer,
 };
+#[cfg(feature = "stats")]
+use crate::stats::TransportStats;
 use async_std::prelude::FutureExt;
 use async_std::task;
 use async_std::task::JoinHandle;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use zenoh_buffers::reader::{HasReader, Reader};
-use zenoh_codec::{RCodec, Zenoh060};
+use zenoh_buffers::ZSlice;
 use zenoh_core::zlock;
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
-    core::{ConduitSn, ConduitSnList, Priority, WhatAmI, ZInt, ZenohId},
-    transport::TransportMessage,
+    core::{Bits, Priority, Resolution, WhatAmI, ZenohId},
+    transport::{BatchSize, Join, KeepAlive, PrioritySn, TransportMessage, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
-use zenoh_sync::RecyclingObjectPool;
-use zenoh_sync::Signal;
+use zenoh_sync::{RecyclingObjectPool, Signal};
 
 pub(super) struct TransportLinkMulticastConfig {
     pub(super) version: u8,
@@ -44,8 +42,8 @@ pub(super) struct TransportLinkMulticastConfig {
     pub(super) lease: Duration,
     pub(super) keep_alive: usize,
     pub(super) join_interval: Duration,
-    pub(super) sn_resolution: ZInt,
-    pub(super) batch_size: u16,
+    pub(super) sn_resolution: Bits,
+    pub(super) batch_size: BatchSize,
 }
 
 #[derive(Clone)]
@@ -82,15 +80,15 @@ impl TransportLinkMulticast {
     pub(super) fn start_tx(
         &mut self,
         config: TransportLinkMulticastConfig,
-        conduit_tx: Arc<[TransportConduitTx]>,
+        priority_tx: Arc<[TransportPriorityTx]>,
     ) {
-        let initial_sns: Vec<ConduitSn> = conduit_tx
+        let initial_sns: Vec<PrioritySn> = priority_tx
             .iter()
-            .map(|x| ConduitSn {
+            .map(|x| PrioritySn {
                 reliable: {
                     let sn = zlock!(x.reliable).sn.now();
                     if sn == 0 {
-                        config.sn_resolution - 1
+                        config.sn_resolution.mask() as TransportSn
                     } else {
                         sn - 1
                     }
@@ -98,7 +96,7 @@ impl TransportLinkMulticast {
                 best_effort: {
                     let sn = zlock!(x.best_effort).sn.now();
                     if sn == 0 {
-                        config.sn_resolution - 1
+                        config.sn_resolution.mask() as TransportSn
                     } else {
                         sn - 1
                     }
@@ -109,17 +107,17 @@ impl TransportLinkMulticast {
         if self.handle_tx.is_none() {
             let tpc = TransmissionPipelineConf {
                 is_streamed: false,
-                batch_size: config.batch_size.min(self.link.get_mtu()),
+                batch_size: config.batch_size,
                 queue_size: self.transport.manager.config.queue_size,
                 backoff: self.transport.manager.config.queue_backoff,
             };
             // The pipeline
-            let (producer, consumer) = TransmissionPipeline::make(tpc, &conduit_tx);
+            let (producer, consumer) = TransmissionPipeline::make(tpc, &priority_tx);
             self.pipeline = Some(producer);
 
             // Spawn the TX task
             let c_link = self.link.clone();
-            let c_transport = self.transport.clone();
+            let ctransport = self.transport.clone();
             let handle = task::spawn(async move {
                 let res = tx_task(
                     consumer,
@@ -127,14 +125,14 @@ impl TransportLinkMulticast {
                     config,
                     initial_sns,
                     #[cfg(feature = "stats")]
-                    c_transport.stats.clone(),
+                    ctransport.stats.clone(),
                 )
                 .await;
                 if let Err(e) = res {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.delete().await });
+                    task::spawn(async move { ctransport.delete().await });
                 }
             });
             self.handle_tx = Some(Arc::new(handle));
@@ -147,11 +145,11 @@ impl TransportLinkMulticast {
         }
     }
 
-    pub(super) fn start_rx(&mut self) {
+    pub(super) fn start_rx(&mut self, batch_size: BatchSize) {
         if self.handle_rx.is_none() {
             // Spawn the RX task
             let c_link = self.link.clone();
-            let c_transport = self.transport.clone();
+            let ctransport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
             let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
 
@@ -159,9 +157,10 @@ impl TransportLinkMulticast {
                 // Start the consume task
                 let res = rx_task(
                     c_link.clone(),
-                    c_transport.clone(),
+                    ctransport.clone(),
                     c_signal.clone(),
                     c_rx_buffer_size,
+                    batch_size,
                 )
                 .await;
                 c_signal.trigger();
@@ -169,7 +168,7 @@ impl TransportLinkMulticast {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.delete().await });
+                    task::spawn(async move { ctransport.delete().await });
                 }
             });
             self.handle_rx = Some(Arc::new(handle));
@@ -207,8 +206,8 @@ async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
     link: LinkMulticast,
     config: TransportLinkMulticastConfig,
-    mut last_sns: Vec<ConduitSn>,
-    #[cfg(feature = "stats")] stats: Arc<TransportMulticastStatsAtomic>,
+    mut last_sns: Vec<PrioritySn>,
+    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
     enum Action {
         Pull((WBatch, usize)),
@@ -264,33 +263,35 @@ async fn tx_task(
                 pipeline.refill(batch, priority);
             }
             Action::Join => {
-                let attachment = None;
                 let next_sns = last_sns
                     .iter()
-                    .map(|c| ConduitSn {
-                        reliable: (1 + c.reliable) % config.sn_resolution,
-                        best_effort: (1 + c.best_effort) % config.sn_resolution,
+                    .map(|c| PrioritySn {
+                        reliable: (1 + c.reliable) & config.sn_resolution.mask() as TransportSn,
+                        best_effort: (1 + c.best_effort)
+                            & config.sn_resolution.mask() as TransportSn,
                     })
-                    .collect::<Vec<ConduitSn>>();
-                let next_sns = if next_sns.len() == Priority::NUM {
-                    let tmp: [ConduitSn; Priority::NUM] = next_sns.try_into().unwrap();
-                    ConduitSnList::QoS(tmp.into())
+                    .collect::<Vec<PrioritySn>>();
+                let (next_sn, ext_qos) = if next_sns.len() == Priority::NUM {
+                    let tmp: [PrioritySn; Priority::NUM] = next_sns.try_into().unwrap();
+                    (PrioritySn::default(), Some(Box::new(tmp)))
                 } else {
-                    assert_eq!(next_sns.len(), 1);
-                    ConduitSnList::Plain(next_sns[0])
+                    (next_sns[0], None)
                 };
-                let message = TransportMessage::make_join(
-                    config.version,
-                    config.whatami,
-                    config.zid,
-                    config.lease,
-                    config.sn_resolution,
-                    next_sns,
-                    attachment,
-                );
+                let message: TransportMessage = Join {
+                    version: config.version,
+                    whatami: config.whatami,
+                    zid: config.zid,
+                    resolution: Resolution::default(),
+                    batch_size: config.batch_size,
+                    lease: config.lease,
+                    next_sn,
+                    ext_qos,
+                    ext_shm: None,
+                }
+                .into();
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.write_transport_message(&message).await?;
+                let n = link.send(&message).await?;
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(1);
@@ -300,12 +301,10 @@ async fn tx_task(
                 last_join = Instant::now();
             }
             Action::KeepAlive => {
-                let zid = Some(config.zid);
-                let attachment = None;
-                let message = TransportMessage::make_keep_alive(zid, attachment);
+                let message: TransportMessage = KeepAlive.into();
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.write_transport_message(&message).await?;
+                let n = link.send(&message).await?;
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(1);
@@ -346,6 +345,7 @@ async fn rx_task(
     transport: TransportMulticastInner,
     signal: Signal,
     rx_buffer_size: usize,
+    batch_size: BatchSize,
 ) -> ZResult<()> {
     enum Action {
         Read((usize, Locator)),
@@ -361,9 +361,6 @@ async fn rx_task(
         signal.wait().await;
         Ok(Action::Stop)
     }
-
-    // The codec
-    let codec = Zenoh060::default();
 
     // The pool of buffers
     let mtu = link.get_mtu() as usize;
@@ -388,17 +385,16 @@ async fn rx_task(
                 transport.stats.inc_rx_bytes(n);
 
                 // Deserialize all the messages from the current ZBuf
-                let mut reader = buffer[0..n].reader();
-                while reader.can_read() {
-                    let msg: TransportMessage = codec
-                        .read(&mut reader)
-                        .map_err(|_| zerror!("{}: decoding error", link))?;
-
+                let zslice = ZSlice::make(Arc::new(buffer), 0, n)
+                    .map_err(|_| zerror!("Read {} bytes but buffer is {} bytes", n, mtu))?;
+                transport.read_messages(
+                    zslice,
+                    &link,
+                    batch_size,
+                    &loc,
                     #[cfg(feature = "stats")]
-                    transport.stats.inc_rx_t_msgs(1);
-
-                    transport.receive_message(msg, &loc)?
-                }
+                    &transport,
+                )?;
             }
             Action::Stop => break,
         }
