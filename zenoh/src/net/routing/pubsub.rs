@@ -464,6 +464,9 @@ pub fn declare_client_subscription(
                         );
                     } else {
                         propagate_simple_subscription(&mut wtables, &res, &propa_sub_info, face);
+                        // This introduced a buffer overflow on windows
+                        // TODO: Let's deactivate this on windows until Fixed
+                        #[cfg(not(windows))]
                         for mcast_group in &wtables.mcast_groups {
                             mcast_group.primitives.send_declare(Declare {
                                 ext_qos: ext::QoSType::default(),
@@ -480,6 +483,9 @@ pub fn declare_client_subscription(
                 }
                 _ => {
                     propagate_simple_subscription(&mut wtables, &res, &propa_sub_info, face);
+                    // This introduced a buffer overflow on windows
+                    // TODO: Let's deactivate this on windows until Fixed
+                    #[cfg(not(windows))]
                     for mcast_group in &wtables.mcast_groups {
                         mcast_group.primitives.send_declare(Declare {
                             ext_qos: ext::QoSType::default(),
