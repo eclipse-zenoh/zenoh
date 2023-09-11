@@ -14,7 +14,6 @@
 
 //! Sample primitives
 use crate::buffers::ZBuf;
-#[zenoh_macros::unstable]
 use crate::prelude::ZenohId;
 use crate::prelude::{KeyExpr, SampleKind, Value};
 use crate::query::Reply;
