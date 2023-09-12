@@ -15,7 +15,9 @@ use async_std::net::TcpStream;
 use std::net::{IpAddr, Ipv6Addr};
 use std::time::Duration;
 use zenoh_core::zconfigurable;
-use zenoh_result::{bail, zerror, ZResult};
+#[cfg(unix)]
+use zenoh_result::zerror;
+use zenoh_result::{bail, ZResult};
 
 zconfigurable! {
     static ref WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE: u32 = 8192;
