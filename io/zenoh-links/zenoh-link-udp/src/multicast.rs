@@ -223,20 +223,10 @@ impl LinkManagerMulticastUdp {
                     .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
             }
             IpAddr::V6(_) => match zenoh_util::net::get_index_of_interface(local_addr) {
-                Ok(Some(idx)) => ucast_sock
+                Ok(idx) => ucast_sock
                     .set_multicast_if_v6(idx)
                     .map_err(|e| zerror!("{}: {}", mcast_addr, e))?,
-                Ok(None) => bail!(
-                    "{}: Unable to find index of network interface for local id address {}",
-                    mcast_addr,
-                    local_addr
-                ),
-                Err(e) => bail!(
-                    "{}: Unable to find index of network interface for local id address {}: {}",
-                    mcast_addr,
-                    local_addr,
-                    e
-                ),
+                Err(e) => bail!("{}: {}", mcast_addr, e),
             },
         }
 
