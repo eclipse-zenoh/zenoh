@@ -337,7 +337,14 @@ mod tests {
 
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
-            "udp/224.0.0.1:7447".parse().unwrap(),
+            format!(
+                "udp/224.{}.{}.{}:7447",
+                rand::random::<u8>(),
+                rand::random::<u8>(),
+                rand::random::<u8>()
+            )
+            .parse()
+            .unwrap(),
             // Disabling by default because of no IPv6 support
             // on GitHub CI actions.
             // format!("udp/{}", ZN_MULTICAST_IPV6_ADDRESS_DEFAULT)
