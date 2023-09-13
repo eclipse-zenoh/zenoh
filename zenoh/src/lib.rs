@@ -174,7 +174,7 @@ pub mod scouting;
 /// # Arguments
 ///
 /// * `what` - The kind of zenoh process to scout for
-/// * `config` - The configuration [`Config`](crate::config::Config) to use for scouting
+/// * `config` - The configuration [`Config`] to use for scouting
 ///
 /// # Examples
 /// ```no_run
