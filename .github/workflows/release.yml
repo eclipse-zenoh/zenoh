@@ -152,6 +152,8 @@ jobs:
         run: rustup toolchain install nightly
       - name: generate doc
         uses: actions-rs/cargo@v1
+        env:
+          RUSTDOCFLAGS: -Dwarnings
         with:
           toolchain: nightly
           command: rustdoc
