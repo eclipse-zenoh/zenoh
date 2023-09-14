@@ -15,6 +15,8 @@ use async_std::net::TcpStream;
 use std::net::{IpAddr, Ipv6Addr};
 use std::time::Duration;
 use zenoh_core::zconfigurable;
+#[cfg(unix)]
+use zenoh_result::zerror;
 use zenoh_result::{bail, ZResult};
 
 zconfigurable! {
@@ -285,19 +287,24 @@ pub fn get_unicast_addresses_of_multicast_interfaces() -> Vec<IpAddr> {
 pub fn get_unicast_addresses_of_interface(name: &str) -> ZResult<Vec<IpAddr>> {
     #[cfg(unix)]
     {
-        let addrs = pnet_datalink::interfaces()
+        match pnet_datalink::interfaces()
             .into_iter()
-            .filter(|iface| iface.is_up() && iface.name == name)
-            .flat_map(|iface| {
-                iface
+            .find(|iface| iface.name == name)
+        {
+            Some(iface) => {
+                if !iface.is_up() {
+                    bail!("Interface {name} is not up");
+                }
+                let addrs = iface
                     .ips
                     .iter()
                     .filter(|ip| !ip.ip().is_multicast())
                     .map(|x| x.ip())
-                    .collect::<Vec<IpAddr>>()
-            })
-            .collect();
-        Ok(addrs)
+                    .collect::<Vec<IpAddr>>();
+                Ok(addrs)
+            }
+            None => bail!("Interface {name} not found"),
+        }
     }
 
     #[cfg(windows)]
@@ -354,13 +361,14 @@ pub fn get_unicast_addresses_of_interface(name: &str) -> ZResult<Vec<IpAddr>> {
     }
 }
 
-pub fn get_index_of_interface(addr: IpAddr) -> ZResult<Option<u32>> {
+pub fn get_index_of_interface(addr: IpAddr) -> ZResult<u32> {
     #[cfg(unix)]
     {
-        Ok(pnet_datalink::interfaces()
+        pnet_datalink::interfaces()
             .iter()
             .find(|iface| iface.ips.iter().any(|ipnet| ipnet.ip() == addr))
-            .map(|iface| iface.index))
+            .map(|iface| iface.index)
+            .ok_or_else(|| zerror!("No interface found with address {addr}").into())
     }
     #[cfg(windows)]
     {
@@ -400,14 +408,14 @@ pub fn get_index_of_interface(addr: IpAddr) -> ZResult<Option<u32>> {
                 while let Some(ucast_addr) = next_ucast_addr {
                     if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
                         if ifaddr.ip() == addr {
-                            return Ok(Some(iface.Ipv6IfIndex));
+                            return Ok(iface.Ipv6IfIndex);
                         }
                     }
                     next_ucast_addr = ucast_addr.Next.as_ref();
                 }
                 next_iface = iface.Next.as_ref();
             }
-            Ok(None)
+            bail!("No interface found with address {addr}")
         }
     }
 }
