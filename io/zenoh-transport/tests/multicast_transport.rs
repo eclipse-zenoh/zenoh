@@ -239,7 +239,11 @@ mod tests {
         println!("Closing transport with {endpoint}");
         ztimeout!(peer01.transport.close()).unwrap();
         assert!(peer01.manager.get_transports_multicast().await.is_empty());
-        assert!(peer02.transport.get_peers().unwrap().is_empty());
+        ztimeout!(async {
+            while !peer02.transport.get_peers().unwrap().is_empty() {
+                task::sleep(SLEEP_COUNT).await;
+            }
+        });
 
         // Close the peer02 transport
         println!("Closing transport with {endpoint}");
