@@ -248,7 +248,6 @@ impl TransportMulticastInner {
                     zid: self.manager.config.zid,
                     whatami: self.manager.config.whatami,
                     lease: self.manager.config.multicast.lease,
-                    keep_alive: self.manager.config.multicast.keep_alive,
                     join_interval: self.manager.config.multicast.join_interval,
                     sn_resolution: self.manager.config.resolution.get(Field::FrameSN),
                     batch_size,
