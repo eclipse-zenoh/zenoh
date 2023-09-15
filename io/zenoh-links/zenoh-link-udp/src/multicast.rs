@@ -236,9 +236,12 @@ impl LinkManagerMulticastUdp {
         mcast_sock
             .set_reuse_address(true)
             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
-        mcast_sock
-            .set_reuse_port(true)
-            .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+        #[cfg(target_family = "unix")]
+        {
+            mcast_sock
+                .set_reuse_port(true)
+                .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+        }
 
         // Bind the socket: let's bing to the unspecified address so we can join and read
         // from multiple multicast groups.
