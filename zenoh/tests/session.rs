@@ -57,13 +57,13 @@ async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
 async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session, Session) {
     // Open the sessions
     let mut config = config::peer();
-    config.connect.endpoints = vec![endpoint01.parse().unwrap()];
+    config.listen.endpoints = vec![endpoint01.parse().unwrap()];
     config.scouting.multicast.set_enabled(Some(true)).unwrap();
     println!("[  ][01a] Opening peer01 session: {}", endpoint01);
     let peer01 = ztimeout!(zenoh::open(config).res_async()).unwrap();
 
     let mut config = config::peer();
-    config.connect.endpoints = vec![endpoint02.parse().unwrap()];
+    config.listen.endpoints = vec![endpoint02.parse().unwrap()];
     config.scouting.multicast.set_enabled(Some(true)).unwrap();
     println!("[  ][02a] Opening peer02 session: {}", endpoint02);
     let peer02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
