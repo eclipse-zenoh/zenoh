@@ -21,7 +21,6 @@ use zenoh_buffers::{
     writer::{DidntWrite, HasWriter, Writer},
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_collections::Properties;
 use zenoh_config::UsrPwdConf;
 use zenoh_core::{bail, zasyncread, zerror, Error as ZError, Result as ZResult};
 use zenoh_crypto::hmac;
@@ -74,9 +73,24 @@ impl AuthUsrPwd {
                 .map_err(|e| zerror!("{S} Invalid user-password dictionary file: {}.", e))?;
 
             // Populate the user-password dictionary
-            let mut ps = Properties::from(content);
-            for (user, password) in ps.drain() {
-                lookup.insert(user.as_bytes().to_owned(), password.as_bytes().to_owned());
+            // The config file is expected to be in the form of:
+            //      usr1:pwd1
+            //      usr2:pwd2
+            //      usr3:pwd3
+            // I.e.: one <user>:<password> entry per line
+            for l in content.lines() {
+                let idx = l.find(':').ok_or_else(|| {
+                    zerror!("{S} Invalid user-password dictionary file: invalid format.")
+                })?;
+                let user = l[..idx].as_bytes().to_owned();
+                if user.is_empty() {
+                    bail!("{S} Invalid user-password dictionary file: empty user.")
+                }
+                let password = l[idx + 1..].as_bytes().to_owned();
+                if password.is_empty() {
+                    bail!("{S} Invalid user-password dictionary file: empty password.")
+                }
+                lookup.insert(user, password);
             }
             log::debug!("{S} User-password dictionary has been configured.");
         }
@@ -106,10 +120,10 @@ impl fmt::Debug for AuthUsrPwd {
         match self.credentials.as_ref() {
             Some(c) => write!(
                 f,
-                "User: '{}', Password: '***'",
+                "User: '{}', Password: '***', ",
                 String::from_utf8_lossy(&c.0)
             )?,
-            None => write!(f, "User: '', Password: ''")?,
+            None => write!(f, "User: '', Password: '', ")?,
         }
         write!(f, "Dictionary: {{")?;
         for (i, (u, _)) in self.lookup.iter().enumerate() {
@@ -426,5 +440,69 @@ impl<'a> AcceptFsm for AuthUsrPwdFsm<'a> {
         _input: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         Ok(Some(ZExtUnit::new()))
+    }
+}
+
+mod tests {
+    #[test]
+    fn authenticator_usrpwd_config() {
+        use zenoh_core::zasync_executor_init;
+
+        async fn inner() {
+            use super::AuthUsrPwd;
+            use std::{fs::File, io::Write};
+            use zenoh_config::UsrPwdConf;
+
+            /* [CONFIG] */
+            let f1 = "zenoh-test-auth-usrpwd.txt";
+
+            let mut config = UsrPwdConf::default();
+            config.set_user(Some("usr1".to_owned())).unwrap();
+            config.set_password(Some("pwd1".to_owned())).unwrap();
+            config.set_dictionary_file(Some(f1.to_owned())).unwrap();
+
+            macro_rules! zconfig {
+                () => {
+                    File::options()
+                        .create(true)
+                        .write(true)
+                        .truncate(true)
+                        .open(f1)
+                        .unwrap()
+                };
+            }
+            // Valid config
+            let mut c = zconfig!();
+            writeln!(c, "usr1:pwd1").unwrap();
+            drop(c);
+            assert!(AuthUsrPwd::from_config(&config).await.unwrap().is_some());
+            // Invalid config
+            let mut c = zconfig!();
+            writeln!(c, "usr1").unwrap();
+            drop(c);
+            assert!(AuthUsrPwd::from_config(&config).await.is_err());
+            // Empty password
+            let mut c = zconfig!();
+            writeln!(c, "usr1:").unwrap();
+            drop(c);
+            assert!(AuthUsrPwd::from_config(&config).await.is_err());
+            // Empty user
+            let mut c = zconfig!();
+            writeln!(c, ":pwd1").unwrap();
+            drop(c);
+            assert!(AuthUsrPwd::from_config(&config).await.is_err());
+            // Empty user and password
+            let mut c = zconfig!();
+            writeln!(c, ":").unwrap();
+            drop(c);
+            assert!(AuthUsrPwd::from_config(&config).await.is_err());
+
+            let _ = std::fs::remove_file(f1);
+        }
+
+        async_std::task::block_on(async {
+            zasync_executor_init!();
+            inner().await;
+        });
     }
 }
