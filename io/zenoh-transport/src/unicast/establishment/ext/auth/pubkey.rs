@@ -17,7 +17,8 @@ use async_trait::async_trait;
 use rand::Rng;
 use rsa::{
     pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey},
-    BigUint, Pkcs1v15Encrypt, PublicKey, PublicKeyParts, RsaPrivateKey, RsaPublicKey,
+    traits::PublicKeyParts,
+    BigUint, Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey,
 };
 use std::{collections::HashSet, fmt, ops::Deref, path::Path};
 use zenoh_buffers::{

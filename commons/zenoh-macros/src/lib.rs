@@ -210,7 +210,10 @@ impl syn::parse::Parse for FormatDeclaration {
 struct FormatDeclarations(syn::punctuated::Punctuated<FormatDeclaration, syn::Token!(,)>);
 impl syn::parse::Parse for FormatDeclarations {
     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-        Ok(Self(input.parse_terminated(FormatDeclaration::parse)?))
+        Ok(Self(input.parse_terminated(
+            FormatDeclaration::parse,
+            syn::Token![,],
+        )?))
     }
 }
 
@@ -260,7 +263,7 @@ impl syn::parse::Parse for FormatUsage {
         }
         assigns.extend(
             input
-                .parse_terminated::<_, syn::Token!(,)>(syn::Expr::parse)?
+                .parse_terminated(syn::Expr::parse, syn::Token![,])?
                 .into_iter()
                 .map(|a| match a {
                     syn::Expr::Assign(a) => (*a.left, *a.right),

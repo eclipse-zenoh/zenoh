@@ -28,11 +28,15 @@ pub(crate) struct Spec<'a> {
 impl<'a> TryFrom<&'a str> for Spec<'a> {
     type Error = Error;
     fn try_from(spec: &'a str) -> Result<Self, Self::Error> {
-        let Some(id_end) = spec.find(':') else {bail!("Spec {spec} didn't contain `:`")};
+        let Some(id_end) = spec.find(':') else {
+            bail!("Spec {spec} didn't contain `:`")
+        };
         let pattern_start = id_end + 1;
         let pattern_end = spec[pattern_start..].find('#').unwrap_or(u16::MAX as usize);
         if pattern_start < spec.len() {
-            let Ok(id_end) = id_end.try_into() else {bail!("Spec {spec} contains an id longer than {}", u16::MAX)};
+            let Ok(id_end) = id_end.try_into() else {
+                bail!("Spec {spec} contains an id longer than {}", u16::MAX)
+            };
             if pattern_end > u16::MAX as usize {
                 bail!("Spec {spec} contains a pattern longer than {}", u16::MAX)
             }
@@ -218,7 +222,9 @@ impl<'s> IKeFormatStorage<'s> for Vec<Segment<'s>> {
         constructor: IterativeConstructor<Self, Self::PartialConstruct, Self::ConstructionError>,
         segment: Segment<'s>,
     ) -> IterativeConstructor<Self, Self::PartialConstruct, Self::ConstructionError> {
-        let IterativeConstructor::Complete(mut this) = constructor else {unsafe {core::hint::unreachable_unchecked()}};
+        let IterativeConstructor::Complete(mut this) = constructor else {
+            unsafe { core::hint::unreachable_unchecked() }
+        };
         this.push(segment);
         IterativeConstructor::Complete(this)
     }
