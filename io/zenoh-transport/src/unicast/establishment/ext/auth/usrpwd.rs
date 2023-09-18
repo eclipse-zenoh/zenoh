@@ -498,6 +498,9 @@ mod tests {
             let _ = std::fs::remove_file(f1);
         }
 
-        async_std::task::block_on(inner());
+        async_std::task::block_on(async {
+            zasync_executor_init!();
+            inner().await;
+        });
     }
 }
