@@ -407,9 +407,57 @@ async fn auth_pubkey(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_
 
 #[cfg(feature = "auth_usrpwd")]
 async fn auth_usrpwd(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_transport: bool) {
+    use std::{fs::File, io::Write};
+    use zenoh_config::UsrPwdConf;
     use zenoh_transport::test_helpers::make_basic_transport_manager_builder;
     use zenoh_transport::unicast::establishment::ext::auth::AuthUsrPwd;
     use zenoh_transport::TransportManager;
+
+    /* [CONFIG] */
+    let f1 = "zenoh-test-auth-usrpwd.txt";
+
+    let mut config = UsrPwdConf::default();
+    config.set_user(Some("usr1".to_owned())).unwrap();
+    config.set_password(Some("pwd1".to_owned())).unwrap();
+    config.set_dictionary_file(Some(f1.to_owned())).unwrap();
+
+    macro_rules! zconfig {
+        () => {
+            File::options()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(f1)
+                .unwrap()
+        };
+    }
+    // Valid config
+    let mut c = zconfig!();
+    writeln!(c, "usr1:pwd1").unwrap();
+    drop(c);
+    assert!(AuthUsrPwd::from_config(&config).await.unwrap().is_some());
+    // Invalid config
+    let mut c = zconfig!();
+    writeln!(c, "usr1").unwrap();
+    drop(c);
+    assert!(AuthUsrPwd::from_config(&config).await.is_err());
+    // Empty password
+    let mut c = zconfig!();
+    writeln!(c, "usr1:").unwrap();
+    drop(c);
+    assert!(AuthUsrPwd::from_config(&config).await.is_err());
+    // Empty user
+    let mut c = zconfig!();
+    writeln!(c, ":pwd1").unwrap();
+    drop(c);
+    assert!(AuthUsrPwd::from_config(&config).await.is_err());
+    // Empty user and password
+    let mut c = zconfig!();
+    writeln!(c, ":").unwrap();
+    drop(c);
+    assert!(AuthUsrPwd::from_config(&config).await.is_err());
+
+    let _ = std::fs::remove_file(f1);
 
     /* [CLIENT] */
     let client01_id = ZenohId::try_from([2]).unwrap();
