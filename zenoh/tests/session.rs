@@ -23,7 +23,7 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
 const MSG_COUNT: usize = 1_000;
-const MSG_SIZE: [usize; 2] = [1_024, 131_072];
+const MSG_SIZE: [usize; 2] = [1_024, 100_000];
 
 macro_rules! ztimeout {
     ($f:expr) => {
