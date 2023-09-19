@@ -11,10 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::{sync::RwLock, task};
+use async_std::{
+    sync::{RwLock, RwLockUpgradableReadGuard},
+    task,
+};
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice, ZSliceKind};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_core::{zasyncread, zasyncwrite, zerror};
+use zenoh_core::{zasyncread_upgradable, zerror};
 use zenoh_protocol::{
     network::{NetworkBody, NetworkMessage, Push, Request, Response},
     zenoh::{
@@ -249,10 +252,9 @@ pub fn map_zslice_to_shmbuf(
     let shmbinfo: SharedMemoryBufInfo = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
 
     // First, try in read mode allowing concurrenct lookups
-    let r_guard = task::block_on(async { zasyncread!(shmr) });
+    let r_guard = task::block_on(async { zasyncread_upgradable!(shmr) });
     let smb = r_guard.try_read_shmbuf(&shmbinfo).or_else(|_| {
-        drop(r_guard);
-        let mut w_guard = task::block_on(async { zasyncwrite!(shmr) });
+        let mut w_guard = task::block_on(RwLockUpgradableReadGuard::upgrade(r_guard));
         w_guard.read_shmbuf(&shmbinfo)
     })?;
 
