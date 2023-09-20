@@ -203,7 +203,7 @@ fn zenoh_session_multicast() {
         let _ = env_logger::try_init();
 
         let (peer01, peer02) =
-            open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17449").await;
+            open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17448").await;
         test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
         close_session(peer01, peer02).await;
     });
