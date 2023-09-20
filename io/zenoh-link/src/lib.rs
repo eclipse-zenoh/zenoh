@@ -66,11 +66,11 @@ pub use zenoh_link_serial as serial;
 #[cfg(feature = "transport_serial")]
 use zenoh_link_serial::{LinkManagerUnicastSerial, SerialLocatorInspector, SERIAL_LOCATOR_PREFIX};
 
-#[cfg(feature = "transport_shm")]
-pub use zenoh_link_shm as shm;
-#[cfg(feature = "transport_shm")]
-use zenoh_link_shm::{
-    LinkManagerUnicastPipe, ShmConfigurator, ShmLocatorInspector, SHM_LOCATOR_PREFIX,
+#[cfg(feature = "transport_unixpipe")]
+pub use zenoh_link_unixpipe as unixpipe;
+#[cfg(feature = "transport_unixpipe")]
+use zenoh_link_unixpipe::{
+    LinkManagerUnicastPipe, UnixPipeConfigurator, UnixPipeLocatorInspector, UNIXPIPE_LOCATOR_PREFIX,
 };
 
 pub use zenoh_link_commons::*;
@@ -91,8 +91,8 @@ pub const PROTOCOLS: &[&str] = &[
     unixsock_stream::UNIXSOCKSTREAM_LOCATOR_PREFIX,
     #[cfg(feature = "transport_serial")]
     serial::SERIAL_LOCATOR_PREFIX,
-    #[cfg(feature = "transport_shm")]
-    shm::SHM_LOCATOR_PREFIX,
+    #[cfg(feature = "transport_unixpipe")]
+    unixpipe::UNIXPIPE_LOCATOR_PREFIX,
 ];
 
 #[derive(Default, Clone)]
@@ -111,8 +111,8 @@ pub struct LocatorInspector {
     unixsock_stream_inspector: UnixSockStreamLocatorInspector,
     #[cfg(feature = "transport_serial")]
     serial_inspector: SerialLocatorInspector,
-    #[cfg(feature = "transport_shm")]
-    shm_inspector: ShmLocatorInspector,
+    #[cfg(feature = "transport_unixpipe")]
+    unixpipe_inspector: UnixPipeLocatorInspector,
 }
 impl LocatorInspector {
     pub async fn is_multicast(&self, locator: &Locator) -> ZResult<bool> {
@@ -136,8 +136,8 @@ impl LocatorInspector {
             WS_LOCATOR_PREFIX => self.ws_inspector.is_multicast(locator).await,
             #[cfg(feature = "transport_serial")]
             SERIAL_LOCATOR_PREFIX => self.serial_inspector.is_multicast(locator).await,
-            #[cfg(feature = "transport_shm")]
-            SHM_LOCATOR_PREFIX => self.shm_inspector.is_multicast(locator).await,
+            #[cfg(feature = "transport_unixpipe")]
+            UNIXPIPE_LOCATOR_PREFIX => self.unixpipe_inspector.is_multicast(locator).await,
             _ => bail!("Unsupported protocol: {}.", protocol),
         }
     }
@@ -148,8 +148,8 @@ pub struct LinkConfigurator {
     quic_inspector: QuicConfigurator,
     #[cfg(feature = "transport_tls")]
     tls_inspector: TlsConfigurator,
-    #[cfg(feature = "transport_shm")]
-    shm_inspector: ShmConfigurator,
+    #[cfg(feature = "transport_unixpipe")]
+    unixpipe_inspector: UnixPipeConfigurator,
 }
 
 impl LinkConfigurator {
@@ -185,11 +185,11 @@ impl LinkConfigurator {
                 self.tls_inspector.inspect_config(config).await,
             );
         }
-        #[cfg(feature = "transport_shm")]
+        #[cfg(feature = "transport_unixpipe")]
         {
             insert_config(
-                SHM_LOCATOR_PREFIX.into(),
-                self.shm_inspector.inspect_config(config).await,
+                UNIXPIPE_LOCATOR_PREFIX.into(),
+                self.unixpipe_inspector.inspect_config(config).await,
             );
         }
         (configs, errors)
@@ -221,8 +221,8 @@ impl LinkManagerBuilderUnicast {
             WS_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastWs::new(_manager))),
             #[cfg(feature = "transport_serial")]
             SERIAL_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastSerial::new(_manager))),
-            #[cfg(feature = "transport_shm")]
-            SHM_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastPipe::new(_manager))),
+            #[cfg(feature = "transport_unixpipe")]
+            UNIXPIPE_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastPipe::new(_manager))),
             _ => bail!("Unicast not supported for {} protocol", protocol),
         }
     }

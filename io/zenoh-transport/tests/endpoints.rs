@@ -179,9 +179,9 @@ fn endpoint_ws() {
     task::block_on(run(&endpoints));
 }
 
-#[cfg(feature = "transport_shm")]
+#[cfg(feature = "transport_unixpipe")]
 #[test]
-fn endpoint_shm() {
+fn endpoint_unixpipe() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
@@ -189,10 +189,10 @@ fn endpoint_shm() {
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
-        "shm/endpoint_shm".parse().unwrap(),
-        "shm/endpoint_shm2".parse().unwrap(),
-        "shm/endpoint_shm3".parse().unwrap(),
-        "shm/endpoint_shm4".parse().unwrap(),
+        "unixpipe/endpoint_unixpipe".parse().unwrap(),
+        "unixpipe/endpoint_unixpipe2".parse().unwrap(),
+        "unixpipe/endpoint_unixpipe3".parse().unwrap(),
+        "unixpipe/endpoint_unixpipe4".parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
 }

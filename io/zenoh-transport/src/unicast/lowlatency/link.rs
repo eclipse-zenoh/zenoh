@@ -11,7 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::TransportUnicastShm;
+use super::transport::TransportUnicastLowlatency;
+#[cfg(feature = "stats")]
+use crate::stats::TransportStats;
 use crate::TransportExecutor;
 use async_std::task;
 use async_std::{prelude::FutureExt, sync::RwLock};
@@ -22,11 +24,18 @@ use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::{writer::HasWriter, ZSlice};
 use zenoh_link::LinkUnicast;
-use zenoh_protocol::transport::{BatchSize, KeepAlive, TransportBodyShm, TransportMessageShm};
+use zenoh_protocol::transport::{
+    BatchSize, KeepAlive, TransportBodyLowLatency, TransportMessageLowLatency,
+};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::RecyclingObjectPool;
 
-pub(crate) async fn send_with_link(link: &LinkUnicast, msg: TransportMessageShm) -> ZResult<()> {
+pub(crate) async fn send_with_link(
+    link: &LinkUnicast,
+    msg: TransportMessageLowLatency,
+    #[cfg(feature = "stats")] stats: &Arc<TransportStats>,
+) -> ZResult<()> {
+    let len;
     if link.is_streamed() {
         let mut buffer = vec![0, 0, 0, 0];
         let codec = Zenoh080::new();
@@ -35,7 +44,7 @@ pub(crate) async fn send_with_link(link: &LinkUnicast, msg: TransportMessageShm)
             .write(&mut writer, &msg)
             .map_err(|_| zerror!("Error serializing message {:?}", msg))?;
 
-        let len = (buffer.len() - 4) as u32;
+        len = (buffer.len() - 4) as u32;
         let le = len.to_le_bytes();
 
         buffer[0..4].copy_from_slice(&le);
@@ -49,27 +58,36 @@ pub(crate) async fn send_with_link(link: &LinkUnicast, msg: TransportMessageShm)
             .write(&mut writer, &msg)
             .map_err(|_| zerror!("Error serializing message {:?}", msg))?;
 
+        #[cfg(feature = "stats")]
+        {
+            len = buffer.len() as u32;
+        }
         link.write_all(&buffer).await?;
     }
     log::trace!("Sent: {:?}", msg);
 
-    // #[cfg(feature = "stats")]
-    // {
-    //     stats.inc_tx_t_msgs(1);
-    //     stats.inc_tx_bytes(buff.len() + 2);
-    // }
-
+    #[cfg(feature = "stats")]
+    {
+        stats.inc_tx_t_msgs(1);
+        stats.inc_tx_bytes(len as usize);
+    }
     Ok(())
 }
 
-impl TransportUnicastShm {
-    pub(super) fn send(&self, msg: TransportMessageShm) -> ZResult<()> {
+impl TransportUnicastLowlatency {
+    pub(super) fn send(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
         async_std::task::block_on(self.send_async(msg))
     }
 
-    pub(super) async fn send_async(&self, msg: TransportMessageShm) -> ZResult<()> {
+    pub(super) async fn send_async(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
         let guard = zasyncwrite!(self.link);
-        send_with_link(&guard, msg).await
+        send_with_link(
+            &guard,
+            msg,
+            #[cfg(feature = "stats")]
+            &self.stats,
+        )
+        .await
     }
 
     pub(super) fn start_keepalive(&self, executor: &TransportExecutor, keep_alive: Duration) {
@@ -79,8 +97,8 @@ impl TransportUnicastShm {
             let res = keepalive_task(
                 c_transport.link.clone(),
                 keep_alive,
-                // #[cfg(feature = "stats")]
-                // c_transport.stats,
+                #[cfg(feature = "stats")]
+                c_transport.stats.clone(),
             )
             .await;
             log::debug!(
@@ -161,20 +179,21 @@ impl TransportUnicastShm {
 async fn keepalive_task(
     link: Arc<RwLock<LinkUnicast>>,
     keep_alive: Duration,
-    // #[cfg(feature = "stats")] stats: Arc<TransportUnicastStatsAtomic>,
+    #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
     loop {
         async_std::task::sleep(keep_alive).await;
 
-        let keepailve = TransportMessageShm {
-            body: TransportBodyShm::KeepAlive(KeepAlive),
+        let keepailve = TransportMessageLowLatency {
+            body: TransportBodyLowLatency::KeepAlive(KeepAlive),
         };
 
         let guard = zasyncwrite!(link);
         let _ = send_with_link(
-            &guard, keepailve,
-            // #[cfg(feature = "stats")]
-            // &stats,
+            &guard,
+            keepailve,
+            #[cfg(feature = "stats")]
+            &stats,
         )
         .await;
         drop(guard);
@@ -183,7 +202,7 @@ async fn keepalive_task(
 
 async fn rx_task_stream(
     link: LinkUnicast,
-    transport: TransportUnicastShm,
+    transport: TransportUnicastLowlatency,
     lease: Duration,
     rx_batch_size: BatchSize,
     rx_buffer_size: usize,
@@ -226,7 +245,7 @@ async fn rx_task_stream(
 
 async fn rx_task_dgram(
     link: LinkUnicast,
-    transport: TransportUnicastShm,
+    transport: TransportUnicastLowlatency,
     lease: Duration,
     rx_batch_size: BatchSize,
     rx_buffer_size: usize,
@@ -260,7 +279,7 @@ async fn rx_task_dgram(
 
 async fn rx_task(
     link: LinkUnicast,
-    transport: TransportUnicastShm,
+    transport: TransportUnicastLowlatency,
     lease: Duration,
     rx_batch_size: u16,
     rx_buffer_size: usize,

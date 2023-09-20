@@ -13,6 +13,7 @@
 //
 #[cfg(feature = "transport_auth")]
 pub mod auth;
+pub(crate) mod lowlatency;
 #[cfg(feature = "transport_multilink")]
 pub(crate) mod multilink;
 pub(crate) mod qos;

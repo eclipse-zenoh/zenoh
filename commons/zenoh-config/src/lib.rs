@@ -219,6 +219,10 @@ validated_struct::validator! {
                 max_sessions: usize,
                 /// Maximum number of unicast incoming links per transport session (default: 1)
                 max_links: usize,
+                /// Enables the LowLatency transport (default `false`).
+                /// This option does not make LowLatency transport mandatory, the actual implementation of transport
+                /// used will depend on Establish procedure and other party's settings
+                lowlatency: bool,
             },
             pub multicast: TransportMulticastConf {
                 /// Link join interval duration in milliseconds (default: 2500)
@@ -291,9 +295,9 @@ validated_struct::validator! {
                     client_certificate: Option<String>,
                     server_name_verification: Option<bool>
                 },
-                pub shared_memory: #[derive(Default)]
-                SHMConf {
-                    shm_access_mask: Option<u32>
+                pub unixpipe: #[derive(Default)]
+                UnixPipeConf {
+                    file_access_mask: Option<u32>
                 },
                 pub compression: #[derive(Default)]
                 /// **Experimental** compression feature.
@@ -311,7 +315,8 @@ validated_struct::validator! {
             pub shared_memory:
             SharedMemoryConf {
                 /// Whether shared memory is enabled or not.
-                /// If set to `true`, the shared-memory transport will be enabled. (default `false`).
+                /// If set to `true`, the SHM buffer optimization support will be announced to other parties. (default `false`).
+                /// This option doesn't make SHM buffer optimization mandatory, the real support depends on other party setting
                 enabled: bool,
             },
             pub auth: #[derive(Default)]

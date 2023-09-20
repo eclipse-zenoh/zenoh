@@ -13,7 +13,7 @@
 //
 use async_std::{prelude::FutureExt, task};
 use std::{convert::TryFrom, sync::Arc, time::Duration};
-use zenoh_core::{zasync_executor_init, zcondfeat};
+use zenoh_core::zasync_executor_init;
 use zenoh_link::EndPoint;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_result::ZResult;
@@ -79,10 +79,7 @@ impl TransportEventHandler for SHClientOpenClose {
     }
 }
 
-async fn openclose_transport(
-    endpoint: &EndPoint,
-    #[cfg(feature = "shared-memory")] shm_transport: bool,
-) {
+async fn openclose_transport(endpoint: &EndPoint, lowlatency_transport: bool) {
     /* [ROUTER] */
     let router_id = ZenohId::try_from([1]).unwrap();
 
@@ -92,7 +89,8 @@ async fn openclose_transport(
         #[cfg(feature = "transport_multilink")]
         2,
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .max_sessions(1);
     let router_manager = TransportManager::builder()
@@ -111,7 +109,8 @@ async fn openclose_transport(
         #[cfg(feature = "transport_multilink")]
         2,
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .max_sessions(1);
     let client01_manager = TransportManager::builder()
@@ -126,7 +125,8 @@ async fn openclose_transport(
         #[cfg(feature = "transport_multilink")]
         1,
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .max_sessions(1);
     let client02_manager = TransportManager::builder()
@@ -189,8 +189,8 @@ async fn openclose_transport(
     /* [2] */
     // Open a second transport from the client to the router
     // -> This should be accepted
-    // (this stage is ignored for SHM transport, because it supports only one link)
-    if zcondfeat!("shared-memory", !shm_transport, true) {
+    // (this stage is ignored for LowLatency transport, because it supports only one link)
+    if !lowlatency_transport {
         links_num = 2;
 
         println!("\nTransport Open Close [2a1]");
@@ -227,7 +227,7 @@ async fn openclose_transport(
             }
         });
     } else {
-        println!("\nTransport Open Close [2a*]: step ignored for SHM transport!");
+        println!("\nTransport Open Close [2a*]: step ignored for LowLatency transport!");
     }
 
     /* [3] */
@@ -455,17 +455,11 @@ async fn openclose_transport(
     task::sleep(SLEEP).await;
 }
 
-async fn openclose_net_transport(endpoint: &EndPoint) {
-    openclose_transport(
-        endpoint,
-        #[cfg(feature = "shared-memory")]
-        false,
-    )
-    .await
+async fn openclose_universal_transport(endpoint: &EndPoint) {
+    openclose_transport(endpoint, false).await
 }
 
-#[cfg(feature = "shared-memory")]
-async fn openclose_shm_transport(endpoint: &EndPoint) {
+async fn openclose_lowlatency_transport(endpoint: &EndPoint) {
     openclose_transport(endpoint, true).await
 }
 
@@ -478,19 +472,19 @@ fn openclose_tcp_only() {
     });
 
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 13000).parse().unwrap();
-    task::block_on(openclose_net_transport(&endpoint));
+    task::block_on(openclose_universal_transport(&endpoint));
 }
 
-#[cfg(all(feature = "transport_tcp", feature = "shared-memory"))]
+#[cfg(feature = "transport_tcp")]
 #[test]
-fn openclose_tcp_only_with_shm_transport() {
+fn openclose_tcp_only_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 13100).parse().unwrap();
-    task::block_on(openclose_shm_transport(&endpoint));
+    task::block_on(openclose_lowlatency_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_udp")]
@@ -502,19 +496,19 @@ fn openclose_udp_only() {
     });
 
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 13010).parse().unwrap();
-    task::block_on(openclose_net_transport(&endpoint));
+    task::block_on(openclose_universal_transport(&endpoint));
 }
 
-#[cfg(all(feature = "transport_udp", feature = "shared-memory"))]
+#[cfg(feature = "transport_udp")]
 #[test]
-fn openclose_udp_only_with_shm_transport() {
+fn openclose_udp_only_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 13110).parse().unwrap();
-    task::block_on(openclose_shm_transport(&endpoint));
+    task::block_on(openclose_lowlatency_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_ws")]
@@ -527,46 +521,48 @@ fn openclose_ws_only() {
     });
 
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 13020).parse().unwrap();
-    task::block_on(openclose_net_transport(&endpoint));
+    task::block_on(openclose_universal_transport(&endpoint));
 }
 
-#[cfg(all(feature = "transport_ws", feature = "shared-memory"))]
+#[cfg(feature = "transport_ws")]
 #[test]
 #[ignore]
-fn openclose_ws_only_with_shm_transport() {
+fn openclose_ws_only_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 13120).parse().unwrap();
-    task::block_on(openclose_shm_transport(&endpoint));
+    task::block_on(openclose_lowlatency_transport(&endpoint));
 }
 
-#[cfg(feature = "transport_shm")]
+#[cfg(feature = "transport_unixpipe")]
 #[test]
 #[ignore]
-fn openclose_shm_only() {
+fn openclose_unixpipe_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "shm/openclose_shm_only".parse().unwrap();
-    task::block_on(openclose_net_transport(&endpoint));
+    let endpoint: EndPoint = "unixpipe/openclose_unixpipe_only".parse().unwrap();
+    task::block_on(openclose_universal_transport(&endpoint));
 }
 
-#[cfg(all(feature = "transport_shm", feature = "shared-memory"))]
+#[cfg(feature = "transport_unixpipe")]
 #[test]
 #[ignore]
-fn openclose_shm_only_with_shm_transport() {
+fn openclose_unixpipe_only_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "shm/openclose_shm_only_with_shm_transport".parse().unwrap();
-    task::block_on(openclose_shm_transport(&endpoint));
+    let endpoint: EndPoint = "unixpipe/openclose_unixpipe_only_with_lowlatency_transport"
+        .parse()
+        .unwrap();
+    task::block_on(openclose_lowlatency_transport(&endpoint));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -581,7 +577,7 @@ fn openclose_unix_only() {
     let f1 = "zenoh-test-unix-socket-9.sock";
     let _ = std::fs::remove_file(f1);
     let endpoint: EndPoint = format!("unixsock-stream/{f1}").parse().unwrap();
-    task::block_on(openclose_net_transport(&endpoint));
+    task::block_on(openclose_universal_transport(&endpoint));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -685,7 +681,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         )
         .unwrap();
 
-    task::block_on(openclose_net_transport(&endpoint));
+    task::block_on(openclose_universal_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_quic")]
@@ -787,5 +783,5 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         )
         .unwrap();
 
-    task::block_on(openclose_net_transport(&endpoint));
+    task::block_on(openclose_universal_transport(&endpoint));
 }

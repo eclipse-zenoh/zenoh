@@ -37,6 +37,7 @@ pub(crate) struct Cookie {
     pub(crate) ext_shm: ext::shm::StateAccept,
     #[cfg(feature = "transport_auth")]
     pub(crate) ext_auth: ext::auth::StateAccept,
+    pub(crate) ext_lowlatency: ext::lowlatency::StateAccept,
 }
 
 impl<W> WCodec<&Cookie, &mut W> for Zenoh080
@@ -60,6 +61,7 @@ where
         self.write(&mut *writer, &x.ext_shm)?;
         #[cfg(feature = "transport_auth")]
         self.write(&mut *writer, &x.ext_auth)?;
+        self.write(&mut *writer, &x.ext_lowlatency)?;
 
         Ok(())
     }
@@ -87,6 +89,7 @@ where
         let ext_shm: ext::shm::StateAccept = self.read(&mut *reader)?;
         #[cfg(feature = "transport_auth")]
         let ext_auth: ext::auth::StateAccept = self.read(&mut *reader)?;
+        let ext_lowlatency: ext::lowlatency::StateAccept = self.read(&mut *reader)?;
 
         let cookie = Cookie {
             zid,
@@ -101,6 +104,7 @@ where
             ext_shm,
             #[cfg(feature = "transport_auth")]
             ext_auth,
+            ext_lowlatency,
         };
 
         Ok(cookie)
@@ -169,6 +173,7 @@ impl Cookie {
             ext_shm: ext::shm::StateAccept::rand(),
             #[cfg(feature = "transport_auth")]
             ext_auth: ext::auth::StateAccept::rand(),
+            ext_lowlatency: ext::lowlatency::StateAccept::rand(),
         }
     }
 }

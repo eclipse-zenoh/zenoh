@@ -106,6 +106,7 @@ impl Default for TransportUnicastConf {
             accept_pending: 100,
             max_sessions: 1_000,
             max_links: 1,
+            lowlatency: false,
         }
     }
 }

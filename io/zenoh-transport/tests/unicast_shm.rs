@@ -149,7 +149,7 @@ mod tests {
         }
     }
 
-    async fn run(endpoint: &EndPoint) {
+    async fn run(endpoint: &EndPoint, lowlatency_transport: bool) {
         println!("Transport SHM [0a]: {endpoint:?}");
 
         // Define client and router IDs
@@ -167,7 +167,11 @@ mod tests {
         let peer_shm01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_shm01)
-            .unicast(TransportManager::config_unicast().shm(true))
+            .unicast(
+                TransportManager::config_unicast()
+                    .shm(true)
+                    .lowlatency(lowlatency_transport),
+            )
             .build(peer_shm01_handler.clone())
             .unwrap();
 
@@ -176,7 +180,11 @@ mod tests {
         let peer_shm02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_shm02)
-            .unicast(TransportManager::config_unicast().shm(true))
+            .unicast(
+                TransportManager::config_unicast()
+                    .shm(true)
+                    .lowlatency(lowlatency_transport),
+            )
             .build(peer_shm02_handler.clone())
             .unwrap();
 
@@ -185,7 +193,11 @@ mod tests {
         let peer_net01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_net01)
-            .unicast(TransportManager::config_unicast().shm(false))
+            .unicast(
+                TransportManager::config_unicast()
+                    .shm(false)
+                    .lowlatency(lowlatency_transport),
+            )
             .build(peer_net01_handler.clone())
             .unwrap();
 
@@ -354,7 +366,7 @@ mod tests {
         task::sleep(SLEEP).await;
     }
 
-    #[cfg(all(feature = "transport_tcp", feature = "shared-memory"))]
+    #[cfg(feature = "transport_tcp")]
     #[test]
     fn transport_tcp_shm() {
         let _ = env_logger::try_init();
@@ -363,10 +375,22 @@ mod tests {
         });
 
         let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
-        task::block_on(run(&endpoint));
+        task::block_on(run(&endpoint, false));
     }
 
-    #[cfg(all(feature = "transport_ws", feature = "shared-memory"))]
+    #[cfg(feature = "transport_tcp")]
+    #[test]
+    fn transport_tcp_shm_with_lowlatency_transport() {
+        let _ = env_logger::try_init();
+        task::block_on(async {
+            zasync_executor_init!();
+        });
+
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
+        task::block_on(run(&endpoint, true));
+    }
+
+    #[cfg(feature = "transport_ws")]
     #[test]
     fn transport_ws_shm() {
         let _ = env_logger::try_init();
@@ -375,18 +399,42 @@ mod tests {
         });
 
         let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14010).parse().unwrap();
-        task::block_on(run(&endpoint));
+        task::block_on(run(&endpoint, false));
     }
 
-    #[cfg(all(feature = "transport_shm", feature = "shared-memory"))]
+    #[cfg(feature = "transport_ws")]
     #[test]
-    fn transport_shm_shm() {
+    fn transport_ws_shm_with_lowlatency_transport() {
         let _ = env_logger::try_init();
         task::block_on(async {
             zasync_executor_init!();
         });
 
-        let endpoint: EndPoint = "shm/transport_shm_shm".parse().unwrap();
-        task::block_on(run(&endpoint));
+        let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14010).parse().unwrap();
+        task::block_on(run(&endpoint, true));
+    }
+
+    #[cfg(feature = "transport_unixpipe")]
+    #[test]
+    fn transport_unixpipe_shm() {
+        let _ = env_logger::try_init();
+        task::block_on(async {
+            zasync_executor_init!();
+        });
+
+        let endpoint: EndPoint = "unixpipe/transport_unixpipe_shm".parse().unwrap();
+        task::block_on(run(&endpoint, false));
+    }
+
+    #[cfg(feature = "transport_unixpipe")]
+    #[test]
+    fn transport_unixpipe_shm_with_lowlatency_transport() {
+        let _ = env_logger::try_init();
+        task::block_on(async {
+            zasync_executor_init!();
+        });
+
+        let endpoint: EndPoint = "unixpipe/transport_unixpipe_shm".parse().unwrap();
+        task::block_on(run(&endpoint, true));
     }
 }

@@ -11,11 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::TransportUnicastNet;
+use super::transport::TransportUnicastUniversal;
 use zenoh_core::zread;
 use zenoh_protocol::network::NetworkMessage;
 
-impl TransportUnicastNet {
+impl TransportUnicastUniversal {
     fn schedule_on_link(&self, msg: NetworkMessage) -> bool {
         macro_rules! zpush {
             ($guard:expr, $pipeline:expr, $msg:expr) => {

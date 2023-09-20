@@ -147,10 +147,7 @@ impl TransportPeerEventHandler for SCClient {
     }
 }
 
-async fn transport_intermittent(
-    endpoint: &EndPoint,
-    #[cfg(feature = "shared-memory")] shm_transport: bool,
-) {
+async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool) {
     /* [ROUTER] */
     let router_id = ZenohId::try_from([1]).unwrap();
 
@@ -160,7 +157,8 @@ async fn transport_intermittent(
         #[cfg(feature = "transport_multilink")]
         1,
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .max_sessions(3);
     let router_manager = TransportManager::builder()
@@ -181,7 +179,8 @@ async fn transport_intermittent(
         #[cfg(feature = "transport_multilink")]
         1,
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .max_sessions(3);
     let client01_manager = TransportManager::builder()
@@ -196,7 +195,8 @@ async fn transport_intermittent(
         #[cfg(feature = "transport_multilink")]
         1,
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .max_sessions(1);
     let client02_manager = TransportManager::builder()
@@ -211,7 +211,8 @@ async fn transport_intermittent(
         #[cfg(feature = "transport_multilink")]
         1,
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .max_sessions(1);
     let client03_manager = TransportManager::builder()
@@ -406,17 +407,11 @@ async fn transport_intermittent(
     task::sleep(SLEEP).await;
 }
 
-async fn net_transport_intermittent(endpoint: &EndPoint) {
-    transport_intermittent(
-        endpoint,
-        #[cfg(feature = "shared-memory")]
-        false,
-    )
-    .await
+async fn universal_transport_intermittent(endpoint: &EndPoint) {
+    transport_intermittent(endpoint, false).await
 }
 
-#[cfg(feature = "shared-memory")]
-async fn shm_transport_intermittent(endpoint: &EndPoint) {
+async fn lowlatency_transport_intermittent(endpoint: &EndPoint) {
     transport_intermittent(endpoint, true).await
 }
 
@@ -429,19 +424,19 @@ fn transport_tcp_intermittent() {
     });
 
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12000).parse().unwrap();
-    task::block_on(net_transport_intermittent(&endpoint));
+    task::block_on(universal_transport_intermittent(&endpoint));
 }
 
-#[cfg(all(feature = "transport_tcp", feature = "shared-memory"))]
+#[cfg(feature = "transport_tcp")]
 #[test]
-fn transport_tcp_intermittent_for_shm_transport() {
+fn transport_tcp_intermittent_for_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12100).parse().unwrap();
-    task::block_on(shm_transport_intermittent(&endpoint));
+    task::block_on(lowlatency_transport_intermittent(&endpoint));
 }
 
 #[cfg(feature = "transport_ws")]
@@ -454,46 +449,46 @@ fn transport_ws_intermittent() {
     });
 
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12010).parse().unwrap();
-    task::block_on(net_transport_intermittent(&endpoint));
+    task::block_on(universal_transport_intermittent(&endpoint));
 }
 
-#[cfg(all(feature = "transport_ws", feature = "shared-memory"))]
+#[cfg(feature = "transport_ws")]
 #[test]
 #[ignore]
-fn transport_ws_intermittent_for_shm_transport() {
+fn transport_ws_intermittent_for_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12110).parse().unwrap();
-    task::block_on(shm_transport_intermittent(&endpoint));
+    task::block_on(lowlatency_transport_intermittent(&endpoint));
 }
 
-#[cfg(feature = "transport_shm")]
+#[cfg(feature = "transport_unixpipe")]
 #[test]
 #[ignore]
-fn transport_shm_intermittent() {
+fn transport_unixpipe_intermittent() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "shm/transport_shm_intermittent".parse().unwrap();
-    task::block_on(net_transport_intermittent(&endpoint));
+    let endpoint: EndPoint = "unixpipe/transport_unixpipe_intermittent".parse().unwrap();
+    task::block_on(universal_transport_intermittent(&endpoint));
 }
 
-#[cfg(all(feature = "transport_shm", feature = "shared-memory"))]
+#[cfg(feature = "transport_unixpipe")]
 #[test]
 #[ignore]
-fn transport_shm_intermittent_for_shm_transport() {
+fn transport_unixpipe_intermittent_for_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "shm/transport_shm_intermittent_for_shm_transport"
+    let endpoint: EndPoint = "unixpipe/transport_unixpipe_intermittent_for_lowlatency_transport"
         .parse()
         .unwrap();
-    task::block_on(shm_transport_intermittent(&endpoint));
+    task::block_on(lowlatency_transport_intermittent(&endpoint));
 }

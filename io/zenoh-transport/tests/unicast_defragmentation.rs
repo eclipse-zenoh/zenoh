@@ -209,17 +209,17 @@ fn transport_unicast_defragmentation_ws_only() {
     });
 }
 
-#[cfg(feature = "transport_shm")]
+#[cfg(feature = "transport_unixpipe")]
 #[test]
 #[ignore]
-fn transport_unicast_defragmentation_shm_only() {
+fn transport_unicast_defragmentation_unixpipe_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Define the locators
-    let endpoint: EndPoint = "shm/transport_unicast_defragmentation_shm_only"
+    let endpoint: EndPoint = "unixpipe/transport_unicast_defragmentation_unixpipe_only"
         .parse()
         .unwrap();
     // Define the reliability and congestion control

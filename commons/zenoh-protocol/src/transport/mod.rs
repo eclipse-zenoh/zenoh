@@ -29,7 +29,6 @@ pub use keepalive::KeepAlive;
 pub use oam::Oam;
 pub use open::{OpenAck, OpenSyn};
 
-#[cfg(feature = "shared-memory")]
 use crate::network::NetworkMessage;
 
 /// NOTE: 16 bits (2 bytes) may be prepended to the serialized message indicating the total length
@@ -59,14 +58,13 @@ pub mod id {
     pub const JOIN: u8 = 0x07; // For multicast communications only
 }
 
-#[cfg(feature = "shared-memory")]
 #[derive(Debug)]
-pub struct TransportMessageShm {
-    pub body: TransportBodyShm,
+pub struct TransportMessageLowLatency {
+    pub body: TransportBodyLowLatency,
 }
-#[cfg(feature = "shared-memory")]
+
 #[derive(Debug)]
-pub enum TransportBodyShm {
+pub enum TransportBodyLowLatency {
     Close(Close),
     KeepAlive(KeepAlive),
     Network(Box<NetworkMessage>),

@@ -329,26 +329,26 @@ mod tests {
         });
     }
 
-    #[cfg(feature = "transport_shm")]
+    #[cfg(feature = "transport_unixpipe")]
     #[test]
     #[ignore]
-    fn transport_shm_simultaneous() {
+    fn transport_unixpipe_simultaneous() {
         let _ = env_logger::try_init();
         task::block_on(async {
             zasync_executor_init!();
         });
 
         let endpoint01: Vec<EndPoint> = vec![
-            "shm/transport_shm_simultaneous".parse().unwrap(),
-            "shm/transport_shm_simultaneous2".parse().unwrap(),
-            "shm/transport_shm_simultaneous3".parse().unwrap(),
-            "shm/transport_shm_simultaneous4".parse().unwrap(),
+            "unixpipe/transport_unixpipe_simultaneous".parse().unwrap(),
+            "unixpipe/transport_unixpipe_simultaneous2".parse().unwrap(),
+            "unixpipe/transport_unixpipe_simultaneous3".parse().unwrap(),
+            "unixpipe/transport_unixpipe_simultaneous4".parse().unwrap(),
         ];
         let endpoint02: Vec<EndPoint> = vec![
-            "shm/transport_shm_simultaneous5".parse().unwrap(),
-            "shm/transport_shm_simultaneous6".parse().unwrap(),
-            "shm/transport_shm_simultaneous7".parse().unwrap(),
-            "shm/transport_shm_simultaneous8".parse().unwrap(),
+            "unixpipe/transport_unixpipe_simultaneous5".parse().unwrap(),
+            "unixpipe/transport_unixpipe_simultaneous6".parse().unwrap(),
+            "unixpipe/transport_unixpipe_simultaneous7".parse().unwrap(),
+            "unixpipe/transport_unixpipe_simultaneous8".parse().unwrap(),
         ];
 
         task::block_on(async {

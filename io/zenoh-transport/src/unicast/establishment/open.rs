@@ -51,6 +51,7 @@ struct State {
     ext_shm: ext::shm::StateOpen,
     #[cfg(feature = "transport_auth")]
     ext_auth: ext::auth::StateOpen,
+    ext_lowlatency: ext::lowlatency::StateOpen,
 }
 
 // InitSyn
@@ -99,6 +100,7 @@ struct OpenLink<'a> {
     ext_shm: ext::shm::ShmFsm<'a>,
     #[cfg(feature = "transport_auth")]
     ext_auth: ext::auth::AuthFsm<'a>,
+    ext_lowlatency: ext::lowlatency::LowLatencyFsm<'a>,
 }
 
 #[async_trait]
@@ -117,6 +119,13 @@ impl<'a> OpenFsm for OpenLink<'a> {
         let ext_qos = self
             .ext_qos
             .send_init_syn(&state.ext_qos)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension LowLatency
+        let ext_lowlatency = self
+            .ext_lowlatency
+            .send_init_syn(&state.ext_lowlatency)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -160,6 +169,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
             ext_shm,
             ext_auth,
             ext_mlink,
+            ext_lowlatency,
         }
         .into();
 
@@ -257,6 +267,12 @@ impl<'a> OpenFsm for OpenLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension LowLatency
+        self.ext_lowlatency
+            .recv_init_ack((&mut state.ext_lowlatency, init_ack.ext_lowlatency))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         // Extension Shm
         #[cfg(feature = "shared-memory")]
         let shm_challenge = self
@@ -304,6 +320,13 @@ impl<'a> OpenFsm for OpenLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension LowLatency
+        let ext_lowlatency = self
+            .ext_lowlatency
+            .send_open_syn(&state.ext_lowlatency)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         // Extension Shm
         let ext_shm = zcondfeat!(
             "shared-memory",
@@ -344,6 +367,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
             ext_shm,
             ext_auth,
             ext_mlink,
+            ext_lowlatency,
         }
         .into();
 
@@ -400,6 +424,12 @@ impl<'a> OpenFsm for OpenLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension QoS
+        self.ext_lowlatency
+            .recv_open_ack((&mut state.ext_lowlatency, open_ack.ext_lowlatency))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         // Extension Shm
         #[cfg(feature = "shared-memory")]
         self.ext_shm
@@ -442,6 +472,7 @@ pub(crate) async fn open_link(
         ext_shm: ext::shm::ShmFsm::new(&manager.state.unicast.shm),
         #[cfg(feature = "transport_auth")]
         ext_auth: manager.state.unicast.authenticator.fsm(&manager.prng),
+        ext_lowlatency: ext::lowlatency::LowLatencyFsm::new(),
     };
 
     let mut state = State {
@@ -464,6 +495,7 @@ pub(crate) async fn open_link(
             .unicast
             .authenticator
             .open(&mut *zasynclock!(manager.prng)),
+        ext_lowlatency: ext::lowlatency::StateOpen::new(manager.config.unicast.is_lowlatency),
     };
 
     // Init handshake
@@ -512,6 +544,7 @@ pub(crate) async fn open_link(
         multilink: state.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]
         is_shm: state.ext_shm.is_shm(),
+        is_lowlatency: state.ext_lowlatency.is_lowlatency(),
     };
 
     let transport = step!(

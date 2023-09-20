@@ -518,16 +518,16 @@ mod tests {
         task::block_on(multilink_transport(&endpoint));
     }
 
-    #[cfg(feature = "transport_shm")]
+    #[cfg(feature = "transport_unixpipe")]
     #[test]
     #[ignore]
-    fn multilink_shm_only() {
+    fn multilink_unixpipe_only() {
         let _ = env_logger::try_init();
         task::block_on(async {
             zasync_executor_init!();
         });
 
-        let endpoint: EndPoint = "shm/multilink_shm_only".parse().unwrap();
+        let endpoint: EndPoint = "unixpipe/multilink_unixpipe_only".parse().unwrap();
         task::block_on(multilink_transport(&endpoint));
     }
 

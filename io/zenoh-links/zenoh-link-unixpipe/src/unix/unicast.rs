@@ -38,7 +38,7 @@ use zenoh_link_commons::{
 };
 use zenoh_result::{bail, ZResult};
 
-use super::SHM_ACCESS_MASK;
+use super::FILE_ACCESS_MASK;
 
 const LINUX_PIPE_MAX_MTU: u16 = 65_535;
 const LINUX_PIPE_DEDICATE_TRIES: usize = 100;
@@ -450,7 +450,7 @@ impl Drop for UnicastPipe {
 #[async_trait]
 impl LinkUnicastTrait for UnicastPipe {
     async fn close(&self) -> ZResult<()> {
-        log::trace!("Closing SHM Pipe link: {}", self);
+        log::trace!("Closing Unix Pipe link: {}", self);
         Ok(())
     }
 
@@ -505,7 +505,7 @@ impl fmt::Display for UnicastPipe {
 
 impl fmt::Debug for UnicastPipe {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Shm")
+        f.debug_struct("UnicastPipe")
             .field("src", &self.local)
             .field("dst", &self.remote)
             .finish()
@@ -578,9 +578,9 @@ fn parse_pipe_endpoint(endpoint: &EndPoint) -> (String, String, u32) {
     let path_downlink = path.to_string() + "_downlink";
     let access_mode = endpoint
         .config()
-        .get(config::SHM_ACCESS_MASK)
-        .map_or(*SHM_ACCESS_MASK, |val| {
-            val.parse().unwrap_or(*SHM_ACCESS_MASK)
+        .get(config::FILE_ACCESS_MASK)
+        .map_or(*FILE_ACCESS_MASK, |val| {
+            val.parse().unwrap_or(*FILE_ACCESS_MASK)
         });
     (path_uplink, path_downlink, access_mode)
 }

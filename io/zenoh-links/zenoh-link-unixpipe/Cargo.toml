@@ -13,7 +13,7 @@
 #
 [package]
 rust-version = { workspace = true }
-name = "zenoh-link-shm"
+name = "zenoh-link-unixpipe"
 version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
@@ -25,7 +25,7 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
-transport_shm = []
+transport_unixpipe = []
 
 [dependencies]
 async-std = { workspace = true }

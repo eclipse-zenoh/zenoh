@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "transport_shm")]
+#[cfg(feature = "transport_unixpipe")]
 use super::link::send_with_link;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
@@ -20,33 +20,35 @@ use crate::TransportConfigUnicast;
 use crate::TransportManager;
 use crate::{TransportExecutor, TransportPeerEventHandler};
 use async_executor::Task;
-#[cfg(feature = "transport_shm")]
+#[cfg(feature = "transport_unixpipe")]
 use async_std::sync::RwLockUpgradableReadGuard;
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::sync::{Arc, RwLock as SyncRwLock};
 use std::time::Duration;
-#[cfg(feature = "transport_shm")]
+#[cfg(feature = "transport_unixpipe")]
 use zenoh_core::zasyncread_upgradable;
 use zenoh_core::{zasynclock, zasyncread, zread, zwrite};
-#[cfg(feature = "transport_shm")]
+#[cfg(feature = "transport_unixpipe")]
+use zenoh_link::unixpipe::UNIXPIPE_LOCATOR_PREFIX;
+#[cfg(feature = "transport_unixpipe")]
 use zenoh_link::Link;
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
-use zenoh_protocol::transport::TransportBodyShm;
-use zenoh_protocol::transport::TransportMessageShm;
+use zenoh_protocol::transport::TransportBodyLowLatency;
+use zenoh_protocol::transport::TransportMessageLowLatency;
 use zenoh_protocol::transport::{Close, TransportSn};
-#[cfg(not(feature = "transport_shm"))]
+#[cfg(not(feature = "transport_unixpipe"))]
 use zenoh_result::bail;
 use zenoh_result::{zerror, ZResult};
 
 /*************************************/
-/*             TRANSPORT             */
+/*       LOW-LATENCY TRANSPORT       */
 /*************************************/
 #[derive(Clone)]
-pub(crate) struct TransportUnicastShm {
+pub(crate) struct TransportUnicastLowlatency {
     // Transport Manager
     pub(super) manager: TransportManager,
     // Transport config
@@ -66,13 +68,13 @@ pub(crate) struct TransportUnicastShm {
     pub(crate) handle_rx: Arc<RwLock<Option<JoinHandle<()>>>>,
 }
 
-impl TransportUnicastShm {
+impl TransportUnicastLowlatency {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
         link: LinkUnicast,
-    ) -> ZResult<TransportUnicastShm> {
-        let t = TransportUnicastShm {
+    ) -> ZResult<TransportUnicastLowlatency> {
+        let t = TransportUnicastLowlatency {
             manager,
             config,
             link: Arc::new(RwLock::new(link)),
@@ -98,8 +100,8 @@ impl TransportUnicastShm {
         );
 
         // Send close message on the link
-        let close = TransportMessageShm {
-            body: TransportBodyShm::Close(Close {
+        let close = TransportMessageLowLatency {
+            body: TransportBodyLowLatency::Close(Close {
                 reason,
                 session: false,
             }),
@@ -145,7 +147,7 @@ impl TransportUnicastShm {
 }
 
 #[async_trait]
-impl TransportUnicastTrait for TransportUnicastShm {
+impl TransportUnicastTrait for TransportUnicastLowlatency {
     /*************************************/
     /*            ACCESSORS              */
     /*************************************/
@@ -222,25 +224,24 @@ impl TransportUnicastTrait for TransportUnicastShm {
     async fn add_link(&self, link: LinkUnicast, _direction: LinkUnicastDirection) -> ZResult<()> {
         log::trace!("Adding link: {}", link);
 
-        #[cfg(not(feature = "transport_shm"))]
+        #[cfg(not(feature = "transport_unixpipe"))]
         bail!(
             "Can not add Link {} with peer {}: link already exists and only unique link is supported!",
             link,
             self.config.zid,
         );
 
-        #[cfg(feature = "transport_shm")]
+        #[cfg(feature = "transport_unixpipe")]
         {
             let guard = zasyncread_upgradable!(self.link);
 
-            let shm_protocol = "shm";
-            let existing_shm = guard.get_dst().protocol().as_str() == shm_protocol;
-            let new_shm = link.get_dst().protocol().as_str() == shm_protocol;
-            match (existing_shm, new_shm) {
+            let existing_unixpipe = guard.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
+            let new_unixpipe = link.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
+            match (existing_unixpipe, new_unixpipe) {
                 (false, true) => {
-                    // SHM transport suports only a single link, but code here also handles upgrade from non-shm link to shm link!
+                    // LowLatency transport suports only a single link, but code here also handles upgrade from non-unixpipe link to unixpipe link!
                     log::trace!(
-                        "Upgrading {} SHM transport's link from {} to {}",
+                        "Upgrading {} LowLatency transport's link from {} to {}",
                         self.config.zid,
                         guard,
                         link
@@ -248,13 +249,19 @@ impl TransportUnicastTrait for TransportUnicastShm {
 
                     // Prepare and send close message on old link
                     {
-                        let close = TransportMessageShm {
-                            body: TransportBodyShm::Close(Close {
+                        let close = TransportMessageLowLatency {
+                            body: TransportBodyLowLatency::Close(Close {
                                 reason: 0,
                                 session: false,
                             }),
                         };
-                        let _ = send_with_link(&guard, close).await;
+                        let _ = send_with_link(
+                            &guard,
+                            close,
+                            #[cfg(feature = "stats")]
+                            &self.stats,
+                        )
+                        .await;
                     };
                     // Notify the callback
                     if let Some(callback) = zread!(self.callback).as_ref() {
