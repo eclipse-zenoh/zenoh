@@ -11,14 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::TransportUnicastShm;
+use super::transport::TransportUnicastLowlatency;
 use zenoh_protocol::{
     network::NetworkMessage,
-    transport::{TransportBodyShm, TransportMessageShm},
+    transport::{TransportBodyLowLatency, TransportMessageLowLatency},
 };
-use zenoh_result::{bail, ZResult};
+#[cfg(feature = "shared-memory")]
+use zenoh_result::bail;
+use zenoh_result::ZResult;
 
-impl TransportUnicastShm {
+impl TransportUnicastLowlatency {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
     #[allow(clippy::let_and_return)] // When feature "stats" is not enabled
     #[inline(always)]
@@ -35,17 +37,17 @@ impl TransportUnicastShm {
             }
         }
 
-        let msg = TransportMessageShm {
-            body: TransportBodyShm::Network(Box::new(msg)),
+        let msg = TransportMessageLowLatency {
+            body: TransportBodyLowLatency::Network(msg),
         };
         let res = self.send(msg);
 
-        // #[cfg(feature = "stats")]
-        // if res {
-        //     self.stats.inc_tx_z_msgs(1);
-        // } else {
-        //     self.stats.inc_tx_z_dropped(1);
-        // }
+        #[cfg(feature = "stats")]
+        if res.is_ok() {
+            self.stats.inc_tx_n_msgs(1);
+        } else {
+            self.stats.inc_tx_n_dropped(1);
+        }
 
         res
     }

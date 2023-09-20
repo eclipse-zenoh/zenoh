@@ -67,7 +67,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets --features shared-memory --features transport_shm -- -D warnings
+          args: --all-targets --features shared-memory --features transport_unixpipe -- -D warnings
 
   test:
     name: Run tests on ${{ matrix.os }}
@@ -107,7 +107,7 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: nextest
-          args: run -F shared-memory -F transport_shm -p zenoh-transport
+          args: run -F shared-memory -F transport_unixpipe -p zenoh-transport
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4

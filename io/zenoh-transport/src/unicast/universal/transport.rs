@@ -15,7 +15,7 @@ use crate::common::priority::{TransportPriorityRx, TransportPriorityTx};
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::transport_unicast_inner::TransportUnicastTrait;
-use crate::unicast::net::link::TransportLinkUnicast;
+use crate::unicast::universal::link::TransportLinkUnicast;
 use crate::TransportConfigUnicast;
 use crate::{TransportExecutor, TransportManager, TransportPeerEventHandler};
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
@@ -51,10 +51,10 @@ macro_rules! zlinkindex {
 }
 
 /*************************************/
-/*             TRANSPORT             */
+/*        UNIVERSAL TRANSPORT        */
 /*************************************/
 #[derive(Clone)]
-pub(crate) struct TransportUnicastNet {
+pub(crate) struct TransportUnicastUniversal {
     // Transport Manager
     pub(crate) manager: TransportManager,
     // Transport config
@@ -74,11 +74,11 @@ pub(crate) struct TransportUnicastNet {
     pub(super) stats: Arc<TransportStats>,
 }
 
-impl TransportUnicastNet {
+impl TransportUnicastUniversal {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
-    ) -> ZResult<TransportUnicastNet> {
+    ) -> ZResult<TransportUnicastUniversal> {
         let mut priority_tx = vec![];
         let mut priority_rx = vec![];
 
@@ -102,7 +102,7 @@ impl TransportUnicastNet {
             c.sync(initial_sn)?;
         }
 
-        let t = TransportUnicastNet {
+        let t = TransportUnicastUniversal {
             manager,
             config,
             priority_tx: priority_tx.into_boxed_slice().into(),
@@ -239,7 +239,7 @@ impl TransportUnicastNet {
 }
 
 #[async_trait]
-impl TransportUnicastTrait for TransportUnicastNet {
+impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     /*               LINK                */
     /*************************************/

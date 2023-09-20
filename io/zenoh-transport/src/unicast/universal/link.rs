@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::TransportUnicastNet;
+use super::transport::TransportUnicastUniversal;
 use crate::common::pipeline::{
     TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
     TransmissionPipelineProducer,
@@ -64,7 +64,7 @@ pub(super) struct TransportLinkUnicast {
     // The transmission pipeline
     pub(super) pipeline: Option<TransmissionPipelineProducer>,
     // The transport this link is associated to
-    transport: TransportUnicastNet,
+    transport: TransportUnicastUniversal,
     // The signals to stop TX/RX tasks
     handle_tx: Option<Arc<async_executor::Task<()>>>,
     signal_rx: Signal,
@@ -73,7 +73,7 @@ pub(super) struct TransportLinkUnicast {
 
 impl TransportLinkUnicast {
     pub(super) fn new(
-        transport: TransportUnicastNet,
+        transport: TransportUnicastUniversal,
         link: LinkUnicast,
         direction: LinkUnicastDirection,
     ) -> TransportLinkUnicast {
@@ -278,7 +278,7 @@ async fn tx_task(
 
 async fn rx_task_stream(
     link: LinkUnicast,
-    transport: TransportUnicastNet,
+    transport: TransportUnicastUniversal,
     lease: Duration,
     signal: Signal,
     rx_batch_size: BatchSize,
@@ -349,7 +349,7 @@ async fn rx_task_stream(
 
 async fn rx_task_dgram(
     link: LinkUnicast,
-    transport: TransportUnicastNet,
+    transport: TransportUnicastUniversal,
     lease: Duration,
     signal: Signal,
     rx_batch_size: BatchSize,
@@ -421,7 +421,7 @@ async fn rx_task_dgram(
 
 async fn rx_task(
     link: LinkUnicast,
-    transport: TransportUnicastNet,
+    transport: TransportUnicastUniversal,
     lease: Duration,
     signal: Signal,
     rx_batch_size: u16,

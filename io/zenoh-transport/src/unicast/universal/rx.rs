@@ -13,7 +13,7 @@ use crate::transport_unicast_inner::TransportUnicastTrait;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::transport::TransportUnicastNet;
+use super::transport::TransportUnicastUniversal;
 use crate::common::priority::TransportChannelRx;
 use async_std::task;
 use std::sync::MutexGuard;
@@ -34,7 +34,7 @@ use zenoh_result::{bail, zerror, ZResult};
 /*************************************/
 /*            TRANSPORT RX           */
 /*************************************/
-impl TransportUnicastNet {
+impl TransportUnicastUniversal {
     fn trigger_callback(
         &self,
         #[allow(unused_mut)] // shared-memory feature requires mut

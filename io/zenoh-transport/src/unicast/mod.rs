@@ -12,17 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod establishment;
+pub(crate) mod lowlatency;
 pub(crate) mod manager;
-pub(crate) mod net;
 pub(crate) mod transport_unicast_inner;
+pub(crate) mod universal;
 
 #[cfg(feature = "test")]
 pub mod test_helpers;
 
 #[cfg(feature = "shared-memory")]
 pub(crate) mod shared_memory_unicast;
-#[cfg(feature = "shared-memory")]
-pub(crate) mod shm;
 
 use self::transport_unicast_inner::TransportUnicastTrait;
 
@@ -55,6 +54,7 @@ pub(crate) struct TransportConfigUnicast {
     pub(crate) multilink: Option<ZPublicKey>,
     #[cfg(feature = "shared-memory")]
     pub(crate) is_shm: bool,
+    pub(crate) is_lowlatency: bool,
 }
 
 /// [`TransportUnicast`] is the transport handler returned

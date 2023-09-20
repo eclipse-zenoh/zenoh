@@ -13,16 +13,15 @@
 //
 #[cfg(feature = "shared-memory")]
 use super::shared_memory_unicast::SharedMemoryUnicast;
-#[cfg(feature = "shared-memory")]
-use super::shm::transport::TransportUnicastShm;
 #[cfg(feature = "transport_auth")]
 use crate::unicast::establishment::ext::auth::Auth;
 #[cfg(feature = "transport_multilink")]
 use crate::unicast::establishment::ext::multilink::MultiLink;
 use crate::{
-    net::transport::TransportUnicastNet,
+    lowlatency::transport::TransportUnicastLowlatency,
     transport_unicast_inner::TransportUnicastTrait,
     unicast::{TransportConfigUnicast, TransportUnicast},
+    universal::transport::TransportUnicastUniversal,
     TransportManager,
 };
 use async_std::{prelude::FutureExt, sync::Mutex, task};
@@ -49,6 +48,7 @@ pub struct TransportManagerConfigUnicast {
     pub accept_pending: usize,
     pub max_sessions: usize,
     pub is_qos: bool,
+    pub is_lowlatency: bool,
     #[cfg(feature = "transport_multilink")]
     pub max_links: usize,
     #[cfg(feature = "shared-memory")]
@@ -98,6 +98,7 @@ pub struct TransportManagerBuilderUnicast {
     pub(super) is_shm: bool,
     #[cfg(feature = "transport_auth")]
     pub(super) authenticator: Auth,
+    pub(super) is_lowlatency: bool,
 }
 
 impl TransportManagerBuilderUnicast {
@@ -128,6 +129,11 @@ impl TransportManagerBuilderUnicast {
 
     pub fn qos(mut self, is_qos: bool) -> Self {
         self.is_qos = is_qos;
+        self
+    }
+
+    pub fn lowlatency(mut self, is_lowlatency: bool) -> Self {
+        self.is_lowlatency = is_lowlatency;
         self
     }
 
@@ -166,6 +172,7 @@ impl TransportManagerBuilderUnicast {
         self = self.accept_pending(*config.transport().unicast().accept_pending());
         self = self.max_sessions(*config.transport().unicast().max_sessions());
         self = self.qos(*config.transport().qos().enabled());
+        self = self.lowlatency(*config.transport().unicast().lowlatency());
 
         #[cfg(feature = "transport_multilink")]
         {
@@ -187,6 +194,10 @@ impl TransportManagerBuilderUnicast {
         self,
         #[allow(unused)] prng: &mut PseudoRng, // Required for #[cfg(feature = "transport_multilink")]
     ) -> ZResult<TransportManagerParamsUnicast> {
+        if self.is_qos && self.is_lowlatency {
+            bail!("'qos' and 'lowlatency' options are incompatible");
+        }
+
         let config = TransportManagerConfigUnicast {
             lease: self.lease,
             keep_alive: self.keep_alive,
@@ -200,6 +211,7 @@ impl TransportManagerBuilderUnicast {
             is_shm: self.is_shm,
             #[cfg(all(feature = "unstable", feature = "transport_compression"))]
             is_compressed: self.is_compressed,
+            is_lowlatency: self.is_lowlatency,
         };
 
         let state = TransportManagerStateUnicast {
@@ -241,6 +253,7 @@ impl Default for TransportManagerBuilderUnicast {
             is_shm: *shm.enabled(),
             #[cfg(feature = "transport_auth")]
             authenticator: Auth::default(),
+            is_lowlatency: *transport.lowlatency(),
         }
     }
 }
@@ -431,51 +444,26 @@ impl TransportManager {
                 let is_multilink =
                     zcondfeat!("transport_multilink", config.multilink.is_some(), false);
 
-                let stc = TransportConfigUnicast {
-                    zid: config.zid,
-                    whatami: config.whatami,
-                    sn_resolution: config.sn_resolution,
-                    tx_initial_sn: config.tx_initial_sn,
-                    is_qos: config.is_qos,
-                    #[cfg(feature = "transport_multilink")]
-                    multilink: config.multilink,
-                    #[cfg(feature = "shared-memory")]
-                    is_shm: config.is_shm,
-                };
-
-                async fn make_net_transport(
-                    manager: &TransportManager,
-                    stc: TransportConfigUnicast,
-                    link: LinkUnicast,
-                    direction: LinkUnicastDirection,
-                ) -> Result<Arc<dyn TransportUnicastTrait>, (Error, Option<u8>)> {
-                    log::debug!("Will use NET transport!");
-                    let t: Arc<dyn TransportUnicastTrait> =
-                        TransportUnicastNet::make(manager.clone(), stc)
-                            .map_err(|e| (e, Some(close::reason::INVALID)))
-                            .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?;
-                    // Add the link to the transport
-                    t.add_link(link, direction)
-                        .await
-                        .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
-                    Ok(t)
-                }
-
                 // select and create transport implementation depending on the cfg and enabled features
-                let a_t: Arc<dyn TransportUnicastTrait> = zcondfeat!(
-                    "shared-memory",
-                    {
-                        if stc.is_shm {
-                            log::debug!("Will use SHM transport!");
-                            TransportUnicastShm::make(self.clone(), stc, link)
+                let a_t = {
+                    if config.is_lowlatency {
+                        log::debug!("Will use LowLatency transport!");
+                        TransportUnicastLowlatency::make(self.clone(), config.clone(), link)
+                            .map_err(|e| (e, Some(close::reason::INVALID)))
+                            .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?
+                    } else {
+                        log::debug!("Will use Universal transport!");
+                        let t: Arc<dyn TransportUnicastTrait> =
+                            TransportUnicastUniversal::make(self.clone(), config.clone())
                                 .map_err(|e| (e, Some(close::reason::INVALID)))
-                                .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?
-                        } else {
-                            make_net_transport(self, stc, link, direction).await?
-                        }
-                    },
-                    make_net_transport(self, stc, link, direction).await?
-                );
+                                .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?;
+                        // Add the link to the transport
+                        t.add_link(link, direction)
+                            .await
+                            .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
+                        t
+                    }
+                };
 
                 // Add the transport transport to the list of active transports
                 let transport = TransportUnicast(Arc::downgrade(&a_t));
@@ -485,7 +473,7 @@ impl TransportManager {
                     "shared-memory",
                     {
                         log::debug!(
-                            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, shm: {}, multilink: {}",
+                            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, shm: {}, multilink: {}, lowlatency: {}",
                             self.config.zid,
                             config.zid,
                             config.whatami,
@@ -493,19 +481,21 @@ impl TransportManager {
                             config.tx_initial_sn,
                             config.is_qos,
                             config.is_shm,
-                            is_multilink
+                            is_multilink,
+                            config.is_lowlatency
                         );
                     },
                     {
                         log::debug!(
-                            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, multilink: {}",
+                            "New transport opened between {} and {} - whatami: {}, sn resolution: {:?}, initial sn: {:?}, qos: {}, multilink: {}, lowlatency: {}",
                             self.config.zid,
                             config.zid,
                             config.whatami,
                             config.sn_resolution,
                             config.tx_initial_sn,
                             config.is_qos,
-                            is_multilink
+                            is_multilink,
+                            config.is_lowlatency
                         );
                     }
                 );

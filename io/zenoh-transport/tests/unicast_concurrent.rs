@@ -420,34 +420,34 @@ fn transport_ws_concurrent() {
     });
 }
 
-#[cfg(feature = "transport_shm")]
+#[cfg(feature = "transport_unixpipe")]
 #[test]
 #[ignore]
-fn transport_shm_concurrent() {
+fn transport_unixpipe_concurrent() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint01: Vec<EndPoint> = vec![
-        "shm/transport_shm_concurrent".parse().unwrap(),
-        "shm/transport_shm_concurrent2".parse().unwrap(),
-        "shm/transport_shm_concurrent3".parse().unwrap(),
-        "shm/transport_shm_concurrent4".parse().unwrap(),
-        "shm/transport_shm_concurrent5".parse().unwrap(),
-        "shm/transport_shm_concurrent6".parse().unwrap(),
-        "shm/transport_shm_concurrent7".parse().unwrap(),
-        "shm/transport_shm_concurrent8".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent2".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent3".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent4".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent5".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent6".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent7".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent8".parse().unwrap(),
     ];
     let endpoint02: Vec<EndPoint> = vec![
-        "shm/transport_shm_concurrent9".parse().unwrap(),
-        "shm/transport_shm_concurrent10".parse().unwrap(),
-        "shm/transport_shm_concurrent11".parse().unwrap(),
-        "shm/transport_shm_concurrent12".parse().unwrap(),
-        "shm/transport_shm_concurrent13".parse().unwrap(),
-        "shm/transport_shm_concurrent14".parse().unwrap(),
-        "shm/transport_shm_concurrent15".parse().unwrap(),
-        "shm/transport_shm_concurrent16".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent9".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent10".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent11".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent12".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent13".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent14".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent15".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent16".parse().unwrap(),
     ];
 
     task::block_on(async {

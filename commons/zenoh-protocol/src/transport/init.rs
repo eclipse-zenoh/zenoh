@@ -117,6 +117,7 @@ pub struct InitSyn {
     pub ext_shm: Option<ext::Shm>,
     pub ext_auth: Option<ext::Auth>,
     pub ext_mlink: Option<ext::MultiLink>,
+    pub ext_lowlatency: Option<ext::LowLatency>,
 }
 
 // Extensions
@@ -141,6 +142,10 @@ pub mod ext {
     /// # Multilink extension
     /// Used as challenge for probing multilink capabilities
     pub type MultiLink = zextzbuf!(0x4, false);
+
+    /// # LowLatency extension
+    /// Used to negotiate the use of lowlatency transport
+    pub type LowLatency = zextunit!(0x5, false);
 }
 
 impl InitSyn {
@@ -160,6 +165,7 @@ impl InitSyn {
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
+        let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
 
         Self {
             version,
@@ -171,6 +177,7 @@ impl InitSyn {
             ext_shm,
             ext_auth,
             ext_mlink,
+            ext_lowlatency,
         }
     }
 }
@@ -187,6 +194,7 @@ pub struct InitAck {
     pub ext_shm: Option<ext::Shm>,
     pub ext_auth: Option<ext::Auth>,
     pub ext_mlink: Option<ext::MultiLink>,
+    pub ext_lowlatency: Option<ext::LowLatency>,
 }
 
 impl InitAck {
@@ -211,6 +219,7 @@ impl InitAck {
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
+        let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
 
         Self {
             version,
@@ -223,6 +232,7 @@ impl InitAck {
             ext_shm,
             ext_auth,
             ext_mlink,
+            ext_lowlatency,
         }
     }
 }

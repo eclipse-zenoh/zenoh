@@ -45,7 +45,8 @@ where
         let mut n_exts = (x.ext_qos.is_some() as u8)
             + (x.ext_shm.is_some() as u8)
             + (x.ext_auth.is_some() as u8)
-            + (x.ext_mlink.is_some() as u8);
+            + (x.ext_mlink.is_some() as u8)
+            + (x.ext_lowlatency.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -86,6 +87,10 @@ where
         if let Some(mlink) = x.ext_mlink.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (mlink, n_exts != 0))?;
+        }
+        if let Some(lowlatency) = x.ext_lowlatency.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (lowlatency, n_exts != 0))?;
         }
 
         Ok(())
@@ -144,6 +149,7 @@ where
         let mut ext_shm = None;
         let mut ext_auth = None;
         let mut ext_mlink = None;
+        let mut ext_lowlatency = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -170,6 +176,11 @@ where
                     ext_mlink = Some(a);
                     has_ext = ext;
                 }
+                ext::LowLatency::ID => {
+                    let (q, ext): (ext::LowLatency, bool) = eodec.read(&mut *reader)?;
+                    ext_lowlatency = Some(q);
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "InitSyn", ext)?;
                 }
@@ -186,6 +197,7 @@ where
             ext_shm,
             ext_auth,
             ext_mlink,
+            ext_lowlatency,
         })
     }
 }
@@ -206,7 +218,8 @@ where
         let mut n_exts = (x.ext_qos.is_some() as u8)
             + (x.ext_shm.is_some() as u8)
             + (x.ext_auth.is_some() as u8)
-            + (x.ext_mlink.is_some() as u8);
+            + (x.ext_mlink.is_some() as u8)
+            + (x.ext_lowlatency.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -250,6 +263,10 @@ where
         if let Some(mlink) = x.ext_mlink.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (mlink, n_exts != 0))?;
+        }
+        if let Some(lowlatency) = x.ext_lowlatency.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (lowlatency, n_exts != 0))?;
         }
 
         Ok(())
@@ -311,6 +328,7 @@ where
         let mut ext_shm = None;
         let mut ext_auth = None;
         let mut ext_mlink = None;
+        let mut ext_lowlatency = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -337,6 +355,11 @@ where
                     ext_mlink = Some(a);
                     has_ext = ext;
                 }
+                ext::LowLatency::ID => {
+                    let (q, ext): (ext::LowLatency, bool) = eodec.read(&mut *reader)?;
+                    ext_lowlatency = Some(q);
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "InitAck", ext)?;
                 }
@@ -354,6 +377,7 @@ where
             ext_shm,
             ext_auth,
             ext_mlink,
+            ext_lowlatency,
         })
     }
 }

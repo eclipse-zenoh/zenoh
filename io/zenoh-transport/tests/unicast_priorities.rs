@@ -349,16 +349,19 @@ fn priorities_tcp_only() {
     task::block_on(run(&endpoints));
 }
 
-#[cfg(feature = "transport_shm")]
+#[cfg(feature = "transport_unixpipe")]
 #[test]
 #[ignore]
-fn conduits_shm_only() {
+fn conduits_unixpipe_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
     // Define the locators
-    let endpoints: Vec<EndPoint> = vec!["shm/conduits_shm_only".to_string().parse().unwrap()];
+    let endpoints: Vec<EndPoint> = vec!["unixpipe/conduits_unixpipe_only"
+        .to_string()
+        .parse()
+        .unwrap()];
     // Run
     task::block_on(run(&endpoints));
 }

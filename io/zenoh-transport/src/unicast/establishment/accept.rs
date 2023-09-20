@@ -55,6 +55,7 @@ struct State {
     ext_shm: ext::shm::StateAccept,
     #[cfg(feature = "transport_auth")]
     ext_auth: ext::auth::StateAccept,
+    ext_lowlatency: ext::lowlatency::StateAccept,
 }
 
 // InitSyn
@@ -115,6 +116,7 @@ struct AcceptLink<'a> {
     ext_shm: ext::shm::ShmFsm<'a>,
     #[cfg(feature = "transport_auth")]
     ext_auth: ext::auth::AuthFsm<'a>,
+    ext_lowlatency: ext::lowlatency::LowLatencyFsm<'a>,
 }
 
 #[async_trait]
@@ -187,6 +189,12 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension LowLatency
+        self.ext_lowlatency
+            .recv_init_syn((&mut state.ext_lowlatency, init_syn.ext_lowlatency))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         // Extension Shm
         #[cfg(feature = "shared-memory")]
         let ext_shm = self
@@ -231,6 +239,13 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         let ext_qos = self
             .ext_qos
             .send_init_ack(&state.ext_qos)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension LowLatency
+        let ext_lowlatency = self
+            .ext_lowlatency
+            .send_init_ack(&state.ext_lowlatency)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -279,6 +294,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             ext_shm: state.ext_shm,
             #[cfg(feature = "transport_auth")]
             ext_auth: state.ext_auth,
+            ext_lowlatency: state.ext_lowlatency,
         };
 
         let mut encrypted = vec![];
@@ -308,6 +324,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             ext_shm,
             ext_auth,
             ext_mlink,
+            ext_lowlatency,
         }
         .into();
 
@@ -394,11 +411,18 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             ext_shm: cookie.ext_shm,
             #[cfg(feature = "transport_auth")]
             ext_auth: cookie.ext_auth,
+            ext_lowlatency: cookie.ext_lowlatency,
         };
 
         // Extension QoS
         self.ext_qos
             .recv_open_syn((&mut state.ext_qos, open_syn.ext_qos))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension LowLatency
+        self.ext_lowlatency
+            .recv_open_syn((&mut state.ext_lowlatency, open_syn.ext_lowlatency))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -447,6 +471,13 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
+        // Extension LowLatency
+        let ext_lowlatency = self
+            .ext_lowlatency
+            .send_open_ack(&state.ext_lowlatency)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
         // Extension Shm
         let ext_shm = zcondfeat!(
             "shared-memory",
@@ -486,6 +517,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             ext_shm,
             ext_auth,
             ext_mlink,
+            ext_lowlatency,
         };
 
         // Do not send the OpenAck right now since we might still incur in MAX_LINKS error
@@ -507,6 +539,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         ext_mlink: manager.state.unicast.multilink.fsm(&manager.prng),
         #[cfg(feature = "transport_auth")]
         ext_auth: manager.state.unicast.authenticator.fsm(&manager.prng),
+        ext_lowlatency: ext::lowlatency::LowLatencyFsm::new(),
     };
 
     // Init handshake
@@ -530,6 +563,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
                 resolution: manager.config.resolution,
             },
             ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos),
+            ext_lowlatency: ext::lowlatency::StateAccept::new(manager.config.unicast.is_lowlatency),
             #[cfg(feature = "transport_multilink")]
             ext_mlink: manager
                 .state
@@ -591,6 +625,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         multilink: state.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]
         is_shm: state.ext_shm.is_shm(),
+        is_lowlatency: state.ext_lowlatency.is_lowlatency(),
     };
 
     let transport = step!(

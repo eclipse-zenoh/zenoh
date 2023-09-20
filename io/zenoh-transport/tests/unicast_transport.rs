@@ -221,8 +221,7 @@ const SLEEP_COUNT: Duration = Duration::from_millis(10);
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
-#[cfg(feature = "shared-memory")]
-const MSG_SIZE_SHM: [usize; 2] = [1_024, 65000];
+const MSG_SIZE_LOWLATENCY: [usize; 2] = [1_024, 65000];
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
 
 macro_rules! ztimeout {
@@ -338,7 +337,7 @@ impl TransportPeerEventHandler for SCClient {
 async fn open_transport_unicast(
     client_endpoints: &[EndPoint],
     server_endpoints: &[EndPoint],
-    #[cfg(feature = "shared-memory")] shm_transport: bool,
+    lowlatency_transport: bool,
 ) -> (
     TransportManager,
     Arc<SHRouter>,
@@ -355,7 +354,8 @@ async fn open_transport_unicast(
         #[cfg(feature = "transport_multilink")]
         server_endpoints.len(),
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     );
     let router_manager = TransportManager::builder()
         .zid(router_id)
@@ -375,7 +375,8 @@ async fn open_transport_unicast(
         #[cfg(feature = "transport_multilink")]
         client_endpoints.len(),
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     );
     let client_manager = TransportManager::builder()
         .whatami(WhatAmI::Client)
@@ -512,7 +513,7 @@ async fn run_single(
     server_endpoints: &[EndPoint],
     channel: Channel,
     msg_size: usize,
-    #[cfg(feature = "shared-memory")] shm_transport: bool,
+    lowlatency_transport: bool,
 ) {
     println!(
         "\n>>> Running test for:  {:?}, {:?}, {:?}, {}",
@@ -521,13 +522,7 @@ async fn run_single(
 
     #[allow(unused_variables)] // Used when stats feature is enabled
     let (router_manager, router_handler, client_manager, client_transport) =
-        open_transport_unicast(
-            client_endpoints,
-            server_endpoints,
-            #[cfg(feature = "shared-memory")]
-            shm_transport,
-        )
-        .await;
+        open_transport_unicast(client_endpoints, server_endpoints, lowlatency_transport).await;
 
     test_transport(
         router_handler.clone(),
@@ -565,7 +560,7 @@ async fn run_internal(
     server_endpoints: &[EndPoint],
     channel: &[Channel],
     msg_size: &[usize],
-    #[cfg(feature = "shared-memory")] shm_transport: bool,
+    lowlatency_transport: bool,
 ) {
     for ch in channel.iter() {
         for ms in msg_size.iter() {
@@ -574,40 +569,30 @@ async fn run_internal(
                 server_endpoints,
                 *ch,
                 *ms,
-                #[cfg(feature = "shared-memory")]
-                shm_transport,
+                lowlatency_transport,
             )
             .await;
         }
     }
 }
 
-async fn run_with_net(
+async fn run_with_universal_transport(
     client_endpoints: &[EndPoint],
     server_endpoints: &[EndPoint],
     channel: &[Channel],
     msg_size: &[usize],
 ) {
-    run_internal(
-        client_endpoints,
-        server_endpoints,
-        channel,
-        msg_size,
-        #[cfg(feature = "shared-memory")]
-        false,
-    )
-    .await;
+    run_internal(client_endpoints, server_endpoints, channel, msg_size, false).await;
 }
 
-#[cfg(feature = "shared-memory")]
-async fn run_with_shm(
+async fn run_with_lowlatency_transport(
     client_endpoints: &[EndPoint],
     server_endpoints: &[EndPoint],
     channel: &[Channel],
     msg_size: &[usize],
 ) {
     if client_endpoints.len() > 1 || server_endpoints.len() > 1 {
-        println!("SHM transport doesn't support more than one link, so this test would produce MAX_LINKS error!");
+        println!("LowLatency transport doesn't support more than one link, so this test would produce MAX_LINKS error!");
         panic!();
     }
     run_internal(client_endpoints, server_endpoints, channel, msg_size, true).await;
@@ -638,7 +623,7 @@ fn transport_unicast_tcp_only() {
         },
     ];
     // Run
-    task::block_on(run_with_net(
+    task::block_on(run_with_universal_transport(
         &endpoints,
         &endpoints,
         &channel,
@@ -646,9 +631,9 @@ fn transport_unicast_tcp_only() {
     ));
 }
 
-#[cfg(all(feature = "transport_tcp", feature = "shared-memory",))]
+#[cfg(feature = "transport_tcp")]
 #[test]
-fn transport_unicast_tcp_only_with_shm() {
+fn transport_unicast_tcp_only_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
@@ -668,11 +653,11 @@ fn transport_unicast_tcp_only_with_shm() {
         },
     ];
     // Run
-    task::block_on(run_with_shm(
+    task::block_on(run_with_lowlatency_transport(
         &endpoints,
         &endpoints,
         &channel,
-        &MSG_SIZE_SHM,
+        &MSG_SIZE_LOWLATENCY,
     ));
 }
 
@@ -701,7 +686,7 @@ fn transport_unicast_udp_only() {
         },
     ];
     // Run
-    task::block_on(run_with_net(
+    task::block_on(run_with_universal_transport(
         &endpoints,
         &endpoints,
         &channel,
@@ -709,9 +694,9 @@ fn transport_unicast_udp_only() {
     ));
 }
 
-#[cfg(all(feature = "transport_udp", feature = "shared-memory",))]
+#[cfg(feature = "transport_udp")]
 #[test]
-fn transport_unicast_udp_only_with_shm() {
+fn transport_unicast_udp_only_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
@@ -731,7 +716,7 @@ fn transport_unicast_udp_only_with_shm() {
         },
     ];
     // Run
-    task::block_on(run_with_shm(
+    task::block_on(run_with_lowlatency_transport(
         &endpoints,
         &endpoints,
         &channel,
@@ -763,7 +748,7 @@ fn transport_unicast_unix_only() {
         },
     ];
     // Run
-    task::block_on(run_with_net(
+    task::block_on(run_with_universal_transport(
         &endpoints,
         &endpoints,
         &channel,
@@ -773,19 +758,15 @@ fn transport_unicast_unix_only() {
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
-#[cfg(all(
-    feature = "transport_unixsock-stream",
-    feature = "shared-memory",
-    target_family = "unix"
-))]
+#[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
-fn transport_unicast_unix_only_with_shm() {
+fn transport_unicast_unix_only_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let f1 = "zenoh-test-unix-socket-5-shm.sock";
+    let f1 = "zenoh-test-unix-socket-5-lowlatency.sock";
     let _ = std::fs::remove_file(f1);
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![format!("unixsock-stream/{f1}").parse().unwrap()];
@@ -801,11 +782,11 @@ fn transport_unicast_unix_only_with_shm() {
         },
     ];
     // Run
-    task::block_on(run_with_shm(
+    task::block_on(run_with_lowlatency_transport(
         &endpoints,
         &endpoints,
         &channel,
-        &MSG_SIZE_SHM,
+        &MSG_SIZE_LOWLATENCY,
     ));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
@@ -844,7 +825,7 @@ fn transport_unicast_ws_only() {
         },
     ];
     // Run
-    task::block_on(run_with_net(
+    task::block_on(run_with_universal_transport(
         &endpoints,
         &endpoints,
         &channel,
@@ -852,9 +833,9 @@ fn transport_unicast_ws_only() {
     ));
 }
 
-#[cfg(all(feature = "transport_ws", feature = "shared-memory",))]
+#[cfg(feature = "transport_ws")]
 #[test]
-fn transport_unicast_ws_only_with_shm() {
+fn transport_unicast_ws_only_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
@@ -882,17 +863,17 @@ fn transport_unicast_ws_only_with_shm() {
         },
     ];
     // Run
-    task::block_on(run_with_shm(
+    task::block_on(run_with_lowlatency_transport(
         &endpoints,
         &endpoints,
         &channel,
-        &MSG_SIZE_SHM,
+        &MSG_SIZE_LOWLATENCY,
     ));
 }
 
-#[cfg(feature = "transport_shm")]
+#[cfg(feature = "transport_unixpipe")]
 #[test]
-fn transport_unicast_shm_only() {
+fn transport_unicast_unixpipe_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
@@ -900,8 +881,8 @@ fn transport_unicast_shm_only() {
 
     // Define the locator
     let endpoints: Vec<EndPoint> = vec![
-        "shm/transport_unicast_shm_only".parse().unwrap(),
-        "shm/transport_unicast_shm_only2".parse().unwrap(),
+        "unixpipe/transport_unicast_unixpipe_only".parse().unwrap(),
+        "unixpipe/transport_unicast_unixpipe_only2".parse().unwrap(),
     ];
     // Define the reliability and congestion control
     let channel = [
@@ -915,7 +896,7 @@ fn transport_unicast_shm_only() {
         },
     ];
     // Run
-    task::block_on(run_with_net(
+    task::block_on(run_with_universal_transport(
         &endpoints,
         &endpoints,
         &channel,
@@ -923,16 +904,20 @@ fn transport_unicast_shm_only() {
     ));
 }
 
-#[cfg(all(feature = "transport_shm", feature = "shared-memory",))]
+#[cfg(feature = "transport_unixpipe")]
 #[test]
-fn transport_unicast_shm_only_with_shm() {
+fn transport_unicast_unixpipe_only_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     // Define the locator
-    let endpoints: Vec<EndPoint> = vec!["shm/transport_unicast_shm_only_with_shm".parse().unwrap()];
+    let endpoints: Vec<EndPoint> = vec![
+        "unixpipe/transport_unicast_unixpipe_only_with_lowlatency_transport"
+            .parse()
+            .unwrap(),
+    ];
     // Define the reliability and congestion control
     let channel = [
         Channel {
@@ -945,11 +930,11 @@ fn transport_unicast_shm_only_with_shm() {
         },
     ];
     // Run
-    task::block_on(run_with_shm(
+    task::block_on(run_with_lowlatency_transport(
         &endpoints,
         &endpoints,
         &channel,
-        &MSG_SIZE_SHM,
+        &MSG_SIZE_LOWLATENCY,
     ));
 }
 
@@ -980,7 +965,7 @@ fn transport_unicast_tcp_udp() {
         },
     ];
     // Run
-    task::block_on(run_with_net(
+    task::block_on(run_with_universal_transport(
         &endpoints,
         &endpoints,
         &channel,
@@ -1020,7 +1005,7 @@ fn transport_unicast_tcp_unix() {
         },
     ];
     // Run
-    task::block_on(run_with_net(
+    task::block_on(run_with_universal_transport(
         &endpoints,
         &endpoints,
         &channel,
@@ -1062,7 +1047,7 @@ fn transport_unicast_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run_with_net(
+    task::block_on(run_with_universal_transport(
         &endpoints,
         &endpoints,
         &channel,
@@ -1107,7 +1092,7 @@ fn transport_unicast_tcp_udp_unix() {
         },
     ];
     // Run
-    task::block_on(run_with_net(
+    task::block_on(run_with_universal_transport(
         &endpoints,
         &endpoints,
         &channel,
@@ -1163,7 +1148,7 @@ fn transport_unicast_tls_only_server() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    task::block_on(run_with_net(
+    task::block_on(run_with_universal_transport(
         &endpoints,
         &endpoints,
         &channel,
@@ -1217,7 +1202,7 @@ fn transport_unicast_quic_only_server() {
     ];
     // Run
     let endpoints = vec![endpoint];
-    task::block_on(run_with_net(
+    task::block_on(run_with_universal_transport(
         &endpoints,
         &endpoints,
         &channel,
@@ -1289,7 +1274,7 @@ fn transport_unicast_tls_only_mutual_success() {
     // Run
     let client_endpoints = vec![client_endpoint];
     let server_endpoints = vec![server_endpoint];
-    task::block_on(run_with_net(
+    task::block_on(run_with_universal_transport(
         &client_endpoints,
         &server_endpoints,
         &channel,
@@ -1368,7 +1353,7 @@ fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
     let client_endpoints = vec![client_endpoint];
     let server_endpoints = vec![server_endpoint];
     let result = std::panic::catch_unwind(|| {
-        task::block_on(run_with_net(
+        task::block_on(run_with_universal_transport(
             &client_endpoints,
             &server_endpoints,
             &channel,
@@ -1450,7 +1435,7 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
     let client_endpoints = vec![client_endpoint];
     let server_endpoints = vec![server_endpoint];
     let result = std::panic::catch_unwind(|| {
-        task::block_on(run_with_net(
+        task::block_on(run_with_universal_transport(
             &client_endpoints,
             &server_endpoints,
             &channel,
@@ -1461,4 +1446,57 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
     let err = result.unwrap_err();
     let error_msg = panic_message::panic_message(&err);
     assert!(error_msg.contains(RUSTLS_UNKNOWN_CA_ALERT_DESCRIPTION));
+}
+
+#[test]
+fn transport_unicast_qos_and_lowlatency_failure() {
+    struct TestPeer;
+    impl TransportEventHandler for TestPeer {
+        fn new_unicast(
+            &self,
+            _: TransportPeer,
+            _: TransportUnicast,
+        ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+            panic!();
+        }
+
+        fn new_multicast(
+            &self,
+            _: TransportMulticast,
+        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+            panic!();
+        }
+    }
+
+    let peer_shm02_handler = Arc::new(TestPeer);
+
+    let failing_manager = TransportManager::builder()
+        .whatami(WhatAmI::Peer)
+        .unicast(
+            TransportManager::config_unicast()
+                .lowlatency(true)
+                .qos(true),
+        )
+        .build(peer_shm02_handler.clone());
+    assert!(failing_manager.is_err());
+
+    let good_manager1 = TransportManager::builder()
+        .whatami(WhatAmI::Peer)
+        .unicast(
+            TransportManager::config_unicast()
+                .lowlatency(false)
+                .qos(true),
+        )
+        .build(peer_shm02_handler.clone());
+    assert!(good_manager1.is_ok());
+
+    let good_manager2 = TransportManager::builder()
+        .whatami(WhatAmI::Peer)
+        .unicast(
+            TransportManager::config_unicast()
+                .lowlatency(true)
+                .qos(false),
+        )
+        .build(peer_shm02_handler.clone());
+    assert!(good_manager2.is_ok());
 }

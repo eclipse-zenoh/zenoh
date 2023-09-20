@@ -107,7 +107,7 @@ impl TransportEventHandler for SHClientAuthenticator {
 }
 
 #[cfg(feature = "auth_pubkey")]
-async fn auth_pubkey(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_transport: bool) {
+async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
     use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
     use zenoh_transport::test_helpers::make_basic_transport_manager_builder;
     use zenoh_transport::unicast::establishment::ext::auth::AuthPubKey;
@@ -161,7 +161,8 @@ async fn auth_pubkey(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_
     )));
     let unicast = make_basic_transport_manager_builder(
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .authenticator(auth);
     let client01_manager = TransportManager::builder()
@@ -219,7 +220,8 @@ async fn auth_pubkey(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_
     )));
     let unicast = make_basic_transport_manager_builder(
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .authenticator(auth);
     let client02_manager = TransportManager::builder()
@@ -238,7 +240,8 @@ async fn auth_pubkey(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_
     )));
     let unicast = make_basic_transport_manager_builder(
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .authenticator(auth);
     let client03_manager = TransportManager::builder()
@@ -298,7 +301,8 @@ async fn auth_pubkey(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_
     auth.set_pubkey(Some(auth_pubkey));
     let unicast = make_basic_transport_manager_builder(
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .authenticator(auth);
     let router_manager = TransportManager::builder()
@@ -406,7 +410,7 @@ async fn auth_pubkey(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_
 }
 
 #[cfg(feature = "auth_usrpwd")]
-async fn auth_usrpwd(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_transport: bool) {
+async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
     use zenoh_transport::test_helpers::make_basic_transport_manager_builder;
     use zenoh_transport::unicast::establishment::ext::auth::AuthUsrPwd;
     use zenoh_transport::TransportManager;
@@ -442,7 +446,8 @@ async fn auth_usrpwd(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_
 
     let unicast = make_basic_transport_manager_builder(
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .authenticator(auth_router);
     let router_manager = TransportManager::builder()
@@ -459,7 +464,8 @@ async fn auth_usrpwd(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_
     auth_client01.set_usrpwd(Some(auth_usrpwdr_client01));
     let unicast = make_basic_transport_manager_builder(
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .authenticator(auth_client01);
     let client01_manager = TransportManager::builder()
@@ -476,7 +482,8 @@ async fn auth_usrpwd(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_
     auth_client02.set_usrpwd(Some(auth_usrpwdr_client02));
     let unicast = make_basic_transport_manager_builder(
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .authenticator(auth_client02);
     let client02_manager = TransportManager::builder()
@@ -493,7 +500,8 @@ async fn auth_usrpwd(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_
     auth_client03.set_usrpwd(Some(auth_usrpwdr_client03));
     let unicast = make_basic_transport_manager_builder(
         #[cfg(feature = "shared-memory")]
-        shm_transport,
+        false,
+        lowlatency_transport,
     )
     .authenticator(auth_client03);
     let client03_manager = TransportManager::builder()
@@ -609,34 +617,18 @@ async fn auth_usrpwd(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_
     task::sleep(SLEEP).await;
 }
 
-async fn run(endpoint: &EndPoint, #[cfg(feature = "shared-memory")] shm_transport: bool) {
+async fn run(endpoint: &EndPoint, lowlatency_transport: bool) {
     #[cfg(feature = "auth_pubkey")]
-    auth_pubkey(
-        endpoint,
-        #[cfg(feature = "shared-memory")]
-        shm_transport,
-    )
-    .await;
+    auth_pubkey(endpoint, lowlatency_transport).await;
     #[cfg(feature = "auth_usrpwd")]
-    auth_usrpwd(
-        endpoint,
-        #[cfg(feature = "shared-memory")]
-        shm_transport,
-    )
-    .await;
+    auth_usrpwd(endpoint, lowlatency_transport).await;
 }
 
-async fn run_with_net(endpoint: &EndPoint) {
-    run(
-        endpoint,
-        #[cfg(feature = "shared-memory")]
-        false,
-    )
-    .await
+async fn run_with_universal_transport(endpoint: &EndPoint) {
+    run(endpoint, false).await
 }
 
-#[cfg(feature = "shared-memory")]
-async fn run_with_shm(endpoint: &EndPoint) {
+async fn run_with_lowlatency_transport(endpoint: &EndPoint) {
     run(endpoint, true).await
 }
 
@@ -649,19 +641,19 @@ fn authenticator_tcp() {
     });
 
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8000).parse().unwrap();
-    task::block_on(run_with_net(&endpoint));
+    task::block_on(run_with_universal_transport(&endpoint));
 }
 
-#[cfg(all(feature = "transport_tcp", feature = "shared-memory"))]
+#[cfg(feature = "transport_tcp")]
 #[test]
-fn authenticator_tcp_with_shm_transport() {
+fn authenticator_tcp_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8100).parse().unwrap();
-    task::block_on(run_with_shm(&endpoint));
+    task::block_on(run_with_lowlatency_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_udp")]
@@ -673,45 +665,47 @@ fn authenticator_udp() {
     });
 
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8010).parse().unwrap();
-    task::block_on(run_with_net(&endpoint));
+    task::block_on(run_with_universal_transport(&endpoint));
 }
 
-#[cfg(all(feature = "transport_udp", feature = "shared-memory"))]
+#[cfg(feature = "transport_udp")]
 #[test]
-fn authenticator_udp_with_shm_transport() {
+fn authenticator_udp_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8110).parse().unwrap();
-    task::block_on(run_with_shm(&endpoint));
+    task::block_on(run_with_lowlatency_transport(&endpoint));
 }
 
-#[cfg(feature = "transport_shm")]
+#[cfg(feature = "transport_unixpipe")]
 #[test]
 #[ignore]
-fn authenticator_shm() {
+fn authenticator_unixpipe() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "shm/authenticator_shm_test".parse().unwrap();
-    task::block_on(run_with_net(&endpoint));
+    let endpoint: EndPoint = "unixpipe/authenticator_unixpipe_test".parse().unwrap();
+    task::block_on(run_with_universal_transport(&endpoint));
 }
 
-#[cfg(all(feature = "transport_shm", feature = "shared-memory"))]
+#[cfg(feature = "transport_unixpipe")]
 #[test]
 #[ignore]
-fn authenticator_shm_with_shm_transport() {
+fn authenticator_unixpipe_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
-    let endpoint: EndPoint = "shm/authenticator_shm_with_shm_transport".parse().unwrap();
-    task::block_on(run_with_shm(&endpoint));
+    let endpoint: EndPoint = "unixpipe/authenticator_unixpipe_with_lowlatency_transport"
+        .parse()
+        .unwrap();
+    task::block_on(run_with_lowlatency_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_ws")]
@@ -724,20 +718,20 @@ fn authenticator_ws() {
     });
 
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8020).parse().unwrap();
-    task::block_on(run_with_net(&endpoint));
+    task::block_on(run_with_universal_transport(&endpoint));
 }
 
-#[cfg(all(feature = "transport_ws", feature = "shared-memory"))]
+#[cfg(feature = "transport_ws")]
 #[test]
 #[ignore]
-fn authenticator_ws_with_shm_transport() {
+fn authenticator_ws_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8120).parse().unwrap();
-    task::block_on(run_with_shm(&endpoint));
+    task::block_on(run_with_lowlatency_transport(&endpoint));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
@@ -751,7 +745,7 @@ fn authenticator_unix() {
     let f1 = "zenoh-test-unix-socket-10.sock";
     let _ = std::fs::remove_file(f1);
     let endpoint: EndPoint = format!("unixsock-stream/{f1}").parse().unwrap();
-    task::block_on(run_with_net(&endpoint));
+    task::block_on(run_with_universal_transport(&endpoint));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -856,7 +850,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         )
         .unwrap();
 
-    task::block_on(run_with_net(&endpoint));
+    task::block_on(run_with_universal_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_quic")]
@@ -959,5 +953,5 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         )
         .unwrap();
 
-    task::block_on(run_with_net(&endpoint));
+    task::block_on(run_with_universal_transport(&endpoint));
 }
