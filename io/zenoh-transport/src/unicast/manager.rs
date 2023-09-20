@@ -194,6 +194,10 @@ impl TransportManagerBuilderUnicast {
         self,
         #[allow(unused)] prng: &mut PseudoRng, // Required for #[cfg(feature = "transport_multilink")]
     ) -> ZResult<TransportManagerParamsUnicast> {
+        if self.is_qos && self.is_lowlatency {
+            bail!("'qos' and 'lowlatency' options are incompatible");
+        }
+
         let config = TransportManagerConfigUnicast {
             lease: self.lease,
             keep_alive: self.keep_alive,

@@ -1447,3 +1447,56 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
     let error_msg = panic_message::panic_message(&err);
     assert!(error_msg.contains(RUSTLS_UNKNOWN_CA_ALERT_DESCRIPTION));
 }
+
+#[test]
+fn transport_unicast_qos_and_lowlatency_failure() {
+    struct TestPeer;
+    impl TransportEventHandler for TestPeer {
+        fn new_unicast(
+            &self,
+            _: TransportPeer,
+            _: TransportUnicast,
+        ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+            panic!();
+        }
+
+        fn new_multicast(
+            &self,
+            _: TransportMulticast,
+        ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
+            panic!();
+        }
+    }
+
+    let peer_shm02_handler = Arc::new(TestPeer);
+
+    let failing_manager = TransportManager::builder()
+        .whatami(WhatAmI::Peer)
+        .unicast(
+            TransportManager::config_unicast()
+                .lowlatency(true)
+                .qos(true),
+        )
+        .build(peer_shm02_handler.clone());
+    assert!(failing_manager.is_err());
+
+    let good_manager1 = TransportManager::builder()
+        .whatami(WhatAmI::Peer)
+        .unicast(
+            TransportManager::config_unicast()
+                .lowlatency(false)
+                .qos(true),
+        )
+        .build(peer_shm02_handler.clone());
+    assert!(good_manager1.is_ok());
+
+    let good_manager2 = TransportManager::builder()
+        .whatami(WhatAmI::Peer)
+        .unicast(
+            TransportManager::config_unicast()
+                .lowlatency(true)
+                .qos(false),
+        )
+        .build(peer_shm02_handler.clone());
+    assert!(good_manager2.is_ok());
+}

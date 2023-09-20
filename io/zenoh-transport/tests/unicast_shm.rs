@@ -170,7 +170,8 @@ mod tests {
             .unicast(
                 TransportManager::config_unicast()
                     .shm(true)
-                    .lowlatency(lowlatency_transport),
+                    .lowlatency(lowlatency_transport)
+                    .qos(!lowlatency_transport),
             )
             .build(peer_shm01_handler.clone())
             .unwrap();
@@ -183,7 +184,8 @@ mod tests {
             .unicast(
                 TransportManager::config_unicast()
                     .shm(true)
-                    .lowlatency(lowlatency_transport),
+                    .lowlatency(lowlatency_transport)
+                    .qos(!lowlatency_transport),
             )
             .build(peer_shm02_handler.clone())
             .unwrap();
@@ -196,7 +198,8 @@ mod tests {
             .unicast(
                 TransportManager::config_unicast()
                     .shm(false)
-                    .lowlatency(lowlatency_transport),
+                    .lowlatency(lowlatency_transport)
+                    .qos(!lowlatency_transport),
             )
             .build(peer_net01_handler.clone())
             .unwrap();

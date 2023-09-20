@@ -53,5 +53,8 @@ pub fn make_basic_transport_manager_builder(
     if lowlatency_transport {
         println!("...with LowLatency transport...");
     }
-    config.lowlatency(lowlatency_transport)
+    match lowlatency_transport {
+        true => config.lowlatency(true).qos(false),
+        false => config,
+    }
 }
