@@ -30,7 +30,7 @@ use zenoh_core::zlock;
 use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{Bits, Priority, Resolution, WhatAmI, ZenohId},
-    transport::{BatchSize, Join, KeepAlive, PrioritySn, TransportMessage, TransportSn},
+    transport::{BatchSize, Join, PrioritySn, TransportMessage, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_sync::{RecyclingObjectPool, Signal};
@@ -40,7 +40,6 @@ pub(super) struct TransportLinkMulticastConfig {
     pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
     pub(super) lease: Duration,
-    pub(super) keep_alive: usize,
     pub(super) join_interval: Duration,
     pub(super) sn_resolution: Bits,
     pub(super) batch_size: BatchSize,
@@ -212,17 +211,13 @@ async fn tx_task(
     enum Action {
         Pull((WBatch, usize)),
         Join,
-        KeepAlive,
         Stop,
     }
 
-    async fn pull(pipeline: &mut TransmissionPipelineConsumer, keep_alive: Duration) -> Action {
-        match pipeline.pull().timeout(keep_alive).await {
-            Ok(res) => match res {
-                Some(sb) => Action::Pull(sb),
-                None => Action::Stop,
-            },
-            Err(_) => Action::KeepAlive,
+    async fn pull(pipeline: &mut TransmissionPipelineConsumer) -> Action {
+        match pipeline.pull().await {
+            Some(sb) => Action::Pull(sb),
+            None => Action::Stop,
         }
     }
 
@@ -236,10 +231,9 @@ async fn tx_task(
         Action::Join
     }
 
-    let keep_alive = config.join_interval / config.keep_alive as u32;
     let mut last_join = Instant::now().checked_sub(config.join_interval).unwrap();
     loop {
-        match pull(&mut pipeline, keep_alive)
+        match pull(&mut pipeline)
             .race(join(last_join, config.join_interval))
             .await
         {
@@ -299,17 +293,6 @@ async fn tx_task(
                 }
 
                 last_join = Instant::now();
-            }
-            Action::KeepAlive => {
-                let message: TransportMessage = KeepAlive.into();
-
-                #[allow(unused_variables)] // Used when stats feature is enabled
-                let n = link.send(&message).await?;
-                #[cfg(feature = "stats")]
-                {
-                    stats.inc_tx_t_msgs(1);
-                    stats.inc_tx_bytes(n);
-                }
             }
             Action::Stop => {
                 // Drain the transmission pipeline and write remaining bytes on the wire

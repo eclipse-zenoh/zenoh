@@ -136,7 +136,7 @@ serde_yaml = "0.9.19"
 sha3 = "0.10.6"
 shared_memory = "0.12.4"
 shellexpand = "3.0.0"
-socket2 = "0.5.1"
+socket2 = { version ="0.5.1", features = [ "all" ] }
 stop-token = "0.7.0"
 syn = "2.0"
 tide = "0.16.0"
