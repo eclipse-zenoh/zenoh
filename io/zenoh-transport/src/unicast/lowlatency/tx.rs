@@ -38,7 +38,7 @@ impl TransportUnicastLowlatency {
         }
 
         let msg = TransportMessageLowLatency {
-            body: TransportBodyLowLatency::Network(Box::new(msg)),
+            body: TransportBodyLowLatency::Network(msg),
         };
         let res = self.send(msg);
 

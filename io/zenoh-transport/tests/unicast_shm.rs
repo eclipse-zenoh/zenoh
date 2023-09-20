@@ -386,7 +386,7 @@ mod tests {
             zasync_executor_init!();
         });
 
-        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14001).parse().unwrap();
         task::block_on(run(&endpoint, true));
     }
 
@@ -410,7 +410,7 @@ mod tests {
             zasync_executor_init!();
         });
 
-        let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14010).parse().unwrap();
+        let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14011).parse().unwrap();
         task::block_on(run(&endpoint, true));
     }
 
@@ -434,7 +434,9 @@ mod tests {
             zasync_executor_init!();
         });
 
-        let endpoint: EndPoint = "unixpipe/transport_unixpipe_shm".parse().unwrap();
+        let endpoint: EndPoint = "unixpipe/transport_unixpipe_shm_with_lowlatency_transport"
+            .parse()
+            .unwrap();
         task::block_on(run(&endpoint, true));
     }
 }

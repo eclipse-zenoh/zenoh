@@ -75,7 +75,7 @@ impl TransportUnicastLowlatency {
                 }
                 zenoh_protocol::transport::TransportBodyLowLatency::KeepAlive(_) => {}
                 zenoh_protocol::transport::TransportBodyLowLatency::Network(msg) => {
-                    let _ = self.trigger_callback(*msg);
+                    let _ = self.trigger_callback(msg);
                 }
             }
         }

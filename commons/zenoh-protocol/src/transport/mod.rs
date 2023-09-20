@@ -63,11 +63,12 @@ pub struct TransportMessageLowLatency {
     pub body: TransportBodyLowLatency,
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
 pub enum TransportBodyLowLatency {
     Close(Close),
     KeepAlive(KeepAlive),
-    Network(Box<NetworkMessage>),
+    Network(NetworkMessage),
 }
 
 pub type TransportSn = u32;

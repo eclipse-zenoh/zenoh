@@ -40,7 +40,7 @@ where
 
     fn write(self, writer: &mut W, x: &TransportMessageLowLatency) -> Self::Output {
         match &x.body {
-            TransportBodyLowLatency::Network(b) => self.write(&mut *writer, b.as_ref()),
+            TransportBodyLowLatency::Network(b) => self.write(&mut *writer, b),
             TransportBodyLowLatency::KeepAlive(b) => self.write(&mut *writer, b),
             TransportBodyLowLatency::Close(b) => self.write(&mut *writer, b),
         }
@@ -62,7 +62,7 @@ where
             id::CLOSE => TransportBodyLowLatency::Close(codec.read(&mut *reader)?),
             _ => {
                 let nw: NetworkMessage = codec.read(&mut *reader)?;
-                TransportBodyLowLatency::Network(Box::new(nw))
+                TransportBodyLowLatency::Network(nw)
             }
         };
 
