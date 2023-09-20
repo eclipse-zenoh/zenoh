@@ -4642,10 +4642,10 @@ dependencies = [
  "zenoh-link-commons",
  "zenoh-link-quic",
  "zenoh-link-serial",
- "zenoh-link-shm",
  "zenoh-link-tcp",
  "zenoh-link-tls",
  "zenoh-link-udp",
+ "zenoh-link-unixpipe",
  "zenoh-link-unixsock_stream",
  "zenoh-link-ws",
  "zenoh-protocol",
@@ -4712,27 +4712,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "zenoh-link-shm"
-version = "0.10.0-dev"
-dependencies = [
- "advisory-lock",
- "async-io",
- "async-std",
- "async-trait",
- "filepath",
- "log",
- "nix 0.27.1",
- "rand 0.8.5",
- "unix-named-pipe",
- "zenoh-buffers",
- "zenoh-config",
- "zenoh-core",
- "zenoh-link-commons",
- "zenoh-protocol",
- "zenoh-result",
-]
-
-[[package]]
 name = "zenoh-link-tcp"
 version = "0.10.0-dev"
 dependencies = [
@@ -4785,6 +4764,27 @@ dependencies = [
  "zenoh-result",
  "zenoh-sync",
  "zenoh-util",
+]
+
+[[package]]
+name = "zenoh-link-unixpipe"
+version = "0.10.0-dev"
+dependencies = [
+ "advisory-lock",
+ "async-io",
+ "async-std",
+ "async-trait",
+ "filepath",
+ "log",
+ "nix 0.27.1",
+ "rand 0.8.5",
+ "unix-named-pipe",
+ "zenoh-buffers",
+ "zenoh-config",
+ "zenoh-core",
+ "zenoh-link-commons",
+ "zenoh-protocol",
+ "zenoh-result",
 ]
 
 [[package]]

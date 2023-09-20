@@ -424,7 +424,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
-        // Extension QoS
+        // Extension LowLatency
         self.ext_lowlatency
             .recv_open_ack((&mut state.ext_lowlatency, open_ack.ext_lowlatency))
             .await
