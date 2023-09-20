@@ -128,6 +128,10 @@
       /// Enables the LowLatency transport
       /// This option does not make LowLatency transport mandatory, the actual implementation of transport
       /// used will depend on Establish procedure and other party's settings
+      ///
+      /// NOTE: Currently, the LowLatency transport doesn't preserve QoS prioritization. 
+      /// NOTE: Due to the note above, 'lowlatency' is incompatible with 'qos' option, so in order to
+      ///       enable 'lowlatency' you need to explicitly disable 'qos'.
       lowlatency: false,
     },
     qos: {
