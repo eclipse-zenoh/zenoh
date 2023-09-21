@@ -16,8 +16,10 @@ macro_rules! stats_struct {
      $(#[$meta:meta])*
      $vis:vis struct $struct_name:ident {
         $(
-        $(#[$field_meta:meta])*
-        $field_vis:vis $field_name:ident,
+            $(# HELP $field_help:literal)?
+            $(# TYPE $field_type:literal)?
+            $(#[$field_meta:meta])*
+            $field_vis:vis $field_name:ident,
         )*
      }
     ) => {
@@ -25,7 +27,7 @@ macro_rules! stats_struct {
             $vis struct $struct_name {
                 parent: Option<std::sync::Arc<$struct_name>>,
                 $(
-                $(#[$field_meta:meta])*
+                $(#[$field_meta])*
                 $field_vis $field_name: AtomicUsize,
                 )*
             }
@@ -33,7 +35,7 @@ macro_rules! stats_struct {
             $(#[$meta])*
             $vis struct [<$struct_name Report>] {
                 $(
-                $(#[$field_meta:meta])*
+                $(#[$field_meta])*
                 $field_vis $field_name: usize,
                 )*
             }
@@ -74,6 +76,41 @@ macro_rules! stats_struct {
                     }
                 }
             }
+
+            impl [<$struct_name Report>] {
+                $vis fn openmetrics_text(&self) -> String {
+                    let mut s = String::new();
+                    $(
+                        $(
+                            s.push_str("# HELP ");
+                            s.push_str(stringify!($field_name));
+                            s.push_str(" ");
+                            s.push_str($field_help);
+                            s.push_str("\n");
+                        )?
+                        $(
+                            s.push_str("# TYPE ");
+                            s.push_str(stringify!($field_name));
+                            s.push_str(" ");
+                            s.push_str($field_type);
+                            s.push_str("\n");
+                        )?
+                        s.push_str(stringify!($field_name));
+                        s.push_str(" ");
+                        s.push_str(self.$field_name.to_string().as_str());
+                        s.push_str("\n");
+                    )*
+                    s
+                }
+            }
+
+            impl Default for [<$struct_name Report>] {
+                fn default() -> Self {
+                    Self {
+                        $($field_name: 0,)*
+                    }
+                }
+            }
         }
     }
 }
@@ -83,41 +120,149 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct TransportStats {
-        pub tx_t_msgs,
-        pub tx_n_msgs,
-        pub tx_n_dropped,
-        pub tx_z_put_user_msgs,
-        pub tx_z_put_user_pl_bytes,
-        pub tx_z_put_admin_msgs,
-        pub tx_z_put_admin_pl_bytes,
-        pub tx_z_del_user_msgs,
-        pub tx_z_del_admin_msgs,
-        pub tx_z_query_user_msgs,
-        pub tx_z_query_user_pl_bytes,
-        pub tx_z_query_admin_msgs,
-        pub tx_z_query_admin_pl_bytes,
-        pub tx_z_reply_user_msgs,
-        pub tx_z_reply_user_pl_bytes,
-        pub tx_z_reply_admin_msgs,
-        pub tx_z_reply_admin_pl_bytes,
+        # HELP "Counter of sent bytes."
+        # TYPE "counter"
         pub tx_bytes,
 
-        pub rx_t_msgs,
-        pub rx_n_msgs,
-        pub rx_z_put_user_msgs,
-        pub rx_z_put_user_pl_bytes,
-        pub rx_z_put_admin_msgs,
-        pub rx_z_put_admin_pl_bytes,
-        pub rx_z_del_user_msgs,
-        pub rx_z_del_admin_msgs,
-        pub rx_z_query_user_msgs,
-        pub rx_z_query_user_pl_bytes,
-        pub rx_z_query_admin_msgs,
-        pub rx_z_query_admin_pl_bytes,
-        pub rx_z_reply_user_msgs,
-        pub rx_z_reply_user_pl_bytes,
-        pub rx_z_reply_admin_msgs,
-        pub rx_z_reply_admin_pl_bytes,
+        # HELP "Counter of sent transport messages."
+        # TYPE "counter"
+        pub tx_t_msgs,
+
+        # HELP "Counter of sent network messages."
+        # TYPE "counter"
+        pub tx_n_msgs,
+
+        # HELP "Counter of dropped network messages."
+        # TYPE "counter"
+        pub tx_n_dropped,
+
+        # HELP "Counter of sent zenoh put messages."
+        # TYPE "counter"
+        pub tx_z_put_user_msgs,
+
+        # HELP "Counter of sent bytes in zenoh put message payloads."
+        # TYPE "counter"
+        pub tx_z_put_user_pl_bytes,
+
+        # HELP "Counter of sent zenoh put messages."
+        # TYPE "counter"
+        pub tx_z_put_admin_msgs,
+
+        # HELP "Counter of sent bytes in zenoh put message payloads."
+        # TYPE "counter"
+        pub tx_z_put_admin_pl_bytes,
+
+        # HELP "Counter of sent zenoh del messages."
+        # TYPE "counter"
+        pub tx_z_del_user_msgs,
+
+        # HELP "Counter of sent zenoh del messages."
+        # TYPE "counter"
+        pub tx_z_del_admin_msgs,
+
+        # HELP "Counter of sent zenoh query messages."
+        # TYPE "counter"
+        pub tx_z_query_user_msgs,
+
+        # HELP "Counter of sent bytes in zenoh query message payloads."
+        # TYPE "counter"
+        pub tx_z_query_user_pl_bytes,
+
+        # HELP "Counter of sent zenoh query messages."
+        # TYPE "counter"
+        pub tx_z_query_admin_msgs,
+
+        # HELP "Counter of sent bytes in zenoh query message payloads."
+        # TYPE "counter"
+        pub tx_z_query_admin_pl_bytes,
+
+        # HELP "Counter of sent zenoh reply messages."
+        # TYPE "counter"
+        pub tx_z_reply_user_msgs,
+
+        # HELP "Counter of sent bytes in zenoh reply message payloads."
+        # TYPE "counter"
+        pub tx_z_reply_user_pl_bytes,
+
+        # HELP "Counter of sent zenoh reply messages."
+        # TYPE "counter"
+        pub tx_z_reply_admin_msgs,
+
+        # HELP "Counter of sent bytes in zenoh reply message payloads."
+        # TYPE "counter"
+        pub tx_z_reply_admin_pl_bytes,
+
+
+        # HELP "Counter of received bytes."
+        # TYPE "counter"
         pub rx_bytes,
+
+        # HELP "Counter of received transport messages."
+        # TYPE "counter"
+        pub rx_t_msgs,
+
+        # HELP "Counter of received network messages."
+        # TYPE "counter"
+        pub rx_n_msgs,
+
+        # HELP "Counter of dropped network messages."
+        # TYPE "counter"
+        pub rx_n_dropped,
+
+        # HELP "Counter of received zenoh put messages."
+        # TYPE "counter"
+        pub rx_z_put_user_msgs,
+
+        # HELP "Counter of received bytes in zenoh put message payloads."
+        # TYPE "counter"
+        pub rx_z_put_user_pl_bytes,
+
+        # HELP "Counter of received zenoh put messages."
+        # TYPE "counter"
+        pub rx_z_put_admin_msgs,
+
+        # HELP "Counter of received bytes in zenoh put message payloads."
+        # TYPE "counter"
+        pub rx_z_put_admin_pl_bytes,
+
+        # HELP "Counter of received zenoh del messages."
+        # TYPE "counter"
+        pub rx_z_del_user_msgs,
+
+        # HELP "Counter of received zenoh del messages."
+        # TYPE "counter"
+        pub rx_z_del_admin_msgs,
+
+        # HELP "Counter of received zenoh query messages."
+        # TYPE "counter"
+        pub rx_z_query_user_msgs,
+
+        # HELP "Counter of received bytes in zenoh query message payloads."
+        # TYPE "counter"
+        pub rx_z_query_user_pl_bytes,
+
+        # HELP "Counter of received zenoh query messages."
+        # TYPE "counter"
+        pub rx_z_query_admin_msgs,
+
+        # HELP "Counter of received bytes in zenoh query message payloads."
+        # TYPE "counter"
+        pub rx_z_query_admin_pl_bytes,
+
+        # HELP "Counter of received zenoh reply messages."
+        # TYPE "counter"
+        pub rx_z_reply_user_msgs,
+
+        # HELP "Counter of received bytes in zenoh reply message payloads."
+        # TYPE "counter"
+        pub rx_z_reply_user_pl_bytes,
+
+        # HELP "Counter of received zenoh reply messages."
+        # TYPE "counter"
+        pub rx_z_reply_admin_msgs,
+
+        # HELP "Counter of received bytes in zenoh reply message payloads."
+        # TYPE "counter"
+        pub rx_z_reply_admin_pl_bytes,
     }
 }
