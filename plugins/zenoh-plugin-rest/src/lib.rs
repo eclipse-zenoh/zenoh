@@ -43,6 +43,7 @@ const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix =
 lazy_static::lazy_static! {
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 }
+const RAW_KEY: &str = "_raw";
 
 fn value_to_json(value: Value) -> String {
     // @TODO: transcode to JSON when implemented in Value
@@ -108,6 +109,14 @@ async fn to_json(results: flume::Receiver<Reply>) -> String {
     format!("[\n{values}\n]\n")
 }
 
+async fn to_json_response(results: flume::Receiver<Reply>) -> Response {
+    response(
+        StatusCode::Ok,
+        Mime::from_str("application/json").unwrap(),
+        &to_json(results).await,
+    )
+}
+
 fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
@@ -138,6 +147,28 @@ async fn to_html(results: flume::Receiver<Reply>) -> String {
     format!("<dl>\n{values}\n</dl>\n")
 }
 
+async fn to_html_response(results: flume::Receiver<Reply>) -> Response {
+    response(StatusCode::Ok, "text/html", &to_html(results).await)
+}
+
+async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
+    match results.recv_async().await {
+        Ok(reply) => match reply.sample {
+            Ok(sample) => response(
+                StatusCode::Ok,
+                sample.value.encoding.to_string().as_ref(),
+                String::from_utf8_lossy(&sample.payload.contiguous()).as_ref(),
+            ),
+            Err(value) => response(
+                StatusCode::Ok,
+                value.encoding.to_string().as_ref(),
+                String::from_utf8_lossy(&value.payload.contiguous()).as_ref(),
+            ),
+        },
+        Err(_) => response(StatusCode::Ok, "", ""),
+    }
+}
+
 fn method_to_kind(method: Method) -> SampleKind {
     match method {
         Method::Put => SampleKind::Put,
@@ -146,13 +177,15 @@ fn method_to_kind(method: Method) -> SampleKind {
     }
 }
 
-fn response(status: StatusCode, content_type: Mime, body: &str) -> Response {
-    Response::builder(status)
+fn response(status: StatusCode, content_type: impl TryInto<Mime>, body: &str) -> Response {
+    let mut builder = Response::builder(status)
         .header("content-length", body.len().to_string())
         .header("Access-Control-Allow-Origin", "*")
-        .content_type(content_type)
-        .body(body)
-        .build()
+        .body(body);
+    if let Ok(mime) = content_type.try_into() {
+        builder = builder.content_type(mime);
+    }
+    builder.build()
 }
 
 zenoh_plugin_trait::declare_plugin!(RestPlugin);
@@ -347,7 +380,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
             Err(e) => {
                 return Ok(response(
                     StatusCode::BadRequest,
-                    Mime::from_str("text/plain").unwrap(),
+                    "text/plain",
                     &e.to_string(),
                 ))
             }
@@ -363,6 +396,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         } else {
             QueryConsolidation::from(zenoh::query::ConsolidationMode::Latest)
         };
+        let raw = selector.decode().any(|(k, _)| k.as_ref() == RAW_KEY);
         match req
             .state()
             .0
@@ -372,23 +406,17 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
             .await
         {
             Ok(receiver) => {
-                if first_accept == "text/html" {
-                    Ok(response(
-                        StatusCode::Ok,
-                        Mime::from_str("text/html").unwrap(),
-                        &to_html(receiver).await,
-                    ))
+                if raw {
+                    Ok(to_raw_response(receiver).await)
+                } else if first_accept == "text/html" {
+                    Ok(to_html_response(receiver).await)
                 } else {
-                    Ok(response(
-                        StatusCode::Ok,
-                        Mime::from_str("application/json").unwrap(),
-                        &to_json(receiver).await,
-                    ))
+                    Ok(to_json_response(receiver).await)
                 }
             }
             Err(e) => Ok(response(
                 StatusCode::InternalServerError,
-                Mime::from_str("text/plain").unwrap(),
+                "text/plain",
                 &e.to_string(),
             )),
         }
@@ -404,7 +432,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 Err(e) => {
                     return Ok(response(
                         StatusCode::BadRequest,
-                        Mime::from_str("text/plain").unwrap(),
+                        "text/plain",
                         &e.to_string(),
                     ))
                 }
@@ -427,14 +455,14 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 Ok(_) => Ok(Response::new(StatusCode::Ok)),
                 Err(e) => Ok(response(
                     StatusCode::InternalServerError,
-                    Mime::from_str("text/plain").unwrap(),
+                    "text/plain",
                     &e.to_string(),
                 )),
             }
         }
         Err(e) => Ok(response(
             StatusCode::NoContent,
-            Mime::from_str("text/plain").unwrap(),
+            "text/plain",
             &e.to_string(),
         )),
     }
