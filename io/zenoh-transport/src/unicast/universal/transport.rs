@@ -102,6 +102,9 @@ impl TransportUnicastUniversal {
             c.sync(initial_sn)?;
         }
 
+        #[cfg(feature = "stats")]
+        let stats = Arc::new(TransportStats::new(Some(manager.get_stats().clone())));
+
         let t = TransportUnicastUniversal {
             manager,
             config,
@@ -111,7 +114,7 @@ impl TransportUnicastUniversal {
             callback: Arc::new(RwLock::new(None)),
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
-            stats: Arc::new(TransportStats::default()),
+            stats,
         };
 
         Ok(t)

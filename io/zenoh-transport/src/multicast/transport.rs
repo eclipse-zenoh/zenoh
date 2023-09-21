@@ -122,6 +122,9 @@ impl TransportMulticastInner {
             bail!("Invalid QoS configuration");
         }
 
+        #[cfg(feature = "stats")]
+        let stats = Arc::new(TransportStats::new(Some(manager.get_stats().clone())));
+
         let ti = TransportMulticastInner {
             manager,
             priority_tx: priority_tx.into_boxed_slice().into(),
@@ -131,7 +134,7 @@ impl TransportMulticastInner {
             callback: Arc::new(RwLock::new(None)),
             timer: Arc::new(Timer::new(false)),
             #[cfg(feature = "stats")]
-            stats: Arc::new(TransportStats::default()),
+            stats,
         };
 
         let link = TransportLinkMulticast::new(ti.clone(), config.link);

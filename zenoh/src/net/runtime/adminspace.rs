@@ -73,6 +73,10 @@ impl AdminSpace {
         let mut handlers: HashMap<_, Handler> = HashMap::new();
         handlers.insert(root_key.clone(), Arc::new(router_data));
         handlers.insert(
+            format!("@/router/{zid_str}/metrics").try_into().unwrap(),
+            Arc::new(router_metrics),
+        );
+        handlers.insert(
             format!("@/router/{zid_str}/linkstate/routers")
                 .try_into()
                 .unwrap(),
@@ -450,7 +454,8 @@ fn router_data(context: &AdminContext, query: Query) {
         .map(transport_to_json)
         .collect();
 
-    let json = json!({
+    #[allow(unused_mut)]
+    let mut json = json!({
         "zid": context.zid_str,
         "version": context.version,
         "metadata": context.metadata,
@@ -458,12 +463,59 @@ fn router_data(context: &AdminContext, query: Query) {
         "sessions": transports,
         "plugins": plugins,
     });
+
+    #[cfg(feature = "stats")]
+    {
+        let stats = crate::prelude::Parameters::decode(&query.selector())
+            .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
+        if stats {
+            json.as_object_mut().unwrap().insert(
+                "stats".to_string(),
+                json!(transport_mgr.get_stats().report()),
+            );
+        }
+    }
+
     log::trace!("AdminSpace router_data: {:?}", json);
     if let Err(e) = query
         .reply(Ok(Sample::new(
             reply_key,
             Value::from(json.to_string().as_bytes().to_vec())
                 .encoding(KnownEncoding::AppJson.into()),
+        )))
+        .res()
+    {
+        log::error!("Error sending AdminSpace reply: {:?}", e);
+    }
+}
+
+fn router_metrics(context: &AdminContext, query: Query) {
+    let reply_key: OwnedKeyExpr = format!("@/router/{}/metrics", context.zid_str)
+        .try_into()
+        .unwrap();
+    #[allow(unused_mut)]
+    let mut metrics = format!(
+        r#"# HELP zenoh_build Informations about zenoh.
+# TYPE zenoh_build gauge
+zenoh_build{{version="{}"}} 1
+"#,
+        context.version
+    );
+
+    #[cfg(feature = "stats")]
+    metrics.push_str(
+        &context
+            .runtime
+            .manager()
+            .get_stats()
+            .report()
+            .openmetrics_text(),
+    );
+
+    if let Err(e) = query
+        .reply(Ok(Sample::new(
+            reply_key,
+            Value::from(metrics.as_bytes().to_vec()).encoding(KnownEncoding::TextPlain.into()),
         )))
         .res()
     {
