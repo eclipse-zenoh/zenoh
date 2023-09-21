@@ -12,14 +12,61 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 macro_rules! stats_struct {
+    (@field_type ) => {AtomicUsize};
+    (@field_type $field_type:ident) => {std::sync::Arc<$field_type>};
+    (@report_field_type ) => {usize};
+    (@report_field_type $field_type:ident) => {paste::paste! {[<$field_type Report>]}};
+    (@new($parent:expr) ) => {AtomicUsize::new(0)};
+    (@new($parent:expr) $field_type:ident) => {std::sync::Arc::new($field_type::new($parent))};
+    (@report_default ) => {0};
+    (@report_default $field_type:ident) => {paste::paste! {[<$field_type Report>]::default()}};
+    (@get $vis:vis $field_name:ident) => {
+        paste::paste! {
+            $vis fn [<get_ $field_name>](&self) -> usize {
+                self.$field_name.load(Ordering::Relaxed)
+            }
+        }
+    };
+    (@get $vis:vis $field_name:ident $field_type:ident) => {
+        paste::paste! {
+            $vis fn [<get_ $field_name>](&self) -> [<$field_type Report>] {
+                self.$field_name.report()
+            }
+        }
+    };
+    (@increment $vis:vis $field_name:ident) => {
+        paste::paste! {
+            $vis fn [<inc_ $field_name>](&self, nb: usize) {
+                self.$field_name.fetch_add(nb, Ordering::Relaxed);
+                if let Some(parent) = self.parent.as_ref() {
+                    parent.[<inc_ $field_name>](nb);
+                }
+            }
+        }
+    };
+    (@increment $vis:vis $field_name:ident $field_type:ident) => {};
+    (@openmetrics($stats:expr, $string:expr) $field_name:ident) => {
+        $string.push_str(stringify!($field_name));
+        $string.push_str(" ");
+        $string.push_str($stats.$field_name.to_string().as_str());
+        $string.push_str("\n");
+    };
+    (@openmetrics($stats:expr, $string:expr) $field_name:ident $field_type:ident) => {
+        $string.push_str(&$stats.$field_name.sub_openmetrics_text(stringify!($field_name)));
+    };
+    (@openmetrics_val($stats:expr) $field_name:ident) => {
+        $stats.$field_name.to_string().as_str()
+    };
+    (@openmetrics_val($stats:expr) $field_name:ident $field_type:ident) => {""};
     (
      $(#[$meta:meta])*
      $vis:vis struct $struct_name:ident {
+
         $(
-            $(# HELP $field_help:literal)?
-            $(# TYPE $field_type:literal)?
+            $(# HELP $help:literal)?
+            $(# TYPE $type:literal)?
             $(#[$field_meta:meta])*
-            $field_vis:vis $field_name:ident,
+            $field_vis:vis $field_name:ident $($field_type:ident)?,
         )*
      }
     ) => {
@@ -28,7 +75,7 @@ macro_rules! stats_struct {
                 parent: Option<std::sync::Arc<$struct_name>>,
                 $(
                 $(#[$field_meta])*
-                $field_vis $field_name: AtomicUsize,
+                $field_vis $field_name: stats_struct!(@field_type $($field_type)?),
                 )*
             }
 
@@ -36,15 +83,15 @@ macro_rules! stats_struct {
             $vis struct [<$struct_name Report>] {
                 $(
                 $(#[$field_meta])*
-                $field_vis $field_name: usize,
+                $field_vis $field_name: stats_struct!(@report_field_type $($field_type)?),
                 )*
             }
 
             impl $struct_name {
                 $vis fn new(parent: Option<std::sync::Arc<$struct_name>>) -> Self {
                     $struct_name {
-                        parent,
-                        $($field_name: AtomicUsize::new(0),)*
+                        parent: parent.clone(),
+                        $($field_name: stats_struct!(@new(parent.as_ref().map(|p|p.$field_name.clone())) $($field_type)?),)*
                     }
                 }
 
@@ -55,16 +102,8 @@ macro_rules! stats_struct {
                 }
 
                 $(
-                    $vis fn [<get_ $field_name>](&self) -> usize {
-                    self.$field_name.load(Ordering::Relaxed)
-                }
-
-                $vis fn [<inc_ $field_name>](&self, nb: usize) {
-                    self.$field_name.fetch_add(nb, Ordering::Relaxed);
-                    if let Some(parent) = self.parent.as_ref() {
-                        parent.[<inc_ $field_name>](nb);
-                    }
-                }
+                    stats_struct!(@get $vis $field_name $($field_type)?);
+                    stats_struct!(@increment $vis $field_name $($field_type)?);
                 )*
             }
 
@@ -72,12 +111,28 @@ macro_rules! stats_struct {
                 fn default() -> Self {
                     Self {
                         parent: None,
-                        $($field_name: AtomicUsize::new(0),)*
+                        $($field_name: stats_struct!(@new(None) $($field_type)?),)*
                     }
                 }
             }
 
             impl [<$struct_name Report>] {
+                #[allow(dead_code)]
+                fn sub_openmetrics_text(&self, prefix: &str) -> String {
+                    let mut s = String::new();
+                    $(
+                        s.push_str(prefix);
+                        s.push_str("{space=\"");
+                        s.push_str(stringify!($field_name));
+                        s.push_str("\"} ");
+                        s.push_str(
+                            stats_struct!(@openmetrics_val(self) $field_name $($field_type)?)
+                        );
+                        s.push_str("\n");
+                    )*
+                    s
+                }
+
                 $vis fn openmetrics_text(&self) -> String {
                     let mut s = String::new();
                     $(
@@ -85,20 +140,17 @@ macro_rules! stats_struct {
                             s.push_str("# HELP ");
                             s.push_str(stringify!($field_name));
                             s.push_str(" ");
-                            s.push_str($field_help);
+                            s.push_str($help);
                             s.push_str("\n");
                         )?
                         $(
                             s.push_str("# TYPE ");
                             s.push_str(stringify!($field_name));
                             s.push_str(" ");
-                            s.push_str($field_type);
+                            s.push_str($type);
                             s.push_str("\n");
                         )?
-                        s.push_str(stringify!($field_name));
-                        s.push_str(" ");
-                        s.push_str(self.$field_name.to_string().as_str());
-                        s.push_str("\n");
+                        stats_struct!(@openmetrics(self, s) $field_name $($field_type)?);
                     )*
                     s
                 }
@@ -107,7 +159,7 @@ macro_rules! stats_struct {
             impl Default for [<$struct_name Report>] {
                 fn default() -> Self {
                     Self {
-                        $($field_name: 0,)*
+                        $($field_name: stats_struct!(@report_default $($field_type)?),)*
                     }
                 }
             }
@@ -117,6 +169,14 @@ macro_rules! stats_struct {
 
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicUsize, Ordering};
+stats_struct! {
+    #[derive(Clone, Debug, Deserialize, Serialize)]
+    pub struct DiscriminatedStats {
+        pub user,
+        pub admin,
+    }
+}
+
 stats_struct! {
     #[derive(Clone, Debug, Deserialize, Serialize)]
     pub struct TransportStats {
@@ -138,60 +198,31 @@ stats_struct! {
 
         # HELP "Counter of sent zenoh put messages."
         # TYPE "counter"
-        pub tx_z_put_user_msgs,
+        pub tx_z_put_msgs DiscriminatedStats,
 
         # HELP "Counter of sent bytes in zenoh put message payloads."
         # TYPE "counter"
-        pub tx_z_put_user_pl_bytes,
-
-        # HELP "Counter of sent zenoh put messages."
-        # TYPE "counter"
-        pub tx_z_put_admin_msgs,
-
-        # HELP "Counter of sent bytes in zenoh put message payloads."
-        # TYPE "counter"
-        pub tx_z_put_admin_pl_bytes,
+        pub tx_z_put_pl_bytes DiscriminatedStats,
 
         # HELP "Counter of sent zenoh del messages."
         # TYPE "counter"
-        pub tx_z_del_user_msgs,
-
-        # HELP "Counter of sent zenoh del messages."
-        # TYPE "counter"
-        pub tx_z_del_admin_msgs,
+        pub tx_z_del_msgs DiscriminatedStats,
 
         # HELP "Counter of sent zenoh query messages."
         # TYPE "counter"
-        pub tx_z_query_user_msgs,
+        pub tx_z_query_msgs DiscriminatedStats,
 
         # HELP "Counter of sent bytes in zenoh query message payloads."
         # TYPE "counter"
-        pub tx_z_query_user_pl_bytes,
-
-        # HELP "Counter of sent zenoh query messages."
-        # TYPE "counter"
-        pub tx_z_query_admin_msgs,
-
-        # HELP "Counter of sent bytes in zenoh query message payloads."
-        # TYPE "counter"
-        pub tx_z_query_admin_pl_bytes,
+        pub tx_z_query_pl_bytes DiscriminatedStats,
 
         # HELP "Counter of sent zenoh reply messages."
         # TYPE "counter"
-        pub tx_z_reply_user_msgs,
+        pub tx_z_reply_msgs DiscriminatedStats,
 
         # HELP "Counter of sent bytes in zenoh reply message payloads."
         # TYPE "counter"
-        pub tx_z_reply_user_pl_bytes,
-
-        # HELP "Counter of sent zenoh reply messages."
-        # TYPE "counter"
-        pub tx_z_reply_admin_msgs,
-
-        # HELP "Counter of sent bytes in zenoh reply message payloads."
-        # TYPE "counter"
-        pub tx_z_reply_admin_pl_bytes,
-
+        pub tx_z_reply_pl_bytes DiscriminatedStats,
 
         # HELP "Counter of received bytes."
         # TYPE "counter"
@@ -211,58 +242,30 @@ stats_struct! {
 
         # HELP "Counter of received zenoh put messages."
         # TYPE "counter"
-        pub rx_z_put_user_msgs,
+        pub rx_z_put_msgs DiscriminatedStats,
 
         # HELP "Counter of received bytes in zenoh put message payloads."
         # TYPE "counter"
-        pub rx_z_put_user_pl_bytes,
-
-        # HELP "Counter of received zenoh put messages."
-        # TYPE "counter"
-        pub rx_z_put_admin_msgs,
-
-        # HELP "Counter of received bytes in zenoh put message payloads."
-        # TYPE "counter"
-        pub rx_z_put_admin_pl_bytes,
+        pub rx_z_put_pl_bytes DiscriminatedStats,
 
         # HELP "Counter of received zenoh del messages."
         # TYPE "counter"
-        pub rx_z_del_user_msgs,
-
-        # HELP "Counter of received zenoh del messages."
-        # TYPE "counter"
-        pub rx_z_del_admin_msgs,
+        pub rx_z_del_msgs DiscriminatedStats,
 
         # HELP "Counter of received zenoh query messages."
         # TYPE "counter"
-        pub rx_z_query_user_msgs,
+        pub rx_z_query_msgs DiscriminatedStats,
 
         # HELP "Counter of received bytes in zenoh query message payloads."
         # TYPE "counter"
-        pub rx_z_query_user_pl_bytes,
-
-        # HELP "Counter of received zenoh query messages."
-        # TYPE "counter"
-        pub rx_z_query_admin_msgs,
-
-        # HELP "Counter of received bytes in zenoh query message payloads."
-        # TYPE "counter"
-        pub rx_z_query_admin_pl_bytes,
+        pub rx_z_query_pl_bytes DiscriminatedStats,
 
         # HELP "Counter of received zenoh reply messages."
         # TYPE "counter"
-        pub rx_z_reply_user_msgs,
+        pub rx_z_reply_msgs DiscriminatedStats,
 
         # HELP "Counter of received bytes in zenoh reply message payloads."
         # TYPE "counter"
-        pub rx_z_reply_user_pl_bytes,
-
-        # HELP "Counter of received zenoh reply messages."
-        # TYPE "counter"
-        pub rx_z_reply_admin_msgs,
-
-        # HELP "Counter of received bytes in zenoh reply message payloads."
-        # TYPE "counter"
-        pub rx_z_reply_admin_pl_bytes,
+        pub rx_z_reply_pl_bytes DiscriminatedStats,
     }
 }

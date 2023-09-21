@@ -1732,10 +1732,12 @@ macro_rules! inc_stats {
                 use zenoh_buffers::SplitBuffer;
                 match &$body {
                     PushBody::Put(p) => {
-                        stats.[<inc_ $txrx _z_put_ $space _msgs>](1);
-                        stats.[<inc_ $txrx _z_put_ $space _pl_bytes>](p.payload.len());
+                        stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
+                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](p.payload.len());
                     }
-                    PushBody::Del(_) => stats.[<inc_ $txrx _z_del_ $space _msgs>](1),
+                    PushBody::Del(_) => {
+                        stats.[<$txrx _z_del_msgs>].[<inc_ $space>](1);
+                    }
                 }
             }
         }
