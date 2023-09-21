@@ -74,6 +74,8 @@ impl TransportUnicastLowlatency {
         config: TransportConfigUnicast,
         link: LinkUnicast,
     ) -> ZResult<TransportUnicastLowlatency> {
+        #[cfg(feature = "stats")]
+        let stats = Arc::new(TransportStats::new(Some(manager.get_stats().clone())));
         let t = TransportUnicastLowlatency {
             manager,
             config,
@@ -81,7 +83,7 @@ impl TransportUnicastLowlatency {
             callback: Arc::new(SyncRwLock::new(None)),
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
-            stats: Arc::new(TransportStats::default()),
+            stats,
             handle_keepalive: Arc::new(RwLock::new(None)),
             handle_rx: Arc::new(RwLock::new(None)),
         };

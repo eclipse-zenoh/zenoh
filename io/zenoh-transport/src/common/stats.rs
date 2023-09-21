@@ -23,6 +23,7 @@ macro_rules! stats_struct {
     ) => {
         paste::paste! {
             $vis struct $struct_name {
+                parent: Option<std::sync::Arc<$struct_name>>,
                 $(
                 $(#[$field_meta:meta])*
                 $field_vis $field_name: AtomicUsize,
@@ -38,6 +39,13 @@ macro_rules! stats_struct {
             }
 
             impl $struct_name {
+                $vis fn new(parent: Option<std::sync::Arc<$struct_name>>) -> Self {
+                    $struct_name {
+                        parent,
+                        $($field_name: AtomicUsize::new(0),)*
+                    }
+                }
+
                 $vis fn report(&self) -> [<$struct_name Report>] {
                     [<$struct_name Report>] {
                         $($field_name: self.[<get_ $field_name>](),)*
@@ -51,13 +59,17 @@ macro_rules! stats_struct {
 
                 $vis fn [<inc_ $field_name>](&self, nb: usize) {
                     self.$field_name.fetch_add(nb, Ordering::Relaxed);
+                    if let Some(parent) = self.parent.as_ref() {
+                        parent.[<inc_ $field_name>](nb);
+                    }
                 }
                 )*
             }
 
             impl Default for $struct_name {
-                fn default() -> $struct_name {
-                    $struct_name {
+                fn default() -> Self {
+                    Self {
+                        parent: None,
                         $($field_name: AtomicUsize::new(0),)*
                     }
                 }

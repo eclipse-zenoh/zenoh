@@ -358,6 +358,8 @@ pub struct TransportManager {
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
     pub(crate) tx_executor: TransportExecutor,
+    #[cfg(feature = "stats")]
+    pub(crate) stats: Arc<crate::stats::TransportStats>,
 }
 
 impl TransportManager {
@@ -379,6 +381,8 @@ impl TransportManager {
             locator_inspector: Default::default(),
             new_unicast_link_sender,
             tx_executor: TransportExecutor::new(tx_threads),
+            #[cfg(feature = "stats")]
+            stats: std::sync::Arc::new(crate::stats::TransportStats::default()),
         };
 
         // @TODO: this should be moved into the unicast module
@@ -400,6 +404,11 @@ impl TransportManager {
 
     pub fn zid(&self) -> ZenohId {
         self.config.zid
+    }
+
+    #[cfg(feature = "stats")]
+    pub fn get_stats(&self) -> std::sync::Arc<crate::stats::TransportStats> {
+        self.stats.clone()
     }
 
     pub async fn close(&self) {

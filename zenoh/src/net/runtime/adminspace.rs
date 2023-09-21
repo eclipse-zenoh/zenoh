@@ -450,7 +450,8 @@ fn router_data(context: &AdminContext, query: Query) {
         .map(transport_to_json)
         .collect();
 
-    let json = json!({
+    #[allow(unused_mut)]
+    let mut json = json!({
         "zid": context.zid_str,
         "version": context.version,
         "metadata": context.metadata,
@@ -458,6 +459,19 @@ fn router_data(context: &AdminContext, query: Query) {
         "sessions": transports,
         "plugins": plugins,
     });
+
+    #[cfg(feature = "stats")]
+    {
+        let stats = crate::prelude::Parameters::decode(&query.selector())
+            .any(|(k, v)| k.as_ref() == "_stats" && v != "false");
+        if stats {
+            json.as_object_mut().unwrap().insert(
+                "stats".to_string(),
+                json!(transport_mgr.get_stats().report()),
+            );
+        }
+    }
+
     log::trace!("AdminSpace router_data: {:?}", json);
     if let Err(e) = query
         .reply(Ok(Sample::new(
