@@ -2002,13 +2002,15 @@ macro_rules! inc_req_stats {
                 use zenoh_buffers::SplitBuffer;
                 match &$body {
                     RequestBody::Put(p) => {
-                        stats.[<inc_ $txrx _z_put_ $space _msgs>](1);
-                        stats.[<inc_ $txrx _z_put_ $space _pl_bytes>](p.payload.len());
+                        stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
+                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](p.payload.len());
                     }
-                    RequestBody::Del(_) => stats.[<inc_ $txrx _z_del_ $space _msgs>](1),
+                    RequestBody::Del(_) => {
+                        stats.[<$txrx _z_del_msgs>].[<inc_ $space>](1);
+                    }
                     RequestBody::Query(q) => {
-                        stats.[<inc_ $txrx _z_query_ $space _msgs>](1);
-                        stats.[<inc_ $txrx _z_query_ $space _pl_bytes>](
+                        stats.[<$txrx _z_query_msgs>].[<inc_ $space>](1);
+                        stats.[<$txrx _z_query_pl_bytes>].[<inc_ $space>](
                             q.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
                         );
                     }
@@ -2032,16 +2034,16 @@ macro_rules! inc_res_stats {
                 use zenoh_buffers::SplitBuffer;
                 match &$body {
                     ResponseBody::Put(p) => {
-                        stats.[<inc_ $txrx _z_put_ $space _msgs>](1);
-                        stats.[<inc_ $txrx _z_put_ $space _pl_bytes>](p.payload.len());
+                        stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
+                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](p.payload.len());
                     }
                     ResponseBody::Reply(r) => {
-                        stats.[<inc_ $txrx _z_reply_ $space _msgs>](1);
-                        stats.[<inc_ $txrx _z_reply_ $space _pl_bytes>](r.payload.len());
+                        stats.[<$txrx _z_reply_msgs>].[<inc_ $space>](1);
+                        stats.[<$txrx _z_reply_pl_bytes>].[<inc_ $space>](r.payload.len());
                     }
                     ResponseBody::Err(e) => {
-                        stats.[<inc_ $txrx _z_reply_ $space _msgs>](1);
-                        stats.[<inc_ $txrx _z_reply_ $space _pl_bytes>](
+                        stats.[<$txrx _z_reply_msgs>].[<inc_ $space>](1);
+                        stats.[<$txrx _z_reply_pl_bytes>].[<inc_ $space>](
                             e.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
                         );
                     }
