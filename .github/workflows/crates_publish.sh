@@ -17,6 +17,7 @@ cargo login $1
 (cd io/zenoh-links/zenoh-link-tcp && cargo publish)
 (cd io/zenoh-links/zenoh-link-tls && cargo publish)
 (cd io/zenoh-links/zenoh-link-quic && cargo publish)
+(cd io/zenoh-links/zenoh-link-unixpipe && cargo publish)
 (cd io/zenoh-links/zenoh-link-unixsock_stream && cargo publish)
 (cd io/zenoh-links/zenoh-link-serial && cargo publish)
 (cd io/zenoh-links/zenoh-link-ws && cargo publish)
