@@ -30,3 +30,4 @@ cargo login $1
 (cd plugins/zenoh-plugin-rest && cargo publish)
 (cd plugins/zenoh-backend-traits && cargo publish)
 (cd plugins/zenoh-plugin-storage-manager && cargo publish)
+echo Done

@@ -373,7 +373,9 @@ jobs:
         run: .github/workflows/crates_check.sh
       - name: Publish to crates.io
         shell: bash
-        run: .github/workflows/crates_publish.sh ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          set +x
+          .github/workflows/crates_publish.sh ${{ secrets.CRATES_IO_TOKEN }}
       - name: Cancel workflow if fail # thus Docker job be interrupted
         if: failure()
         uses: andymckay/cancel-action@0.2
