@@ -23,6 +23,18 @@ on:
       runtests:
         description: "run tests"
         type: boolean
+      publish:
+        description: "publish"
+        type: boolean
+      githubrelease:
+        description: "publish as github release"
+        type: boolean
+      eclipse:
+        description: "publish to download.eclipse.org/zenoh"
+        type: boolean
+      cratesio:
+        description: "publish to crates.io"
+        type: boolean
       dockerhub:
         description: "publish to dockerhub"
         type: boolean
@@ -330,7 +342,7 @@ jobs:
 
   publication:
     name: Release publication
-    if: ${{ needs.checks.outputs.IS_RELEASE == 'true' && !failure() }}
+    if: ${{ (needs.checks.outputs.IS_RELEASE == 'true' || github.event.inputs.publish == 'true') && !failure() }}
     needs: [checks, builds, tests, doc]
     runs-on: ubuntu-latest
     steps:
@@ -339,10 +351,12 @@ jobs:
         with:
           path: ARTIFACTS
       - name: Publish as github release
+        if: ${{ !(github.event.inputs.githubrelease == 'false') }}
         uses: softprops/action-gh-release@v1
         with:
           files: ARTIFACTS/*/*.*
       - name: Publish to download.eclipse.org/zenoh
+        if: ${{ !(github.event.inputs.eclipse == 'false') }}
         env:
           SSH_TARGET: genie.zenoh@projects-storage.eclipse.org
           ECLIPSE_BASE_DIR: /home/data/httpd/download.eclipse.org/zenoh
@@ -367,11 +381,14 @@ jobs:
           ssh-add -D
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
+        if: ${{ !(github.event.inputs.cratesio == 'false') }}
         run: rustup show
       - name: Check crates
+        if: ${{ !(github.event.inputs.cratesio == 'false') }}
         shell: bash
         run: .github/workflows/crates_check.sh
       - name: Publish to crates.io
+        if: ${{ !(github.event.inputs.cratesio == 'false') }}
         shell: bash
         run: |
           set +x
