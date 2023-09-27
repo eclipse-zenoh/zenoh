@@ -5003,7 +5003,6 @@ dependencies = [
  "zenoh-result",
  "zenoh-shm",
  "zenoh-sync",
- "zenoh-transport",
  "zenoh-util",
 ]
 
