@@ -23,6 +23,9 @@ on:
       runtests:
         description: "run tests"
         type: boolean
+      doc:
+        description: "generate doc"
+        type: boolean
       publish:
         description: "publish"
         type: boolean
@@ -37,9 +40,6 @@ on:
         type: boolean
       dockerhub:
         description: "publish to dockerhub"
-        type: boolean
-      doc:
-        description: "generate doc"
         type: boolean
       features:
         description: "build with specified features (comma separated, no space)"
