@@ -26,6 +26,9 @@ on:
       doc:
         description: "generate doc"
         type: boolean
+      build:
+        description: "build"
+        type: boolean
       publish:
         description: "publish"
         type: boolean
@@ -174,6 +177,7 @@ jobs:
 
   builds:
     name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
+    if: ${{ !(github.event.inputs.build == 'false') }}
     needs: checks
     runs-on: ${{ matrix.job.os }}
     strategy:
