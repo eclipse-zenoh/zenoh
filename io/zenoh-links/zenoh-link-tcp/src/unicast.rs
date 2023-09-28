@@ -256,10 +256,32 @@ impl LinkManagerUnicastTcp {
 impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let dst_addrs = get_tcp_addrs(endpoint.address()).await?;
+        let config = endpoint.config();
+        let iface = config.get("iface").map(|s| s.as_bytes());
 
         let mut errs: Vec<ZError> = vec![];
+
         for da in dst_addrs {
-            match self.new_link_inner(&da).await {
+            let connection = {
+                // Since the building of async_std::net::TcpStream from socket2 is synchronous, let's separate the cases
+                // for the sake of the performance
+                if iface.is_some() {
+                    let socket = socket2::Socket::new(
+                        socket2::Domain::for_address(da),
+                        socket2::Type::STREAM,
+                        Some(socket2::Protocol::TCP),
+                    )?;
+                    socket.connect(&da.into())?;
+                    socket.bind_device(iface)?;
+                    let stream = TcpStream::from(std::net::TcpStream::from(socket));
+                    let src_addr = stream.local_addr().map_err(|e| zerror!("{}: {}", da, e))?;
+                    let dst_addr = stream.peer_addr().map_err(|e| zerror!("{}: {}", da, e))?;
+                    Ok((stream, src_addr, dst_addr))
+                } else {
+                    self.new_link_inner(&da).await
+                }
+            };
+            match connection {
                 Ok((stream, src_addr, dst_addr)) => {
                     let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
                     return Ok(LinkUnicast(link));
@@ -283,10 +305,33 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
 
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
         let addrs = get_tcp_addrs(endpoint.address()).await?;
+        let config = endpoint.config();
+        let iface = config.get("iface").map(|s| s.as_bytes());
 
         let mut errs: Vec<ZError> = vec![];
         for da in addrs {
-            match self.new_listener_inner(&da).await {
+            let connection = {
+                // Since the building of async_std::net::TcpListener from socket2 is synchronous, let's separate the cases
+                // for the sake of the performance
+                if iface.is_some() {
+                    let socket = socket2::Socket::new(
+                        socket2::Domain::for_address(da),
+                        socket2::Type::STREAM,
+                        Some(socket2::Protocol::TCP),
+                    )?;
+                    socket.bind(&da.into())?;
+                    socket.bind_device(iface)?;
+                    socket.listen(128)?;
+                    let listener = TcpListener::from(std::net::TcpListener::from(socket));
+                    let local_addr = listener
+                        .local_addr()
+                        .map_err(|e| zerror!("{}: {}", da, e))?;
+                    Ok((listener, local_addr))
+                } else {
+                    self.new_listener_inner(&da).await
+                }
+            };
+            match connection {
                 Ok((socket, local_addr)) => {
                     // Update the endpoint locator address
                     endpoint = EndPoint::new(
