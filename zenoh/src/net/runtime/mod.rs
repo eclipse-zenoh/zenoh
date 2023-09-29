@@ -47,6 +47,8 @@ use zenoh_transport::{
 };
 
 pub struct RuntimeState {
+    #[cfg(feature = "crashable")]
+    pub _dummy: bool,
     pub zid: ZenohId,
     pub whatami: WhatAmI,
     pub metadata: serde_json::Value,
@@ -137,6 +139,8 @@ impl Runtime {
 
         let runtime = Runtime {
             state: Arc::new(RuntimeState {
+                #[cfg(feature = "crashable")]
+                _dummy: true,
                 zid,
                 whatami,
                 metadata,

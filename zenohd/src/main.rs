@@ -30,6 +30,12 @@ lazy_static::lazy_static!(
 const DEFAULT_LISTENER: &str = "tcp/[::]:7447";
 
 fn main() {
+    #[cfg(feature = "crashable")]
+    println!("CRASH IS EXPECTED");
+
+    #[cfg(feature = "shared-memory")]
+    println!("Sgared memory is enabled");
+
     task::block_on(async {
         let mut log_builder =
             env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("z=info"));

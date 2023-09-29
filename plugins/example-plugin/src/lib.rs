@@ -15,6 +15,7 @@
 
 use futures::select;
 use log::{debug, info};
+use core::panic;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::{
@@ -47,6 +48,13 @@ impl Plugin for ExamplePlugin {
 
     // The first operation called by zenohd on the plugin
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
+        let dummy = runtime._dummy;
+        println!("dummy: {}", dummy);
+        eprintln!("edummy: {}", dummy);
+        info!("ldummy: {}", dummy);
+        if dummy {
+            panic!("FOOOO!!!!");
+        }
         let config = runtime.config.lock();
         let self_cfg = config.plugin(name).unwrap().as_object().unwrap();
         // get the plugin's config details from self_cfg Map (here the "storage-selector" property)

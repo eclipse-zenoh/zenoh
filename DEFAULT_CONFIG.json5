@@ -403,4 +403,17 @@
   //   }
   // },
 
+  plugins: {
+    dds: {
+      __config__: "../zenoh-plugin-dds/config.json5",
+      __path__: [
+        "../zenoh-plugin-dds/target/debug/libzenoh_plugin_dds.so",
+      ],
+    },
+    example: {
+      __path__: [
+        "target/debug/libzenoh_plugin_example.so",
+      ],
+    },
+  }
 }
