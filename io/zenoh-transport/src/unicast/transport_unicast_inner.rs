@@ -12,19 +12,20 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{fmt::DebugStruct, sync::Arc, time::Duration};
-
+use crate::{
+    TransportConfigUnicast, TransportExecutor, TransportLinkUnicastConfig,
+    TransportPeerEventHandler,
+};
 use async_std::sync::MutexGuard as AsyncMutexGuard;
 use async_trait::async_trait;
-use zenoh_link::{LinkUnicast, LinkUnicastDirection};
+use std::{fmt::DebugStruct, sync::Arc, time::Duration};
+use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
     core::{WhatAmI, ZenohId},
     network::NetworkMessage,
     transport::TransportSn,
 };
 use zenoh_result::ZResult;
-
-use crate::{TransportConfigUnicast, TransportExecutor, TransportPeerEventHandler};
 
 /*************************************/
 /*      UNICAST TRANSPORT TRAIT      */
@@ -50,7 +51,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    async fn add_link(&self, link: LinkUnicast, direction: LinkUnicastDirection) -> ZResult<()>;
+    async fn add_link(&self, link: LinkUnicast, config: TransportLinkUnicastConfig) -> ZResult<()>;
 
     /*************************************/
     /*                TX                 */

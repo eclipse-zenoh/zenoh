@@ -235,6 +235,11 @@ validated_struct::validator! {
                 /// If set to `false`, the QoS will be disabled. (default `true`).
                 enabled: bool
             },
+            pub compression: CompressionConf {
+                /// You must compile zenoh with "transport_compression" feature to be able to enable compression.
+                /// When enabled is true, batches will be sent compressed. (default `false`).
+                enabled: bool,
+            },
             pub link: #[derive(Default)]
             TransportLinkConf {
                 // An optional whitelist of protocols to be used for accepting and opening sessions.
@@ -299,18 +304,6 @@ validated_struct::validator! {
                 UnixPipeConf {
                     file_access_mask: Option<u32>
                 },
-                pub compression: #[derive(Default)]
-                /// **Experimental** compression feature.
-                /// Will compress the batches hop to hop (as opposed to end to end). May cause errors when
-                /// the batches's complexity is too high, causing the resulting compression to be bigger in
-                /// size than the MTU.
-                /// You must use the features "transport_compression" and "unstable" to enable this.
-                CompressionConf {
-                    /// When enabled is true, batches will be sent compressed. It does not affect the
-                    /// reception, which always expects compressed batches when built with thes features
-                    /// "transport_compression" and "unstable".
-                    enabled: bool,
-                }
             },
             pub shared_memory:
             SharedMemoryConf {

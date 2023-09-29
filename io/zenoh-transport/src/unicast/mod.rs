@@ -41,6 +41,24 @@ use zenoh_protocol::{
 use zenoh_result::{zerror, ZResult};
 
 /*************************************/
+/*      TRANSPORT UNICAST LINK       */
+/*************************************/
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TransportLinkUnicastDirection {
+    Inbound,
+    Outbound,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) struct TransportLinkUnicastConfig {
+    // Inbound / outbound
+    pub(super) direction: TransportLinkUnicastDirection,
+    // Compression is active on the link
+    #[cfg(feature = "transport_compression")]
+    is_compression: bool,
+}
+
+/*************************************/
 /*        TRANSPORT UNICAST          */
 /*************************************/
 #[derive(Clone, Debug, PartialEq, Eq)]

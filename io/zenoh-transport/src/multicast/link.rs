@@ -106,6 +106,7 @@ impl TransportLinkMulticast {
         if self.handle_tx.is_none() {
             let tpc = TransmissionPipelineConf {
                 is_streamed: false,
+                is_compression: false,
                 batch_size: config.batch_size,
                 queue_size: self.transport.manager.config.queue_size,
                 backoff: self.transport.manager.config.queue_backoff,
@@ -239,7 +240,7 @@ async fn tx_task(
         {
             Action::Pull((batch, priority)) => {
                 // Send the buffer on the link
-                let bytes = batch.as_bytes();
+                let bytes = batch.as_slice();
                 link.write_all(bytes).await?;
                 // Keep track of next SNs
                 if let Some(sn) = batch.latest_sn.reliable {
@@ -298,7 +299,7 @@ async fn tx_task(
                 // Drain the transmission pipeline and write remaining bytes on the wire
                 let mut batches = pipeline.drain();
                 for (b, _) in batches.drain(..) {
-                    link.write_all(b.as_bytes())
+                    link.write_all(b.as_slice())
                         .timeout(config.join_interval)
                         .await
                         .map_err(|_| {

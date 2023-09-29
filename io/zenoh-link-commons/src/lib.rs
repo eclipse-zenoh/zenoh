@@ -17,13 +17,10 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-#![no_std]
-extern crate alloc;
-
+pub(crate) mod batch;
 mod multicast;
 mod unicast;
 
-use alloc::{borrow::ToOwned, boxed::Box, string::String};
 use async_trait::async_trait;
 use core::{cmp::PartialEq, fmt, hash::Hash};
 pub use multicast::*;

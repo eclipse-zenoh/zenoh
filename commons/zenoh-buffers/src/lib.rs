@@ -100,6 +100,7 @@ pub mod writer {
         where
             F: FnOnce(&mut [u8]) -> usize;
     }
+
     pub trait BacktrackableWriter: Writer {
         type Mark;
 

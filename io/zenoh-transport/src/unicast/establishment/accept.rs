@@ -14,9 +14,12 @@
 #[cfg(feature = "shared-memory")]
 use crate::unicast::shared_memory_unicast::Challenge;
 use crate::{
-    unicast::establishment::{
-        close_link, compute_sn, ext, finalize_transport, AcceptFsm, Cookie, InputFinalize,
-        Zenoh080Cookie,
+    unicast::{
+        establishment::{
+            close_link, compute_sn, ext, finalize_transport, AcceptFsm, Cookie, InputFinalize,
+            Zenoh080Cookie,
+        },
+        TransportLinkUnicastConfig, TransportLinkUnicastDirection,
     },
     TransportConfigUnicast, TransportManager,
 };
@@ -28,7 +31,7 @@ use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZSlice};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_core::{zasynclock, zcondfeat, zerror};
 use zenoh_crypto::{BlockCipher, PseudoRng};
-use zenoh_link::{LinkUnicast, LinkUnicastDirection};
+use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
     core::{Field, Resolution, WhatAmI, ZenohId},
     transport::{
@@ -41,21 +44,27 @@ use zenoh_result::ZResult;
 
 pub(super) type AcceptError = (zenoh_result::Error, Option<u8>);
 
-struct StateZenoh {
+struct StateTransport {
     batch_size: BatchSize,
     resolution: Resolution,
-}
-
-struct State {
-    zenoh: StateZenoh,
     ext_qos: ext::qos::StateAccept,
     #[cfg(feature = "transport_multilink")]
     ext_mlink: ext::multilink::StateAccept,
     #[cfg(feature = "shared-memory")]
     ext_shm: ext::shm::StateAccept,
+    ext_lowlatency: ext::lowlatency::StateAccept,
+}
+
+struct StateLink {
     #[cfg(feature = "transport_auth")]
     ext_auth: ext::auth::StateAccept,
-    ext_lowlatency: ext::lowlatency::StateAccept,
+    #[cfg(feature = "transport_compression")]
+    ext_compression: ext::compression::StateAccept,
+}
+
+struct State {
+    transport: StateTransport,
+    link: StateLink,
 }
 
 // InitSyn
@@ -117,6 +126,8 @@ struct AcceptLink<'a> {
     #[cfg(feature = "transport_auth")]
     ext_auth: ext::auth::AuthFsm<'a>,
     ext_lowlatency: ext::lowlatency::LowLatencyFsm<'a>,
+    #[cfg(feature = "transport_compression")]
+    ext_compression: ext::compression::CompressionFsm<'a>,
 }
 
 #[async_trait]
@@ -160,38 +171,32 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         }
 
         // Compute the minimum SN resolution
-        state.zenoh.resolution = {
+        state.transport.resolution = {
             let mut res = Resolution::default();
 
             // Frame SN
             let i_fsn_res = init_syn.resolution.get(Field::FrameSN);
-            let m_fsn_res = state.zenoh.resolution.get(Field::FrameSN);
+            let m_fsn_res = state.transport.resolution.get(Field::FrameSN);
             res.set(Field::FrameSN, i_fsn_res.min(m_fsn_res));
 
             // Request ID
             let i_rid_res = init_syn.resolution.get(Field::RequestID);
-            let m_rid_res = state.zenoh.resolution.get(Field::RequestID);
+            let m_rid_res = state.transport.resolution.get(Field::RequestID);
             res.set(Field::RequestID, i_rid_res.min(m_rid_res));
 
             res
         };
 
         // Compute the minimum batch size
-        state.zenoh.batch_size = state
-            .zenoh
+        state.transport.batch_size = state
+            .transport
             .batch_size
             .min(init_syn.batch_size)
             .min(batch_size::UNICAST);
 
         // Extension QoS
         self.ext_qos
-            .recv_init_syn((&mut state.ext_qos, init_syn.ext_qos))
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-
-        // Extension LowLatency
-        self.ext_lowlatency
-            .recv_init_syn((&mut state.ext_lowlatency, init_syn.ext_lowlatency))
+            .recv_init_syn((&mut state.transport.ext_qos, init_syn.ext_qos))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -206,14 +211,27 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         // Extension Auth
         #[cfg(feature = "transport_auth")]
         self.ext_auth
-            .recv_init_syn((&mut state.ext_auth, init_syn.ext_auth))
+            .recv_init_syn((&mut state.link.ext_auth, init_syn.ext_auth))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension MultiLink
         #[cfg(feature = "transport_multilink")]
         self.ext_mlink
-            .recv_init_syn((&mut state.ext_mlink, init_syn.ext_mlink))
+            .recv_init_syn((&mut state.transport.ext_mlink, init_syn.ext_mlink))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension LowLatency
+        self.ext_lowlatency
+            .recv_init_syn((&mut state.transport.ext_lowlatency, init_syn.ext_lowlatency))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension Compression
+        #[cfg(feature = "transport_compression")]
+        self.ext_compression
+            .recv_init_syn((&mut state.link.ext_compression, init_syn.ext_compression))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -238,14 +256,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         // Extension QoS
         let ext_qos = self
             .ext_qos
-            .send_init_ack(&state.ext_qos)
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-
-        // Extension LowLatency
-        let ext_lowlatency = self
-            .ext_lowlatency
-            .send_init_ack(&state.ext_lowlatency)
+            .send_init_ack(&state.transport.ext_qos)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -253,7 +264,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         let ext_shm = zcondfeat!(
             "shared-memory",
             self.ext_shm
-                .send_init_ack((&mut state.ext_shm, input.ext_shm))
+                .send_init_ack((&mut state.transport.ext_shm, input.ext_shm))
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None
@@ -263,7 +274,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         let ext_auth = zcondfeat!(
             "transport_auth",
             self.ext_auth
-                .send_init_ack(&state.ext_auth)
+                .send_init_ack(&state.link.ext_auth)
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None
@@ -273,7 +284,24 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         let ext_mlink = zcondfeat!(
             "transport_multilink",
             self.ext_mlink
-                .send_init_ack(&state.ext_mlink)
+                .send_init_ack(&state.transport.ext_mlink)
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
+            None
+        );
+
+        // Extension LowLatency
+        let ext_lowlatency = self
+            .ext_lowlatency
+            .send_init_ack(&state.transport.ext_lowlatency)
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension MultiLink
+        let ext_compression = zcondfeat!(
+            "transport_compression",
+            self.ext_compression
+                .send_init_ack(&state.link.ext_compression)
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None
@@ -284,17 +312,19 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         let cookie = Cookie {
             zid: input.other_zid,
             whatami: input.other_whatami,
-            resolution: state.zenoh.resolution,
-            batch_size: state.zenoh.batch_size,
+            resolution: state.transport.resolution,
+            batch_size: state.transport.batch_size,
             nonce: cookie_nonce,
-            ext_qos: state.ext_qos,
+            ext_qos: state.transport.ext_qos,
             #[cfg(feature = "transport_multilink")]
-            ext_mlink: state.ext_mlink,
+            ext_mlink: state.transport.ext_mlink,
             #[cfg(feature = "shared-memory")]
-            ext_shm: state.ext_shm,
+            ext_shm: state.transport.ext_shm,
             #[cfg(feature = "transport_auth")]
-            ext_auth: state.ext_auth,
-            ext_lowlatency: state.ext_lowlatency,
+            ext_auth: state.link.ext_auth,
+            ext_lowlatency: state.transport.ext_lowlatency,
+            #[cfg(feature = "transport_compression")]
+            ext_compression: state.link.ext_compression,
         };
 
         let mut encrypted = vec![];
@@ -317,14 +347,15 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             version: input.mine_version,
             whatami: input.mine_whatami,
             zid: input.mine_zid,
-            resolution: state.zenoh.resolution,
-            batch_size: state.zenoh.batch_size,
+            resolution: state.transport.resolution,
+            batch_size: state.transport.batch_size,
             cookie,
             ext_qos,
             ext_shm,
             ext_auth,
             ext_mlink,
             ext_lowlatency,
+            ext_compression,
         }
         .into();
 
@@ -400,29 +431,27 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
 
         // Rebuild the state from the cookie
         let mut state = State {
-            zenoh: StateZenoh {
+            transport: StateTransport {
                 batch_size: cookie.batch_size,
                 resolution: cookie.resolution,
+                ext_qos: cookie.ext_qos,
+                #[cfg(feature = "transport_multilink")]
+                ext_mlink: cookie.ext_mlink,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: cookie.ext_shm,
+                ext_lowlatency: cookie.ext_lowlatency,
             },
-            ext_qos: cookie.ext_qos,
-            #[cfg(feature = "transport_multilink")]
-            ext_mlink: cookie.ext_mlink,
-            #[cfg(feature = "shared-memory")]
-            ext_shm: cookie.ext_shm,
-            #[cfg(feature = "transport_auth")]
-            ext_auth: cookie.ext_auth,
-            ext_lowlatency: cookie.ext_lowlatency,
+            link: StateLink {
+                #[cfg(feature = "transport_auth")]
+                ext_auth: cookie.ext_auth,
+                #[cfg(feature = "transport_compression")]
+                ext_compression: cookie.ext_compression,
+            },
         };
 
         // Extension QoS
         self.ext_qos
-            .recv_open_syn((&mut state.ext_qos, open_syn.ext_qos))
-            .await
-            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
-
-        // Extension LowLatency
-        self.ext_lowlatency
-            .recv_open_syn((&mut state.ext_lowlatency, open_syn.ext_lowlatency))
+            .recv_open_syn((&mut state.transport.ext_qos, open_syn.ext_qos))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -436,14 +465,27 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         // Extension Auth
         #[cfg(feature = "transport_auth")]
         self.ext_auth
-            .recv_open_syn((&mut state.ext_auth, open_syn.ext_auth))
+            .recv_open_syn((&mut state.link.ext_auth, open_syn.ext_auth))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension MultiLink
         #[cfg(feature = "transport_multilink")]
         self.ext_mlink
-            .recv_open_syn((&mut state.ext_mlink, open_syn.ext_mlink))
+            .recv_open_syn((&mut state.transport.ext_mlink, open_syn.ext_mlink))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension LowLatency
+        self.ext_lowlatency
+            .recv_open_syn((&mut state.transport.ext_lowlatency, open_syn.ext_lowlatency))
+            .await
+            .map_err(|e| (e, Some(close::reason::GENERIC)))?;
+
+        // Extension Compression
+        #[cfg(feature = "transport_compression")]
+        self.ext_compression
+            .recv_open_syn((&mut state.link.ext_compression, open_syn.ext_compression))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -467,14 +509,14 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         // Extension QoS
         let ext_qos = self
             .ext_qos
-            .send_open_ack(&state.ext_qos)
+            .send_open_ack(&state.transport.ext_qos)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
         // Extension LowLatency
         let ext_lowlatency = self
             .ext_lowlatency
-            .send_open_ack(&state.ext_lowlatency)
+            .send_open_ack(&state.transport.ext_lowlatency)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -492,7 +534,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         let ext_auth = zcondfeat!(
             "transport_auth",
             self.ext_auth
-                .send_open_ack(&state.ext_auth)
+                .send_open_ack(&state.link.ext_auth)
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None
@@ -502,14 +544,25 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
         let ext_mlink = zcondfeat!(
             "transport_multilink",
             self.ext_mlink
-                .send_open_ack(&state.ext_mlink)
+                .send_open_ack(&state.transport.ext_mlink)
+                .await
+                .map_err(|e| (e, Some(close::reason::GENERIC)))?,
+            None
+        );
+
+        // Extension Compression
+        let ext_compression = zcondfeat!(
+            "transport_compression",
+            self.ext_compression
+                .send_open_ack(&state.link.ext_compression)
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None
         );
 
         // Build OpenAck message
-        let mine_initial_sn = compute_sn(input.mine_zid, input.other_zid, state.zenoh.resolution);
+        let mine_initial_sn =
+            compute_sn(input.mine_zid, input.other_zid, state.transport.resolution);
         let open_ack = OpenAck {
             lease: input.mine_lease,
             initial_sn: mine_initial_sn,
@@ -518,6 +571,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
             ext_auth,
             ext_mlink,
             ext_lowlatency,
+            ext_compression,
         };
 
         // Do not send the OpenAck right now since we might still incur in MAX_LINKS error
@@ -540,6 +594,8 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         #[cfg(feature = "transport_auth")]
         ext_auth: manager.state.unicast.authenticator.fsm(&manager.prng),
         ext_lowlatency: ext::lowlatency::LowLatencyFsm::new(),
+        #[cfg(feature = "transport_compression")]
+        ext_compression: ext::compression::CompressionFsm::new(),
     };
 
     // Init handshake
@@ -558,26 +614,34 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
 
     let iack_out = {
         let mut state = State {
-            zenoh: StateZenoh {
+            transport: StateTransport {
                 batch_size: manager.config.batch_size,
                 resolution: manager.config.resolution,
+                ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos),
+                #[cfg(feature = "transport_multilink")]
+                ext_mlink: manager
+                    .state
+                    .unicast
+                    .multilink
+                    .accept(manager.config.unicast.max_links > 1),
+                #[cfg(feature = "shared-memory")]
+                ext_shm: ext::shm::StateAccept::new(manager.config.unicast.is_shm),
+                ext_lowlatency: ext::lowlatency::StateAccept::new(
+                    manager.config.unicast.is_lowlatency,
+                ),
             },
-            ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos),
-            ext_lowlatency: ext::lowlatency::StateAccept::new(manager.config.unicast.is_lowlatency),
-            #[cfg(feature = "transport_multilink")]
-            ext_mlink: manager
-                .state
-                .unicast
-                .multilink
-                .accept(manager.config.unicast.max_links > 1),
-            #[cfg(feature = "shared-memory")]
-            ext_shm: ext::shm::StateAccept::new(manager.config.unicast.is_shm),
-            #[cfg(feature = "transport_auth")]
-            ext_auth: manager
-                .state
-                .unicast
-                .authenticator
-                .accept(&mut *zasynclock!(manager.prng)),
+            link: StateLink {
+                #[cfg(feature = "transport_auth")]
+                ext_auth: manager
+                    .state
+                    .unicast
+                    .authenticator
+                    .accept(&mut *zasynclock!(manager.prng)),
+                #[cfg(feature = "transport_compression")]
+                ext_compression: ext::compression::StateAccept::new(
+                    manager.config.unicast.is_compression,
+                ),
+            },
         };
 
         // Let's scope the Init phase in such a way memory is freed by Rust
@@ -618,19 +682,24 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
     let config = TransportConfigUnicast {
         zid: osyn_out.other_zid,
         whatami: osyn_out.other_whatami,
-        sn_resolution: state.zenoh.resolution.get(Field::FrameSN),
+        sn_resolution: state.transport.resolution.get(Field::FrameSN),
         tx_initial_sn: oack_out.open_ack.initial_sn,
-        is_qos: state.ext_qos.is_qos(),
+        is_qos: state.transport.ext_qos.is_qos(),
         #[cfg(feature = "transport_multilink")]
-        multilink: state.ext_mlink.multilink(),
+        multilink: state.transport.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]
         is_shm: state.ext_shm.is_shm(),
-        is_lowlatency: state.ext_lowlatency.is_lowlatency(),
+        is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
     };
 
+    let link_config = TransportLinkUnicastConfig {
+        direction: TransportLinkUnicastDirection::Inbound,
+        #[cfg(feature = "transport_compression")]
+        is_compression: state.link.ext_compression.is_compression(),
+    };
     let transport = step!(
         manager
-            .init_transport_unicast(config, link.clone(), LinkUnicastDirection::Inbound)
+            .init_transport_unicast(config, link.clone(), link_config)
             .await
     );
 
@@ -651,7 +720,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
     let input = InputFinalize {
         transport: transport.clone(),
         other_lease: osyn_out.other_lease,
-        agreed_batch_size: state.zenoh.batch_size,
+        agreed_batch_size: state.transport.batch_size,
     };
     step!(finalize_transport(link, manager, input)
         .await

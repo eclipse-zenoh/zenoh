@@ -17,6 +17,7 @@ use super::link::send_with_link;
 use crate::stats::TransportStats;
 use crate::transport_unicast_inner::TransportUnicastTrait;
 use crate::TransportConfigUnicast;
+use crate::TransportLinkUnicastConfig;
 use crate::TransportManager;
 use crate::{TransportExecutor, TransportPeerEventHandler};
 use async_executor::Task;
@@ -34,7 +35,7 @@ use zenoh_core::{zasynclock, zasyncread, zread, zwrite};
 use zenoh_link::unixpipe::UNIXPIPE_LOCATOR_PREFIX;
 #[cfg(feature = "transport_unixpipe")]
 use zenoh_link::Link;
-use zenoh_link::{LinkUnicast, LinkUnicastDirection};
+use zenoh_link::LinkUnicast;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::transport::TransportBodyLowLatency;
@@ -223,7 +224,11 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    async fn add_link(&self, link: LinkUnicast, _direction: LinkUnicastDirection) -> ZResult<()> {
+    async fn add_link(
+        &self,
+        link: LinkUnicast,
+        _config: TransportLinkUnicastConfig,
+    ) -> ZResult<()> {
         log::trace!("Adding link: {}", link);
 
         #[cfg(not(feature = "transport_unixpipe"))]

@@ -12,14 +12,19 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::TransportUnicastUniversal;
-use crate::common::pipeline::{
-    TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
-    TransmissionPipelineProducer,
-};
-use crate::common::priority::TransportPriorityTx;
 #[cfg(feature = "stats")]
 use crate::common::stats::TransportStats;
-use crate::TransportExecutor;
+use crate::{
+    common::{
+        pipeline::{
+            TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
+            TransmissionPipelineProducer,
+        },
+        priority::TransportPriorityTx,
+    },
+    unicast::TransportLinkUnicastConfig,
+    TransportExecutor,
+};
 use async_std::prelude::FutureExt;
 use async_std::task;
 use async_std::task::JoinHandle;
@@ -29,7 +34,7 @@ use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::ZSlice;
-use zenoh_link::{LinkUnicast, LinkUnicastDirection};
+use zenoh_link::LinkUnicast;
 use zenoh_protocol::transport::{BatchSize, KeepAlive, TransportMessage};
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_sync::{RecyclingObjectPool, Signal};
@@ -57,12 +62,12 @@ const MAX_BATCH_SIZE: usize = u16::MAX as usize;
 
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicast {
-    // Inbound / outbound
-    pub(super) direction: LinkUnicastDirection,
     // The underlying link
     pub(super) link: LinkUnicast,
     // The transmission pipeline
     pub(super) pipeline: Option<TransmissionPipelineProducer>,
+    // The config
+    pub(super) config: TransportLinkUnicastConfig,
     // The transport this link is associated to
     transport: TransportUnicastUniversal,
     // The signals to stop TX/RX tasks
@@ -75,13 +80,13 @@ impl TransportLinkUnicast {
     pub(super) fn new(
         transport: TransportUnicastUniversal,
         link: LinkUnicast,
-        direction: LinkUnicastDirection,
+        config: TransportLinkUnicastConfig,
     ) -> TransportLinkUnicast {
         TransportLinkUnicast {
-            direction,
-            transport,
             link,
             pipeline: None,
+            config,
+            transport,
             handle_tx: None,
             signal_rx: Signal::new(),
             handle_rx: None,
@@ -94,12 +99,14 @@ impl TransportLinkUnicast {
         &mut self,
         executor: &TransportExecutor,
         keep_alive: Duration,
-        batch_size: u16,
+        batch_size: BatchSize,
         priority_tx: &[TransportPriorityTx],
     ) {
         if self.handle_tx.is_none() {
             let config = TransmissionPipelineConf {
                 is_streamed: self.link.is_streamed(),
+                #[cfg(feature = "transport_compression")]
+                is_compression: self.config.is_compression,
                 batch_size: batch_size.min(self.link.get_mtu()),
                 queue_size: self.transport.manager.config.queue_size,
                 backoff: self.transport.manager.config.queue_backoff,
@@ -218,7 +225,7 @@ async fn tx_task(
                 Some((batch, priority)) => {
                     // Send the buffer on the link
                     #[allow(unused_mut)]
-                    let mut bytes = batch.as_bytes();
+                    let mut bytes = batch.as_slice();
 
                     #[cfg(all(feature = "unstable", feature = "transport_compression"))]
                     {
@@ -261,7 +268,7 @@ async fn tx_task(
     // Drain the transmission pipeline and write remaining bytes on the wire
     let mut batches = pipeline.drain();
     for (b, _) in batches.drain(..) {
-        link.write_all(b.as_bytes())
+        link.write_all(b.as_slice())
             .timeout(keep_alive)
             .await
             .map_err(|_| zerror!("{}: flush failed after {} ms", link, keep_alive.as_millis()))??;

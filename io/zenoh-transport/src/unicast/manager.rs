@@ -20,7 +20,7 @@ use crate::unicast::establishment::ext::multilink::MultiLink;
 use crate::{
     lowlatency::transport::TransportUnicastLowlatency,
     transport_unicast_inner::TransportUnicastTrait,
-    unicast::{TransportConfigUnicast, TransportUnicast},
+    unicast::{TransportConfigUnicast, TransportLinkUnicastConfig, TransportUnicast},
     universal::transport::TransportUnicastUniversal,
     TransportManager,
 };
@@ -28,7 +28,7 @@ use async_std::{prelude::FutureExt, sync::Mutex, task};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 #[cfg(feature = "shared-memory")]
 use zenoh_config::SharedMemoryConf;
-use zenoh_config::{Config, LinkTxConf, QoSConf, TransportUnicastConf};
+use zenoh_config::{CompressionConf, Config, LinkTxConf, QoSConf, TransportUnicastConf};
 use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_crypto::PseudoRng;
 use zenoh_link::*;
@@ -53,8 +53,8 @@ pub struct TransportManagerConfigUnicast {
     pub max_links: usize,
     #[cfg(feature = "shared-memory")]
     pub is_shm: bool,
-    #[cfg(all(feature = "unstable", feature = "transport_compression"))]
-    pub is_compressed: bool,
+    #[cfg(feature = "transport_compression")]
+    pub is_compression: bool,
 }
 
 pub struct TransportManagerStateUnicast {
@@ -99,6 +99,8 @@ pub struct TransportManagerBuilderUnicast {
     #[cfg(feature = "transport_auth")]
     pub(super) authenticator: Auth,
     pub(super) is_lowlatency: bool,
+    #[cfg(feature = "transport_compression")]
+    pub(super) is_compress: bool,
 }
 
 impl TransportManagerBuilderUnicast {
@@ -155,9 +157,9 @@ impl TransportManagerBuilderUnicast {
         self
     }
 
-    #[cfg(all(feature = "unstable", feature = "transport_compression"))]
-    pub fn compression(mut self, is_compressed: bool) -> Self {
-        self.is_compressed = is_compressed;
+    #[cfg(feature = "transport_compression")]
+    pub fn compression(mut self, is_compress: bool) -> Self {
+        self.is_compress = is_compress;
         self
     }
 
@@ -212,6 +214,8 @@ impl TransportManagerBuilderUnicast {
             #[cfg(all(feature = "unstable", feature = "transport_compression"))]
             is_compressed: self.is_compressed,
             is_lowlatency: self.is_lowlatency,
+            #[cfg(feature = "transport_compression")]
+            is_compression: self.is_compress,
         };
 
         let state = TransportManagerStateUnicast {
@@ -239,6 +243,8 @@ impl Default for TransportManagerBuilderUnicast {
         let qos = QoSConf::default();
         #[cfg(feature = "shared-memory")]
         let shm = SharedMemoryConf::default();
+        #[cfg(feature = "transport_compression")]
+        let compression = CompressionConf::default();
 
         Self {
             lease: Duration::from_millis(*link_tx.lease()),
@@ -254,6 +260,8 @@ impl Default for TransportManagerBuilderUnicast {
             #[cfg(feature = "transport_auth")]
             authenticator: Auth::default(),
             is_lowlatency: *transport.lowlatency(),
+            #[cfg(feature = "transport_compression")]
+            is_compress: *compression.enabled(),
         }
     }
 }
@@ -399,7 +407,7 @@ impl TransportManager {
         &self,
         config: TransportConfigUnicast,
         link: LinkUnicast,
-        direction: LinkUnicastDirection,
+        link_config: TransportLinkUnicastConfig,
     ) -> Result<TransportUnicast, (Error, Option<u8>)> {
         let mut guard = zasynclock!(self.state.unicast.transports);
 
@@ -422,7 +430,7 @@ impl TransportManager {
 
                 // Add the link to the transport
                 transport
-                    .add_link(link, direction)
+                    .add_link(link, link_config)
                     .await
                     .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
 
@@ -458,7 +466,7 @@ impl TransportManager {
                                 .map_err(|e| (e, Some(close::reason::INVALID)))
                                 .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?;
                         // Add the link to the transport
-                        t.add_link(link, direction)
+                        t.add_link(link, link_config)
                             .await
                             .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
                         t

@@ -15,8 +15,9 @@ use crate::{
     reader::HasReader,
     vec,
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
+    ZSlice,
 };
-use alloc::boxed::Box;
+use alloc::{boxed::Box, sync::Arc};
 use core::num::NonZeroUsize;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -149,6 +150,19 @@ impl<'a> HasReader for &'a BBuf {
 
     fn reader(self) -> Self::Reader {
         self.as_slice()
+    }
+}
+
+// From impls
+impl From<BBuf> for ZSlice {
+    fn from(value: BBuf) -> Self {
+        ZSlice {
+            buf: Arc::new(value.buffer),
+            start: 0,
+            end: value.len,
+            #[cfg(feature = "shared-memory")]
+            kind: ZSliceKind::Raw,
+        }
     }
 }
 

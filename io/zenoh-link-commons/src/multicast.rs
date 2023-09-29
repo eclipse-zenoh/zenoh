@@ -11,13 +11,13 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use alloc::{borrow::Cow, boxed::Box, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use core::{
     fmt,
     hash::{Hash, Hasher},
     ops::Deref,
 };
+use std::{borrow::Cow, sync::Arc};
 use zenoh_buffers::{reader::HasReader, writer::HasWriter};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
 use zenoh_protocol::{

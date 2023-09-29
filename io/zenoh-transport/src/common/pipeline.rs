@@ -379,7 +379,7 @@ impl StageOutIn {
     #[inline]
     fn try_pull(&mut self) -> Pull {
         if let Some(mut batch) = self.s_out_r.pull() {
-            batch.write_len();
+            batch.finalize();
             self.backoff.stop();
             return Pull::Some(batch);
         }
@@ -398,7 +398,7 @@ impl StageOutIn {
                 if let Ok(mut g) = self.current.try_lock() {
                     // First try to pull from stage OUT
                     if let Some(mut batch) = self.s_out_r.pull() {
-                        batch.write_len();
+                        batch.finalize();
                         self.backoff.stop();
                         return Pull::Some(batch);
                     }
@@ -406,7 +406,7 @@ impl StageOutIn {
                     // An incomplete (non-empty) batch is available in the state IN pipeline.
                     match g.take() {
                         Some(mut batch) => {
-                            batch.write_len();
+                            batch.finalize();
                             self.backoff.stop();
                             return Pull::Some(batch);
                         }
@@ -421,7 +421,7 @@ impl StageOutIn {
             std::cmp::Ordering::Less => {
                 // There should be a new batch in Stage OUT
                 if let Some(mut batch) = self.s_out_r.pull() {
-                    batch.write_len();
+                    batch.finalize();
                     self.backoff.stop();
                     return Pull::Some(batch);
                 }
@@ -470,7 +470,7 @@ impl StageOut {
         let mut batches = vec![];
         // Empty the ring buffer
         while let Some(mut batch) = self.s_in.s_out_r.pull() {
-            batch.write_len();
+            batch.finalize();
             batches.push(batch);
         }
         // Take the current batch
@@ -484,6 +484,8 @@ impl StageOut {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TransmissionPipelineConf {
     pub(crate) is_streamed: bool,
+    #[cfg(feature = "transport_compression")]
+    pub(crate) is_compression: bool,
     pub(crate) batch_size: BatchSize,
     pub(crate) queue_size: [usize; Priority::NUM],
     pub(crate) backoff: Duration,
@@ -493,6 +495,8 @@ impl Default for TransmissionPipelineConf {
     fn default() -> Self {
         Self {
             is_streamed: false,
+            #[cfg(feature = "transport_compression")]
+            is_compression: false,
             batch_size: BatchSize::MAX,
             queue_size: [1; Priority::NUM],
             backoff: Duration::from_micros(1),
@@ -530,9 +534,12 @@ impl TransmissionPipeline {
             let (mut s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::init();
             // Fill the refill ring buffer with batches
             for _ in 0..*num {
-                assert!(s_ref_w
-                    .push(WBatch::new(config.batch_size, config.is_streamed))
-                    .is_none());
+                let mut batch = WBatch::new(config.batch_size).set_streamed(config.is_streamed);
+                #[cfg(feature = "transport_compression")]
+                {
+                    batch = batch.set_compression(config.is_compression);
+                }
+                assert!(s_ref_w.push(batch).is_none());
             }
             // Create the channel for notifying that new batches are in the refill ring buffer
             // This is a SPSC channel
@@ -730,6 +737,7 @@ mod tests {
 
     const CONFIG: TransmissionPipelineConf = TransmissionPipelineConf {
         is_streamed: true,
+        is_compression: true,
         batch_size: BatchSize::MAX,
         queue_size: [1; Priority::NUM],
         backoff: Duration::from_micros(1),
@@ -782,7 +790,7 @@ mod tests {
                 batches += 1;
                 bytes += batch.len() as usize;
                 // Create a ZBuf for deserialization starting from the batch
-                let bytes = batch.as_bytes();
+                let bytes = batch.as_slice();
                 // Deserialize the messages
                 let mut reader = bytes.reader();
                 let codec = Zenoh080::new();

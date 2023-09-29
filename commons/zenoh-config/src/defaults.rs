@@ -126,6 +126,12 @@ impl Default for QoSConf {
     }
 }
 
+impl Default for CompressionConf {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
+}
+
 impl Default for LinkTxConf {
     #[allow(clippy::unnecessary_cast)]
     fn default() -> Self {

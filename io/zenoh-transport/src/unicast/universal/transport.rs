@@ -11,21 +11,26 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::common::priority::{TransportPriorityRx, TransportPriorityTx};
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
-use crate::transport_unicast_inner::TransportUnicastTrait;
-use crate::unicast::universal::link::TransportLinkUnicast;
-use crate::TransportConfigUnicast;
-use crate::{TransportExecutor, TransportManager, TransportPeerEventHandler};
+use crate::{
+    common::priority::{TransportPriorityRx, TransportPriorityTx},
+    transport_unicast_inner::TransportUnicastTrait,
+    unicast::{
+        universal::link::TransportLinkUnicast, TransportLinkUnicastConfig,
+        TransportLinkUnicastDirection,
+    },
+    TransportConfigUnicast, TransportExecutor, TransportManager, TransportPeerEventHandler,
+};
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use async_trait::async_trait;
 use std::fmt::DebugStruct;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
-use zenoh_link::{Link, LinkUnicast, LinkUnicastDirection};
+use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::network::NetworkMessage;
+use zenoh_protocol::transport::BatchSize;
 use zenoh_protocol::{
     core::{Priority, WhatAmI, ZenohId},
     transport::{Close, PrioritySn, TransportMessage, TransportSn},
@@ -246,13 +251,16 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    async fn add_link(&self, link: LinkUnicast, direction: LinkUnicastDirection) -> ZResult<()> {
+    async fn add_link(&self, link: LinkUnicast, config: TransportLinkUnicastConfig) -> ZResult<()> {
         // Add the link to the channel
         let mut guard = zwrite!(self.links);
 
         // Check if we can add more inbound links
-        if let LinkUnicastDirection::Inbound = direction {
-            let count = guard.iter().filter(|l| l.direction == direction).count();
+        if let TransportLinkUnicastDirection::Inbound = config.direction {
+            let count = guard
+                .iter()
+                .filter(|l| l.config.direction == config.direction)
+                .count();
 
             let limit = zcondfeat!(
                 "transport_multilink",
@@ -276,7 +284,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         }
 
         // Create a channel link from a link
-        let link = TransportLinkUnicast::new(self.clone(), link, direction);
+        let link = TransportLinkUnicast::new(self.clone(), link, config);
 
         let mut links = Vec::with_capacity(guard.len() + 1);
         links.extend_from_slice(&guard);
@@ -422,7 +430,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         link: &LinkUnicast,
         executor: &TransportExecutor,
         keep_alive: Duration,
-        batch_size: u16,
+        batch_size: BatchSize,
     ) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, link) {
