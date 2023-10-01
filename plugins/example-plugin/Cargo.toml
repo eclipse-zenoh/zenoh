@@ -28,6 +28,9 @@ name = "zenoh_plugin_example"
 # This crate type will make `cargo` output a dynamic library instead of a rust static library
 crate-type = ["cdylib"]
 
+[features]
+crashable = ["zenoh/crashable"]
+
 [dependencies]
 async-std = { workspace = true, features = ["default"] }
 clap = { workspace = true }
