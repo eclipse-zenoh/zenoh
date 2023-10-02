@@ -25,12 +25,31 @@ use zenoh_result::ZResult;
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq, Clone)]
+pub struct StructLayout {
+    pub name: &'static str,
+    pub size: usize,
+    pub alignment: usize,
+    pub fields_count: usize,
+    pub fields: &'static [StructField],
+}
+
+#[repr(C)]
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct StructField {
+    pub name: &'static str,
+    pub offset: usize,
+    pub size: usize,
+}
+
+#[repr(C)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Compatibility {
     major: u64,
     minor: u64,
     patch: u64,
     stable: bool,
     commit: &'static str,
+    structs: &'static [StructLayout],
 }
 const RELEASE_AND_COMMIT: (&str, &str) = zenoh_macros::rustc_version_release!();
 impl Compatibility {
@@ -48,14 +67,28 @@ impl Compatibility {
             patch: split.next().unwrap().parse().unwrap(),
             stable,
             commit,
+            structs: &[],
         })
     }
     pub fn are_compatible(a: &Self, b: &Self) -> bool {
+        // Compare compiler versions
         if a.stable && b.stable {
-            a.major == b.major && a.minor == b.minor && a.patch == b.patch
-        } else {
-            a == b
+            if a.major != b.major || a.minor != b.minor || a.patch != b.patch {
+                return false;
+            }
+        } else if a != b {
+            return false;
         }
+        // Compare declared structs layouts. The count and poisions of structs must match
+        if a.structs.len() != b.structs.len() {
+            return false;
+        }
+        for (a, b) in a.structs.iter().zip(b.structs.iter()) {
+            if a != b {
+                return false;
+            }
+        }
+        true
     }
 }
 
