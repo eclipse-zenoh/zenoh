@@ -17,7 +17,7 @@ pub mod ext;
 pub(crate) mod open;
 
 use super::{TransportPeer, TransportUnicast};
-use crate::{common::seq_num, TransportManager};
+use crate::{common::seq_num, unicast::link::TransportLinkUnicast, TransportManager};
 use async_trait::async_trait;
 use cookie::*;
 use sha3::{
@@ -25,7 +25,7 @@ use sha3::{
     Shake128,
 };
 use std::time::Duration;
-use zenoh_link::{Link, LinkUnicast};
+use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Field, Resolution, ZenohId},
     transport::{BatchSize, Close, TransportMessage, TransportSn},
@@ -116,7 +116,7 @@ pub(super) fn compute_sn(zid1: ZenohId, zid2: ZenohId, resolution: Resolution) -
     TransportSn::from_le_bytes(array) & seq_num::get_mask(resolution.get(Field::FrameSN))
 }
 
-pub(super) async fn close_link(link: &LinkUnicast, reason: Option<u8>) {
+pub(super) async fn close_link(link: TransportLinkUnicast, reason: Option<u8>) {
     if let Some(reason) = reason {
         // Build the close message
         let message: TransportMessage = Close {
@@ -139,7 +139,7 @@ pub(super) struct InputFinalize {
 }
 // Finalize the transport, notify the callback and start the link tasks
 pub(super) async fn finalize_transport(
-    link: &LinkUnicast,
+    link: &TransportLinkUnicast,
     manager: &TransportManager,
     input: self::InputFinalize,
 ) -> ZResult<()> {

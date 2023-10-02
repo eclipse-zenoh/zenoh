@@ -13,13 +13,12 @@
 //
 
 use crate::{
-    TransportConfigUnicast, TransportExecutor, TransportLinkUnicastConfig,
-    TransportPeerEventHandler,
+    unicast::{link::TransportLinkUnicast, TransportConfigUnicast},
+    TransportExecutor, TransportPeerEventHandler,
 };
 use async_std::sync::MutexGuard as AsyncMutexGuard;
 use async_trait::async_trait;
 use std::{fmt::DebugStruct, sync::Arc, time::Duration};
-use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
     core::{WhatAmI, ZenohId},
     network::NetworkMessage,
@@ -40,7 +39,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     fn get_zid(&self) -> ZenohId;
     fn get_whatami(&self) -> WhatAmI;
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>>;
-    fn get_links(&self) -> Vec<LinkUnicast>;
+    fn get_links(&self) -> Vec<TransportLinkUnicast>;
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool;
     fn is_qos(&self) -> bool;
@@ -51,7 +50,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    async fn add_link(&self, link: LinkUnicast, config: TransportLinkUnicastConfig) -> ZResult<()>;
+    async fn add_link(&self, link: TransportLinkUnicast) -> ZResult<()>;
 
     /*************************************/
     /*                TX                 */
@@ -59,7 +58,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     fn schedule(&self, msg: NetworkMessage) -> ZResult<()>;
     fn start_tx(
         &self,
-        link: &LinkUnicast,
+        link: &TransportLinkUnicast,
         executor: &TransportExecutor,
         keep_alive: Duration,
         batch_size: u16,
@@ -68,7 +67,12 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     /*                RX                 */
     /*************************************/
-    fn start_rx(&self, link: &LinkUnicast, lease: Duration, batch_size: u16) -> ZResult<()>;
+    fn start_rx(
+        &self,
+        link: &TransportLinkUnicast,
+        lease: Duration,
+        batch_size: u16,
+    ) -> ZResult<()>;
 
     /*************************************/
     /*           INITIATION              */
@@ -78,7 +82,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     /*            TERMINATION            */
     /*************************************/
-    async fn close_link(&self, link: &LinkUnicast, reason: u8) -> ZResult<()>;
+    async fn close_link(&self, link: &TransportLinkUnicast, reason: u8) -> ZResult<()>;
     async fn close(&self, reason: u8) -> ZResult<()>;
 
     fn add_debug_fields<'a, 'b: 'a, 'c>(

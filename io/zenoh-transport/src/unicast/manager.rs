@@ -18,9 +18,9 @@ use crate::unicast::establishment::ext::auth::Auth;
 #[cfg(feature = "transport_multilink")]
 use crate::unicast::establishment::ext::multilink::MultiLink;
 use crate::{
-    lowlatency::transport::TransportUnicastLowlatency,
+    // lowlatency::transport::TransportUnicastLowlatency,
     transport_unicast_inner::TransportUnicastTrait,
-    unicast::{TransportConfigUnicast, TransportLinkUnicastConfig, TransportUnicast},
+    unicast::{link::TransportLinkUnicast, TransportConfigUnicast, TransportUnicast},
     universal::transport::TransportUnicastUniversal,
     TransportManager,
 };
@@ -406,8 +406,7 @@ impl TransportManager {
     pub(super) async fn init_transport_unicast(
         &self,
         config: TransportConfigUnicast,
-        link: LinkUnicast,
-        link_config: TransportLinkUnicastConfig,
+        link: TransportLinkUnicast,
     ) -> Result<TransportUnicast, (Error, Option<u8>)> {
         let mut guard = zasynclock!(self.state.unicast.transports);
 
@@ -430,7 +429,7 @@ impl TransportManager {
 
                 // Add the link to the transport
                 transport
-                    .add_link(link, link_config)
+                    .add_link(link)
                     .await
                     .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
 
@@ -456,9 +455,10 @@ impl TransportManager {
                 let a_t = {
                     if config.is_lowlatency {
                         log::debug!("Will use LowLatency transport!");
-                        TransportUnicastLowlatency::make(self.clone(), config.clone(), link)
-                            .map_err(|e| (e, Some(close::reason::INVALID)))
-                            .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?
+                        // TransportUnicastLowlatency::make(self.clone(), config.clone(), link)
+                        //     .map_err(|e| (e, Some(close::reason::INVALID)))
+                        //     .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?
+                        panic!(); // @TODO
                     } else {
                         log::debug!("Will use Universal transport!");
                         let t: Arc<dyn TransportUnicastTrait> =
@@ -466,7 +466,7 @@ impl TransportManager {
                                 .map_err(|e| (e, Some(close::reason::INVALID)))
                                 .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?;
                         // Add the link to the transport
-                        t.add_link(link, link_config)
+                        t.add_link(link)
                             .await
                             .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
                         t
@@ -542,7 +542,7 @@ impl TransportManager {
         // Create a new link associated by calling the Link Manager
         let link = manager.new_link(endpoint).await?;
         // Open the link
-        super::establishment::open::open_link(&link, self).await
+        super::establishment::open::open_link(link, self).await
     }
 
     pub async fn get_transport_unicast(&self, peer: &ZenohId) -> Option<TransportUnicast> {

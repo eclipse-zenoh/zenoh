@@ -11,22 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use async_trait::async_trait;
-use std::{
+use core::{
     fmt,
     hash::{Hash, Hasher},
     ops::Deref,
-    sync::Arc,
 };
-use zenoh_buffers::{reader::HasReader, ZSlice};
-use zenoh_codec::{RCodec, Zenoh080};
-use zenoh_protocol::{
-    core::{EndPoint, Locator},
-    transport::TransportMessage,
-};
-use zenoh_result::{zerror, ZResult};
-
-use crate::batch::{Encode, RBatch, WBatch};
+use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_result::ZResult;
 
 pub type LinkManagerUnicast = Arc<dyn LinkManagerUnicastTrait>;
 #[async_trait]
@@ -57,46 +50,6 @@ pub trait LinkUnicastTrait: Send + Sync {
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()>;
     async fn close(&self) -> ZResult<()>;
-}
-
-impl LinkUnicast {
-    pub async fn send_batch(&self, batch: WBatch) -> ZResult<usize> {
-        const ERR: &str = "Write error on link: ";
-        let buff = batch.finalize().map_err(|_| zerror!("{ERR}{self}"))?;
-        // Send the message on the link
-        self.0.write_all(buff.as_slice()).await?;
-        Ok(buff.len())
-    }
-
-    pub async fn send(&self, msg: &TransportMessage) -> ZResult<usize> {
-        const ERR: &str = "Write error on link: ";
-        // Create the batch for serializing the message
-        let mut batch = WBatch::new(self.get_mtu()).set_streamed(self.is_streamed());
-        batch.encode(msg).map_err(|_| zerror!("{ERR}{self}"))?;
-        self.send_batch(batch).await
-    }
-
-    pub async fn recv_batch(&self, mut batch: RBatch) -> ZResult<ZSlice> {
-        use crate::batch::ReadFrom;
-        const ERR: &str = "Read error from link: ";
-        batch.read_from(self).await?;
-        let zslice = batch.finalize().map_err(|_| zerror!("{ERR}{self}"))?;
-        Ok(zslice)
-    }
-
-    pub async fn recv(&self) -> ZResult<TransportMessage> {
-        let batch = RBatch::new(self.get_mtu()).set_streamed(self.is_streamed());
-        let mut zslice = self.recv_batch(batch).await?;
-
-        let mut reader = zslice.reader();
-        let codec = Zenoh080::new();
-
-        let msg: TransportMessage = codec
-            .read(&mut reader)
-            .map_err(|_| zerror!("Read error on link: {}", self))?;
-
-        Ok(msg)
-    }
 }
 
 impl Deref for LinkUnicast {

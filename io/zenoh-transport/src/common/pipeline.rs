@@ -11,8 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::batch::{Encode, WBatch, WError};
-use super::priority::{TransportChannelTx, TransportPriorityTx};
+use super::{
+    batch::{Encode, WBatch, WError},
+    priority::{TransportChannelTx, TransportPriorityTx},
+};
 use async_std::prelude::FutureExt;
 use flume::{bounded, Receiver, Sender};
 use ringbuffer_spsc::{RingBuffer, RingBufferReader, RingBufferWriter};
@@ -378,8 +380,7 @@ struct StageOutIn {
 impl StageOutIn {
     #[inline]
     fn try_pull(&mut self) -> Pull {
-        if let Some(mut batch) = self.s_out_r.pull() {
-            batch.finalize();
+        if let Some(batch) = self.s_out_r.pull() {
             self.backoff.stop();
             return Pull::Some(batch);
         }
@@ -397,16 +398,14 @@ impl StageOutIn {
                 // No new bytes have been written on the batch, try to pull
                 if let Ok(mut g) = self.current.try_lock() {
                     // First try to pull from stage OUT
-                    if let Some(mut batch) = self.s_out_r.pull() {
-                        batch.finalize();
+                    if let Some(batch) = self.s_out_r.pull() {
                         self.backoff.stop();
                         return Pull::Some(batch);
                     }
 
                     // An incomplete (non-empty) batch is available in the state IN pipeline.
                     match g.take() {
-                        Some(mut batch) => {
-                            batch.finalize();
+                        Some(batch) => {
                             self.backoff.stop();
                             return Pull::Some(batch);
                         }
@@ -420,8 +419,7 @@ impl StageOutIn {
             }
             std::cmp::Ordering::Less => {
                 // There should be a new batch in Stage OUT
-                if let Some(mut batch) = self.s_out_r.pull() {
-                    batch.finalize();
+                if let Some(batch) = self.s_out_r.pull() {
                     self.backoff.stop();
                     return Pull::Some(batch);
                 }
@@ -469,8 +467,7 @@ impl StageOut {
     fn drain(&mut self, guard: &mut MutexGuard<'_, Option<WBatch>>) -> Vec<WBatch> {
         let mut batches = vec![];
         // Empty the ring buffer
-        while let Some(mut batch) = self.s_in.s_out_r.pull() {
-            batch.finalize();
+        while let Some(batch) = self.s_in.s_out_r.pull() {
             batches.push(batch);
         }
         // Take the current batch
@@ -534,11 +531,12 @@ impl TransmissionPipeline {
             let (mut s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::init();
             // Fill the refill ring buffer with batches
             for _ in 0..*num {
-                let mut batch = WBatch::new(config.batch_size).set_streamed(config.is_streamed);
-                #[cfg(feature = "transport_compression")]
-                {
-                    batch = batch.set_compression(config.is_compression);
-                }
+                let batch = WBatch::new(
+                    config.batch_size,
+                    config.is_streamed,
+                    #[cfg(feature = "transport_compression")]
+                    false,
+                );
                 assert!(s_ref_w.push(batch).is_none());
             }
             // Create the channel for notifying that new batches are in the refill ring buffer

@@ -14,16 +14,14 @@
 use super::transport::TransportUnicastLowlatency;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
-use crate::TransportExecutor;
+use crate::{unicast::link::TransportLinkUnicast, TransportExecutor};
 use async_std::task;
 use async_std::{prelude::FutureExt, sync::RwLock};
-use zenoh_codec::*;
-use zenoh_core::{zasyncread, zasyncwrite};
-
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh_buffers::{writer::HasWriter, ZSlice};
-use zenoh_link::LinkUnicast;
+use zenoh_codec::*;
+use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_protocol::transport::{
     BatchSize, KeepAlive, TransportBodyLowLatency, TransportMessageLowLatency,
 };
@@ -31,7 +29,7 @@ use zenoh_result::{zerror, ZResult};
 use zenoh_sync::RecyclingObjectPool;
 
 pub(crate) async fn send_with_link(
-    link: &LinkUnicast,
+    link: &TransportLinkUnicast,
     msg: TransportMessageLowLatency,
     #[cfg(feature = "stats")] stats: &Arc<TransportStats>,
 ) -> ZResult<()> {
@@ -177,7 +175,7 @@ impl TransportUnicastLowlatency {
 /*              TASKS                */
 /*************************************/
 async fn keepalive_task(
-    link: Arc<RwLock<LinkUnicast>>,
+    link: Arc<RwLock<TransportLinkUnicast>>,
     keep_alive: Duration,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
@@ -201,13 +199,13 @@ async fn keepalive_task(
 }
 
 async fn rx_task_stream(
-    link: LinkUnicast,
+    link: TransportLinkUnicast,
     transport: TransportUnicastLowlatency,
     lease: Duration,
     rx_batch_size: BatchSize,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
-    async fn read(link: &LinkUnicast, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(link: &TransportLinkUnicast, buffer: &mut [u8]) -> ZResult<usize> {
         // 16 bits for reading the batch length
         let mut length = [0_u8, 0_u8, 0_u8, 0_u8];
         link.read_exact(&mut length).await?;
@@ -244,7 +242,7 @@ async fn rx_task_stream(
 }
 
 async fn rx_task_dgram(
-    link: LinkUnicast,
+    link: TransportLinkUnicast,
     transport: TransportUnicastLowlatency,
     lease: Duration,
     rx_batch_size: BatchSize,
@@ -278,13 +276,13 @@ async fn rx_task_dgram(
 }
 
 async fn rx_task(
-    link: LinkUnicast,
+    link: TransportLinkUnicast,
     transport: TransportUnicastLowlatency,
     lease: Duration,
     rx_batch_size: u16,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
-    if link.is_streamed() {
+    if link.link.is_streamed() {
         rx_task_stream(link, transport, lease, rx_batch_size, rx_buffer_size).await
     } else {
         rx_task_dgram(link, transport, lease, rx_batch_size, rx_buffer_size).await

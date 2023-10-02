@@ -19,7 +19,7 @@ use crate::{
             close_link, compute_sn, ext, finalize_transport, AcceptFsm, Cookie, InputFinalize,
             Zenoh080Cookie,
         },
-        TransportLinkUnicastConfig, TransportLinkUnicastDirection,
+        link::{TransportLinkUnicast, TransportLinkUnicastConfig, TransportLinkUnicastDirection},
     },
     TransportConfigUnicast, TransportManager,
 };
@@ -115,7 +115,7 @@ struct SendOpenAckOut {
 
 // Fsm
 struct AcceptLink<'a> {
-    link: &'a LinkUnicast,
+    link: &'a TransportLinkUnicast,
     prng: &'a Mutex<PseudoRng>,
     cipher: &'a BlockCipher,
     ext_qos: ext::qos::QoSFsm<'a>,
@@ -582,8 +582,16 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
 }
 
 pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) -> ZResult<()> {
+    let link = TransportLinkUnicast::new(
+        link.clone(),
+        TransportLinkUnicastConfig {
+            direction: TransportLinkUnicastDirection::Inbound,
+            #[cfg(feature = "transport_compression")]
+            is_compression: false,
+        },
+    );
     let fsm = AcceptLink {
-        link,
+        link: &link,
         prng: &manager.prng,
         cipher: &manager.cipher,
         ext_qos: ext::qos::QoSFsm::new(),
@@ -691,17 +699,12 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         is_shm: state.ext_shm.is_shm(),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
     };
-
-    let link_config = TransportLinkUnicastConfig {
-        direction: TransportLinkUnicastDirection::Inbound,
-        #[cfg(feature = "transport_compression")]
-        is_compression: state.link.ext_compression.is_compression(),
-    };
-    let transport = step!(
-        manager
-            .init_transport_unicast(config, link.clone(), link_config)
-            .await
-    );
+    let mut c_link = link.clone();
+    #[cfg(feature = "transport_compression")]
+    {
+        c_link.config.is_compression = state.link.ext_compression.is_compression();
+    }
+    let transport = step!(manager.init_transport_unicast(config, c_link).await);
 
     // Send the open_ack on the link
     step!(link
@@ -722,7 +725,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         other_lease: osyn_out.other_lease,
         agreed_batch_size: state.transport.batch_size,
     };
-    step!(finalize_transport(link, manager, input)
+    step!(finalize_transport(&link, manager, input)
         .await
         .map_err(|e| (e, Some(close::reason::INVALID))));
 

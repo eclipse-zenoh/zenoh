@@ -12,7 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod establishment;
-pub(crate) mod lowlatency;
+pub(crate) mod link;
+// pub(crate) mod lowlatency;
 pub(crate) mod manager;
 pub(crate) mod transport_unicast_inner;
 pub(crate) mod universal;
@@ -39,24 +40,6 @@ use zenoh_protocol::{
     transport::{close, TransportSn},
 };
 use zenoh_result::{zerror, ZResult};
-
-/*************************************/
-/*      TRANSPORT UNICAST LINK       */
-/*************************************/
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum TransportLinkUnicastDirection {
-    Inbound,
-    Outbound,
-}
-
-#[derive(Clone, Copy)]
-pub(crate) struct TransportLinkUnicastConfig {
-    // Inbound / outbound
-    pub(super) direction: TransportLinkUnicastDirection,
-    // Compression is active on the link
-    #[cfg(feature = "transport_compression")]
-    is_compression: bool,
-}
 
 /*************************************/
 /*        TRANSPORT UNICAST          */
@@ -152,7 +135,7 @@ impl TransportUnicast {
         let link = transport
             .get_links()
             .into_iter()
-            .find(|l| l.get_src() == &link.src && l.get_dst() == &link.dst)
+            .find(|l| l.link.get_src() == &link.src && l.link.get_dst() == &link.dst)
             .ok_or_else(|| zerror!("Invalid link"))?;
         transport.close_link(&link, close::reason::GENERIC).await?;
         Ok(())

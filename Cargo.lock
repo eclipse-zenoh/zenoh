@@ -5000,7 +5000,6 @@ dependencies = [
  "zenoh-core",
  "zenoh-crypto",
  "zenoh-link",
- "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
  "zenoh-shm",

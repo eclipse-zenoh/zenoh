@@ -16,7 +16,7 @@ use crate::unicast::shared_memory_unicast::Challenge;
 use crate::{
     unicast::{
         establishment::{close_link, compute_sn, ext, finalize_transport, InputFinalize, OpenFsm},
-        TransportLinkUnicastConfig, TransportLinkUnicastDirection,
+        link::{TransportLinkUnicast, TransportLinkUnicastConfig, TransportLinkUnicastDirection},
     },
     TransportConfigUnicast, TransportManager, TransportUnicast,
 };
@@ -99,7 +99,7 @@ struct RecvOpenAckOut {
 
 // FSM
 struct OpenLink<'a> {
-    link: &'a LinkUnicast,
+    link: &'a TransportLinkUnicast,
     ext_qos: ext::qos::QoSFsm<'a>,
     #[cfg(feature = "transport_multilink")]
     ext_mlink: ext::multilink::MultiLinkFsm<'a>,
@@ -506,11 +506,19 @@ impl<'a> OpenFsm for OpenLink<'a> {
 }
 
 pub(crate) async fn open_link(
-    link: &LinkUnicast,
+    link: LinkUnicast,
     manager: &TransportManager,
 ) -> ZResult<TransportUnicast> {
-    let fsm = OpenLink {
+    let mut link = TransportLinkUnicast::new(
         link,
+        TransportLinkUnicastConfig {
+            direction: TransportLinkUnicastDirection::Outbound,
+            #[cfg(feature = "transport_compression")]
+            is_compression: false,
+        },
+    );
+    let fsm = OpenLink {
+        link: &link,
         ext_qos: ext::qos::QoSFsm::new(),
         #[cfg(feature = "transport_multilink")]
         ext_mlink: manager.state.unicast.multilink.fsm(&manager.prng),
@@ -601,16 +609,12 @@ pub(crate) async fn open_link(
         is_shm: state.ext_shm.is_shm(),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
     };
-    let link_config = TransportLinkUnicastConfig {
-        direction: TransportLinkUnicastDirection::Outbound,
-        #[cfg(feature = "transport_compression")]
-        is_compression: state.link.ext_compression.is_compression(),
-    };
-    let transport = step!(
-        manager
-            .init_transport_unicast(config, link.clone(), link_config)
-            .await
-    );
+    #[cfg(feature = "transport_compression")]
+    {
+        link.config.is_compression = state.link.ext_compression.is_compression();
+    }
+    let c_link = link.clone();
+    let transport = step!(manager.init_transport_unicast(config, c_link).await);
 
     // Sync the RX sequence number
     let _ = step!(transport
@@ -625,7 +629,7 @@ pub(crate) async fn open_link(
         agreed_batch_size: state.transport.batch_size,
     };
     let transport = output.transport.clone();
-    let res = finalize_transport(link, manager, output).await;
+    let res = finalize_transport(&link, manager, output).await;
     if let Err(e) = res {
         let _ = transport.close().await;
         return Err(e);
