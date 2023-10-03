@@ -262,6 +262,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
         let mut errs: Vec<ZError> = vec![];
 
         for da in dst_addrs {
+            // bind_device is only supported on Android, Fushia, and Linux
+            // https://docs.rs/socket2/latest/x86_64-unknown-linux-gnu/socket2/struct.Socket.html#method.bind_device
+            #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
             let connection = {
                 // Since the building of async_std::net::TcpStream from socket2 is synchronous, let's separate the cases
                 // for the sake of the performance
@@ -281,6 +284,9 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
                     self.new_link_inner(&da).await
                 }
             };
+            #[cfg(not(any(target_os = "android", target_os = "fuchsia", target_os = "linux")))]
+            let connection = self.new_link_inner(&da).await;
+
             match connection {
                 Ok((stream, src_addr, dst_addr)) => {
                     let link = Arc::new(LinkUnicastTcp::new(stream, src_addr, dst_addr));
