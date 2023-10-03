@@ -257,6 +257,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_link(&self, endpoint: EndPoint) -> ZResult<LinkUnicast> {
         let dst_addrs = get_tcp_addrs(endpoint.address()).await?;
         let config = endpoint.config();
+        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
         let iface = config.get("iface").map(|s| s.as_bytes());
 
         let mut errs: Vec<ZError> = vec![];
@@ -312,6 +313,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
     async fn new_listener(&self, mut endpoint: EndPoint) -> ZResult<Locator> {
         let addrs = get_tcp_addrs(endpoint.address()).await?;
         let config = endpoint.config();
+        #[cfg(any(target_os = "android", target_os = "fuchsia", target_os = "linux"))]
         let iface = config.get("iface").map(|s| s.as_bytes());
 
         let mut errs: Vec<ZError> = vec![];
