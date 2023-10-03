@@ -335,7 +335,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
                 }
             };
             #[cfg(not(any(target_os = "android", target_os = "fuchsia", target_os = "linux")))]
-            let connection = self.new_listener_inner(&da).await?;
+            let connection = self.new_listener_inner(&da).await;
 
             match connection {
                 Ok((socket, local_addr)) => {
