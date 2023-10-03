@@ -13,7 +13,7 @@
 //
 pub mod establishment;
 pub(crate) mod link;
-// pub(crate) mod lowlatency;
+pub(crate) mod lowlatency;
 pub(crate) mod manager;
 pub(crate) mod transport_unicast_inner;
 pub(crate) mod universal;

@@ -16,8 +16,8 @@ use super::link::{TransportLinkMulticast, TransportLinkMulticastConfig};
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
-    TransportConfigMulticast, TransportManager, TransportMulticastEventHandler, TransportPeer,
-    TransportPeerEventHandler,
+    multicast::{TransportConfigMulticast, TransportMulticastEventHandler},
+    TransportManager, TransportPeer, TransportPeerEventHandler,
 };
 use async_trait::async_trait;
 use std::{

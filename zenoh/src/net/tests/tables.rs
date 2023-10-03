@@ -27,7 +27,7 @@ use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
 use zenoh_protocol::network::declare::Mode;
 use zenoh_protocol::network::{ext, Declare, DeclareBody, DeclareKeyExpr};
 use zenoh_protocol::zenoh::{PushBody, Put};
-use zenoh_transport::{DummyPrimitives, Primitives};
+use zenoh_transport::primitives::{DummyPrimitives, Primitives};
 
 #[test]
 fn base_test() {

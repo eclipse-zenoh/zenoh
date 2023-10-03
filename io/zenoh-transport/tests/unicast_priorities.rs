@@ -35,8 +35,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
-    TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
+    TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -102,8 +102,8 @@ impl TransportEventHandler for SHRouter {
 
     fn new_multicast(
         &self,
-        _transport: zenoh_transport::TransportMulticast,
-    ) -> ZResult<Arc<dyn zenoh_transport::TransportMulticastEventHandler>> {
+        _transport: TransportMulticast,
+    ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
         panic!();
     }
 }

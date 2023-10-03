@@ -18,10 +18,11 @@ use crate::unicast::establishment::ext::auth::Auth;
 #[cfg(feature = "transport_multilink")]
 use crate::unicast::establishment::ext::multilink::MultiLink;
 use crate::{
-    // lowlatency::transport::TransportUnicastLowlatency,
-    transport_unicast_inner::TransportUnicastTrait,
-    unicast::{link::TransportLinkUnicast, TransportConfigUnicast, TransportUnicast},
-    universal::transport::TransportUnicastUniversal,
+    unicast::{
+        link::TransportLinkUnicast, lowlatency::transport::TransportUnicastLowlatency,
+        transport_unicast_inner::TransportUnicastTrait,
+        universal::transport::TransportUnicastUniversal, TransportConfigUnicast, TransportUnicast,
+    },
     TransportManager,
 };
 use async_std::{prelude::FutureExt, sync::Mutex, task};
@@ -100,7 +101,7 @@ pub struct TransportManagerBuilderUnicast {
     pub(super) authenticator: Auth,
     pub(super) is_lowlatency: bool,
     #[cfg(feature = "transport_compression")]
-    pub(super) is_compress: bool,
+    pub(super) is_compression: bool,
 }
 
 impl TransportManagerBuilderUnicast {
@@ -158,8 +159,8 @@ impl TransportManagerBuilderUnicast {
     }
 
     #[cfg(feature = "transport_compression")]
-    pub fn compression(mut self, is_compress: bool) -> Self {
-        self.is_compress = is_compress;
+    pub fn compression(mut self, is_compression: bool) -> Self {
+        self.is_compression = is_compression;
         self
     }
 
@@ -188,6 +189,10 @@ impl TransportManagerBuilderUnicast {
         {
             self = self.authenticator(Auth::from_config(config).await?);
         }
+        #[cfg(feature = "transport_compression")]
+        {
+            self = self.compression(*config.transport().compression().enabled());
+        }
 
         Ok(self)
     }
@@ -215,7 +220,7 @@ impl TransportManagerBuilderUnicast {
             is_compressed: self.is_compressed,
             is_lowlatency: self.is_lowlatency,
             #[cfg(feature = "transport_compression")]
-            is_compression: self.is_compress,
+            is_compression: self.is_compression,
         };
 
         let state = TransportManagerStateUnicast {
@@ -261,7 +266,7 @@ impl Default for TransportManagerBuilderUnicast {
             authenticator: Auth::default(),
             is_lowlatency: *transport.lowlatency(),
             #[cfg(feature = "transport_compression")]
-            is_compress: *compression.enabled(),
+            is_compression: *compression.enabled(),
         }
     }
 }
@@ -455,10 +460,9 @@ impl TransportManager {
                 let a_t = {
                     if config.is_lowlatency {
                         log::debug!("Will use LowLatency transport!");
-                        // TransportUnicastLowlatency::make(self.clone(), config.clone(), link)
-                        //     .map_err(|e| (e, Some(close::reason::INVALID)))
-                        //     .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?
-                        panic!(); // @TODO
+                        TransportUnicastLowlatency::make(self.clone(), config.clone(), link)
+                            .map_err(|e| (e, Some(close::reason::INVALID)))
+                            .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?
                     } else {
                         log::debug!("Will use Universal transport!");
                         let t: Arc<dyn TransportUnicastTrait> =
@@ -591,7 +595,7 @@ impl TransportManager {
         }
 
         // A new link is available
-        log::trace!("New link waiting... {}", link);
+        log::trace!("Accepting link... {}", link);
         *guard += 1;
         drop(guard);
 

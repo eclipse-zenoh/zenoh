@@ -38,7 +38,7 @@ use zenoh_protocol::{
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
-use zenoh_transport::{Primitives, TransportUnicast};
+use zenoh_transport::{primitives::Primitives, unicast::TransportUnicast};
 
 pub struct AdminContext {
     runtime: Runtime,

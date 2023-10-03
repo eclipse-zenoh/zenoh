@@ -17,8 +17,9 @@ use crate::{
     unicast::{
         establishment::{close_link, compute_sn, ext, finalize_transport, InputFinalize, OpenFsm},
         link::{TransportLinkUnicast, TransportLinkUnicastConfig, TransportLinkUnicastDirection},
+        TransportConfigUnicast, TransportUnicast,
     },
-    TransportConfigUnicast, TransportManager, TransportUnicast,
+    TransportManager,
 };
 use async_trait::async_trait;
 use std::time::Duration;

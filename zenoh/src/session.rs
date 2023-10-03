@@ -22,7 +22,7 @@ use crate::key_expr::KeyExprInner;
 use crate::liveliness::{Liveliness, LivelinessTokenState};
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
-use crate::net::transport::Primitives;
+use crate::net::transport::primitives::Primitives;
 use crate::prelude::Locality;
 use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;

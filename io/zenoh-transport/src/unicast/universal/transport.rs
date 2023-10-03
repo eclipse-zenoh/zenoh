@@ -15,10 +15,13 @@
 use crate::stats::TransportStats;
 use crate::{
     common::priority::{TransportPriorityRx, TransportPriorityTx},
-    transport_unicast_inner::TransportUnicastTrait,
-    unicast::link::{TransportLinkUnicast, TransportLinkUnicastDirection},
-    universal::link::TransportLinkUnicastUniversal,
-    TransportConfigUnicast, TransportExecutor, TransportManager, TransportPeerEventHandler,
+    unicast::{
+        link::{TransportLinkUnicast, TransportLinkUnicastDirection},
+        transport_unicast_inner::TransportUnicastTrait,
+        universal::link::TransportLinkUnicastUniversal,
+        TransportConfigUnicast,
+    },
+    TransportExecutor, TransportManager, TransportPeerEventHandler,
 };
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use async_trait::async_trait;
@@ -37,19 +40,22 @@ use zenoh_result::{bail, zerror, ZResult};
 
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {
-        $guard.iter().find(|tl| &tl.link == $link)
+        // Compare LinkUnicast link to not compare TransportLinkUnicast direction
+        $guard.iter().find(|tl| &tl.link.link == &$link.link)
     };
 }
 
 macro_rules! zlinkgetmut {
     ($guard:expr, $link:expr) => {
-        $guard.iter_mut().find(|tl| &tl.link == $link)
+        // Compare LinkUnicast link to not compare TransportLinkUnicast direction
+        $guard.iter_mut().find(|tl| &tl.link.link == &$link.link)
     };
 }
 
 macro_rules! zlinkindex {
     ($guard:expr, $link:expr) => {
-        $guard.iter().position(|tl| &tl.link == $link)
+        // Compare LinkUnicast link to not compare TransportLinkUnicast direction
+        $guard.iter().position(|tl| &tl.link.link == &$link.link)
     };
 }
 
@@ -438,9 +444,9 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             }
             None => {
                 bail!(
-                    "Can not start Link TX {} with peer: {}",
+                    "Can not start Link TX {} with ZID: {}",
                     link,
-                    self.config.zid
+                    self.config.zid,
                 )
             }
         }
