@@ -96,7 +96,7 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
             running_plugins,
             ..
         } = self;
-        let compat = crate::Compatibility::new().unwrap();
+        // let compat = crate::Compatibility::new(&[]);
         plugin_starters.iter().map(move |p| {
             let name = p.name();
             let path = p.path();
@@ -106,26 +106,24 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
                 match running_plugins.entry(name.into()) {
                     std::collections::hash_map::Entry::Occupied(_) => Ok(None),
                     std::collections::hash_map::Entry::Vacant(e) => {
-                        let compatible = match p.compatibility() {
-                            Some(Ok(c)) => {
-                                if Compatibility::are_compatible(&compat, &c) {
-                                    Ok(())
-                                } else {
-                                    Err(zerror!("Plugin compatibility mismatch: host: {:?} - plugin: {:?}. This could lead to segfaults, so wer'e not starting it.", &compat, &c))
-                                }
-                            }
-                            Some(Err(e)) => Err(zerror!(e => "Plugin {} (from {}) compatibility couldn't be recovered. This likely means it's very broken.", name, path)),
-                            None => Ok(()),
-                        };
-                        if let Err(e) = compatible {
-                            Err(e.into())
-                        } else {
-                            match p.start(args) {
-                                Ok(p) => Ok(Some(unsafe {
-                                    std::mem::transmute(&e.insert((path.into(), p)).1)
-                                })),
-                                Err(e) => Err(e),
-                            }
+                        // let compatible = match p.compatibility() {
+                        //     Some(c) => {
+                        //         if Compatibility::are_compatible(&compat, &c) {
+                        //             Ok(())
+                        //         } else {
+                        //             Err(zerror!("Plugin compatibility mismatch: host: {:?} - plugin: {:?}. This could lead to segfaults, so wer'e not starting it.", &compat, &c))
+                        //         }
+                        //     }
+                        //     None => Ok(()),
+                        // };
+                        // if let Err(e) = compatible {
+                        //     Err(e.into())
+                        // } else {
+                        match p.start(args) {
+                            Ok(p) => Ok(Some(unsafe {
+                                std::mem::transmute(&e.insert((path.into(), p)).1)
+                            })),
+                            Err(e) => Err(e),
                         }
                     }
                 },
@@ -218,7 +216,6 @@ trait PluginStarter<StartArgs, RunningPlugin> {
     fn name(&self) -> &str;
     fn path(&self) -> &str;
     fn start(&self, args: &StartArgs) -> ZResult<RunningPlugin>;
-    fn compatibility(&self) -> Option<ZResult<Compatibility>>;
     fn deletable(&self) -> bool;
 }
 
@@ -244,9 +241,6 @@ where
     fn path(&self) -> &str {
         "<statically_linked>"
     }
-    fn compatibility(&self) -> Option<ZResult<Compatibility>> {
-        None
-    }
     fn start(&self, args: &StartArgs) -> ZResult<RunningPlugin> {
         P::start(P::STATIC_NAME, args)
     }
@@ -267,9 +261,6 @@ impl<StartArgs, RunningPlugin> PluginStarter<StartArgs, RunningPlugin>
     fn start(&self, args: &StartArgs) -> ZResult<RunningPlugin> {
         self.vtable.start(self.name(), args)
     }
-    fn compatibility(&self) -> Option<ZResult<Compatibility>> {
-        Some(self.vtable.compatibility())
-    }
     fn deletable(&self) -> bool {
         true
     }
@@ -283,9 +274,9 @@ pub struct DynamicPlugin<StartArgs, RunningPlugin> {
 }
 
 impl<StartArgs, RunningPlugin> DynamicPlugin<StartArgs, RunningPlugin> {
-    fn new(name: String, lib: Library, path: PathBuf) -> Result<Self, Option<PluginVTableVersion>> {
+    fn new(name: String, lib: Library, path: PathBuf) -> Result<Self, Option<PluginLoaderVersion>> {
         let load_plugin = unsafe {
-            lib.get::<fn(PluginVTableVersion) -> LoadPluginResult<StartArgs, RunningPlugin>>(
+            lib.get::<fn(PluginLoaderVersion) -> LoadPluginResult<StartArgs, RunningPlugin>>(
                 b"load_plugin",
             )
             .map_err(|_| None)?

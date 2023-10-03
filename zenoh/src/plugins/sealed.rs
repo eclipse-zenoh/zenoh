@@ -71,6 +71,8 @@ pub trait RunningPluginTrait: Send + Sync + std::any::Any {
 pub type PluginsManager = zenoh_plugin_trait::loading::PluginsManager<StartArgs, RunningPlugin>;
 
 pub use zenoh_plugin_trait::Plugin;
+pub use zenoh_plugin_trait::Compatibility;
+pub use zenoh_plugin_trait::Validator;
 pub type ValidationFunction = std::sync::Arc<
     dyn Fn(
             &str,

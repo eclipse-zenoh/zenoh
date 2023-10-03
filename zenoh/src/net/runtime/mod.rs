@@ -30,6 +30,7 @@ pub use adminspace::AdminSpace;
 use async_std::task::JoinHandle;
 use futures::stream::StreamExt;
 use futures::Future;
+use zenoh_plugin_trait::{Validator, Compatibility};
 use std::any::Any;
 use std::sync::Arc;
 use std::time::Duration;
@@ -64,6 +65,12 @@ pub struct RuntimeState {
 #[derive(Clone)]
 pub struct Runtime {
     state: Arc<RuntimeState>,
+}
+
+impl Validator for Runtime {
+    fn compatibility() -> Compatibility {
+        todo!()
+    }
 }
 
 impl std::ops::Deref for Runtime {
