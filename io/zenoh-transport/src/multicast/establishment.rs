@@ -13,8 +13,8 @@
 //
 use crate::{
     common::seq_num,
-    multicast::{transport::TransportMulticastInner, TransportMulticast},
-    TransportConfigMulticast, TransportManager,
+    multicast::{transport::TransportMulticastInner, TransportConfigMulticast, TransportMulticast},
+    TransportManager,
 };
 use rand::Rng;
 use std::sync::Arc;

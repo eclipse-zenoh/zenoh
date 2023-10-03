@@ -20,8 +20,9 @@ use crate::{
             Zenoh080Cookie,
         },
         link::{TransportLinkUnicast, TransportLinkUnicastConfig, TransportLinkUnicastDirection},
+        TransportConfigUnicast,
     },
-    TransportConfigUnicast, TransportManager,
+    TransportManager,
 };
 use async_std::sync::Mutex;
 use async_trait::async_trait;

@@ -34,7 +34,7 @@ pub(crate) async fn send_with_link(
     #[cfg(feature = "stats")] stats: &Arc<TransportStats>,
 ) -> ZResult<()> {
     let len;
-    if link.is_streamed() {
+    if link.link.is_streamed() {
         let mut buffer = vec![0, 0, 0, 0];
         let codec = Zenoh080::new();
         let mut writer = buffer.writer();
@@ -47,7 +47,7 @@ pub(crate) async fn send_with_link(
 
         buffer[0..4].copy_from_slice(&le);
 
-        link.write_all(&buffer).await?;
+        link.link.write_all(&buffer).await?;
     } else {
         let mut buffer = vec![];
         let codec = Zenoh080::new();
@@ -60,7 +60,7 @@ pub(crate) async fn send_with_link(
         {
             len = buffer.len() as u32;
         }
-        link.write_all(&buffer).await?;
+        link.link.write_all(&buffer).await?;
     }
     log::trace!("Sent: {:?}", msg);
 
@@ -208,15 +208,15 @@ async fn rx_task_stream(
     async fn read(link: &TransportLinkUnicast, buffer: &mut [u8]) -> ZResult<usize> {
         // 16 bits for reading the batch length
         let mut length = [0_u8, 0_u8, 0_u8, 0_u8];
-        link.read_exact(&mut length).await?;
+        link.link.read_exact(&mut length).await?;
         let n = u32::from_le_bytes(length) as usize;
 
-        link.read_exact(&mut buffer[0..n]).await?;
+        link.link.read_exact(&mut buffer[0..n]).await?;
         Ok(n)
     }
 
     // The pool of buffers
-    let mtu = link.get_mtu().min(rx_batch_size) as usize;
+    let mtu = link.link.get_mtu().min(rx_batch_size) as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -237,7 +237,7 @@ async fn rx_task_stream(
 
         // Deserialize all the messages from the current ZBuf
         let zslice = ZSlice::make(Arc::new(buffer), 0, bytes).unwrap();
-        transport.read_messages(zslice, &link).await?;
+        transport.read_messages(zslice, &link.link).await?;
     }
 }
 
@@ -249,7 +249,7 @@ async fn rx_task_dgram(
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     // The pool of buffers
-    let mtu = link.get_mtu().min(rx_batch_size) as usize;
+    let mtu = link.link.get_mtu().min(rx_batch_size) as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -261,17 +261,19 @@ async fn rx_task_dgram(
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
         // Async read from the underlying link
-        let bytes =
-            link.read(&mut buffer).timeout(lease).await.map_err(|_| {
-                zerror!("{}: expired after {} milliseconds", link, lease.as_millis())
-            })??;
+        let bytes = link
+            .link
+            .read(&mut buffer)
+            .timeout(lease)
+            .await
+            .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
 
         #[cfg(feature = "stats")]
         transport.stats.inc_rx_bytes(bytes);
 
         // Deserialize all the messages from the current ZBuf
         let zslice = ZSlice::make(Arc::new(buffer), 0, bytes).unwrap();
-        transport.read_messages(zslice, &link).await?;
+        transport.read_messages(zslice, &link.link).await?;
     }
 }
 

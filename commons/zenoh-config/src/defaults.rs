@@ -126,9 +126,10 @@ impl Default for QoSConf {
     }
 }
 
+#[allow(clippy::derivable_impls)]
 impl Default for CompressionConf {
     fn default() -> Self {
-        Self { enabled: true }
+        Self { enabled: false }
     }
 }
 

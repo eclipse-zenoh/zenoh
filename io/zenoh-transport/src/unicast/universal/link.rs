@@ -32,7 +32,7 @@ use async_std::task::JoinHandle;
 use std::{sync::Arc, time::Duration};
 use zenoh_buffers::ZSlice;
 use zenoh_protocol::transport::{BatchSize, KeepAlive, TransportMessage};
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObjectPool, Signal};
 
 #[derive(Clone)]
@@ -270,8 +270,6 @@ async fn rx_task(
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
 
     while !signal.is_triggered() {
-        // Retrieve one buffer
-        let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
         // Retrieve one buffer
         let batch = RBatch::new(
             rx_batch_size,

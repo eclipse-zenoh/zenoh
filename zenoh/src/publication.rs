@@ -14,7 +14,7 @@
 
 //! Publishing primitives.
 
-use crate::net::transport::Primitives;
+use crate::net::transport::primitives::Primitives;
 use crate::prelude::*;
 use crate::sample::DataInfo;
 use crate::Encoding;
