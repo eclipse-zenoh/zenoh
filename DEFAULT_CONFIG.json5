@@ -125,7 +125,7 @@
       max_sessions: 1000,
       /// Maximum number of incoming links that are admitted per session
       max_links: 1,
-      /// Enables the LowLatency transport. WARNING: This option is still experimental!
+      /// Enables the LowLatency transport
       /// This option does not make LowLatency transport mandatory, the actual implementation of transport
       /// used will depend on Establish procedure and other party's settings
       ///
