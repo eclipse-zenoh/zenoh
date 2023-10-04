@@ -12,22 +12,25 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use core::hash::Hasher;
 #[cfg(not(feature = "std"))]
 use hashbrown::{
-    hash_map::{Entry, Iter, IterMut, Values, ValuesMut},
+    hash_map::{DefaultHasher, Entry, Iter, IterMut, Values, ValuesMut},
     HashMap,
 };
 #[cfg(feature = "std")]
 use std::collections::{
-    hash_map::{Entry, Iter, IterMut, Values, ValuesMut},
+    hash_map::{DefaultHasher, Entry, Iter, IterMut, Values, ValuesMut},
     HashMap,
 };
 
 use crate::keyexpr_tree::*;
 
-pub struct HashMapProvider;
-impl<T: 'static> IChildrenProvider<T> for HashMapProvider {
-    type Assoc = HashMap<OwnedKeyExpr, T>;
+pub struct HashMapProvider<Hash: Hasher + Default + 'static = DefaultHasher>(
+    core::marker::PhantomData<Hash>,
+);
+impl<T: 'static, Hash: Hasher + Default + 'static> IChildrenProvider<T> for HashMapProvider<Hash> {
+    type Assoc = HashMap<OwnedKeyExpr, T, core::hash::BuildHasherDefault<Hash>>;
 }
 
 #[cfg(not(feature = "std"))]

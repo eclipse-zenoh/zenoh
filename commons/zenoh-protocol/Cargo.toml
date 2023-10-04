@@ -47,10 +47,11 @@ rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
 serde = { workspace = true, features = ["alloc"] }
 uhlc = { workspace = true, default-features = false }
 uuid = { workspace = true }                                                     # Needs a getrandom::getrandom() custom implementation on embedded (in root crate)
-zenoh-buffers = { workspace = true, default-features = false  }
+zenoh-buffers = { workspace = true, default-features = false }
 zenoh-keyexpr = { workspace = true }
 zenoh-result = { workspace = true }
 
 # NOTE: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0
 [dev-dependencies]
 lazy_static = { workspace = true }
+rand = { workspace = true, features = ["default"] }
