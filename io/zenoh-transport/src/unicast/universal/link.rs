@@ -106,7 +106,7 @@ impl TransportLinkUnicast {
             };
 
             #[cfg(all(feature = "unstable", feature = "transport_compression"))]
-            let is_compressed = self.transport.config.manager.config.unicast.is_compressed;
+            let is_compressed = self.transport.manager.config.unicast.is_compressed;
 
             // The pipeline
             let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);

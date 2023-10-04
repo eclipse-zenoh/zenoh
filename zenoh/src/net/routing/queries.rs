@@ -2178,7 +2178,7 @@ pub fn route_query(
                                 ext_qos: ext::QoSType::request_default(), // TODO
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
-                                    node_id: context.map(|c| c.tree_id).unwrap_or(0) as u16,
+                                    node_id: context.unwrap_or(0),
                                 },
                                 ext_target: *t,
                                 ext_budget: None,

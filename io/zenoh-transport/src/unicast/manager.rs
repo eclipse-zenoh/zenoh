@@ -96,6 +96,8 @@ pub struct TransportManagerBuilderUnicast {
     pub(super) max_links: usize,
     #[cfg(feature = "shared-memory")]
     pub(super) is_shm: bool,
+    #[cfg(feature = "transport_compression")]
+    pub(super) is_compressed: bool,
     #[cfg(feature = "transport_auth")]
     pub(super) authenticator: Auth,
     pub(super) is_lowlatency: bool,
@@ -251,6 +253,8 @@ impl Default for TransportManagerBuilderUnicast {
             max_links: *transport.max_links(),
             #[cfg(feature = "shared-memory")]
             is_shm: *shm.enabled(),
+            #[cfg(feature = "transport_compression")]
+            is_compressed: false,
             #[cfg(feature = "transport_auth")]
             authenticator: Auth::default(),
             is_lowlatency: *transport.lowlatency(),
