@@ -14,7 +14,9 @@
 
 use core::hash::Hasher;
 #[cfg(not(feature = "std"))]
-use hashbrown::hash_map::DefaultHasher;
+// `SipHasher` is deprecated in favour of a symbol that only exists in `std`
+#[allow(deprecated)]
+use core::hash::SipHasher as DefaultHasher;
 #[cfg(feature = "std")]
 use std::collections::hash_map::DefaultHasher;
 
