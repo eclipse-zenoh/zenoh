@@ -483,7 +483,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     app.with(
         tide::security::CorsMiddleware::new()
             .allow_methods(
-                "GET, PUT, PATCH, DELETE"
+                "GET, POST, PUT, PATCH, DELETE"
                     .parse::<http_types::headers::HeaderValue>()
                     .unwrap(),
             )
@@ -491,8 +491,18 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
             .allow_credentials(false),
     );
 
-    app.at("/").get(query).put(write).patch(write).delete(write);
-    app.at("*").get(query).put(write).patch(write).delete(write);
+    app.at("/")
+        .get(query)
+        .post(query)
+        .put(write)
+        .patch(write)
+        .delete(write);
+    app.at("*")
+        .get(query)
+        .post(query)
+        .put(write)
+        .patch(write)
+        .delete(write);
 
     if let Err(e) = app.listen(conf.http_port).await {
         log::error!("Unable to start http server for REST: {:?}", e);
