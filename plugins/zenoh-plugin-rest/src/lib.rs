@@ -402,7 +402,7 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
         if !body.is_empty() {
             let encoding: Encoding = req
                 .content_type()
-                .map(|m| m.essence().to_owned().into())
+                .map(|m| m.to_string().into())
                 .unwrap_or_default();
             query = query.with_value(Value::from(body).encoding(encoding));
         }
@@ -441,7 +441,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             };
             let encoding: Encoding = req
                 .content_type()
-                .map(|m| m.essence().to_owned().into())
+                .map(|m| m.to_string().into())
                 .unwrap_or_default();
 
             // @TODO: Define the right congestion control value
