@@ -13,7 +13,11 @@
 //
 use crate::{
     common::seq_num,
-    multicast::{transport::TransportMulticastInner, TransportConfigMulticast, TransportMulticast},
+    multicast::{
+        link::{TransportLinkMulticast, TransportLinkMulticastConfig},
+        transport::TransportMulticastInner,
+        TransportConfigMulticast, TransportMulticast,
+    },
     TransportManager,
 };
 use rand::Rng;
@@ -57,6 +61,13 @@ pub(crate) async fn open_link(
 
     // Create the transport
     let locator = link.get_dst().to_owned();
+    let link = TransportLinkMulticast::new(
+        link,
+        TransportLinkMulticastConfig {
+            #[cfg(feature = "transport_compression")]
+            is_compression: manager.config.multicast.is_compression,
+        },
+    );
     let config = TransportConfigMulticast {
         link,
         sn_resolution,

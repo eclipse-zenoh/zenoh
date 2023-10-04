@@ -12,13 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::{TransportMulticastInner, TransportMulticastPeer};
-use crate::common::priority::TransportChannelRx;
+use crate::{common::priority::TransportChannelRx, multicast::link::TransportLinkMulticast};
 use std::sync::MutexGuard;
 use zenoh_buffers::reader::{HasReader, Reader};
 use zenoh_buffers::ZSlice;
 use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::{zlock, zread};
-use zenoh_link::LinkMulticast;
 use zenoh_protocol::core::{Priority, Reliability};
 use zenoh_protocol::transport::{
     BatchSize, Close, Fragment, Frame, Join, KeepAlive, TransportBody, TransportSn,
@@ -248,7 +247,7 @@ impl TransportMulticastInner {
     pub(super) fn read_messages(
         &self,
         mut zslice: ZSlice,
-        link: &LinkMulticast,
+        link: &TransportLinkMulticast,
         batch_size: BatchSize,
         locator: &Locator,
         #[cfg(feature = "stats")] transport: &TransportMulticastInner,

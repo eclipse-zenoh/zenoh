@@ -268,7 +268,6 @@ async fn rx_task(
     }
 
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
-
     while !signal.is_triggered() {
         // Retrieve one buffer
         let batch = RBatch::new(

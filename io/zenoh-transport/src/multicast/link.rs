@@ -11,31 +11,151 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::common::{pipeline::TransmissionPipeline, priority::TransportPriorityTx};
-use super::transport::TransportMulticastInner;
-use crate::common::batch::WBatch;
-use crate::common::pipeline::{
-    TransmissionPipelineConf, TransmissionPipelineConsumer, TransmissionPipelineProducer,
-};
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
-use async_std::prelude::FutureExt;
-use async_std::task;
-use async_std::task::JoinHandle;
-use std::convert::TryInto;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
-use zenoh_buffers::ZSlice;
+use crate::{
+    common::{
+        batch::{Encode, RBatch, WBatch},
+        pipeline::{
+            TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
+            TransmissionPipelineProducer,
+        },
+        priority::TransportPriorityTx,
+    },
+    multicast::transport::TransportMulticastInner,
+};
+use async_std::{
+    prelude::FutureExt,
+    task::{self, JoinHandle},
+};
+use std::{
+    convert::TryInto,
+    fmt,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use zenoh_buffers::{reader::HasReader, ZSlice};
+use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::zlock;
-use zenoh_link::{LinkMulticast, Locator};
+use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{Bits, Priority, Resolution, WhatAmI, ZenohId},
     transport::{BatchSize, Join, PrioritySn, TransportMessage, TransportSn},
 };
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObjectPool, Signal};
 
-pub(super) struct TransportLinkMulticastConfig {
+/****************************/
+/* TRANSPORT MULTICAST LINK */
+/****************************/
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct TransportLinkMulticastConfig {
+    // Compression is active on the link
+    #[cfg(feature = "transport_compression")]
+    pub(crate) is_compression: bool,
+}
+
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub(crate) struct TransportLinkMulticast {
+    pub(crate) link: LinkMulticast,
+    pub(crate) config: TransportLinkMulticastConfig,
+}
+
+impl TransportLinkMulticast {
+    pub fn new(link: LinkMulticast, config: TransportLinkMulticastConfig) -> Self {
+        Self { link, config }
+    }
+
+    pub async fn send_batch(&self, batch: &mut WBatch) -> ZResult<()> {
+        const ERR: &str = "Write error on link: ";
+        batch.finalize().map_err(|_| zerror!("{ERR}{self}"))?;
+        // Send the message on the link
+        self.link.write_all(batch.as_slice()).await?;
+
+        Ok(())
+    }
+
+    pub async fn send(&self, msg: &TransportMessage) -> ZResult<usize> {
+        const ERR: &str = "Write error on link: ";
+        // Create the batch for serializing the message
+        let mut batch = WBatch::from(self);
+        batch.encode(msg).map_err(|_| zerror!("{ERR}{self}"))?;
+        let len = batch.len() as usize;
+        self.send_batch(&mut batch).await?;
+        Ok(len)
+    }
+
+    pub async fn recv_batch(&self, batch: &mut RBatch) -> ZResult<Locator> {
+        const ERR: &str = "Read error from link: ";
+
+        let loc = batch.read_multicast(&self.link).await?;
+        batch.finalize().map_err(|_| zerror!("{ERR}{self}"))?;
+        Ok(loc)
+    }
+
+    pub async fn recv(&self) -> ZResult<TransportMessage> {
+        let mut batch = RBatch::from(self);
+        self.recv_batch(&mut batch).await?;
+
+        let codec = Zenoh080::new();
+        let mut zslice: ZSlice = batch.into();
+        let mut reader = zslice.reader();
+        let msg: TransportMessage = codec
+            .read(&mut reader)
+            .map_err(|_| zerror!("Read error on link: {}", self))?;
+
+        Ok(msg)
+    }
+
+    pub async fn close(&self) -> ZResult<()> {
+        self.link.close().await
+    }
+}
+
+impl fmt::Display for TransportLinkMulticast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.link)
+    }
+}
+
+impl From<&TransportLinkMulticast> for Link {
+    fn from(link: &TransportLinkMulticast) -> Self {
+        Link::from(&link.link)
+    }
+}
+
+impl From<TransportLinkMulticast> for Link {
+    fn from(link: TransportLinkMulticast) -> Self {
+        Link::from(link.link)
+    }
+}
+
+impl From<&TransportLinkMulticast> for WBatch {
+    fn from(link: &TransportLinkMulticast) -> Self {
+        WBatch::new(
+            link.link.get_mtu(),
+            false,
+            #[cfg(feature = "transport_compression")]
+            link.config.is_compression,
+        )
+    }
+}
+
+impl From<&TransportLinkMulticast> for RBatch {
+    fn from(link: &TransportLinkMulticast) -> Self {
+        RBatch::new(
+            link.link.get_mtu(),
+            false,
+            #[cfg(feature = "transport_compression")]
+            link.config.is_compression,
+        )
+    }
+}
+
+/**************************************/
+/* TRANSPORT MULTICAST LINK UNIVERSAL */
+/**************************************/
+pub(super) struct TransportLinkMulticastConfigUniversal {
     pub(super) version: u8,
     pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
@@ -46,9 +166,9 @@ pub(super) struct TransportLinkMulticastConfig {
 }
 
 #[derive(Clone)]
-pub(super) struct TransportLinkMulticast {
+pub(super) struct TransportLinkMulticastUniversal {
     // The underlying link
-    pub(super) link: LinkMulticast,
+    pub(super) link: TransportLinkMulticast,
     // The transmission pipeline
     pub(super) pipeline: Option<TransmissionPipelineProducer>,
     // The transport this link is associated to
@@ -59,12 +179,12 @@ pub(super) struct TransportLinkMulticast {
     handle_rx: Option<Arc<JoinHandle<()>>>,
 }
 
-impl TransportLinkMulticast {
+impl TransportLinkMulticastUniversal {
     pub(super) fn new(
         transport: TransportMulticastInner,
-        link: LinkMulticast,
-    ) -> TransportLinkMulticast {
-        TransportLinkMulticast {
+        link: TransportLinkMulticast,
+    ) -> TransportLinkMulticastUniversal {
+        TransportLinkMulticastUniversal {
             transport,
             link,
             pipeline: None,
@@ -75,10 +195,10 @@ impl TransportLinkMulticast {
     }
 }
 
-impl TransportLinkMulticast {
+impl TransportLinkMulticastUniversal {
     pub(super) fn start_tx(
         &mut self,
-        config: TransportLinkMulticastConfig,
+        config: TransportLinkMulticastConfigUniversal,
         priority_tx: Arc<[TransportPriorityTx]>,
     ) {
         let initial_sns: Vec<PrioritySn> = priority_tx
@@ -204,8 +324,8 @@ impl TransportLinkMulticast {
 /*************************************/
 async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
-    link: LinkMulticast,
-    config: TransportLinkMulticastConfig,
+    link: TransportLinkMulticast,
+    config: TransportLinkMulticastConfigUniversal,
     mut last_sns: Vec<PrioritySn>,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
@@ -238,10 +358,9 @@ async fn tx_task(
             .race(join(last_join, config.join_interval))
             .await
         {
-            Action::Pull((batch, priority)) => {
+            Action::Pull((mut batch, priority)) => {
                 // Send the buffer on the link
-                let bytes = batch.as_slice();
-                link.write_all(bytes).await?;
+                link.send_batch(&mut batch).await?;
                 // Keep track of next SNs
                 if let Some(sn) = batch.latest_sn.reliable {
                     last_sns[priority].reliable = sn;
@@ -298,8 +417,8 @@ async fn tx_task(
             Action::Stop => {
                 // Drain the transmission pipeline and write remaining bytes on the wire
                 let mut batches = pipeline.drain();
-                for (b, _) in batches.drain(..) {
-                    link.write_all(b.as_slice())
+                for (mut b, _) in batches.drain(..) {
+                    link.send_batch(&mut b)
                         .timeout(config.join_interval)
                         .await
                         .map_err(|_| {
@@ -325,20 +444,21 @@ async fn tx_task(
 }
 
 async fn rx_task(
-    link: LinkMulticast,
+    link: TransportLinkMulticast,
     transport: TransportMulticastInner,
     signal: Signal,
     rx_buffer_size: usize,
     batch_size: BatchSize,
 ) -> ZResult<()> {
     enum Action {
-        Read((usize, Locator)),
+        Read((ZSlice, Locator)),
         Stop,
     }
 
-    async fn read(link: &LinkMulticast, buffer: &mut [u8]) -> ZResult<Action> {
-        let (n, loc) = link.read(buffer).await?;
-        Ok(Action::Read((n, loc.into_owned())))
+    async fn read(link: &TransportLinkMulticast, mut batch: RBatch) -> ZResult<Action> {
+        let loc = link.recv_batch(&mut batch).await?;
+        let zslice: ZSlice = batch.into();
+        Ok(Action::Read((zslice, loc)))
     }
 
     async fn stop(signal: Signal) -> ZResult<Action> {
@@ -347,7 +467,7 @@ async fn rx_task(
     }
 
     // The pool of buffers
-    let mtu = link.get_mtu() as usize;
+    let mtu = link.link.get_mtu() as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -355,22 +475,20 @@ async fn rx_task(
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Retrieve one buffer
-        let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
+        let batch = RBatch::new(
+            link.link.get_mtu(),
+            false,
+            #[cfg(feature = "transport_compression")]
+            link.config.is_compression,
+        );
         // Async read from the underlying link
-        let action = read(&link, &mut buffer).race(stop(signal.clone())).await?;
+        let action = read(&link, batch).race(stop(signal.clone())).await?;
         match action {
-            Action::Read((n, loc)) => {
-                if n == 0 {
-                    // Reading 0 bytes means error
-                    bail!("{}: zero bytes reading", link);
-                }
-
+            Action::Read((zslice, loc)) => {
                 #[cfg(feature = "stats")]
-                transport.stats.inc_rx_bytes(n);
+                transport.stats.inc_rx_bytes(zslice.len());
 
                 // Deserialize all the messages from the current ZBuf
-                let zslice = ZSlice::make(Arc::new(buffer), 0, n)
-                    .map_err(|_| zerror!("Read {} bytes but buffer is {} bytes", n, mtu))?;
                 transport.read_messages(
                     zslice,
                     &link,
