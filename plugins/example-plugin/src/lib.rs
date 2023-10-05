@@ -13,9 +13,9 @@
 //
 #![recursion_limit = "256"]
 
+use core::panic;
 use futures::select;
 use log::{debug, info};
-use core::panic;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::{
@@ -30,35 +30,42 @@ use zenoh_result::{bail, ZResult};
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
 pub struct ExamplePlugin {}
+const PLUGIN: ExamplePlugin = ExamplePlugin {};
 
 // declaration of the plugin's VTable for zenohd to find the plugin's functions to be called
-zenoh_plugin_trait::declare_plugin!(ExamplePlugin);
+// zenoh_plugin_trait::declare_plugin!(plugin, ZenohPlugin);
+
+#[no_mangle]
+fn get_plugin_loader_version() -> PluginLoaderVersion {
+    1
+}
+
+#[no_mangle]
+fn get_plugin_compatibility() -> Compatibility {
+    ExamplePlugin::compatibility()
+}
+
+#[no_mangle]
+fn get_plugin_trait() -> &'static dyn ZenohPlugin {
+    &PLUGIN
+}
 
 // A default selector for this example of storage plugin (in case the config doesn't set it)
 // This plugin will subscribe to this selector and declare a queryable with this selector
 const DEFAULT_SELECTOR: &str = "demo/example/**";
 
-impl ZenohPlugin for ExamplePlugin {}
-impl Plugin for ExamplePlugin {
-    type StartArgs = Runtime;
-    type RunningPlugin = zenoh::plugins::RunningPlugin;
-
+impl ZenohPlugin for ExamplePlugin {
     // A mandatory const to define, in case of the plugin is built as a standalone executable
-    const STATIC_NAME: &'static str = "example";
+    // const STATIC_NAME: &'static str = "example";
 
     // The first operation called by zenohd on the plugin
-    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
-
+    fn start(name: &str, runtime: &Runtime) -> ZResult<RunningPlugin> {
         // panic!("panic");
 
-        #[cfg(feature="crashable")]
+        #[cfg(feature = "crashable")]
         {
             panic!("FOOOO!!!! : {}", runtime._dummy);
         }
-        info!("example started");
-        println!("example started !");
-        panic!("example started !!");
-
         let config = runtime.config.lock();
         let self_cfg = config.plugin(name).unwrap().as_object().unwrap();
         // get the plugin's config details from self_cfg Map (here the "storage-selector" property)
@@ -104,7 +111,7 @@ impl RunningPluginTrait for RunningPlugin {
         let guard = zlock!(&self.0);
         let name = guard.name.clone();
         std::mem::drop(guard);
-        let plugin = self.clone();
+        let PLUGIN = self.clone();
         Arc::new(move |path, old, new| {
             const STORAGE_SELECTOR: &str = "storage-selector";
             if path == STORAGE_SELECTOR || path.is_empty() {
@@ -112,7 +119,7 @@ impl RunningPluginTrait for RunningPlugin {
                     (Some(serde_json::Value::String(os)), Some(serde_json::Value::String(ns)))
                         if os == ns => {}
                     (_, Some(serde_json::Value::String(selector))) => {
-                        let mut guard = zlock!(&plugin.0);
+                        let mut guard = zlock!(&PLUGIN.0);
                         guard.flag.store(false, Relaxed);
                         guard.flag = Arc::new(AtomicBool::new(true));
                         match KeyExpr::try_from(selector.clone()) {
@@ -128,7 +135,7 @@ impl RunningPluginTrait for RunningPlugin {
                         return Ok(None);
                     }
                     (_, None) => {
-                        let guard = zlock!(&plugin.0);
+                        let guard = zlock!(&PLUGIN.0);
                         guard.flag.store(false, Relaxed);
                     }
                     _ => {

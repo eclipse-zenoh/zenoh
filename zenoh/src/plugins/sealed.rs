@@ -24,7 +24,12 @@ zconfigurable! {
 }
 
 /// Zenoh plugins should implement this trait to ensure type-safety, even if the starting arguments and expected plugin types change in a future release.
-pub trait ZenohPlugin: Plugin<StartArgs = StartArgs, RunningPlugin = RunningPlugin> {}
+pub trait ZenohPlugin {
+    fn compatibility() -> Compatibility {
+        Compatibility::new(&[])
+    }
+    fn start(name: &str, args: &StartArgs) -> ZResult<RunningPlugin>;
+}
 
 /// A zenoh plugin receives a reference to a value of this type when started.
 pub type StartArgs = Runtime;
@@ -70,8 +75,8 @@ pub trait RunningPluginTrait: Send + Sync + std::any::Any {
 /// The zenoh plugins manager. It handles the full lifetime of plugins, from loading to destruction.
 pub type PluginsManager = zenoh_plugin_trait::loading::PluginsManager<StartArgs, RunningPlugin>;
 
-pub use zenoh_plugin_trait::Plugin;
 pub use zenoh_plugin_trait::Compatibility;
+pub use zenoh_plugin_trait::Plugin;
 pub use zenoh_plugin_trait::Validator;
 pub type ValidationFunction = std::sync::Arc<
     dyn Fn(

@@ -101,7 +101,7 @@ impl Compatibility {
         }
     }
     pub fn are_compatible(&self, other: &Self) -> bool {
-            RustVersion::are_compatible(&self.rust_version, &other.rust_version)
+        RustVersion::are_compatible(&self.rust_version, &other.rust_version)
             && self.struct_layouts.len() == other.struct_layouts.len()
             && self
                 .struct_layouts
@@ -112,18 +112,5 @@ impl Compatibility {
 }
 
 pub mod prelude {
-    pub use crate::{loading::*, vtable::*, Plugin, Validator};
-}
-
-pub trait PluginVTable {
-    fn compatibility() -> Compatibility;
-}
-
-pub trait Plugin: Sized + 'static {
-    type StartArgs: Validator;
-    type RunningPlugin;
-    /// Your plugins' default name when statically linked.
-    const STATIC_NAME: &'static str;
-    /// Starts your plugin. Use `Ok` to return your plugin's control structure
-    fn start(name: &str, args: &Self::StartArgs) -> ZResult<Self::RunningPlugin>;
+    pub use crate::vtable::*;
 }

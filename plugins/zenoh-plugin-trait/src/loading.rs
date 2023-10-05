@@ -105,27 +105,12 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
                 path,
                 match running_plugins.entry(name.into()) {
                     std::collections::hash_map::Entry::Occupied(_) => Ok(None),
-                    std::collections::hash_map::Entry::Vacant(e) => {
-                        // let compatible = match p.compatibility() {
-                        //     Some(c) => {
-                        //         if Compatibility::are_compatible(&compat, &c) {
-                        //             Ok(())
-                        //         } else {
-                        //             Err(zerror!("Plugin compatibility mismatch: host: {:?} - plugin: {:?}. This could lead to segfaults, so wer'e not starting it.", &compat, &c))
-                        //         }
-                        //     }
-                        //     None => Ok(()),
-                        // };
-                        // if let Err(e) = compatible {
-                        //     Err(e.into())
-                        // } else {
-                        match p.start(args) {
-                            Ok(p) => Ok(Some(unsafe {
-                                std::mem::transmute(&e.insert((path.into(), p)).1)
-                            })),
-                            Err(e) => Err(e),
-                        }
-                    }
+                    std::collections::hash_map::Entry::Vacant(e) => match p.start(args) {
+                        Ok(p) => Ok(Some(unsafe {
+                            std::mem::transmute(&e.insert((path.into(), p)).1)
+                        })),
+                        Err(e) => Err(e),
+                    },
                 },
             )
         })
@@ -170,11 +155,12 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
         lib: Library,
         path: PathBuf,
     ) -> ZResult<DynamicPlugin<StartArgs, RunningPlugin>> {
-        DynamicPlugin::new(name.into(), lib, path).map_err(|e|
-            zerror!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})",
-                name,
-                e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()),
-                PLUGIN_VTABLE_VERSION).into()
+        DynamicPlugin::new(name.into(), lib, path).map_err(
+            |e| panic!("Incompatible plugin"), // TODO: fire zerror!
+                                               // zerror!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})",
+                                               // name,
+                                               // e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()),
+                                               // PLUGIN_VTABLE_VERSION).into()
         )
     }
 
@@ -266,15 +252,33 @@ impl<StartArgs, RunningPlugin> PluginStarter<StartArgs, RunningPlugin>
     }
 }
 
-pub struct DynamicPlugin<StartArgs, RunningPlugin> {
+pub struct DynamicPlugin<DynTraitPlugin> {
     _lib: Library,
-    vtable: PluginVTable<StartArgs, RunningPlugin>,
+    vtable: Option<&DynTraitPlugin>,
     pub name: String,
     pub path: PathBuf,
 }
 
 impl<StartArgs, RunningPlugin> DynamicPlugin<StartArgs, RunningPlugin> {
-    fn new(name: String, lib: Library, path: PathBuf) -> Result<Self, Option<PluginLoaderVersion>> {
+    fn new(name: String, lib: Library, path: PathBuf) -> ZResult<Self> {
+        // Check loader version
+        let get_plugin_loader_version =
+            unsafe { lib.get::<fn() -> PluginLoaderVersion>(b"get_plugin_loader_version") }?;
+        let plugin_loader_version = get_plugin_loader_version();
+        if plugin_loader_version != PLUGIN_LOADER_VERSION {
+            bail!(
+                "Plugin loader version mismatch: expected {}, got {}",
+                PLUGIN_LOADER_VERSION,
+                plugin_loader_version
+            );
+        }
+
+        // Check plugin compatibility. Matching loader versions guarantees that [`Compatibility`] structure is matching
+        let get_plugin_compatibility =
+            unsafe { lib.get::<fn() -> Compatibility>(b"get_plugin_compatibility") }?;
+        if get_plugin_compatibility().are_compatible(other)
+
+
         let load_plugin = unsafe {
             lib.get::<fn(PluginLoaderVersion) -> LoadPluginResult<StartArgs, RunningPlugin>>(
                 b"load_plugin",
