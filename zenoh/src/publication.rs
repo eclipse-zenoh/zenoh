@@ -340,11 +340,11 @@ impl<'a> Publisher<'a> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
-    /// publisher.matching_state().res().await.unwrap().is_matching();
+    /// publisher.matching_status().res().await.unwrap().is_matching();
     /// # })
     /// ```
     #[zenoh_macros::unstable]
-    pub fn matching_state(&self) -> impl Resolve<ZResult<MatchingState>> {
+    pub fn matching_status(&self) -> impl Resolve<ZResult<MatchingStatus>> {
         use crate::net::routing::router::RoutingExpr;
         let tables = zread!(self.session.runtime.router.tables.tables);
         let res = crate::net::routing::resource::Resource::get_resource(
@@ -361,7 +361,7 @@ impl<'a> Publisher<'a> {
         )
         .is_empty();
 
-        zenoh_core::ResolveFuture::new(async move { Ok(MatchingState { matching }) })
+        zenoh_core::ResolveFuture::new(async move { Ok(MatchingStatus { matching }) })
     }
 
     /// # Examples
@@ -372,8 +372,8 @@ impl<'a> Publisher<'a> {
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
     /// let matching_listener = publisher.matching_listener().res().await.unwrap();
-    /// while let Ok(matching_state) = matching_listener.recv_async().await {
-    ///     if matching_state.is_matching() {
+    /// while let Ok(matching_status) = matching_listener.recv_async().await {
+    ///     if matching_status.is_matching() {
     ///         println!("Publisher has matching subscribers.");
     ///     } else {
     ///         println!("Publisher has NO MORE matching subscribers.");
@@ -759,12 +759,12 @@ impl From<Priority> for zenoh_protocol::core::Priority {
 
 #[zenoh_macros::unstable]
 #[derive(Copy, Clone, Debug)]
-pub struct MatchingState {
+pub struct MatchingStatus {
     pub(crate) matching: bool,
 }
 
 #[zenoh_macros::unstable]
-impl MatchingState {
+impl MatchingStatus {
     pub fn is_matching(&self) -> bool {
         self.matching
     }
@@ -783,7 +783,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     #[zenoh_macros::unstable]
     pub fn callback<Callback>(self, callback: Callback) -> MatchingListenerBuilder<'a, Callback>
     where
-        Callback: Fn(MatchingState) + Send + Sync + 'static,
+        Callback: Fn(MatchingStatus) + Send + Sync + 'static,
     {
         let MatchingListenerBuilder {
             publisher,
@@ -800,9 +800,9 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
-    ) -> MatchingListenerBuilder<'a, impl Fn(MatchingState) + Send + Sync + 'static>
+    ) -> MatchingListenerBuilder<'a, impl Fn(MatchingStatus) + Send + Sync + 'static>
     where
-        CallbackMut: FnMut(MatchingState) + Send + Sync + 'static,
+        CallbackMut: FnMut(MatchingStatus) + Send + Sync + 'static,
     {
         self.callback(crate::handlers::locked(callback))
     }
@@ -811,7 +811,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> MatchingListenerBuilder<'a, Handler>
     where
-        Handler: crate::prelude::IntoCallbackReceiverPair<'static, MatchingState>,
+        Handler: crate::prelude::IntoCallbackReceiverPair<'static, MatchingStatus>,
     {
         let MatchingListenerBuilder {
             publisher,
@@ -824,7 +824,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
 #[zenoh_macros::unstable]
 impl<'a, Handler> Resolvable for MatchingListenerBuilder<'a, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, MatchingState> + Send,
+    Handler: IntoCallbackReceiverPair<'static, MatchingStatus> + Send,
     Handler::Receiver: Send,
 {
     type To = ZResult<MatchingListener<'a, Handler::Receiver>>;
@@ -833,7 +833,7 @@ where
 #[zenoh_macros::unstable]
 impl<'a, Handler> SyncResolve for MatchingListenerBuilder<'a, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, MatchingState> + Send,
+    Handler: IntoCallbackReceiverPair<'static, MatchingStatus> + Send,
     Handler::Receiver: Send,
 {
     #[zenoh_macros::unstable]
@@ -856,7 +856,7 @@ where
 #[zenoh_macros::unstable]
 impl<'a, Handler> AsyncResolve for MatchingListenerBuilder<'a, Handler>
 where
-    Handler: IntoCallbackReceiverPair<'static, MatchingState> + Send,
+    Handler: IntoCallbackReceiverPair<'static, MatchingStatus> + Send,
     Handler::Receiver: Send,
 {
     type Future = Ready<Self::To>;
@@ -872,7 +872,7 @@ pub(crate) struct MatchingListenerState {
     pub(crate) id: Id,
     pub(crate) current: std::sync::atomic::AtomicBool,
     pub(crate) key_expr: KeyExpr<'static>,
-    pub(crate) callback: Callback<'static, MatchingState>,
+    pub(crate) callback: Callback<'static, MatchingStatus>,
 }
 
 #[zenoh_macros::unstable]
@@ -905,8 +905,8 @@ impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListene
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
 /// let matching_listener = publisher.matching_listener().res().await.unwrap();
-/// while let Ok(matching_state) = matching_listener.recv_async().await {
-///     if matching_state.is_matching() {
+/// while let Ok(matching_status) = matching_listener.recv_async().await {
+///     if matching_status.is_matching() {
 ///         println!("Publisher has matching subscribers.");
 ///     } else {
 ///         println!("Publisher has NO MORE matching subscribers.");

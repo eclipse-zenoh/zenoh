@@ -1431,7 +1431,7 @@ impl Session {
     pub(crate) fn declare_matches_subscriber_inner(
         &self,
         publisher: &Publisher,
-        callback: Callback<'static, MatchingState>,
+        callback: Callback<'static, MatchingStatus>,
     ) -> ZResult<Arc<MatchingListenerState>> {
         let mut state = zwrite!(self.state);
         log::trace!("matches_subscriber({:?})", publisher.key_expr);
@@ -1444,9 +1444,14 @@ impl Session {
             callback,
         });
         state.matching_listeners.insert(id, sub_state.clone());
-        if publisher.matching_state().res_sync().unwrap().is_matching() {
+        if publisher
+            .matching_status()
+            .res_sync()
+            .unwrap()
+            .is_matching()
+        {
             sub_state.current.store(true, Ordering::Relaxed);
-            (sub_state.callback)(MatchingState { matching: true });
+            (sub_state.callback)(MatchingStatus { matching: true });
         }
         Ok(sub_state)
     }
@@ -1981,7 +1986,7 @@ impl Primitives for Session {
                                     && expr.intersects(&msub.key_expr)
                                 {
                                     msub.current.store(true, Ordering::Relaxed);
-                                    (msub.callback)(MatchingState { matching: true });
+                                    (msub.callback)(MatchingStatus { matching: true });
                                 }
                             }
 
@@ -2011,7 +2016,7 @@ impl Primitives for Session {
                                     && expr.intersects(&msub.key_expr)
                                 {
                                     msub.current.store(false, Ordering::Relaxed);
-                                    (msub.callback)(MatchingState { matching: false });
+                                    (msub.callback)(MatchingStatus { matching: false });
                                 }
                             }
 
