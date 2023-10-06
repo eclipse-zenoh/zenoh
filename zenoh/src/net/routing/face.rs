@@ -47,7 +47,7 @@ pub struct FaceState {
 }
 
 impl FaceState {
-    pub(super) fn new(
+    pub(crate) fn new(
         id: usize,
         zid: ZenohId,
         whatami: WhatAmI,

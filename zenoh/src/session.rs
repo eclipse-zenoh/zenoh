@@ -101,6 +101,8 @@ pub(crate) struct SessionState {
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     #[cfg(feature = "unstable")]
     pub(crate) tokens: HashMap<Id, Arc<LivelinessTokenState>>,
+    #[cfg(feature = "unstable")]
+    pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
     pub(crate) queries: HashMap<RequestId, QueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     //pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
@@ -123,6 +125,8 @@ impl SessionState {
             queryables: HashMap::new(),
             #[cfg(feature = "unstable")]
             tokens: HashMap::new(),
+            #[cfg(feature = "unstable")]
+            matching_listeners: HashMap::new(),
             queries: HashMap::new(),
             aggregated_subscribers,
             //aggregated_publishers,
@@ -1423,6 +1427,39 @@ impl Session {
         }
     }
 
+    #[zenoh_macros::unstable]
+    pub(crate) fn declare_matches_subscriber_inner(
+        &self,
+        publisher: &Publisher,
+        callback: Callback<'static, MatchingState>,
+    ) -> ZResult<Arc<MatchingListenerState>> {
+        let mut state = zwrite!(self.state);
+        log::trace!("matches_subscriber({:?})", publisher.key_expr);
+
+        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let sub_state = Arc::new(MatchingListenerState {
+            id,
+            current: std::sync::atomic::AtomicBool::new(false),
+            key_expr: publisher.key_expr.clone().into_owned(),
+            callback,
+        });
+        state.matching_listeners.insert(id, sub_state.clone());
+        if publisher.matching_state().res_sync().unwrap().is_matching() {
+            sub_state.current.store(true, Ordering::Relaxed);
+            (sub_state.callback)(MatchingState { matching: true });
+        }
+        Ok(sub_state)
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn matches_unsubscribe(&self, sid: usize) -> ZResult<()> {
+        let mut state = zwrite!(self.state);
+        if let Some(sub_state) = state.subscribers.remove(&sid) {
+            trace!("matches_unsubscribe({:?})", sub_state);
+        }
+        Ok(())
+    }
+
     pub(crate) fn handle_data(
         &self,
         local: bool,
@@ -1939,6 +1976,15 @@ impl Primitives for Session {
                     let state = zread!(self.state);
                     match state.wireexpr_to_keyexpr(&m.wire_expr, false) {
                         Ok(expr) => {
+                            for msub in state.matching_listeners.values() {
+                                if (!msub.current.load(Ordering::Relaxed))
+                                    && expr.intersects(&msub.key_expr)
+                                {
+                                    msub.current.store(true, Ordering::Relaxed);
+                                    (msub.callback)(MatchingState { matching: true });
+                                }
+                            }
+
                             if expr
                                 .as_str()
                                 .starts_with(crate::liveliness::PREFIX_LIVELINESS)
@@ -1960,6 +2006,15 @@ impl Primitives for Session {
                     let state = zread!(self.state);
                     match state.wireexpr_to_keyexpr(&m.ext_wire_expr.wire_expr, false) {
                         Ok(expr) => {
+                            for msub in state.matching_listeners.values() {
+                                if msub.current.load(Ordering::Relaxed)
+                                    && expr.intersects(&msub.key_expr)
+                                {
+                                    msub.current.store(false, Ordering::Relaxed);
+                                    (msub.callback)(MatchingState { matching: false });
+                                }
+                            }
+
                             if expr
                                 .as_str()
                                 .starts_with(crate::liveliness::PREFIX_LIVELINESS)
