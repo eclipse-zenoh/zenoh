@@ -137,7 +137,7 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
         log::info!("Finished loading plugins");
 
         {
-            let mut config_guard = runtime.config.lock();
+            let mut config_guard = runtime.config().lock();
             for (name, (_, plugin)) in plugins.running_plugins() {
                 let hook = plugin.config_checker();
                 config_guard.add_plugin_validator(name, hook)

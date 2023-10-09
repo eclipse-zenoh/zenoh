@@ -140,6 +140,7 @@ impl Tables {
         &self.root_res
     }
 
+    #[allow(dead_code)]
     pub fn print(&self) -> String {
         Resource::print_tree(&self.root_res)
     }

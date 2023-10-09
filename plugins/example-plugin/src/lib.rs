@@ -47,7 +47,7 @@ impl Plugin for ExamplePlugin {
 
     // The first operation called by zenohd on the plugin
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
-        let config = runtime.config.lock();
+        let config = runtime.config().lock();
         let self_cfg = config.plugin(name).unwrap().as_object().unwrap();
         // get the plugin's config details from self_cfg Map (here the "storage-selector" property)
         let selector: KeyExpr = match self_cfg.get("storage-selector") {

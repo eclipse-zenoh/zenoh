@@ -47,16 +47,16 @@ use zenoh_transport::{
 };
 
 pub struct RuntimeState {
-    pub zid: ZenohId,
-    pub whatami: WhatAmI,
-    pub metadata: serde_json::Value,
-    pub router: Arc<Router>,
-    pub config: Notifier<Config>,
-    pub manager: TransportManager,
-    pub transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
-    pub(crate) locators: std::sync::RwLock<Vec<Locator>>,
-    pub hlc: Option<Arc<HLC>>,
-    pub(crate) stop_source: std::sync::RwLock<Option<StopSource>>,
+    zid: ZenohId,
+    whatami: WhatAmI,
+    metadata: serde_json::Value,
+    router: Arc<Router>,
+    config: Notifier<Config>,
+    manager: TransportManager,
+    transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
+    locators: std::sync::RwLock<Vec<Locator>>,
+    hlc: Option<Arc<HLC>>,
+    stop_source: std::sync::RwLock<Option<StopSource>>,
 }
 
 #[derive(Clone)]
@@ -212,6 +212,26 @@ impl Runtime {
             .unwrap()
             .as_ref()
             .map(|source| async_std::task::spawn(future.timeout_at(source.token())))
+    }
+
+    pub(crate) fn router(&self) -> Arc<Router> {
+        self.router.clone()
+    }
+
+    pub fn config(&self) -> &Notifier<Config> {
+        &self.config
+    }
+
+    pub fn hlc(&self) -> Option<&HLC> {
+        self.hlc.as_ref().map(Arc::as_ref)
+    }
+
+    pub fn zid(&self) -> ZenohId {
+        self.zid
+    }
+
+    pub fn whatami(&self) -> WhatAmI {
+        self.whatami
     }
 }
 

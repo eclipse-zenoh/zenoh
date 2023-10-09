@@ -225,7 +225,7 @@ impl Plugin for RestPlugin {
         let _ = env_logger::try_init();
         log::debug!("REST plugin {}", LONG_VERSION.as_str());
 
-        let runtime_conf = runtime.config.lock();
+        let runtime_conf = runtime.config().lock();
         let plugin_conf = runtime_conf
             .plugin(name)
             .ok_or_else(|| zerror!("Plugin `{}`: missing config", name))?;
@@ -476,7 +476,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     // But cannot be done twice in case of static link.
     let _ = env_logger::try_init();
 
-    let zid = runtime.zid.to_string();
+    let zid = runtime.zid().to_string();
     let session = zenoh::init(runtime).res().await.unwrap();
 
     let mut app = Server::with_state((Arc::new(session), zid));

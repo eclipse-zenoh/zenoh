@@ -65,7 +65,7 @@ impl Plugin for StoragesPlugin {
         std::mem::drop(env_logger::try_init());
         log::debug!("StorageManager plugin {}", LONG_VERSION.as_str());
         let config =
-            { PluginConfig::try_from((name, runtime.config.lock().plugin(name).unwrap())) }?;
+            { PluginConfig::try_from((name, runtime.config().lock().plugin(name).unwrap())) }?;
         Ok(Box::new(StorageRuntime::from(StorageRuntimeInner::new(
             runtime.clone(),
             config,
@@ -85,7 +85,8 @@ impl StorageRuntimeInner {
     fn status_key(&self) -> String {
         format!(
             "@/router/{}/status/plugins/{}",
-            &self.runtime.zid, &self.name
+            &self.runtime.zid(),
+            &self.name
         )
     }
     fn new(runtime: Runtime, config: PluginConfig) -> ZResult<Self> {
