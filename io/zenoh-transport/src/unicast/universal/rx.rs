@@ -13,16 +13,14 @@
 //
 use super::transport::TransportUnicastUniversal;
 use crate::{
-    common::priority::TransportChannelRx,
+    common::{
+        batch::{Decode, RBatch},
+        priority::TransportChannelRx,
+    },
     unicast::{link::TransportLinkUnicast, transport_unicast_inner::TransportUnicastTrait},
 };
 use async_std::task;
 use std::sync::MutexGuard;
-use zenoh_buffers::{
-    reader::{HasReader, Reader},
-    ZSlice,
-};
-use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::{zlock, zread};
 use zenoh_protocol::{
     core::{Priority, Reliability},
@@ -191,14 +189,12 @@ impl TransportUnicastUniversal {
 
     pub(super) fn read_messages(
         &self,
-        mut zslice: ZSlice,
+        mut batch: RBatch,
         link: &TransportLinkUnicast,
     ) -> ZResult<()> {
-        let codec = Zenoh080::new();
-        let mut reader = zslice.reader();
-        while reader.can_read() {
-            let msg: TransportMessage = codec
-                .read(&mut reader)
+        while !batch.is_empty() {
+            let msg: TransportMessage = batch
+                .decode()
                 .map_err(|_| zerror!("{}: decoding error", link))?;
 
             log::trace!("Received: {:?}", msg);

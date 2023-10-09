@@ -18,9 +18,9 @@ use crate::{
     ZSlice,
 };
 use alloc::{boxed::Box, sync::Arc};
-use core::num::NonZeroUsize;
+use core::{fmt, num::NonZeroUsize};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct BBuf {
     buffer: Box<[u8]>,
     len: usize,
@@ -68,6 +68,12 @@ impl BBuf {
     fn as_writable_slice(&mut self) -> &mut [u8] {
         // SAFETY: self.len is ensured by the writer to be smaller than buffer length.
         crate::unsafe_slice_mut!(self.buffer, self.len..)
+    }
+}
+
+impl fmt::Debug for BBuf {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:02x?}", self.as_slice())
     }
 }
 

@@ -30,7 +30,7 @@ use async_std::prelude::FutureExt;
 use async_std::task;
 use async_std::task::JoinHandle;
 use std::{sync::Arc, time::Duration};
-use zenoh_buffers::ZSlice;
+use zenoh_buffers::ZSliceBuffer;
 use zenoh_protocol::transport::{BatchSize, KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObjectPool, Signal};
@@ -245,14 +245,26 @@ async fn rx_task(
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     enum Action {
-        Read(ZSlice),
+        Read(RBatch),
         Stop,
     }
 
-    async fn read(link: &TransportLinkUnicast, mut batch: RBatch) -> ZResult<Action> {
-        link.recv_batch(&mut batch).await?;
-        let zslice: ZSlice = batch.into();
-        Ok(Action::Read(zslice))
+    async fn read<T>(
+        link: &TransportLinkUnicast,
+        into: T,
+        #[cfg(feature = "transport_compression")] uncompress_into: T,
+    ) -> ZResult<Action>
+    where
+        T: ZSliceBuffer + 'static,
+    {
+        let batch = link
+            .recv_batch(
+                into,
+                #[cfg(feature = "transport_compression")]
+                uncompress_into,
+            )
+            .await?;
+        Ok(Action::Read(batch))
     }
 
     async fn stop(signal: Signal) -> ZResult<Action> {
@@ -270,18 +282,20 @@ async fn rx_task(
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Retrieve one buffer
-        let batch = RBatch::new(
-            rx_batch_size,
-            link.link.is_streamed(),
-            #[cfg(feature = "transport_compression")]
-            link.config.is_compression,
-        );
+        let into = pool.try_take().unwrap_or_else(|| pool.alloc());
+        #[cfg(feature = "transport_compression")]
+        let uncompress_into = pool.try_take().unwrap_or_else(|| pool.alloc());
         // Async read from the underlying link
-        let action = read(&link, batch)
-            .race(stop(signal.clone()))
-            .timeout(lease)
-            .await
-            .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
+        let action = read(
+            &link,
+            into,
+            #[cfg(feature = "transport_compression")]
+            uncompress_into,
+        )
+        .race(stop(signal.clone()))
+        .timeout(lease)
+        .await
+        .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
         match action {
             Action::Read(zslice) => {
                 #[cfg(feature = "stats")]

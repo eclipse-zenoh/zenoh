@@ -15,7 +15,7 @@
 use crate::stats::TransportStats;
 use crate::{
     common::{
-        batch::{Encode, RBatch, WBatch},
+        batch::{BatchConfig, Decode, Encode, RBatch, WBatch},
         pipeline::{
             TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
             TransmissionPipelineProducer,
@@ -34,8 +34,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use zenoh_buffers::{reader::HasReader, ZSlice};
-use zenoh_codec::{RCodec, Zenoh080};
+use zenoh_buffers::ZSliceBuffer;
 use zenoh_core::zlock;
 use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::{
@@ -66,6 +65,14 @@ impl TransportLinkMulticast {
         Self { link, config }
     }
 
+    pub fn batch_config(&self) -> BatchConfig {
+        BatchConfig {
+            is_streamed: false,
+            #[cfg(feature = "transport_compression")]
+            is_compression: self.config.is_compression,
+        }
+    }
+
     pub async fn send_batch(&self, batch: &mut WBatch) -> ZResult<()> {
         const ERR: &str = "Write error on link: ";
         batch.finalize().map_err(|_| zerror!("{ERR}{self}"))?;
@@ -78,33 +85,51 @@ impl TransportLinkMulticast {
     pub async fn send(&self, msg: &TransportMessage) -> ZResult<usize> {
         const ERR: &str = "Write error on link: ";
         // Create the batch for serializing the message
-        let mut batch = WBatch::from(self);
+        let mut batch = WBatch::with_capacity(self.batch_config(), self.link.get_mtu());
         batch.encode(msg).map_err(|_| zerror!("{ERR}{self}"))?;
         let len = batch.len() as usize;
         self.send_batch(&mut batch).await?;
         Ok(len)
     }
 
-    pub async fn recv_batch(&self, batch: &mut RBatch) -> ZResult<Locator> {
+    pub async fn recv_batch<T>(
+        &self,
+        into: T,
+        #[cfg(feature = "transport_compression")] uncompress_into: T,
+    ) -> ZResult<(RBatch, Locator)>
+    where
+        T: ZSliceBuffer + 'static,
+    {
         const ERR: &str = "Read error from link: ";
-
-        let loc = batch.read_multicast(&self.link).await?;
-        batch.finalize().map_err(|_| zerror!("{ERR}{self}"))?;
-        Ok(loc)
+        let (mut batch, locator) =
+            RBatch::read_multicast(self.batch_config(), &self.link, into).await?;
+        batch
+            .finalize(
+                #[cfg(feature = "transport_compression")]
+                uncompress_into,
+            )
+            .map_err(|_| zerror!("{ERR}{self}"))?;
+        Ok((batch, locator))
     }
 
-    pub async fn recv(&self) -> ZResult<TransportMessage> {
-        let mut batch = RBatch::from(self);
-        self.recv_batch(&mut batch).await?;
+    pub async fn recv(&self) -> ZResult<(TransportMessage, Locator)> {
+        let into = zenoh_buffers::vec::uninit(self.link.get_mtu() as usize).into_boxed_slice();
+        #[cfg(feature = "transport_compression")]
+        let uncompress_into =
+            zenoh_buffers::vec::uninit(self.link.get_mtu() as usize).into_boxed_slice();
+        let (mut batch, locator) = self
+            .recv_batch(
+                into,
+                #[cfg(feature = "transport_compression")]
+                uncompress_into,
+            )
+            .await?;
 
-        let codec = Zenoh080::new();
-        let mut zslice: ZSlice = batch.into();
-        let mut reader = zslice.reader();
-        let msg: TransportMessage = codec
-            .read(&mut reader)
-            .map_err(|_| zerror!("Read error on link: {}", self))?;
+        let msg = batch
+            .decode()
+            .map_err(|_| zerror!("Decode error on link: {}", self))?;
 
-        Ok(msg)
+        Ok((msg, locator))
     }
 
     pub async fn close(&self) -> ZResult<()> {
@@ -127,28 +152,6 @@ impl From<&TransportLinkMulticast> for Link {
 impl From<TransportLinkMulticast> for Link {
     fn from(link: TransportLinkMulticast) -> Self {
         Link::from(link.link)
-    }
-}
-
-impl From<&TransportLinkMulticast> for WBatch {
-    fn from(link: &TransportLinkMulticast) -> Self {
-        WBatch::new(
-            link.link.get_mtu(),
-            false,
-            #[cfg(feature = "transport_compression")]
-            link.config.is_compression,
-        )
-    }
-}
-
-impl From<&TransportLinkMulticast> for RBatch {
-    fn from(link: &TransportLinkMulticast) -> Self {
-        RBatch::new(
-            link.link.get_mtu(),
-            false,
-            #[cfg(feature = "transport_compression")]
-            link.config.is_compression,
-        )
     }
 }
 
@@ -451,14 +454,26 @@ async fn rx_task(
     batch_size: BatchSize,
 ) -> ZResult<()> {
     enum Action {
-        Read((ZSlice, Locator)),
+        Read((RBatch, Locator)),
         Stop,
     }
 
-    async fn read(link: &TransportLinkMulticast, mut batch: RBatch) -> ZResult<Action> {
-        let loc = link.recv_batch(&mut batch).await?;
-        let zslice: ZSlice = batch.into();
-        Ok(Action::Read((zslice, loc)))
+    async fn read<T>(
+        link: &TransportLinkMulticast,
+        into: T,
+        #[cfg(feature = "transport_compression")] uncompress_into: T,
+    ) -> ZResult<Action>
+    where
+        T: ZSliceBuffer + 'static,
+    {
+        let (rbatch, locator) = link
+            .recv_batch(
+                into,
+                #[cfg(feature = "transport_compression")]
+                uncompress_into,
+            )
+            .await?;
+        Ok(Action::Read((rbatch, locator)))
     }
 
     async fn stop(signal: Signal) -> ZResult<Action> {
@@ -475,25 +490,28 @@ async fn rx_task(
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Retrieve one buffer
-        let batch = RBatch::new(
-            link.link.get_mtu(),
-            false,
-            #[cfg(feature = "transport_compression")]
-            link.config.is_compression,
-        );
+        let into = pool.try_take().unwrap_or_else(|| pool.alloc());
+        #[cfg(feature = "transport_compression")]
+        let uncompress_into = pool.try_take().unwrap_or_else(|| pool.alloc());
         // Async read from the underlying link
-        let action = read(&link, batch).race(stop(signal.clone())).await?;
+        let action = read(
+            &link,
+            into,
+            #[cfg(feature = "transport_compression")]
+            uncompress_into,
+        )
+        .race(stop(signal.clone()))
+        .await?;
         match action {
-            Action::Read((zslice, loc)) => {
+            Action::Read((batch, locator)) => {
                 #[cfg(feature = "stats")]
                 transport.stats.inc_rx_bytes(zslice.len());
 
                 // Deserialize all the messages from the current ZBuf
                 transport.read_messages(
-                    zslice,
-                    &link,
+                    batch,
+                    locator,
                     batch_size,
-                    &loc,
                     #[cfg(feature = "stats")]
                     &transport,
                 )?;

@@ -11,11 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::common::batch::{Encode, RBatch, WBatch};
+use crate::common::batch::{BatchConfig, Decode, Encode, RBatch, WBatch};
 use std::fmt;
-use zenoh_buffers::reader::HasReader;
-use zenoh_buffers::ZSlice;
-use zenoh_codec::{RCodec, Zenoh080};
+use zenoh_buffers::ZSliceBuffer;
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::transport::TransportMessage;
 use zenoh_result::{zerror, ZResult};
@@ -46,6 +44,14 @@ impl TransportLinkUnicast {
         Self { link, config }
     }
 
+    pub fn batch_config(&self) -> BatchConfig {
+        BatchConfig {
+            is_streamed: self.link.is_streamed(),
+            #[cfg(feature = "transport_compression")]
+            is_compression: self.config.is_compression,
+        }
+    }
+
     pub async fn send_batch(&self, batch: &mut WBatch) -> ZResult<()> {
         const ERR: &str = "Write error on link: ";
         batch.finalize().map_err(|_| zerror!("{ERR}{self}"))?;
@@ -58,32 +64,47 @@ impl TransportLinkUnicast {
     pub async fn send(&self, msg: &TransportMessage) -> ZResult<usize> {
         const ERR: &str = "Write error on link: ";
         // Create the batch for serializing the message
-        let mut batch = WBatch::from(self);
+        let mut batch = WBatch::with_capacity(self.batch_config(), self.link.get_mtu());
         batch.encode(msg).map_err(|_| zerror!("{ERR}{self}"))?;
         let len = batch.len() as usize;
         self.send_batch(&mut batch).await?;
         Ok(len)
     }
 
-    pub async fn recv_batch(&self, batch: &mut RBatch) -> ZResult<()> {
+    pub async fn recv_batch<T>(
+        &self,
+        into: T,
+        #[cfg(feature = "transport_compression")] uncompress_into: T,
+    ) -> ZResult<RBatch>
+    where
+        T: ZSliceBuffer + 'static,
+    {
         const ERR: &str = "Read error from link: ";
-
-        batch.read_unicast(&self.link).await?;
-        batch.finalize().map_err(|_| zerror!("{ERR}{self}"))?;
-        Ok(())
+        let mut batch = RBatch::read_unicast(self.batch_config(), &self.link, into).await?;
+        batch
+            .finalize(
+                #[cfg(feature = "transport_compression")]
+                uncompress_into,
+            )
+            .map_err(|_| zerror!("{ERR}{self}"))?;
+        Ok(batch)
     }
 
     pub async fn recv(&self) -> ZResult<TransportMessage> {
-        let mut batch = RBatch::from(self);
-        self.recv_batch(&mut batch).await?;
-
-        let codec = Zenoh080::new();
-        let mut zslice: ZSlice = batch.into();
-        let mut reader = zslice.reader();
-        let msg: TransportMessage = codec
-            .read(&mut reader)
-            .map_err(|_| zerror!("Read error on link: {}", self))?;
-
+        let into = zenoh_buffers::vec::uninit(self.link.get_mtu() as usize).into_boxed_slice();
+        #[cfg(feature = "transport_compression")]
+        let uncompress_into =
+            zenoh_buffers::vec::uninit(self.link.get_mtu() as usize).into_boxed_slice();
+        let mut batch = self
+            .recv_batch(
+                into,
+                #[cfg(feature = "transport_compression")]
+                uncompress_into,
+            )
+            .await?;
+        let msg = batch
+            .decode()
+            .map_err(|_| zerror!("Decode error on link: {}", self))?;
         Ok(msg)
     }
 
@@ -107,27 +128,5 @@ impl From<&TransportLinkUnicast> for Link {
 impl From<TransportLinkUnicast> for Link {
     fn from(link: TransportLinkUnicast) -> Self {
         Link::from(link.link)
-    }
-}
-
-impl From<&TransportLinkUnicast> for WBatch {
-    fn from(link: &TransportLinkUnicast) -> Self {
-        WBatch::new(
-            link.link.get_mtu(),
-            link.link.is_streamed(),
-            #[cfg(feature = "transport_compression")]
-            link.config.is_compression,
-        )
-    }
-}
-
-impl From<&TransportLinkUnicast> for RBatch {
-    fn from(link: &TransportLinkUnicast) -> Self {
-        RBatch::new(
-            link.link.get_mtu(),
-            link.link.is_streamed(),
-            #[cfg(feature = "transport_compression")]
-            link.config.is_compression,
-        )
     }
 }

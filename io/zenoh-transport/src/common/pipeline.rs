@@ -1,3 +1,5 @@
+use crate::common::batch::BatchConfig;
+
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -531,12 +533,12 @@ impl TransmissionPipeline {
             let (mut s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::init();
             // Fill the refill ring buffer with batches
             for _ in 0..*num {
-                let batch = WBatch::new(
-                    config.batch_size,
-                    config.is_streamed,
+                let bc = BatchConfig {
+                    is_streamed: config.is_streamed,
                     #[cfg(feature = "transport_compression")]
-                    false,
-                );
+                    is_compression: false,
+                };
+                let batch = WBatch::with_capacity(bc, config.batch_size);
                 assert!(s_ref_w.push(batch).is_none());
             }
             // Create the channel for notifying that new batches are in the refill ring buffer
