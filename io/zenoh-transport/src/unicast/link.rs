@@ -71,36 +71,22 @@ impl TransportLinkUnicast {
         Ok(len)
     }
 
-    pub async fn recv_batch<T>(
-        &self,
-        into: T,
-        #[cfg(feature = "transport_compression")] uncompress_into: T,
-    ) -> ZResult<RBatch>
+    pub async fn recv_batch<C, T>(&self, buff: C) -> ZResult<RBatch>
     where
+        C: Fn() -> T + Copy,
         T: ZSliceBuffer + 'static,
     {
         const ERR: &str = "Read error from link: ";
-        let mut batch = RBatch::read_unicast(self.batch_config(), &self.link, into).await?;
-        batch
-            .finalize(
-                #[cfg(feature = "transport_compression")]
-                uncompress_into,
-            )
-            .map_err(|_| zerror!("{ERR}{self}"))?;
+        let mut batch = RBatch::read_unicast(self.batch_config(), &self.link, buff).await?;
+        batch.finalize(buff).map_err(|_| zerror!("{ERR}{self}"))?;
         Ok(batch)
     }
 
     pub async fn recv(&self) -> ZResult<TransportMessage> {
-        let into = zenoh_buffers::vec::uninit(self.link.get_mtu() as usize).into_boxed_slice();
-        #[cfg(feature = "transport_compression")]
-        let uncompress_into =
-            zenoh_buffers::vec::uninit(self.link.get_mtu() as usize).into_boxed_slice();
         let mut batch = self
-            .recv_batch(
-                into,
-                #[cfg(feature = "transport_compression")]
-                uncompress_into,
-            )
+            .recv_batch(|| {
+                zenoh_buffers::vec::uninit(self.link.get_mtu() as usize).into_boxed_slice()
+            })
             .await?;
         let msg = batch
             .decode()

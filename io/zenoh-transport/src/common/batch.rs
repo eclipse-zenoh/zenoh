@@ -518,16 +518,18 @@ pub struct RBatch {
 }
 
 impl RBatch {
-    pub(crate) async fn read_unicast<T>(
+    pub(crate) async fn read_unicast<C, T>(
         config: BatchConfig,
         from: &LinkUnicast,
-        mut into: T,
+        buff: C,
     ) -> ZResult<Self>
     where
+        C: Fn() -> T + Copy,
         T: ZSliceBuffer + 'static,
     {
         let (has_length, header) = config.build();
 
+        let mut into = (buff)();
         let end = if has_length {
             let start = LENGTH_BYTES.len();
             // Read and decode the message length
@@ -557,17 +559,19 @@ impl RBatch {
         })
     }
 
-    pub(crate) async fn read_multicast<T>(
+    pub(crate) async fn read_multicast<C, T>(
         config: BatchConfig,
         from: &LinkMulticast,
-        mut into: T,
+        buff: C,
     ) -> ZResult<(Self, Locator)>
     where
+        C: Fn() -> T + Copy,
         T: ZSliceBuffer + 'static,
     {
         let (has_length, header) = config.build();
 
         // Read the bytes
+        let mut into = (buff)();
         let (n, locator) = from.read(into.as_mut_slice()).await?;
         let buffer = ZSlice::make(Arc::new(into), 0, n).map_err(|_| zerror!("Error"))?;
         Ok((
@@ -613,11 +617,9 @@ impl RBatch {
         self.has_header
     }
 
-    pub fn finalize<T>(
-        &mut self,
-        #[cfg(feature = "transport_compression")] into: T,
-    ) -> Result<(), DidntRead>
+    pub fn finalize<C, T>(&mut self, buff: C) -> Result<(), DidntRead>
     where
+        C: Fn() -> T + Copy,
         T: ZSliceBuffer + 'static,
     {
         macro_rules! zsubslice {
@@ -631,7 +633,7 @@ impl RBatch {
 
         #[cfg(feature = "transport_compression")]
         if self.is_compression() {
-            self.uncompress(into)?;
+            self.uncompress(buff)?;
         } else {
             zsubslice!();
         }
@@ -650,12 +652,12 @@ impl RBatch {
     }
 
     #[cfg(feature = "transport_compression")]
-    fn uncompress<T>(&mut self, mut into: T) -> Result<(), DidntRead>
+    fn uncompress<T>(&mut self, mut buff: impl FnMut() -> T) -> Result<(), DidntRead>
     where
         T: ZSliceBuffer + 'static,
     {
-        println!("UNCOMPRESS!");
         let (_l, _h, p) = self.split();
+        let mut into = (buff)();
         let n = lz4_flex::block::decompress_into(p, into.as_mut_slice()).map_err(|_| DidntRead)?;
         self.buffer = ZSlice::make(Arc::new(into), 0, n).map_err(|_| DidntRead)?;
 
@@ -711,14 +713,9 @@ mod tests {
                 has_length,
                 has_header,
             };
-            #[cfg(feature = "transport_compression")]
-            let into = vec![0u8; BatchSize::MAX as usize].into_boxed_slice();
 
             rbatch
-                .finalize(
-                    #[cfg(feature = "transport_compression")]
-                    into,
-                )
+                .finalize(|| vec![0u8; BatchSize::MAX as usize].into_boxed_slice())
                 .unwrap();
             println!("RBatch: {:?}", rbatch);
             let msg_out: TransportMessage = rbatch.decode().unwrap();

@@ -33,7 +33,7 @@ use std::{sync::Arc, time::Duration};
 use zenoh_buffers::ZSliceBuffer;
 use zenoh_protocol::transport::{BatchSize, KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
-use zenoh_sync::{RecyclingObjectPool, Signal};
+use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
 
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicastUniversal {
@@ -249,20 +249,17 @@ async fn rx_task(
         Stop,
     }
 
-    async fn read<T>(
+    async fn read<T, F>(
         link: &TransportLinkUnicast,
-        into: T,
-        #[cfg(feature = "transport_compression")] uncompress_into: T,
+        pool: &RecyclingObjectPool<T, F>,
     ) -> ZResult<Action>
     where
         T: ZSliceBuffer + 'static,
+        F: Fn() -> T,
+        RecyclingObject<T>: ZSliceBuffer,
     {
         let batch = link
-            .recv_batch(
-                into,
-                #[cfg(feature = "transport_compression")]
-                uncompress_into,
-            )
+            .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
             .await?;
         Ok(Action::Read(batch))
     }
@@ -281,21 +278,12 @@ async fn rx_task(
 
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
-        // Retrieve one buffer
-        let into = pool.try_take().unwrap_or_else(|| pool.alloc());
-        #[cfg(feature = "transport_compression")]
-        let uncompress_into = pool.try_take().unwrap_or_else(|| pool.alloc());
         // Async read from the underlying link
-        let action = read(
-            &link,
-            into,
-            #[cfg(feature = "transport_compression")]
-            uncompress_into,
-        )
-        .race(stop(signal.clone()))
-        .timeout(lease)
-        .await
-        .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
+        let action = read(&link, &pool)
+            .race(stop(signal.clone()))
+            .timeout(lease)
+            .await
+            .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
         match action {
             Action::Read(zslice) => {
                 #[cfg(feature = "stats")]
