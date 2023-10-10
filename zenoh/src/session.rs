@@ -1987,7 +1987,12 @@ impl Primitives for Session {
                                     && expr.intersects(&msub.key_expr)
                                 {
                                     msub.current.store(true, Ordering::Relaxed);
-                                    (msub.callback)(MatchingStatus { matching: true });
+                                    // tables keep lock when propagating declarations
+                                    // avoid calling user callbacks holdin tables lock
+                                    async_std::task::spawn({
+                                        let callback = msub.callback.clone();
+                                        async move { (callback)(MatchingStatus { matching: true }) }
+                                    });
                                 }
                             }
 
@@ -2017,7 +2022,12 @@ impl Primitives for Session {
                                     && expr.intersects(&msub.key_expr)
                                 {
                                     msub.current.store(false, Ordering::Relaxed);
-                                    (msub.callback)(MatchingStatus { matching: false });
+                                    // tables keep lock when propagating declarations
+                                    // avoid calling user callbacks holdin tables lock
+                                    async_std::task::spawn({
+                                        let callback = msub.callback.clone();
+                                        async move { (callback)(MatchingStatus { matching: false }) }
+                                    });
                                 }
                             }
 
