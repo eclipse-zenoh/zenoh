@@ -66,8 +66,8 @@ enum PluginDiff {
 
 impl AdminSpace {
     pub async fn start(runtime: &Runtime, plugins_mgr: plugins::PluginsManager, version: String) {
-        let zid_str = runtime.zid.to_string();
-        let metadata = runtime.metadata.clone();
+        let zid_str = runtime.state.zid.to_string();
+        let metadata = runtime.state.metadata.clone();
         let root_key: OwnedKeyExpr = format!("@/router/{zid_str}").try_into().unwrap();
 
         let mut handlers: HashMap<_, Handler> = HashMap::new();
@@ -121,14 +121,14 @@ impl AdminSpace {
             metadata,
         });
         let admin = Arc::new(AdminSpace {
-            zid: runtime.zid,
+            zid: runtime.zid(),
             primitives: Mutex::new(None),
             mappings: Mutex::new(HashMap::new()),
             handlers,
             context,
         });
 
-        let cfg_rx = admin.context.runtime.config.subscribe();
+        let cfg_rx = admin.context.runtime.state.config.subscribe();
         task::spawn({
             let admin = admin.clone();
             async move {
@@ -139,7 +139,7 @@ impl AdminSpace {
                     }
 
                     let requested_plugins = {
-                        let cfg_guard = admin.context.runtime.config.lock();
+                        let cfg_guard = admin.context.runtime.state.config.lock();
                         cfg_guard.plugins().load_requests().collect::<Vec<_>>()
                     };
                     let mut diffs = Vec::new();
@@ -195,7 +195,7 @@ impl AdminSpace {
                                             Ok(Some((path, plugin))) => {
                                                 active_plugins.insert(name.into(), path.into());
                                                 let mut cfg_guard =
-                                                    admin.context.runtime.config.lock();
+                                                    admin.context.runtime.state.config.lock();
                                                 cfg_guard.add_plugin_validator(
                                                     name,
                                                     plugin.config_checker(),
@@ -221,7 +221,7 @@ impl AdminSpace {
             }
         });
 
-        let primitives = runtime.router.new_primitives(admin.clone());
+        let primitives = runtime.state.router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(Declare {
@@ -283,7 +283,7 @@ impl Primitives for AdminSpace {
     fn send_push(&self, msg: Push) {
         trace!("recv Push {:?}", msg);
         {
-            let conf = self.context.runtime.config.lock();
+            let conf = self.context.runtime.state.config.lock();
             if !conf.adminspace.permissions().write {
                 log::error!(
                     "Received PUT on '{}' but adminspace.permissions.write=false in configuration",
@@ -307,7 +307,7 @@ impl Primitives for AdminSpace {
                             key,
                             json
                         );
-                        if let Err(e) = (&self.context.runtime.config).insert_json5(key, json) {
+                        if let Err(e) = (&self.context.runtime.state.config).insert_json5(key, json) {
                             error!(
                                 "Error inserting conf value /@/router/{}/config/{} : {} - {}",
                                 &self.context.zid_str, key, json, e
@@ -325,7 +325,7 @@ impl Primitives for AdminSpace {
                         &self.context.zid_str,
                         key
                     );
-                    if let Err(e) = self.context.runtime.config.remove(key) {
+                    if let Err(e) = self.context.runtime.state.config.remove(key) {
                         log::error!("Error deleting conf value {} : {}", msg.wire_expr, e)
                     }
                 }
@@ -338,7 +338,7 @@ impl Primitives for AdminSpace {
         if let RequestBody::Query(query) = msg.payload {
             let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
             {
-                let conf = self.context.runtime.config.lock();
+                let conf = self.context.runtime.state.config.lock();
                 if !conf.adminspace.permissions().read {
                     log::error!(
                         "Received GET on '{}' but adminspace.permissions.read=false in configuration",
@@ -528,7 +528,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
         .try_into()
         .unwrap();
 
-    let tables = zread!(context.runtime.router.tables.tables);
+    let tables = zread!(context.runtime.state.router.tables.tables);
 
     if let Err(e) = query
         .reply(Ok(Sample::new(
@@ -555,7 +555,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
         .try_into()
         .unwrap();
 
-    let tables = zread!(context.runtime.router.tables.tables);
+    let tables = zread!(context.runtime.state.router.tables.tables);
 
     if let Err(e) = query
         .reply(Ok(Sample::new(
@@ -578,7 +578,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
 }
 
 fn subscribers_data(context: &AdminContext, query: Query) {
-    let tables = zread!(context.runtime.router.tables.tables);
+    let tables = zread!(context.runtime.state.router.tables.tables);
     for sub in tables.router_subs.iter() {
         let key = KeyExpr::try_from(format!(
             "@/router/{}/subscriber/{}",
@@ -595,7 +595,7 @@ fn subscribers_data(context: &AdminContext, query: Query) {
 }
 
 fn queryables_data(context: &AdminContext, query: Query) {
-    let tables = zread!(context.runtime.router.tables.tables);
+    let tables = zread!(context.runtime.state.router.tables.tables);
     for qabl in tables.router_qabls.iter() {
         let key = KeyExpr::try_from(format!(
             "@/router/{}/queryable/{}",
