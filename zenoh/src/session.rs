@@ -1444,6 +1444,7 @@ impl Session {
             callback,
         });
         state.matching_listeners.insert(id, sub_state.clone());
+        drop(state);
         if publisher
             .matching_status()
             .res_sync()
