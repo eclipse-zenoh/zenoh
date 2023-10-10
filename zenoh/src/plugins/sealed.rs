@@ -45,8 +45,8 @@ impl Response {
     }
 }
 
-pub trait RunningPluginTrait: Send + Sync + std::any::Any {
-    /// Returns a function that will be called when configuration relevant to the plugin is about to change.
+pub trait RunningPluginTrait: Send + Sync {
+    /// Function that will be called when configuration relevant to the plugin is about to change.
     ///
     /// This function is called with 3 arguments:
     /// * `path`, the relative path from the plugin's configuration root to the changed value.
@@ -58,7 +58,10 @@ pub trait RunningPluginTrait: Send + Sync + std::any::Any {
     ///   Useful when the changes affect settings that aren't hot-configurable for your plugin.
     /// * `Ok(None)` indicates that the plugin has accepted the configuration change.
     /// * `Ok(Some(value))` indicates that the plugin would rather the new configuration be `value`.
-    fn config_checker(&self) -> ValidationFunction;
+    fn config_checker(&self,
+            path: &str,
+            current: &serde_json::Map<String, serde_json::Value>,
+            new: &serde_json::Map<String, serde_json::Value>) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>>;
     /// Used to request your plugin's status for the administration space.
     fn adminspace_getter<'a>(
         &'a self,

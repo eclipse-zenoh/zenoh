@@ -192,13 +192,28 @@ impl AdminSpace {
                                         let name = &plugin.name;
                                         log::info!("Loaded plugin `{}` from {}", name, &path);
                                         match plugins_mgr.start(name, &admin.context.runtime) {
-                                            Ok(Some((path, plugin))) => {
+                                            Ok(Some((path, _))) => {
                                                 active_plugins.insert(name.into(), path.into());
                                                 let mut cfg_guard =
                                                     admin.context.runtime.state.config.lock();
+                                                let validation_function = {
+                                                    let name = name.clone();
+                                                    let admin = admin.clone();
+                                                    Arc::new(move |path: &_, old: &_, new: &_| {
+                                                        let plugins_mgr =
+                                                            zlock!(admin.context.plugins_mgr);
+                                                        if let Some(plugin) =
+                                                            plugins_mgr.plugin(name.as_str())
+                                                        {
+                                                            plugin.config_checker(path, old, new)
+                                                        } else {
+                                                            Err("Plugin not found".into())
+                                                        }
+                                                    })
+                                                };
                                                 cfg_guard.add_plugin_validator(
                                                     name,
-                                                    plugin.config_checker(),
+                                                    validation_function,
                                                 );
                                                 log::info!(
                                                     "Successfully started plugin `{}` from {}",
@@ -307,7 +322,8 @@ impl Primitives for AdminSpace {
                             key,
                             json
                         );
-                        if let Err(e) = (&self.context.runtime.state.config).insert_json5(key, json) {
+                        if let Err(e) = (&self.context.runtime.state.config).insert_json5(key, json)
+                        {
                             error!(
                                 "Error inserting conf value /@/router/{}/config/{} : {} - {}",
                                 &self.context.zid_str, key, json, e
