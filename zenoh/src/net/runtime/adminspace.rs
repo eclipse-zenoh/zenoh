@@ -27,7 +27,7 @@ use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::SplitBuffer;
-use zenoh_config::{ValidatedMap, ValidationFunction};
+use zenoh_config::{ConfigValidator, ValidatedMap};
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
     network::{
@@ -64,15 +64,21 @@ enum PluginDiff {
     Start(crate::config::PluginLoad),
 }
 
-fn make_plugin_validator(admin: Arc<AdminSpace>) -> ValidationFunction {
-    Arc::new(move |name: &_, path: &_, old: &_, new: &_| {
-        let plugins_mgr = zlock!(admin.context.plugins_mgr);
+impl ConfigValidator for AdminSpace {
+    fn check_config(
+        &self,
+        name: &str,
+        path: &str,
+        current: &serde_json::Map<String, serde_json::Value>,
+        new: &serde_json::Map<String, serde_json::Value>,
+    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+        let plugins_mgr = zlock!(self.context.plugins_mgr);
         if let Some(plugin) = plugins_mgr.plugin(name) {
-            plugin.config_checker(path, old, new)
+            plugin.config_checker(path, current, new)
         } else {
             Err(format!("Plugin {name} not found").into())
         }
-    })
+    }
 }
 
 impl AdminSpace {
@@ -145,7 +151,7 @@ impl AdminSpace {
             .state
             .config
             .lock()
-            .set_plugin_validator(make_plugin_validator(admin.clone()));
+            .set_plugin_validator(Arc::downgrade(&admin));
 
         let cfg_rx = admin.context.runtime.state.config.subscribe();
         task::spawn({

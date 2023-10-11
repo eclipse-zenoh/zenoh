@@ -31,7 +31,7 @@ use std::{
     marker::PhantomData,
     net::SocketAddr,
     path::Path,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{Arc, Mutex, MutexGuard, Weak},
 };
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
@@ -46,16 +46,21 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_util::LibLoader;
 
-pub type ValidationFunction = std::sync::Arc<
-    dyn Fn(
-            &str,                                        // plugin name
-            &str, // `path`, the relative path from the plugin's configuration root to the changed value.
-            &serde_json::Map<String, serde_json::Value>, // `current`, the current configuration of the plugin (from its root).
-            &serde_json::Map<String, serde_json::Value>, // `new`, the proposed new configuration of the plugin.
-        ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>>
-        + Send
-        + Sync,
->;
+pub trait ConfigValidator: Send + Sync {
+    fn check_config(
+        &self,
+        _plugin_name: &str,
+        _path: &str,
+        _current: &serde_json::Map<String, serde_json::Value>,
+        _new: &serde_json::Map<String, serde_json::Value>,
+    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+        Ok(None)
+    }
+}
+
+// Necessary to allow to set default emplty weak referece value to plugin.validator field
+// because empty weak value is not allowed for Arc<dyn Trait>
+impl ConfigValidator for () {}
 
 /// Creates an empty zenoh net Session configuration.
 pub fn empty() -> Config {
@@ -483,7 +488,7 @@ fn config_deser() {
 }
 
 impl Config {
-    pub fn set_plugin_validator(&mut self, validator: ValidationFunction) {
+    pub fn set_plugin_validator<T: ConfigValidator + 'static>(&mut self, validator: Weak<T>) {
         self.plugins.validator = validator;
     }
 
@@ -837,7 +842,7 @@ fn user_conf_validator(u: &UsrPwdConf) -> bool {
 #[derive(Clone)]
 pub struct PluginsConfig {
     values: Value,
-    validator: ValidationFunction,
+    validator: std::sync::Weak<dyn ConfigValidator>,
 }
 fn sift_privates(value: &mut serde_json::Value) {
     match value {
@@ -946,14 +951,18 @@ impl PluginsConfig {
             }
             other => bail!("{} cannot be indexed", other),
         }
-        let new_conf = match (self.validator)(
-            plugin,
-            &key[("plugins/".len() + plugin.len())..],
-            old_conf.as_object().unwrap(),
-            new_conf.as_object().unwrap(),
-        )? {
-            None => new_conf,
-            Some(new_conf) => Value::Object(new_conf),
+        let new_conf = if let Some(validator) = self.validator.upgrade() {
+            match validator.check_config(
+                plugin,
+                &key[("plugins/".len() + plugin.len())..],
+                old_conf.as_object().unwrap(),
+                new_conf.as_object().unwrap(),
+            )? {
+                None => new_conf,
+                Some(new_conf) => Value::Object(new_conf),
+            }
+        } else {
+            new_conf
         };
         *old_conf = new_conf;
         Ok(())
@@ -973,7 +982,7 @@ impl Default for PluginsConfig {
     fn default() -> Self {
         Self {
             values: Value::Object(Default::default()),
-            validator: Arc::new(|_, _, _, _| Ok(None)),
+            validator: std::sync::Weak::<()>::new(),
         }
     }
 }
@@ -983,8 +992,8 @@ impl<'a> serde::Deserialize<'a> for PluginsConfig {
         D: serde::Deserializer<'a>,
     {
         Ok(PluginsConfig {
-            validator: Arc::new(|_, _, _, _| Ok(None)),
             values: serde::Deserialize::deserialize(deserializer)?,
+            validator: std::sync::Weak::<()>::new(),
         })
     }
 }
@@ -1077,15 +1086,17 @@ impl validated_struct::ValidatedMap for PluginsConfig {
             .entry(plugin)
             .or_insert(Value::Null);
         let mut new_value = value.clone().merge(key, new_value)?;
-        match (self.validator)(
-            plugin,
-            key,
-            value.as_object().unwrap(),
-            new_value.as_object().unwrap(),
-        ) {
-            Ok(Some(val)) => new_value = Value::Object(val),
-            Ok(None) => {}
-            Err(e) => return Err(format!("{e}").into()),
+        if let Some(validator) = self.validator.upgrade() {
+            match validator.check_config(
+                plugin,
+                key,
+                value.as_object().unwrap(),
+                new_value.as_object().unwrap(),
+            ) {
+                Ok(Some(val)) => new_value = Value::Object(val),
+                Ok(None) => {}
+                Err(e) => return Err(format!("{e}").into()),
+            }
         }
         *value = new_value;
         Ok(())
