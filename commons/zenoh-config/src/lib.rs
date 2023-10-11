@@ -25,7 +25,7 @@ use serde_json::Value;
 use std::convert::TryFrom; // This is a false positive from the rust analyser
 use std::{
     any::Any,
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fmt,
     io::Read,
     marker::PhantomData,
@@ -46,7 +46,7 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_util::LibLoader;
 
-type ValidationFunction = std::sync::Arc<
+pub type ValidationFunction = std::sync::Arc<
     dyn Fn(
             &str,                                        // plugin name
             &str, // `path`, the relative path from the plugin's configuration root to the changed value.
@@ -483,8 +483,8 @@ fn config_deser() {
 }
 
 impl Config {
-    pub fn add_plugin_validator(&mut self, name: impl Into<String>, validator: ValidationFunction) {
-        self.plugins.validators.insert(name.into(), validator);
+    pub fn set_plugin_validator(&mut self, validator: ValidationFunction) {
+        self.plugins.validator = validator;
     }
 
     pub fn plugin(&self, name: &str) -> Option<&Value> {
@@ -837,7 +837,7 @@ fn user_conf_validator(u: &UsrPwdConf) -> bool {
 #[derive(Clone)]
 pub struct PluginsConfig {
     values: Value,
-    validators: HashMap<String, ValidationFunction>,
+    validator: ValidationFunction,
 }
 fn sift_privates(value: &mut serde_json::Value) {
     match value {
@@ -903,11 +903,9 @@ impl PluginsConfig {
             Some(first_in_plugin) => first_in_plugin,
             None => {
                 self.values.as_object_mut().unwrap().remove(plugin);
-                self.validators.remove(plugin);
                 return Ok(());
             }
         };
-        let validator = self.validators.get(plugin);
         let (old_conf, mut new_conf) = match self.values.get_mut(plugin) {
             Some(plugin) => {
                 let clone = plugin.clone();
@@ -948,18 +946,14 @@ impl PluginsConfig {
             }
             other => bail!("{} cannot be indexed", other),
         }
-        let new_conf = if let Some(validator) = validator {
-            match validator(
-                plugin,
-                &key[("plugins/".len() + plugin.len())..],
-                old_conf.as_object().unwrap(),
-                new_conf.as_object().unwrap(),
-            )? {
-                None => new_conf,
-                Some(new_conf) => Value::Object(new_conf),
-            }
-        } else {
-            new_conf
+        let new_conf = match (self.validator)(
+            plugin,
+            &key[("plugins/".len() + plugin.len())..],
+            old_conf.as_object().unwrap(),
+            new_conf.as_object().unwrap(),
+        )? {
+            None => new_conf,
+            Some(new_conf) => Value::Object(new_conf),
         };
         *old_conf = new_conf;
         Ok(())
@@ -979,7 +973,7 @@ impl Default for PluginsConfig {
     fn default() -> Self {
         Self {
             values: Value::Object(Default::default()),
-            validators: Default::default(),
+            validator: Arc::new(|_, _, _, _| Ok(None)),
         }
     }
 }
@@ -989,7 +983,7 @@ impl<'a> serde::Deserialize<'a> for PluginsConfig {
         D: serde::Deserializer<'a>,
     {
         Ok(PluginsConfig {
-            validators: Default::default(),
+            validator: Arc::new(|_, _, _, _| Ok(None)),
             values: serde::Deserialize::deserialize(deserializer)?,
         })
     }
@@ -1075,7 +1069,6 @@ impl validated_struct::ValidatedMap for PluginsConfig {
         validated_struct::InsertionError: From<D::Error>,
     {
         let (plugin, key) = validated_struct::split_once(key, '/');
-        let validator = self.validators.get(plugin);
         let new_value: Value = serde::Deserialize::deserialize(deserializer)?;
         let value = self
             .values
@@ -1084,16 +1077,15 @@ impl validated_struct::ValidatedMap for PluginsConfig {
             .entry(plugin)
             .or_insert(Value::Null);
         let mut new_value = value.clone().merge(key, new_value)?;
-        if let Some(validator) = validator {
-            match validator(
-                key,
-                value.as_object().unwrap(),
-                new_value.as_object().unwrap(),
-            ) {
-                Ok(Some(val)) => new_value = Value::Object(val),
-                Ok(None) => {}
-                Err(e) => return Err(format!("{e}").into()),
-            }
+        match (self.validator)(
+            plugin,
+            key,
+            value.as_object().unwrap(),
+            new_value.as_object().unwrap(),
+        ) {
+            Ok(Some(val)) => new_value = Value::Object(val),
+            Ok(None) => {}
+            Err(e) => return Err(format!("{e}").into()),
         }
         *value = new_value;
         Ok(())

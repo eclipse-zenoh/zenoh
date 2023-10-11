@@ -13,7 +13,7 @@
 use super::routing::face::Face;
 use super::Runtime;
 use crate::key_expr::KeyExpr;
-use crate::plugins::sealed::{self as plugins, ValidationFunction};
+use crate::plugins::sealed::{self as plugins};
 use crate::prelude::sync::{Sample, SyncResolve};
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
@@ -27,7 +27,7 @@ use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::SplitBuffer;
-use zenoh_config::ValidatedMap;
+use zenoh_config::{ValidatedMap, ValidationFunction};
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
     network::{
@@ -64,8 +64,7 @@ enum PluginDiff {
     Start(crate::config::PluginLoad),
 }
 
-fn make_plugin_validator(admin: &Arc<AdminSpace>) -> ValidationFunction {
-    let admin = admin.clone();
+fn make_plugin_validator(admin: Arc<AdminSpace>) -> ValidationFunction {
     Arc::new(move |name: &_, path: &_, old: &_, new: &_| {
         let plugins_mgr = zlock!(admin.context.plugins_mgr);
         if let Some(plugin) = plugins_mgr.plugin(name) {
@@ -140,10 +139,13 @@ impl AdminSpace {
             context,
         });
 
-        let mut config_guard = admin.context.runtime.state.config.lock();
-        for (name, (_, plugin)) in plugins.running_plugins() {
-            config_guard.add_plugin_validator(name, make_plugin_validator(&admin))
-        }
+        admin
+            .context
+            .runtime
+            .state
+            .config
+            .lock()
+            .set_plugin_validator(make_plugin_validator(admin.clone()));
 
         let cfg_rx = admin.context.runtime.state.config.subscribe();
         task::spawn({
@@ -211,12 +213,6 @@ impl AdminSpace {
                                         match plugins_mgr.start(name, &admin.context.runtime) {
                                             Ok(Some((path, _))) => {
                                                 active_plugins.insert(name.into(), path.into());
-                                                let mut cfg_guard =
-                                                    admin.context.runtime.state.config.lock();
-                                                cfg_guard.add_plugin_validator(
-                                                    name,
-                                                    make_plugin_validator(&admin),
-                                                );
                                                 log::info!(
                                                     "Successfully started plugin `{}` from {}",
                                                     name,

@@ -30,7 +30,7 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::sync::Mutex;
 use storages_mgt::StorageMessage;
-use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
+use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::sync::*;
 use zenoh::runtime::Runtime;
 use zenoh::Session;
@@ -309,19 +309,21 @@ impl From<StorageRuntimeInner> for StorageRuntime {
 }
 
 impl RunningPluginTrait for StorageRuntime {
-    fn config_checker(&self) -> ValidationFunction {
+    fn config_checker(
+        &self,
+        _: &str,
+        old: &serde_json::Map<String, serde_json::Value>,
+        new: &serde_json::Map<String, serde_json::Value>,
+    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
         let name = { zlock!(self.0).name.clone() };
-        let runtime = self.0.clone();
-        Arc::new(move |_path, old, new| {
-            let old = PluginConfig::try_from((&name, old))?;
-            let new = PluginConfig::try_from((&name, new))?;
-            log::info!("old: {:?}", &old);
-            log::info!("new: {:?}", &new);
-            let diffs = ConfigDiff::diffs(old, new);
-            log::info!("diff: {:?}", &diffs);
-            { zlock!(runtime).update(diffs) }?;
-            Ok(None)
-        })
+        let old = PluginConfig::try_from((&name, old))?;
+        let new = PluginConfig::try_from((&name, new))?;
+        log::info!("old: {:?}", &old);
+        log::info!("new: {:?}", &new);
+        let diffs = ConfigDiff::diffs(old, new);
+        log::info!("diff: {:?}", &diffs);
+        { zlock!(self.0).update(diffs) }?;
+        Ok(None)
     }
 
     fn adminspace_getter<'a>(

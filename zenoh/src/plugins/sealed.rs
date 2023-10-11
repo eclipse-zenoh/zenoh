@@ -58,10 +58,12 @@ pub trait RunningPluginTrait: Send + Sync {
     ///   Useful when the changes affect settings that aren't hot-configurable for your plugin.
     /// * `Ok(None)` indicates that the plugin has accepted the configuration change.
     /// * `Ok(Some(value))` indicates that the plugin would rather the new configuration be `value`.
-    fn config_checker(&self,
-            path: &str,
-            current: &serde_json::Map<String, serde_json::Value>,
-            new: &serde_json::Map<String, serde_json::Value>) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>>;
+    fn config_checker(
+        &self,
+        path: &str,
+        current: &serde_json::Map<String, serde_json::Value>,
+        new: &serde_json::Map<String, serde_json::Value>,
+    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>>;
     /// Used to request your plugin's status for the administration space.
     fn adminspace_getter<'a>(
         &'a self,
@@ -74,12 +76,3 @@ pub trait RunningPluginTrait: Send + Sync {
 pub type PluginsManager = zenoh_plugin_trait::loading::PluginsManager<StartArgs, RunningPlugin>;
 
 pub use zenoh_plugin_trait::Plugin;
-pub type ValidationFunction = std::sync::Arc<
-    dyn Fn(
-            &str,
-            &serde_json::Map<String, serde_json::Value>,
-            &serde_json::Map<String, serde_json::Value>,
-        ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>>
-        + Send
-        + Sync,
->;

@@ -243,10 +243,13 @@ impl Plugin for RestPlugin {
 
 struct RunningPlugin(Config);
 impl RunningPluginTrait for RunningPlugin {
-    fn config_checker(&self) -> zenoh::plugins::ValidationFunction {
-        Arc::new(|_, _, _| {
-            bail!("zenoh-plugin-rest doesn't accept any runtime configuration changes")
-        })
+    fn config_checker(
+        &self,
+        _: &str,
+        _: &serde_json::Map<String, serde_json::Value>,
+        _: &serde_json::Map<String, serde_json::Value>,
+    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+        bail!("zenoh-plugin-rest doesn't accept any runtime configuration changes")
     }
 
     fn adminspace_getter<'a>(
