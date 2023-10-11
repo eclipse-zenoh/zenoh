@@ -411,24 +411,8 @@ impl<'a> Publisher<'a> {
     /// # })
     /// ```
     #[zenoh_macros::unstable]
-    pub fn matching_status(&self) -> impl Resolve<ZResult<MatchingStatus>> {
-        use crate::net::routing::router::RoutingExpr;
-        let tables = zread!(self.session.runtime.router.tables.tables);
-        let res = crate::net::routing::resource::Resource::get_resource(
-            &tables.root_res,
-            self.key_expr.as_str(),
-        );
-        let matching = !crate::net::routing::pubsub::get_data_route(
-            &tables,
-            WhatAmI::Client,
-            0,
-            &res,
-            &mut RoutingExpr::new(&tables.root_res, self.key_expr.as_str()),
-            0,
-        )
-        .is_empty();
-
-        zenoh_core::ResolveFuture::new(async move { Ok(MatchingStatus { matching }) })
+    pub fn matching_status(&self) -> impl Resolve<ZResult<MatchingStatus>> + '_ {
+        zenoh_core::ResolveFuture::new(async move { self.session.matching_status(self.key_expr()) })
     }
 
     /// Return a [`MatchingListener`] for this Publisher.
@@ -1095,7 +1079,7 @@ where
 #[zenoh_macros::unstable]
 pub(crate) struct MatchingListenerState {
     pub(crate) id: Id,
-    pub(crate) current: std::sync::atomic::AtomicBool,
+    pub(crate) current: std::sync::Mutex<bool>,
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) callback: Callback<'static, MatchingStatus>,
 }
