@@ -199,7 +199,8 @@ impl Runtime {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        self.state.stop_source
+        self.state
+            .stop_source
             .read()
             .unwrap()
             .as_ref()
@@ -249,7 +250,11 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                 Ok(Arc::new(RuntimeSession {
                     runtime: runtime.clone(),
                     endpoint: std::sync::RwLock::new(None),
-                    main_handler: runtime.state.router.new_transport_unicast(transport).unwrap(),
+                    main_handler: runtime
+                        .state
+                        .router
+                        .new_transport_unicast(transport)
+                        .unwrap(),
                     slave_handlers,
                 }))
             }
@@ -268,7 +273,10 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                         .iter()
                         .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
                         .collect();
-                runtime.state.router.new_transport_multicast(transport.clone())?;
+                runtime
+                    .state
+                    .router
+                    .new_transport_multicast(transport.clone())?;
                 Ok(Arc::new(RuntimeMuticastGroup {
                     runtime: runtime.clone(),
                     transport,

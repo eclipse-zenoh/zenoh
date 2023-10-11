@@ -829,7 +829,16 @@ impl Runtime {
             }
             _ => {
                 if let Some(endpoint) = &*zread!(session.endpoint) {
-                    let peers = { session.runtime.state.config.lock().connect().endpoints().clone() };
+                    let peers = {
+                        session
+                            .runtime
+                            .state
+                            .config
+                            .lock()
+                            .connect()
+                            .endpoints()
+                            .clone()
+                    };
                     if peers.contains(endpoint) {
                         let endpoint = endpoint.clone();
                         let runtime = session.runtime.clone();
