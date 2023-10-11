@@ -491,7 +491,7 @@ impl Session {
     /// # })
     /// ```
     pub fn config(&self) -> &Notifier<Config> {
-        &self.runtime.config()
+        self.runtime.config()
     }
 
     /// Get informations about the zenoh [`Session`](Session).
