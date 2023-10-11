@@ -412,7 +412,10 @@ impl<'a> Publisher<'a> {
     /// ```
     #[zenoh_macros::unstable]
     pub fn matching_status(&self) -> impl Resolve<ZResult<MatchingStatus>> + '_ {
-        zenoh_core::ResolveFuture::new(async move { self.session.matching_status(self.key_expr()) })
+        zenoh_core::ResolveFuture::new(async move {
+            self.session
+                .matching_status(self.key_expr(), self.destination)
+        })
     }
 
     /// Return a [`MatchingListener`] for this Publisher.
@@ -1081,6 +1084,7 @@ pub(crate) struct MatchingListenerState {
     pub(crate) id: Id,
     pub(crate) current: std::sync::Mutex<bool>,
     pub(crate) key_expr: KeyExpr<'static>,
+    pub(crate) destination: Locality,
     pub(crate) callback: Callback<'static, MatchingStatus>,
 }
 

@@ -1458,6 +1458,7 @@ impl Session {
         let sub_state = Arc::new(MatchingListenerState {
             id,
             current: std::sync::Mutex::new(false),
+            destination: publisher.destination,
             key_expr: publisher.key_expr.clone().into_owned(),
             callback,
         });
@@ -1466,7 +1467,7 @@ impl Session {
         match sub_state.current.lock() {
             Ok(mut current) => {
                 if self
-                    .matching_status(&publisher.key_expr)
+                    .matching_status(&publisher.key_expr, sub_state.destination)
                     .map(|s| s.is_matching())
                     .unwrap_or(true)
                 {
@@ -1480,7 +1481,11 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn matching_status(&self, key_expr: &KeyExpr) -> ZResult<MatchingStatus> {
+    pub(crate) fn matching_status(
+        &self,
+        key_expr: &KeyExpr,
+        destination: Locality,
+    ) -> ZResult<MatchingStatus> {
         use crate::net::routing::router::RoutingExpr;
         use zenoh_protocol::core::WhatAmI;
         let tables = zread!(self.runtime.router.tables.tables);
@@ -1488,16 +1493,20 @@ impl Session {
             &tables.root_res,
             key_expr.as_str(),
         );
-        let matching = !crate::net::routing::pubsub::get_data_route(
+
+        let route = crate::net::routing::pubsub::get_data_route(
             &tables,
             WhatAmI::Client,
             0,
             &res,
             &mut RoutingExpr::new(&tables.root_res, key_expr.as_str()),
             0,
-        )
-        .is_empty();
-
+        );
+        let matching = match destination {
+            Locality::Any => !route.is_empty(),
+            Locality::Remote => route.values().any(|dir| !dir.0.is_local()),
+            Locality::SessionLocal => route.values().any(|dir| dir.0.is_local()),
+        };
         Ok(MatchingStatus { matching })
     }
 
@@ -1513,7 +1522,9 @@ impl Session {
                         match msub.current.lock() {
                             Ok(mut current) => {
                                 if !*current {
-                                    if let Ok(status) = session.matching_status(&msub.key_expr) {
+                                    if let Ok(status) =
+                                        session.matching_status(&msub.key_expr, msub.destination)
+                                    {
                                         if status.is_matching() {
                                             *current = true;
                                             let callback = msub.callback.clone();
@@ -1544,7 +1555,9 @@ impl Session {
                         match msub.current.lock() {
                             Ok(mut current) => {
                                 if *current {
-                                    if let Ok(status) = session.matching_status(&msub.key_expr) {
+                                    if let Ok(status) =
+                                        session.matching_status(&msub.key_expr, msub.destination)
+                                    {
                                         if !status.is_matching() {
                                             *current = false;
                                             let callback = msub.callback.clone();
