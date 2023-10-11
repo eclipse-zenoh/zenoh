@@ -110,11 +110,12 @@ impl<T> From<T> for RecyclingObject<T> {
 
 impl<T> Drop for RecyclingObject<T> {
     fn drop(&mut self) {
-        if let Some(pool) = self.pool.upgrade() {
-            if let Some(obj) = self.object.take() {
-                tokio::runtime::Handle::current().block_on(pool.push(obj));
-            }
-        }
+        // if let Some(pool) = self.pool.upgrade() {
+        //     if let Some(obj) = self.object.take() {
+        //         dbg!();
+        //         async_std::task::block_on(pool.push(obj));
+        //     }
+        // }
     }
 }
 
