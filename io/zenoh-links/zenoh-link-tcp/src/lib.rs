@@ -68,7 +68,6 @@ pub async fn get_tcp_addrs(address: Address<'_>) -> ZResult<impl Iterator<Item =
     let iter = address
         .as_str()
         .to_socket_addrs()
-        .await
         .map_err(|e| zerror!("{}", e))?
         .filter(|x| !x.ip().is_multicast());
     Ok(iter)
