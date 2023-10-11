@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::Condition;
-use async_std::sync::Mutex;
+use tokio::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use zenoh_core::zasynclock;
 

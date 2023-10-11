@@ -56,7 +56,7 @@ macro_rules! zasynclock {
 #[macro_export]
 macro_rules! zasyncread {
     ($var:expr) => {
-        if let Some(g) = $var.try_read() {
+        if let Ok(g) = $var.try_read() {
             g
         } else {
             $var.read().await
@@ -70,7 +70,7 @@ macro_rules! zasyncread {
 #[macro_export]
 macro_rules! zasyncread_upgradable {
     ($var:expr) => {
-        if let Some(g) = $var.try_upgradable_read() {
+        if let Ok(g) = $var.try_upgradable_read() {
             g
         } else {
             $var.upgradable_read().await
@@ -84,7 +84,7 @@ macro_rules! zasyncread_upgradable {
 #[macro_export]
 macro_rules! zasyncwrite {
     ($var:expr) => {
-        if let Some(g) = $var.try_write() {
+        if let Ok(g) = $var.try_write() {
             g
         } else {
             $var.write().await

@@ -27,17 +27,8 @@ use crate::{
     TransportExecutor,
 };
 use async_std::prelude::FutureExt;
-use async_std::task;
-use async_std::task::JoinHandle;
-use std::{
-    sync::{Arc, RwLock},
-    time::Duration,
-};
-use zenoh_buffers::ZSliceBuffer;
-use zenoh_core::zwrite;
-use zenoh_protocol::transport::{KeepAlive, TransportMessage};
-use zenoh_result::{zerror, ZResult};
-use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
+use tokio::task;
+use tokio::task::JoinHandle;
 
 pub(super) struct Tasks {
     // The handlers to stop TX/RX tasks
@@ -165,6 +156,13 @@ impl TransportLinkUnicastUniversal {
 
     pub(super) async fn close(mut self) -> ZResult<()> {
         log::trace!("{}: closing", self.link);
+        self.stop_rx();
+        if let Some(handle) = self.handle_rx.take() {
+            // SAFETY: it is safe to unwrap the Arc since we have the ownership of the whole link
+            let handle_rx = Arc::try_unwrap(handle).unwrap();
+            handle_rx.await?;
+        }
+
         self.stop_tx();
         self.stop_rx();
 

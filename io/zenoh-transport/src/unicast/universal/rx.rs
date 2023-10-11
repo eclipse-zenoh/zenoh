@@ -12,15 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::TransportUnicastUniversal;
-use crate::{
-    common::{
-        batch::{Decode, RBatch},
-        priority::TransportChannelRx,
-    },
-    unicast::transport_unicast_inner::TransportUnicastTrait,
-    TransportPeerEventHandler,
-};
-use async_std::task;
+use crate::common::priority::TransportChannelRx;
+use tokio::task;
 use std::sync::MutexGuard;
 use zenoh_core::{zlock, zread};
 use zenoh_link::Link;

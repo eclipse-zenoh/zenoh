@@ -528,14 +528,14 @@ impl fmt::Debug for UnicastPipe {
 
 pub struct LinkManagerUnicastPipe {
     manager: Arc<NewLinkChannelSender>,
-    listeners: async_std::sync::RwLock<HashMap<EndPoint, UnicastPipeListener>>,
+    listeners: tokio::sync::RwLock<HashMap<EndPoint, UnicastPipeListener>>,
 }
 
 impl LinkManagerUnicastPipe {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager: Arc::new(manager),
-            listeners: async_std::sync::RwLock::new(HashMap::new()),
+            listeners: tokio::sync::RwLock::new(HashMap::new()),
         }
     }
 }

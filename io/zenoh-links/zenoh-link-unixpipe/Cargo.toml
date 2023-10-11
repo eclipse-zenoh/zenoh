@@ -39,6 +39,7 @@ zenoh-config = { workspace = true }
 zenoh-link-commons = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
 
 [target.'cfg(unix)'.dependencies]
 unix-named-pipe = "=0.2.0"

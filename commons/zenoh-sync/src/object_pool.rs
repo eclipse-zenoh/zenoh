@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::LifoQueue;
-use async_std::task;
 use std::{
     any::Any,
     fmt,
@@ -113,7 +112,7 @@ impl<T> Drop for RecyclingObject<T> {
     fn drop(&mut self) {
         if let Some(pool) = self.pool.upgrade() {
             if let Some(obj) = self.object.take() {
-                task::block_on(pool.push(obj));
+                tokio::runtime::Handle::current().block_on(pool.push(obj));
             }
         }
     }

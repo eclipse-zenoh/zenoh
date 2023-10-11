@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::sync::RwLock;
+use tokio::sync::RwLock;
 use rand::{Rng, SeedableRng};
 use zenoh_core::zerror;
 use zenoh_crypto::PseudoRng;

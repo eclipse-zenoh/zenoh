@@ -15,7 +15,7 @@
 use crate::multicast::shm::SharedMemoryMulticast;
 use crate::multicast::{transport::TransportMulticastInner, TransportMulticast};
 use crate::TransportManager;
-use async_std::sync::Mutex;
+use tokio::sync::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;

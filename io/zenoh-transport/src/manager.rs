@@ -19,7 +19,8 @@ use crate::multicast::manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
 };
-use async_std::{sync::Mutex as AsyncMutex, task};
+use tokio::sync::Mutex as AsyncMutex;
+use tokio::runtime::Handle;
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -73,7 +74,7 @@ use zenoh_result::{bail, ZResult};
 ///         .lease(Duration::from_secs(1))
 ///         .keep_alive(4)      // Send a KeepAlive every 250 ms
 ///         .accept_timeout(Duration::from_secs(1))
-///         .accept_pending(10) // Set to 10 the number of simultanous pending incoming transports        
+///         .accept_pending(10) // Set to 10 the number of simultanous pending incoming transports
 ///         .max_sessions(5);   // Allow max 5 transports open
 /// let mut resolution = Resolution::default();
 /// resolution.set(Field::FrameSN, Bits::U8);
@@ -331,7 +332,7 @@ impl TransportExecutor {
             let recv = receiver.clone();
             std::thread::Builder::new()
                 .name(format!("zenoh-tx-{}", i))
-                .spawn(move || async_std::task::block_on(exec.run(recv.recv())))
+                .spawn(move || Handle::current().block_on(exec.run(recv.recv())))
                 .unwrap();
         }
         Self { executor, sender }
@@ -386,7 +387,7 @@ impl TransportManager {
         };
 
         // @TODO: this should be moved into the unicast module
-        async_std::task::spawn({
+        tokio::task::spawn({
             let this = this.clone();
             async move {
                 while let Ok(link) = new_unicast_link_receiver.recv_async().await {
@@ -444,15 +445,17 @@ impl TransportManager {
     }
 
     pub fn get_listeners(&self) -> Vec<EndPoint> {
-        let mut lsu = task::block_on(self.get_listeners_unicast());
-        let mut lsm = task::block_on(self.get_listeners_multicast());
+        let handle = tokio::runtime::Handle::current();
+        let mut lsu = handle.block_on(self.get_listeners_unicast());
+        let mut lsm = handle.block_on(self.get_listeners_multicast());
         lsu.append(&mut lsm);
         lsu
     }
 
     pub fn get_locators(&self) -> Vec<Locator> {
-        let mut lsu = task::block_on(self.get_locators_unicast());
-        let mut lsm = task::block_on(self.get_locators_multicast());
+        let handle = tokio::runtime::Handle::current();
+        let mut lsu = handle.block_on(self.get_locators_unicast());
+        let mut lsm = handle.block_on(self.get_locators_multicast());
         lsu.append(&mut lsm);
         lsu
     }

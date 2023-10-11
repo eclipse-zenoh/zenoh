@@ -11,8 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::net::SocketAddr;
-use async_std::prelude::*;
+use std::net::SocketAddr;
+use async_std::prelude::FutureExt;
 use async_trait::async_trait;
 use std::convert::TryInto;
 use std::fmt;

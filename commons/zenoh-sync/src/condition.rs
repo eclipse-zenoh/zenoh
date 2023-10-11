@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::sync::MutexGuard as AysncMutexGuard;
+use tokio::sync::MutexGuard as AysncMutexGuard;
 use event_listener::{Event, EventListener};
 use std::{pin::Pin, sync::MutexGuard};
 

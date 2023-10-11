@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::unicast::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
-use async_std::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock};
 use async_trait::async_trait;
 use rand::Rng;
 use rsa::{

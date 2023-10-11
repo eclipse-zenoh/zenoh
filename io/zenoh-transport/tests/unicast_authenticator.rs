@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::{prelude::FutureExt, task};
+use async_std::prelude::FutureExt;
 use std::{any::Any, sync::Arc, time::Duration};
 use zenoh_core::{zasync_executor_init, zasyncwrite};
 use zenoh_link::Link;
@@ -388,7 +388,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
 
     ztimeout!(async {
         while !router_manager.get_transports_unicast().await.is_empty() {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
@@ -401,7 +401,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
 
     ztimeout!(async {
         while !router_manager.get_listeners().is_empty() {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
@@ -411,7 +411,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
     ztimeout!(router_manager.close());
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    tokio::time::sleep(SLEEP).await;
 }
 
 #[cfg(feature = "auth_usrpwd")]
@@ -548,7 +548,7 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
 
     ztimeout!(async {
         while !router_manager.get_transports_unicast().await.is_empty() {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
@@ -605,7 +605,7 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
 
     ztimeout!(async {
         while !router_manager.get_transports_unicast().await.is_empty() {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
@@ -618,12 +618,12 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
 
     ztimeout!(async {
         while !router_manager.get_listeners().is_empty() {
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    tokio::time::sleep(SLEEP).await;
 }
 
 async fn run(endpoint: &EndPoint, lowlatency_transport: bool) {
@@ -645,48 +645,48 @@ async fn run_with_lowlatency_transport(endpoint: &EndPoint) {
 #[test]
 fn authenticator_tcp() {
     let _ = env_logger::try_init();
-    task::block_on(async {
+    tokio::runtime::Handle::current().block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8000).parse().unwrap();
-    task::block_on(run_with_universal_transport(&endpoint));
+    tokio::runtime::Handle::current().block_on(run_with_universal_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_tcp")]
 #[test]
 fn authenticator_tcp_with_lowlatency_transport() {
     let _ = env_logger::try_init();
-    task::block_on(async {
+    tokio::runtime::Handle::current().block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8100).parse().unwrap();
-    task::block_on(run_with_lowlatency_transport(&endpoint));
+    tokio::runtime::Handle::current().block_on(run_with_lowlatency_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_udp")]
 #[test]
 fn authenticator_udp() {
     let _ = env_logger::try_init();
-    task::block_on(async {
+    tokio::runtime::Handle::current().block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8010).parse().unwrap();
-    task::block_on(run_with_universal_transport(&endpoint));
+    tokio::runtime::Handle::current().block_on(run_with_universal_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_udp")]
 #[test]
 fn authenticator_udp_with_lowlatency_transport() {
     let _ = env_logger::try_init();
-    task::block_on(async {
+    tokio::runtime::Handle::current().block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8110).parse().unwrap();
-    task::block_on(run_with_lowlatency_transport(&endpoint));
+    tokio::runtime::Handle::current().block_on(run_with_lowlatency_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_unixpipe")]
@@ -694,12 +694,12 @@ fn authenticator_udp_with_lowlatency_transport() {
 #[ignore]
 fn authenticator_unixpipe() {
     let _ = env_logger::try_init();
-    task::block_on(async {
+    tokio::runtime::Handle::current().block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = "unixpipe/authenticator_unixpipe_test".parse().unwrap();
-    task::block_on(run_with_universal_transport(&endpoint));
+    tokio::runtime::Handle::current().block_on(run_with_universal_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_unixpipe")]
@@ -707,14 +707,14 @@ fn authenticator_unixpipe() {
 #[ignore]
 fn authenticator_unixpipe_with_lowlatency_transport() {
     let _ = env_logger::try_init();
-    task::block_on(async {
+    tokio::runtime::Handle::current().block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = "unixpipe/authenticator_unixpipe_with_lowlatency_transport"
         .parse()
         .unwrap();
-    task::block_on(run_with_lowlatency_transport(&endpoint));
+    tokio::runtime::Handle::current().block_on(run_with_lowlatency_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_ws")]
@@ -722,12 +722,12 @@ fn authenticator_unixpipe_with_lowlatency_transport() {
 #[ignore]
 fn authenticator_ws() {
     let _ = env_logger::try_init();
-    task::block_on(async {
+    tokio::runtime::Handle::current().block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8020).parse().unwrap();
-    task::block_on(run_with_universal_transport(&endpoint));
+    tokio::runtime::Handle::current().block_on(run_with_universal_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_ws")]
@@ -735,26 +735,26 @@ fn authenticator_ws() {
 #[ignore]
 fn authenticator_ws_with_lowlatency_transport() {
     let _ = env_logger::try_init();
-    task::block_on(async {
+    tokio::runtime::Handle::current().block_on(async {
         zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8120).parse().unwrap();
-    task::block_on(run_with_lowlatency_transport(&endpoint));
+    tokio::runtime::Handle::current().block_on(run_with_lowlatency_transport(&endpoint));
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
 #[test]
 fn authenticator_unix() {
     let _ = env_logger::try_init();
-    task::block_on(async {
+    tokio::runtime::Handle::current().block_on(async {
         zasync_executor_init!();
     });
 
     let f1 = "zenoh-test-unix-socket-10.sock";
     let _ = std::fs::remove_file(f1);
     let endpoint: EndPoint = format!("unixsock-stream/{f1}").parse().unwrap();
-    task::block_on(run_with_universal_transport(&endpoint));
+    tokio::runtime::Handle::current().block_on(run_with_universal_transport(&endpoint));
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
@@ -765,7 +765,7 @@ fn authenticator_tls() {
     use zenoh_link::tls::config::*;
 
     let _ = env_logger::try_init();
-    task::block_on(async {
+    tokio::runtime::Handle::current().block_on(async {
         zasync_executor_init!();
     });
 
@@ -859,7 +859,7 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         )
         .unwrap();
 
-    task::block_on(run_with_universal_transport(&endpoint));
+    tokio::runtime::Handle::current().block_on(run_with_universal_transport(&endpoint));
 }
 
 #[cfg(feature = "transport_quic")]
@@ -868,7 +868,7 @@ fn authenticator_quic() {
     use zenoh_link::quic::config::*;
 
     let _ = env_logger::try_init();
-    task::block_on(async {
+    tokio::runtime::Handle::current().block_on(async {
         zasync_executor_init!();
     });
 
@@ -962,5 +962,5 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         )
         .unwrap();
 
-    task::block_on(run_with_universal_transport(&endpoint));
+    tokio::runtime::Handle::current().block_on(run_with_universal_transport(&endpoint));
 }
