@@ -13,7 +13,7 @@
 use super::routing::face::Face;
 use super::Runtime;
 use crate::key_expr::KeyExpr;
-use crate::plugins::sealed as plugins;
+use crate::plugins::sealed::{self as plugins, ValidationFunction};
 use crate::prelude::sync::{Sample, SyncResolve};
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
@@ -62,6 +62,18 @@ pub struct AdminSpace {
 enum PluginDiff {
     Delete(String),
     Start(crate::config::PluginLoad),
+}
+
+fn make_plugin_validator(admin: &Arc<AdminSpace>) -> ValidationFunction {
+    let admin = admin.clone();
+    Arc::new(move |name: &_, path: &_, old: &_, new: &_| {
+        let plugins_mgr = zlock!(admin.context.plugins_mgr);
+        if let Some(plugin) = plugins_mgr.plugin(name) {
+            plugin.config_checker(path, old, new)
+        } else {
+            Err(format!("Plugin {name} not found").into())
+        }
+    })
 }
 
 impl AdminSpace {
@@ -127,6 +139,11 @@ impl AdminSpace {
             handlers,
             context,
         });
+
+        let mut config_guard = admin.context.runtime.state.config.lock();
+        for (name, (_, plugin)) in plugins.running_plugins() {
+            config_guard.add_plugin_validator(name, make_plugin_validator(&admin))
+        }
 
         let cfg_rx = admin.context.runtime.state.config.subscribe();
         task::spawn({
@@ -196,24 +213,9 @@ impl AdminSpace {
                                                 active_plugins.insert(name.into(), path.into());
                                                 let mut cfg_guard =
                                                     admin.context.runtime.state.config.lock();
-                                                let validation_function = {
-                                                    let name = name.clone();
-                                                    let admin = admin.clone();
-                                                    Arc::new(move |path: &_, old: &_, new: &_| {
-                                                        let plugins_mgr =
-                                                            zlock!(admin.context.plugins_mgr);
-                                                        if let Some(plugin) =
-                                                            plugins_mgr.plugin(name.as_str())
-                                                        {
-                                                            plugin.config_checker(path, old, new)
-                                                        } else {
-                                                            Err("Plugin not found".into())
-                                                        }
-                                                    })
-                                                };
                                                 cfg_guard.add_plugin_validator(
                                                     name,
-                                                    validation_function,
+                                                    make_plugin_validator(&admin),
                                                 );
                                                 log::info!(
                                                     "Successfully started plugin `{}` from {}",

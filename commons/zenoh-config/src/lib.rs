@@ -46,11 +46,12 @@ use zenoh_protocol::{
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_util::LibLoader;
 
-pub type ValidationFunction = std::sync::Arc<
+type ValidationFunction = std::sync::Arc<
     dyn Fn(
-            &str,
-            &serde_json::Map<String, serde_json::Value>,
-            &serde_json::Map<String, serde_json::Value>,
+            &str,                                        // plugin name
+            &str, // `path`, the relative path from the plugin's configuration root to the changed value.
+            &serde_json::Map<String, serde_json::Value>, // `current`, the current configuration of the plugin (from its root).
+            &serde_json::Map<String, serde_json::Value>, // `new`, the proposed new configuration of the plugin.
         ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>>
         + Send
         + Sync,
@@ -949,6 +950,7 @@ impl PluginsConfig {
         }
         let new_conf = if let Some(validator) = validator {
             match validator(
+                plugin,
                 &key[("plugins/".len() + plugin.len())..],
                 old_conf.as_object().unwrap(),
                 new_conf.as_object().unwrap(),
