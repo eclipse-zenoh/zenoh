@@ -1103,6 +1103,12 @@ impl Session {
                     ext_info: *info,
                 }),
             });
+
+            #[cfg(feature = "unstable")]
+            {
+                let state = zread!(self.state);
+                self.update_status_up(&state, &key_expr)
+            }
         }
 
         Ok(sub_state)
@@ -1161,6 +1167,12 @@ impl Session {
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             });
+
+                            #[cfg(feature = "unstable")]
+                            {
+                                let state = zread!(self.state);
+                                self.update_status_down(&state, &sub_state.key_expr)
+                            }
                         }
                     }
                     None => {
@@ -1182,6 +1194,12 @@ impl Session {
                                     },
                                 }),
                             });
+
+                            #[cfg(feature = "unstable")]
+                            {
+                                let state = zread!(self.state);
+                                self.update_status_down(&state, &sub_state.key_expr)
+                            }
                         }
                     }
                 };
@@ -1481,6 +1499,68 @@ impl Session {
         .is_empty();
 
         Ok(MatchingStatus { matching })
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn update_status_up(&self, state: &SessionState, key_expr: &KeyExpr) {
+        for msub in state.matching_listeners.values() {
+            if key_expr.intersects(&msub.key_expr) {
+                // Cannot hold session lock when calling tables (matching_status())
+                async_std::task::spawn({
+                    let session = self.clone();
+                    let msub = msub.clone();
+                    async move {
+                        match msub.current.lock() {
+                            Ok(mut current) => {
+                                if !*current {
+                                    if let Ok(status) = session.matching_status(&msub.key_expr) {
+                                        if status.is_matching() {
+                                            *current = true;
+                                            let callback = msub.callback.clone();
+                                            (callback)(status)
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("Error trying to acquire MathginListener lock: {}", e);
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn update_status_down(&self, state: &SessionState, key_expr: &KeyExpr) {
+        for msub in state.matching_listeners.values() {
+            if key_expr.intersects(&msub.key_expr) {
+                // Cannot hold session lock when calling tables (matching_status())
+                async_std::task::spawn({
+                    let session = self.clone();
+                    let msub = msub.clone();
+                    async move {
+                        match msub.current.lock() {
+                            Ok(mut current) => {
+                                if *current {
+                                    if let Ok(status) = session.matching_status(&msub.key_expr) {
+                                        if !status.is_matching() {
+                                            *current = false;
+                                            let callback = msub.callback.clone();
+                                            (callback)(status)
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("Error trying to acquire MathginListener lock: {}", e);
+                            }
+                        }
+                    }
+                });
+            }
+        }
     }
 
     #[zenoh_macros::unstable]
@@ -2008,36 +2088,7 @@ impl Primitives for Session {
                     let state = zread!(self.state);
                     match state.wireexpr_to_keyexpr(&m.wire_expr, false) {
                         Ok(expr) => {
-                            for msub in state.matching_listeners.values() {
-                                if expr.intersects(&msub.key_expr) {
-                                    // tables keep lock when propagating declarations
-                                    async_std::task::spawn({
-                                        let session = self.clone();
-                                        let msub = msub.clone();
-                                        async move {
-                                            match msub.current.lock() {
-                                                Ok(mut current) => {
-                                                    if !*current {
-                                                        if let Ok(status) =
-                                                            session.matching_status(&msub.key_expr)
-                                                        {
-                                                            if status.is_matching() {
-                                                                *current = true;
-                                                                let callback =
-                                                                    msub.callback.clone();
-                                                                (callback)(status)
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                Err(e) => {
-                                                    log::error!("Error trying to acquire MathginListener lock: {}", e);
-                                                }
-                                            }
-                                        }
-                                    });
-                                }
-                            }
+                            self.update_status_up(&state, &expr);
 
                             if expr
                                 .as_str()
@@ -2060,36 +2111,7 @@ impl Primitives for Session {
                     let state = zread!(self.state);
                     match state.wireexpr_to_keyexpr(&m.ext_wire_expr.wire_expr, false) {
                         Ok(expr) => {
-                            for msub in state.matching_listeners.values() {
-                                if expr.intersects(&msub.key_expr) {
-                                    // tables keep lock when propagating declarations
-                                    async_std::task::spawn({
-                                        let session = self.clone();
-                                        let msub = msub.clone();
-                                        async move {
-                                            match msub.current.lock() {
-                                                Ok(mut current) => {
-                                                    if *current {
-                                                        if let Ok(status) =
-                                                            session.matching_status(&msub.key_expr)
-                                                        {
-                                                            if !status.is_matching() {
-                                                                *current = false;
-                                                                let callback =
-                                                                    msub.callback.clone();
-                                                                (callback)(status)
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                Err(e) => {
-                                                    log::error!("Error trying to acquire MathginListener lock: {}", e);
-                                                }
-                                            }
-                                        }
-                                    });
-                                }
-                            }
+                            self.update_status_down(&state, &expr);
 
                             if expr
                                 .as_str()
