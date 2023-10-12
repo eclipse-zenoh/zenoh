@@ -45,7 +45,7 @@ fn zenoh_matching_status_any() {
         .unwrap();
 
         let matching_listener = ztimeout!(publisher1.matching_listener().res_async()).unwrap();
-        
+
         let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
         assert!(received_status.err() == Some(RecvTimeoutError::Timeout));
 
@@ -111,7 +111,7 @@ fn zenoh_matching_status_remote() {
         .unwrap();
 
         let matching_listener = ztimeout!(publisher1.matching_listener().res_async()).unwrap();
-        
+
         let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
         assert!(received_status.err() == Some(RecvTimeoutError::Timeout));
 
@@ -177,7 +177,7 @@ fn zenoh_matching_status_local() {
         .unwrap();
 
         let matching_listener = ztimeout!(publisher1.matching_listener().res_async()).unwrap();
-        
+
         let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
         assert!(received_status.err() == Some(RecvTimeoutError::Timeout));
 
