@@ -47,9 +47,9 @@ pub mod no_mangle {
             }
 
             #[no_mangle]
-            fn get_plugin_compatibility() -> $crate::Compatibility {
+            fn get_plugin_compatibility() -> $crate::prelude::Compatibility {
                 // TODO: add vtable version (including type parameters) to the compatibility information
-                Compatibility::new()
+                $crate::prelude::Compatibility::new()
             }
 
             #[no_mangle]

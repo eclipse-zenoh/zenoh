@@ -154,12 +154,7 @@ impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, Runni
         lib: Library,
         path: PathBuf,
     ) -> ZResult<DynamicPlugin<StartArgs, RunningPlugin>> {
-        DynamicPlugin::new(name.into(), lib, path).map_err(|e|
-            zerror!("Wrong PluginVTable version, your {} doesn't appear to be compatible with this version of Zenoh (vtable versions: plugin v{}, zenoh v{})",
-                name,
-                e.map_or_else(|| "UNKNWON".to_string(), |e| e.to_string()),
-                PLUGIN_VTABLE_VERSION).into()
-        )
+        DynamicPlugin::new(name.into(), lib, path)
     }
 
     pub fn load_plugin_by_name(&mut self, name: String) -> ZResult<String> {
@@ -258,18 +253,16 @@ pub struct DynamicPlugin<StartArgs, RunningPlugin> {
 }
 
 impl<StartArgs, RunningPlugin> DynamicPlugin<StartArgs, RunningPlugin> {
-    fn new(name: String, lib: Library, path: PathBuf) -> Self {
+    fn new(name: String, lib: Library, path: PathBuf) -> ZResult<Self> {
         // TODO: check loader version and compatibility
-        let load_plugin = unsafe {
-            lib.get::<fn() -> PluginVTable<StartArgs, RunningPlugin>>(b"load_plugin")
-                .map_err(|_| None)?
-        };
+        let load_plugin =
+            unsafe { lib.get::<fn() -> PluginVTable<StartArgs, RunningPlugin>>(b"load_plugin")? };
         let vtable = load_plugin();
-        Self {
+        Ok(Self {
             _lib: lib,
             vtable,
             name,
             path,
-        }
+        })
     }
 }
