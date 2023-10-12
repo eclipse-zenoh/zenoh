@@ -93,7 +93,7 @@ impl TransportUnicastLowlatency {
     pub(super) fn start_keepalive(&self, executor: &TransportExecutor, keep_alive: Duration) {
         let mut guard = async_std::task::block_on(async { zasyncwrite!(self.handle_keepalive) });
         let c_transport = self.clone();
-        let handle = executor.spawn(async move {
+        let handle = executor.runtime.spawn(async move {
             let res = keepalive_task(
                 c_transport.link.clone(),
                 keep_alive,
@@ -126,7 +126,7 @@ impl TransportUnicastLowlatency {
         drop(guard);
 
         if let Some(handle) = handle {
-            let _ = handle.cancel().await;
+            let _ = handle.abort();
             log::debug!("[{}] keepalive task stopped...", zid,);
         }
     }

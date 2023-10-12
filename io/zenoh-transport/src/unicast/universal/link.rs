@@ -30,9 +30,49 @@ use async_std::prelude::FutureExt;
 use tokio::task;
 use tokio::task::JoinHandle;
 
-pub(super) struct Tasks {
-    // The handlers to stop TX/RX tasks
-    handle_tx: RwLock<Option<async_executor::Task<()>>>,
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
+use std::convert::TryInto;
+use std::sync::Arc;
+use std::time::Duration;
+use zenoh_buffers::ZSlice;
+use zenoh_link::{LinkUnicast, LinkUnicastDirection};
+use zenoh_protocol::transport::{BatchSize, KeepAlive, TransportMessage};
+use zenoh_result::{bail, zerror, ZResult};
+use zenoh_sync::{RecyclingObjectPool, Signal};
+
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
+const HEADER_BYTES_SIZE: usize = 2;
+
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
+const COMPRESSION_BYTE_INDEX_STREAMED: usize = 2;
+
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
+const COMPRESSION_BYTE_INDEX: usize = 0;
+
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
+const COMPRESSION_ENABLED: u8 = 1_u8;
+
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
+const COMPRESSION_DISABLED: u8 = 0_u8;
+
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
+const BATCH_PAYLOAD_START_INDEX: usize = 1;
+
+#[cfg(all(feature = "unstable", feature = "transport_compression"))]
+const MAX_BATCH_SIZE: usize = u16::MAX as usize;
+
+#[derive(Clone)]
+pub(super) struct TransportLinkUnicast {
+    // Inbound / outbound
+    pub(super) direction: LinkUnicastDirection,
+    // The underlying link
+    pub(super) link: LinkUnicast,
+    // The transmission pipeline
+    pub(super) pipeline: Option<TransmissionPipelineProducer>,
+    // The transport this link is associated to
+    transport: TransportUnicastUniversal,
+    // The signals to stop TX/RX tasks
+    handle_tx: Option<Arc<tokio::task::JoinHandle<()>>>,
     signal_rx: Signal,
     handle_rx: RwLock<Option<JoinHandle<()>>>,
 }
@@ -96,8 +136,9 @@ impl TransportLinkUnicastUniversal {
         let mut guard = zwrite!(self.tasks.handle_tx);
         if guard.is_none() {
             // Spawn the TX task
-            let mut tx = self.link.tx();
-            let handle = executor.spawn(async move {
+            let c_link = self.link.clone();
+            let c_transport = self.transport.clone();
+            let handle = executor.runtime.spawn(async move {
                 let res = tx_task(
                     consumer,
                     &mut tx,
@@ -164,11 +205,10 @@ impl TransportLinkUnicastUniversal {
         }
 
         self.stop_tx();
-        self.stop_rx();
-
-        let handle_tx = zwrite!(self.tasks.handle_tx).take();
-        if let Some(handle) = handle_tx {
-            handle.await;
+        if let Some(handle) = self.handle_tx.take() {
+            // SAFETY: it is safe to unwrap the Arc since we have the ownership of the whole link
+            let handle_tx = Arc::try_unwrap(handle).unwrap();
+            handle_tx.await?;
         }
 
         let handle_rx = zwrite!(self.tasks.handle_rx).take();

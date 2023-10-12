@@ -20,7 +20,6 @@ use crate::multicast::manager::{
     TransportManagerStateMulticast,
 };
 use tokio::sync::Mutex as AsyncMutex;
-use tokio::runtime::Handle;
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -317,37 +316,25 @@ impl Default for TransportManagerBuilder {
     }
 }
 
-#[derive(Clone)]
 pub(crate) struct TransportExecutor {
-    executor: Arc<async_executor::Executor<'static>>,
-    sender: async_std::channel::Sender<()>,
+    pub runtime: tokio::runtime::Runtime,
 }
 
 impl TransportExecutor {
-    fn new(num_threads: usize) -> Self {
-        let (sender, receiver) = async_std::channel::bounded(1);
-        let executor = Arc::new(async_executor::Executor::new());
-        for i in 0..num_threads {
-            let handle = Handle::current();
-            let exec = executor.clone();
-            let recv = receiver.clone();
-            std::thread::Builder::new()
-                .name(format!("zenoh-tx-{}", i))
-                .spawn(move || handle.block_on(exec.run(recv.recv())))
-                .unwrap();
-        }
-        Self { executor, sender }
-    }
-
-    async fn stop(&self) {
-        let _ = self.sender.send(()).await;
-    }
-
-    pub(crate) fn spawn<T: Send + 'static>(
-        &self,
-        future: impl core::future::Future<Output = T> + Send + 'static,
-    ) -> async_executor::Task<T> {
-        self.executor.spawn(future)
+    fn new(num_threads: usize) -> ZResult<Self> {
+        use tokio::runtime::Builder;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let runtime = Builder::new_multi_thread()
+            .worker_threads(num_threads)
+            .thread_name_fn(|| {
+               static ATOMIC_TX_THREAD_ID: AtomicUsize = AtomicUsize::new(0);
+               let id = ATOMIC_TX_THREAD_ID.fetch_add(1, Ordering::SeqCst);
+               format!("zenoh-tx-{}", id)
+            })
+            .build()?;
+        Ok(TransportExecutor {
+            runtime
+        })
     }
 }
 
@@ -359,7 +346,7 @@ pub struct TransportManager {
     pub(crate) cipher: Arc<BlockCipher>,
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
-    pub(crate) tx_executor: TransportExecutor,
+    pub(crate) tx_executor: Arc<TransportExecutor>,
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
 }
@@ -382,7 +369,7 @@ impl TransportManager {
             cipher: Arc::new(cipher),
             locator_inspector: Default::default(),
             new_unicast_link_sender,
-            tx_executor: TransportExecutor::new(tx_threads),
+            tx_executor: Arc::new(TransportExecutor::new(tx_threads).unwrap()),
             #[cfg(feature = "stats")]
             stats: std::sync::Arc::new(crate::stats::TransportStats::default()),
         };
@@ -415,7 +402,8 @@ impl TransportManager {
 
     pub async fn close(&self) {
         self.close_unicast().await;
-        self.tx_executor.stop().await;
+        // WARN: depends on the auto-close of tokio runtime after dropped
+        // self.tx_executor.runtime.shutdown_background();
     }
 
     /*************************************/
