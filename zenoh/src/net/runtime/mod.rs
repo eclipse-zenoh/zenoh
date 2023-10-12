@@ -21,8 +21,8 @@ mod adminspace;
 pub mod orchestrator;
 
 use super::routing;
-use super::routing::face::Face;
-use super::routing::pubsub::full_reentrant_route_data;
+use super::routing::dispatcher::face::Face;
+use super::routing::dispatcher::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
 use crate::GIT_VERSION;

@@ -985,7 +985,7 @@ impl Network {
     }
 
     #[inline]
-    pub(super) fn get_links(&self, node: ZenohId) -> &[ZenohId] {
+    pub(crate) fn get_links(&self, node: ZenohId) -> &[ZenohId] {
         self.get_node(&node)
             .map(|node| &node.links[..])
             .unwrap_or_default()
@@ -993,7 +993,7 @@ impl Network {
 }
 
 #[inline]
-pub(super) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<ZenohId> {
+pub(crate) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<ZenohId> {
     net1.graph
         .node_references()
         .filter_map(|(_, node1)| {

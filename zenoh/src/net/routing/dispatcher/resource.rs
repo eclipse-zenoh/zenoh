@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::face::FaceState;
-use super::router::{Tables, TablesLock};
+use super::tables::{Tables, TablesLock};
 use std::collections::{HashMap, HashSet};
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
@@ -33,63 +33,63 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-pub(super) type RoutingContext = u16;
+pub(crate) type RoutingContext = u16;
 
-pub(super) type Direction = (Arc<FaceState>, WireExpr<'static>, Option<RoutingContext>);
-pub(super) type Route = HashMap<usize, Direction>;
+pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, Option<RoutingContext>);
+pub(crate) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
-pub(super) type QueryRoute = HashMap<usize, (Direction, RequestId, TargetType)>;
+pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId, TargetType)>;
 #[cfg(not(feature = "complete_n"))]
-pub(super) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
-pub(super) struct QueryTargetQabl {
-    pub(super) direction: Direction,
-    pub(super) complete: u64,
-    pub(super) distance: f64,
+pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
+pub(crate) struct QueryTargetQabl {
+    pub(crate) direction: Direction,
+    pub(crate) complete: u64,
+    pub(crate) distance: f64,
 }
-pub(super) type QueryTargetQablSet = Vec<QueryTargetQabl>;
-pub(super) type PullCaches = Vec<Arc<SessionContext>>;
+pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
+pub(crate) type PullCaches = Vec<Arc<SessionContext>>;
 
-pub(super) struct SessionContext {
-    pub(super) face: Arc<FaceState>,
-    pub(super) local_expr_id: Option<ExprId>,
-    pub(super) remote_expr_id: Option<ExprId>,
-    pub(super) subs: Option<SubscriberInfo>,
-    pub(super) qabl: Option<QueryableInfo>,
-    pub(super) last_values: HashMap<String, PushBody>,
-}
-
-pub(super) struct DataRoutes {
-    pub(super) matching_pulls: Option<Arc<PullCaches>>,
-    pub(super) routers_data_routes: Vec<Arc<Route>>,
-    pub(super) peers_data_routes: Vec<Arc<Route>>,
-    pub(super) peer_data_route: Option<Arc<Route>>,
-    pub(super) client_data_route: Option<Arc<Route>>,
+pub(crate) struct SessionContext {
+    pub(crate) face: Arc<FaceState>,
+    pub(crate) local_expr_id: Option<ExprId>,
+    pub(crate) remote_expr_id: Option<ExprId>,
+    pub(crate) subs: Option<SubscriberInfo>,
+    pub(crate) qabl: Option<QueryableInfo>,
+    pub(crate) last_values: HashMap<String, PushBody>,
 }
 
-pub(super) struct QueryRoutes {
-    pub(super) routers_query_routes: Vec<Arc<QueryTargetQablSet>>,
-    pub(super) peers_query_routes: Vec<Arc<QueryTargetQablSet>>,
-    pub(super) peer_query_route: Option<Arc<QueryTargetQablSet>>,
-    pub(super) client_query_route: Option<Arc<QueryTargetQablSet>>,
+pub(crate) struct DataRoutes {
+    pub(crate) matching_pulls: Option<Arc<PullCaches>>,
+    pub(crate) routers_data_routes: Vec<Arc<Route>>,
+    pub(crate) peers_data_routes: Vec<Arc<Route>>,
+    pub(crate) peer_data_route: Option<Arc<Route>>,
+    pub(crate) client_data_route: Option<Arc<Route>>,
 }
 
-pub(super) struct ResourceContext {
-    pub(super) router_subs: HashSet<ZenohId>,
-    pub(super) peer_subs: HashSet<ZenohId>,
-    pub(super) router_qabls: HashMap<ZenohId, QueryableInfo>,
-    pub(super) peer_qabls: HashMap<ZenohId, QueryableInfo>,
-    pub(super) matches: Vec<Weak<Resource>>,
-    pub(super) matching_pulls: Arc<PullCaches>,
-    pub(super) valid_data_routes: bool,
-    pub(super) routers_data_routes: Vec<Arc<Route>>,
-    pub(super) peers_data_routes: Vec<Arc<Route>>,
-    pub(super) peer_data_route: Option<Arc<Route>>,
-    pub(super) client_data_route: Option<Arc<Route>>,
-    pub(super) valid_query_routes: bool,
-    pub(super) routers_query_routes: Vec<Arc<QueryTargetQablSet>>,
-    pub(super) peers_query_routes: Vec<Arc<QueryTargetQablSet>>,
-    pub(super) peer_query_route: Option<Arc<QueryTargetQablSet>>,
-    pub(super) client_query_route: Option<Arc<QueryTargetQablSet>>,
+pub(crate) struct QueryRoutes {
+    pub(crate) routers_query_routes: Vec<Arc<QueryTargetQablSet>>,
+    pub(crate) peers_query_routes: Vec<Arc<QueryTargetQablSet>>,
+    pub(crate) peer_query_route: Option<Arc<QueryTargetQablSet>>,
+    pub(crate) client_query_route: Option<Arc<QueryTargetQablSet>>,
+}
+
+pub(crate) struct ResourceContext {
+    pub(crate) router_subs: HashSet<ZenohId>,
+    pub(crate) peer_subs: HashSet<ZenohId>,
+    pub(crate) router_qabls: HashMap<ZenohId, QueryableInfo>,
+    pub(crate) peer_qabls: HashMap<ZenohId, QueryableInfo>,
+    pub(crate) matches: Vec<Weak<Resource>>,
+    pub(crate) matching_pulls: Arc<PullCaches>,
+    pub(crate) valid_data_routes: bool,
+    pub(crate) routers_data_routes: Vec<Arc<Route>>,
+    pub(crate) peers_data_routes: Vec<Arc<Route>>,
+    pub(crate) peer_data_route: Option<Arc<Route>>,
+    pub(crate) client_data_route: Option<Arc<Route>>,
+    pub(crate) valid_query_routes: bool,
+    pub(crate) routers_query_routes: Vec<Arc<QueryTargetQablSet>>,
+    pub(crate) peers_query_routes: Vec<Arc<QueryTargetQablSet>>,
+    pub(crate) peer_query_route: Option<Arc<QueryTargetQablSet>>,
+    pub(crate) client_query_route: Option<Arc<QueryTargetQablSet>>,
 }
 
 impl ResourceContext {
@@ -114,7 +114,7 @@ impl ResourceContext {
         }
     }
 
-    pub(super) fn update_data_routes(&mut self, data_routes: DataRoutes) {
+    pub(crate) fn update_data_routes(&mut self, data_routes: DataRoutes) {
         self.valid_data_routes = true;
         if let Some(matching_pulls) = data_routes.matching_pulls {
             self.matching_pulls = matching_pulls;
@@ -125,7 +125,7 @@ impl ResourceContext {
         self.client_data_route = data_routes.client_data_route;
     }
 
-    pub(super) fn update_query_routes(&mut self, query_routes: QueryRoutes) {
+    pub(crate) fn update_query_routes(&mut self, query_routes: QueryRoutes) {
         self.valid_query_routes = true;
         self.routers_query_routes = query_routes.routers_query_routes;
         self.peers_query_routes = query_routes.peers_query_routes;
@@ -135,12 +135,12 @@ impl ResourceContext {
 }
 
 pub struct Resource {
-    pub(super) parent: Option<Arc<Resource>>,
-    pub(super) suffix: String,
-    pub(super) nonwild_prefix: Option<(Arc<Resource>, String)>,
-    pub(super) childs: HashMap<String, Arc<Resource>>,
-    pub(super) context: Option<ResourceContext>,
-    pub(super) session_ctxs: HashMap<usize, Arc<SessionContext>>,
+    pub(crate) parent: Option<Arc<Resource>>,
+    pub(crate) suffix: String,
+    pub(crate) nonwild_prefix: Option<(Arc<Resource>, String)>,
+    pub(crate) childs: HashMap<String, Arc<Resource>>,
+    pub(crate) context: Option<ResourceContext>,
+    pub(crate) session_ctxs: HashMap<usize, Arc<SessionContext>>,
 }
 
 impl PartialEq for Resource {
@@ -187,12 +187,12 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(super) fn context(&self) -> &ResourceContext {
+    pub(crate) fn context(&self) -> &ResourceContext {
         self.context.as_ref().unwrap()
     }
 
     #[inline(always)]
-    pub(super) fn context_mut(&mut self) -> &mut ResourceContext {
+    pub(crate) fn context_mut(&mut self) -> &mut ResourceContext {
         self.context.as_mut().unwrap()
     }
 
@@ -269,7 +269,7 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(super) fn routers_query_route(&self, context: usize) -> Option<Arc<QueryTargetQablSet>> {
+    pub(crate) fn routers_query_route(&self, context: usize) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_query_routes {
@@ -284,7 +284,7 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(super) fn peers_query_route(&self, context: usize) -> Option<Arc<QueryTargetQablSet>> {
+    pub(crate) fn peers_query_route(&self, context: usize) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_query_routes {
@@ -299,7 +299,7 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(super) fn peer_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
+    pub(crate) fn peer_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_query_routes {
@@ -313,7 +313,7 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(super) fn client_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
+    pub(crate) fn client_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_query_routes {

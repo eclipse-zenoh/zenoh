@@ -17,10 +17,8 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-pub mod dispatcher;
-pub mod hat;
-pub mod router;
-
-use super::runtime;
-
-pub(crate) static PREFIX_LIVELINESS: &str = "@/liveliness";
+pub mod face;
+pub mod pubsub;
+pub mod queries;
+pub mod resource;
+pub mod tables;

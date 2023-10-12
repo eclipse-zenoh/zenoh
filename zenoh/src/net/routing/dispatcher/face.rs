@@ -11,7 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::router::*;
+use super::super::router::*;
+use super::tables::{Tables, TablesLock};
+use super::{resource::*, tables};
 use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::sync::Arc;
@@ -28,26 +30,26 @@ use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{Primitives, TransportMulticast};
 
 pub struct FaceState {
-    pub(super) id: usize,
-    pub(super) zid: ZenohId,
-    pub(super) whatami: WhatAmI,
+    pub(crate) id: usize,
+    pub(crate) zid: ZenohId,
+    pub(crate) whatami: WhatAmI,
     #[cfg(feature = "stats")]
-    pub(super) stats: Option<Arc<TransportStats>>,
-    pub(super) primitives: Arc<dyn Primitives + Send + Sync>,
-    pub(super) link_id: usize,
-    pub(super) local_mappings: HashMap<ExprId, Arc<Resource>>,
-    pub(super) remote_mappings: HashMap<ExprId, Arc<Resource>>,
-    pub(super) local_subs: HashSet<Arc<Resource>>,
-    pub(super) remote_subs: HashSet<Arc<Resource>>,
-    pub(super) local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
-    pub(super) remote_qabls: HashSet<Arc<Resource>>,
-    pub(super) next_qid: RequestId,
-    pub(super) pending_queries: HashMap<RequestId, Arc<Query>>,
-    pub(super) mcast_group: Option<TransportMulticast>,
+    pub(crate) stats: Option<Arc<TransportStats>>,
+    pub(crate) primitives: Arc<dyn Primitives + Send + Sync>,
+    pub(crate) link_id: usize,
+    pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
+    pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
+    pub(crate) local_subs: HashSet<Arc<Resource>>,
+    pub(crate) remote_subs: HashSet<Arc<Resource>>,
+    pub(crate) local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
+    pub(crate) remote_qabls: HashSet<Arc<Resource>>,
+    pub(crate) next_qid: RequestId,
+    pub(crate) pending_queries: HashMap<RequestId, Arc<Query>>,
+    pub(crate) mcast_group: Option<TransportMulticast>,
 }
 
 impl FaceState {
-    pub(super) fn new(
+    pub(crate) fn new(
         id: usize,
         zid: ZenohId,
         whatami: WhatAmI,
@@ -78,7 +80,7 @@ impl FaceState {
 
     #[inline]
     #[allow(clippy::trivially_copy_pass_by_ref)]
-    pub(super) fn get_mapping(
+    pub(crate) fn get_mapping(
         &self,
         prefixid: &ExprId,
         mapping: Mapping,
@@ -89,7 +91,7 @@ impl FaceState {
         }
     }
 
-    pub(super) fn get_next_local_id(&self) -> ExprId {
+    pub(crate) fn get_next_local_id(&self) -> ExprId {
         let mut id = 1;
         while self.local_mappings.get(&id).is_some() || self.remote_mappings.get(&id).is_some() {
             id += 1;
@@ -97,8 +99,14 @@ impl FaceState {
         id
     }
 
-    pub(super) fn get_router(&self, tables: &Tables, nodeid: &u64) -> Option<ZenohId> {
-        match tables.routers_net.as_ref().unwrap().get_link(self.link_id) {
+    pub(crate) fn get_router(&self, tables: &Tables, nodeid: &u64) -> Option<ZenohId> {
+        match tables
+            .hat
+            .routers_net
+            .as_ref()
+            .unwrap()
+            .get_link(self.link_id)
+        {
             Some(link) => match link.get_zid(nodeid) {
                 Some(router) => Some(*router),
                 None => {
@@ -119,8 +127,14 @@ impl FaceState {
         }
     }
 
-    pub(super) fn get_peer(&self, tables: &Tables, nodeid: &u64) -> Option<ZenohId> {
-        match tables.peers_net.as_ref().unwrap().get_link(self.link_id) {
+    pub(crate) fn get_peer(&self, tables: &Tables, nodeid: &u64) -> Option<ZenohId> {
+        match tables
+            .hat
+            .peers_net
+            .as_ref()
+            .unwrap()
+            .get_link(self.link_id)
+        {
             Some(link) => match link.get_zid(nodeid) {
                 Some(router) => Some(*router),
                 None => {
@@ -185,7 +199,7 @@ impl Primitives for Face {
                     (WhatAmI::Router, WhatAmI::Peer)
                     | (WhatAmI::Peer, WhatAmI::Router)
                     | (WhatAmI::Peer, WhatAmI::Peer) => {
-                        if rtables.full_net(WhatAmI::Peer) {
+                        if rtables.hat.full_net(WhatAmI::Peer) {
                             if let Some(peer) = self
                                 .state
                                 .get_peer(&rtables, &(msg.ext_nodeid.node_id as u64))
@@ -238,7 +252,7 @@ impl Primitives for Face {
                     (WhatAmI::Router, WhatAmI::Peer)
                     | (WhatAmI::Peer, WhatAmI::Router)
                     | (WhatAmI::Peer, WhatAmI::Peer) => {
-                        if rtables.full_net(WhatAmI::Peer) {
+                        if rtables.hat.full_net(WhatAmI::Peer) {
                             if let Some(peer) = self
                                 .state
                                 .get_peer(&rtables, &(msg.ext_nodeid.node_id as u64))
@@ -289,7 +303,7 @@ impl Primitives for Face {
                     (WhatAmI::Router, WhatAmI::Peer)
                     | (WhatAmI::Peer, WhatAmI::Router)
                     | (WhatAmI::Peer, WhatAmI::Peer) => {
-                        if rtables.full_net(WhatAmI::Peer) {
+                        if rtables.hat.full_net(WhatAmI::Peer) {
                             if let Some(peer) = self
                                 .state
                                 .get_peer(&rtables, &(msg.ext_nodeid.node_id as u64))
@@ -342,7 +356,7 @@ impl Primitives for Face {
                     (WhatAmI::Router, WhatAmI::Peer)
                     | (WhatAmI::Peer, WhatAmI::Router)
                     | (WhatAmI::Peer, WhatAmI::Peer) => {
-                        if rtables.full_net(WhatAmI::Peer) {
+                        if rtables.hat.full_net(WhatAmI::Peer) {
                             if let Some(peer) = self
                                 .state
                                 .get_peer(&rtables, &(msg.ext_nodeid.node_id as u64))
@@ -432,7 +446,7 @@ impl Primitives for Face {
     }
 
     fn send_close(&self) {
-        super::router::close_face(&self.tables, &Arc::downgrade(&self.state));
+        tables::close_face(&self.tables, &Arc::downgrade(&self.state));
     }
 }
 
