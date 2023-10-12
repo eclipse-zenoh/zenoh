@@ -1053,11 +1053,11 @@ where
         let (callback, receiver) = self.handler.into_cb_receiver_pair();
         self.publisher
             .session
-            .declare_matches_subscriber_inner(&self.publisher, callback)
-            .map(|sub_state| MatchingListener {
-                subscriber: MatchingListenerInner {
+            .declare_matches_listener_inner(&self.publisher, callback)
+            .map(|listener_state| MatchingListener {
+                listener: MatchingListenerInner {
                     publisher: self.publisher,
-                    state: sub_state,
+                    state: listener_state,
                     alive: true,
                 },
                 receiver,
@@ -1132,7 +1132,7 @@ impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListene
 /// ```
 #[zenoh_macros::unstable]
 pub struct MatchingListener<'a, Receiver> {
-    pub(crate) subscriber: MatchingListenerInner<'a>,
+    pub(crate) listener: MatchingListenerInner<'a>,
     pub receiver: Receiver,
 }
 
@@ -1156,14 +1156,14 @@ impl<'a, Receiver> MatchingListener<'a, Receiver> {
     /// ```
     #[inline]
     pub fn undeclare(self) -> MatchingListenerUndeclaration<'a> {
-        self.subscriber.undeclare()
+        self.listener.undeclare()
     }
 }
 
 #[zenoh_macros::unstable]
 impl<'a, T> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListener<'a, T> {
     fn undeclare_inner(self, _: ()) -> MatchingListenerUndeclaration<'a> {
-        Undeclarable::undeclare_inner(self.subscriber, ())
+        Undeclarable::undeclare_inner(self.listener, ())
     }
 }
 

@@ -1446,38 +1446,38 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn declare_matches_subscriber_inner(
+    pub(crate) fn declare_matches_listener_inner(
         &self,
         publisher: &Publisher,
         callback: Callback<'static, MatchingStatus>,
     ) -> ZResult<Arc<MatchingListenerState>> {
         let mut state = zwrite!(self.state);
-        log::trace!("matches_subscriber({:?})", publisher.key_expr);
+        log::trace!("matches_listener({:?})", publisher.key_expr);
 
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
-        let sub_state = Arc::new(MatchingListenerState {
+        let listener_state = Arc::new(MatchingListenerState {
             id,
             current: std::sync::Mutex::new(false),
             destination: publisher.destination,
             key_expr: publisher.key_expr.clone().into_owned(),
             callback,
         });
-        state.matching_listeners.insert(id, sub_state.clone());
+        state.matching_listeners.insert(id, listener_state.clone());
         drop(state);
-        match sub_state.current.lock() {
+        match listener_state.current.lock() {
             Ok(mut current) => {
                 if self
-                    .matching_status(&publisher.key_expr, sub_state.destination)
+                    .matching_status(&publisher.key_expr, listener_state.destination)
                     .map(|s| s.is_matching())
                     .unwrap_or(true)
                 {
                     *current = true;
-                    (sub_state.callback)(MatchingStatus { matching: true });
+                    (listener_state.callback)(MatchingStatus { matching: true });
                 }
             }
             Err(e) => log::error!("Error trying to acquire MathginListener lock: {}", e),
         }
-        Ok(sub_state)
+        Ok(listener_state)
     }
 
     #[zenoh_macros::unstable]
