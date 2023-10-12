@@ -285,12 +285,12 @@ async fn rx_task(
             .await
             .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
         match action {
-            Action::Read(zslice) => {
+            Action::Read(batch) => {
                 #[cfg(feature = "stats")]
                 {
                     transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
                 }
-                transport.read_messages(zslice, &link)?;
+                transport.read_messages(batch, &link)?;
             }
             Action::Stop => break,
         }
