@@ -18,19 +18,22 @@
 //!
 //! If building a plugin for [`zenohd`](https://crates.io/crates/zenoh), you should use the types exported in [`zenoh::plugins`](https://docs.rs/zenoh/latest/zenoh/plugins) to fill [`Plugin`]'s associated types.  
 //! To check your plugin typing for `zenohd`, have your plugin implement [`zenoh::plugins::ZenohPlugin`](https://docs.rs/zenoh/latest/zenoh/plugins/struct.ZenohPlugin)
-pub mod compatibility;
 pub mod loading;
 pub mod vtable;
 
 use zenoh_result::ZResult;
 
 pub mod prelude {
-    pub use crate::{compatibility::*, loading::*, vtable::*, Plugin};
+    pub use crate::{loading::*, vtable::*, Plugin, Version};
+}
+
+pub trait Version {
+    fn version() -> u32;
 }
 
 pub trait Plugin: Sized + 'static {
-    type StartArgs;
-    type RunningPlugin;
+    type StartArgs: Version;
+    type RunningPlugin: Version;
     /// Your plugins' default name when statically linked.
     const STATIC_NAME: &'static str;
     /// Starts your plugin. Use `Ok` to return your plugin's control structure

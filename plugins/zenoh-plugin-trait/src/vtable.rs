@@ -15,14 +15,88 @@ use crate::*;
 pub use no_mangle::*;
 use zenoh_result::ZResult;
 
-pub type PluginLoaderVersion = u64;
-pub const PLUGIN_LOADER_VERSION: PluginLoaderVersion = 1;
+pub type CompatibilityVersion = u64;
+pub const COMPATIBILITY_VERSION: CompatibilityVersion = 1;
 
 type StartFn<StartArgs, RunningPlugin> = fn(&str, &StartArgs) -> ZResult<RunningPlugin>;
 
 #[repr(C)]
 pub struct PluginVTable<StartArgs, RunningPlugin> {
     pub start: StartFn<StartArgs, RunningPlugin>,
+}
+
+impl<StartArgs, RunningPlugin> Version for PluginVTable<StartArgs, RunningPlugin> {
+    fn version() -> u32 {
+        1
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Compatibility {
+    rust_version: RustVersion,
+    vtable_version: PluginVTableVersion,
+}
+
+impl Compatibility {}
+
+#[repr(C)]
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct RustVersion {
+    major: u64,
+    minor: u64,
+    patch: u64,
+    stable: bool,
+    commit: &'static str,
+}
+
+const RELEASE_AND_COMMIT: (&str, &str) = zenoh_macros::rustc_version_release!();
+impl RustVersion {
+    pub fn new() -> Self {
+        let (release, commit) = RELEASE_AND_COMMIT;
+        let (release, stable) = if let Some(p) = release.chars().position(|c| c == '-') {
+            (&release[..p], false)
+        } else {
+            (release, true)
+        };
+        let mut split = release.split('.').map(|s| s.trim());
+        RustVersion {
+            major: split.next().unwrap().parse().unwrap(),
+            minor: split.next().unwrap().parse().unwrap(),
+            patch: split.next().unwrap().parse().unwrap(),
+            stable,
+            commit,
+        }
+    }
+    pub fn are_compatible(a: &Self, b: &Self) -> bool {
+        if a.stable && b.stable {
+            a.major == b.major && a.minor == b.minor && a.patch == b.patch
+        } else {
+            a == b
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct PluginVTableVersion {
+    vtable_version: u32,
+    start_args_type_version: u32,
+    running_plugin_type_version: u32,
+    start_args_type_name: &'static str,
+    running_plugin_type_name: &'static str,
+}
+
+impl PluginVTableVersion {
+    pub fn new<StartArgs, RunningPlugin>() -> Self {
+        Self {
+            vtable_version: 1,
+            start_args_type_version: 1,
+            running_plugin_type_version: 1,
+            start_args_type_name: std::any::type_name::<StartArgs>(),
+            running_plugin_type_name: std::any::type_name::<RunningPlugin>(),
+        }
+    }
 }
 
 impl<StartArgs, RunningPlugin> PluginVTable<StartArgs, RunningPlugin> {
@@ -42,12 +116,12 @@ pub mod no_mangle {
     macro_rules! declare_plugin {
         ($ty: path) => {
             #[no_mangle]
-            fn get_plugin_loader_version() -> $crate::prelude::PluginLoaderVersion {
+            fn get_compatibility_version() -> $crate::prelude::CompatibilityVersion {
                 $crate::prelude::PLUGIN_LOADER_VERSION
             }
 
             #[no_mangle]
-            fn get_plugin_compatibility() -> $crate::prelude::Compatibility {
+            fn get_compatibility() -> $crate::prelude::Compatibility {
                 // TODO: add vtable version (including type parameters) to the compatibility information
                 $crate::prelude::Compatibility::new()
             }
