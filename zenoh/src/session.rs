@@ -1452,9 +1452,9 @@ impl Session {
         callback: Callback<'static, MatchingStatus>,
     ) -> ZResult<Arc<MatchingListenerState>> {
         let mut state = zwrite!(self.state);
-        log::trace!("matches_listener({:?})", publisher.key_expr);
 
         let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        log::trace!("matches_listener({:?}) => {id}", publisher.key_expr);
         let listener_state = Arc::new(MatchingListenerState {
             id,
             current: std::sync::Mutex::new(false),
@@ -1579,8 +1579,10 @@ impl Session {
     #[zenoh_macros::unstable]
     pub(crate) fn matches_unsubscribe(&self, sid: usize) -> ZResult<()> {
         let mut state = zwrite!(self.state);
-        if let Some(sub_state) = state.subscribers.remove(&sid) {
-            trace!("matches_unsubscribe({:?})", sub_state);
+        if state.matching_listeners.remove(&sid).is_some() {
+            trace!("matches_unsubscribe({sid})");
+        } else {
+            bail!("Failed to unsubscribe matching status: unknown id: {sid}")
         }
         Ok(())
     }
