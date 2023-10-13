@@ -12,13 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
+    buffer::{Buffer, SplitBuffer},
     reader::HasReader,
     vec,
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
     ZSlice,
 };
 use alloc::{boxed::Box, sync::Arc};
-use core::{fmt, num::NonZeroUsize};
+use core::{fmt, num::NonZeroUsize, option};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct BBuf {
@@ -38,16 +39,6 @@ impl BBuf {
     #[must_use]
     pub const fn capacity(&self) -> usize {
         self.buffer.len()
-    }
-
-    #[must_use]
-    pub const fn len(&self) -> usize {
-        self.len
-    }
-
-    #[must_use]
-    pub const fn is_empty(&self) -> bool {
-        self.len == 0
     }
 
     #[must_use]
@@ -74,6 +65,34 @@ impl BBuf {
 impl fmt::Debug for BBuf {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:02x?}", self.as_slice())
+    }
+}
+
+// Buffer
+impl Buffer for BBuf {
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
+impl Buffer for &BBuf {
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
+impl Buffer for &mut BBuf {
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
+// SplitBuffer
+impl SplitBuffer for BBuf {
+    type Slices<'a> = option::IntoIter<&'a [u8]>;
+
+    fn slices(&self) -> Self::Slices<'_> {
+        Some(self.as_slice()).into_iter()
     }
 }
 
