@@ -32,8 +32,8 @@ pub type StartArgs = Runtime;
 pub type RunningPlugin = Box<dyn RunningPluginTrait + 'static>;
 
 impl CompatibilityVersion for RunningPlugin {
-    fn version() -> u32 {
-        1
+    fn version() -> &'static str {
+        "1"
     }
 }
 
@@ -81,5 +81,5 @@ pub trait RunningPluginTrait: Send + Sync {
 /// The zenoh plugins manager. It handles the full lifetime of plugins, from loading to destruction.
 pub type PluginsManager = zenoh_plugin_trait::loading::PluginsManager<StartArgs, RunningPlugin>;
 
-use zenoh_plugin_trait::CompatibilityVersion;
+pub use zenoh_plugin_trait::CompatibilityVersion;
 pub use zenoh_plugin_trait::Plugin;

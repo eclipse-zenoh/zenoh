@@ -28,9 +28,9 @@ use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
 use crate::GIT_VERSION;
 pub use adminspace::AdminSpace;
 use async_std::task::JoinHandle;
+use const_format::concatcp;
 use futures::stream::StreamExt;
 use futures::Future;
-use zenoh_plugin_trait::CompatibilityVersion;
 use std::any::Any;
 use std::sync::Arc;
 use std::time::Duration;
@@ -38,6 +38,7 @@ use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
 use zenoh_link::{EndPoint, Link};
+use zenoh_plugin_trait::{CompatibilityVersion, version_with_features};
 use zenoh_protocol::core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId};
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::{bail, ZResult};
@@ -66,8 +67,26 @@ pub struct Runtime {
 }
 
 impl CompatibilityVersion for Runtime {
-    fn version() -> u32 {
-        1
+    fn version() -> &'static str {
+        version_with_features!(
+            "1",
+            "auth_pubkey",
+            "auth_usrpwd",
+            "complete_n",
+            "shared-memory",
+            "stats",
+            "transport_multilink",
+            "transport_quic",
+            "transport_serial",
+            "transport_unixpipe",
+            "transport_tcp",
+            "transport_tls",
+            "transport_udp",
+            "transport_unixsock-stream",
+            "transport_ws",
+            "unstable",
+            "default"
+        )
     }
 }
 

@@ -16,19 +16,19 @@ use libloading::Library;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use vtable::PluginVTable;
+use vtable::{PluginVTable, PluginLoaderVersion, PLUGIN_LOADER_VERSION, Compatibility};
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_util::LibLoader;
 
 /// A plugins manager that handles starting and stopping plugins.
 /// Plugins can be loaded from shared libraries using [`Self::load_plugin_by_name`] or [`Self::load_plugin_by_paths`], or added directly from the binary if available using [`Self::add_static`].
-pub struct PluginsManager<StartArgs, RunningPlugin> {
+pub struct PluginsManager<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion> {
     loader: Option<LibLoader>,
     plugin_starters: Vec<Box<dyn PluginStarter<StartArgs, RunningPlugin> + Send + Sync>>,
     running_plugins: HashMap<String, (String, RunningPlugin)>,
 }
 
-impl<StartArgs: 'static, RunningPlugin: 'static> PluginsManager<StartArgs, RunningPlugin> {
+impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + CompatibilityVersion> PluginsManager<StartArgs, RunningPlugin> {
     /// Constructs a new plugin manager with dynamic library loading enabled.
     pub fn dynamic(loader: LibLoader) -> Self {
         PluginsManager {
@@ -228,7 +228,7 @@ where
     }
 }
 
-impl<StartArgs, RunningPlugin> PluginStarter<StartArgs, RunningPlugin>
+impl<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion> PluginStarter<StartArgs, RunningPlugin>
     for DynamicPlugin<StartArgs, RunningPlugin>
 {
     fn name(&self) -> &str {
@@ -245,15 +245,29 @@ impl<StartArgs, RunningPlugin> PluginStarter<StartArgs, RunningPlugin>
     }
 }
 
-pub struct DynamicPlugin<StartArgs, RunningPlugin> {
+pub struct DynamicPlugin<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion> {
     _lib: Library,
     vtable: PluginVTable<StartArgs, RunningPlugin>,
     pub name: String,
     pub path: PathBuf,
 }
 
-impl<StartArgs, RunningPlugin> DynamicPlugin<StartArgs, RunningPlugin> {
+impl<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion> DynamicPlugin<StartArgs, RunningPlugin> {
     fn new(name: String, lib: Library, path: PathBuf) -> ZResult<Self> {
+        let get_plugin_loader_version = unsafe {
+            lib.get::<fn() -> PluginLoaderVersion>(b"get_plugin_loader_version")?
+        };
+        let plugin_loader_version = get_plugin_loader_version();
+        if plugin_loader_version != PLUGIN_LOADER_VERSION {
+            bail!("Plugin loader version mismatch: host = {}, plugin = {}", PLUGIN_LOADER_VERSION, plugin_loader_version);
+        }
+        let get_compatibility = unsafe { lib.get::<fn() -> Compatibility>(b"get_compatibility")? };
+        let plugin_compatibility_record = get_compatibility();
+        let host_compatibility_record = Compatibility::new::<StartArgs, RunningPlugin>();
+        if !plugin_compatibility_record.are_compatible(&host_compatibility_record) {
+            bail!("Plugin compatibility mismatch:\nhost = {:?}\nplugin = {:?}\n", host_compatibility_record, plugin_compatibility_record);
+        }
+
         // TODO: check loader version and compatibility
         let load_plugin =
             unsafe { lib.get::<fn() -> PluginVTable<StartArgs, RunningPlugin>>(b"load_plugin")? };

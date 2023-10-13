@@ -25,8 +25,8 @@ pub struct PluginVTable<StartArgs, RunningPlugin> {
     pub start: StartFn<StartArgs, RunningPlugin>,
 }
 impl<StartArgs, RunningPlugin> CompatibilityVersion for PluginVTable<StartArgs, RunningPlugin> {
-    fn version() -> u32 {
-        1
+    fn version() -> &'static str{
+        "1"
     }
 }
 
@@ -34,9 +34,9 @@ impl<StartArgs, RunningPlugin> CompatibilityVersion for PluginVTable<StartArgs, 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Compatibility {
     rust_version: RustVersion,
-    vtable_version: u32,
-    start_args_version: (&'static str, u32),
-    running_plugin_version: (&'static str, u32),
+    vtable_version: &'static str,
+    start_args_version: (&'static str, &'static str),
+    running_plugin_version: (&'static str, &'static str),
 }
 
 impl Compatibility {

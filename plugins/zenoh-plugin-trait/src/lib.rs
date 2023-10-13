@@ -27,8 +27,16 @@ pub mod prelude {
     pub use crate::{loading::*, vtable::*, Plugin, CompatibilityVersion};
 }
 
+#[macro_export]
+macro_rules! version_with_features {
+    ($version:literal, $($feature:literal),*) => {
+        concatcp!($version $(,
+            if cfg!(feature = $feature) { concatcp!(" ", $feature) } else { "" }
+        )*)
+    };
+}
 pub trait CompatibilityVersion {
-    fn version() -> u32;
+    fn version() -> &'static str;
 }
 
 pub trait Plugin: Sized + 'static {

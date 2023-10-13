@@ -20,6 +20,7 @@ use zenoh::config::{Config, ModeDependentValue, PermissionsConf, PluginLoad, Val
 use zenoh::plugins::PluginsManager;
 use zenoh::prelude::{EndPoint, WhatAmI};
 use zenoh::runtime::{AdminSpace, Runtime};
+use zenoh::plugins::CompatibilityVersion;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
