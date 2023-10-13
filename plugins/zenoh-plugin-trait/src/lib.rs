@@ -24,16 +24,16 @@ pub mod vtable;
 use zenoh_result::ZResult;
 
 pub mod prelude {
-    pub use crate::{loading::*, vtable::*, Plugin, Version};
+    pub use crate::{loading::*, vtable::*, Plugin, CompatibilityVersion};
 }
 
-pub trait Version {
+pub trait CompatibilityVersion {
     fn version() -> u32;
 }
 
 pub trait Plugin: Sized + 'static {
-    type StartArgs: Version;
-    type RunningPlugin: Version;
+    type StartArgs: CompatibilityVersion;
+    type RunningPlugin: CompatibilityVersion;
     /// Your plugins' default name when statically linked.
     const STATIC_NAME: &'static str;
     /// Starts your plugin. Use `Ok` to return your plugin's control structure

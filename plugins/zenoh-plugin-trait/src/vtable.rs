@@ -15,8 +15,8 @@ use crate::*;
 pub use no_mangle::*;
 use zenoh_result::ZResult;
 
-pub type CompatibilityVersion = u64;
-pub const COMPATIBILITY_VERSION: CompatibilityVersion = 1;
+pub type PluginLoaderVersion = u64;
+pub const PLUGIN_LOADER_VERSION: PluginLoaderVersion = 1;
 
 type StartFn<StartArgs, RunningPlugin> = fn(&str, &StartArgs) -> ZResult<RunningPlugin>;
 
@@ -24,8 +24,7 @@ type StartFn<StartArgs, RunningPlugin> = fn(&str, &StartArgs) -> ZResult<Running
 pub struct PluginVTable<StartArgs, RunningPlugin> {
     pub start: StartFn<StartArgs, RunningPlugin>,
 }
-
-impl<StartArgs, RunningPlugin> Version for PluginVTable<StartArgs, RunningPlugin> {
+impl<StartArgs, RunningPlugin> CompatibilityVersion for PluginVTable<StartArgs, RunningPlugin> {
     fn version() -> u32 {
         1
     }
@@ -35,10 +34,30 @@ impl<StartArgs, RunningPlugin> Version for PluginVTable<StartArgs, RunningPlugin
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Compatibility {
     rust_version: RustVersion,
-    vtable_version: PluginVTableVersion,
+    vtable_version: u32,
+    start_args_version: (&'static str, u32),
+    running_plugin_version: (&'static str, u32),
 }
 
-impl Compatibility {}
+impl Compatibility {
+    pub fn new<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion>() -> Self {
+        Self {
+            rust_version: RustVersion::new(),
+            vtable_version: PluginVTable::<StartArgs, RunningPlugin>::version(),
+            start_args_version: (std::any::type_name::<StartArgs>(), StartArgs::version()),
+            running_plugin_version: (
+                std::any::type_name::<RunningPlugin>(),
+                RunningPlugin::version(),
+            ),
+        }
+    }
+    pub fn are_compatible(&self, other: &Self) -> bool {
+        RustVersion::are_compatible(&self.rust_version, &other.rust_version)
+            && self.vtable_version == other.vtable_version
+            && self.start_args_version == other.start_args_version
+            && self.running_plugin_version == other.running_plugin_version
+    }
+}
 
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -77,25 +96,9 @@ impl RustVersion {
     }
 }
 
-#[repr(C)]
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct PluginVTableVersion {
-    vtable_version: u32,
-    start_args_type_version: u32,
-    running_plugin_type_version: u32,
-    start_args_type_name: &'static str,
-    running_plugin_type_name: &'static str,
-}
-
-impl PluginVTableVersion {
-    pub fn new<StartArgs, RunningPlugin>() -> Self {
-        Self {
-            vtable_version: 1,
-            start_args_type_version: 1,
-            running_plugin_type_version: 1,
-            start_args_type_name: std::any::type_name::<StartArgs>(),
-            running_plugin_type_name: std::any::type_name::<RunningPlugin>(),
-        }
+impl Default for RustVersion {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -116,14 +119,17 @@ pub mod no_mangle {
     macro_rules! declare_plugin {
         ($ty: path) => {
             #[no_mangle]
-            fn get_compatibility_version() -> $crate::prelude::CompatibilityVersion {
+            fn get_plugin_loader_version() -> $crate::prelude::PluginLoaderVersion {
                 $crate::prelude::PLUGIN_LOADER_VERSION
             }
 
             #[no_mangle]
             fn get_compatibility() -> $crate::prelude::Compatibility {
                 // TODO: add vtable version (including type parameters) to the compatibility information
-                $crate::prelude::Compatibility::new()
+                $crate::prelude::Compatibility::new::<
+                    <$ty as $crate::prelude::Plugin>::StartArgs,
+                    <$ty as $crate::prelude::Plugin>::RunningPlugin,
+                >()
             }
 
             #[no_mangle]

@@ -30,6 +30,7 @@ pub use adminspace::AdminSpace;
 use async_std::task::JoinHandle;
 use futures::stream::StreamExt;
 use futures::Future;
+use zenoh_plugin_trait::CompatibilityVersion;
 use std::any::Any;
 use std::sync::Arc;
 use std::time::Duration;
@@ -62,6 +63,12 @@ struct RuntimeState {
 #[derive(Clone)]
 pub struct Runtime {
     state: Arc<RuntimeState>,
+}
+
+impl CompatibilityVersion for Runtime {
+    fn version() -> u32 {
+        1
+    }
 }
 
 impl Runtime {
