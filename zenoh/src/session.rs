@@ -1577,14 +1577,14 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn matches_unsubscribe(&self, sid: usize) -> ZResult<()> {
+    pub(crate) fn undeclare_matches_listener_inner(&self, sid: usize) -> ZResult<()> {
         let mut state = zwrite!(self.state);
-        if state.matching_listeners.remove(&sid).is_some() {
-            trace!("matches_unsubscribe({sid})");
+        if let Some(state) = state.matching_listeners.remove(&sid) {
+            trace!("undeclare_matches_listener_inner({:?})", state);
+            Ok(())
         } else {
-            bail!("Failed to unsubscribe matching status: unknown id: {sid}")
+            Err(zerror!("Unable to find MatchingListener").into())
         }
-        Ok(())
     }
 
     pub(crate) fn handle_data(

@@ -1089,6 +1089,16 @@ pub(crate) struct MatchingListenerState {
 }
 
 #[zenoh_macros::unstable]
+impl std::fmt::Debug for MatchingListenerState {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.debug_struct("MatchingListener")
+            .field("id", &self.id)
+            .field("key_expr", &self.key_expr)
+            .finish()
+    }
+}
+
+#[zenoh_macros::unstable]
 pub(crate) struct MatchingListenerInner<'a> {
     pub(crate) publisher: PublisherRef<'a, 'a>,
     pub(crate) state: std::sync::Arc<MatchingListenerState>,
@@ -1199,7 +1209,7 @@ impl SyncResolve for MatchingListenerUndeclaration<'_> {
         self.subscriber
             .publisher
             .session
-            .matches_unsubscribe(self.subscriber.state.id)
+            .undeclare_matches_listener_inner(self.subscriber.state.id)
     }
 }
 
@@ -1215,9 +1225,11 @@ impl AsyncResolve for MatchingListenerUndeclaration<'_> {
 #[zenoh_macros::unstable]
 impl Drop for MatchingListenerInner<'_> {
     fn drop(&mut self) {
-        self.alive = false;
-        if let Err(e) = self.publisher.session.matches_unsubscribe(self.state.id) {
-            log::error!("Failed to undeclare MatchingListener: {e}");
+        if self.alive {
+            let _ = self
+                .publisher
+                .session
+                .undeclare_matches_listener_inner(self.state.id);
         }
     }
 }
