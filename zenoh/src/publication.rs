@@ -1212,6 +1212,16 @@ impl AsyncResolve for MatchingListenerUndeclaration<'_> {
     }
 }
 
+#[zenoh_macros::unstable]
+impl Drop for MatchingListenerInner<'_> {
+    fn drop(&mut self) {
+        self.alive = false;
+        if let Err(e) = self.publisher.session.matches_unsubscribe(self.state.id) {
+            log::error!("Failed to undeclare MatchingListener: {e}");
+        }
+    }
+}
+
 mod tests {
     #[test]
     fn priority_from() {
