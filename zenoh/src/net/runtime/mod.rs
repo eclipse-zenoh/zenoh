@@ -38,7 +38,7 @@ use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
 use zenoh_link::{EndPoint, Link};
-use zenoh_plugin_trait::{CompatibilityVersion, version_with_features};
+use zenoh_plugin_trait::{CompatibilityVersion, concat_enabled_features};
 use zenoh_protocol::core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId};
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::{bail, ZResult};
@@ -66,10 +66,12 @@ pub struct Runtime {
     state: Arc<RuntimeState>,
 }
 
+const RUNTIME_VERSION: &str = "1";
+
 impl CompatibilityVersion for Runtime {
     fn version() -> &'static str {
-        version_with_features!(
-            "1",
+        concat_enabled_features!(
+            RUNTIME_VERSION,
             "auth_pubkey",
             "auth_usrpwd",
             "complete_n",

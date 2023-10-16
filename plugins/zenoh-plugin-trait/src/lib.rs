@@ -24,15 +24,18 @@ pub mod vtable;
 use zenoh_result::ZResult;
 
 pub mod prelude {
-    pub use crate::{loading::*, vtable::*, Plugin, CompatibilityVersion};
+    pub use crate::{loading::*, vtable::*, CompatibilityVersion, Plugin};
 }
 
 #[macro_export]
-macro_rules! version_with_features {
-    ($version:literal, $($feature:literal),*) => {
-        concatcp!($version $(,
-            if cfg!(feature = $feature) { concatcp!(" ", $feature) } else { "" }
-        )*)
+macro_rules! concat_enabled_features {
+    ($version:ident, $($feature:literal),*) => {
+        {
+            use const_format::concatcp;
+            const_format::concatcp!($version $(,
+                if cfg!(feature = $feature) { concatcp!(" ", $feature) } else { "" }
+            )*)
+        }
     };
 }
 pub trait CompatibilityVersion {
