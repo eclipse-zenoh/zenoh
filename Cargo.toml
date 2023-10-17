@@ -40,6 +40,7 @@ members = [
   "io/zenoh-links/zenoh-link-unixpipe/",
   "io/zenoh-transport",
   "plugins/example-plugin",
+  "plugins/example-storage-plugin",
   "plugins/zenoh-backend-traits",
   "plugins/zenoh-plugin-rest",
   "plugins/zenoh-plugin-storage-manager",
