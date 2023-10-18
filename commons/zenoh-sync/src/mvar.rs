@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::Condition;
-use tokio::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use tokio::sync::Mutex;
 use zenoh_core::zasynclock;
 
 pub struct Mvar<T> {

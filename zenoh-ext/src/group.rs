@@ -14,8 +14,6 @@
 
 //! To manage groups and group memeberships
 
-use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
 use flume::{Receiver, Sender};
 use futures::prelude::*;
 use futures::select;
@@ -25,6 +23,8 @@ use std::convert::TryInto;
 use std::ops::Add;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::Publisher;
 use zenoh::query::ConsolidationMode;

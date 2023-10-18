@@ -17,11 +17,11 @@ use crate::transport_unicast_inner::TransportUnicastTrait;
 use crate::unicast::universal::link::TransportLinkUnicast;
 use crate::TransportConfigUnicast;
 use crate::{TransportExecutor, TransportManager, TransportPeerEventHandler};
-use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use async_trait::async_trait;
 use std::fmt::DebugStruct;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard};
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{

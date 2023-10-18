@@ -491,7 +491,8 @@ impl Network {
 
                         if !self.autoconnect.is_empty() {
                             // Connect discovered peers
-                            if tokio::runtime::Handle::current().block_on(self.runtime.manager().get_transport_unicast(&zid))
+                            if tokio::runtime::Handle::current()
+                                .block_on(self.runtime.manager().get_transport_unicast(&zid))
                                 .is_none()
                                 && self.autoconnect.matches(whatami)
                             {
@@ -610,7 +611,8 @@ impl Network {
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
                 if let Some(whatami) = node.whatami {
-                    if tokio::runtime::Handle::current().block_on(self.runtime.manager().get_transport_unicast(&node.zid))
+                    if tokio::runtime::Handle::current()
+                        .block_on(self.runtime.manager().get_transport_unicast(&node.zid))
                         .is_none()
                         && self.autoconnect.matches(whatami)
                     {

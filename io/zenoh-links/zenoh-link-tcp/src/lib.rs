@@ -17,9 +17,9 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use std::net::ToSocketAddrs;
 use async_trait::async_trait;
 use std::net::SocketAddr;
+use std::net::ToSocketAddrs;
 use zenoh_core::zconfigurable;
 use zenoh_link_commons::LocatorInspector;
 use zenoh_protocol::core::{endpoint::Address, Locator};

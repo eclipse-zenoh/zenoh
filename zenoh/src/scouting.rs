@@ -14,9 +14,9 @@
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::net::runtime::{orchestrator::Loop, Runtime};
 
-use tokio::net::UdpSocket;
 use futures::StreamExt;
 use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};
+use tokio::net::UdpSocket;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::ZResult;

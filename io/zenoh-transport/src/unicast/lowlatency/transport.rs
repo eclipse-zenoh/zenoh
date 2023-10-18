@@ -19,12 +19,17 @@ use crate::TransportManager;
 use crate::{TransportExecutor, TransportPeerEventHandler};
 #[cfg(feature = "transport_unixpipe")]
 use async_std::sync::RwLockUpgradableReadGuard;
-use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
-use tokio::task::JoinHandle;
 use async_trait::async_trait;
 use std::sync::{Arc, RwLock as SyncRwLock};
 use std::time::Duration;
-use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
+use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
+use tokio::task::JoinHandle;
+#[cfg(feature = "transport_unixpipe")]
+use zenoh_core::zasyncread_upgradable;
+use zenoh_core::{zasynclock, zasyncread, zread, zwrite};
+#[cfg(feature = "transport_unixpipe")]
+use zenoh_link::unixpipe::UNIXPIPE_LOCATOR_PREFIX;
+#[cfg(feature = "transport_unixpipe")]
 use zenoh_link::Link;
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::transport::TransportBodyLowLatency;

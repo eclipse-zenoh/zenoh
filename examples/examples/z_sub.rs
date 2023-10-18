@@ -11,14 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use tokio::time::sleep;
 use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
+use tokio::time::sleep;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use tokio::io::AsyncReadExt;
 
 #[tokio::main]
 async fn main() {

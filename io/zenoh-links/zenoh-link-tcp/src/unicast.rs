@@ -11,14 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::net::SocketAddr;
 use async_trait::async_trait;
+use std::cell::UnsafeCell;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
 use std::net::IpAddr;
+use std::net::SocketAddr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::task::JoinHandle;
+use zenoh_core::{zread, zwrite};
 use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
@@ -26,16 +31,12 @@ use zenoh_link_commons::{
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 use zenoh_sync::Signal;
-use tokio::io::{AsyncWriteExt, AsyncReadExt};
-use std::cell::UnsafeCell;
-use tokio::task::JoinHandle;
-
 
 use super::{
     get_tcp_addrs, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU, TCP_LINGER_TIMEOUT,
     TCP_LOCATOR_PREFIX,
 };
-use tokio::net::{TcpStream, TcpListener};
+use tokio::net::{TcpListener, TcpStream};
 
 pub struct LinkUnicastTcp {
     // The underlying socket as returned from the async-std library
@@ -63,11 +64,9 @@ impl LinkUnicastTcp {
         }
 
         // Set the TCP linger option
-        if let Err(err) = socket.set_linger(
-            Some(Duration::from_secs(
-                (*TCP_LINGER_TIMEOUT).try_into().unwrap(),
-            )),
-        ) {
+        if let Err(err) = socket.set_linger(Some(Duration::from_secs(
+            (*TCP_LINGER_TIMEOUT).try_into().unwrap(),
+        ))) {
             log::warn!(
                 "Unable to set LINGER option on TCP link {} => {}: {}",
                 src_addr,
@@ -89,7 +88,6 @@ impl LinkUnicastTcp {
     fn get_mut_socket(&self) -> &mut TcpStream {
         unsafe { &mut *self.socket.get() }
     }
-
 }
 
 #[async_trait]
@@ -129,14 +127,11 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     }
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        let _ = self.get_mut_socket()
-            .read_exact(buffer)
-            .await
-            .map_err(|e| {
-                let e = zerror!("Read error on TCP link {}: {}", self, e);
-                log::trace!("{}", e);
-                e
-            });
+        let _ = self.get_mut_socket().read_exact(buffer).await.map_err(|e| {
+            let e = zerror!("Read error on TCP link {}: {}", self, e);
+            log::trace!("{}", e);
+            e
+        });
         Ok(())
     }
 
@@ -392,7 +387,6 @@ async fn accept_task(
     signal: Signal,
     manager: NewLinkChannelSender,
 ) -> ZResult<()> {
-
     async fn accept(socket: &TcpListener) -> ZResult<(TcpStream, SocketAddr)> {
         let res = socket.accept().await.map_err(|e| zerror!(e))?;
         Ok(res)
@@ -406,7 +400,6 @@ async fn accept_task(
 
     log::trace!("Ready to accept TCP connections on: {:?}", src_addr);
     while active.load(Ordering::Acquire) {
-
         let (stream, dst_addr) = tokio::select! {
             _ = signal.wait() => break,
             res = accept(&socket) => {

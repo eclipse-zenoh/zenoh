@@ -19,11 +19,11 @@ use crate::multicast::manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
 };
-use tokio::sync::Mutex as AsyncMutex;
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex as AsyncMutex;
 use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
@@ -322,20 +322,18 @@ pub(crate) struct TransportExecutor {
 
 impl TransportExecutor {
     fn new(num_threads: usize) -> ZResult<Self> {
-        use tokio::runtime::Builder;
         use std::sync::atomic::{AtomicUsize, Ordering};
+        use tokio::runtime::Builder;
         let runtime = Builder::new_multi_thread()
             .enable_time()
             .worker_threads(num_threads)
             .thread_name_fn(|| {
-               static ATOMIC_TX_THREAD_ID: AtomicUsize = AtomicUsize::new(0);
-               let id = ATOMIC_TX_THREAD_ID.fetch_add(1, Ordering::SeqCst);
-               format!("zenoh-tx-{}", id)
+                static ATOMIC_TX_THREAD_ID: AtomicUsize = AtomicUsize::new(0);
+                let id = ATOMIC_TX_THREAD_ID.fetch_add(1, Ordering::SeqCst);
+                format!("zenoh-tx-{}", id)
             })
             .build()?;
-        Ok(TransportExecutor {
-            runtime
-        })
+        Ok(TransportExecutor { runtime })
     }
 }
 
