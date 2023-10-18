@@ -14,7 +14,6 @@
 
 //! Tools to access information about the current zenoh [`Session`](crate::Session).
 use crate::SessionRef;
-use async_std::task;
 use std::future::Ready;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::{WhatAmI, ZenohId};
@@ -82,7 +81,8 @@ impl<'a> Resolvable for RoutersZidBuilder<'a> {
 impl<'a> SyncResolve for RoutersZidBuilder<'a> {
     fn res_sync(self) -> Self::To {
         Box::new(
-            task::block_on(self.session.runtime.manager().get_transports_unicast())
+            tokio::runtime::Handle::current()
+                .block_on(self.session.runtime.manager().get_transports_unicast())
                 .into_iter()
                 .filter_map(|s| {
                     s.get_whatami()
@@ -129,7 +129,8 @@ impl<'a> Resolvable for PeersZidBuilder<'a> {
 impl<'a> SyncResolve for PeersZidBuilder<'a> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         Box::new(
-            task::block_on(self.session.runtime.manager().get_transports_unicast())
+            tokio::runtime::Handle::current()
+                .block_on(self.session.runtime.manager().get_transports_unicast())
                 .into_iter()
                 .filter_map(|s| {
                     s.get_whatami()

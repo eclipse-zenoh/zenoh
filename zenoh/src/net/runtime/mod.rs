@@ -26,7 +26,7 @@ use super::routing::router::Router;
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
 use crate::GIT_VERSION;
 pub use adminspace::AdminSpace;
-use async_std::task::JoinHandle;
+use tokio::task::JoinHandle;
 use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
@@ -85,6 +85,9 @@ impl Runtime {
 
     pub(crate) async fn init(config: Config) -> ZResult<Runtime> {
         log::debug!("Zenoh Rust API {}", GIT_VERSION);
+        // Make sure to have have enough threads spawned in the async futures executor
+        // WARN: switch to tokio
+        zasync_executor_init!();
 
         let zid = *config.id();
 
@@ -179,7 +182,7 @@ impl Runtime {
             .read()
             .unwrap()
             .as_ref()
-            .map(|source| async_std::task::spawn(future.timeout_at(source.token())))
+            .map(|source| tokio::task::spawn(future.timeout_at(source.token())))
     }
 
     pub(crate) fn router(&self) -> Arc<Router> {

@@ -14,7 +14,7 @@
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::net::runtime::{orchestrator::Loop, Runtime};
 
-use async_std::net::UdpSocket;
+use tokio::net::UdpSocket;
 use futures::StreamExt;
 use std::{fmt, future::Ready, net::SocketAddr, ops::Deref};
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
@@ -307,7 +307,7 @@ fn scout(
             .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
             .collect();
         if !sockets.is_empty() {
-            async_std::task::spawn(async move {
+            tokio::task::spawn(async move {
                 let mut stop_receiver = stop_receiver.stream();
                 let scout = Runtime::scout(&sockets, what, &addr, move |hello| {
                     let callback = callback.clone();
@@ -320,7 +320,10 @@ fn scout(
                     stop_receiver.next().await;
                     log::trace!("stop scout({}, {})", what, &config);
                 };
-                async_std::prelude::FutureExt::race(scout, stop).await;
+                tokio::select! {
+                    _ = scout => {},
+                    _ = stop => {},
+                }
             });
         }
     }

@@ -32,11 +32,8 @@ use async_std::{
     sync::{Mutex, MutexGuard},
     task,
 };
-use async_std::prelude::FutureExt;
-use tokio::{sync::Mutex, task};
 use std::{collections::HashMap, sync::Arc, time::Duration};
-#[cfg(feature = "transport_compression")]
-use zenoh_config::CompressionUnicastConf;
+use tokio::{sync::Mutex, task};
 #[cfg(feature = "shared-memory")]
 use zenoh_config::SharedMemoryConf;
 use zenoh_config::{Config, LinkTxConf, QoSUnicastConf, TransportUnicastConf};
@@ -745,9 +742,11 @@ impl TransportManager {
         // Spawn a task to accept the link
         let c_manager = self.clone();
         task::spawn(async move {
-            if let Err(e) = super::establishment::accept::accept_link(link, &c_manager)
-                .timeout(c_manager.config.unicast.accept_timeout)
-                .await
+            if let Err(e) = tokio::time::timeout(
+                c_manager.config.unicast.accept_timeout,
+                super::establishment::accept::accept_link(&link, &c_manager),
+            )
+            .await
             {
                 log::debug!("{}", e);
             }

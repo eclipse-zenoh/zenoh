@@ -50,7 +50,7 @@ default = ["test", "transport_multilink"]
 
 [dependencies]
 async-executor = { workspace = true }
-async-global-executor = { workspace = true }
+async-global-executor = { workspace = true, features = ["tokio"] }
 async-std = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true, features = ["sync", "rt", "fs"] }

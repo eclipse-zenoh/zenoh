@@ -173,7 +173,7 @@ impl Default for TransportManagerBuilderMulticast {
             #[cfg(feature = "transport_compression")]
             is_compression: *compression.enabled(),
         };
-        async_std::task::block_on(tmb.from_config(&Config::default())).unwrap()
+        async_global_executor::block_on(tmb.from_config(&Config::default())).unwrap()
     }
 }
 

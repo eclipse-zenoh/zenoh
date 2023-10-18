@@ -163,7 +163,7 @@ where
     F: Future<Output = To> + Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        async_std::task::block_on(self.0)
+        async_global_executor::block_on(self.0)
     }
 }
 

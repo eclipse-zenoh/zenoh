@@ -40,7 +40,7 @@ use crate::Sample;
 use crate::SampleKind;
 use crate::Selector;
 use crate::Value;
-use async_std::task;
+use tokio::task;
 use log::{error, trace, warn};
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -816,7 +816,7 @@ impl Session {
                     match runtime.start().await {
                         Ok(()) => {
                             // Workaround for the declare_and_shoot problem
-                            task::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
+                            tokio::time::sleep(Duration::from_millis(*API_OPEN_SESSION_DELAY)).await;
                             Ok(session)
                         }
                         Err(err) => Err(err),
@@ -1747,7 +1747,7 @@ impl Session {
             let state = self.state.clone();
             let zid = self.runtime.zid();
             async move {
-                task::sleep(timeout).await;
+                tokio::time::sleep(timeout).await;
                 let mut state = zwrite!(state);
                 if let Some(query) = state.queries.remove(&qid) {
                     std::mem::drop(state);

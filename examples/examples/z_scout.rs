@@ -36,5 +36,7 @@ async fn main() {
     .await;
 
     // stop scouting
-    receiver.stop();
+    drop(receiver);
+
+    async_std::task::sleep(std::time::Duration::from_secs(10)).await;
 }

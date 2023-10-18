@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::net::SocketAddr;
-use async_std::prelude::FutureExt;
 use async_trait::async_trait;
 use std::convert::TryInto;
 use std::fmt;
@@ -393,19 +392,10 @@ async fn accept_task(
     signal: Signal,
     manager: NewLinkChannelSender,
 ) -> ZResult<()> {
-    enum Action {
-        Accept((TcpStream, SocketAddr)),
-        Stop,
-    }
 
-    async fn accept(socket: &TcpListener) -> ZResult<Action> {
+    async fn accept(socket: &TcpListener) -> ZResult<(TcpStream, SocketAddr)> {
         let res = socket.accept().await.map_err(|e| zerror!(e))?;
-        Ok(Action::Accept(res))
-    }
-
-    async fn stop(signal: Signal) -> ZResult<Action> {
-        signal.wait().await;
-        Ok(Action::Stop)
+        Ok(res)
     }
 
     let src_addr = socket.local_addr().map_err(|e| {
@@ -416,22 +406,25 @@ async fn accept_task(
 
     log::trace!("Ready to accept TCP connections on: {:?}", src_addr);
     while active.load(Ordering::Acquire) {
-        // Wait for incoming connections
-        let (stream, dst_addr) = match accept(&socket).race(stop(signal.clone())).await {
-            Ok(action) => match action {
-                Action::Accept((stream, addr)) => (stream, addr),
-                Action::Stop => break,
-            },
-            Err(e) => {
-                log::warn!("{}. Hint: increase the system open file limit.", e);
-                // Throttle the accept loop upon an error
-                // NOTE: This might be due to various factors. However, the most common case is that
-                //       the process has reached the maximum number of open files in the system. On
-                //       Linux systems this limit can be changed by using the "ulimit" command line
-                //       tool. In case of systemd-based systems, this can be changed by using the
-                //       "sysctl" command line tool.
-                tokio::time::sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
-                continue;
+
+        let (stream, dst_addr) = tokio::select! {
+            _ = signal.wait() => break,
+            res = accept(&socket) => {
+                match res {
+                    Ok((stream, addr)) => (stream, addr),
+                    Err(e) => {
+                        log::warn!("{}. Hint: increase the system open file limit.", e);
+                        // Throttle the accept loop upon an error
+                        // NOTE: This might be due to various factors. However, the most common case is that
+                        //       the process has reached the maximum number of open files in the system. On
+                        //       Linux systems this limit can be changed by using the "ulimit" command line
+                        //       tool. In case of systemd-based systems, this can be changed by using the
+                        //       "sysctl" command line tool.
+                        tokio::time::sleep(Duration::from_micros(*TCP_ACCEPT_THROTTLE_TIME)).await;
+                        continue;
+                    }
+
+                }
             }
         };
 

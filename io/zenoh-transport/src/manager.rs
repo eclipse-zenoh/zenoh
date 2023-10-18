@@ -325,6 +325,7 @@ impl TransportExecutor {
         use tokio::runtime::Builder;
         use std::sync::atomic::{AtomicUsize, Ordering};
         let runtime = Builder::new_multi_thread()
+            .enable_time()
             .worker_threads(num_threads)
             .thread_name_fn(|| {
                static ATOMIC_TX_THREAD_ID: AtomicUsize = AtomicUsize::new(0);
@@ -442,9 +443,8 @@ impl TransportManager {
     }
 
     pub fn get_locators(&self) -> Vec<Locator> {
-        let handle = tokio::runtime::Handle::current();
-        let mut lsu = handle.block_on(self.get_locators_unicast());
-        let mut lsm = handle.block_on(self.get_locators_multicast());
+        let mut lsu = async_global_executor::block_on(self.get_locators_unicast());
+        let mut lsm = async_global_executor::block_on(self.get_locators_multicast());
         lsu.append(&mut lsm);
         lsu
     }

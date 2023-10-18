@@ -36,11 +36,12 @@ transport_unixpipe = ["zenoh/transport_unixpipe"]
 #
 # [target.'cfg(unix)'.dependencies]
 # zenoh = { workspace = true, features = ["transport_unixpipe"] }
-# 
+#
 # [target.'cfg(not(unix))'.dependencies]
 # zenoh = { workspace = true }
 
 [dependencies]
+tokio = { workspace = true, features = ["rt", "time", "io-std"] }
 async-std = { workspace = true, features = ["attributes"] }
 clap = { workspace = true, features = ["derive"] }
 env_logger = { workspace = true }

@@ -13,32 +13,15 @@
 //
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
-use crate::{
-    common::{
-        batch::{BatchConfig, Encode, Finalize, RBatch, WBatch},
-        pipeline::{
-            TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
-            TransmissionPipelineProducer,
-        },
-        priority::TransportPriorityTx,
-    },
-    multicast::transport::TransportMulticastInner,
-    TransportExecutor,
-};
-use async_executor::Task;
-use async_std::{
-    prelude::FutureExt,
-    task::{self, JoinHandle},
-};
-use std::{
-    convert::TryInto,
-    fmt,
-    sync::Arc,
-    time::{Duration, Instant},
-};
-use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
-use zenoh_core::{zcondfeat, zlock};
-use zenoh_link::{Link, LinkMulticast, Locator};
+use async_std::prelude::FutureExt;
+use tokio::task;
+use tokio::task::JoinHandle;
+use std::convert::TryInto;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+use zenoh_buffers::ZSlice;
+use zenoh_core::zlock;
+use zenoh_link::{LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{Bits, Priority, Resolution, WhatAmI, ZenohId},
     transport::{BatchSize, Close, Join, PrioritySn, TransportMessage, TransportSn},
@@ -401,14 +384,14 @@ impl TransportLinkMulticastUniversal {
         if let Some(handle) = self.handle_rx.take() {
             // It is safe to unwrap the Arc since we have the ownership of the whole link
             let handle_rx = Arc::try_unwrap(handle).unwrap();
-            handle_rx.await;
+            handle_rx.await?;
         }
 
         self.stop_tx();
         if let Some(handle) = self.handle_tx.take() {
             // It is safe to unwrap the Arc since we have the ownership of the whole link
             let handle_tx = Arc::try_unwrap(handle).unwrap();
-            handle_tx.await;
+            handle_tx.await?;
         }
 
         self.link.close(None).await
@@ -443,7 +426,7 @@ async fn tx_task(
         let target = last_join + join_interval;
         if now < target {
             let left = target - now;
-            task::sleep(left).await;
+            tokio::time::sleep(left).await;
         }
         Action::Join
     }
