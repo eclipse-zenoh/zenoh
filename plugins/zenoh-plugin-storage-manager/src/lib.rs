@@ -170,13 +170,12 @@ impl StorageRuntimeInner {
                     for path in paths {
                         unsafe {
                             if let Ok((lib, path)) = LibLoader::load_file(path) {
-                                self.loaded_backend_from_lib(
+                                return self.loaded_backend_from_lib(
                                     &volume_id,
                                     config.clone(),
                                     lib,
                                     path,
-                                )?;
-                                break;
+                                );
                             }
                         }
                     }
