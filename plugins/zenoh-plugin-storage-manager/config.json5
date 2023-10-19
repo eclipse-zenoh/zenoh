@@ -1,9 +1,18 @@
 {
   "volumes": {
     "example": {
-      "__path__": "target/debug/libzenoh_backend_example.so",
+      "__path__": ["target/debug/libzenoh_backend_example.so","target/debug/libzenoh_backend_example.dylib"],
       "__config__": "../../plugins/example-storage-plugin/config.json5"
     }
   },
-  "storages": {}
+  "storages": {
+    "memory": {
+      "volume": "memory",
+      "key_expr": "demo/memory/**"
+    },
+    "example": {
+      "volume": "example",
+      "key_expr": "demo/example/**"
+    }
+  }
 }

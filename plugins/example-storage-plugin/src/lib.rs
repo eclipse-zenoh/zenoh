@@ -1,5 +1,6 @@
-use std::sync::Arc;
+use std::{collections::{hash_map::Entry, HashMap}, sync::Arc};
 
+use async_std::sync::RwLock;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -23,16 +24,26 @@ use zenoh_result::ZResult;
 
 #[no_mangle]
 pub fn create_volume(_config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
-    let volume = ExampleBackendStorage {};
+    let volume = ExampleBackend {};
     Ok(Box::new(volume))
 }
 
-pub struct ExampleBackendStorage {}
+pub struct ExampleBackend {}
 
-pub struct ExampleStorage {}
+pub struct ExampleStorage {
+    map: RwLock<HashMap<Option<OwnedKeyExpr>, StoredData>>,
+}
+
+impl Default for ExampleStorage {
+    fn default() -> Self {
+        Self {
+            map: RwLock::new(HashMap::new()),
+        }
+    }
+}
 
 #[async_trait]
-impl Volume for ExampleBackendStorage {
+impl Volume for ExampleBackend {
     fn get_admin_status(&self) -> serde_json::Value {
         serde_json::Value::Null
     }
@@ -44,7 +55,7 @@ impl Volume for ExampleBackendStorage {
         }
     }
     async fn create_storage(&mut self, _props: StorageConfig) -> ZResult<Box<dyn Storage>> {
-        Ok(Box::new(ExampleStorage {}))
+        Ok(Box::new(ExampleStorage::default()))
     }
     fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
         None
@@ -61,30 +72,49 @@ impl Storage for ExampleStorage {
     }
     async fn put(
         &mut self,
-        _key: Option<OwnedKeyExpr>,
-        _value: Value,
-        _timestamp: Timestamp,
+        key: Option<OwnedKeyExpr>,
+        value: Value,
+        timestamp: Timestamp,
     ) -> ZResult<StorageInsertionResult> {
-        Ok(StorageInsertionResult::Inserted)
+        let mut map = self.map.write().await;
+        match map.entry(key) {
+            Entry::Occupied(mut e) => {
+                e.insert(StoredData { value, timestamp });
+                return Ok(StorageInsertionResult::Replaced);
+            }
+            Entry::Vacant(e) => {
+                e.insert(StoredData { value, timestamp });
+                return Ok(StorageInsertionResult::Inserted);
+            }
+        }
     }
 
     async fn delete(
         &mut self,
-        _key: Option<OwnedKeyExpr>,
+        key: Option<OwnedKeyExpr>,
         _timestamp: Timestamp,
     ) -> ZResult<StorageInsertionResult> {
+        self.map.write().await.remove_entry(&key);
         Ok(StorageInsertionResult::Deleted)
     }
 
     async fn get(
         &mut self,
-        _key: Option<OwnedKeyExpr>,
+        key: Option<OwnedKeyExpr>,
         _parameters: &str,
     ) -> ZResult<Vec<StoredData>> {
-        Ok(Vec::new())
+        match self.map.read().await.get(&key) {
+            Some(v) => Ok(vec![v.clone()]),
+            None => Err(format!("Key {:?} is not present", key).into()),
+        }
     }
 
     async fn get_all_entries(&self) -> ZResult<Vec<(Option<OwnedKeyExpr>, Timestamp)>> {
-        Ok(Vec::new())
+        let map = self.map.read().await;
+        let mut result = Vec::with_capacity(map.len());
+        for (k, v) in map.iter() {
+            result.push((k.clone(), v.timestamp));
+        }
+        Ok(result)
     }
 }
