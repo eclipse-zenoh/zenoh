@@ -171,12 +171,9 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         zasynclock!(self.alive)
     }
 
-    fn get_links(&self) -> Vec<Link> {
-        let guard = async_std::task::block_on(async { zasyncread!(self.link) });
-        if let Some(val) = guard.as_ref() {
-            return [val.link()].to_vec();
-        }
-        vec![]
+    fn get_links(&self) -> Vec<LinkUnicast> {
+        let guard = tokio::runtime::Handle::current().block_on(async { zasyncread!(self.link) });
+        [guard.clone()].to_vec()
     }
 
     fn get_zid(&self) -> ZenohId {

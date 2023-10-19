@@ -75,7 +75,7 @@ pub(crate) async fn send_with_link(
 
 impl TransportUnicastLowlatency {
     pub(super) fn send(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
-        async_std::task::block_on(self.send_async(msg))
+        tokio::runtime::Handle::current().block_on(self.send_async(msg))
     }
 
     pub(super) async fn send_async(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
@@ -91,7 +91,7 @@ impl TransportUnicastLowlatency {
     }
 
     pub(super) fn start_keepalive(&self, executor: &TransportExecutor, keep_alive: Duration) {
-        let mut guard = async_std::task::block_on(async { zasyncwrite!(self.handle_keepalive) });
+        let mut guard = tokio::runtime::Handle::current().block_on(async { zasyncwrite!(self.handle_keepalive) });
         let c_transport = self.clone();
         let handle = executor.runtime.spawn(async move {
             let res = keepalive_task(
@@ -131,8 +131,8 @@ impl TransportUnicastLowlatency {
         }
     }
 
-    pub(super) fn internal_start_rx(&self, lease: Duration) {
-        let mut guard = async_std::task::block_on(async { zasyncwrite!(self.handle_rx) });
+    pub(super) fn internal_start_rx(&self, lease: Duration, batch_size: u16) {
+        let mut guard = tokio::runtime::Handle::current().block_on(async { zasyncwrite!(self.handle_rx) });
         let c_transport = self.clone();
         let handle = task::spawn(async move {
             let guard = zasyncread!(c_transport.link);
@@ -182,7 +182,7 @@ async fn keepalive_task(
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
     loop {
-        async_std::task::sleep(keep_alive).await;
+        tokio::time::sleep(keep_alive).await;
 
         let keepailve = TransportMessageLowLatency {
             body: TransportBodyLowLatency::KeepAlive(KeepAlive),
