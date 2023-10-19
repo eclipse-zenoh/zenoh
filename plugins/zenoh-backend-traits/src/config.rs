@@ -16,7 +16,10 @@ use schemars::JsonSchema;
 use serde_json::{Map, Value};
 use std::convert::TryFrom;
 use std::time::Duration;
-use zenoh::{key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult};
+use zenoh::{
+    key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult,
+};
+use zenoh_plugin_trait::{CompatibilityVersion, concat_enabled_features};
 use zenoh_result::{bail, zerror, Error};
 
 #[derive(JsonSchema, Debug, Clone, AsMut, AsRef)]
@@ -65,6 +68,32 @@ pub struct ReplicaConfig {
     pub publication_interval: Duration,
     pub propagation_delay: Duration,
     pub delta: Duration,
+}
+
+const VOLUME_CONFIG_VERSION: &str = "1";
+
+impl CompatibilityVersion for VolumeConfig {
+    fn version() -> &'static str {
+        concat_enabled_features!(
+            VOLUME_CONFIG_VERSION,
+            "auth_pubkey",
+            "auth_usrpwd",
+            "complete_n",
+            "shared-memory",
+            "stats",
+            "transport_multilink",
+            "transport_quic",
+            "transport_serial",
+            "transport_unixpipe",
+            "transport_tcp",
+            "transport_tls",
+            "transport_udp",
+            "transport_unixsock-stream",
+            "transport_ws",
+            "unstable",
+            "default"
+        )
+    }
 }
 
 impl Default for ReplicaConfig {

@@ -132,6 +132,7 @@
 //! ```
 
 use async_trait::async_trait;
+use zenoh_plugin_trait::{CompatibilityVersion, concat_enabled_features};
 use std::sync::Arc;
 use zenoh::prelude::{KeyExpr, OwnedKeyExpr, Sample, Selector};
 use zenoh::queryable::ReplyBuilder;
@@ -212,6 +213,34 @@ pub trait Volume: Send + Sync {
     /// Returns an interceptor that will be called before sending any reply
     /// to a query from a storage created by this backend. `None` can be returned for no interception point.
     fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>;
+}
+
+pub type VolumePlugin = Box<dyn Volume + 'static>;
+
+const VOLUME_PLUGIN_VERSION: &str = "1";
+
+impl CompatibilityVersion for VolumePlugin {
+    fn version() -> &'static str {
+        concat_enabled_features!(
+            VOLUME_PLUGIN_VERSION,
+            "auth_pubkey",
+            "auth_usrpwd",
+            "complete_n",
+            "shared-memory",
+            "stats",
+            "transport_multilink",
+            "transport_quic",
+            "transport_serial",
+            "transport_unixpipe",
+            "transport_tcp",
+            "transport_tls",
+            "transport_udp",
+            "transport_unixsock-stream",
+            "transport_ws",
+            "unstable",
+            "default"
+        )
+    }
 }
 
 /// Trait to be implemented by a Storage.

@@ -1,4 +1,7 @@
-use std::{collections::{hash_map::Entry, HashMap}, sync::Arc};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::Arc,
+};
 
 use async_std::sync::RwLock;
 //
@@ -19,8 +22,24 @@ use zenoh::{prelude::OwnedKeyExpr, sample::Sample, time::Timestamp, value::Value
 use zenoh_backend_traits::{
     config::{StorageConfig, VolumeConfig},
     Capability, History, Persistence, Storage, StorageInsertionResult, StoredData, Volume,
+    VolumePlugin,
 };
+use zenoh_plugin_trait::Plugin;
 use zenoh_result::ZResult;
+
+zenoh_plugin_trait::declare_plugin!(ExampleBackend);
+
+impl Plugin for ExampleBackend {
+    type StartArgs = VolumeConfig;
+    type RunningPlugin = VolumePlugin;
+
+    fn start(_name: &str, _args: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
+        let volume = ExampleBackend {};
+        Ok(Box::new(volume))
+    }
+
+    const STATIC_NAME: &'static str = "example_backend";
+}
 
 #[no_mangle]
 pub fn create_volume(_config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
@@ -55,7 +74,7 @@ impl Volume for ExampleBackend {
         }
     }
     async fn create_storage(&mut self, _props: StorageConfig) -> ZResult<Box<dyn Storage>> {
-        Ok(Box::new(ExampleStorage::default()))
+        Ok(Box::<ExampleStorage>::default())
     }
     fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
         None

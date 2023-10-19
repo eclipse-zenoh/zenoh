@@ -24,7 +24,7 @@ pub mod vtable;
 use zenoh_result::ZResult;
 
 pub mod prelude {
-    pub use crate::{loading::*, vtable::*, CompatibilityVersion, Plugin};
+    pub use crate::{loading::*, vtable::*, CompatibilityVersion, Plugin, concat_enabled_features};
 }
 
 #[macro_export]

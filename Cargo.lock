@@ -5057,10 +5057,12 @@ version = "0.11.0-dev"
 dependencies = [
  "async-std",
  "async-trait",
+ "const_format",
  "derive_more",
  "schemars",
  "serde_json",
  "zenoh",
+ "zenoh-plugin-trait",
  "zenoh-result",
  "zenoh-util",
 ]
