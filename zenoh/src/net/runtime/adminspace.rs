@@ -195,12 +195,13 @@ impl AdminSpace {
                                 plugins_mgr.stop(&plugin);
                             }
                             PluginDiff::Start(plugin) => {
-                                let load = match &plugin.paths {
-                                    Some(paths) => {
-                                        plugins_mgr.load_plugin_by_paths(plugin.name.clone(), paths)
-                                    }
-                                    None => plugins_mgr.load_plugin_by_name(plugin.name.clone()),
-                                };
+                                let load =
+                                    match &plugin.paths {
+                                        Some(paths) => plugins_mgr
+                                            .load_plugin_by_paths(plugin.name.clone(), paths),
+                                        None => plugins_mgr
+                                            .load_plugin_by_backend_name(plugin.name.clone()),
+                                    };
                                 match load {
                                     Err(e) => {
                                         if plugin.required {

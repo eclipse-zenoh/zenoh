@@ -35,6 +35,7 @@ use zenoh::prelude::sync::*;
 use zenoh::runtime::Runtime;
 use zenoh::Session;
 use zenoh_backend_traits::CreateVolume;
+use zenoh_backend_traits::VolumePlugin;
 use zenoh_backend_traits::CREATE_VOLUME_FN_NAME;
 use zenoh_backend_traits::{config::*, Volume};
 use zenoh_core::zlock;
@@ -72,14 +73,17 @@ impl Plugin for StoragesPlugin {
         )?)))
     }
 }
+
+type PluginsManager = zenoh_plugin_trait::loading::PluginsManager<VolumeConfig, VolumePlugin>;
+
 struct StorageRuntime(Arc<Mutex<StorageRuntimeInner>>);
 struct StorageRuntimeInner {
     name: String,
     runtime: Runtime,
     session: Arc<Session>,
-    lib_loader: LibLoader,
     volumes: HashMap<String, VolumeHandle>,
     storages: HashMap<String, HashMap<String, Sender<StorageMessage>>>,
+    plugins_manager: PluginsManager,
 }
 impl StorageRuntimeInner {
     fn status_key(&self) -> String {
@@ -110,9 +114,9 @@ impl StorageRuntimeInner {
             name,
             runtime,
             session,
-            lib_loader,
             volumes: Default::default(),
             storages: Default::default(),
+            plugins_manager: PluginsManager::dynamic(lib_loader, BACKEND_LIB_PREFIX),
         };
         new_self.spawn_volume(VolumeConfig {
             name: MEMORY_BACKEND_NAME.into(),
@@ -153,51 +157,27 @@ impl StorageRuntimeInner {
         std::mem::drop(self.volumes.remove(&volume.name));
     }
     fn spawn_volume(&mut self, config: VolumeConfig) -> ZResult<()> {
-        let volume_id = config.name.clone();
-        if volume_id == MEMORY_BACKEND_NAME {
+        let volume_id = config.name();
+        let backend_name = config.backend();
+        if backend_name == MEMORY_BACKEND_NAME {
             match create_memory_backend(config) {
                 Ok(backend) => {
                     self.volumes.insert(
-                        volume_id,
+                        volume_id.to_string(),
                         VolumeHandle::new(backend, None, "<static-memory>".into()),
                     );
                 }
                 Err(e) => bail!("{}", e),
             }
         } else {
-            match config.backend_search_method() {
-                BackendSearchMethod::ByPaths(paths) => {
-                    for path in paths {
-                        unsafe {
-                            if let Ok((lib, path)) = LibLoader::load_file(path) {
-                                return self.loaded_backend_from_lib(
-                                    &volume_id,
-                                    config.clone(),
-                                    lib,
-                                    path,
-                                );
-                            }
-                        }
-                    }
-                    bail!(
-                        "Failed to find a suitable library for volume {} from paths: {:?}",
-                        volume_id,
-                        paths
-                    );
-                }
-                BackendSearchMethod::ByName(backend_name) => unsafe {
-                    let backend_filename = format!("{}{}", BACKEND_LIB_PREFIX, &backend_name);
-                    if let Ok((lib, path)) = self.lib_loader.search_and_load(&backend_filename) {
-                        self.loaded_backend_from_lib(&volume_id, config.clone(), lib, path)?;
-                    } else {
-                        bail!(
-                            "Failed to find a suitable library for volume {} (was looking for <lib>{}<.so/.dll/.dylib>)",
-                            volume_id,
-                            &backend_filename
-                        );
-                    }
-                },
-            };
+            if let Some(paths) = config.paths() {
+                self.plugins_manager
+                    .load_plugin_by_paths(volume_id, paths)?;
+            } else {
+                self.plugins_manager
+                    .load_plugin_by_backend_name(volume_id, backend_name)?;
+            }
+            if let Some()
         };
         Ok(())
     }

@@ -21,7 +21,7 @@ use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::*;
 use zenoh_result::ZResult;
 
-pub fn create_memory_backend(config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
+pub fn create_memory_backend(config: VolumeConfig) -> ZResult<VolumePlugin> {
     Ok(Box::new(MemoryBackend { config }))
 }
 

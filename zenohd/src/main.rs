@@ -90,7 +90,7 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
                 req = if required { "required" } else { "" }
             );
             if let Err(e) = match paths {
-                None => plugins.load_plugin_by_name(name.clone()),
+                None => plugins.load_plugin_by_backend_name(name.clone()),
                 Some(paths) => plugins.load_plugin_by_paths(name.clone(), &paths),
             } {
                 if required {

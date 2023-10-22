@@ -16,30 +16,35 @@ use libloading::Library;
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use vtable::{PluginVTable, PluginLoaderVersion, PLUGIN_LOADER_VERSION, Compatibility};
+use vtable::{Compatibility, PluginLoaderVersion, PluginVTable, PLUGIN_LOADER_VERSION};
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_util::LibLoader;
 
 /// A plugins manager that handles starting and stopping plugins.
 /// Plugins can be loaded from shared libraries using [`Self::load_plugin_by_name`] or [`Self::load_plugin_by_paths`], or added directly from the binary if available using [`Self::add_static`].
 pub struct PluginsManager<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion> {
+    default_lib_prefix: String,
     loader: Option<LibLoader>,
     plugin_starters: Vec<Box<dyn PluginStarter<StartArgs, RunningPlugin> + Send + Sync>>,
     running_plugins: HashMap<String, (String, RunningPlugin)>,
 }
 
-impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + CompatibilityVersion> PluginsManager<StartArgs, RunningPlugin> {
+impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + CompatibilityVersion>
+    PluginsManager<StartArgs, RunningPlugin>
+{
     /// Constructs a new plugin manager with dynamic library loading enabled.
-    pub fn dynamic(loader: LibLoader) -> Self {
+    pub fn dynamic<S: Into<String>>(loader: LibLoader, default_lib_prefix: S) -> Self {
         PluginsManager {
+            default_lib_prefix: default_lib_prefix.into(),
             loader: Some(loader),
             plugin_starters: Vec::new(),
             running_plugins: HashMap::new(),
         }
     }
-    /// Constructs a new plugin manager with dynamic library loading enabled.
+    /// Constructs a new plugin manager with dynamic library loading disabled.
     pub fn static_plugins_only() -> Self {
         PluginsManager {
+            default_lib_prefix: String::new(),
             loader: None,
             plugin_starters: Vec::new(),
             running_plugins: HashMap::new(),
@@ -157,12 +162,20 @@ impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + Compati
         DynamicPlugin::new(name.into(), lib, path)
     }
 
-    pub fn load_plugin_by_name(&mut self, name: String) -> ZResult<String> {
+    /// Tries to load a plugin with the name `defaukt_lib_prefix` + `backend_name` + `.so | .dll | .dylib`
+    /// in lib_loader's search paths.
+    pub fn load_plugin_by_backend_name<T: AsRef<str>, T1: AsRef<str>>(
+        &mut self,
+        name: T,
+        backend_name: T1,
+    ) -> ZResult<String> {
+        let name = name.as_ref();
+        let backend_name = backend_name.as_ref();
         let (lib, p) = match &mut self.loader {
-            Some(l) => unsafe { l.search_and_load(&format!("zenoh_plugin_{}", &name))? },
-            None => bail!("Can't load dynamic plugin ` {}`, as dynamic loading is not enabled for this plugin manager.", name),
+            Some(l) => unsafe { l.search_and_load(&format!("{}{}", &self.default_lib_prefix, &backend_name))? },
+            None => bail!("Can't load dynamic plugin `{}`, as dynamic loading is not enabled for this plugin manager.", &name),
         };
-        let plugin = match Self::load_plugin(&name, lib, p.clone()) {
+        let plugin = match Self::load_plugin(name, lib, p.clone()) {
             Ok(p) => p,
             Err(e) => bail!("After loading `{:?}`: {}", &p, e),
         };
@@ -170,16 +183,18 @@ impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + Compati
         self.plugin_starters.push(Box::new(plugin));
         Ok(path)
     }
-    pub fn load_plugin_by_paths<P: AsRef<str> + std::fmt::Debug>(
+    /// Tries to load a plugin from the list of path to plugin (absolute or relative to the current working directory)
+    pub fn load_plugin_by_paths<T: AsRef<str>, P: AsRef<str> + std::fmt::Debug>(
         &mut self,
-        name: String,
+        name: T,
         paths: &[P],
     ) -> ZResult<String> {
+        let name = name.as_ref();
         for path in paths {
             let path = path.as_ref();
             match unsafe { LibLoader::load_file(path) } {
                 Ok((lib, p)) => {
-                    let plugin = Self::load_plugin(&name, lib, p)?;
+                    let plugin = Self::load_plugin(name, lib, p)?;
                     let path = plugin.path().into();
                     self.plugin_starters.push(Box::new(plugin));
                     return Ok(path);
@@ -228,8 +243,8 @@ where
     }
 }
 
-impl<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion> PluginStarter<StartArgs, RunningPlugin>
-    for DynamicPlugin<StartArgs, RunningPlugin>
+impl<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion>
+    PluginStarter<StartArgs, RunningPlugin> for DynamicPlugin<StartArgs, RunningPlugin>
 {
     fn name(&self) -> &str {
         &self.name
@@ -252,20 +267,29 @@ pub struct DynamicPlugin<StartArgs: CompatibilityVersion, RunningPlugin: Compati
     pub path: PathBuf,
 }
 
-impl<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion> DynamicPlugin<StartArgs, RunningPlugin> {
+impl<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion>
+    DynamicPlugin<StartArgs, RunningPlugin>
+{
     fn new(name: String, lib: Library, path: PathBuf) -> ZResult<Self> {
-        let get_plugin_loader_version = unsafe {
-            lib.get::<fn() -> PluginLoaderVersion>(b"get_plugin_loader_version")?
-        };
+        let get_plugin_loader_version =
+            unsafe { lib.get::<fn() -> PluginLoaderVersion>(b"get_plugin_loader_version")? };
         let plugin_loader_version = get_plugin_loader_version();
         if plugin_loader_version != PLUGIN_LOADER_VERSION {
-            bail!("Plugin loader version mismatch: host = {}, plugin = {}", PLUGIN_LOADER_VERSION, plugin_loader_version);
+            bail!(
+                "Plugin loader version mismatch: host = {}, plugin = {}",
+                PLUGIN_LOADER_VERSION,
+                plugin_loader_version
+            );
         }
         let get_compatibility = unsafe { lib.get::<fn() -> Compatibility>(b"get_compatibility")? };
         let plugin_compatibility_record = get_compatibility();
         let host_compatibility_record = Compatibility::new::<StartArgs, RunningPlugin>();
         if !plugin_compatibility_record.are_compatible(&host_compatibility_record) {
-            bail!("Plugin compatibility mismatch:\nhost = {:?}\nplugin = {:?}\n", host_compatibility_record, plugin_compatibility_record);
+            bail!(
+                "Plugin compatibility mismatch:\nhost = {:?}\nplugin = {:?}\n",
+                host_compatibility_record,
+                plugin_compatibility_record
+            );
         }
 
         // TODO: check loader version and compatibility
