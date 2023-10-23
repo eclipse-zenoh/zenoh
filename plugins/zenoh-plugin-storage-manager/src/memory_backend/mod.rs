@@ -43,7 +43,7 @@ impl Volume for MemoryBackend {
         }
     }
 
-    async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
+    async fn create_storage(&self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
         log::debug!("Create Memory Storage with configuration: {:?}", properties);
         Ok(Box::new(MemoryStorage::new(properties).await?))
     }

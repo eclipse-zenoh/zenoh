@@ -76,7 +76,7 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
         let config = config_from_args(&args);
         log::info!("Initial conf: {}", &config);
 
-        let mut plugins = PluginsManager::dynamic(config.libloader());
+        let mut plugins = PluginsManager::dynamic(config.libloader(), "zenoh_plugin_");
         // Static plugins are to be added here, with `.add_static::<PluginType>()`
         let mut required_plugins = HashSet::new();
         for plugin_load in config.plugins().load_requests() {
@@ -90,7 +90,7 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
                 req = if required { "required" } else { "" }
             );
             if let Err(e) = match paths {
-                None => plugins.load_plugin_by_backend_name(name.clone()),
+                None => plugins.load_plugin_by_backend_name(&name, &name),
                 Some(paths) => plugins.load_plugin_by_paths(name.clone(), &paths),
             } {
                 if required {

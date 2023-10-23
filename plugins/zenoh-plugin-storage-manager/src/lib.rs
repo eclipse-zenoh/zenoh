@@ -21,12 +21,8 @@
 
 use async_std::task;
 use flume::Sender;
-use libloading::Library;
-use memory_backend::create_memory_backend;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::path::PathBuf;
-use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::sync::Mutex;
 use storages_mgt::StorageMessage;
@@ -34,10 +30,7 @@ use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::sync::*;
 use zenoh::runtime::Runtime;
 use zenoh::Session;
-use zenoh_backend_traits::CreateVolume;
 use zenoh_backend_traits::VolumePlugin;
-use zenoh_backend_traits::CREATE_VOLUME_FN_NAME;
-use zenoh_backend_traits::{config::*, Volume};
 use zenoh_core::zlock;
 use zenoh_result::{bail, ZResult};
 use zenoh_util::LibLoader;
@@ -81,7 +74,6 @@ struct StorageRuntimeInner {
     name: String,
     runtime: Runtime,
     session: Arc<Session>,
-    volumes: HashMap<String, VolumeHandle>,
     storages: HashMap<String, HashMap<String, Sender<StorageMessage>>>,
     plugins_manager: PluginsManager,
 }
@@ -114,7 +106,6 @@ impl StorageRuntimeInner {
             name,
             runtime,
             session,
-            volumes: Default::default(),
             storages: Default::default(),
             plugins_manager: PluginsManager::dynamic(lib_loader, BACKEND_LIB_PREFIX),
         };
@@ -136,7 +127,7 @@ impl StorageRuntimeInner {
     fn update<I: IntoIterator<Item = ConfigDiff>>(&mut self, diffs: I) -> ZResult<()> {
         for diff in diffs {
             match diff {
-                ConfigDiff::DeleteVolume(volume) => self.kill_volume(volume),
+                ConfigDiff::DeleteVolume(volume) => self.kill_volume(&volume.name),
                 ConfigDiff::AddVolume(volume) => {
                     self.spawn_volume(volume)?;
                 }
@@ -146,29 +137,31 @@ impl StorageRuntimeInner {
         }
         Ok(())
     }
-    fn kill_volume(&mut self, volume: VolumeConfig) {
-        if let Some(storages) = self.storages.remove(&volume.name) {
+    fn kill_volume<T: AsRef<str>>(&mut self, name: T) {
+        let name = name.as_ref();
+        if let Some(storages) = self.storages.remove(name) {
             async_std::task::block_on(futures::future::join_all(
                 storages
                     .into_values()
                     .map(|s| async move { s.send(StorageMessage::Stop) }),
             ));
         }
-        std::mem::drop(self.volumes.remove(&volume.name));
+        self.plugins_manager.stop(name);
     }
     fn spawn_volume(&mut self, config: VolumeConfig) -> ZResult<()> {
         let volume_id = config.name();
         let backend_name = config.backend();
         if backend_name == MEMORY_BACKEND_NAME {
-            match create_memory_backend(config) {
-                Ok(backend) => {
-                    self.volumes.insert(
-                        volume_id.to_string(),
-                        VolumeHandle::new(backend, None, "<static-memory>".into()),
-                    );
-                }
-                Err(e) => bail!("{}", e),
-            }
+            // match create_memory_backend(config) {
+                // Ok(backend) => {
+                    // TODO: implement static memory backend as static plugin
+                    // self.volumes.insert(
+                    // volume_id.to_string(),
+                    // VolumeHandle::new(backend, None, "<static-memory>".into()),
+                    // );
+                // }
+                // Err(e) => bail!("{}", e),
+            // }
         } else {
             if let Some(paths) = config.paths() {
                 self.plugins_manager
@@ -177,45 +170,9 @@ impl StorageRuntimeInner {
                 self.plugins_manager
                     .load_plugin_by_backend_name(volume_id, backend_name)?;
             }
-            if let Some()
         };
+        self.plugins_manager.start(volume_id, &config)?;
         Ok(())
-    }
-    unsafe fn loaded_backend_from_lib(
-        &mut self,
-        volume_id: &str,
-        config: VolumeConfig,
-        lib: Library,
-        lib_path: PathBuf,
-    ) -> ZResult<()> {
-        if let Ok(create_backend) = lib.get::<CreateVolume>(CREATE_VOLUME_FN_NAME) {
-            match create_backend(config) {
-                Ok(backend) => {
-                    self.volumes.insert(
-                        volume_id.to_string(),
-                        VolumeHandle::new(
-                            backend,
-                            Some(lib),
-                            lib_path.to_string_lossy().into_owned(),
-                        ),
-                    );
-                    Ok(())
-                }
-                Err(e) => bail!(
-                    "Failed to load Backend {} from {}: {}",
-                    volume_id,
-                    lib_path.display(),
-                    e
-                ),
-            }
-        } else {
-            bail!(
-                "Failed to instantiate volume {} from {}: function {}(VolumeConfig) not found in lib",
-                volume_id,
-                lib_path.display(),
-                String::from_utf8_lossy(CREATE_VOLUME_FN_NAME)
-            );
-        }
     }
     fn kill_storage(&mut self, config: StorageConfig) {
         let volume = &config.volume_id;
@@ -234,14 +191,14 @@ impl StorageRuntimeInner {
     fn spawn_storage(&mut self, storage: StorageConfig) -> ZResult<()> {
         let admin_key = self.status_key() + "/storages/" + &storage.name;
         let volume_id = storage.volume_id.clone();
-        if let Some(backend) = self.volumes.get_mut(&volume_id) {
+        if let Some(backend) = self.plugins_manager.plugin(&volume_id) {
             let storage_name = storage.name.clone();
-            let in_interceptor = backend.backend.incoming_data_interceptor();
-            let out_interceptor = backend.backend.outgoing_data_interceptor();
+            let in_interceptor = backend.incoming_data_interceptor();
+            let out_interceptor = backend.outgoing_data_interceptor();
             let stopper = async_std::task::block_on(create_and_start_storage(
                 admin_key,
                 storage,
-                &mut backend.backend,
+                &backend,
                 in_interceptor,
                 out_interceptor,
                 self.session.clone(),
@@ -257,28 +214,6 @@ impl StorageRuntimeInner {
                 volume_id
             )
         }
-    }
-}
-struct VolumeHandle {
-    backend: Box<dyn Volume>,
-    _lib: Option<Library>,
-    lib_path: String,
-    stopper: Arc<AtomicBool>,
-}
-impl VolumeHandle {
-    fn new(backend: Box<dyn Volume>, lib: Option<Library>, lib_path: String) -> Self {
-        VolumeHandle {
-            backend,
-            _lib: lib,
-            lib_path,
-            stopper: Arc::new(std::sync::atomic::AtomicBool::new(true)),
-        }
-    }
-}
-impl Drop for VolumeHandle {
-    fn drop(&mut self) {
-        self.stopper
-            .store(false, std::sync::atomic::Ordering::Relaxed);
     }
 }
 impl From<StorageRuntimeInner> for StorageRuntime {
@@ -325,7 +260,7 @@ impl RunningPluginTrait for StorageRuntime {
         });
         let guard = self.0.lock().unwrap();
         with_extended_string(&mut key, &["/volumes/"], |key| {
-            for (volume_id, volume) in &guard.volumes {
+            for (volume_id, (lib_path, volume)) in guard.plugins_manager.running_plugins() {
                 with_extended_string(key, &[volume_id], |key| {
                     with_extended_string(key, &["/__path__"], |key| {
                         if keyexpr::new(key.as_str())
@@ -334,7 +269,7 @@ impl RunningPluginTrait for StorageRuntime {
                         {
                             responses.push(zenoh::plugins::Response::new(
                                 key.clone(),
-                                volume.lib_path.clone().into(),
+                                lib_path.into(),
                             ))
                         }
                     });
@@ -344,7 +279,7 @@ impl RunningPluginTrait for StorageRuntime {
                     {
                         responses.push(zenoh::plugins::Response::new(
                             key.clone(),
-                            volume.backend.get_admin_status(),
+                            volume.get_admin_status(),
                         ))
                     }
                 });

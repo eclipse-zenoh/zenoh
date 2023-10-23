@@ -30,7 +30,7 @@ pub struct StoreIntercept {
 pub(crate) async fn create_and_start_storage(
     admin_key: String,
     config: StorageConfig,
-    backend: &mut Box<dyn zenoh_backend_traits::Volume>,
+    backend: &Box<dyn zenoh_backend_traits::Volume>,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,

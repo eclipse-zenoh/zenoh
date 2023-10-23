@@ -200,7 +200,7 @@ impl AdminSpace {
                                         Some(paths) => plugins_mgr
                                             .load_plugin_by_paths(plugin.name.clone(), paths),
                                         None => plugins_mgr
-                                            .load_plugin_by_backend_name(plugin.name.clone()),
+                                            .load_plugin_by_backend_name(&plugin.name, &plugin.name),
                                     };
                                 match load {
                                     Err(e) => {

@@ -73,7 +73,7 @@ impl Volume for ExampleBackend {
             read_cost: 0,
         }
     }
-    async fn create_storage(&mut self, _props: StorageConfig) -> ZResult<Box<dyn Storage>> {
+    async fn create_storage(&self, _props: StorageConfig) -> ZResult<Box<dyn Storage>> {
         Ok(Box::<ExampleStorage>::default())
     }
     fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {

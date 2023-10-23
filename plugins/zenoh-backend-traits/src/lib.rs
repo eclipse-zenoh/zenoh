@@ -204,7 +204,7 @@ pub trait Volume: Send + Sync {
     fn get_capability(&self) -> Capability;
 
     /// Creates a storage configured with some properties.
-    async fn create_storage(&mut self, props: StorageConfig) -> ZResult<Box<dyn Storage>>;
+    async fn create_storage(&self, props: StorageConfig) -> ZResult<Box<dyn Storage>>;
 
     /// Returns an interceptor that will be called before pushing any data
     /// into a storage created by this backend. `None` can be returned for no interception point.
