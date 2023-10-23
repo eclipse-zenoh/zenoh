@@ -170,6 +170,9 @@ impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + Compati
         backend_name: T1,
     ) -> ZResult<String> {
         let name = name.as_ref();
+
+        // TODO: check if plugin is already loaded
+
         let backend_name = backend_name.as_ref();
         let (lib, p) = match &mut self.loader {
             Some(l) => unsafe { l.search_and_load(&format!("{}{}", &self.default_lib_prefix, &backend_name))? },

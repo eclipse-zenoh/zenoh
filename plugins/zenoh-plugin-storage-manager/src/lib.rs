@@ -21,6 +21,7 @@
 
 use async_std::task;
 use flume::Sender;
+use memory_backend::MemoryBackend;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -102,12 +103,15 @@ impl StorageRuntimeInner {
             .unwrap_or_default();
 
         let session = Arc::new(zenoh::init(runtime.clone()).res_sync().unwrap());
+
+        let plugins_manager = PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX).add_static::<MemoryBackend>();
+
         let mut new_self = StorageRuntimeInner {
             name,
             runtime,
             session,
             storages: Default::default(),
-            plugins_manager: PluginsManager::dynamic(lib_loader, BACKEND_LIB_PREFIX),
+            plugins_manager
         };
         new_self.spawn_volume(VolumeConfig {
             name: MEMORY_BACKEND_NAME.into(),
@@ -151,26 +155,13 @@ impl StorageRuntimeInner {
     fn spawn_volume(&mut self, config: VolumeConfig) -> ZResult<()> {
         let volume_id = config.name();
         let backend_name = config.backend();
-        if backend_name == MEMORY_BACKEND_NAME {
-            // match create_memory_backend(config) {
-                // Ok(backend) => {
-                    // TODO: implement static memory backend as static plugin
-                    // self.volumes.insert(
-                    // volume_id.to_string(),
-                    // VolumeHandle::new(backend, None, "<static-memory>".into()),
-                    // );
-                // }
-                // Err(e) => bail!("{}", e),
-            // }
+        if let Some(paths) = config.paths() {
+            self.plugins_manager
+                .load_plugin_by_paths(volume_id, paths)?;
         } else {
-            if let Some(paths) = config.paths() {
-                self.plugins_manager
-                    .load_plugin_by_paths(volume_id, paths)?;
-            } else {
-                self.plugins_manager
-                    .load_plugin_by_backend_name(volume_id, backend_name)?;
-            }
-        };
+            self.plugins_manager
+                .load_plugin_by_backend_name(volume_id, backend_name)?;
+        }
         self.plugins_manager.start(volume_id, &config)?;
         Ok(())
     }

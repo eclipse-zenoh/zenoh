@@ -13,6 +13,7 @@
 //
 use async_std::sync::RwLock;
 use async_trait::async_trait;
+use zenoh_plugin_trait::Plugin;
 use std::collections::HashMap;
 use std::sync::Arc;
 use zenoh::prelude::r#async::*;
@@ -21,12 +22,25 @@ use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::*;
 use zenoh_result::ZResult;
 
+use crate::MEMORY_BACKEND_NAME;
+
 pub fn create_memory_backend(config: VolumeConfig) -> ZResult<VolumePlugin> {
     Ok(Box::new(MemoryBackend { config }))
 }
 
 pub struct MemoryBackend {
     config: VolumeConfig,
+}
+
+impl Plugin for MemoryBackend {
+    type StartArgs = VolumeConfig;
+    type RunningPlugin = VolumePlugin;
+
+    const STATIC_NAME: &'static str = MEMORY_BACKEND_NAME;
+
+    fn start(name: &str, args: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
+        todo!()
+    }
 }
 
 #[async_trait]
