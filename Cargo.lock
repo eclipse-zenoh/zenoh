@@ -5125,6 +5125,7 @@ dependencies = [
  "async-trait",
  "env_logger",
  "flume",
+ "futures-util",
  "log",
  "lz4_flex",
  "panic-message",

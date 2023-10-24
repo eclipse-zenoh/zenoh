@@ -59,7 +59,8 @@ impl StageInRefill {
     }
 
     fn wait(&self) -> bool {
-        self.n_ref_r.recv().is_ok()
+        let res = self.n_ref_r.recv().is_ok();
+        res
     }
 }
 
@@ -172,7 +173,9 @@ impl StageIn {
         // Attempt the serialization on the current batch
         let e = match batch.encode(&*msg) {
             Ok(_) => zretok!(batch),
-            Err(e) => e,
+            Err(e) => {
+                e
+            }
         };
 
         // Lock the channel. We are the only one that will be writing on it.
@@ -603,7 +606,8 @@ impl TransmissionPipelineProducer {
         };
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
-        queue.push_network_message(&mut msg, priority)
+        let res = queue.push_network_message(&mut msg, priority);
+        res
     }
 
     #[inline]
@@ -656,7 +660,9 @@ impl TransmissionPipelineConsumer {
                             bo = b;
                         }
                     }
-                    Pull::None => {}
+                    Pull::None => {
+
+                    }
                 }
             }
 
@@ -700,7 +706,6 @@ impl TransmissionPipelineConsumer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_std::{prelude::FutureExt, task};
     use std::{
         convert::TryFrom,
         sync::{
@@ -709,6 +714,8 @@ mod tests {
         },
         time::{Duration, Instant},
     };
+    use tokio::task;
+    use tokio::time::timeout;
     use zenoh_buffers::{
         reader::{DidntRead, HasReader},
         ZBuf,
@@ -720,9 +727,10 @@ mod tests {
         transport::{BatchSize, Fragment, Frame, TransportBody, TransportSn},
         zenoh::{PushBody, Put},
     };
+    use zenoh_result::ZResult;
 
     const SLEEP: Duration = Duration::from_millis(100);
-    const TIMEOUT: Duration = Duration::from_secs(60);
+    const TIMEOUT: Duration = Duration::from_secs(10);
 
     const CONFIG: TransmissionPipelineConf = TransmissionPipelineConf {
         batch: BatchConfig {
@@ -735,8 +743,8 @@ mod tests {
         backoff: Duration::from_micros(1),
     };
 
-    #[test]
-    fn tx_pipeline_flow() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn tx_pipeline_flow() -> ZResult<()> {
         fn schedule(queue: TransmissionPipelineProducer, num_msg: usize, payload_size: usize) {
             // Send reliable messages
             let key = "test".into();
@@ -770,6 +778,7 @@ mod tests {
                 );
                 queue.push_network_message(message.clone());
             }
+            println!("schedule is done.");
         }
 
         async fn consume(mut queue: TransmissionPipelineConsumer, num_msg: usize) {
@@ -808,7 +817,9 @@ mod tests {
                             }
                             println!("Pipeline Flow [<<<]: Pulled {} msgs", msgs + 1);
                         }
-                        Err(_) => break,
+                        Err(_) => {
+                            break;
+                        }
                     }
                 }
                 println!("Pipeline Flow [+++]: Refill {} msgs", msgs + 1);
@@ -822,7 +833,7 @@ mod tests {
         }
 
         // Pipeline priorities
-        let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX)).unwrap();
+        let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX))?;
         let priorities = vec![tct];
 
         // Total amount of bytes to send in each test
@@ -831,37 +842,37 @@ mod tests {
         // Payload size of the messages
         let payload_sizes = [8, 64, 512, 4_096, 8_192, 32_768, 262_144, 2_097_152];
 
-        task::block_on(async {
-            for ps in payload_sizes.iter() {
-                if u64::try_from(*ps).is_err() {
-                    break;
-                }
-
-                // Compute the number of messages to send
-                let num_msg = max_msgs.min(bytes / ps);
-
-                let (producer, consumer) = TransmissionPipeline::make(
-                    TransmissionPipelineConf::default(),
-                    priorities.as_slice(),
-                );
-
-                let t_c = task::spawn(async move {
-                    consume(consumer, num_msg).await;
-                });
-
-                let c_ps = *ps;
-                let t_s = task::spawn_blocking(move || {
-                    schedule(producer, num_msg, c_ps);
-                });
-
-                let res = t_c.join(t_s).timeout(TIMEOUT).await;
-                assert!(res.is_ok());
+        for ps in payload_sizes.iter() {
+            if u64::try_from(*ps).is_err() {
+                break;
             }
-        });
+
+            // Compute the number of messages to send
+            let num_msg = max_msgs.min(bytes / ps);
+
+            let (producer, consumer) = TransmissionPipeline::make(
+                TransmissionPipelineConf::default(),
+                priorities.as_slice(),
+            );
+
+            let t_c = task::spawn(async move {
+                consume(consumer, num_msg).await;
+            });
+
+            let c_ps = *ps;
+            let t_s = task::spawn_blocking(move || {
+                schedule(producer, num_msg, c_ps);
+            });
+
+            let res = timeout(TIMEOUT, futures_util::future::join(t_c, t_s)).await;
+            assert!(res.is_ok());
+        }
+
+        Ok(())
     }
 
-    #[test]
-    fn tx_pipeline_blocking() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn tx_pipeline_blocking() -> ZResult<()> {
         fn schedule(queue: TransmissionPipelineProducer, counter: Arc<AtomicUsize>, id: usize) {
             // Make sure to put only one message per batch: set the payload size
             // to half of the batch in such a way the serialized zenoh message
@@ -908,7 +919,7 @@ mod tests {
         }
 
         // Pipeline
-        let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX)).unwrap();
+        let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX))?;
         let priorities = vec![tct];
         let (producer, mut consumer) =
             TransmissionPipeline::make(TransmissionPipelineConf::default(), priorities.as_slice());
@@ -926,34 +937,36 @@ mod tests {
             schedule(producer, c_counter, 2);
         });
 
-        task::block_on(async {
-            // Wait to have sent enough messages and to have blocked
-            println!(
-                "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
-                CONFIG.queue_size[Priority::MAX as usize]
-            );
-            let check = async {
-                while counter.load(Ordering::Acquire) < CONFIG.queue_size[Priority::MAX as usize] {
-                    task::sleep(SLEEP).await;
-                }
-            };
-            check.timeout(TIMEOUT).await.unwrap();
+        // Wait to have sent enough messages and to have blocked
+        println!(
+            "Pipeline Blocking [---]: waiting to have {} messages being scheduled",
+            CONFIG.queue_size[Priority::MAX as usize]
+        );
+        let check = async {
+            while counter.load(Ordering::Acquire) < CONFIG.queue_size[Priority::MAX as usize] {
+                tokio::time::sleep(SLEEP).await;
+            }
+        };
 
-            // Disable and drain the queue
+        timeout(TIMEOUT, check).await?;
+
+        // Disable and drain the queue
+        timeout(
+            TIMEOUT,
             task::spawn_blocking(move || {
                 println!("Pipeline Blocking [---]: draining the queue");
                 let _ = consumer.drain();
-            })
-            .timeout(TIMEOUT)
-            .await
-            .unwrap();
+            }),
+        )
+        .await??;
 
-            // Make sure that the tasks scheduling have been unblocked
-            println!("Pipeline Blocking [---]: waiting for schedule (1) to be unblocked");
-            h1.timeout(TIMEOUT).await.unwrap();
-            println!("Pipeline Blocking [---]: waiting for schedule (2) to be unblocked");
-            h2.timeout(TIMEOUT).await.unwrap();
-        });
+        // Make sure that the tasks scheduling have been unblocked
+        println!("Pipeline Blocking [---]: waiting for schedule (1) to be unblocked");
+        timeout(TIMEOUT, h1).await??;
+        println!("Pipeline Blocking [---]: waiting for schedule (2) to be unblocked");
+        timeout(TIMEOUT, h2).await??;
+
+        Ok(())
     }
 
     #[test]
@@ -1020,7 +1033,7 @@ mod tests {
             }
         });
 
-        task::block_on(async {
+        tokio::runtime::Handle::current().block_on(async {
             let mut prev_size: usize = usize::MAX;
             loop {
                 let received = count.swap(0, Ordering::AcqRel);
@@ -1030,7 +1043,7 @@ mod tests {
                     println!("{} bytes: {:.6} Gbps", current, 2.0 * thr);
                 }
                 prev_size = current;
-                task::sleep(Duration::from_millis(500)).await;
+                tokio::time::sleep(Duration::from_millis(500)).await;
             }
         });
     }

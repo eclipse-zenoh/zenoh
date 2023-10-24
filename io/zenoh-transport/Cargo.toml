@@ -53,7 +53,7 @@ async-executor = { workspace = true }
 async-global-executor = { workspace = true, features = ["tokio"] }
 async-std = { workspace = true }
 async-trait = { workspace = true }
-tokio = { workspace = true, features = ["sync", "rt", "fs"] }
+tokio = { workspace = true, features = ["sync", "rt", "fs", "time", "macros", "rt-multi-thread"] }
 flume = { workspace = true }
 log = { workspace = true }
 lz4_flex = { workspace = true }
@@ -77,6 +77,7 @@ zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
 
 [dev-dependencies]
+futures-util = { workspace = true }
 env_logger = { workspace = true }
 panic-message = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }

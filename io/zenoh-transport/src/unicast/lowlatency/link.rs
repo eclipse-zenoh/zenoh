@@ -15,7 +15,6 @@ use super::transport::TransportUnicastLowlatency;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::TransportExecutor;
-use async_std::prelude::FutureExt;
 use tokio::{sync::RwLock, task};
 use zenoh_codec::*;
 use zenoh_core::{zasyncread, zasyncwrite};
@@ -75,7 +74,7 @@ pub(crate) async fn send_with_link(
 
 impl TransportUnicastLowlatency {
     pub(super) fn send(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
-        tokio::runtime::Handle::current().block_on(self.send_async(msg))
+        async_global_executor::block_on(self.send_async(msg))
     }
 
     pub(super) async fn send_async(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
@@ -91,7 +90,7 @@ impl TransportUnicastLowlatency {
     }
 
     pub(super) fn start_keepalive(&self, executor: &TransportExecutor, keep_alive: Duration) {
-        let mut guard = tokio::runtime::Handle::current().block_on(async { zasyncwrite!(self.handle_keepalive) });
+        let mut guard = async_global_executor::block_on(async { zasyncwrite!(self.handle_keepalive) });
         let c_transport = self.clone();
         let handle = executor.runtime.spawn(async move {
             let res = keepalive_task(
@@ -132,7 +131,7 @@ impl TransportUnicastLowlatency {
     }
 
     pub(super) fn internal_start_rx(&self, lease: Duration, batch_size: u16) {
-        let mut guard = tokio::runtime::Handle::current().block_on(async { zasyncwrite!(self.handle_rx) });
+        let mut guard = async_global_executor::block_on(async { zasyncwrite!(self.handle_rx) });
         let c_transport = self.clone();
         let handle = task::spawn(async move {
             let guard = zasyncread!(c_transport.link);
@@ -233,8 +232,7 @@ async fn rx_task_stream(
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
         // Async read from the underlying link
-        let bytes = read(&link, &mut buffer)
-            .timeout(lease)
+        let bytes = tokio::time::timeout(lease, read(&link, &mut buffer))
             .await
             .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
         #[cfg(feature = "stats")]
@@ -265,12 +263,11 @@ async fn rx_task_dgram(
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
         // Async read from the underlying link
-        let bytes = link
-            .link
-            .read(&mut buffer)
-            .timeout(lease)
-            .await
-            .map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
+        let bytes =
+            tokio::time::timeout(lease, link.read(&mut buffer))
+            .await.map_err(|_| {
+                zerror!("{}: expired after {} milliseconds", link, lease.as_millis())
+            })??;
 
         #[cfg(feature = "stats")]
         transport.stats.inc_rx_bytes(bytes);
