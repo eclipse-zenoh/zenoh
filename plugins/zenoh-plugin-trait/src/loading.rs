@@ -57,13 +57,13 @@ impl<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion>
             false
         }
     }
-    fn start(&mut self, args: &StartArgs) -> ZResult<(bool, &RunningPlugin)> {
+    fn start(&mut self, args: &StartArgs) -> ZResult<bool> {
         if self.running_plugin.is_some() {
-            return Ok((false, self.running_plugin.as_ref().unwrap()));
+            return Ok(false);
         }
         let plugin = self.starter.start(args)?;
         self.running_plugin = Some(plugin);
-        Ok((true, self.running_plugin.as_ref().unwrap()))
+        Ok(true)
     }
     fn as_plugin_info(&self) -> &dyn PluginInfo {
         self
@@ -77,6 +77,13 @@ pub struct PluginsManager<StartArgs: CompatibilityVersion, RunningPlugin: Compat
     loader: Option<LibLoader>,
     plugins: Vec<PluginInstance<StartArgs, RunningPlugin>>,
 }
+
+/// Unique identifier of plugin in plugin manager. Actually is just an index in the plugins list.
+/// It's guaranteed that if intex is obtained from plugin manager, it's valid for this plugin manager.
+/// (at least at this moment, when there is no pluing unload support).
+/// Using it instead of plugin name allows to avoid checking for ``Option`` every time.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct PluginIndex(usize);
 
 impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + CompatibilityVersion>
     PluginsManager<StartArgs, RunningPlugin>
@@ -109,68 +116,63 @@ impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + Compati
         self
     }
 
-    fn get_plugin_instance_mut(
-        &mut self,
-        name: &str,
-    ) -> Option<&mut PluginInstance<StartArgs, RunningPlugin>> {
-        self.plugins.iter_mut().find(|p| p.name() == name)
+    /// Returns `true` if the plugin with the given index exists in the manager.
+    pub fn check_plugin_index(&self, index: PluginIndex) -> bool {
+        index.0 < self.plugins.len()
     }
 
-    fn get_plugin_instance(
-        &mut self,
-        name: &str,
-    ) -> Option<&PluginInstance<StartArgs, RunningPlugin>> {
-        self.plugins.iter().find(|p| p.name() == name)
+    /// Returns plugin index by name
+    pub fn get_plugin_index(&self, name: &str) -> Option<PluginIndex> {
+        self.plugins
+            .iter()
+            .position(|p| p.name() == name)
+            .map(PluginIndex)
     }
 
-    fn get_plugin_instance_mut_err(
-        &mut self,
-        name: &str,
-    ) -> ZResult<&mut PluginInstance<StartArgs, RunningPlugin>> {
-        self.get_plugin_instance_mut(name)
+    /// Returns plugin index by name or error if plugin not found
+    pub fn get_plugin_index_err(&self, name: &str) -> ZResult<PluginIndex> {
+        self.get_plugin_index(name)
             .ok_or_else(|| format!("Plugin `{}` not found", name).into())
     }
 
-    fn get_plugin_instance_err(
-        &mut self,
-        name: &str,
-    ) -> ZResult<&PluginInstance<StartArgs, RunningPlugin>> {
-        self.get_plugin_instance(name)
-            .ok_or_else(|| format!("Plugin `{}` not found", name).into())
-    }
-
-    /// Starts plugin named `name`
+    /// Starts plugin.
     /// Returns
-    /// Ok((true, &RunningPluguin)) => plugin was successfully started
-    /// Ok((false, &RunningPlugin)) => plugin was already running
+    /// Ok(true) => plugin was successfully started
+    /// Ok(false) => plugin was already running
     /// Err(e) => starting the plugin failed due to `e`
-    pub fn start(&mut self, name: &str, args: &StartArgs) -> ZResult<(bool, &RunningPlugin)> {
-        self.get_plugin_instance_mut_err(name)?.start(args)
+    pub fn start(&mut self, index: PluginIndex, args: &StartArgs) -> ZResult<bool> {
+        let instance = &mut self.plugins[index.0];
+        let already_started = instance.start(args)?;
+        Ok(already_started)
     }
 
     /// Stops `plugin`, returning `true` if it was indeed running.
-    pub fn stop(&mut self, name: &str) -> ZResult<bool> {
-        Ok(self.get_plugin_instance_mut_err(name)?.stop())
+    pub fn stop(&mut self, index: PluginIndex) -> ZResult<bool> {
+        let instance = &mut self.plugins[index.0];
+        let was_running = instance.stop();
+        Ok(was_running)
     }
-
-    /// Lists the loaded plugins by name.
-    pub fn plugins(&self) -> impl Iterator<Item = (&dyn PluginInfo, Option<&RunningPlugin>)> {
-        self.plugins
-            .iter()
-            .map(|p| (p.as_plugin_info(), p.get_running_plugin()))
+    /// Lists the loaded plugins
+    pub fn plugins(&self) -> impl Iterator<Item = PluginIndex> + '_ {
+        self.plugins.iter().enumerate().map(|(i, _)| PluginIndex(i))
     }
-    /// Returns an iterator over each running plugin, where the keys are their name, and the values are a tuple of their path and handle.
-    pub fn running_plugins(&self) -> impl Iterator<Item = (&dyn PluginInfo, &RunningPlugin)> {
-        self.plugins
-            .iter()
-            .filter_map(|p| p.get_running_plugin().map(|rp| (p.as_plugin_info(), rp)))
+    /// Lists the loaded plugins
+    pub fn running_plugins(&self) -> impl Iterator<Item = PluginIndex> + '_ {
+        self.plugins.iter().enumerate().filter_map(|(i, p)| {
+            if p.get_running_plugin().is_some() {
+                Some(PluginIndex(i))
+            } else {
+                None
+            }
+        })
     }
-    /// Returns the handle of the requested running plugin if available.
-    pub fn plugin(&self, name: &str) -> Option<&RunningPlugin> {
-        self.plugins
-            .iter()
-            .find(|p| p.name() == name)
-            .and_then(|p| p.get_running_plugin())
+    /// Returns running plugin interface of plugin or none if plugin is stopped
+    pub fn running_plugin(&self, index: PluginIndex) -> Option<&RunningPlugin> {
+        self.plugins[index.0].get_running_plugin()
+    }
+    /// Returns plugin information
+    pub fn plugin(&self, index: PluginIndex) -> &dyn PluginInfo {
+        self.plugins[index.0].as_plugin_info()
     }
 
     fn load_plugin(
@@ -187,9 +189,9 @@ impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + Compati
         &mut self,
         name: T,
         backend_name: T1,
-    ) -> ZResult<&dyn PluginInfo> {
+    ) -> ZResult<PluginIndex> {
         let name = name.as_ref();
-        if self.get_plugin_instance(name).is_some() {
+        if self.get_plugin_index(name).is_some() {
             bail!("Plugin `{}` already loaded", name);
         }
         let backend_name = backend_name.as_ref();
@@ -202,16 +204,16 @@ impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + Compati
             Err(e) => bail!("After loading `{:?}`: {}", &p, e),
         };
         self.plugins.push(PluginInstance::new(plugin));
-        Ok(self.plugins.last().unwrap().as_plugin_info())
+        Ok(PluginIndex(self.plugins.len() - 1))
     }
     /// Tries to load a plugin from the list of path to plugin (absolute or relative to the current working directory)
     pub fn load_plugin_by_paths<T: AsRef<str>, P: AsRef<str> + std::fmt::Debug>(
         &mut self,
         name: T,
         paths: &[P],
-    ) -> ZResult<&dyn PluginInfo> {
+    ) -> ZResult<PluginIndex> {
         let name = name.as_ref();
-        if self.get_plugin_instance(name).is_some() {
+        if self.get_plugin_index(name).is_some() {
             bail!("Plugin `{}` already loaded", name);
         }
         for path in paths {
@@ -220,7 +222,7 @@ impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + Compati
                 Ok((lib, p)) => {
                     let plugin = Self::load_plugin(name, lib, p)?;
                     self.plugins.push(PluginInstance::new(plugin));
-                    return Ok(self.plugins.last().unwrap().as_plugin_info());
+                    return Ok(PluginIndex(self.plugins.len() - 1));
                 }
                 Err(e) => log::warn!("Plugin '{}' load fail at {}: {}", &name, path, e),
             }
