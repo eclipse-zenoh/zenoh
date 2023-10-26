@@ -85,6 +85,29 @@ pub struct PluginsManager<StartArgs: CompatibilityVersion, RunningPlugin: Compat
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct PluginIndex(usize);
 
+/// Unique identifier of running plugin in plugin manager.
+/// The ``RunningPligin`` insterface can be accessed through this index without
+/// additional checks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct RunningPluginIndex(PluginIndex);
+
+/// Trait allowing to use ``RunningPluginIndex`` as ``PluginIndex``
+pub trait PluginIndexTrait {
+    fn index(&self) -> PluginIndex;
+}
+
+impl PluginIndexTrait for PluginIndex {
+    fn index(&self) -> PluginIndex {
+        *self
+    }
+}
+
+impl PluginIndexTrait for RunningPluginIndex {
+    fn index(&self) -> PluginIndex {
+        self.0
+    }
+}
+
 impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + CompatibilityVersion>
     PluginsManager<StartArgs, RunningPlugin>
 {
@@ -117,8 +140,8 @@ impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + Compati
     }
 
     /// Returns `true` if the plugin with the given index exists in the manager.
-    pub fn check_plugin_index(&self, index: PluginIndex) -> bool {
-        index.0 < self.plugins.len()
+    pub fn check_plugin_index<T: PluginIndexTrait>(&self, index: T) -> bool {
+        index.index().0 < self.plugins.len()
     }
 
     /// Returns plugin index by name
@@ -135,20 +158,39 @@ impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + Compati
             .ok_or_else(|| format!("Plugin `{}` not found", name).into())
     }
 
+    /// Returns running plugin index by name
+    pub fn get_running_plugin_index(&self, name: &str) -> Option<RunningPluginIndex> {
+        self.get_plugin_index(name).and_then(|i| {
+            self.plugins[i.0]
+                .get_running_plugin()
+                .map(|_| RunningPluginIndex(i))
+        })
+    }
+
+    /// Returns running plugin index by name or error if plugin not found
+    pub fn get_running_plugin_index_err(&self, name: &str) -> ZResult<RunningPluginIndex> {
+        self.get_running_plugin_index(name)
+            .ok_or_else(|| format!("Plugin `{}` not running", name).into())
+    }
+
     /// Starts plugin.
     /// Returns
-    /// Ok(true) => plugin was successfully started
-    /// Ok(false) => plugin was already running
+    /// Ok(true, index) => plugin was successfully started
+    /// Ok(false, index) => plugin was already running
     /// Err(e) => starting the plugin failed due to `e`
-    pub fn start(&mut self, index: PluginIndex, args: &StartArgs) -> ZResult<bool> {
-        let instance = &mut self.plugins[index.0];
+    pub fn start<T: PluginIndexTrait>(
+        &mut self,
+        index: T,
+        args: &StartArgs,
+    ) -> ZResult<(bool, RunningPluginIndex)> {
+        let instance = &mut self.plugins[index.index().0];
         let already_started = instance.start(args)?;
-        Ok(already_started)
+        Ok((already_started, RunningPluginIndex(index.index())))
     }
 
     /// Stops `plugin`, returning `true` if it was indeed running.
-    pub fn stop(&mut self, index: PluginIndex) -> ZResult<bool> {
-        let instance = &mut self.plugins[index.0];
+    pub fn stop(&mut self, index: RunningPluginIndex) -> ZResult<bool> {
+        let instance = &mut self.plugins[index.index().0];
         let was_running = instance.stop();
         Ok(was_running)
     }
@@ -157,22 +199,22 @@ impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + Compati
         self.plugins.iter().enumerate().map(|(i, _)| PluginIndex(i))
     }
     /// Lists the loaded plugins
-    pub fn running_plugins(&self) -> impl Iterator<Item = PluginIndex> + '_ {
+    pub fn running_plugins(&self) -> impl Iterator<Item = RunningPluginIndex> + '_ {
         self.plugins.iter().enumerate().filter_map(|(i, p)| {
             if p.get_running_plugin().is_some() {
-                Some(PluginIndex(i))
+                Some(RunningPluginIndex(PluginIndex(i)))
             } else {
                 None
             }
         })
     }
     /// Returns running plugin interface of plugin or none if plugin is stopped
-    pub fn running_plugin(&self, index: PluginIndex) -> Option<&RunningPlugin> {
-        self.plugins[index.0].get_running_plugin()
+    pub fn running_plugin(&self, index: RunningPluginIndex) -> &RunningPlugin {
+        self.plugins[index.index().0].get_running_plugin().unwrap()
     }
     /// Returns plugin information
-    pub fn plugin(&self, index: PluginIndex) -> &dyn PluginInfo {
-        self.plugins[index.0].as_plugin_info()
+    pub fn plugin<T: PluginIndexTrait>(&self, index: T) -> &dyn PluginInfo {
+        self.plugins[index.index().0].as_plugin_info()
     }
 
     fn load_plugin(
