@@ -183,7 +183,7 @@ pub fn get_multicast_interfaces() -> Vec<IpAddr> {
         pnet_datalink::interfaces()
             .iter()
             .filter_map(|iface| {
-                if iface.is_up() && iface.is_multicast() {
+                if iface.is_up() && iface.is_running() && iface.is_multicast() {
                     for ipaddr in &iface.ips {
                         if ipaddr.is_ipv4() {
                             return Some(ipaddr.ip());
@@ -266,7 +266,7 @@ pub fn get_unicast_addresses_of_multicast_interfaces() -> Vec<IpAddr> {
     {
         pnet_datalink::interfaces()
             .iter()
-            .filter(|iface| iface.is_up() && iface.is_multicast())
+            .filter(|iface| iface.is_up() && iface.is_running() && iface.is_multicast())
             .flat_map(|iface| {
                 iface
                     .ips
@@ -294,6 +294,9 @@ pub fn get_unicast_addresses_of_interface(name: &str) -> ZResult<Vec<IpAddr>> {
             Some(iface) => {
                 if !iface.is_up() {
                     bail!("Interface {name} is not up");
+                }
+                if !iface.is_running() {
+                    bail!("Interface {name} is not running");
                 }
                 let addrs = iface
                     .ips
