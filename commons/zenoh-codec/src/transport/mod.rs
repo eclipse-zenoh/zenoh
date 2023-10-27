@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-mod batch;
+pub mod batch;
 mod close;
 mod fragment;
 mod frame;

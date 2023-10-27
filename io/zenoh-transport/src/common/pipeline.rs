@@ -14,7 +14,7 @@ use crate::common::batch::BatchConfig;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::{
-    batch::{Encode, WBatch, WError},
+    batch::{Encode, WBatch},
     priority::{TransportChannelTx, TransportPriorityTx},
 };
 use async_std::prelude::FutureExt;
@@ -29,7 +29,7 @@ use zenoh_buffers::{
     writer::HasWriter,
     ZBuf,
 };
-use zenoh_codec::{WCodec, Zenoh080};
+use zenoh_codec::{transport::batch::BatchError, WCodec, Zenoh080};
 use zenoh_config::QueueSizeConf;
 use zenoh_core::zlock;
 use zenoh_protocol::core::Reliability;
@@ -191,11 +191,11 @@ impl StageIn {
             ext_qos: frame::ext::QoSType::new(priority),
         };
 
-        if let WError::NewFrame = e {
+        if let BatchError::NewFrame = e {
             // Attempt a serialization with a new frame
-            if batch.encode((&*msg, frame)).is_ok() {
+            if batch.encode((&*msg, &frame)).is_ok() {
                 zretok!(batch);
-            };
+            }
         }
 
         if !batch.is_empty() {
@@ -205,9 +205,9 @@ impl StageIn {
         }
 
         // Attempt a second serialization on fully empty batch
-        if batch.encode((&*msg, frame)).is_ok() {
+        if batch.encode((&*msg, &frame)).is_ok() {
             zretok!(batch);
-        };
+        }
 
         // The second serialization attempt has failed. This means that the message is
         // too large for the current batch size: we need to fragment.
@@ -235,7 +235,7 @@ impl StageIn {
             batch = zgetbatch_rets!(true);
 
             // Serialize the message fragmnet
-            match batch.encode((&mut reader, fragment)) {
+            match batch.encode((&mut reader, &mut fragment)) {
                 Ok(_) => {
                     // Update the SN
                     fragment.sn = tch.sn.get();
@@ -534,11 +534,11 @@ impl TransmissionPipeline {
             // Fill the refill ring buffer with batches
             for _ in 0..*num {
                 let bc = BatchConfig {
-                    is_streamed: config.is_streamed,
+                    mtu: config.batch_size,
                     #[cfg(feature = "transport_compression")]
                     is_compression: false,
                 };
-                let batch = WBatch::with_capacity(bc, config.batch_size);
+                let batch = WBatch::new(bc);
                 assert!(s_ref_w.push(batch).is_none());
             }
             // Create the channel for notifying that new batches are in the refill ring buffer
@@ -737,6 +737,7 @@ mod tests {
 
     const CONFIG: TransmissionPipelineConf = TransmissionPipelineConf {
         is_streamed: true,
+        #[cfg(feature = "transport_compression")]
         is_compression: true,
         batch_size: BatchSize::MAX,
         queue_size: [1; Priority::NUM],

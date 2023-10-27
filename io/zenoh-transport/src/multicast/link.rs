@@ -15,7 +15,7 @@
 use crate::stats::TransportStats;
 use crate::{
     common::{
-        batch::{BatchConfig, Decode, Encode, RBatch, WBatch},
+        batch::{BatchConfig, Encode, RBatch, WBatch},
         pipeline::{
             TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
             TransmissionPipelineProducer,
@@ -34,7 +34,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use zenoh_buffers::ZSliceBuffer;
+use zenoh_buffers::{ZSlice, ZSliceBuffer};
 use zenoh_core::zlock;
 use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::{
@@ -49,6 +49,8 @@ use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
 /****************************/
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct TransportLinkMulticastConfig {
+    // MTU
+    pub(crate) mtu: BatchSize,
     // Compression is active on the link
     #[cfg(feature = "transport_compression")]
     pub(crate) is_compression: bool,
@@ -65,9 +67,9 @@ impl TransportLinkMulticast {
         Self { link, config }
     }
 
-    pub fn batch_config(&self) -> BatchConfig {
+    const fn batch_config(&self) -> BatchConfig {
         BatchConfig {
-            is_streamed: false,
+            mtu: self.config.mtu,
             #[cfg(feature = "transport_compression")]
             is_compression: self.config.is_compression,
         }
@@ -85,7 +87,7 @@ impl TransportLinkMulticast {
     pub async fn send(&self, msg: &TransportMessage) -> ZResult<usize> {
         const ERR: &str = "Write error on link: ";
         // Create the batch for serializing the message
-        let mut batch = WBatch::with_capacity(self.batch_config(), self.link.get_mtu());
+        let mut batch = WBatch::new(self.batch_config());
         batch.encode(msg).map_err(|_| zerror!("{ERR}{self}"))?;
         let len = batch.len() as usize;
         self.send_batch(&mut batch).await?;
@@ -98,25 +100,28 @@ impl TransportLinkMulticast {
         T: ZSliceBuffer + 'static,
     {
         const ERR: &str = "Read error from link: ";
-        let (mut batch, locator) =
-            RBatch::read_multicast(self.batch_config(), &self.link, buff).await?;
-        batch.finalize(buff).map_err(|_| zerror!("{ERR}{self}"))?;
-        Ok((batch, locator))
+
+        let mut into = (buff)();
+        let (n, locator) = self.link.read(into.as_mut_slice()).await?;
+        let buffer = ZSlice::make(Arc::new(into), 0, n).map_err(|_| zerror!("Error"))?;
+        let mut batch = RBatch::new(self.batch_config(), buffer);
+        batch.initialize(buff).map_err(|_| zerror!("{ERR}{self}"))?;
+        Ok((batch, locator.into_owned()))
     }
 
-    pub async fn recv(&self) -> ZResult<(TransportMessage, Locator)> {
-        let (mut batch, locator) = self
-            .recv_batch(|| {
-                zenoh_buffers::vec::uninit(self.link.get_mtu() as usize).into_boxed_slice()
-            })
-            .await?;
+    // pub async fn recv(&self) -> ZResult<(TransportMessage, Locator)> {
+    //     let (mut batch, locator) = self
+    //         .recv_batch(|| {
+    //             zenoh_buffers::vec::uninit(self.link.get_mtu() as usize).into_boxed_slice()
+    //         })
+    //         .await?;
 
-        let msg = batch
-            .decode()
-            .map_err(|_| zerror!("Decode error on link: {}", self))?;
+    //     let msg = batch
+    //         .decode()
+    //         .map_err(|_| zerror!("Decode error on link: {}", self))?;
 
-        Ok((msg, locator))
-    }
+    //     Ok((msg, locator))
+    // }
 
     pub async fn close(&self) -> ZResult<()> {
         self.link.close().await
@@ -215,6 +220,7 @@ impl TransportLinkMulticastUniversal {
         if self.handle_tx.is_none() {
             let tpc = TransmissionPipelineConf {
                 is_streamed: false,
+                #[cfg(feature = "transport_compression")]
                 is_compression: false,
                 batch_size: config.batch_size,
                 queue_size: self.transport.manager.config.queue_size,
@@ -351,10 +357,10 @@ async fn tx_task(
                 // Send the buffer on the link
                 link.send_batch(&mut batch).await?;
                 // Keep track of next SNs
-                if let Some(sn) = batch.latest_sn.reliable {
+                if let Some(sn) = batch.codec.latest_sn.reliable {
                     last_sns[priority].reliable = sn;
                 }
-                if let Some(sn) = batch.latest_sn.best_effort {
+                if let Some(sn) = batch.codec.latest_sn.best_effort {
                     last_sns[priority].best_effort = sn;
                 }
                 #[cfg(feature = "stats")]

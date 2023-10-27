@@ -100,7 +100,6 @@ struct RecvOpenAckOut {
 
 // FSM
 struct OpenLink<'a> {
-    link: &'a TransportLinkUnicast,
     ext_qos: ext::qos::QoSFsm<'a>,
     #[cfg(feature = "transport_multilink")]
     ext_mlink: ext::multilink::MultiLinkFsm<'a>,
@@ -117,13 +116,13 @@ struct OpenLink<'a> {
 impl<'a> OpenFsm for OpenLink<'a> {
     type Error = OpenError;
 
-    type SendInitSynIn = (&'a mut State, SendInitSynIn);
+    type SendInitSynIn = (&'a mut TransportLinkUnicast, &'a mut State, SendInitSynIn);
     type SendInitSynOut = ();
     async fn send_init_syn(
         &self,
         input: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
-        let (state, input) = input;
+        let (link, state, input) = input;
 
         // Extension QoS
         let ext_qos = self
@@ -194,8 +193,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
         }
         .into();
 
-        let _ = self
-            .link
+        let _ = link
             .send(&msg)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
@@ -203,14 +201,15 @@ impl<'a> OpenFsm for OpenLink<'a> {
         Ok(())
     }
 
-    type RecvInitAckIn = &'a mut State;
+    type RecvInitAckIn = (&'a mut TransportLinkUnicast, &'a mut State);
     type RecvInitAckOut = RecvInitAckOut;
     async fn recv_init_ack(
         &self,
-        state: Self::RecvInitAckIn,
+        input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
-        let msg = self
-            .link
+        let (link, state) = input;
+
+        let msg = link
             .recv()
             .await
             .map_err(|e| (e, Some(close::reason::INVALID)))?;
@@ -221,7 +220,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
                 let e = zerror!(
                     "Received a close message (reason {}) in response to an InitSyn on: {}",
                     close::reason_to_str(reason),
-                    self.link,
+                    link,
                 );
                 match reason {
                     close::reason::MAX_LINKS => log::debug!("{}", e),
@@ -232,7 +231,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
             _ => {
                 let e = zerror!(
                     "Received an invalid message in response to an InitSyn on {}: {:?}",
-                    self.link,
+                    link,
                     msg.body
                 );
                 log::error!("{}", e);
@@ -251,7 +250,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
             if i_fsn_res > m_fsn_res {
                 let e = zerror!(
                     "Invalid FrameSN resolution on {}: {:?} > {:?}",
-                    self.link,
+                    link,
                     i_fsn_res,
                     m_fsn_res
                 );
@@ -267,7 +266,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
             if i_rid_res > m_rid_res {
                 let e = zerror!(
                     "Invalid RequestID resolution on {}: {:?} > {:?}",
-                    self.link,
+                    link,
                     i_rid_res,
                     m_rid_res
                 );
@@ -333,13 +332,13 @@ impl<'a> OpenFsm for OpenLink<'a> {
         Ok(output)
     }
 
-    type SendOpenSynIn = (&'a mut State, SendOpenSynIn);
+    type SendOpenSynIn = (&'a mut TransportLinkUnicast, &'a mut State, SendOpenSynIn);
     type SendOpenSynOut = SendOpenSynOut;
     async fn send_open_syn(
         &self,
         input: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
-        let (state, input) = input;
+        let (link, state, input) = input;
 
         // Extension QoS
         let ext_qos = self
@@ -411,8 +410,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
         }
         .into();
 
-        let _ = self
-            .link
+        let _ = link
             .send(&message)
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
@@ -421,14 +419,15 @@ impl<'a> OpenFsm for OpenLink<'a> {
         Ok(output)
     }
 
-    type RecvOpenAckIn = &'a mut State;
+    type RecvOpenAckIn = (&'a mut TransportLinkUnicast, &'a mut State);
     type RecvOpenAckOut = RecvOpenAckOut;
     async fn recv_open_ack(
         &self,
-        state: Self::RecvOpenAckIn,
+        input: Self::RecvOpenAckIn,
     ) -> Result<Self::RecvOpenAckOut, Self::Error> {
-        let msg = self
-            .link
+        let (link, state) = input;
+
+        let msg = link
             .recv()
             .await
             .map_err(|e| (e, Some(close::reason::INVALID)))?;
@@ -439,7 +438,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
                 let e = zerror!(
                     "Received a close message (reason {}) in response to an OpenSyn on: {:?}",
                     close::reason_to_str(reason),
-                    self.link,
+                    link,
                 );
                 match reason {
                     close::reason::MAX_LINKS => log::debug!("{}", e),
@@ -450,7 +449,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
             _ => {
                 let e = zerror!(
                     "Received an invalid message in response to an OpenSyn on {}: {:?}",
-                    self.link,
+                    link,
                     msg.body
                 );
                 log::error!("{}", e);
@@ -510,16 +509,14 @@ pub(crate) async fn open_link(
     link: LinkUnicast,
     manager: &TransportManager,
 ) -> ZResult<TransportUnicast> {
-    let mut link = TransportLinkUnicast::new(
-        link,
-        TransportLinkUnicastConfig {
-            direction: TransportLinkUnicastDirection::Outbound,
-            #[cfg(feature = "transport_compression")]
-            is_compression: false,
-        },
-    );
+    let config = TransportLinkUnicastConfig {
+        direction: TransportLinkUnicastDirection::Outbound,
+        mtu: link.get_mtu(),
+        #[cfg(feature = "transport_compression")]
+        is_compression: false, // Perform the exchange Init/Open exchange with no compression
+    };
+    let mut link = TransportLinkUnicast::new(link, config);
     let fsm = OpenLink {
-        link: &link,
         ext_qos: ext::qos::QoSFsm::new(),
         #[cfg(feature = "transport_multilink")]
         ext_mlink: manager.state.unicast.multilink.fsm(&manager.prng),
@@ -580,9 +577,9 @@ pub(crate) async fn open_link(
         mine_zid: manager.config.zid,
         mine_whatami: manager.config.whatami,
     };
-    step!(fsm.send_init_syn((&mut state, isyn_in)).await);
+    step!(fsm.send_init_syn((&mut link, &mut state, isyn_in)).await);
 
-    let iack_out = step!(fsm.recv_init_ack(&mut state).await);
+    let iack_out = step!(fsm.recv_init_ack((&mut link, &mut state)).await);
 
     // Open handshake
     let osyn_in = SendOpenSynIn {
@@ -593,9 +590,9 @@ pub(crate) async fn open_link(
         #[cfg(feature = "shared-memory")]
         ext_shm: iack_out.ext_shm,
     };
-    let osyn_out = step!(fsm.send_open_syn((&mut state, osyn_in)).await);
+    let osyn_out = step!(fsm.send_open_syn((&mut link, &mut state, osyn_in)).await);
 
-    let oack_out = step!(fsm.recv_open_ack(&mut state).await);
+    let oack_out = step!(fsm.recv_open_ack((&mut link, &mut state)).await);
 
     // Initialize the transport
     let config = TransportConfigUnicast {
@@ -610,6 +607,7 @@ pub(crate) async fn open_link(
         is_shm: state.ext_shm.is_shm(),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
     };
+    link.config.mtu = state.transport.batch_size;
     #[cfg(feature = "transport_compression")]
     {
         link.config.is_compression = state.link.ext_compression.is_compression();

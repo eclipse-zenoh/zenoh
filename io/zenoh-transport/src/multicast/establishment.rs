@@ -61,13 +61,13 @@ pub(crate) async fn open_link(
 
     // Create the transport
     let locator = link.get_dst().to_owned();
-    let link = TransportLinkMulticast::new(
-        link,
-        TransportLinkMulticastConfig {
-            #[cfg(feature = "transport_compression")]
-            is_compression: manager.config.multicast.is_compression,
-        },
-    );
+    let config = TransportLinkMulticastConfig {
+        mtu: link.get_mtu(),
+        #[cfg(feature = "transport_compression")]
+        is_compression: manager.config.multicast.is_compression,
+    };
+    let link = TransportLinkMulticast::new(link, config);
+
     let config = TransportConfigMulticast {
         link,
         sn_resolution,

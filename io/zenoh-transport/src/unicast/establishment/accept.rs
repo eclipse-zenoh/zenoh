@@ -583,14 +583,13 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
 }
 
 pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) -> ZResult<()> {
-    let link = TransportLinkUnicast::new(
-        link.clone(),
-        TransportLinkUnicastConfig {
-            direction: TransportLinkUnicastDirection::Inbound,
-            #[cfg(feature = "transport_compression")]
-            is_compression: false,
-        },
-    );
+    let config = TransportLinkUnicastConfig {
+        mtu: link.get_mtu(),
+        direction: TransportLinkUnicastDirection::Inbound,
+        #[cfg(feature = "transport_compression")]
+        is_compression: false,
+    };
+    let mut link = TransportLinkUnicast::new(link.clone(), config);
     let fsm = AcceptLink {
         link: &link,
         prng: &manager.prng,
@@ -700,6 +699,8 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         is_shm: state.ext_shm.is_shm(),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
     };
+    link.config.mtu = state.transport.batch_size;
+
     let mut c_link = link.clone();
     #[cfg(feature = "transport_compression")]
     {

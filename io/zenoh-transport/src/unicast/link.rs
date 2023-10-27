@@ -13,9 +13,10 @@
 //
 use crate::common::batch::{BatchConfig, Decode, Encode, RBatch, WBatch};
 use std::fmt;
-use zenoh_buffers::ZSliceBuffer;
+use std::sync::Arc;
+use zenoh_buffers::{ZSlice, ZSliceBuffer};
 use zenoh_link::{Link, LinkUnicast};
-use zenoh_protocol::transport::TransportMessage;
+use zenoh_protocol::transport::{BatchSize, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -28,6 +29,8 @@ pub(crate) enum TransportLinkUnicastDirection {
 pub(crate) struct TransportLinkUnicastConfig {
     // Inbound / outbound
     pub(crate) direction: TransportLinkUnicastDirection,
+    // MTU
+    pub(crate) mtu: BatchSize,
     // Compression is active on the link
     #[cfg(feature = "transport_compression")]
     pub(crate) is_compression: bool,
@@ -44,9 +47,9 @@ impl TransportLinkUnicast {
         Self { link, config }
     }
 
-    pub fn batch_config(&self) -> BatchConfig {
+    const fn batch_config(&self) -> BatchConfig {
         BatchConfig {
-            is_streamed: self.link.is_streamed(),
+            mtu: self.config.mtu,
             #[cfg(feature = "transport_compression")]
             is_compression: self.config.is_compression,
         }
@@ -54,8 +57,14 @@ impl TransportLinkUnicast {
 
     pub async fn send_batch(&self, batch: &mut WBatch) -> ZResult<()> {
         const ERR: &str = "Write error on link: ";
+
         batch.finalize().map_err(|_| zerror!("{ERR}{self}"))?;
+
         // Send the message on the link
+        if self.link.is_streamed() {
+            let len = batch.len().to_le_bytes();
+            self.link.write_all(&len).await?;
+        }
         self.link.write_all(batch.as_slice()).await?;
 
         Ok(())
@@ -63,8 +72,9 @@ impl TransportLinkUnicast {
 
     pub async fn send(&self, msg: &TransportMessage) -> ZResult<usize> {
         const ERR: &str = "Write error on link: ";
+
         // Create the batch for serializing the message
-        let mut batch = WBatch::with_capacity(self.batch_config(), self.link.get_mtu());
+        let mut batch = WBatch::new(self.batch_config());
         batch.encode(msg).map_err(|_| zerror!("{ERR}{self}"))?;
         let len = batch.len() as usize;
         self.send_batch(&mut batch).await?;
@@ -77,8 +87,32 @@ impl TransportLinkUnicast {
         T: ZSliceBuffer + 'static,
     {
         const ERR: &str = "Read error from link: ";
-        let mut batch = RBatch::read_unicast(self.batch_config(), &self.link, buff).await?;
-        batch.finalize(buff).map_err(|_| zerror!("{ERR}{self}"))?;
+
+        let mut into = (buff)();
+        let end = if self.link.is_streamed() {
+            // Read and decode the message length
+            let mut len = BatchSize::MIN.to_le_bytes();
+            self.link.read_exact(&mut len).await?;
+            let len = BatchSize::from_le_bytes(len) as usize;
+
+            // Read the bytes
+            let slice = into
+                .as_mut_slice()
+                .get_mut(..len)
+                .ok_or_else(|| zerror!("{ERR}{self}. Invalid batch length or buffer size."))?;
+            self.link.read_exact(slice).await?;
+            len
+        } else {
+            // Read the bytes
+            self.link.read(into.as_mut_slice()).await?
+        };
+
+        let buffer = ZSlice::make(Arc::new(into), 0, end)
+            .map_err(|_| zerror!("ZSlice index(es) out of bounds"))?;
+
+        let mut batch = RBatch::new(self.batch_config(), buffer);
+        batch.initialize(buff).map_err(|_| zerror!("{ERR}{self}"))?;
+
         Ok(batch)
     }
 

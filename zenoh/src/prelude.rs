@@ -25,7 +25,11 @@
 pub use common::*;
 pub(crate) mod common {
     pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
-    pub use zenoh_buffers::{reader::HasReader, writer::HasWriter, SplitBuffer};
+    pub use zenoh_buffers::{
+        buffer::{Buffer, SplitBuffer},
+        reader::HasReader,
+        writer::HasWriter,
+    };
     pub use zenoh_core::Resolve;
 
     pub(crate) type Id = usize;
