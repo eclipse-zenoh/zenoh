@@ -112,6 +112,17 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
             }
         };
 
+        // for index in plugins.plugins() {
+        //     let info = plugins[index].info();
+        //     let required = required_plugins.contains(name);
+        //     log::info!(
+        //         "Starting {req} plugin \"{name}\"",
+        //         req = if required { "required" } else { "" }
+        //     );
+
+        //     let index = plugins.start(index, &runtime);
+        // }
+
         for (name, path, start_result) in plugins.start_all(&runtime) {
             let required = required_plugins.contains(name);
             log::info!(

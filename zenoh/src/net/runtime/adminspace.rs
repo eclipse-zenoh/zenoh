@@ -73,10 +73,8 @@ impl ConfigValidator for AdminSpace {
         new: &serde_json::Map<String, serde_json::Value>,
     ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
         let plugins_mgr = zlock!(self.context.plugins_mgr);
-        let index = plugins_mgr.get_running_plugin_index_err(name)?;
-        plugins_mgr
-            .running_plugin(index)
-            .config_checker(path, current, new)
+        let plugin = plugins_mgr.running_plugin(name)?;
+        plugin.running().config_checker(path, current, new)
     }
 }
 
@@ -125,10 +123,7 @@ impl AdminSpace {
 
         let mut active_plugins = plugins_mgr
             .running_plugins()
-            .map(|index| {
-                let info = plugins_mgr.plugin(index);
-                (info.name().to_string(), info.path().to_string())
-            })
+            .map(|rec| (rec.name().to_string(), rec.path().to_string()))
             .collect::<HashMap<_, _>>();
 
         let context = Arc::new(AdminContext {
@@ -193,28 +188,32 @@ impl AdminSpace {
                         match diff {
                             PluginDiff::Delete(name) => {
                                 active_plugins.remove(name.as_str());
-                                if let Some(index) = plugins_mgr.get_running_plugin_index(&name) {
-                                    let _ = plugins_mgr.stop(index);
+                                if let Ok(running) = plugins_mgr.running_plugin_mut(&name) {
+                                    running.stop()
                                 }
                             }
                             PluginDiff::Start(plugin) => {
                                 let name = &plugin.name;
-                                let index = if let Some(paths) = &plugin.paths {
+                                let rec = if let Some(paths) = &plugin.paths {
                                     plugins_mgr.load_plugin_by_paths(name, paths)
                                 } else {
                                     plugins_mgr.load_plugin_by_backend_name(name, &plugin.name)
                                 };
-                                match index {
-                                    Ok(index) => {
-                                        let path = plugins_mgr.plugin(index).path().to_string();
-                                        log::info!("Loaded plugin `{}` from {}", name, path);
-                                        match plugins_mgr.start(index, &admin.context.runtime) {
-                                            Ok((true, _)) => {
-                                                active_plugins.insert(name.into(), path.clone());
+                                match rec {
+                                    Ok(rec) => {
+                                        log::info!(
+                                            "Loaded plugin `{}` from {}",
+                                            rec.name(),
+                                            rec.path()
+                                        );
+                                        match rec.start(&admin.context.runtime) {
+                                            Ok((true, rec)) => {
+                                                active_plugins
+                                                    .insert(name.into(), rec.path().to_string());
                                                 log::info!(
                                                     "Successfully started plugin `{}` from {}",
-                                                    name,
-                                                    path
+                                                    rec.name(),
+                                                    rec.path()
                                                 );
                                             }
                                             Ok((false, _)) => {
@@ -437,8 +436,7 @@ fn router_data(context: &AdminContext, query: Query) {
         let plugins_mgr = zlock!(context.plugins_mgr);
         plugins_mgr
             .running_plugins()
-            .map(|index| plugins_mgr.plugin(index))
-            .map(|info| (info.name(), json!({ "path": info.path() })))
+            .map(|rec| (rec.name(), json!({ "path": rec.path() })))
             .collect()
     };
 
