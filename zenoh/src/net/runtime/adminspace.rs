@@ -640,19 +640,15 @@ fn plugins_status(context: &AdminContext, query: Query) {
     let guard = zlock!(context.plugins_mgr);
     let mut root_key = format!("@/router/{}/status/plugins/", &context.zid_str);
 
-    for index in guard.running_plugins() {
-        let info = guard.plugin(index);
-        let name = info.name();
-        let path = info.path();
-        let plugin = guard.running_plugin(index);
-        with_extended_string(&mut root_key, &[name], |plugin_key| {
+    for plugin in guard.running_plugins() {
+        with_extended_string(&mut root_key, &[plugin.name()], |plugin_key| {
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
                         if let Err(e) = query
                             .reply(Ok(Sample::new(
                                 key_expr,
-                                Value::from(path).encoding(KnownEncoding::AppJson.into()),
+                                Value::from(plugin.path()).encoding(KnownEncoding::AppJson.into()),
                             )))
                             .res()
                         {
@@ -672,7 +668,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 return;
             }
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                plugin.adminspace_getter(&selector, plugin_key)
+                plugin.running().adminspace_getter(&selector, plugin_key)
             })) {
                 Ok(Ok(responses)) => {
                     for response in responses {
@@ -691,15 +687,15 @@ fn plugins_status(context: &AdminContext, query: Query) {
                     }
                 }
                 Ok(Err(e)) => {
-                    log::error!("Plugin {} bailed from responding to {}: {}", name, query.key_expr(), e)
+                    log::error!("Plugin {} bailed from responding to {}: {}", plugin.name(), query.key_expr(), e)
                 }
                 Err(e) => match e
                     .downcast_ref::<String>()
                     .map(|s| s.as_str())
                     .or_else(|| e.downcast_ref::<&str>().copied())
                 {
-                    Some(e) => log::error!("Plugin {} panicked while responding to {}: {}", name, query.key_expr(), e),
-                    None => log::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", name, query.key_expr()),
+                    Some(e) => log::error!("Plugin {} panicked while responding to {}: {}", plugin.name(), query.key_expr(), e),
+                    None => log::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", plugin.name(), query.key_expr()),
                 },
             }
         });

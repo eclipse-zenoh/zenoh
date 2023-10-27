@@ -31,9 +31,13 @@ use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::sync::*;
 use zenoh::runtime::Runtime;
 use zenoh::Session;
+use zenoh_backend_traits::config::ConfigDiff;
+use zenoh_backend_traits::config::PluginConfig;
+use zenoh_backend_traits::config::StorageConfig;
+use zenoh_backend_traits::config::VolumeConfig;
 use zenoh_backend_traits::VolumePlugin;
 use zenoh_core::zlock;
-use zenoh_result::{bail, ZResult};
+use zenoh_result::ZResult;
 use zenoh_util::LibLoader;
 
 mod backends_mgt;
@@ -104,14 +108,15 @@ impl StorageRuntimeInner {
 
         let session = Arc::new(zenoh::init(runtime.clone()).res_sync().unwrap());
 
-        let plugins_manager = PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX).add_static::<MemoryBackend>();
+        let plugins_manager = PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
+            .add_static::<MemoryBackend>();
 
         let mut new_self = StorageRuntimeInner {
             name,
             runtime,
             session,
             storages: Default::default(),
-            plugins_manager
+            plugins_manager,
         };
         new_self.spawn_volume(VolumeConfig {
             name: MEMORY_BACKEND_NAME.into(),
@@ -131,7 +136,7 @@ impl StorageRuntimeInner {
     fn update<I: IntoIterator<Item = ConfigDiff>>(&mut self, diffs: I) -> ZResult<()> {
         for diff in diffs {
             match diff {
-                ConfigDiff::DeleteVolume(volume) => self.kill_volume(&volume.name),
+                ConfigDiff::DeleteVolume(volume) => self.kill_volume(&volume.name)?,
                 ConfigDiff::AddVolume(volume) => {
                     self.spawn_volume(volume)?;
                 }
@@ -141,7 +146,7 @@ impl StorageRuntimeInner {
         }
         Ok(())
     }
-    fn kill_volume<T: AsRef<str>>(&mut self, name: T) {
+    fn kill_volume<T: AsRef<str>>(&mut self, name: T) -> ZResult<()> {
         let name = name.as_ref();
         if let Some(storages) = self.storages.remove(name) {
             async_std::task::block_on(futures::future::join_all(
@@ -150,7 +155,8 @@ impl StorageRuntimeInner {
                     .map(|s| async move { s.send(StorageMessage::Stop) }),
             ));
         }
-        self.plugins_manager.stop(name);
+        self.plugins_manager.running_plugin_mut(name)?.stop();
+        Ok(())
     }
     fn spawn_volume(&mut self, config: VolumeConfig) -> ZResult<()> {
         let volume_id = config.name();
@@ -162,7 +168,7 @@ impl StorageRuntimeInner {
             self.plugins_manager
                 .load_plugin_by_backend_name(volume_id, backend_name)?;
         }
-        self.plugins_manager.start(volume_id, &config)?;
+        self.plugins_manager.plugin_mut(volume_id)?.start(&config)?;
         Ok(())
     }
     fn kill_storage(&mut self, config: StorageConfig) {
@@ -182,29 +188,23 @@ impl StorageRuntimeInner {
     fn spawn_storage(&mut self, storage: StorageConfig) -> ZResult<()> {
         let admin_key = self.status_key() + "/storages/" + &storage.name;
         let volume_id = storage.volume_id.clone();
-        if let Some(backend) = self.plugins_manager.plugin(&volume_id) {
-            let storage_name = storage.name.clone();
-            let in_interceptor = backend.incoming_data_interceptor();
-            let out_interceptor = backend.outgoing_data_interceptor();
-            let stopper = async_std::task::block_on(create_and_start_storage(
-                admin_key,
-                storage,
-                &backend,
-                in_interceptor,
-                out_interceptor,
-                self.session.clone(),
-            ))?;
-            self.storages
-                .entry(volume_id)
-                .or_default()
-                .insert(storage_name, stopper);
-            Ok(())
-        } else {
-            bail!(
-                "`{}` volume doesn't support the required storage configuration",
-                volume_id
-            )
-        }
+        let backend = self.plugins_manager.running_plugin(&volume_id)?;
+        let storage_name = storage.name.clone();
+        let in_interceptor = backend.running().incoming_data_interceptor();
+        let out_interceptor = backend.running().outgoing_data_interceptor();
+        let stopper = async_std::task::block_on(create_and_start_storage(
+            admin_key,
+            storage,
+            backend.running(),
+            in_interceptor,
+            out_interceptor,
+            self.session.clone(),
+        ))?;
+        self.storages
+            .entry(volume_id)
+            .or_default()
+            .insert(storage_name, stopper);
+        Ok(())
     }
 }
 impl From<StorageRuntimeInner> for StorageRuntime {
@@ -251,8 +251,8 @@ impl RunningPluginTrait for StorageRuntime {
         });
         let guard = self.0.lock().unwrap();
         with_extended_string(&mut key, &["/volumes/"], |key| {
-            for (volume_id, (lib_path, volume)) in guard.plugins_manager.running_plugins() {
-                with_extended_string(key, &[volume_id], |key| {
+            for plugin in guard.plugins_manager.running_plugins() {
+                with_extended_string(key, &[plugin.name()], |key| {
                     with_extended_string(key, &["/__path__"], |key| {
                         if keyexpr::new(key.as_str())
                             .unwrap()
@@ -260,7 +260,7 @@ impl RunningPluginTrait for StorageRuntime {
                         {
                             responses.push(zenoh::plugins::Response::new(
                                 key.clone(),
-                                lib_path.into(),
+                                plugin.path().into(),
                             ))
                         }
                     });
@@ -270,7 +270,7 @@ impl RunningPluginTrait for StorageRuntime {
                     {
                         responses.push(zenoh::plugins::Response::new(
                             key.clone(),
-                            volume.get_admin_status(),
+                            plugin.running().get_admin_status(),
                         ))
                     }
                 });

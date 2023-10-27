@@ -76,7 +76,7 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
         let config = config_from_args(&args);
         log::info!("Initial conf: {}", &config);
 
-        let mut plugins = PluginsManager::dynamic(config.libloader(), "zenoh_plugin_");
+        let mut plugin_mgr = PluginsManager::dynamic(config.libloader(), "zenoh_plugin_");
         // Static plugins are to be added here, with `.add_static::<PluginType>()`
         let mut required_plugins = HashSet::new();
         for plugin_load in config.plugins().load_requests() {
@@ -90,8 +90,8 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
                 req = if required { "required" } else { "" }
             );
             if let Err(e) = match paths {
-                None => plugins.load_plugin_by_backend_name(&name, &name),
-                Some(paths) => plugins.load_plugin_by_paths(name.clone(), &paths),
+                None => plugin_mgr.load_plugin_by_backend_name(&name, &name),
+                Some(paths) => plugin_mgr.load_plugin_by_paths(name.clone(), &paths),
             } {
                 if required {
                     panic!("Plugin load failure: {}", e)
@@ -112,42 +112,53 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
             }
         };
 
-        // for index in plugins.plugins() {
-        //     let info = plugins[index].info();
-        //     let required = required_plugins.contains(name);
-        //     log::info!(
-        //         "Starting {req} plugin \"{name}\"",
-        //         req = if required { "required" } else { "" }
-        //     );
-
-        //     let index = plugins.start(index, &runtime);
-        // }
-
-        for (name, path, start_result) in plugins.start_all(&runtime) {
-            let required = required_plugins.contains(name);
+        for plugin in plugin_mgr.plugins_mut() {
+            let required = required_plugins.contains(plugin.name());
             log::info!(
                 "Starting {req} plugin \"{name}\"",
-                req = if required { "required" } else { "" }
+                req = if required { "required" } else { "" },
+                name = plugin.name()
             );
-            match start_result {
-                Ok(Some(_)) => log::info!("Successfully started plugin {} from {:?}", name, path),
-                Ok(None) => log::warn!("Plugin {} from {:?} wasn't loaded, as an other plugin by the same name is already running", name, path),
+            match plugin.start(&runtime) {
+                Ok(_) => {
+                    log::info!(
+                        "Successfully started plugin {} from {:?}",
+                        plugin.name(),
+                        plugin.path()
+                    );
+                }
                 Err(e) => {
                     let report = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| e.to_string())) {
                         Ok(s) => s,
-                        Err(_) => panic!("Formatting the error from plugin {} ({:?}) failed, this is likely due to ABI unstability.\r\nMake sure your plugin was built with the same version of cargo as zenohd", name, path),
+                        Err(_) => panic!("Formatting the error from plugin {} ({:?}) failed, this is likely due to ABI unstability.\r\nMake sure your plugin was built with the same version of cargo as zenohd", plugin.name(), plugin.path()),
                     };
                     if required {
-                        panic!("Plugin \"{name}\" failed to start: {}", if report.is_empty() {"no details provided"} else {report.as_str()});
-                    }else {
-                        log::error!("Required plugin \"{name}\" failed to start: {}", if report.is_empty() {"no details provided"} else {report.as_str()});
+                        panic!(
+                            "Plugin \"{}\" failed to start: {}",
+                            plugin.name(),
+                            if report.is_empty() {
+                                "no details provided"
+                            } else {
+                                report.as_str()
+                            }
+                        );
+                    } else {
+                        log::error!(
+                            "Required plugin \"{}\" failed to start: {}",
+                            plugin.name(),
+                            if report.is_empty() {
+                                "no details provided"
+                            } else {
+                                report.as_str()
+                            }
+                        );
                     }
                 }
             }
         }
         log::info!("Finished loading plugins");
 
-        AdminSpace::start(&runtime, plugins, LONG_VERSION.clone()).await;
+        AdminSpace::start(&runtime, plugin_mgr, LONG_VERSION.clone()).await;
 
         future::pending::<()>().await;
     });
