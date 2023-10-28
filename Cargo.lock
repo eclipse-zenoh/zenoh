@@ -4936,6 +4936,7 @@ dependencies = [
 name = "zenoh-plugin-trait"
 version = "0.11.0-dev"
 dependencies = [
+ "const_format",
  "libloading",
  "log",
  "serde_json",

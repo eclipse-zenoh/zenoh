@@ -224,14 +224,16 @@ impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + Compati
 
     /// Tries to load a plugin with the name `defaukt_lib_prefix` + `backend_name` + `.so | .dll | .dylib`
     /// in lib_loader's search paths.
+    /// Returns a tuple of (retval, plugin_record)
+    /// where `retval`` is true if the plugin was successfully loaded, false if pluginw with this name it was already loaded
     pub fn load_plugin_by_backend_name<T: AsRef<str>, T1: AsRef<str>>(
         &mut self,
         name: T,
         backend_name: T1,
-    ) -> ZResult<&mut PluginRecord<StartArgs, RunningPlugin>> {
+    ) -> ZResult<(bool, &mut PluginRecord<StartArgs, RunningPlugin>)> {
         let name = name.as_ref();
-        if self.get_plugin_index(name).is_some() {
-            bail!("Plugin `{}` already loaded", name);
+        if let Some(index) = self.get_plugin_index(name) {
+            return Ok((false, &mut self.plugins[index]));
         }
         let backend_name = backend_name.as_ref();
         let (lib, p) = match &mut self.loader {
@@ -243,17 +245,19 @@ impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + Compati
             Err(e) => bail!("After loading `{:?}`: {}", &p, e),
         };
         self.plugins.push(PluginRecord::new(plugin));
-        Ok(self.plugins.last_mut().unwrap())
+        Ok((true, self.plugins.last_mut().unwrap()))
     }
     /// Tries to load a plugin from the list of path to plugin (absolute or relative to the current working directory)
+    /// Returns a tuple of (retval, plugin_record)
+    /// where `retval`` is true if the plugin was successfully loaded, false if pluginw with this name it was already loaded
     pub fn load_plugin_by_paths<T: AsRef<str>, P: AsRef<str> + std::fmt::Debug>(
         &mut self,
         name: T,
         paths: &[P],
-    ) -> ZResult<&mut PluginRecord<StartArgs, RunningPlugin>> {
+    ) -> ZResult<(bool, &mut PluginRecord<StartArgs, RunningPlugin>)> {
         let name = name.as_ref();
-        if self.get_plugin_index(name).is_some() {
-            bail!("Plugin `{}` already loaded", name);
+        if let Some(index) = self.get_plugin_index(name) {
+            return Ok((false, &mut self.plugins[index]));
         }
         for path in paths {
             let path = path.as_ref();
@@ -261,7 +265,7 @@ impl<StartArgs: 'static + CompatibilityVersion, RunningPlugin: 'static + Compati
                 Ok((lib, p)) => {
                     let plugin = Self::load_plugin(name, lib, p)?;
                     self.plugins.push(PluginRecord::new(plugin));
-                    return Ok(self.plugins.last_mut().unwrap());
+                    return Ok((true, self.plugins.last_mut().unwrap()));
                 }
                 Err(e) => log::warn!("Plugin '{}' load fail at {}: {}", &name, path, e),
             }
@@ -356,9 +360,11 @@ impl<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion>
     DynamicPlugin<StartArgs, RunningPlugin>
 {
     fn new(name: String, lib: Library, path: PathBuf) -> ZResult<Self> {
+        log::debug!("Loading plugin {}", &path.to_str().unwrap(),);
         let get_plugin_loader_version =
             unsafe { lib.get::<fn() -> PluginLoaderVersion>(b"get_plugin_loader_version")? };
         let plugin_loader_version = get_plugin_loader_version();
+        log::debug!("Plugin loader version: {}", &plugin_loader_version);
         if plugin_loader_version != PLUGIN_LOADER_VERSION {
             bail!(
                 "Plugin loader version mismatch: host = {}, plugin = {}",
@@ -369,15 +375,17 @@ impl<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion>
         let get_compatibility = unsafe { lib.get::<fn() -> Compatibility>(b"get_compatibility")? };
         let plugin_compatibility_record = get_compatibility();
         let host_compatibility_record = Compatibility::new::<StartArgs, RunningPlugin>();
+        log::debug!(
+            "Plugin compativilty record: {:?}",
+            &plugin_compatibility_record
+        );
         if !plugin_compatibility_record.are_compatible(&host_compatibility_record) {
             bail!(
-                "Plugin compatibility mismatch:\nhost = {:?}\nplugin = {:?}\n",
+                "Plugin compatibility mismatch:\n\nHost:\n{}\nPlugin:\n{}\n",
                 host_compatibility_record,
                 plugin_compatibility_record
             );
         }
-
-        // TODO: check loader version and compatibility
         let load_plugin =
             unsafe { lib.get::<fn() -> PluginVTable<StartArgs, RunningPlugin>>(b"load_plugin")? };
         let vtable = load_plugin();

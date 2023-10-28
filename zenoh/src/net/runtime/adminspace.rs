@@ -200,12 +200,20 @@ impl AdminSpace {
                                     plugins_mgr.load_plugin_by_backend_name(name, &plugin.name)
                                 };
                                 match rec {
-                                    Ok(rec) => {
-                                        log::info!(
-                                            "Loaded plugin `{}` from {}",
-                                            rec.name(),
-                                            rec.path()
-                                        );
+                                    Ok((loaded, rec)) => {
+                                        if loaded {
+                                            log::info!(
+                                                "Loaded plugin `{}` from {}",
+                                                rec.name(),
+                                                rec.path()
+                                            );
+                                        } else {
+                                            log::warn!(
+                                                "Plugin `{}` was already loaded from {}",
+                                                rec.name(),
+                                                rec.path()
+                                            );
+                                        }
                                         match rec.start(&admin.context.runtime) {
                                             Ok((true, rec)) => {
                                                 active_plugins

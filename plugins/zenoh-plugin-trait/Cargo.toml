@@ -37,3 +37,4 @@ serde_json = { workspace = true }
 zenoh-macros = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
+const_format = { workspace = true } 

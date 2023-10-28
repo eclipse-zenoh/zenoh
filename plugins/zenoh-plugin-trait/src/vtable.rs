@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -25,8 +27,56 @@ pub struct PluginVTable<StartArgs, RunningPlugin> {
     pub start: StartFn<StartArgs, RunningPlugin>,
 }
 impl<StartArgs, RunningPlugin> CompatibilityVersion for PluginVTable<StartArgs, RunningPlugin> {
-    fn version() -> &'static str{
-        "1"
+    fn version() -> u64 {
+        1
+    }
+    fn features() -> &'static str {
+        concat_enabled_features!(
+            "auth_pubkey",
+            "auth_usrpwd",
+            "complete_n",
+            "shared-memory",
+            "stats",
+            "transport_multilink",
+            "transport_quic",
+            "transport_serial",
+            "transport_unixpipe",
+            "transport_tcp",
+            "transport_tls",
+            "transport_udp",
+            "transport_unixsock-stream",
+            "transport_ws",
+            "unstable",
+            "default"
+        )
+    }
+}
+
+#[repr(C)]
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct StructVersion {
+    pub version: u64,
+    pub name: &'static str,
+    pub features: &'static str,
+}
+
+impl StructVersion {
+    pub fn new<T: CompatibilityVersion>() -> Self {
+        Self {
+            version: T::version(),
+            name: std::any::type_name::<T>(),
+            features: T::features(),
+        }
+    }
+}
+
+impl Display for StructVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "  version: {}\n  type: {}\n  features: {}\n",
+            self.version, self.name, self.features
+        )
     }
 }
 
@@ -34,21 +84,22 @@ impl<StartArgs, RunningPlugin> CompatibilityVersion for PluginVTable<StartArgs, 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Compatibility {
     rust_version: RustVersion,
-    vtable_version: &'static str,
-    start_args_version: (&'static str, &'static str),
-    running_plugin_version: (&'static str, &'static str),
+    vtable_version: StructVersion,
+    start_args_version: StructVersion,
+    running_plugin_version: StructVersion,
 }
 
 impl Compatibility {
     pub fn new<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion>() -> Self {
+        let rust_version = RustVersion::new();
+        let vtable_version = StructVersion::new::<PluginVTable<StartArgs, RunningPlugin>>();
+        let start_args_version = StructVersion::new::<StartArgs>();
+        let running_plugin_version = StructVersion::new::<RunningPlugin>();
         Self {
-            rust_version: RustVersion::new(),
-            vtable_version: PluginVTable::<StartArgs, RunningPlugin>::version(),
-            start_args_version: (std::any::type_name::<StartArgs>(), StartArgs::version()),
-            running_plugin_version: (
-                std::any::type_name::<RunningPlugin>(),
-                RunningPlugin::version(),
-            ),
+            rust_version,
+            vtable_version,
+            start_args_version,
+            running_plugin_version,
         }
     }
     pub fn are_compatible(&self, other: &Self) -> bool {
@@ -56,6 +107,19 @@ impl Compatibility {
             && self.vtable_version == other.vtable_version
             && self.start_args_version == other.start_args_version
             && self.running_plugin_version == other.running_plugin_version
+    }
+}
+
+impl Display for Compatibility {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}\nVTable:{}StartArgs:{}RunningPlugin:{}",
+            self.rust_version,
+            self.vtable_version,
+            self.start_args_version,
+            self.running_plugin_version
+        )
     }
 }
 
@@ -67,6 +131,20 @@ pub struct RustVersion {
     patch: u64,
     stable: bool,
     commit: &'static str,
+}
+
+impl Display for RustVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Rust {}.{}.{}{} commit {}",
+            self.major,
+            self.minor,
+            self.patch,
+            if self.stable { "" } else { "-nightly" },
+            self.commit
+        )
+    }
 }
 
 const RELEASE_AND_COMMIT: (&str, &str) = zenoh_macros::rustc_version_release!();

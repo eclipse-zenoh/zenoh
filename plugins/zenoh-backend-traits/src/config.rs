@@ -68,12 +68,12 @@ pub struct ReplicaConfig {
     pub delta: Duration,
 }
 
-const VOLUME_CONFIG_VERSION: &str = "1";
-
 impl CompatibilityVersion for VolumeConfig {
-    fn version() -> &'static str {
+    fn version() -> u64 {
+        1
+    }
+    fn features() -> &'static str {
         concat_enabled_features!(
-            VOLUME_CONFIG_VERSION,
             "auth_pubkey",
             "auth_usrpwd",
             "complete_n",

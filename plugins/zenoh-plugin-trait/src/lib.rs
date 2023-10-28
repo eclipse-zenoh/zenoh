@@ -24,22 +24,29 @@ pub mod vtable;
 use zenoh_result::ZResult;
 
 pub mod prelude {
-    pub use crate::{loading::*, vtable::*, CompatibilityVersion, Plugin, concat_enabled_features};
+    pub use crate::{concat_enabled_features, loading::*, vtable::*, CompatibilityVersion, Plugin};
 }
 
 #[macro_export]
 macro_rules! concat_enabled_features {
-    ($version:ident, $($feature:literal),*) => {
+    ($($feature:literal),*) => {
         {
             use const_format::concatcp;
-            const_format::concatcp!($version $(,
+            const_format::concatcp!("" $(,
                 if cfg!(feature = $feature) { concatcp!(" ", $feature) } else { "" }
             )*)
         }
     };
 }
+
 pub trait CompatibilityVersion {
-    fn version() -> &'static str;
+    /// The version of the structure implementing this trait. After any channge in the structure or it's dependencies
+    /// whcich may affect the ABI, this version should be incremented.
+    fn version() -> u64;
+    /// The features enabled when the structure implementing this trait was compiled.
+    /// Different features between the plugin and the host may cuase ABI incompatibility even if the structure version is the same.
+    /// Use `concat_enabled_features!` to generate this string.
+    fn features() -> &'static str;
 }
 
 pub trait Plugin: Sized + 'static {

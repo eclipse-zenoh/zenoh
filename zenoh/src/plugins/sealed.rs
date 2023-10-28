@@ -31,12 +31,12 @@ pub type StartArgs = Runtime;
 /// A zenoh plugin, when started, must return this type.
 pub type RunningPlugin = Box<dyn RunningPluginTrait + 'static>;
 
-const RUNNING_PLUGIN_VERSION: &str = "1";
-
 impl CompatibilityVersion for RunningPlugin {
-    fn version() -> &'static str {
+    fn version() -> u64 {
+        1
+    }
+    fn features() -> &'static str {
         concat_enabled_features!(
-            RUNNING_PLUGIN_VERSION,
             "auth_pubkey",
             "auth_usrpwd",
             "complete_n",

@@ -132,13 +132,13 @@
 //! ```
 
 use async_trait::async_trait;
-use zenoh_plugin_trait::{CompatibilityVersion, concat_enabled_features};
 use std::sync::Arc;
 use zenoh::prelude::{KeyExpr, OwnedKeyExpr, Sample, Selector};
 use zenoh::queryable::ReplyBuilder;
 use zenoh::time::Timestamp;
 use zenoh::value::Value;
 pub use zenoh::Result as ZResult;
+use zenoh_plugin_trait::{concat_enabled_features, CompatibilityVersion};
 
 pub mod config;
 use config::{StorageConfig, VolumeConfig};
@@ -217,12 +217,12 @@ pub trait Volume: Send + Sync {
 
 pub type VolumePlugin = Box<dyn Volume + 'static>;
 
-const VOLUME_PLUGIN_VERSION: &str = "1";
-
 impl CompatibilityVersion for VolumePlugin {
-    fn version() -> &'static str {
+    fn version() -> u64 {
+        1
+    }
+    fn features() -> &'static str {
         concat_enabled_features!(
-            VOLUME_PLUGIN_VERSION,
             "auth_pubkey",
             "auth_usrpwd",
             "complete_n",
