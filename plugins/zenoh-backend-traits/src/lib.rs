@@ -132,6 +132,7 @@
 //! ```
 
 use async_trait::async_trait;
+use const_format::concatcp;
 use std::sync::Arc;
 use zenoh::prelude::{KeyExpr, OwnedKeyExpr, Sample, Selector};
 use zenoh::queryable::ReplyBuilder;
@@ -142,6 +143,11 @@ use zenoh_plugin_trait::{concat_enabled_features, CompatibilityVersion};
 
 pub mod config;
 use config::{StorageConfig, VolumeConfig};
+
+// No features are actually used in this crate, but this dummy list allows to demonstrate how to combine feature lists
+// from multiple crates. See implementation of `CompatibilityVersion::features()` for more `VolumePlugin` and `VolumeConfig` types
+const FEATURES: &str =
+    concat_enabled_features!(prefix = "zenoh-backend-traits", features = ["default"]);
 
 /// Capability of a storage indicates the guarantees of the storage
 /// It is used by the storage manager to take decisions on the trade-offs to ensure correct performance
@@ -222,24 +228,7 @@ impl CompatibilityVersion for VolumePlugin {
         1
     }
     fn features() -> &'static str {
-        concat_enabled_features!(
-            "auth_pubkey",
-            "auth_usrpwd",
-            "complete_n",
-            "shared-memory",
-            "stats",
-            "transport_multilink",
-            "transport_quic",
-            "transport_serial",
-            "transport_unixpipe",
-            "transport_tcp",
-            "transport_tls",
-            "transport_udp",
-            "transport_unixsock-stream",
-            "transport_ws",
-            "unstable",
-            "default"
-        )
+        concatcp!(zenoh::FEATURES, crate::FEATURES)
     }
 }
 

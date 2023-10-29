@@ -29,11 +29,11 @@ pub mod prelude {
 
 #[macro_export]
 macro_rules! concat_enabled_features {
-    ($($feature:literal),*) => {
+    (prefix = $prefix:literal, features = [$($feature:literal),*]) => {
         {
             use const_format::concatcp;
-            const_format::concatcp!("" $(,
-                if cfg!(feature = $feature) { concatcp!(" ", $feature) } else { "" }
+            concatcp!("" $(,
+                if cfg!(feature = $feature) { concatcp!(" ", concatcp!($prefix, "/", $feature)) } else { "" }
             )*)
         }
     };
@@ -43,9 +43,9 @@ pub trait CompatibilityVersion {
     /// The version of the structure implementing this trait. After any channge in the structure or it's dependencies
     /// whcich may affect the ABI, this version should be incremented.
     fn version() -> u64;
-    /// The features enabled when the structure implementing this trait was compiled.
+    /// The features enabled during comiplation of the structure implementing this trait.
     /// Different features between the plugin and the host may cuase ABI incompatibility even if the structure version is the same.
-    /// Use `concat_enabled_features!` to generate this string.
+    /// Use `concat_enabled_features!` to generate this string
     fn features() -> &'static str;
 }
 

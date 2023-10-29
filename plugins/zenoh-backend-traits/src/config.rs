@@ -1,3 +1,4 @@
+use const_format::concatcp;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -17,7 +18,7 @@ use serde_json::{Map, Value};
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::{key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult};
-use zenoh_plugin_trait::{concat_enabled_features, CompatibilityVersion};
+use zenoh_plugin_trait::CompatibilityVersion;
 use zenoh_result::{bail, zerror, Error};
 
 #[derive(JsonSchema, Debug, Clone, AsMut, AsRef)]
@@ -73,24 +74,7 @@ impl CompatibilityVersion for VolumeConfig {
         1
     }
     fn features() -> &'static str {
-        concat_enabled_features!(
-            "auth_pubkey",
-            "auth_usrpwd",
-            "complete_n",
-            "shared-memory",
-            "stats",
-            "transport_multilink",
-            "transport_quic",
-            "transport_serial",
-            "transport_unixpipe",
-            "transport_tcp",
-            "transport_tls",
-            "transport_udp",
-            "transport_unixsock-stream",
-            "transport_ws",
-            "unstable",
-            "default"
-        )
+        concatcp!(zenoh::FEATURES, crate::FEATURES)
     }
 }
 

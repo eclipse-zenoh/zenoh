@@ -19,6 +19,8 @@ use zenoh_result::ZResult;
 
 pub type PluginLoaderVersion = u64;
 pub const PLUGIN_LOADER_VERSION: PluginLoaderVersion = 1;
+pub const FEATURES: &str =
+    concat_enabled_features!(prefix = "zenoh-plugin-trait", features = ["default"]);
 
 type StartFn<StartArgs, RunningPlugin> = fn(&str, &StartArgs) -> ZResult<RunningPlugin>;
 
@@ -31,24 +33,7 @@ impl<StartArgs, RunningPlugin> CompatibilityVersion for PluginVTable<StartArgs, 
         1
     }
     fn features() -> &'static str {
-        concat_enabled_features!(
-            "auth_pubkey",
-            "auth_usrpwd",
-            "complete_n",
-            "shared-memory",
-            "stats",
-            "transport_multilink",
-            "transport_quic",
-            "transport_serial",
-            "transport_unixpipe",
-            "transport_tcp",
-            "transport_tls",
-            "transport_udp",
-            "transport_unixsock-stream",
-            "transport_ws",
-            "unstable",
-            "default"
-        )
+        FEATURES
     }
 }
 

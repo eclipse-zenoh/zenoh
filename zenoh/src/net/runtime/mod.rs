@@ -28,7 +28,6 @@ use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
 use crate::GIT_VERSION;
 pub use adminspace::AdminSpace;
 use async_std::task::JoinHandle;
-use const_format::concatcp;
 use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
@@ -38,7 +37,7 @@ use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
 use zenoh_link::{EndPoint, Link};
-use zenoh_plugin_trait::{concat_enabled_features, CompatibilityVersion};
+use zenoh_plugin_trait::CompatibilityVersion;
 use zenoh_protocol::core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId};
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::{bail, ZResult};
@@ -71,24 +70,7 @@ impl CompatibilityVersion for Runtime {
         1
     }
     fn features() -> &'static str {
-        concat_enabled_features!(
-            "auth_pubkey",
-            "auth_usrpwd",
-            "complete_n",
-            "shared-memory",
-            "stats",
-            "transport_multilink",
-            "transport_quic",
-            "transport_serial",
-            "transport_unixpipe",
-            "transport_tcp",
-            "transport_tls",
-            "transport_udp",
-            "transport_unixsock-stream",
-            "transport_ws",
-            "unstable",
-            "default"
-        )
+        crate::FEATURES
     }
 }
 
