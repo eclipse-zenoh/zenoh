@@ -573,10 +573,11 @@ pub(crate) async fn open_link(
     }
 
     log::debug!(
-        "New transport link opened from {} to {}: {}",
+        "New transport link opened from {} to {}: {}. Batch size: {}.",
         manager.config.zid,
         iack_out.other_zid,
-        link
+        link,
+        state.zenoh.batch_size,
     );
 
     Ok(transport)

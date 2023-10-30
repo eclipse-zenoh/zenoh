@@ -185,7 +185,7 @@ Note that the REST plugin is added to the configuration by the default value of 
 **[REST plugin](https://zenoh.io/docs/manual/plugin-http/)** (exposing a REST API):
 This plugin converts GET and PUT REST requests into Zenoh gets and puts respectively.
 
-**[Storages plugin](https://zenoh.io/docs/manual/plugin-storages/)** (managing [backends and storages](https://zenoh.io/docs/manual/backends/))
+**[Storages plugin](https://zenoh.io/docs/manual/plugin-storage-manager/)** (managing [backends and storages](https://zenoh.io/docs/manual/plugin-storage-manager/#backends-and-volumes))
 This plugin allows you to easily define storages. These will store key-value pairs they subscribed to, and send the most recent ones when queried. Check out [DEFAULT_CONFIG.json5](DEFAULT_CONFIG.json5) for info on how to configure them.
 
 -------------------------------

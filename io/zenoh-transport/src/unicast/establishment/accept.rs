@@ -658,10 +658,11 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         .map_err(|e| (e, Some(close::reason::INVALID))));
 
     log::debug!(
-        "New transport link accepted from {} to {}: {}",
+        "New transport link accepted from {} to {}: {}. Batch size: {}.",
         osyn_out.other_zid,
         manager.config.zid,
-        link
+        link,
+        state.zenoh.batch_size,
     );
 
     Ok(())
