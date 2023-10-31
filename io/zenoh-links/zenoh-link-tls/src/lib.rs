@@ -21,9 +21,10 @@ use async_rustls::rustls::ServerName;
 use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 use config::{
-    TLS_CLIENT_AUTH, TLS_CLIENT_CERTIFICATE_FILE, TLS_CLIENT_PRIVATE_KEY_FILE,
-    TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_NAME_VERIFICATION,
-    TLS_SERVER_PRIVATE_KEY_FILE,
+    TLS_CLIENT_AUTH, TLS_CLIENT_CERTIFICATE_BASE64, TLS_CLIENT_CERTIFICATE_FILE,
+    TLS_CLIENT_PRIVATE_KEY_BASE64, TLS_CLIENT_PRIVATE_KEY_FILE, TLS_ROOT_CA_CERTIFICATE_BASE64,
+    TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_BASE64, TLS_SERVER_CERTIFICATE_FILE,
+    TLS_SERVER_NAME_VERIFICATION, TLS_SERVER_PRIVATE_KEY_BASE_64, TLS_SERVER_PRIVATE_KEY_FILE,
 };
 use std::{convert::TryFrom, net::SocketAddr};
 use zenoh_config::Config;
@@ -69,27 +70,79 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
         let mut ps: Vec<(&str, &str)> = vec![];
 
         let c = config.transport().link().tls();
-        if let Some(ca_certificate) = c.root_ca_certificate() {
-            ps.push((TLS_ROOT_CA_CERTIFICATE_FILE, ca_certificate));
+
+        match (c.root_ca_certificate(), c.root_ca_certificate_base64()) {
+            (Some(_), Some(_)) => {
+                bail!("Only one between 'root_ca_certificate' and 'root_ca_certificate_base64' can be present!")
+            }
+            (Some(ca_certificate), None) => {
+                ps.push((TLS_ROOT_CA_CERTIFICATE_FILE, ca_certificate));
+            }
+            (None, Some(ca_certificate)) => {
+                ps.push((TLS_ROOT_CA_CERTIFICATE_BASE64, ca_certificate));
+            }
+            _ => {}
         }
-        if let Some(server_private_key) = c.server_private_key() {
-            ps.push((TLS_SERVER_PRIVATE_KEY_FILE, server_private_key));
+
+        match (c.server_private_key(), c.server_private_key_base64()) {
+            (Some(_), Some(_)) => {
+                bail!("Only one between 'server_private_key' and 'server_private_key_base64' can be present!")
+            }
+            (Some(server_private_key), None) => {
+                ps.push((TLS_SERVER_PRIVATE_KEY_FILE, server_private_key));
+            }
+            (None, Some(server_private_key)) => {
+                ps.push((TLS_SERVER_PRIVATE_KEY_BASE_64, server_private_key));
+            }
+            _ => {}
         }
-        if let Some(server_certificate) = c.server_certificate() {
-            ps.push((TLS_SERVER_CERTIFICATE_FILE, server_certificate));
+
+        match (c.server_certificate(), c.server_certificate_base64()) {
+            (Some(_), Some(_)) => {
+                bail!("Only one between 'server_certificate' and 'server_certificate_base64' can be present!")
+            }
+            (Some(server_certificate), None) => {
+                ps.push((TLS_SERVER_CERTIFICATE_FILE, server_certificate));
+            }
+            (None, Some(server_certificate)) => {
+                ps.push((TLS_SERVER_CERTIFICATE_BASE64, server_certificate));
+            }
+            _ => {}
         }
+
         if let Some(client_auth) = c.client_auth() {
             match client_auth {
                 true => ps.push((TLS_CLIENT_AUTH, "true")),
                 false => ps.push((TLS_CLIENT_AUTH, "false")),
             };
         }
-        if let Some(client_private_key) = c.client_private_key() {
-            ps.push((TLS_CLIENT_PRIVATE_KEY_FILE, client_private_key));
+
+        match (c.client_private_key(), c.client_private_key_base64()) {
+            (Some(_), Some(_)) => {
+                bail!("Only one between 'client_private_key' and 'client_private_key_base64' can be present!")
+            }
+            (Some(client_private_key), None) => {
+                ps.push((TLS_CLIENT_PRIVATE_KEY_FILE, client_private_key));
+            }
+            (None, Some(client_private_key)) => {
+                ps.push((TLS_CLIENT_PRIVATE_KEY_BASE64, client_private_key));
+            }
+            _ => {}
         }
-        if let Some(client_certificate) = c.client_certificate() {
-            ps.push((TLS_CLIENT_CERTIFICATE_FILE, client_certificate));
+
+        match (c.client_private_key(), c.client_private_key_base64()) {
+            (Some(_), Some(_)) => {
+                bail!("Only one between 'client_private_key' and 'client_private_key_base64' can be present!")
+            }
+            (Some(client_certificate), None) => {
+                ps.push((TLS_CLIENT_CERTIFICATE_FILE, client_certificate));
+            }
+            (None, Some(client_certificate)) => {
+                ps.push((TLS_CLIENT_CERTIFICATE_BASE64, client_certificate));
+            }
+            _ => {}
         }
+
         if let Some(server_name_verification) = c.server_name_verification() {
             match server_name_verification {
                 true => ps.push((TLS_SERVER_NAME_VERIFICATION, "true")),
@@ -120,18 +173,23 @@ zconfigurable! {
 pub mod config {
     pub const TLS_ROOT_CA_CERTIFICATE_FILE: &str = "root_ca_certificate_file";
     pub const TLS_ROOT_CA_CERTIFICATE_RAW: &str = "root_ca_certificate_raw";
+    pub const TLS_ROOT_CA_CERTIFICATE_BASE64: &str = "root_ca_certificate_base64";
 
     pub const TLS_SERVER_PRIVATE_KEY_FILE: &str = "server_private_key_file";
     pub const TLS_SERVER_PRIVATE_KEY_RAW: &str = "server_private_key_raw";
+    pub const TLS_SERVER_PRIVATE_KEY_BASE_64: &str = "server_private_key_base64";
 
     pub const TLS_SERVER_CERTIFICATE_FILE: &str = "server_certificate_file";
     pub const TLS_SERVER_CERTIFICATE_RAW: &str = "server_certificate_raw";
+    pub const TLS_SERVER_CERTIFICATE_BASE64: &str = "server_certificate_base64";
 
     pub const TLS_CLIENT_PRIVATE_KEY_FILE: &str = "client_private_key_file";
     pub const TLS_CLIENT_PRIVATE_KEY_RAW: &str = "client_private_key_raw";
+    pub const TLS_CLIENT_PRIVATE_KEY_BASE64: &str = "client_private_key_base64";
 
     pub const TLS_CLIENT_CERTIFICATE_FILE: &str = "client_certificate_file";
     pub const TLS_CLIENT_CERTIFICATE_RAW: &str = "client_certificate_raw";
+    pub const TLS_CLIENT_CERTIFICATE_BASE64: &str = "client_certificate_base64";
 
     pub const TLS_CLIENT_AUTH: &str = "client_auth";
 
@@ -155,4 +213,12 @@ pub fn get_tls_host<'a>(address: &'a Address<'a>) -> ZResult<&'a str> {
 
 pub fn get_tls_server_name(address: &Address<'_>) -> ZResult<ServerName> {
     Ok(ServerName::try_from(get_tls_host(address)?).map_err(|e| zerror!(e))?)
+}
+
+pub fn base64_decode(data: &str) -> ZResult<Vec<u8>> {
+    use base64::engine::general_purpose;
+    use base64::Engine;
+    Ok(general_purpose::STANDARD
+        .decode(data)
+        .map_err(|e| zerror!("Unable to perform base64 decoding: {e:?}"))?)
 }

@@ -288,11 +288,16 @@ validated_struct::validator! {
                 pub tls: #[derive(Default)]
                 TLSConf {
                     root_ca_certificate: Option<String>,
+                    root_ca_certificate_base64: Option<String>,
                     server_private_key: Option<String>,
+                    server_private_key_base64: Option<String>,
                     server_certificate: Option<String>,
+                    server_certificate_base64: Option<String>,
                     client_auth: Option<bool>,
                     client_private_key: Option<String>,
+                    client_private_key_base64 : Option<String>,
                     client_certificate: Option<String>,
+                    client_certificate_base64 : Option<String>,
                     server_name_verification: Option<bool>
                 },
                 pub unixpipe: #[derive(Default)]

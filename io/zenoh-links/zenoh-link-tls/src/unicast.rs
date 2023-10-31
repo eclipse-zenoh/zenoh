@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    config::*, get_tls_addr, get_tls_host, get_tls_server_name,
+    base64_decode, config::*, get_tls_addr, get_tls_host, get_tls_server_name,
     verify::WebPkiVerifierAnyServerName, TLS_ACCEPT_THROTTLE_TIME, TLS_DEFAULT_MTU,
     TLS_LINGER_TIMEOUT, TLS_LOCATOR_PREFIX,
 };
@@ -583,6 +583,7 @@ impl TlsServerConfig {
             config,
             TLS_SERVER_PRIVATE_KEY_RAW,
             TLS_SERVER_PRIVATE_KEY_FILE,
+            TLS_SERVER_PRIVATE_KEY_BASE_64,
         )
         .await
     }
@@ -592,6 +593,7 @@ impl TlsServerConfig {
             config,
             TLS_SERVER_CERTIFICATE_RAW,
             TLS_SERVER_CERTIFICATE_FILE,
+            TLS_SERVER_CERTIFICATE_BASE64,
         )
         .await
     }
@@ -700,6 +702,7 @@ impl TlsClientConfig {
             config,
             TLS_CLIENT_PRIVATE_KEY_RAW,
             TLS_CLIENT_PRIVATE_KEY_FILE,
+            TLS_CLIENT_PRIVATE_KEY_BASE64,
         )
         .await
     }
@@ -709,6 +712,7 @@ impl TlsClientConfig {
             config,
             TLS_CLIENT_CERTIFICATE_RAW,
             TLS_CLIENT_CERTIFICATE_FILE,
+            TLS_CLIENT_CERTIFICATE_BASE64,
         )
         .await
     }
@@ -718,9 +722,12 @@ async fn load_tls_key(
     config: &Config<'_>,
     tls_private_key_raw_config_key: &str,
     tls_private_key_file_config_key: &str,
+    tls_private_key_base64_config_key: &str,
 ) -> ZResult<Vec<u8>> {
     if let Some(value) = config.get(tls_private_key_raw_config_key) {
         return Ok(value.as_bytes().to_vec());
+    } else if let Some(b64_key) = config.get(tls_private_key_base64_config_key) {
+        return base64_decode(b64_key);
     } else if let Some(value) = config.get(tls_private_key_file_config_key) {
         return Ok(fs::read(value)
             .await
@@ -740,9 +747,12 @@ async fn load_tls_certificate(
     config: &Config<'_>,
     tls_certificate_raw_config_key: &str,
     tls_certificate_file_config_key: &str,
+    tls_certificate_base64_config_key: &str,
 ) -> ZResult<Vec<u8>> {
     if let Some(value) = config.get(tls_certificate_raw_config_key) {
         return Ok(value.as_bytes().to_vec());
+    } else if let Some(b64_certificate) = config.get(tls_certificate_base64_config_key) {
+        return base64_decode(b64_certificate);
     } else if let Some(value) = config.get(tls_certificate_file_config_key) {
         return Ok(fs::read(value)
             .await
@@ -755,6 +765,21 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
     let mut root_cert_store = RootCertStore::empty();
     if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
         let mut pem = BufReader::new(value.as_bytes());
+        let certs = rustls_pemfile::certs(&mut pem)?;
+        let trust_anchors = certs.iter().map(|cert| {
+            let ta = TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
+            OwnedTrustAnchor::from_subject_spki_name_constraints(
+                ta.subject,
+                ta.spki,
+                ta.name_constraints,
+            )
+        });
+        root_cert_store.add_trust_anchors(trust_anchors.into_iter());
+        return Ok(Some(root_cert_store));
+    }
+    if let Some(b64_certificate) = config.get(TLS_ROOT_CA_CERTIFICATE_BASE64) {
+        let certificate_pem = base64_decode(b64_certificate)?;
+        let mut pem = BufReader::new(certificate_pem.as_slice());
         let certs = rustls_pemfile::certs(&mut pem)?;
         let trust_anchors = certs.iter().map(|cert| {
             let ta = TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
