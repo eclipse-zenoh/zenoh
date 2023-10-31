@@ -130,9 +130,9 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
             _ => {}
         }
 
-        match (c.client_private_key(), c.client_private_key_base64()) {
+        match (c.client_certificate(), c.client_certificate_base64()) {
             (Some(_), Some(_)) => {
-                bail!("Only one between 'client_private_key' and 'client_private_key_base64' can be present!")
+                bail!("Only one between 'client_certificate' and 'client_certificate_base64' can be present!")
             }
             (Some(client_certificate), None) => {
                 ps.push((TLS_CLIENT_CERTIFICATE_FILE, client_certificate));
