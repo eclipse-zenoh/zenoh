@@ -49,6 +49,28 @@ pub trait CompatibilityVersion {
     fn features() -> &'static str;
 }
 
+pub enum PluginState {
+    Declared,
+    Loaded,
+    Started,
+}
+
+pub enum PluginCondition {
+    Ok,
+    Warning(String),
+    Error(String),
+}
+
+pub struct PluginStatus {
+    pub state: PluginState,
+    pub condition: PluginCondition,
+}
+
+pub trait PluginControl {
+    fn plugins(&self) -> Vec<&str>;
+    fn status(&self, name: &str) -> PluginStatus;
+}
+
 pub trait Plugin: Sized + 'static {
     type StartArgs: CompatibilityVersion;
     type RunningPlugin: CompatibilityVersion;

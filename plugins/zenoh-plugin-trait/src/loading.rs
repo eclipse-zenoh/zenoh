@@ -349,17 +349,28 @@ impl<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion>
     }
 }
 
+struct 
+
 pub struct DynamicPlugin<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion> {
-    _lib: Library,
-    vtable: PluginVTable<StartArgs, RunningPlugin>,
-    pub name: String,
-    pub path: PathBuf,
+    name: String,
+    lib: Option<Library>,
+    vtable: Option<PluginVTable<StartArgs, RunningPlugin>>,
+    path: Option<PathBuf>,
 }
 
 impl<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion>
     DynamicPlugin<StartArgs, RunningPlugin>
 {
-    fn new(name: String, lib: Library, path: PathBuf) -> ZResult<Self> {
+    pub fn new(name: String, lib: Library, path: PathBuf) -> Self {
+        Self {
+            name,
+            lib: None,
+            vtable: None,
+            path: None,
+        }
+    }
+
+    fn get_vtable(path: &PathBuf) -> ZResult<PluginVTable<StartArgs, RunningPlugin>> {
         log::debug!("Loading plugin {}", &path.to_str().unwrap(),);
         let get_plugin_loader_version =
             unsafe { lib.get::<fn() -> PluginLoaderVersion>(b"get_plugin_loader_version")? };
@@ -389,11 +400,52 @@ impl<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion>
         let load_plugin =
             unsafe { lib.get::<fn() -> PluginVTable<StartArgs, RunningPlugin>>(b"load_plugin")? };
         let vtable = load_plugin();
-        Ok(Self {
-            _lib: lib,
-            vtable,
-            name,
-            path,
-        })
+        Ok(vtable)
     }
+
+    /// Tries to load a plugin with the name `libname` + `.so | .dll | .dylib`
+    /// in lib_loader's search paths.
+    /// Returns a tuple of (retval, plugin_record)
+    /// where `retval`` is true if the plugin was successfully loaded, false if pluginw with this name it was already loaded
+    fn load_by_libname(
+        &self,
+        libloader: &LibLoader,
+        libname: &str,
+    ) -> ZResult<Library, PathBuf> {
+        let (lib, p) = unsafe { libloader.search_and_load(libname)? };
+
+        let plugin = match Self::load_plugin(name, lib, p.clone()) {
+            Ok(p) => p,
+            Err(e) => bail!("After loading `{:?}`: {}", &p, e),
+        };
+        self.plugins.push(PluginRecord::new(plugin));
+        Ok((true, self.plugins.last_mut().unwrap()))
+    }
+    /// Tries to load a plugin from the list of path to plugin (absolute or relative to the current working directory)
+    /// Returns a tuple of (retval, plugin_record)
+    /// where `retval`` is true if the plugin was successfully loaded, false if pluginw with this name it was already loaded
+    pub fn load_plugin_by_paths<T: AsRef<str>, P: AsRef<str> + std::fmt::Debug>(
+        &mut self,
+        name: T,
+        paths: &[P],
+    ) -> ZResult<(bool, &mut PluginRecord<StartArgs, RunningPlugin>)> {
+        let name = name.as_ref();
+        if let Some(index) = self.get_plugin_index(name) {
+            return Ok((false, &mut self.plugins[index]));
+        }
+        for path in paths {
+            let path = path.as_ref();
+            match unsafe { LibLoader::load_file(path) } {
+                Ok((lib, p)) => {
+                    let plugin = Self::load_plugin(name, lib, p)?;
+                    self.plugins.push(PluginRecord::new(plugin));
+                    return Ok((true, self.plugins.last_mut().unwrap()));
+                }
+                Err(e) => log::warn!("Plugin '{}' load fail at {}: {}", &name, path, e),
+            }
+        }
+        bail!("Plugin '{}' not found in {:?}", name, &paths)
+    }
+}
+
 }
