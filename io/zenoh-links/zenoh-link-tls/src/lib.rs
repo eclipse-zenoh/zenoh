@@ -71,7 +71,10 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
 
         let c = config.transport().link().tls();
 
-        match (c.root_ca_certificate(), c.root_ca_certificate_base64()) {
+        match (
+            c.root_ca_certificate(),
+            c.private().root_ca_certificate_base64(),
+        ) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'root_ca_certificate' and 'root_ca_certificate_base64' can be present!")
             }
@@ -84,7 +87,10 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
             _ => {}
         }
 
-        match (c.server_private_key(), c.server_private_key_base64()) {
+        match (
+            c.server_private_key(),
+            c.private().server_private_key_base64(),
+        ) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'server_private_key' and 'server_private_key_base64' can be present!")
             }
@@ -97,7 +103,10 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
             _ => {}
         }
 
-        match (c.server_certificate(), c.server_certificate_base64()) {
+        match (
+            c.server_certificate(),
+            c.private().server_certificate_base64(),
+        ) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'server_certificate' and 'server_certificate_base64' can be present!")
             }
@@ -117,7 +126,10 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
             };
         }
 
-        match (c.client_private_key(), c.client_private_key_base64()) {
+        match (
+            c.client_private_key(),
+            c.private().client_private_key_base64(),
+        ) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'client_private_key' and 'client_private_key_base64' can be present!")
             }
@@ -130,7 +142,10 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
             _ => {}
         }
 
-        match (c.client_certificate(), c.client_certificate_base64()) {
+        match (
+            c.client_certificate(),
+            c.private().client_certificate_base64(),
+        ) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'client_certificate' and 'client_certificate_base64' can be present!")
             }

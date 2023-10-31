@@ -74,7 +74,10 @@ impl ConfigurationInspector<Config> for QuicConfigurator {
 
         let c = config.transport().link().tls();
 
-        match (c.root_ca_certificate(), c.root_ca_certificate_base64()) {
+        match (
+            c.root_ca_certificate(),
+            c.private().root_ca_certificate_base64(),
+        ) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'root_ca_certificate' and 'root_ca_certificate_base64' can be present!")
             }
@@ -87,7 +90,10 @@ impl ConfigurationInspector<Config> for QuicConfigurator {
             _ => {}
         }
 
-        match (c.server_private_key(), c.server_private_key_base64()) {
+        match (
+            c.server_private_key(),
+            c.private().server_private_key_base64(),
+        ) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'server_private_key' and 'server_private_key_base64' can be present!")
             }
@@ -100,7 +106,10 @@ impl ConfigurationInspector<Config> for QuicConfigurator {
             _ => {}
         }
 
-        match (c.server_certificate(), c.server_certificate_base64()) {
+        match (
+            c.server_certificate(),
+            c.private().server_certificate_base64(),
+        ) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'server_certificate' and 'server_certificate_base64' can be present!")
             }
