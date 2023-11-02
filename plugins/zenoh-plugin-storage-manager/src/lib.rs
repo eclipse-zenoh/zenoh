@@ -168,7 +168,7 @@ impl StorageRuntimeInner {
             self.plugins_manager
                 .load_plugin_by_backend_name(volume_id, backend_name)?;
         }
-        self.plugins_manager.plugin_mut(volume_id)?.start(&config)?;
+        self.plugins_manager.plugin_mut(volume_id)?.run(&config)?;
         Ok(())
     }
     fn kill_storage(&mut self, config: StorageConfig) {

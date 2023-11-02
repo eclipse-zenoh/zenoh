@@ -214,7 +214,7 @@ impl AdminSpace {
                                                 rec.path()
                                             );
                                         }
-                                        match rec.start(&admin.context.runtime) {
+                                        match rec.run(&admin.context.runtime) {
                                             Ok((true, rec)) => {
                                                 active_plugins
                                                     .insert(name.into(), rec.path().to_string());

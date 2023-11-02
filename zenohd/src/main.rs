@@ -119,7 +119,7 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
                 req = if required { "required" } else { "" },
                 name = plugin.name()
             );
-            match plugin.start(&runtime) {
+            match plugin.run(&runtime) {
                 Ok(_) => {
                     log::info!(
                         "Successfully started plugin {} from {:?}",
