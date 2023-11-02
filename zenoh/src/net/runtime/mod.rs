@@ -287,7 +287,7 @@ impl TransportPeerEventHandler for RuntimeSession {
                 &data.wire_expr,
                 data.ext_qos,
                 data.payload,
-                data.ext_nodeid.node_id.into(),
+                data.ext_nodeid.node_id,
             );
             return Ok(());
         }

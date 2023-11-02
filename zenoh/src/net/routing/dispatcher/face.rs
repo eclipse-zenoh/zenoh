@@ -395,7 +395,7 @@ impl Primitives for Face {
             &msg.wire_expr,
             msg.ext_qos,
             msg.payload,
-            msg.ext_nodeid.node_id as u64,
+            msg.ext_nodeid.node_id,
         );
     }
 
@@ -411,7 +411,7 @@ impl Primitives for Face {
                     msg.ext_target,
                     // consolidation,
                     msg.payload,
-                    msg.ext_nodeid.node_id as u64,
+                    msg.ext_nodeid.node_id,
                 );
             }
             RequestBody::Pull(_) => {

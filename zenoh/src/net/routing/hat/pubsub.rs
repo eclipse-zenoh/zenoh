@@ -167,7 +167,7 @@ fn propagate_sourced_subscription(
                     res,
                     src_face,
                     sub_info,
-                    Some(tree_sid.index() as u16),
+                    Some(tree_sid.index() as RoutingContext),
                 );
             } else {
                 log::trace!(
@@ -668,7 +668,7 @@ fn propagate_forget_sourced_subscription(
                     &net.trees[tree_sid.index()].childs,
                     res,
                     src_face,
-                    Some(tree_sid.index() as u16),
+                    Some(tree_sid.index() as RoutingContext),
                 );
             } else {
                 log::trace!(
@@ -1129,7 +1129,7 @@ pub(crate) fn pubsub_tree_change(
                                 res,
                                 None,
                                 &sub_info,
-                                Some(tree_sid as u16),
+                                Some(tree_sid as RoutingContext),
                             );
                         }
                     }
@@ -1230,28 +1230,21 @@ fn insert_faces_for_subs(
     expr: &RoutingExpr,
     tables: &Tables,
     net: &Network,
-    source: usize,
+    source: RoutingContext,
     subs: &HashSet<ZenohId>,
 ) {
-    if net.trees.len() > source {
+    if net.trees.len() > source as usize {
         for sub in subs {
             if let Some(sub_idx) = net.get_idx(sub) {
-                if net.trees[source].directions.len() > sub_idx.index() {
-                    if let Some(direction) = net.trees[source].directions[sub_idx.index()] {
+                if net.trees[source as usize].directions.len() > sub_idx.index() {
+                    if let Some(direction) = net.trees[source as usize].directions[sub_idx.index()]
+                    {
                         if net.graph.contains_node(direction) {
                             if let Some(face) = tables.get_face(&net.graph[direction].zid) {
                                 route.entry(face.id).or_insert_with(|| {
                                     let key_expr =
                                         Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                                    (
-                                        face.clone(),
-                                        key_expr.to_owned(),
-                                        if source != 0 {
-                                            Some(source as u16)
-                                        } else {
-                                            None
-                                        },
-                                    )
+                                    (face.clone(), key_expr.to_owned(), source)
                                 });
                             }
                         }
@@ -1267,7 +1260,7 @@ fn insert_faces_for_subs(
 pub(crate) fn compute_data_route(
     tables: &Tables,
     expr: &mut RoutingExpr,
-    source: Option<usize>,
+    source: RoutingContext,
     source_type: WhatAmI,
 ) -> Arc<Route> {
     let mut route = HashMap::new();
@@ -1308,8 +1301,8 @@ pub(crate) fn compute_data_route(
             if master || source_type == WhatAmI::Router {
                 let net = tables.hat.routers_net.as_ref().unwrap();
                 let router_source = match source_type {
-                    WhatAmI::Router => source.unwrap(),
-                    _ => net.idx.index(),
+                    WhatAmI::Router => source,
+                    _ => net.idx.index() as RoutingContext,
                 };
                 insert_faces_for_subs(
                     &mut route,
@@ -1324,8 +1317,8 @@ pub(crate) fn compute_data_route(
             if (master || source_type != WhatAmI::Router) && tables.hat.full_net(WhatAmI::Peer) {
                 let net = tables.hat.peers_net.as_ref().unwrap();
                 let peer_source = match source_type {
-                    WhatAmI::Peer => source.unwrap(),
-                    _ => net.idx.index(),
+                    WhatAmI::Peer => source,
+                    _ => net.idx.index() as RoutingContext,
                 };
                 insert_faces_for_subs(
                     &mut route,
@@ -1341,8 +1334,8 @@ pub(crate) fn compute_data_route(
         if tables.whatami == WhatAmI::Peer && tables.hat.full_net(WhatAmI::Peer) {
             let net = tables.hat.peers_net.as_ref().unwrap();
             let peer_source = match source_type {
-                WhatAmI::Router | WhatAmI::Peer => source.unwrap(),
-                _ => net.idx.index(),
+                WhatAmI::Router | WhatAmI::Peer => source,
+                _ => net.idx.index() as RoutingContext,
             };
             insert_faces_for_subs(
                 &mut route,
@@ -1367,7 +1360,11 @@ pub(crate) fn compute_data_route(
                     {
                         route.entry(*sid).or_insert_with(|| {
                             let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                            (context.face.clone(), key_expr.to_owned(), None)
+                            (
+                                context.face.clone(),
+                                key_expr.to_owned(),
+                                RoutingContext::default(),
+                            )
                         });
                     }
                 }
@@ -1380,7 +1377,7 @@ pub(crate) fn compute_data_route(
             (
                 mcast_group.clone(),
                 expr.full_expr().to_string().into(),
-                None,
+                RoutingContext::default(),
             ),
         );
     }

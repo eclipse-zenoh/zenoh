@@ -1,6 +1,3 @@
-use crate::net::routing::dispatcher::tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr};
-use crate::net::routing::PREFIX_LIVELINESS;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -20,6 +17,8 @@ use super::super::dispatcher::resource::{Resource, RoutingContext, SessionContex
 use super::super::dispatcher::tables::{Tables, TablesLock};
 use super::network::Network;
 use super::HatTables;
+use crate::net::routing::dispatcher::tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr};
+use crate::net::routing::PREFIX_LIVELINESS;
 use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
@@ -195,7 +194,7 @@ fn send_sourced_queryable_to_net_childs(
     res: &Arc<Resource>,
     qabl_info: &QueryableInfo,
     src_face: Option<&mut Arc<FaceState>>,
-    routing_context: Option<RoutingContext>,
+    routing_context: RoutingContext,
 ) {
     for child in childs {
         if net.graph.contains_node(*child) {
@@ -210,7 +209,7 @@ fn send_sourced_queryable_to_net_childs(
                             ext_qos: ext::QoSType::declare_default(),
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType {
-                                node_id: routing_context.unwrap_or(0),
+                                node_id: routing_context,
                             },
                             body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                 id: 0, // TODO
@@ -307,7 +306,7 @@ fn propagate_sourced_queryable(
                     res,
                     qabl_info,
                     src_face,
-                    Some(tree_sid.index() as u16),
+                    tree_sid.index() as RoutingContext,
                 );
             } else {
                 log::trace!(
@@ -678,7 +677,7 @@ fn send_forget_sourced_queryable_to_net_childs(
     childs: &[NodeIndex],
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
-    routing_context: Option<RoutingContext>,
+    routing_context: RoutingContext,
 ) {
     for child in childs {
         if net.graph.contains_node(*child) {
@@ -693,7 +692,7 @@ fn send_forget_sourced_queryable_to_net_childs(
                             ext_qos: ext::QoSType::declare_default(),
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType {
-                                node_id: routing_context.unwrap_or(0),
+                                node_id: routing_context,
                             },
                             body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                                 id: 0, // TODO
@@ -782,7 +781,7 @@ fn propagate_forget_sourced_queryable(
                     &net.trees[tree_sid.index()].childs,
                     res,
                     src_face,
-                    Some(tree_sid.index() as u16),
+                    tree_sid.index() as RoutingContext,
                 );
             } else {
                 log::trace!(
@@ -1332,7 +1331,7 @@ pub(crate) fn queries_tree_change(
                             res,
                             qabl_info,
                             None,
-                            Some(tree_sid as u16),
+                            tree_sid as RoutingContext,
                         );
                     }
                 }
@@ -1351,30 +1350,23 @@ fn insert_target_for_qabls(
     expr: &mut RoutingExpr,
     tables: &Tables,
     net: &Network,
-    source: usize,
+    source: RoutingContext,
     qabls: &HashMap<ZenohId, QueryableInfo>,
     complete: bool,
 ) {
-    if net.trees.len() > source {
+    if net.trees.len() > source as usize {
         for (qabl, qabl_info) in qabls {
             if let Some(qabl_idx) = net.get_idx(qabl) {
-                if net.trees[source].directions.len() > qabl_idx.index() {
-                    if let Some(direction) = net.trees[source].directions[qabl_idx.index()] {
+                if net.trees[source as usize].directions.len() > qabl_idx.index() {
+                    if let Some(direction) = net.trees[source as usize].directions[qabl_idx.index()]
+                    {
                         if net.graph.contains_node(direction) {
                             if let Some(face) = tables.get_face(&net.graph[direction].zid) {
                                 if net.distances.len() > qabl_idx.index() {
                                     let key_expr =
                                         Resource::get_best_key(expr.prefix, expr.suffix, face.id);
                                     route.push(QueryTargetQabl {
-                                        direction: (
-                                            face.clone(),
-                                            key_expr.to_owned(),
-                                            if source != 0 {
-                                                Some(source as u16)
-                                            } else {
-                                                None
-                                            },
-                                        ),
+                                        direction: (face.clone(), key_expr.to_owned(), source),
                                         complete: if complete {
                                             qabl_info.complete as u64
                                         } else {
@@ -1400,7 +1392,7 @@ lazy_static::lazy_static! {
 pub(crate) fn compute_query_route(
     tables: &Tables,
     expr: &mut RoutingExpr,
-    source: Option<usize>,
+    source: RoutingContext,
     source_type: WhatAmI,
 ) -> Arc<QueryTargetQablSet> {
     let mut route = QueryTargetQablSet::new();
@@ -1442,8 +1434,8 @@ pub(crate) fn compute_query_route(
             if master || source_type == WhatAmI::Router {
                 let net = tables.hat.routers_net.as_ref().unwrap();
                 let router_source = match source_type {
-                    WhatAmI::Router => source.unwrap(),
-                    _ => net.idx.index(),
+                    WhatAmI::Router => source,
+                    _ => net.idx.index() as RoutingContext,
                 };
                 insert_target_for_qabls(
                     &mut route,
@@ -1459,8 +1451,8 @@ pub(crate) fn compute_query_route(
             if (master || source_type != WhatAmI::Router) && tables.hat.full_net(WhatAmI::Peer) {
                 let net = tables.hat.peers_net.as_ref().unwrap();
                 let peer_source = match source_type {
-                    WhatAmI::Peer => source.unwrap(),
-                    _ => net.idx.index(),
+                    WhatAmI::Peer => source,
+                    _ => net.idx.index() as RoutingContext,
                 };
                 insert_target_for_qabls(
                     &mut route,
@@ -1477,8 +1469,8 @@ pub(crate) fn compute_query_route(
         if tables.whatami == WhatAmI::Peer && tables.hat.full_net(WhatAmI::Peer) {
             let net = tables.hat.peers_net.as_ref().unwrap();
             let peer_source = match source_type {
-                WhatAmI::Router | WhatAmI::Peer => source.unwrap(),
-                _ => net.idx.index(),
+                WhatAmI::Router | WhatAmI::Peer => source,
+                _ => net.idx.index() as RoutingContext,
             };
             insert_target_for_qabls(
                 &mut route,
@@ -1500,7 +1492,11 @@ pub(crate) fn compute_query_route(
                     let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
                     if let Some(qabl_info) = context.qabl.as_ref() {
                         route.push(QueryTargetQabl {
-                            direction: (context.face.clone(), key_expr.to_owned(), None),
+                            direction: (
+                                context.face.clone(),
+                                key_expr.to_owned(),
+                                RoutingContext::default(),
+                            ),
                             complete: if complete {
                                 qabl_info.complete as u64
                             } else {

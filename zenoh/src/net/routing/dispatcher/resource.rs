@@ -36,7 +36,7 @@ use zenoh_sync::get_mut_unchecked;
 
 pub(crate) type RoutingContext = u16;
 
-pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, Option<RoutingContext>);
+pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, RoutingContext);
 pub(crate) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
 pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId, TargetType)>;
@@ -205,12 +205,12 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub fn routers_data_route(&self, context: usize) -> Option<Arc<Route>> {
+    pub fn routers_data_route(&self, context: RoutingContext) -> Option<Arc<Route>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_data_routes {
-                    (ctx.routers_data_routes.len() > context)
-                        .then(|| ctx.routers_data_routes[context].clone())
+                    (ctx.routers_data_routes.len() > context as usize)
+                        .then(|| ctx.routers_data_routes[context as usize].clone())
                 } else {
                     None
                 }
@@ -221,12 +221,12 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub fn peers_data_route(&self, context: usize) -> Option<Arc<Route>> {
+    pub fn peers_data_route(&self, context: RoutingContext) -> Option<Arc<Route>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_data_routes {
-                    (ctx.peers_data_routes.len() > context)
-                        .then(|| ctx.peers_data_routes[context].clone())
+                    (ctx.peers_data_routes.len() > context as usize)
+                        .then(|| ctx.peers_data_routes[context as usize].clone())
                 } else {
                     None
                 }
@@ -264,12 +264,15 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(crate) fn routers_query_route(&self, context: usize) -> Option<Arc<QueryTargetQablSet>> {
+    pub(crate) fn routers_query_route(
+        &self,
+        context: RoutingContext,
+    ) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_query_routes {
-                    (ctx.routers_query_routes.len() > context)
-                        .then(|| ctx.routers_query_routes[context].clone())
+                    (ctx.routers_query_routes.len() > context as usize)
+                        .then(|| ctx.routers_query_routes[context as usize].clone())
                 } else {
                     None
                 }
@@ -279,12 +282,15 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(crate) fn peers_query_route(&self, context: usize) -> Option<Arc<QueryTargetQablSet>> {
+    pub(crate) fn peers_query_route(
+        &self,
+        context: RoutingContext,
+    ) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_query_routes {
-                    (ctx.peers_query_routes.len() > context)
-                        .then(|| ctx.peers_query_routes[context].clone())
+                    (ctx.peers_query_routes.len() > context as usize)
+                        .then(|| ctx.peers_query_routes[context as usize].clone())
                 } else {
                     None
                 }
