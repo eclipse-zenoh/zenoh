@@ -13,7 +13,8 @@
 //
 use super::face::FaceState;
 use super::tables::{Tables, TablesLock};
-use std::collections::{HashMap, HashSet};
+use crate::net::routing::hat::HatContext;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
@@ -22,7 +23,7 @@ use zenoh_protocol::network::request::ext::TargetType;
 use zenoh_protocol::network::RequestId;
 use zenoh_protocol::zenoh::PushBody;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, ExprId, WireExpr, ZenohId},
+    core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
         declare::{
             ext, queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo, Declare,
@@ -74,12 +75,9 @@ pub(crate) struct QueryRoutes {
 }
 
 pub(crate) struct ResourceContext {
-    pub(crate) router_subs: HashSet<ZenohId>,
-    pub(crate) peer_subs: HashSet<ZenohId>,
-    pub(crate) router_qabls: HashMap<ZenohId, QueryableInfo>,
-    pub(crate) peer_qabls: HashMap<ZenohId, QueryableInfo>,
     pub(crate) matches: Vec<Weak<Resource>>,
     pub(crate) matching_pulls: Arc<PullCaches>,
+    pub(crate) hat: HatContext,
     pub(crate) valid_data_routes: bool,
     pub(crate) routers_data_routes: Vec<Arc<Route>>,
     pub(crate) peers_data_routes: Vec<Arc<Route>>,
@@ -95,12 +93,9 @@ pub(crate) struct ResourceContext {
 impl ResourceContext {
     fn new() -> ResourceContext {
         ResourceContext {
-            router_subs: HashSet::new(),
-            peer_subs: HashSet::new(),
-            router_qabls: HashMap::new(),
-            peer_qabls: HashMap::new(),
             matches: Vec::new(),
             matching_pulls: Arc::new(Vec::new()),
+            hat: HatContext::new(),
             valid_data_routes: false,
             routers_data_routes: Vec::new(),
             peers_data_routes: Vec::new(),

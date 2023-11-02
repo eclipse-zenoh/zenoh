@@ -1,3 +1,5 @@
+use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
+
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -19,9 +21,11 @@ use super::super::PREFIX_LIVELINESS;
 use super::network::Network;
 use super::HatTables;
 use petgraph::graph::NodeIndex;
-use std::collections::HashMap;
+use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLockReadGuard};
 use zenoh_core::zread;
+use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 use zenoh_protocol::{
     core::{key_expr::keyexpr, Reliability, WhatAmI, WireExpr, ZenohId},
     network::declare::{
@@ -80,7 +84,7 @@ fn propagate_simple_subscription_to(
     full_peer_net: bool,
 ) {
     if (src_face.id != dst_face.id || res.expr().starts_with(PREFIX_LIVELINESS))
-        && !dst_face.local_subs.contains(res)
+        && !dst_face.hat.local_subs.contains(res)
         && match tables.whatami {
             WhatAmI::Router => {
                 if full_peer_net {
@@ -102,7 +106,10 @@ fn propagate_simple_subscription_to(
             _ => src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client,
         }
     {
-        get_mut_unchecked(dst_face).local_subs.insert(res.clone());
+        get_mut_unchecked(dst_face)
+            .hat
+            .local_subs
+            .insert(res.clone());
         let key_expr = Resource::decl_key(res, dst_face);
         dst_face.primitives.send_declare(Declare {
             ext_qos: ext::QoSType::declare_default(),
@@ -186,7 +193,7 @@ fn register_router_subscription(
     sub_info: &SubscriberInfo,
     router: ZenohId,
 ) {
-    if !res.context().router_subs.contains(&router) {
+    if !res.context().hat.router_subs.contains(&router) {
         // Register router subscription
         {
             log::debug!(
@@ -196,6 +203,7 @@ fn register_router_subscription(
             );
             get_mut_unchecked(res)
                 .context_mut()
+                .hat
                 .router_subs
                 .insert(router);
             tables.hat.router_subs.insert(res.clone());
@@ -276,11 +284,15 @@ fn register_peer_subscription(
     sub_info: &SubscriberInfo,
     peer: ZenohId,
 ) {
-    if !res.context().peer_subs.contains(&peer) {
+    if !res.context().hat.peer_subs.contains(&peer) {
         // Register peer subscription
         {
             log::debug!("Register peer subscription {} (peer: {})", res.expr(), peer);
-            get_mut_unchecked(res).context_mut().peer_subs.insert(peer);
+            get_mut_unchecked(res)
+                .context_mut()
+                .hat
+                .peer_subs
+                .insert(peer);
             tables.hat.peer_subs.insert(res.clone());
         }
 
@@ -392,7 +404,7 @@ fn register_client_subscription(
             }
         }
     }
-    get_mut_unchecked(face).remote_subs.insert(res.clone());
+    get_mut_unchecked(face).hat.remote_subs.insert(res.clone());
 }
 
 pub fn declare_client_subscription(
@@ -515,6 +527,7 @@ fn remote_router_subs(tables: &Tables, res: &Arc<Resource>) -> bool {
     res.context.is_some()
         && res
             .context()
+            .hat
             .router_subs
             .iter()
             .any(|peer| peer != &tables.zid)
@@ -525,6 +538,7 @@ fn remote_peer_subs(tables: &Tables, res: &Arc<Resource>) -> bool {
     res.context.is_some()
         && res
             .context()
+            .hat
             .peer_subs
             .iter()
             .any(|peer| peer != &tables.zid)
@@ -583,7 +597,7 @@ fn send_forget_sourced_subscription_to_net_childs(
 
 fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>) {
     for face in tables.faces.values_mut() {
-        if face.local_subs.contains(res) {
+        if face.hat.local_subs.contains(res) {
             let wire_expr = Resource::get_best_key(res, "", face.id);
             face.primitives.send_declare(Declare {
                 ext_qos: ext::QoSType::declare_default(),
@@ -594,15 +608,15 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
                     ext_wire_expr: WireExprType { wire_expr },
                 }),
             });
-            get_mut_unchecked(face).local_subs.remove(res);
+            get_mut_unchecked(face).hat.local_subs.remove(res);
         }
     }
 }
 
 fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<Resource>) {
     if !tables.hat.full_net(WhatAmI::Peer)
-        && res.context().router_subs.len() == 1
-        && res.context().router_subs.contains(&tables.zid)
+        && res.context().hat.router_subs.len() == 1
+        && res.context().hat.router_subs.contains(&tables.zid)
     {
         for mut face in tables
             .faces
@@ -611,7 +625,7 @@ fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<
             .collect::<Vec<Arc<FaceState>>>()
         {
             if face.whatami == WhatAmI::Peer
-                && face.local_subs.contains(res)
+                && face.hat.local_subs.contains(res)
                 && !res.session_ctxs.values().any(|s| {
                     face.zid != s.face.zid
                         && s.subs.is_some()
@@ -631,7 +645,7 @@ fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<
                     }),
                 });
 
-                get_mut_unchecked(&mut face).local_subs.remove(res);
+                get_mut_unchecked(&mut face).hat.local_subs.remove(res);
             }
         }
     }
@@ -681,10 +695,11 @@ fn unregister_router_subscription(tables: &mut Tables, res: &mut Arc<Resource>, 
     );
     get_mut_unchecked(res)
         .context_mut()
+        .hat
         .router_subs
         .retain(|sub| sub != router);
 
-    if res.context().router_subs.is_empty() {
+    if res.context().hat.router_subs.is_empty() {
         tables.hat.router_subs.retain(|sub| !Arc::ptr_eq(sub, res));
 
         if tables.hat.full_net(WhatAmI::Peer) {
@@ -702,7 +717,7 @@ fn undeclare_router_subscription(
     res: &mut Arc<Resource>,
     router: &ZenohId,
 ) {
-    if res.context().router_subs.contains(router) {
+    if res.context().hat.router_subs.contains(router) {
         unregister_router_subscription(tables, res, router);
         propagate_forget_sourced_subscription(tables, res, face, router, WhatAmI::Router);
     }
@@ -750,10 +765,11 @@ fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, pe
     );
     get_mut_unchecked(res)
         .context_mut()
+        .hat
         .peer_subs
         .retain(|sub| sub != peer);
 
-    if res.context().peer_subs.is_empty() {
+    if res.context().hat.peer_subs.is_empty() {
         tables.hat.peer_subs.retain(|sub| !Arc::ptr_eq(sub, res));
 
         if tables.whatami == WhatAmI::Peer {
@@ -768,7 +784,7 @@ fn undeclare_peer_subscription(
     res: &mut Arc<Resource>,
     peer: &ZenohId,
 ) {
-    if res.context().peer_subs.contains(peer) {
+    if res.context().hat.peer_subs.contains(peer) {
         unregister_peer_subscription(tables, res, peer);
         propagate_forget_sourced_subscription(tables, res, face, peer, WhatAmI::Peer);
     }
@@ -825,7 +841,7 @@ pub(crate) fn undeclare_client_subscription(
     if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
         get_mut_unchecked(ctx).subs = None;
     }
-    get_mut_unchecked(face).remote_subs.remove(res);
+    get_mut_unchecked(face).hat.remote_subs.remove(res);
 
     let mut client_subs = client_subs(res);
     let router_subs = remote_router_subs(tables, res);
@@ -855,7 +871,7 @@ pub(crate) fn undeclare_client_subscription(
     }
     if client_subs.len() == 1 && !router_subs && !peer_subs {
         let face = &mut client_subs[0];
-        if face.local_subs.contains(res)
+        if face.hat.local_subs.contains(res)
             && !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS))
         {
             let wire_expr = Resource::get_best_key(res, "", face.id);
@@ -869,7 +885,7 @@ pub(crate) fn undeclare_client_subscription(
                 }),
             });
 
-            get_mut_unchecked(face).local_subs.remove(res);
+            get_mut_unchecked(face).hat.local_subs.remove(res);
         }
     }
 }
@@ -917,7 +933,7 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
         WhatAmI::Router => {
             if face.whatami == WhatAmI::Client {
                 for sub in &tables.hat.router_subs {
-                    get_mut_unchecked(face).local_subs.insert(sub.clone());
+                    get_mut_unchecked(face).hat.local_subs.insert(sub.clone());
                     let key_expr = Resource::decl_key(sub, face);
                     face.primitives.send_declare(Declare {
                         ext_qos: ext::QoSType::declare_default(),
@@ -933,7 +949,12 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
             } else if face.whatami == WhatAmI::Peer && !tables.hat.full_net(WhatAmI::Peer) {
                 for sub in &tables.hat.router_subs {
                     if sub.context.is_some()
-                        && (sub.context().router_subs.iter().any(|r| *r != tables.zid)
+                        && (sub
+                            .context()
+                            .hat
+                            .router_subs
+                            .iter()
+                            .any(|r| *r != tables.zid)
                             || sub.session_ctxs.values().any(|s| {
                                 s.subs.is_some()
                                     && (s.face.whatami == WhatAmI::Client
@@ -941,7 +962,7 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                                             && tables.hat.failover_brokering(s.face.zid, face.zid)))
                             }))
                     {
-                        get_mut_unchecked(face).local_subs.insert(sub.clone());
+                        get_mut_unchecked(face).hat.local_subs.insert(sub.clone());
                         let key_expr = Resource::decl_key(sub, face);
                         face.primitives.send_declare(Declare {
                             ext_qos: ext::QoSType::declare_default(),
@@ -961,7 +982,7 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
             if tables.hat.full_net(WhatAmI::Peer) {
                 if face.whatami == WhatAmI::Client {
                     for sub in &tables.hat.peer_subs {
-                        get_mut_unchecked(face).local_subs.insert(sub.clone());
+                        get_mut_unchecked(face).hat.local_subs.insert(sub.clone());
                         let key_expr = Resource::decl_key(sub, face);
                         face.primitives.send_declare(Declare {
                             ext_qos: ext::QoSType::declare_default(),
@@ -982,7 +1003,7 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                     .cloned()
                     .collect::<Vec<Arc<FaceState>>>()
                 {
-                    for sub in &src_face.remote_subs {
+                    for sub in &src_face.hat.remote_subs {
                         propagate_simple_subscription_to(
                             tables,
                             face,
@@ -1002,7 +1023,7 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                 .cloned()
                 .collect::<Vec<Arc<FaceState>>>()
             {
-                for sub in &src_face.remote_subs {
+                for sub in &src_face.hat.remote_subs {
                     propagate_simple_subscription_to(
                         tables,
                         face,
@@ -1024,7 +1045,7 @@ pub(crate) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: 
                 .hat
                 .router_subs
                 .iter()
-                .filter(|res| res.context().router_subs.contains(node))
+                .filter(|res| res.context().hat.router_subs.contains(node))
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
@@ -1044,7 +1065,7 @@ pub(crate) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: 
                 .hat
                 .peer_subs
                 .iter()
-                .filter(|res| res.context().peer_subs.contains(node))
+                .filter(|res| res.context().hat.peer_subs.contains(node))
                 .cloned()
                 .collect::<Vec<Arc<Resource>>>()
             {
@@ -1092,8 +1113,8 @@ pub(crate) fn pubsub_tree_change(
 
                 for res in subs_res {
                     let subs = match net_type {
-                        WhatAmI::Router => &res.context().router_subs,
-                        _ => &res.context().peer_subs,
+                        WhatAmI::Router => &res.context().hat.router_subs,
+                        _ => &res.context().hat.peer_subs,
                     };
                     for sub in subs {
                         if *sub == tree_id {
@@ -1127,7 +1148,7 @@ pub(crate) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
             && tables.whatami == WhatAmI::Router
             && src_face.whatami == WhatAmI::Peer
         {
-            for res in &src_face.remote_subs {
+            for res in &src_face.hat.remote_subs {
                 let client_subs = res
                     .session_ctxs
                     .values()
@@ -1139,7 +1160,7 @@ pub(crate) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                     {
                         let dst_face = &mut get_mut_unchecked(ctx).face;
                         if dst_face.whatami == WhatAmI::Peer && src_face.zid != dst_face.zid {
-                            if dst_face.local_subs.contains(res) {
+                            if dst_face.hat.local_subs.contains(res) {
                                 let forget = !HatTables::failover_brokering_to(links, dst_face.zid)
                                     && {
                                         let ctx_links = tables
@@ -1171,11 +1192,14 @@ pub(crate) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                         ),
                                     });
 
-                                    get_mut_unchecked(dst_face).local_subs.remove(res);
+                                    get_mut_unchecked(dst_face).hat.local_subs.remove(res);
                                 }
                             } else if HatTables::failover_brokering_to(links, ctx.face.zid) {
                                 let dst_face = &mut get_mut_unchecked(ctx).face;
-                                get_mut_unchecked(dst_face).local_subs.insert(res.clone());
+                                get_mut_unchecked(dst_face)
+                                    .hat
+                                    .local_subs
+                                    .insert(res.clone());
                                 let key_expr = Resource::decl_key(res, dst_face);
                                 let sub_info = SubscriberInfo {
                                     reliability: Reliability::Reliable, // TODO
@@ -1198,4 +1222,167 @@ pub(crate) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
             }
         }
     }
+}
+
+#[inline]
+fn insert_faces_for_subs(
+    route: &mut Route,
+    expr: &RoutingExpr,
+    tables: &Tables,
+    net: &Network,
+    source: usize,
+    subs: &HashSet<ZenohId>,
+) {
+    if net.trees.len() > source {
+        for sub in subs {
+            if let Some(sub_idx) = net.get_idx(sub) {
+                if net.trees[source].directions.len() > sub_idx.index() {
+                    if let Some(direction) = net.trees[source].directions[sub_idx.index()] {
+                        if net.graph.contains_node(direction) {
+                            if let Some(face) = tables.get_face(&net.graph[direction].zid) {
+                                route.entry(face.id).or_insert_with(|| {
+                                    let key_expr =
+                                        Resource::get_best_key(expr.prefix, expr.suffix, face.id);
+                                    (
+                                        face.clone(),
+                                        key_expr.to_owned(),
+                                        if source != 0 {
+                                            Some(source as u16)
+                                        } else {
+                                            None
+                                        },
+                                    )
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    } else {
+        log::trace!("Tree for node sid:{} not yet ready", source);
+    }
+}
+
+pub(crate) fn compute_data_route(
+    tables: &Tables,
+    expr: &mut RoutingExpr,
+    source: Option<usize>,
+    source_type: WhatAmI,
+) -> Arc<Route> {
+    let mut route = HashMap::new();
+    let key_expr = expr.full_expr();
+    if key_expr.ends_with('/') {
+        return Arc::new(route);
+    }
+    log::trace!(
+        "compute_data_route({}, {:?}, {:?})",
+        key_expr,
+        source,
+        source_type
+    );
+    let key_expr = match OwnedKeyExpr::try_from(key_expr) {
+        Ok(ke) => ke,
+        Err(e) => {
+            log::warn!("Invalid KE reached the system: {}", e);
+            return Arc::new(route);
+        }
+    };
+    let res = Resource::get_resource(expr.prefix, expr.suffix);
+    let matches = res
+        .as_ref()
+        .and_then(|res| res.context.as_ref())
+        .map(|ctx| Cow::from(&ctx.matches))
+        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+
+    let master = tables.whatami != WhatAmI::Router
+        || !tables.hat.full_net(WhatAmI::Peer)
+        || *tables
+            .hat
+            .elect_router(&tables.zid, &key_expr, tables.hat.shared_nodes.iter())
+            == tables.zid;
+
+    for mres in matches.iter() {
+        let mres = mres.upgrade().unwrap();
+        if tables.whatami == WhatAmI::Router {
+            if master || source_type == WhatAmI::Router {
+                let net = tables.hat.routers_net.as_ref().unwrap();
+                let router_source = match source_type {
+                    WhatAmI::Router => source.unwrap(),
+                    _ => net.idx.index(),
+                };
+                insert_faces_for_subs(
+                    &mut route,
+                    expr,
+                    tables,
+                    net,
+                    router_source,
+                    &mres.context().hat.router_subs,
+                );
+            }
+
+            if (master || source_type != WhatAmI::Router) && tables.hat.full_net(WhatAmI::Peer) {
+                let net = tables.hat.peers_net.as_ref().unwrap();
+                let peer_source = match source_type {
+                    WhatAmI::Peer => source.unwrap(),
+                    _ => net.idx.index(),
+                };
+                insert_faces_for_subs(
+                    &mut route,
+                    expr,
+                    tables,
+                    net,
+                    peer_source,
+                    &mres.context().hat.peer_subs,
+                );
+            }
+        }
+
+        if tables.whatami == WhatAmI::Peer && tables.hat.full_net(WhatAmI::Peer) {
+            let net = tables.hat.peers_net.as_ref().unwrap();
+            let peer_source = match source_type {
+                WhatAmI::Router | WhatAmI::Peer => source.unwrap(),
+                _ => net.idx.index(),
+            };
+            insert_faces_for_subs(
+                &mut route,
+                expr,
+                tables,
+                net,
+                peer_source,
+                &mres.context().hat.peer_subs,
+            );
+        }
+
+        if tables.whatami != WhatAmI::Router || master || source_type == WhatAmI::Router {
+            for (sid, context) in &mres.session_ctxs {
+                if let Some(subinfo) = &context.subs {
+                    if match tables.whatami {
+                        WhatAmI::Router => context.face.whatami != WhatAmI::Router,
+                        _ => {
+                            source_type == WhatAmI::Client
+                                || context.face.whatami == WhatAmI::Client
+                        }
+                    } && subinfo.mode == Mode::Push
+                    {
+                        route.entry(*sid).or_insert_with(|| {
+                            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
+                            (context.face.clone(), key_expr.to_owned(), None)
+                        });
+                    }
+                }
+            }
+        }
+    }
+    for mcast_group in &tables.mcast_groups {
+        route.insert(
+            mcast_group.id,
+            (
+                mcast_group.clone(),
+                expr.full_expr().to_string().into(),
+                None,
+            ),
+        );
+    }
+    Arc::new(route)
 }

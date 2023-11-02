@@ -11,19 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::hat::network::Network;
+use super::super::hat::pubsub::compute_data_route;
 use super::face::FaceState;
 use super::resource::{DataRoutes, Direction, PullCaches, Resource, Route};
 use super::tables::{RoutingExpr, Tables};
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_core::zread;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, WhatAmI, WireExpr, ZenohId},
+    core::{key_expr::OwnedKeyExpr, WhatAmI, WireExpr},
     network::{
         declare::{ext, Mode},
         Push,
@@ -31,169 +31,6 @@ use zenoh_protocol::{
     zenoh::PushBody,
 };
 use zenoh_sync::get_mut_unchecked;
-
-#[inline]
-fn insert_faces_for_subs(
-    route: &mut Route,
-    expr: &RoutingExpr,
-    tables: &Tables,
-    net: &Network,
-    source: usize,
-    subs: &HashSet<ZenohId>,
-) {
-    if net.trees.len() > source {
-        for sub in subs {
-            if let Some(sub_idx) = net.get_idx(sub) {
-                if net.trees[source].directions.len() > sub_idx.index() {
-                    if let Some(direction) = net.trees[source].directions[sub_idx.index()] {
-                        if net.graph.contains_node(direction) {
-                            if let Some(face) = tables.get_face(&net.graph[direction].zid) {
-                                route.entry(face.id).or_insert_with(|| {
-                                    let key_expr =
-                                        Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                                    (
-                                        face.clone(),
-                                        key_expr.to_owned(),
-                                        if source != 0 {
-                                            Some(source as u16)
-                                        } else {
-                                            None
-                                        },
-                                    )
-                                });
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        log::trace!("Tree for node sid:{} not yet ready", source);
-    }
-}
-
-fn compute_data_route(
-    tables: &Tables,
-    expr: &mut RoutingExpr,
-    source: Option<usize>,
-    source_type: WhatAmI,
-) -> Arc<Route> {
-    let mut route = HashMap::new();
-    let key_expr = expr.full_expr();
-    if key_expr.ends_with('/') {
-        return Arc::new(route);
-    }
-    log::trace!(
-        "compute_data_route({}, {:?}, {:?})",
-        key_expr,
-        source,
-        source_type
-    );
-    let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-        Ok(ke) => ke,
-        Err(e) => {
-            log::warn!("Invalid KE reached the system: {}", e);
-            return Arc::new(route);
-        }
-    };
-    let res = Resource::get_resource(expr.prefix, expr.suffix);
-    let matches = res
-        .as_ref()
-        .and_then(|res| res.context.as_ref())
-        .map(|ctx| Cow::from(&ctx.matches))
-        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
-
-    let master = tables.whatami != WhatAmI::Router
-        || !tables.hat.full_net(WhatAmI::Peer)
-        || *tables
-            .hat
-            .elect_router(&tables.zid, &key_expr, tables.hat.shared_nodes.iter())
-            == tables.zid;
-
-    for mres in matches.iter() {
-        let mres = mres.upgrade().unwrap();
-        if tables.whatami == WhatAmI::Router {
-            if master || source_type == WhatAmI::Router {
-                let net = tables.hat.routers_net.as_ref().unwrap();
-                let router_source = match source_type {
-                    WhatAmI::Router => source.unwrap(),
-                    _ => net.idx.index(),
-                };
-                insert_faces_for_subs(
-                    &mut route,
-                    expr,
-                    tables,
-                    net,
-                    router_source,
-                    &mres.context().router_subs,
-                );
-            }
-
-            if (master || source_type != WhatAmI::Router) && tables.hat.full_net(WhatAmI::Peer) {
-                let net = tables.hat.peers_net.as_ref().unwrap();
-                let peer_source = match source_type {
-                    WhatAmI::Peer => source.unwrap(),
-                    _ => net.idx.index(),
-                };
-                insert_faces_for_subs(
-                    &mut route,
-                    expr,
-                    tables,
-                    net,
-                    peer_source,
-                    &mres.context().peer_subs,
-                );
-            }
-        }
-
-        if tables.whatami == WhatAmI::Peer && tables.hat.full_net(WhatAmI::Peer) {
-            let net = tables.hat.peers_net.as_ref().unwrap();
-            let peer_source = match source_type {
-                WhatAmI::Router | WhatAmI::Peer => source.unwrap(),
-                _ => net.idx.index(),
-            };
-            insert_faces_for_subs(
-                &mut route,
-                expr,
-                tables,
-                net,
-                peer_source,
-                &mres.context().peer_subs,
-            );
-        }
-
-        if tables.whatami != WhatAmI::Router || master || source_type == WhatAmI::Router {
-            for (sid, context) in &mres.session_ctxs {
-                if let Some(subinfo) = &context.subs {
-                    if match tables.whatami {
-                        WhatAmI::Router => context.face.whatami != WhatAmI::Router,
-                        _ => {
-                            source_type == WhatAmI::Client
-                                || context.face.whatami == WhatAmI::Client
-                        }
-                    } && subinfo.mode == Mode::Push
-                    {
-                        route.entry(*sid).or_insert_with(|| {
-                            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                            (context.face.clone(), key_expr.to_owned(), None)
-                        });
-                    }
-                }
-            }
-        }
-    }
-    for mcast_group in &tables.mcast_groups {
-        route.insert(
-            mcast_group.id,
-            (
-                mcast_group.clone(),
-                expr.full_expr().to_string().into(),
-                None,
-            ),
-        );
-    }
-    Arc::new(route)
-}
 
 fn compute_matching_pulls(tables: &Tables, expr: &mut RoutingExpr) -> Arc<PullCaches> {
     let mut pull_caches = vec![];

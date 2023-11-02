@@ -1,5 +1,3 @@
-use crate::net::routing::PREFIX_LIVELINESS;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -13,28 +11,19 @@ use crate::net::routing::PREFIX_LIVELINESS;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::hat::network::Network;
+use super::super::hat::queries::compute_local_replies;
+use super::super::hat::queries::compute_query_route;
 use super::face::FaceState;
-use super::resource::{QueryRoute, QueryRoutes, QueryTargetQabl, QueryTargetQablSet, Resource};
+use super::resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource};
 use super::tables::{RoutingExpr, Tables, TablesLock};
 use async_trait::async_trait;
-use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
-use std::borrow::Cow;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::sync::{Arc, Weak};
-use zenoh_buffers::ZBuf;
 use zenoh_protocol::{
-    core::{
-        key_expr::{
-            include::{Includer, DEFAULT_INCLUDER},
-            OwnedKeyExpr,
-        },
-        Encoding, WhatAmI, WireExpr, ZenohId,
-    },
+    core::{Encoding, WhatAmI, WireExpr},
     network::{
-        declare::{ext, queryable::ext::QueryableInfo},
+        declare::ext,
         request::{ext::TargetType, Request, RequestId},
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
     },
@@ -46,179 +35,6 @@ use zenoh_util::Timed;
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
     src_qid: RequestId,
-}
-
-#[inline]
-#[allow(clippy::too_many_arguments)]
-fn insert_target_for_qabls(
-    route: &mut QueryTargetQablSet,
-    expr: &mut RoutingExpr,
-    tables: &Tables,
-    net: &Network,
-    source: usize,
-    qabls: &HashMap<ZenohId, QueryableInfo>,
-    complete: bool,
-) {
-    if net.trees.len() > source {
-        for (qabl, qabl_info) in qabls {
-            if let Some(qabl_idx) = net.get_idx(qabl) {
-                if net.trees[source].directions.len() > qabl_idx.index() {
-                    if let Some(direction) = net.trees[source].directions[qabl_idx.index()] {
-                        if net.graph.contains_node(direction) {
-                            if let Some(face) = tables.get_face(&net.graph[direction].zid) {
-                                if net.distances.len() > qabl_idx.index() {
-                                    let key_expr =
-                                        Resource::get_best_key(expr.prefix, expr.suffix, face.id);
-                                    route.push(QueryTargetQabl {
-                                        direction: (
-                                            face.clone(),
-                                            key_expr.to_owned(),
-                                            if source != 0 {
-                                                Some(source as u16)
-                                            } else {
-                                                None
-                                            },
-                                        ),
-                                        complete: if complete {
-                                            qabl_info.complete as u64
-                                        } else {
-                                            0
-                                        },
-                                        distance: net.distances[qabl_idx.index()],
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    } else {
-        log::trace!("Tree for node sid:{} not yet ready", source);
-    }
-}
-
-lazy_static::lazy_static! {
-    static ref EMPTY_ROUTE: Arc<QueryTargetQablSet> = Arc::new(Vec::new());
-}
-fn compute_query_route(
-    tables: &Tables,
-    expr: &mut RoutingExpr,
-    source: Option<usize>,
-    source_type: WhatAmI,
-) -> Arc<QueryTargetQablSet> {
-    let mut route = QueryTargetQablSet::new();
-    let key_expr = expr.full_expr();
-    if key_expr.ends_with('/') {
-        return EMPTY_ROUTE.clone();
-    }
-    log::trace!(
-        "compute_query_route({}, {:?}, {:?})",
-        key_expr,
-        source,
-        source_type
-    );
-    let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-        Ok(ke) => ke,
-        Err(e) => {
-            log::warn!("Invalid KE reached the system: {}", e);
-            return EMPTY_ROUTE.clone();
-        }
-    };
-    let res = Resource::get_resource(expr.prefix, expr.suffix);
-    let matches = res
-        .as_ref()
-        .and_then(|res| res.context.as_ref())
-        .map(|ctx| Cow::from(&ctx.matches))
-        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
-
-    let master = tables.whatami != WhatAmI::Router
-        || !tables.hat.full_net(WhatAmI::Peer)
-        || *tables
-            .hat
-            .elect_router(&tables.zid, &key_expr, tables.hat.shared_nodes.iter())
-            == tables.zid;
-
-    for mres in matches.iter() {
-        let mres = mres.upgrade().unwrap();
-        let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
-        if tables.whatami == WhatAmI::Router {
-            if master || source_type == WhatAmI::Router {
-                let net = tables.hat.routers_net.as_ref().unwrap();
-                let router_source = match source_type {
-                    WhatAmI::Router => source.unwrap(),
-                    _ => net.idx.index(),
-                };
-                insert_target_for_qabls(
-                    &mut route,
-                    expr,
-                    tables,
-                    net,
-                    router_source,
-                    &mres.context().router_qabls,
-                    complete,
-                );
-            }
-
-            if (master || source_type != WhatAmI::Router) && tables.hat.full_net(WhatAmI::Peer) {
-                let net = tables.hat.peers_net.as_ref().unwrap();
-                let peer_source = match source_type {
-                    WhatAmI::Peer => source.unwrap(),
-                    _ => net.idx.index(),
-                };
-                insert_target_for_qabls(
-                    &mut route,
-                    expr,
-                    tables,
-                    net,
-                    peer_source,
-                    &mres.context().peer_qabls,
-                    complete,
-                );
-            }
-        }
-
-        if tables.whatami == WhatAmI::Peer && tables.hat.full_net(WhatAmI::Peer) {
-            let net = tables.hat.peers_net.as_ref().unwrap();
-            let peer_source = match source_type {
-                WhatAmI::Router | WhatAmI::Peer => source.unwrap(),
-                _ => net.idx.index(),
-            };
-            insert_target_for_qabls(
-                &mut route,
-                expr,
-                tables,
-                net,
-                peer_source,
-                &mres.context().peer_qabls,
-                complete,
-            );
-        }
-
-        if tables.whatami != WhatAmI::Router || master || source_type == WhatAmI::Router {
-            for (sid, context) in &mres.session_ctxs {
-                if match tables.whatami {
-                    WhatAmI::Router => context.face.whatami != WhatAmI::Router,
-                    _ => source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client,
-                } {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                    if let Some(qabl_info) = context.qabl.as_ref() {
-                        route.push(QueryTargetQabl {
-                            direction: (context.face.clone(), key_expr.to_owned(), None),
-                            complete: if complete {
-                                qabl_info.complete as u64
-                            } else {
-                                0
-                            },
-                            distance: 0.5,
-                        });
-                    }
-                }
-            }
-        }
-    }
-    route.sort_by_key(|qabl| OrderedFloat(qabl.distance));
-    Arc::new(route)
 }
 
 pub(crate) fn compute_query_routes_(tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
@@ -556,47 +372,6 @@ fn compute_final_route(
             }
         }
     }
-}
-
-#[inline]
-fn compute_local_replies(
-    tables: &Tables,
-    prefix: &Arc<Resource>,
-    suffix: &str,
-    face: &Arc<FaceState>,
-) -> Vec<(WireExpr<'static>, ZBuf)> {
-    let mut result = vec![];
-    // Only the first routing point in the query route
-    // should return the liveliness tokens
-    if face.whatami == WhatAmI::Client {
-        let key_expr = prefix.expr() + suffix;
-        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-            Ok(ke) => ke,
-            Err(e) => {
-                log::warn!("Invalid KE reached the system: {}", e);
-                return result;
-            }
-        };
-        if key_expr.starts_with(PREFIX_LIVELINESS) {
-            let res = Resource::get_resource(prefix, suffix);
-            let matches = res
-                .as_ref()
-                .and_then(|res| res.context.as_ref())
-                .map(|ctx| Cow::from(&ctx.matches))
-                .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
-            for mres in matches.iter() {
-                let mres = mres.upgrade().unwrap();
-                if (mres.context.is_some()
-                    && (!mres.context().router_subs.is_empty()
-                        || !mres.context().peer_subs.is_empty()))
-                    || mres.session_ctxs.values().any(|ctx| ctx.subs.is_some())
-                {
-                    result.push((Resource::get_best_key(&mres, "", face.id), ZBuf::default()));
-                }
-            }
-        }
-    }
-    result
 }
 
 #[derive(Clone)]

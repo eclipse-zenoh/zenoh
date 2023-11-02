@@ -1,3 +1,5 @@
+use crate::net::routing::hat::HatFace;
+
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -14,16 +16,13 @@
 use super::super::router::*;
 use super::tables::{Tables, TablesLock};
 use super::{resource::*, tables};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use zenoh_protocol::zenoh::RequestBody;
 use zenoh_protocol::{
     core::{ExprId, WhatAmI, ZenohId},
-    network::{
-        declare::queryable::ext::QueryableInfo, Mapping, Push, Request, RequestId, Response,
-        ResponseFinal,
-    },
+    network::{Mapping, Push, Request, RequestId, Response, ResponseFinal},
 };
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
@@ -39,13 +38,10 @@ pub struct FaceState {
     pub(crate) link_id: usize,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
-    pub(crate) local_subs: HashSet<Arc<Resource>>,
-    pub(crate) remote_subs: HashSet<Arc<Resource>>,
-    pub(crate) local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
-    pub(crate) remote_qabls: HashSet<Arc<Resource>>,
     pub(crate) next_qid: RequestId,
     pub(crate) pending_queries: HashMap<RequestId, Arc<Query>>,
     pub(crate) mcast_group: Option<TransportMulticast>,
+    pub(crate) hat: HatFace,
 }
 
 impl FaceState {
@@ -68,13 +64,10 @@ impl FaceState {
             link_id,
             local_mappings: HashMap::new(),
             remote_mappings: HashMap::new(),
-            local_subs: HashSet::new(),
-            remote_subs: HashSet::new(),
-            local_qabls: HashMap::new(),
-            remote_qabls: HashSet::new(),
             next_qid: 0,
             pending_queries: HashMap::new(),
             mcast_group,
+            hat: HatFace::new(),
         })
     }
 

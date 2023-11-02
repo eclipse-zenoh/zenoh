@@ -17,15 +17,23 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use self::network::Network;
-use super::dispatcher::tables::{Resource, TablesLock};
+use self::{
+    network::Network, pubsub::undeclare_client_subscription, queries::undeclare_client_queryable,
+};
+use super::dispatcher::{
+    face::FaceState,
+    queries::compute_query_routes_,
+    tables::{compute_data_routes_, Resource, TablesLock},
+};
 use async_std::task::JoinHandle;
 use std::{
-    collections::{hash_map::DefaultHasher, HashSet},
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::Hasher,
     sync::Arc,
 };
 use zenoh_config::{WhatAmI, ZenohId};
+use zenoh_protocol::network::declare::queryable::ext::QueryableInfo;
+use zenoh_sync::get_mut_unchecked;
 
 pub mod network;
 pub mod pubsub;
@@ -192,4 +200,126 @@ impl HatTables {
             };
         }
     }
+}
+
+pub(crate) struct HatContext {
+    router_subs: HashSet<ZenohId>,
+    peer_subs: HashSet<ZenohId>,
+    router_qabls: HashMap<ZenohId, QueryableInfo>,
+    peer_qabls: HashMap<ZenohId, QueryableInfo>,
+}
+
+impl HatContext {
+    pub fn new() -> Self {
+        Self {
+            router_subs: HashSet::new(),
+            peer_subs: HashSet::new(),
+            router_qabls: HashMap::new(),
+            peer_qabls: HashMap::new(),
+        }
+    }
+}
+
+pub(crate) struct HatFace {
+    pub(crate) local_subs: HashSet<Arc<Resource>>,
+    pub(crate) remote_subs: HashSet<Arc<Resource>>,
+    pub(crate) local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
+    pub(crate) remote_qabls: HashSet<Arc<Resource>>,
+}
+
+impl HatFace {
+    pub fn new() -> Self {
+        Self {
+            local_subs: HashSet::new(),
+            remote_subs: HashSet::new(),
+            local_qabls: HashMap::new(),
+            remote_qabls: HashSet::new(),
+        }
+    }
+}
+
+pub(crate) fn close_face(tables: &TablesLock, face: &mut Arc<FaceState>) {
+    let ctrl_lock = zlock!(tables.ctrl_lock);
+    let mut wtables = zwrite!(tables.tables);
+    let mut face_clone = face.clone();
+    let face = get_mut_unchecked(face);
+    for res in face.remote_mappings.values_mut() {
+        get_mut_unchecked(res).session_ctxs.remove(&face.id);
+        Resource::clean(res);
+    }
+    face.remote_mappings.clear();
+    for res in face.local_mappings.values_mut() {
+        get_mut_unchecked(res).session_ctxs.remove(&face.id);
+        Resource::clean(res);
+    }
+    face.local_mappings.clear();
+
+    let mut subs_matches = vec![];
+    for mut res in face.hat.remote_subs.drain() {
+        get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
+        undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res);
+
+        if res.context.is_some() {
+            for match_ in &res.context().matches {
+                let mut match_ = match_.upgrade().unwrap();
+                if !Arc::ptr_eq(&match_, &res) {
+                    get_mut_unchecked(&mut match_)
+                        .context_mut()
+                        .valid_data_routes = false;
+                    subs_matches.push(match_);
+                }
+            }
+            get_mut_unchecked(&mut res).context_mut().valid_data_routes = false;
+            subs_matches.push(res);
+        }
+    }
+
+    let mut qabls_matches = vec![];
+    for mut res in face.hat.remote_qabls.drain() {
+        get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
+        undeclare_client_queryable(&mut wtables, &mut face_clone, &mut res);
+
+        if res.context.is_some() {
+            for match_ in &res.context().matches {
+                let mut match_ = match_.upgrade().unwrap();
+                if !Arc::ptr_eq(&match_, &res) {
+                    get_mut_unchecked(&mut match_)
+                        .context_mut()
+                        .valid_query_routes = false;
+                    qabls_matches.push(match_);
+                }
+            }
+            get_mut_unchecked(&mut res).context_mut().valid_query_routes = false;
+            qabls_matches.push(res);
+        }
+    }
+    drop(wtables);
+
+    let mut matches_data_routes = vec![];
+    let mut matches_query_routes = vec![];
+    let rtables = zread!(tables.tables);
+    for _match in subs_matches.drain(..) {
+        matches_data_routes.push((_match.clone(), compute_data_routes_(&rtables, &_match)));
+    }
+    for _match in qabls_matches.drain(..) {
+        matches_query_routes.push((_match.clone(), compute_query_routes_(&rtables, &_match)));
+    }
+    drop(rtables);
+
+    let mut wtables = zwrite!(tables.tables);
+    for (mut res, data_routes) in matches_data_routes {
+        get_mut_unchecked(&mut res)
+            .context_mut()
+            .update_data_routes(data_routes);
+        Resource::clean(&mut res);
+    }
+    for (mut res, query_routes) in matches_query_routes {
+        get_mut_unchecked(&mut res)
+            .context_mut()
+            .update_query_routes(query_routes);
+        Resource::clean(&mut res);
+    }
+    wtables.faces.remove(&face.id);
+    drop(wtables);
+    drop(ctrl_lock);
 }
