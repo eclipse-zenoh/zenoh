@@ -24,6 +24,7 @@ use config::{
     TLS_SERVER_CERTIFICATE_FILE, TLS_SERVER_NAME_VERIFICATION, TLS_SERVER_PRIVATE_KEY_BASE64,
     TLS_SERVER_PRIVATE_KEY_FILE,
 };
+use secrecy::ExposeSecret;
 use std::net::SocketAddr;
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
@@ -74,10 +75,7 @@ impl ConfigurationInspector<Config> for QuicConfigurator {
 
         let c = config.transport().link().tls();
 
-        match (
-            c.root_ca_certificate(),
-            c.private().root_ca_certificate_base64(),
-        ) {
+        match (c.root_ca_certificate(), c.root_ca_certificate_base64()) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'root_ca_certificate' and 'root_ca_certificate_base64' can be present!")
             }
@@ -85,15 +83,15 @@ impl ConfigurationInspector<Config> for QuicConfigurator {
                 ps.push((TLS_ROOT_CA_CERTIFICATE_FILE, ca_certificate));
             }
             (None, Some(ca_certificate)) => {
-                ps.push((TLS_ROOT_CA_CERTIFICATE_BASE64, ca_certificate));
+                ps.push((
+                    TLS_ROOT_CA_CERTIFICATE_BASE64,
+                    ca_certificate.expose_secret(),
+                ));
             }
             _ => {}
         }
 
-        match (
-            c.server_private_key(),
-            c.private().server_private_key_base64(),
-        ) {
+        match (c.server_private_key(), c.server_private_key_base64()) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'server_private_key' and 'server_private_key_base64' can be present!")
             }
@@ -101,15 +99,15 @@ impl ConfigurationInspector<Config> for QuicConfigurator {
                 ps.push((TLS_SERVER_PRIVATE_KEY_FILE, server_private_key));
             }
             (None, Some(server_private_key)) => {
-                ps.push((TLS_SERVER_PRIVATE_KEY_BASE64, server_private_key));
+                ps.push((
+                    TLS_SERVER_PRIVATE_KEY_BASE64,
+                    server_private_key.expose_secret(),
+                ));
             }
             _ => {}
         }
 
-        match (
-            c.server_certificate(),
-            c.private().server_certificate_base64(),
-        ) {
+        match (c.server_certificate(), c.server_certificate_base64()) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'server_certificate' and 'server_certificate_base64' can be present!")
             }
@@ -117,7 +115,10 @@ impl ConfigurationInspector<Config> for QuicConfigurator {
                 ps.push((TLS_SERVER_CERTIFICATE_FILE, server_certificate));
             }
             (None, Some(server_certificate)) => {
-                ps.push((TLS_SERVER_CERTIFICATE_BASE64, server_certificate));
+                ps.push((
+                    TLS_SERVER_CERTIFICATE_BASE64,
+                    server_certificate.expose_secret(),
+                ));
             }
             _ => {}
         }

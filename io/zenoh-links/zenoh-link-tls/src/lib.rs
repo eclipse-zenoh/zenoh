@@ -26,6 +26,7 @@ use config::{
     TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_BASE64, TLS_SERVER_CERTIFICATE_FILE,
     TLS_SERVER_NAME_VERIFICATION, TLS_SERVER_PRIVATE_KEY_BASE_64, TLS_SERVER_PRIVATE_KEY_FILE,
 };
+use secrecy::ExposeSecret;
 use std::{convert::TryFrom, net::SocketAddr};
 use zenoh_config::Config;
 use zenoh_core::zconfigurable;
@@ -71,10 +72,7 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
 
         let c = config.transport().link().tls();
 
-        match (
-            c.root_ca_certificate(),
-            c.private().root_ca_certificate_base64(),
-        ) {
+        match (c.root_ca_certificate(), c.root_ca_certificate_base64()) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'root_ca_certificate' and 'root_ca_certificate_base64' can be present!")
             }
@@ -82,15 +80,15 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
                 ps.push((TLS_ROOT_CA_CERTIFICATE_FILE, ca_certificate));
             }
             (None, Some(ca_certificate)) => {
-                ps.push((TLS_ROOT_CA_CERTIFICATE_BASE64, ca_certificate));
+                ps.push((
+                    TLS_ROOT_CA_CERTIFICATE_BASE64,
+                    ca_certificate.expose_secret(),
+                ));
             }
             _ => {}
         }
 
-        match (
-            c.server_private_key(),
-            c.private().server_private_key_base64(),
-        ) {
+        match (c.server_private_key(), c.server_private_key_base64()) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'server_private_key' and 'server_private_key_base64' can be present!")
             }
@@ -98,15 +96,15 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
                 ps.push((TLS_SERVER_PRIVATE_KEY_FILE, server_private_key));
             }
             (None, Some(server_private_key)) => {
-                ps.push((TLS_SERVER_PRIVATE_KEY_BASE_64, server_private_key));
+                ps.push((
+                    TLS_SERVER_PRIVATE_KEY_BASE_64,
+                    server_private_key.expose_secret(),
+                ));
             }
             _ => {}
         }
 
-        match (
-            c.server_certificate(),
-            c.private().server_certificate_base64(),
-        ) {
+        match (c.server_certificate(), c.server_certificate_base64()) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'server_certificate' and 'server_certificate_base64' can be present!")
             }
@@ -114,7 +112,10 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
                 ps.push((TLS_SERVER_CERTIFICATE_FILE, server_certificate));
             }
             (None, Some(server_certificate)) => {
-                ps.push((TLS_SERVER_CERTIFICATE_BASE64, server_certificate));
+                ps.push((
+                    TLS_SERVER_CERTIFICATE_BASE64,
+                    server_certificate.expose_secret(),
+                ));
             }
             _ => {}
         }
@@ -126,10 +127,7 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
             };
         }
 
-        match (
-            c.client_private_key(),
-            c.private().client_private_key_base64(),
-        ) {
+        match (c.client_private_key(), c.client_private_key_base64()) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'client_private_key' and 'client_private_key_base64' can be present!")
             }
@@ -137,15 +135,15 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
                 ps.push((TLS_CLIENT_PRIVATE_KEY_FILE, client_private_key));
             }
             (None, Some(client_private_key)) => {
-                ps.push((TLS_CLIENT_PRIVATE_KEY_BASE64, client_private_key));
+                ps.push((
+                    TLS_CLIENT_PRIVATE_KEY_BASE64,
+                    client_private_key.expose_secret(),
+                ));
             }
             _ => {}
         }
 
-        match (
-            c.client_certificate(),
-            c.private().client_certificate_base64(),
-        ) {
+        match (c.client_certificate(), c.client_certificate_base64()) {
             (Some(_), Some(_)) => {
                 bail!("Only one between 'client_certificate' and 'client_certificate_base64' can be present!")
             }
@@ -153,7 +151,10 @@ impl ConfigurationInspector<Config> for TlsConfigurator {
                 ps.push((TLS_CLIENT_CERTIFICATE_FILE, client_certificate));
             }
             (None, Some(client_certificate)) => {
-                ps.push((TLS_CLIENT_CERTIFICATE_BASE64, client_certificate));
+                ps.push((
+                    TLS_CLIENT_CERTIFICATE_BASE64,
+                    client_certificate.expose_secret(),
+                ));
             }
             _ => {}
         }

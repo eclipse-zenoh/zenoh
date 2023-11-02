@@ -128,6 +128,7 @@ rustls = { version = "0.21.5", features = ["dangerous_configuration"] }
 rustls-native-certs = "0.6.2"
 rustls-pemfile = "1.0.2"
 schemars = "0.8.12"
+secrecy = {version = "0.8.0", features = ["serde", "alloc"]}
 serde = { version = "1.0.154", default-features = false, features = [
   "derive",
 ] } # Default features are disabled due to usage in no_std crates
