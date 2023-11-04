@@ -24,7 +24,7 @@ zconfigurable! {
 }
 
 /// Zenoh plugins should implement this trait to ensure type-safety, even if the starting arguments and expected plugin types change in a future release.
-pub trait ZenohPlugin: Plugin<StartArgs = StartArgs, RunningPlugin = RunningPlugin> {}
+pub trait ZenohPlugin: Plugin<StartArgs = StartArgs, Instance = RunningPlugin> {}
 
 /// A zenoh plugin receives a reference to a value of this type when started.
 pub type StartArgs = Runtime;

@@ -58,9 +58,9 @@ impl Plugin for StoragesPlugin {
     const STATIC_NAME: &'static str = "storage_manager";
 
     type StartArgs = Runtime;
-    type RunningPlugin = zenoh::plugins::RunningPlugin;
+    type Instance = zenoh::plugins::RunningPlugin;
 
-    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
         std::mem::drop(env_logger::try_init());
         log::debug!("StorageManager plugin {}", LONG_VERSION.as_str());
         let config =
@@ -109,7 +109,7 @@ impl StorageRuntimeInner {
         let session = Arc::new(zenoh::init(runtime.clone()).res_sync().unwrap());
 
         let plugins_manager = PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
-            .add_static::<MemoryBackend>();
+            .add_static_plugin::<MemoryBackend>();
 
         let mut new_self = StorageRuntimeInner {
             name,
@@ -190,12 +190,12 @@ impl StorageRuntimeInner {
         let volume_id = storage.volume_id.clone();
         let backend = self.plugins_manager.running_plugin(&volume_id)?;
         let storage_name = storage.name.clone();
-        let in_interceptor = backend.running().incoming_data_interceptor();
-        let out_interceptor = backend.running().outgoing_data_interceptor();
+        let in_interceptor = backend.instance().incoming_data_interceptor();
+        let out_interceptor = backend.instance().outgoing_data_interceptor();
         let stopper = async_std::task::block_on(create_and_start_storage(
             admin_key,
             storage,
-            backend.running(),
+            backend.instance(),
             in_interceptor,
             out_interceptor,
             self.session.clone(),
@@ -270,7 +270,7 @@ impl RunningPluginTrait for StorageRuntime {
                     {
                         responses.push(zenoh::plugins::Response::new(
                             key.clone(),
-                            plugin.running().get_admin_status(),
+                            plugin.instance().get_admin_status(),
                         ))
                     }
                 });

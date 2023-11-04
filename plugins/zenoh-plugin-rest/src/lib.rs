@@ -215,7 +215,7 @@ impl ZenohPlugin for RestPlugin {}
 
 impl Plugin for RestPlugin {
     type StartArgs = Runtime;
-    type RunningPlugin = zenoh::plugins::RunningPlugin;
+    type Instance = zenoh::plugins::RunningPlugin;
     const STATIC_NAME: &'static str = "rest";
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<zenoh::plugins::RunningPlugin> {

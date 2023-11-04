@@ -30,7 +30,7 @@ pub struct MemoryBackend {
 
 impl Plugin for MemoryBackend {
     type StartArgs = VolumeConfig;
-    type RunningPlugin = VolumePlugin;
+    type Instance = VolumePlugin;
 
     const STATIC_NAME: &'static str = MEMORY_BACKEND_NAME;
 

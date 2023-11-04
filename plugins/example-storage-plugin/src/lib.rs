@@ -31,9 +31,9 @@ zenoh_plugin_trait::declare_plugin!(ExampleBackend);
 
 impl Plugin for ExampleBackend {
     type StartArgs = VolumeConfig;
-    type RunningPlugin = VolumePlugin;
+    type Instance = VolumePlugin;
 
-    fn start(_name: &str, _args: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
+    fn start(_name: &str, _args: &Self::StartArgs) -> ZResult<Self::Instance> {
         let volume = ExampleBackend {};
         Ok(Box::new(volume))
     }

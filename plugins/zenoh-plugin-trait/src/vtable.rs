@@ -166,8 +166,7 @@ impl Default for RustVersion {
 }
 
 impl<StartArgs, RunningPlugin> PluginVTable<StartArgs, RunningPlugin> {
-    pub fn new<ConcretePlugin: Plugin<StartArgs = StartArgs, RunningPlugin = RunningPlugin>>(
-    ) -> Self {
+    pub fn new<ConcretePlugin: Plugin<StartArgs = StartArgs, Instance = RunningPlugin>>() -> Self {
         Self {
             start: ConcretePlugin::start,
         }

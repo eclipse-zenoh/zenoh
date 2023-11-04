@@ -51,14 +51,14 @@ pub trait CompatibilityVersion {
 
 pub trait PluginControl {
     fn plugins(&self) -> Vec<&str>;
-    fn status(&self, name: &str) -> PluginStatus;
+    // fn status(&self, name: &str) -> PluginStatus;
 }
 
 pub trait Plugin: Sized + 'static {
     type StartArgs: CompatibilityVersion;
-    type RunningPlugin: CompatibilityVersion;
+    type Instance: CompatibilityVersion;
     /// Your plugins' default name when statically linked.
     const STATIC_NAME: &'static str;
     /// Starts your plugin. Use `Ok` to return your plugin's control structure
-    fn start(name: &str, args: &Self::StartArgs) -> ZResult<Self::RunningPlugin>;
+    fn start(name: &str, args: &Self::StartArgs) -> ZResult<Self::Instance>;
 }

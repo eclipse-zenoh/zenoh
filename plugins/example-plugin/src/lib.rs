@@ -40,13 +40,13 @@ const DEFAULT_SELECTOR: &str = "demo/example/**";
 impl ZenohPlugin for ExamplePlugin {}
 impl Plugin for ExamplePlugin {
     type StartArgs = Runtime;
-    type RunningPlugin = zenoh::plugins::RunningPlugin;
+    type Instance = zenoh::plugins::RunningPlugin;
 
     // A mandatory const to define, in case of the plugin is built as a standalone executable
     const STATIC_NAME: &'static str = "example";
 
     // The first operation called by zenohd on the plugin
-    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
         let config = runtime.config().lock();
         let self_cfg = config.plugin(name).unwrap().as_object().unwrap();
         // get the plugin's config details from self_cfg Map (here the "storage-selector" property)

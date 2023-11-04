@@ -74,7 +74,7 @@ impl ConfigValidator for AdminSpace {
     ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
         let plugins_mgr = zlock!(self.context.plugins_mgr);
         let plugin = plugins_mgr.running_plugin(name)?;
-        plugin.running().config_checker(path, current, new)
+        plugin.instance().config_checker(path, current, new)
     }
 }
 
@@ -676,7 +676,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 return;
             }
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                plugin.running().adminspace_getter(&selector, plugin_key)
+                plugin.instance().adminspace_getter(&selector, plugin_key)
             })) {
                 Ok(Ok(responses)) => {
                     for response in responses {
