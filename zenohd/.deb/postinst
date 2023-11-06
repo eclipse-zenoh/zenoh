@@ -20,12 +20,12 @@ set -e
 
 case "$1" in
     configure)
-        if ! command -v systemctl &> /dev/null
+        if ! command -v systemctl > /dev/null 2>&1
         then
             echo "WARNING: 'systemctl' not found - cannot install zenohd as a service."
             exit 0
         fi
-        id -u zenohd  &> /dev/null || useradd -r -s /bin/false zenohd
+        id -u zenohd > /dev/null 2>&1 || useradd -r -s /bin/false zenohd
         mkdir -p /var/zenohd
         chown zenohd:zenohd /var/zenohd
         systemctl daemon-reload
