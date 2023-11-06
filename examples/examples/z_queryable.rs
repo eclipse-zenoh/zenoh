@@ -26,6 +26,7 @@ async fn main() {
     env_logger::init();
 
     let (config, key_expr, value, complete) = parse_args();
+    let send_errors = std::sync::atomic::AtomicBool::new(false);
 
     let key_expr = KeyExpr::try_from(key_expr).unwrap();
     println!("Opening session...");
@@ -39,7 +40,7 @@ async fn main() {
         .await
         .unwrap();
 
-    println!("Enter 'q' to quit...");
+    println!("Enter 'q' to quit, 'e' for the next query to receive an error as response...");
     let mut stdin = async_std::io::stdin();
     let mut input = [0_u8];
     loop {
@@ -50,8 +51,10 @@ async fn main() {
                     None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
                     Some(value) => println!(">> [Queryable ] Received Query '{}' with value '{}'", query.selector(), value),
                 }
+                let response = if send_errors.swap(false, std::sync::atomic::Ordering::Relaxed) {Err(value.clone().into())} else {Ok(Sample::new(key_expr.clone(), value.clone()))};
+                println!(">> [Queryable ] Responding {response:?}");
                 query
-                    .reply(Ok(Sample::new(key_expr.clone(), value.clone())))
+                    .reply(response)
                     .res()
                     .await
                     .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
@@ -61,6 +64,7 @@ async fn main() {
                 match input[0] {
                     b'q' => break,
                     0 => sleep(Duration::from_secs(1)).await,
+                    b'e' => send_errors.store(true, std::sync::atomic::Ordering::Relaxed),
                     _ => (),
                 }
             }

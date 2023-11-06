@@ -28,6 +28,7 @@ use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_protocol::core::WireExpr;
 use zenoh_protocol::network::{response, Mapping, RequestId, Response, ResponseFinal};
+use zenoh_protocol::zenoh::ext::ValueType;
 use zenoh_protocol::zenoh::reply::ext::ConsolidationType;
 use zenoh_protocol::zenoh::{self, ResponseBody};
 use zenoh_result::ZResult;
@@ -198,7 +199,36 @@ impl SyncResolve for ReplyBuilder<'_> {
                 });
                 Ok(())
             }
-            Err(_) => Err(zerror!("Replying errors is not yet supported!").into()),
+            Err(payload) => {
+                self.query.inner.primitives.send_response(Response {
+                    rid: self.query.inner.qid,
+                    wire_expr: WireExpr {
+                        scope: 0,
+                        suffix: std::borrow::Cow::Owned(self.query.key_expr().as_str().to_owned()),
+                        mapping: Mapping::Sender,
+                    },
+                    payload: ResponseBody::Err(zenoh::Err {
+                        timestamp: None,
+                        is_infrastructure: false,
+                        ext_sinfo: None,
+                        ext_unknown: vec![],
+                        ext_body: Some(ValueType {
+                            #[cfg(feature = "shared-memory")]
+                            ext_shm: None,
+                            payload: payload.payload,
+                            encoding: payload.encoding,
+                        }),
+                        code: 0, // TODO
+                    }),
+                    ext_qos: response::ext::QoSType::response_default(),
+                    ext_tstamp: None,
+                    ext_respid: Some(response::ext::ResponderIdType {
+                        zid: self.query.inner.zid,
+                        eid: 0, // TODO
+                    }),
+                });
+                Ok(())
+            }
         }
     }
 }
