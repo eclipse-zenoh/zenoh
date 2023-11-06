@@ -205,7 +205,8 @@ impl WBatch {
         let (_header, payload) = self.split();
 
         // Create a new empty buffer
-        let mut buffer = BBuf::with_capacity(self.buffer.capacity());
+        let mut buffer =
+            BBuf::with_capacity(lz4_flex::block::get_maximum_output_size(self.buffer.len()));
 
         // Write the initial bytes for the batch
         let mut writer = buffer.writer();
@@ -371,6 +372,8 @@ impl Decode<TransportMessage> for &mut RBatch {
 
 #[cfg(test)]
 mod tests {
+    use std::vec;
+
     use super::*;
     use rand::Rng;
     use zenoh_buffers::ZBuf;
@@ -379,7 +382,7 @@ mod tests {
         network::{ext, Push},
         transport::{
             frame::{self, FrameHeader},
-            KeepAlive, TransportMessage,
+            Fragment, KeepAlive, TransportMessage,
         },
         zenoh::{PushBody, Put},
     };
@@ -389,30 +392,37 @@ mod tests {
         let mut rng = rand::thread_rng();
 
         for _ in 0..1_000 {
-            let msg_in = TransportMessage::rand();
+            let msg_ins: [TransportMessage; 2] = [TransportMessage::rand(), {
+                let mut msg_in = Fragment::rand();
+                msg_in.payload = vec![0u8; rng.gen_range(8..1_024)].into();
+                msg_in.into()
+            }];
+            for msg_in in msg_ins {
+                let config = BatchConfig {
+                    mtu: BatchSize::MAX,
+                    #[cfg(feature = "transport_compression")]
+                    is_compression: rng.gen_bool(0.5),
+                };
+                let mut wbatch = WBatch::new(config);
+                wbatch.encode(&msg_in).unwrap();
+                println!("Encoded WBatch: {:?}", wbatch);
+                wbatch.finalize().unwrap();
+                println!("Finalized WBatch: {:?}", wbatch);
 
-            let config = BatchConfig {
-                mtu: BatchSize::MAX,
-                #[cfg(feature = "transport_compression")]
-                is_compression: rng.gen_bool(0.5),
-            };
-            let mut wbatch = WBatch::new(config);
-            wbatch.encode(&msg_in).unwrap();
-            println!("Encoded WBatch: {:?}", wbatch);
-            wbatch.finalize().unwrap();
-            println!("Finalized WBatch: {:?}", wbatch);
-
-            let mut rbatch = RBatch::new(
-                config,
-                wbatch.buffer.as_slice().to_vec().into_boxed_slice().into(),
-            );
-            println!("Decoded RBatch: {:?}", rbatch);
-            rbatch
-                .initialize(|| zenoh_buffers::vec::uninit(config.mtu as usize).into_boxed_slice())
-                .unwrap();
-            println!("Initialized RBatch: {:?}", rbatch);
-            let msg_out: TransportMessage = rbatch.decode().unwrap();
-            assert_eq!(msg_in, msg_out);
+                let mut rbatch = RBatch::new(
+                    config,
+                    wbatch.buffer.as_slice().to_vec().into_boxed_slice().into(),
+                );
+                println!("Decoded RBatch: {:?}", rbatch);
+                rbatch
+                    .initialize(|| {
+                        zenoh_buffers::vec::uninit(config.mtu as usize).into_boxed_slice()
+                    })
+                    .unwrap();
+                println!("Initialized RBatch: {:?}", rbatch);
+                let msg_out: TransportMessage = rbatch.decode().unwrap();
+                assert_eq!(msg_in, msg_out);
+            }
         }
     }
 

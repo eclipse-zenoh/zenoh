@@ -108,10 +108,14 @@ impl TransportLinkUnicast {
         };
 
         let buffer = ZSlice::make(Arc::new(into), 0, end)
-            .map_err(|_| zerror!("ZSlice index(es) out of bounds"))?;
+            .map_err(|_| zerror!("{ERR}{self}. ZSlice index(es) out of bounds"))?;
+
+        log::trace!("RBatch: {:?}", buffer);
 
         let mut batch = RBatch::new(self.batch_config(), buffer);
-        batch.initialize(buff).map_err(|_| zerror!("{ERR}{self}"))?;
+        batch
+            .initialize(buff)
+            .map_err(|e| zerror!("{ERR}{self}. {e}."))?;
 
         Ok(batch)
     }

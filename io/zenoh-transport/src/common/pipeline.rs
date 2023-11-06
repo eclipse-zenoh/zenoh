@@ -536,7 +536,7 @@ impl TransmissionPipeline {
                 let bc = BatchConfig {
                     mtu: config.batch_size,
                     #[cfg(feature = "transport_compression")]
-                    is_compression: false,
+                    is_compression: config.is_compression,
                 };
                 let batch = WBatch::new(bc);
                 assert!(s_ref_w.push(batch).is_none());

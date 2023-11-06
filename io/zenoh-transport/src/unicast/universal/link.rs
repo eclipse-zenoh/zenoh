@@ -80,9 +80,6 @@ impl TransportLinkUnicastUniversal {
                 backoff: self.transport.manager.config.queue_backoff,
             };
 
-            #[cfg(all(feature = "unstable", feature = "transport_compression"))]
-            let is_compressed = self.transport.config.manager.config.unicast.is_compressed;
-
             // The pipeline
             let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
             self.pipeline = Some(producer);
@@ -97,8 +94,6 @@ impl TransportLinkUnicastUniversal {
                     keep_alive,
                     #[cfg(feature = "stats")]
                     c_transport.stats.clone(),
-                    #[cfg(all(feature = "unstable", feature = "transport_compression"))]
-                    is_compressed,
                 )
                 .await;
                 if let Err(e) = res {
@@ -181,12 +176,7 @@ async fn tx_task(
     link: TransportLinkUnicast,
     keep_alive: Duration,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
-    #[cfg(all(feature = "unstable", feature = "transport_compression"))] is_compressed: bool,
 ) -> ZResult<()> {
-    #[cfg(all(feature = "unstable", feature = "transport_compression"))]
-    let mut compression_aux_buff: Box<[u8]> =
-        vec![0; lz4_flex::block::get_maximum_output_size(MAX_BATCH_SIZE)].into_boxed_slice();
-
     loop {
         match pipeline.pull().timeout(keep_alive).await {
             Ok(res) => match res {

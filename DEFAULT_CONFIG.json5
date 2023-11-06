@@ -134,6 +134,9 @@
       ///       enable 'lowlatency' you need to explicitly disable 'qos'.
       lowlatency: false,
     },
+    compression: {
+      enabled: true,
+    },
     qos: {
       enabled: true,
     },

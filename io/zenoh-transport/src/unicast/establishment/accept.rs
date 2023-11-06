@@ -714,6 +714,11 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         .await
         .map_err(|e| (e, Some(close::reason::GENERIC))));
 
+    #[cfg(feature = "transport_compression")]
+    {
+        link.config.is_compression = state.link.ext_compression.is_compression();
+    }
+
     // Sync the RX sequence number
     let _ = step!(transport
         .get_inner()
@@ -732,7 +737,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         .map_err(|e| (e, Some(close::reason::INVALID))));
 
     log::debug!(
-        "New transport link accepted from {} to {}: {}",
+        "New transport link accepted from {} to {}: {:?}",
         osyn_out.other_zid,
         manager.config.zid,
         link
