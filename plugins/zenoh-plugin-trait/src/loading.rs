@@ -36,49 +36,22 @@ pub enum PluginCondition {
     Error(Cow<'static, str>),
 }
 
+impl PluginCondition {
+    fn store<T>(&mut self, result: ZResult<T>) -> ZResult<T> {
+        match result {
+            Ok(v) => Ok(v),
+            Err(e) => {
+                *self = PluginCondition::Error(e.to_string().into());
+                Err(e)
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PluginStatus {
     pub state: PluginState,
     pub condition: PluginCondition,
-}
-
-// trait PluginLoader<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> {
-//     fn load(&self) -> ZResult<Box<dyn PluginStarter<StartArgs, Instance>>>;
-// }
-
-trait PluginLoader<T> {
-    fn load(&self) -> ZResult<Box<T>>;
-}
-
-trait PluginStarter<StartArgs, Instance> {
-    fn start(&self, name: &str, args: &StartArgs) -> ZResult<Instance>;
-    fn path(&self) -> &str;
-}
-
-struct PluginRecord<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> {
-    name: String,
-    condition: PluginCondition,
-    loader:
-        Box<dyn PluginLoader<dyn PluginStarter<StartArgs, Instance> + Send + Sync> + Send + Sync>,
-    starter: Option<Box<dyn PluginStarter<StartArgs, Instance> + Send + Sync>>,
-    instance: Option<Instance>,
-}
-
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
-    PluginRecord<StartArgs, Instance>
-{
-    fn new<T: PluginLoader<StartArgs, Instance> + 'static + Send + Sync>(
-        name: String,
-        loader: T,
-    ) -> Self {
-        Self {
-            name,
-            condition: PluginCondition::Ok,
-            loader: Box::new(loader),
-            starter: None,
-            instance: None,
-        }
-    }
 }
 
 pub trait PluginInfo {
@@ -87,8 +60,191 @@ pub trait PluginInfo {
     fn status(&self) -> PluginStatus;
 }
 
+pub trait DeclaredPlugin<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>:
+    PluginInfo
+{
+    fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>>;
+    fn loaded(&self) -> Option<&dyn LoadedPlugin<StartArgs, Instance>>;
+    fn loaded_mut(&mut self) -> Option<&mut dyn LoadedPlugin<StartArgs, Instance>>;
+}
+pub trait LoadedPlugin<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>:
+    PluginInfo
+{
+    fn run(&mut self, args: &StartArgs) -> ZResult<&mut dyn RunningPlugin<StartArgs, Instance>>;
+    fn running(&self) -> Option<&dyn RunningPlugin<StartArgs, Instance>>;
+    fn running_mut(&mut self) -> Option<&mut dyn RunningPlugin<StartArgs, Instance>>;
+}
+
+pub trait RunningPlugin<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> {
+    fn stop(&mut self);
+    fn instance(&self) -> &Instance;
+    fn instance_mut(&mut self) -> &mut Instance;
+}
+
+struct StaticPlugin<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion, P>
+where
+    P: Plugin<StartArgs = StartArgs, Instance = Instance>,
+{
+    instance: Option<Instance>,
+    phantom: PhantomData<P>,
+}
+
+impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion, P>
+    StaticPlugin<StartArgs, Instance, P>
+where
+    P: Plugin<StartArgs = StartArgs, Instance = Instance>,
+{
+    fn new() -> Self {
+        Self {
+            instance: None,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion, P> PluginInfo
+    for StaticPlugin<StartArgs, Instance, P>
+{
+    fn name(&self) -> &str {
+        P::STATIC_NAME
+    }
+    fn path(&self) -> &str {
+        "<static>"
+    }
+    fn status(&self) -> PluginStatus {
+        PluginStatus {
+            state: self
+                .instance
+                .map_or(PluginState::Loaded, |_| PluginState::Running),
+            condition: PluginCondition::Ok, // TODO: request runnnig plugin status
+        }
+    }
+}
+
+impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion, P>
+    DeclaredPlugin<StartArgs, Instance> for StaticPlugin<StartArgs, Instance, P>
+where
+    P: Plugin<StartArgs = StartArgs, Instance = Instance>,
+{
+    fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>> {
+        Ok(self)
+    }
+    fn loaded(&self) -> Option<&dyn LoadedPlugin<StartArgs, Instance>> {
+        Some(self)
+    }
+    fn loaded_mut(&mut self) -> Option<&mut dyn LoadedPlugin<StartArgs, Instance>> {
+        Some(self)
+    }
+}
+
+impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion, P>
+    LoadedPlugin<StartArgs, Instance> for StaticPlugin<StartArgs, Instance, P>
+where
+    P: Plugin<StartArgs = StartArgs, Instance = Instance>,
+{
+    fn run(&mut self, args: &StartArgs) -> ZResult<&mut dyn RunningPlugin<StartArgs, Instance>> {
+        if self.instance.is_none() {
+            self.instance = Some(P::start(self.name(), args)?);
+        }
+        Ok(self)
+    }
+    fn running(&self) -> Option<&dyn RunningPlugin<StartArgs, Instance>> {
+        if self.instance.is_some() {
+            Some(self)
+        } else {
+            None
+        }
+    }
+    fn running_mut(&mut self) -> Option<&mut dyn RunningPlugin<StartArgs, Instance>> {
+        if self.instance.is_some() {
+            Some(self)
+        } else {
+            None
+        }
+    }
+}
+
+impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion, P>
+    RunningPlugin<StartArgs, Instance> for StaticPlugin<StartArgs, Instance, P>
+where
+    P: Plugin<StartArgs = StartArgs, Instance = Instance>,
+{
+    fn stop(&mut self) {}
+    fn instance(&self) -> &Instance {
+        self.instance.as_ref().unwrap()
+    }
+    fn instance_mut(&mut self) -> &mut Instance {
+        self.instance.as_mut().unwrap()
+    }
+}
+
+/// This enum contains information where to load the plugin from.
+enum DynamicPluginSource {
+    /// Load plugin with the name in String + `.so | .dll | .dylib`
+    /// in LibLoader's search paths.
+    ByName((LibLoader, String)),
+    /// Load first avalilable plugin from the list of path to plugin files (absolute or relative to the current working directory)
+    ByPaths(Vec<String>),
+}
+
+impl DynamicPluginSource {
+    fn load(&self) -> ZResult<(Library, PathBuf)> {
+        match self {
+            DynamicPluginSource::ByName((libloader, name)) => unsafe {
+                libloader.search_and_load(name)
+            },
+            DynamicPluginSource::ByPaths(paths) => {
+                for path in paths {
+                    match unsafe { LibLoader::load_file(path) } {
+                        Ok((l, p)) => return Ok((l, p)),
+                        Err(e) => log::warn!("Plugin {} load fail: {}", path, e),
+                    }
+                }
+                bail!("Plugin not found in {:?}", &paths)
+            }
+        }
+    }
+}
+
+struct DynamicPluginStarter<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> {
+    _lib: Library,
+    path: PathBuf,
+    vtable: PluginVTable<StartArgs, Instance>,
+}
+
+impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
+    DynamicPluginStarter<StartArgs, Instance>
+{
+    fn new(lib: Library, path: PathBuf)``
+    }
+}
+
+struct DynamicPlugin<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> {
+    name: String,
+    condition: PluginCondition,
+    source: DynamicPluginSource,
+    starter: Option<DynamicPluginStarter<StartArgs, Instance>>,
+    instance: Option<Instance>,
+}
+
+impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
+    DynamicPlugin<StartArgs, Instance>
+{
+    fn new(name: String, source: DynamicPluginSource) -> Self {
+        Self {
+            name,
+            condition: PluginCondition::Ok,
+            source,
+            starter: None,
+            instance: None,
+        }
+    }
+}
+
+
+
 impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> PluginInfo
-    for PluginRecord<StartArgs, Instance>
+    for DynamicPlugin<StartArgs, Instance>
 {
     fn name(&self) -> &str {
         self.name.as_str()
@@ -107,26 +263,59 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> PluginInfo
             } else {
                 PluginState::Declared
             },
-            condition: self.condition.clone(),
+            condition: self.condition.clone(), // TODO: request condition from running plugin
         }
     }
 }
 
-pub trait DeclaredPluginRecord<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>:
-    PluginInfo
-{
-    fn load(&mut self) -> ZResult<(bool, &mut dyn LoadedPluginRecord<StartArgs, Instance>)>;
-    fn loaded(&self) -> Option<&dyn LoadedPluginRecord<StartArgs, Instance>>;
-    fn loaded_mut(&mut self) -> Option<&mut dyn LoadedPluginRecord<StartArgs, Instance>>;
+fn get_vtable<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>(
+    lib: &Library,
+    path: &Path,
+) -> ZResult<PluginVTable<StartArgs, Instance>> {
+    log::debug!("Loading plugin {}", &path.to_str().unwrap(),);
+    let get_plugin_loader_version =
+        unsafe { lib.get::<fn() -> PluginLoaderVersion>(b"get_plugin_loader_version")? };
+    let plugin_loader_version = get_plugin_loader_version();
+    log::debug!("Plugin loader version: {}", &plugin_loader_version);
+    if plugin_loader_version != PLUGIN_LOADER_VERSION {
+        bail!(
+            "Plugin loader version mismatch: host = {}, plugin = {}",
+            PLUGIN_LOADER_VERSION,
+            plugin_loader_version
+        );
+    }
+    let get_compatibility = unsafe { lib.get::<fn() -> Compatibility>(b"get_compatibility")? };
+    let plugin_compatibility_record = get_compatibility();
+    let host_compatibility_record = Compatibility::new::<StartArgs, Instance>();
+    log::debug!(
+        "Plugin compativilty record: {:?}",
+        &plugin_compatibility_record
+    );
+    if !plugin_compatibility_record.are_compatible(&host_compatibility_record) {
+        bail!(
+            "Plugin compatibility mismatch:\n\nHost:\n{}\nPlugin:\n{}\n",
+            host_compatibility_record,
+            plugin_compatibility_record
+        );
+    }
+    let load_plugin =
+        unsafe { lib.get::<fn() -> PluginVTable<StartArgs, Instance>>(b"load_plugin")? };
+    let vtable = load_plugin();
+    Ok(vtable)
 }
 
+
 impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
-    DeclaredPluginRecord<StartArgs, Instance> for PluginRecord<StartArgs, Instance>
+    DeclaredPlugin<StartArgs, Instance> for DynamicPlugin<StartArgs, Instance>
 {
-    fn load(&mut self) -> ZResult<(bool, &mut dyn LoadedPluginRecord<StartArgs, Instance>)> {
+    fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>> {
         if self.starter.is_some() {
-            Ok((false, self))
+            Ok(self)
         } else {
+            let (lib, path) = self.source.load()?;
+            let starter = DynamicPluginStarter::new(lib, path)?;
+
+
             match self.loader.load() {
                 Ok(starter) => {
                     self.starter = Some(starter);
@@ -154,17 +343,6 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
             None
         }
     }
-}
-
-pub trait LoadedPluginRecord<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>:
-    PluginInfo
-{
-    fn run(
-        &mut self,
-        args: &StartArgs,
-    ) -> ZResult<&mut dyn RunningPluginRecord<StartArgs, Instance>>;
-    fn running(&self) -> Option<&dyn RunningPluginRecord<StartArgs, Instance>>;
-    fn running_mut(&mut self) -> Option<&mut dyn RunningPluginRecord<StartArgs, Instance>>;
 }
 
 impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
@@ -198,12 +376,6 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
             None
         }
     }
-}
-
-pub trait RunningPluginRecord<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> {
-    fn stop(&mut self);
-    fn instance(&self) -> &Instance;
-    fn instance_mut(&mut self) -> &mut Instance;
 }
 
 impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
@@ -260,7 +432,9 @@ impl<StartArgs: 'static + CompatibilityVersion, Instance: 'static + Compatibilit
         self
     }
 
-    fn add_dynamic<L: PluginLoader<StartArgs, Instance> + 'static>(
+    fn add_dynamic<
+        L: PluginLoader<dyn PluginStarter<StartArgs, Instance> + Send + Sync> + 'static + Send + Sync,
+    >(
         &mut self,
         name: String,
         loader: L,
@@ -411,69 +585,6 @@ impl<StartArgs: 'static + CompatibilityVersion, Instance: 'static + Compatibilit
     }
 }
 
-struct StaticPlugin<P> {
-    inner: PhantomData<P>,
-}
-
-impl<P> StaticPlugin<P> {
-    fn new() -> Self {
-        StaticPlugin { inner: PhantomData }
-    }
-}
-
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion, P>
-    PluginLoader<StartArgs, Instance> for StaticPlugin<P>
-where
-    P: Plugin<StartArgs = StartArgs, Instance = Instance>,
-{
-    fn load(&self) -> ZResult<Box<dyn PluginStarter<StartArgs, Instance>>> {
-        Ok(Box::new(Self::new()))
-    }
-}
-
-impl<StartArgs, Instance, P> PluginStarter<StartArgs, Instance> for StaticPlugin<P>
-where
-    P: Plugin<StartArgs = StartArgs, Instance = Instance>,
-{
-    fn start(&self, name: &str, args: &StartArgs) -> ZResult<Instance> {
-        P::start(name, args)
-    }
-    fn path(&self) -> &str {
-        "<static>"
-    }
-}
-enum DynamicPluginSource {
-    /// Load plugin with the name in String + `.so | .dll | .dylib`
-    /// in LibLoader's search paths.
-    ByName((LibLoader, String)),
-    /// Load first avalilable plugin from the list of path to plugin files (absolute or relative to the current working directory)
-    ByPaths(Vec<String>),
-}
-
-impl DynamicPluginSource {
-    fn load(&self) -> ZResult<(Library, PathBuf)> {
-        match self {
-            DynamicPluginSource::ByName((libloader, name)) => unsafe {
-                libloader.search_and_load(name)
-            },
-            DynamicPluginSource::ByPaths(paths) => {
-                for path in paths {
-                    match unsafe { LibLoader::load_file(path) } {
-                        Ok((l, p)) => return Ok((l, p)),
-                        Err(e) => log::warn!("Plugin {} load fail: {}", path, e),
-                    }
-                }
-                bail!("Plugin not found in {:?}", &paths)
-            }
-        }
-    }
-}
-
-struct DynamicPluginLoader<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> {
-    source: DynamicPluginSource,
-    _phantom: PhantomData<(StartArgs, Instance)>,
-}
-
 impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
     DynamicPluginLoader<StartArgs, Instance>
 {
@@ -520,20 +631,6 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
             unsafe { lib.get::<fn() -> PluginVTable<StartArgs, Instance>>(b"load_plugin")? };
         let vtable = load_plugin();
         Ok(vtable)
-    }
-}
-
-impl<StartArgs: CompatibilityVersion + 'static, Instance: CompatibilityVersion + 'static>
-    PluginLoader<StartArgs, Instance> for DynamicPluginLoader<StartArgs, Instance>
-{
-    fn load(&self) -> ZResult<Box<dyn PluginStarter<StartArgs, Instance>>> {
-        let (lib, path) = self.source.load()?;
-        let vtable: PluginVTable<StartArgs, Instance> = Self::get_vtable(&lib, &path)?;
-        Ok(Box::new(DynamicPluginStarter {
-            _lib: lib,
-            path,
-            vtable,
-        }))
     }
 }
 
