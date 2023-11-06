@@ -17,15 +17,11 @@ use crate::transport_unicast_inner::TransportUnicastTrait;
 use crate::TransportConfigUnicast;
 use crate::TransportManager;
 use crate::{TransportExecutor, TransportPeerEventHandler};
-#[cfg(feature = "transport_unixpipe")]
-use async_std::sync::RwLockUpgradableReadGuard;
 use async_trait::async_trait;
 use std::sync::{Arc, RwLock as SyncRwLock};
 use std::time::Duration;
 use tokio::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
 use tokio::task::JoinHandle;
-#[cfg(feature = "transport_unixpipe")]
-use zenoh_core::zasyncread_upgradable;
 use zenoh_core::{zasynclock, zasyncread, zread, zwrite};
 #[cfg(feature = "transport_unixpipe")]
 use zenoh_link::unixpipe::UNIXPIPE_LOCATOR_PREFIX;
@@ -226,13 +222,64 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
 
         let _ = self.sync(other_initial_sn).await;
 
-        let mut guard = zasyncwrite!(self.link);
-        if guard.is_some() {
-            return Err((
-                zerror!("Lowlatency transport cannot support more than one link!").into(),
-                link.fail(),
-                close::reason::GENERIC,
-            ));
+        #[cfg(feature = "transport_unixpipe")]
+        {
+            // For performance reasons, it first performs a try_write() and,
+            // if it fails, it falls back on write().await
+            let guard = if let Ok(g) = self.link.try_read() {
+                g
+            } else {
+                self.link.read().await
+            };
+
+            let existing_unixpipe = guard.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
+            let new_unixpipe = link.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
+            match (existing_unixpipe, new_unixpipe) {
+                (false, true) => {
+                    // LowLatency transport suports only a single link, but code here also handles upgrade from non-unixpipe link to unixpipe link!
+                    log::trace!(
+                        "Upgrading {} LowLatency transport's link from {} to {}",
+                        self.config.zid,
+                        guard,
+                        link
+                    );
+
+                    // Prepare and send close message on old link
+                    {
+                        let close = TransportMessageLowLatency {
+                            body: TransportBodyLowLatency::Close(Close {
+                                reason: 0,
+                                session: false,
+                            }),
+                        };
+                        let _ = send_with_link(
+                            &guard,
+                            close,
+                            #[cfg(feature = "stats")]
+                            &self.stats,
+                        )
+                        .await;
+                    };
+                    // Notify the callback
+                    if let Some(callback) = zread!(self.callback).as_ref() {
+                        callback.del_link(Link::from(guard.clone()));
+                    }
+
+                    // Set the new link
+                    let mut write_guard = self.link.write().await;
+                    *write_guard = link;
+
+                    Ok(())
+                }
+                _ => {
+                    let e = zerror!(
+                    "Can not add Link {} with peer {}: link already exists and only unique link is supported!",
+                    link,
+                    self.config.zid,
+                );
+                    Err(e.into())
+                }
+            }
         }
         let (link, ack) = link.unpack();
         *guard = Some(link);
