@@ -11,14 +11,20 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::multicast::{TransportMulticast, TransportMulticastConfig, TransportMulticastInner};
-use crate::TransportManager;
+use crate::{
+    common::seq_num,
+    multicast::{transport::TransportMulticastInner, TransportMulticast},
+    TransportConfigMulticast, TransportManager,
+};
 use rand::Rng;
 use std::sync::Arc;
-use zenoh_core::{zasynclock, zlock};
+use zenoh_core::zasynclock;
 use zenoh_link::LinkMulticast;
-use zenoh_protocol::core::{ConduitSn, ConduitSnList, Priority};
-use zenoh_result::ZResult;
+use zenoh_protocol::{
+    core::{Field, Priority},
+    transport::PrioritySn,
+};
+use zenoh_result::{bail, ZResult};
 
 pub(crate) async fn open_link(
     manager: &TransportManager,
@@ -27,58 +33,67 @@ pub(crate) async fn open_link(
     // Create and configure the multicast transport
     let mut prng = zasynclock!(manager.prng);
 
-    macro_rules! zgen_conduit_sn {
+    // Generate initial SNs
+    let sn_resolution = manager.config.resolution.get(Field::FrameSN);
+    let max = seq_num::get_mask(sn_resolution);
+    macro_rules! zgen_prioritysn {
         () => {
-            ConduitSn {
-                reliable: prng.gen_range(0..manager.config.sn_resolution),
-                best_effort: prng.gen_range(0..manager.config.sn_resolution),
+            PrioritySn {
+                reliable: prng.gen_range(0..=max),
+                best_effort: prng.gen_range(0..=max),
             }
         };
     }
 
-    let locator = link.get_dst();
     let initial_sns = if manager.config.multicast.is_qos {
-        let mut initial_sns = [ConduitSn::default(); Priority::NUM];
-        for isn in initial_sns.iter_mut() {
-            *isn = zgen_conduit_sn!();
-        }
-        ConduitSnList::QoS(initial_sns.into())
+        (0..Priority::NUM).map(|_| zgen_prioritysn!()).collect()
     } else {
-        ConduitSnList::Plain(zgen_conduit_sn!())
-    };
-    let config = TransportMulticastConfig {
-        manager: manager.clone(),
+        vec![zgen_prioritysn!()]
+    }
+    .into_boxed_slice();
+
+    // Release the lock
+    drop(prng);
+
+    // Create the transport
+    let locator = link.get_dst().to_owned();
+    let config = TransportConfigMulticast {
+        link,
+        sn_resolution,
         initial_sns,
-        link: link.clone(),
+        #[cfg(feature = "shared-memory")]
+        is_shm: manager.config.multicast.is_shm,
     };
-    let ti = Arc::new(TransportMulticastInner::make(config)?);
+    let ti = Arc::new(TransportMulticastInner::make(manager.clone(), config)?);
+
+    // Add the link
+    ti.start_tx()?;
 
     // Store the active transport
-    let transport: TransportMulticast = (&ti).into();
-    zlock!(manager.state.multicast.transports).insert(locator.to_owned(), ti.clone());
+    let mut w_guard = zasynclock!(manager.state.multicast.transports);
+    if w_guard.get(&locator).is_some() {
+        bail!("A Multicast transport on {} already exist!", locator);
+    }
+    w_guard.insert(locator.clone(), ti.clone());
+    drop(w_guard);
 
     // Notify the transport event handler
-    let batch_size = manager.config.batch_size.min(link.get_mtu());
-    ti.start_tx(batch_size).map_err(|e| {
-        zlock!(manager.state.multicast.transports).remove(locator);
-        let _ = ti.stop_tx();
-        e
-    })?;
-    let callback = manager
-        .config
-        .handler
-        .new_multicast(transport.clone())
-        .map_err(|e| {
-            zlock!(manager.state.multicast.transports).remove(locator);
+    let transport: TransportMulticast = (&ti).into();
+
+    let callback = match manager.config.handler.new_multicast(transport.clone()) {
+        Ok(c) => c,
+        Err(e) => {
+            zasynclock!(manager.state.multicast.transports).remove(&locator);
             let _ = ti.stop_tx();
-            e
-        })?;
+            return Err(e);
+        }
+    };
     ti.set_callback(callback);
-    ti.start_rx().map_err(|e| {
-        zlock!(manager.state.multicast.transports).remove(locator);
+    if let Err(e) = ti.start_rx() {
+        zasynclock!(manager.state.multicast.transports).remove(&locator);
         let _ = ti.stop_rx();
-        e
-    })?;
+        return Err(e);
+    }
 
     Ok(transport)
 }

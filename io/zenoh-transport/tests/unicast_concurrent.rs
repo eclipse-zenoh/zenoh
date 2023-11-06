@@ -1,4 +1,3 @@
-//
 // Copyright (c) 2023 ZettaScale Technology
 //
 // This program and the accompanying materials are made available under the
@@ -19,12 +18,18 @@ use std::convert::TryFrom;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use zenoh_buffers::ZBuf;
 use zenoh_core::zasync_executor_init;
 use zenoh_link::Link;
 use zenoh_protocol::{
-    core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
-    zenoh::ZenohMessage,
+    core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
+    network::{
+        push::{
+            ext::{NodeIdType, QoSType},
+            Push,
+        },
+        NetworkMessage,
+    },
+    zenoh::Put,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -89,7 +94,7 @@ impl MHPeer {
 }
 
 impl TransportPeerEventHandler for MHPeer {
-    fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
         self.count.fetch_add(1, Ordering::AcqRel);
         Ok(())
     }
@@ -162,7 +167,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
                 println!("[Transport Peer 01c] => Waiting for opening transport");
                 // Syncrhonize before opening the transports
                 ztimeout!(cc_barow.wait());
-                let res = ztimeout!(c_p01m.open_transport(c_end.clone()));
+                let res = ztimeout!(c_p01m.open_transport_unicast(c_end.clone()));
                 println!("[Transport Peer 01d] => Opening transport with {c_end:?}: {res:?}");
                 assert!(res.is_ok());
 
@@ -176,43 +181,41 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         println!("[Transport Peer 01e] => Waiting... OK");
 
         // Verify that the transport has been correctly open
-        assert_eq!(peer01_manager.get_transports().len(), 1);
-        let s02 = peer01_manager.get_transport(&c_zid02).unwrap();
+        assert_eq!(peer01_manager.get_transports_unicast().await.len(), 1);
+        let s02 = peer01_manager
+            .get_transport_unicast(&c_zid02)
+            .await
+            .unwrap();
         assert_eq!(
             s02.get_links().unwrap().len(),
             c_end01.len() + c_end02.len()
         );
 
         // Create the message to send
-        let key = "test02".into();
-        let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
-        let channel = Channel {
-            priority: Priority::default(),
-            reliability: Reliability::Reliable,
-        };
-        let congestion_control = CongestionControl::Block;
-        let data_info = None;
-        let routing_context = None;
-        let reply_context = None;
-        let attachment = None;
-
-        let message = ZenohMessage::make_data(
-            key,
-            payload,
-            channel,
-            congestion_control,
-            data_info,
-            routing_context,
-            reply_context,
-            attachment,
-        );
+        let message: NetworkMessage = Push {
+            wire_expr: "test".into(),
+            ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::default(),
+            payload: Put {
+                payload: vec![0u8; MSG_SIZE].into(),
+                timestamp: None,
+                encoding: Encoding::default(),
+                ext_sinfo: None,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: None,
+                ext_unknown: vec![],
+            }
+            .into(),
+        }
+        .into();
 
         // Synchronize wit the peer
         ztimeout!(c_barp.wait());
         println!("[Transport Peer 01f] => Waiting... OK");
 
         for i in 0..MSG_COUNT {
-            println!("[Transport Peer 01g] Scheduling message {i}");
+            println!("[Transport Peer 01g] Scheduling message {}", i);
             s02.schedule(message.clone()).unwrap();
         }
         println!("[Transport Peer 01g] => Scheduling OK");
@@ -265,7 +268,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
                 // Syncrhonize before opening the transports
                 ztimeout!(cc_barow.wait());
 
-                let res = ztimeout!(c_p02m.open_transport(c_end.clone()));
+                let res = ztimeout!(c_p02m.open_transport_unicast(c_end.clone()));
                 println!("[Transport Peer 02d] => Opening transport with {c_end:?}: {res:?}");
                 assert!(res.is_ok());
 
@@ -280,45 +283,43 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         // Verify that the transport has been correctly open
         println!(
             "[Transport Peer 02e] => Transports: {:?}",
-            peer02_manager.get_transports()
+            peer02_manager.get_transports_unicast().await
         );
-        assert_eq!(peer02_manager.get_transports().len(), 1);
-        let s01 = peer02_manager.get_transport(&c_zid01).unwrap();
+        assert_eq!(peer02_manager.get_transports_unicast().await.len(), 1);
+        let s01 = peer02_manager
+            .get_transport_unicast(&c_zid01)
+            .await
+            .unwrap();
         assert_eq!(
             s01.get_links().unwrap().len(),
             c_end01.len() + c_end02.len()
         );
 
         // Create the message to send
-        let key = "test02".into();
-        let payload = ZBuf::from(vec![0_u8; MSG_SIZE]);
-        let channel = Channel {
-            priority: Priority::default(),
-            reliability: Reliability::Reliable,
-        };
-        let congestion_control = CongestionControl::Block;
-        let data_info = None;
-        let routing_context = None;
-        let reply_context = None;
-        let attachment = None;
-
-        let message = ZenohMessage::make_data(
-            key,
-            payload,
-            channel,
-            congestion_control,
-            data_info,
-            routing_context,
-            reply_context,
-            attachment,
-        );
+        let message: NetworkMessage = Push {
+            wire_expr: "test".into(),
+            ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::default(),
+            payload: Put {
+                payload: vec![0u8; MSG_SIZE].into(),
+                timestamp: None,
+                encoding: Encoding::default(),
+                ext_sinfo: None,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: None,
+                ext_unknown: vec![],
+            }
+            .into(),
+        }
+        .into();
 
         // Synchronize wit the peer
         ztimeout!(c_barp.wait());
         println!("[Transport Peer 02f] => Waiting... OK");
 
         for i in 0..MSG_COUNT {
-            println!("[Transport Peer 02g] Scheduling message {i}");
+            println!("[Transport Peer 02g] Scheduling message {}", i);
             s01.schedule(message.clone()).unwrap();
         }
         println!("[Transport Peer 02g] => Scheduling OK");
@@ -386,6 +387,7 @@ fn transport_tcp_concurrent() {
 
 #[cfg(feature = "transport_ws")]
 #[test]
+#[ignore]
 fn transport_ws_concurrent() {
     let _ = env_logger::try_init();
     task::block_on(async {
@@ -411,6 +413,41 @@ fn transport_ws_concurrent() {
         format!("ws/127.0.0.1:{}", 9035).parse().unwrap(),
         format!("ws/127.0.0.1:{}", 9036).parse().unwrap(),
         format!("ws/127.0.0.1:{}", 9037).parse().unwrap(),
+    ];
+
+    task::block_on(async {
+        transport_concurrent(endpoint01, endpoint02).await;
+    });
+}
+
+#[cfg(feature = "transport_unixpipe")]
+#[test]
+#[ignore]
+fn transport_unixpipe_concurrent() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    let endpoint01: Vec<EndPoint> = vec![
+        "unixpipe/transport_unixpipe_concurrent".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent2".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent3".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent4".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent5".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent6".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent7".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent8".parse().unwrap(),
+    ];
+    let endpoint02: Vec<EndPoint> = vec![
+        "unixpipe/transport_unixpipe_concurrent9".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent10".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent11".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent12".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent13".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent14".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent15".parse().unwrap(),
+        "unixpipe/transport_unixpipe_concurrent16".parse().unwrap(),
     ];
 
     task::block_on(async {

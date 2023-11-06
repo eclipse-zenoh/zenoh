@@ -14,21 +14,31 @@
 
 // Restricting to macos by default because of no IPv6 support
 // on GitHub CI actions on Linux and Windows.
-#[cfg(target_os = "macos")]
+#[cfg(target_family = "unix")]
 mod tests {
-    use async_std::prelude::FutureExt;
-    use async_std::task;
-    use std::any::Any;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::Arc;
-    use std::time::Duration;
-    use zenoh_buffers::ZBuf;
-    use zenoh_cfg_properties::config::*;
+    use async_std::{prelude::FutureExt, task};
+    use std::{
+        any::Any,
+        sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        },
+        time::Duration,
+    };
     use zenoh_core::zasync_executor_init;
     use zenoh_link::Link;
     use zenoh_protocol::{
-        core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
-        zenoh::ZenohMessage,
+        core::{
+            Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI, ZenohId,
+        },
+        network::{
+            push::{
+                ext::{NodeIdType, QoSType},
+                Push,
+            },
+            NetworkMessage,
+        },
+        zenoh::Put,
     };
     use zenoh_result::ZResult;
     use zenoh_transport::{
@@ -64,7 +74,7 @@ mod tests {
 
     impl SHPeer {
         fn get_count(&self) -> usize {
-            self.count.load(Ordering::SeqCst)
+            self.count.load(Ordering::Relaxed)
         }
     }
 
@@ -98,7 +108,8 @@ mod tests {
     }
 
     impl TransportMulticastEventHandler for SCPeer {
-        fn new_peer(&self, _peer: TransportPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+        fn new_peer(&self, peer: TransportPeer) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
+            println!("\tNew peer: {:?}", peer);
             Ok(Arc::new(SCPeer {
                 count: self.count.clone(),
             }))
@@ -112,8 +123,8 @@ mod tests {
     }
 
     impl TransportPeerEventHandler for SCPeer {
-        fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
-            self.count.fetch_add(1, Ordering::SeqCst);
+        fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
+            self.count.fetch_add(1, Ordering::Relaxed);
             Ok(())
         }
 
@@ -160,36 +171,50 @@ mod tests {
         // Open transport -> This should be accepted
         println!("Opening transport with {endpoint}");
         let _ = ztimeout!(peer01_manager.open_transport_multicast(endpoint.clone())).unwrap();
-        assert!(peer01_manager
-            .get_transport_multicast(&endpoint.to_locator())
-            .is_some());
-        println!("\t{:?}", peer01_manager.get_transports_multicast());
+        assert!(!peer01_manager.get_transports_multicast().await.is_empty());
+        println!("\t{:?}", peer01_manager.get_transports_multicast().await);
 
         println!("Opening transport with {endpoint}");
         let _ = ztimeout!(peer02_manager.open_transport_multicast(endpoint.clone())).unwrap();
-        assert!(peer02_manager
-            .get_transport_multicast(&endpoint.to_locator())
-            .is_some());
-        println!("\t{:?}", peer02_manager.get_transports_multicast());
+        assert!(!peer02_manager.get_transports_multicast().await.is_empty());
+        println!("\t{:?}", peer02_manager.get_transports_multicast().await);
 
         // Wait to for peer 01 and 02 to join each other
+        ztimeout!(async {
+            while peer01_manager
+                .get_transport_multicast(&peer02_id)
+                .await
+                .is_none()
+            {
+                task::sleep(SLEEP_COUNT).await;
+            }
+        });
         let peer01_transport = peer01_manager
-            .get_transport_multicast(&endpoint.to_locator())
+            .get_transport_multicast(&peer02_id)
+            .await
             .unwrap();
-        ztimeout!(async {
-            while peer01_transport.get_peers().unwrap().is_empty() {
-                task::sleep(SLEEP_COUNT).await;
-            }
-        });
+        println!(
+            "\tPeer01 peers: {:?}",
+            peer01_transport.get_peers().unwrap()
+        );
 
-        let peer02_transport = peer02_manager
-            .get_transport_multicast(&endpoint.to_locator())
-            .unwrap();
         ztimeout!(async {
-            while peer02_transport.get_peers().unwrap().is_empty() {
+            while peer02_manager
+                .get_transport_multicast(&peer01_id)
+                .await
+                .is_none()
+            {
                 task::sleep(SLEEP_COUNT).await;
             }
         });
+        let peer02_transport = peer02_manager
+            .get_transport_multicast(&peer01_id)
+            .await
+            .unwrap();
+        println!(
+            "\tPeer02 peers: {:?}",
+            peer02_transport.get_peers().unwrap()
+        );
 
         (
             TransportMulticastPeer {
@@ -213,13 +238,17 @@ mod tests {
         // Close the peer01 transport
         println!("Closing transport with {endpoint}");
         ztimeout!(peer01.transport.close()).unwrap();
-        assert!(peer01.manager.get_transports_multicast().is_empty());
-        assert!(peer02.transport.get_peers().unwrap().is_empty());
+        assert!(peer01.manager.get_transports_multicast().await.is_empty());
+        ztimeout!(async {
+            while !peer02.transport.get_peers().unwrap().is_empty() {
+                task::sleep(SLEEP_COUNT).await;
+            }
+        });
 
         // Close the peer02 transport
         println!("Closing transport with {endpoint}");
         ztimeout!(peer02.transport.close()).unwrap();
-        assert!(peer02.manager.get_transports_multicast().is_empty());
+        assert!(peer02.manager.get_transports_multicast().await.is_empty());
 
         // Wait a little bit
         task::sleep(SLEEP).await;
@@ -232,22 +261,23 @@ mod tests {
         msg_size: usize,
     ) {
         // Create the message to send
-        let key = "test".into();
-        let payload = ZBuf::from(vec![0_u8; msg_size]);
-        let data_info = None;
-        let routing_context = None;
-        let reply_context = None;
-        let attachment = None;
-        let message = ZenohMessage::make_data(
-            key,
-            payload,
-            channel,
-            CongestionControl::Block,
-            data_info,
-            routing_context,
-            reply_context,
-            attachment,
-        );
+        let message: NetworkMessage = Push {
+            wire_expr: "test".into(),
+            ext_qos: QoSType::new(channel.priority, CongestionControl::Block, false),
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::default(),
+            payload: Put {
+                payload: vec![0u8; msg_size].into(),
+                timestamp: None,
+                encoding: Encoding::default(),
+                ext_sinfo: None,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: None,
+                ext_unknown: vec![],
+            }
+            .into(),
+        }
+        .into();
 
         println!("Sending {MSG_COUNT} messages... {channel:?} {msg_size}");
         for _ in 0..MSG_COUNT {
@@ -281,9 +311,9 @@ mod tests {
 
         #[cfg(feature = "stats")]
         {
-            let stats = peer01.transport.get_stats().unwrap();
+            let stats = peer01.transport.get_stats().unwrap().report();
             println!("\tPeer 01: {:?}", stats);
-            let stats = peer02.transport.get_stats().unwrap();
+            let stats = peer02.transport.get_stats().unwrap().report();
             println!("\tPeer 02: {:?}", stats);
         }
 
@@ -311,9 +341,14 @@ mod tests {
 
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
-            format!("udp/{ZN_MULTICAST_IPV4_ADDRESS_DEFAULT}")
-                .parse()
-                .unwrap(),
+            format!(
+                "udp/224.{}.{}.{}:7447",
+                rand::random::<u8>(),
+                rand::random::<u8>(),
+                rand::random::<u8>()
+            )
+            .parse()
+            .unwrap(),
             // Disabling by default because of no IPv6 support
             // on GitHub CI actions.
             // format!("udp/{}", ZN_MULTICAST_IPV6_ADDRESS_DEFAULT)

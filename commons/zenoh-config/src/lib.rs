@@ -16,11 +16,14 @@
 pub mod defaults;
 mod include;
 use include::recursive_include;
+use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{
     de::{self, MapAccess, Visitor},
     Deserialize, Serialize,
 };
 use serde_json::Value;
+#[allow(unused_imports)]
+use std::convert::TryFrom; // This is a false positive from the rust analyser
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
@@ -33,15 +36,39 @@ use std::{
 };
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
-pub use zenoh_cfg_properties::config::*;
 use zenoh_core::zlock;
-use zenoh_protocol::core::{
-    key_expr::OwnedKeyExpr,
-    whatami::{WhatAmIMatcher, WhatAmIMatcherVisitor},
+pub use zenoh_protocol::core::{
+    whatami, EndPoint, Locator, Priority, WhatAmI, WhatAmIMatcher, WhatAmIMatcherVisitor, ZenohId,
 };
-pub use zenoh_protocol::core::{whatami, EndPoint, Locator, Priority, WhatAmI, ZenohId};
+use zenoh_protocol::{
+    core::{key_expr::OwnedKeyExpr, Bits},
+    transport::{BatchSize, TransportSn},
+};
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_util::LibLoader;
+
+// Wrappers for secrecy of values
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct SecretString(String);
+
+impl Deref for SecretString {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl SerializableSecret for SecretString {}
+impl DebugSecret for SecretString {}
+impl CloneableSecret for SecretString {}
+impl Zeroize for SecretString {
+    fn zeroize(&mut self) {
+        self.0 = "".to_string();
+    }
+}
+
+pub type SecretValue = Secret<SecretString>;
 
 pub type ValidationFunction = std::sync::Arc<
     dyn Fn(
@@ -52,7 +79,6 @@ pub type ValidationFunction = std::sync::Arc<
         + Send
         + Sync,
 >;
-type ZInt = u64;
 
 /// Creates an empty zenoh net Session configuration.
 pub fn empty() -> Config {
@@ -176,7 +202,7 @@ validated_struct::validator! {
         },
 
         /// The default timeout to apply to queries in milliseconds.
-        queries_default_timeout: Option<ZInt>,
+        queries_default_timeout: Option<u64>,
 
         /// The routing strategy to use and it's configuration.
         pub routing: #[derive(Default)]
@@ -210,17 +236,21 @@ validated_struct::validator! {
         TransportConf {
             pub unicast: TransportUnicastConf {
                 /// Timeout in milliseconds when opening a link (default: 10000).
-                accept_timeout: Option<ZInt>,
+                accept_timeout: u64,
                 /// Number of links that may stay pending during accept phase (default: 100).
-                accept_pending: Option<usize>,
+                accept_pending: usize,
                 /// Maximum number of unicast sessions (default: 1000)
-                max_sessions: Option<usize>,
+                max_sessions: usize,
                 /// Maximum number of unicast incoming links per transport session (default: 1)
-                max_links: Option<usize>,
+                max_links: usize,
+                /// Enables the LowLatency transport (default `false`).
+                /// This option does not make LowLatency transport mandatory, the actual implementation of transport
+                /// used will depend on Establish procedure and other party's settings
+                lowlatency: bool,
             },
             pub multicast: TransportMulticastConf {
                 /// Link join interval duration in milliseconds (default: 2500)
-                join_interval: Option<ZInt>,
+                join_interval: Option<u64>,
                 /// Maximum number of multicast sessions (default: 1000)
                 max_sessions: Option<usize>,
             },
@@ -235,15 +265,16 @@ validated_struct::validator! {
                 // If not configured, all the supported protocols are automatically whitelisted.
                 pub protocols: Option<Vec<String>>,
                 pub tx: LinkTxConf {
-                    /// The largest value allowed for Zenoh message sequence numbers (wrappring to 0 when reached). When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
-                    /// Defaults to 2^28.
-                    sequence_number_resolution: Option<ZInt>,
+                    /// The resolution in bits to be used for the message sequence numbers.
+                    /// When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
+                    /// Accepted values: 8bit, 16bit, 32bit, 64bit.
+                    sequence_number_resolution: Bits where (sequence_number_resolution_validator),
                     /// Link lease duration in milliseconds (default: 10000)
-                    lease: Option<ZInt>,
+                    lease: u64,
                     /// Number fo keep-alive messages in a link lease duration (default: 4)
-                    keep_alive: Option<usize>,
+                    keep_alive: usize,
                     /// Zenoh's MTU equivalent (default: 2^16-1)
-                    batch_size: Option<u16>,
+                    batch_size: BatchSize,
                     pub queue: QueueConf {
                         /// The size of each priority queue indicates the number of batches a given queue can contain.
                         /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.
@@ -262,10 +293,10 @@ validated_struct::validator! {
                         } where (queue_size_validator),
                         /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
                         /// Higher values lead to a more aggressive batching but it will introduce additional latency.
-                        backoff: Option<ZInt>
+                        backoff: u64,
                     },
                     // Number of threads used for TX
-                    threads: Option<usize>,
+                    threads: usize,
                 },
                 pub rx: LinkRxConf {
                     /// Receiving buffer size in bytes for each link
@@ -273,10 +304,10 @@ validated_struct::validator! {
                     /// For very high throughput scenarios, the rx_buffer_size can be increased to accomodate
                     /// more in-flight data. This is particularly relevant when dealing with large messages.
                     /// E.g. for 16MiB rx_buffer_size set the value to: 16777216.
-                    buffer_size: Option<usize>,
+                    buffer_size: usize,
                     /// Maximum size of the defragmentation buffer at receiver end (default: 1GiB).
                     /// Fragmented messages that are larger than the configured size will be dropped.
-                    max_message_size: Option<usize>,
+                    max_message_size: usize,
                 },
                 pub tls: #[derive(Default)]
                 TLSConf {
@@ -286,7 +317,23 @@ validated_struct::validator! {
                     client_auth: Option<bool>,
                     client_private_key: Option<String>,
                     client_certificate: Option<String>,
-                    server_name_verification: Option<bool>
+                    server_name_verification: Option<bool>,
+                    // Skip serializing field because they contain secrets
+                    #[serde(skip_serializing)]
+                    root_ca_certificate_base64: Option<SecretValue>,
+                    #[serde(skip_serializing)]
+                    server_private_key_base64:  Option<SecretValue>,
+                    #[serde(skip_serializing)]
+                    server_certificate_base64: Option<SecretValue>,
+                    #[serde(skip_serializing)]
+                    client_private_key_base64 :  Option<SecretValue>,
+                    #[serde(skip_serializing)]
+                    client_certificate_base64 :  Option<SecretValue>,
+                }
+                ,
+                pub unixpipe: #[derive(Default)]
+                UnixPipeConf {
+                    file_access_mask: Option<u32>
                 },
                 pub compression: #[derive(Default)]
                 /// **Experimental** compression feature.
@@ -301,9 +348,11 @@ validated_struct::validator! {
                     enabled: bool,
                 }
             },
-            pub shared_memory: SharedMemoryConf {
+            pub shared_memory:
+            SharedMemoryConf {
                 /// Whether shared memory is enabled or not.
-                /// If set to `true`, the shared-memory transport will be enabled. (default `false`).
+                /// If set to `true`, the SHM buffer optimization support will be announced to other parties. (default `false`).
+                /// This option doesn't make SHM buffer optimization mandatory, the real support depends on other party setting
                 enabled: bool,
             },
             pub auth: #[derive(Default)]
@@ -311,7 +360,7 @@ validated_struct::validator! {
                 /// The configuration of authentification.
                 /// A password implies a username is required.
                 pub usrpwd: #[derive(Default)]
-                UserConf {
+                UsrPwdConf {
                     user: Option<String>,
                     password: Option<String>,
                     /// The path to a file containing the user password dictionary, a file containing `<user>:<password>`
@@ -407,15 +456,15 @@ fn config_deser() {
     assert_eq!(*config.scouting().multicast().enabled(), Some(false));
     assert_eq!(
         config.scouting().multicast().autoconnect().router(),
-        Some(&WhatAmIMatcher::try_from(131).unwrap())
+        Some(&WhatAmIMatcher::empty().router().peer())
     );
     assert_eq!(
         config.scouting().multicast().autoconnect().peer(),
-        Some(&WhatAmIMatcher::try_from(131).unwrap())
+        Some(&WhatAmIMatcher::empty().router().peer())
     );
     assert_eq!(
         config.scouting().multicast().autoconnect().client(),
-        Some(&WhatAmIMatcher::try_from(131).unwrap())
+        Some(&WhatAmIMatcher::empty().router().peer())
     );
     let config = Config::from_deserializer(
         &mut json5::Deserializer::from_str(
@@ -434,11 +483,11 @@ fn config_deser() {
     assert_eq!(*config.scouting().multicast().enabled(), Some(false));
     assert_eq!(
         config.scouting().multicast().autoconnect().router(),
-        Some(&WhatAmIMatcher::try_from(128).unwrap())
+        Some(&WhatAmIMatcher::empty())
     );
     assert_eq!(
         config.scouting().multicast().autoconnect().peer(),
-        Some(&WhatAmIMatcher::try_from(131).unwrap())
+        Some(&WhatAmIMatcher::empty().router().peer())
     );
     assert_eq!(config.scouting().multicast().autoconnect().client(), None);
     let config = Config::from_deserializer(
@@ -691,7 +740,7 @@ where
     ) -> Result<<Self as validated_struct::ValidatedMapAssociatedTypes<'a>>::Accessor, GetError>
     {
         let guard: MutexGuard<'a, T> = zlock!(self.inner.inner);
-        // Safety: MutexGuard pins the mutex behind which the value is held.
+        // SAFETY: MutexGuard pins the mutex behind which the value is held.
         let subref = guard.get(key.as_ref())? as *const _;
         Ok(GetGuard {
             _guard: guard,
@@ -731,7 +780,7 @@ where
     ) -> Result<<Self as validated_struct::ValidatedMapAssociatedTypes<'a>>::Accessor, GetError>
     {
         let guard: MutexGuard<'a, T> = zlock!(self.inner.inner);
-        // Safety: MutexGuard pins the mutex behind which the value is held.
+        // SAFETY: MutexGuard pins the mutex behind which the value is held.
         let subref = guard.get(key.as_ref())? as *const _;
         Ok(GetGuard {
             _guard: guard,
@@ -765,6 +814,10 @@ impl<'a, T> AsRef<dyn Any> for GetGuard<'a, T> {
     }
 }
 
+fn sequence_number_resolution_validator(b: &Bits) -> bool {
+    b <= &Bits::from(TransportSn::MAX)
+}
+
 fn queue_size_validator(q: &QueueSizeConf) -> bool {
     fn check(size: &usize) -> bool {
         (QueueSizeConf::MIN..=QueueSizeConf::MAX).contains(size)
@@ -790,7 +843,7 @@ fn queue_size_validator(q: &QueueSizeConf) -> bool {
         && check(background)
 }
 
-fn user_conf_validator(u: &UserConf) -> bool {
+fn user_conf_validator(u: &UsrPwdConf) -> bool {
     (u.password().is_none() && u.user().is_none()) || (u.password().is_some() && u.user().is_some())
 }
 
@@ -833,10 +886,9 @@ fn sift_privates(value: &mut serde_json::Value) {
 }
 
 fn load_external_plugin_config(title: &str, value: &mut Value) -> ZResult<()> {
-    let Some(values) = value
-        .as_object_mut() else {
-            bail!("{} must be object", title);
-        };
+    let Some(values) = value.as_object_mut() else {
+        bail!("{} must be object", title);
+    };
     recursive_include(title, values, HashSet::new(), "__config__", ".")
 }
 

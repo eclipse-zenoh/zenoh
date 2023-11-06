@@ -28,6 +28,16 @@ readme = "README.md"
 [features]
 shared-memory = ["zenoh/shared-memory"]
 unstable = ["zenoh/unstable"]
+transport_unixpipe = ["zenoh/transport_unixpipe"]
+
+# Unfortunately, the feature "transport_unixpipe" is always
+# enabled for the lines below. It looks like a Cargo bug :(
+#
+# [target.'cfg(unix)'.dependencies]
+# zenoh = { workspace = true, features = ["transport_unixpipe"] }
+# 
+# [target.'cfg(not(unix))'.dependencies]
+# zenoh = { workspace = true }
 
 [dependencies]
 async-std = { workspace = true, features = ["attributes"] }

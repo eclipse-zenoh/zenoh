@@ -1,9 +1,3 @@
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher},
-    sync::Arc,
-};
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -19,14 +13,21 @@ use std::{
 //
 use crate::{
     keyexpr,
-    prelude::sync::{KeyExpr, Locality},
+    prelude::sync::{KeyExpr, Locality, SampleKind},
     queryable::Query,
+    sample::DataInfo,
     Sample, Session, ZResult,
+};
+use async_std::task;
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+    sync::Arc,
 };
 use zenoh_core::SyncResolve;
 use zenoh_protocol::{
-    core::{Encoding, KnownEncoding, SampleKind, WireExpr},
-    zenoh::{DataInfo, ZenohMessage},
+    core::{Encoding, KnownEncoding, WireExpr},
+    network::NetworkMessage,
 };
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -91,12 +92,12 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
     }
 
     if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        for transport in session.runtime.manager().get_transports() {
+        for transport in task::block_on(session.runtime.manager().get_transports_unicast()) {
             if let Ok(peer) = transport.get_peer() {
                 reply_peer(own_zid, &query, peer);
             }
         }
-        for transport in session.runtime.manager().get_transports_multicast() {
+        for transport in task::block_on(session.runtime.manager().get_transports_multicast()) {
             for peer in transport.get_peers().unwrap_or_default() {
                 reply_peer(own_zid, &query, peer);
             }
@@ -180,7 +181,7 @@ pub(crate) struct PeerHandler {
 }
 
 impl TransportPeerEventHandler for PeerHandler {
-    fn handle_message(&self, _msg: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _msg: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
 

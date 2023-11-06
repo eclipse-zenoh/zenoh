@@ -14,7 +14,6 @@
 
 //! Sample primitives
 use crate::buffers::ZBuf;
-#[zenoh_macros::unstable]
 use crate::prelude::ZenohId;
 use crate::prelude::{KeyExpr, SampleKind, Value};
 use crate::query::Reply;
@@ -22,9 +21,9 @@ use crate::time::{new_reception_timestamp, Timestamp};
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::convert::{TryFrom, TryInto};
-#[zenoh_macros::unstable]
-use zenoh_protocol::core::ZInt;
-use zenoh_protocol::zenoh::DataInfo;
+use zenoh_protocol::core::Encoding;
+
+pub type SourceSn = u64;
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_macros::unstable]
@@ -44,6 +43,15 @@ pub(crate) enum Locality {
     Any,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) struct DataInfo {
+    pub kind: SampleKind,
+    pub encoding: Option<Encoding>,
+    pub timestamp: Option<Timestamp>,
+    pub source_id: Option<ZenohId>,
+    pub source_sn: Option<SourceSn>,
+}
+
 /// Informations on the source of a zenoh [`Sample`].
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
@@ -51,7 +59,7 @@ pub struct SourceInfo {
     /// The [`ZenohId`] of the zenoh instance that published the concerned [`Sample`].
     pub source_id: Option<ZenohId>,
     /// The sequence number of the [`Sample`] from the source.
-    pub source_sn: Option<ZInt>,
+    pub source_sn: Option<SourceSn>,
 }
 
 #[test]
@@ -190,8 +198,6 @@ impl Sample {
             kind: self.kind,
             encoding: Some(self.value.encoding),
             timestamp: self.timestamp,
-            #[cfg(feature = "shared-memory")]
-            sliced: false,
             #[cfg(feature = "unstable")]
             source_id: self.source_info.source_id,
             #[cfg(not(feature = "unstable"))]

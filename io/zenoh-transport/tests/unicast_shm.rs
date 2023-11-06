@@ -16,28 +16,29 @@ mod tests {
     use async_std::{prelude::FutureExt, task};
     use std::{
         any::Any,
-        collections::HashSet,
         convert::TryFrom,
-        iter::FromIterator,
         sync::{
             atomic::{AtomicUsize, Ordering},
             Arc,
         },
         time::Duration,
     };
-    use zenoh_buffers::{SplitBuffer, ZBuf};
+    use zenoh_buffers::SplitBuffer;
     use zenoh_core::zasync_executor_init;
     use zenoh_link::Link;
     use zenoh_protocol::{
-        core::{Channel, CongestionControl, EndPoint, Priority, Reliability, WhatAmI, ZenohId},
-        zenoh::{Data, ZenohBody, ZenohMessage},
+        core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
+        network::{
+            push::ext::{NodeIdType, QoSType},
+            NetworkBody, NetworkMessage, Push,
+        },
+        zenoh::{PushBody, Put},
     };
     use zenoh_result::ZResult;
-    use zenoh_shm::SharedMemoryManager;
+    use zenoh_shm::{SharedMemoryBuf, SharedMemoryManager};
     use zenoh_transport::{
-        unicast::establishment::authenticator::SharedMemoryAuthenticator, TransportEventHandler,
-        TransportManager, TransportMulticast, TransportMulticastEventHandler, TransportPeer,
-        TransportPeerEventHandler, TransportUnicast,
+        TransportEventHandler, TransportManager, TransportMulticast,
+        TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
     };
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -103,14 +104,27 @@ mod tests {
     }
 
     impl TransportPeerEventHandler for SCPeer {
-        fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
+        fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
             if self.is_shm {
                 print!("s");
             } else {
                 print!("n");
             }
             let payload = match message.body {
-                ZenohBody::Data(Data { payload, .. }) => payload.contiguous().into_owned(),
+                NetworkBody::Push(m) => match m.payload {
+                    PushBody::Put(Put { payload, .. }) => {
+                        for zs in payload.zslices() {
+                            if self.is_shm && zs.downcast_ref::<SharedMemoryBuf>().is_none() {
+                                panic!("Expected SharedMemoryBuf: {:?}", zs);
+                            } else if !self.is_shm && zs.downcast_ref::<SharedMemoryBuf>().is_some()
+                            {
+                                panic!("Not Expected SharedMemoryBuf: {:?}", zs);
+                            }
+                        }
+                        payload.contiguous().into_owned()
+                    }
+                    _ => panic!("Unsolicited message"),
+                },
                 _ => panic!("Unsolicited message"),
             };
             assert_eq!(payload.len(), MSG_SIZE);
@@ -135,7 +149,7 @@ mod tests {
         }
     }
 
-    async fn run(endpoint: &EndPoint) {
+    async fn run(endpoint: &EndPoint, lowlatency_transport: bool) {
         println!("Transport SHM [0a]: {endpoint:?}");
 
         // Define client and router IDs
@@ -149,28 +163,30 @@ mod tests {
                 .unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
-        let peer_shm01_handler = Arc::new(SHPeer::new(false));
-        let unicast =
-            TransportManager::config_unicast().peer_authenticator(HashSet::from_iter(vec![
-                SharedMemoryAuthenticator::make().unwrap().into(),
-            ]));
+        let peer_shm01_handler = Arc::new(SHPeer::new(true));
         let peer_shm01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_shm01)
-            .unicast(unicast)
+            .unicast(
+                TransportManager::config_unicast()
+                    .shm(true)
+                    .lowlatency(lowlatency_transport)
+                    .qos(!lowlatency_transport),
+            )
             .build(peer_shm01_handler.clone())
             .unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm02_handler = Arc::new(SHPeer::new(true));
-        let unicast =
-            TransportManager::config_unicast().peer_authenticator(HashSet::from_iter(vec![
-                SharedMemoryAuthenticator::make().unwrap().into(),
-            ]));
         let peer_shm02_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_shm02)
-            .unicast(unicast)
+            .unicast(
+                TransportManager::config_unicast()
+                    .shm(true)
+                    .lowlatency(lowlatency_transport)
+                    .qos(!lowlatency_transport),
+            )
             .build(peer_shm02_handler.clone())
             .unwrap();
 
@@ -179,6 +195,12 @@ mod tests {
         let peer_net01_manager = TransportManager::builder()
             .whatami(WhatAmI::Peer)
             .zid(peer_net01)
+            .unicast(
+                TransportManager::config_unicast()
+                    .shm(false)
+                    .lowlatency(lowlatency_transport)
+                    .qos(!lowlatency_transport),
+            )
             .build(peer_net01_handler.clone())
             .unwrap();
 
@@ -191,18 +213,30 @@ mod tests {
 
         // Create a transport with the peer
         println!("Transport SHM [1b]");
-        let _ = ztimeout!(peer_shm02_manager.open_transport(endpoint.clone())).unwrap();
+        let peer_shm01_transport =
+            ztimeout!(peer_shm02_manager.open_transport_unicast(endpoint.clone())).unwrap();
+        assert!(peer_shm01_transport.is_shm().unwrap());
 
         // Create a transport with the peer
         println!("Transport SHM [1c]");
-        let _ = ztimeout!(peer_net01_manager.open_transport(endpoint.clone())).unwrap();
+        let peer_net02_transport =
+            ztimeout!(peer_net01_manager.open_transport_unicast(endpoint.clone())).unwrap();
+        assert!(!peer_net02_transport.is_shm().unwrap());
 
         // Retrieve the transports
         println!("Transport SHM [2a]");
-        let peer_shm02_transport = peer_shm01_manager.get_transport(&peer_shm02).unwrap();
+        let peer_shm02_transport = peer_shm01_manager
+            .get_transport_unicast(&peer_shm02)
+            .await
+            .unwrap();
+        assert!(peer_shm02_transport.is_shm().unwrap());
 
         println!("Transport SHM [2b]");
-        let peer_net01_transport = peer_shm01_manager.get_transport(&peer_net01).unwrap();
+        let peer_net01_transport = peer_shm01_manager
+            .get_transport_unicast(&peer_net01)
+            .await
+            .unwrap();
+        assert!(!peer_net01_transport.is_shm().unwrap());
 
         // Send the message
         println!("Transport SHM [3a]");
@@ -221,30 +255,24 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = "test".into();
-            let payload: ZBuf = sbuf.into();
-            let channel = Channel {
-                priority: Priority::default(),
-                reliability: Reliability::Reliable,
-            };
-            let congestion_control = CongestionControl::Block;
-            let data_info = None;
-            let routing_context = None;
-            let reply_context = None;
-            let attachment = None;
+            let message: NetworkMessage = Push {
+                wire_expr: "test".into(),
+                ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+                ext_tstamp: None,
+                ext_nodeid: NodeIdType::default(),
+                payload: Put {
+                    payload: sbuf.into(),
+                    timestamp: None,
+                    encoding: Encoding::default(),
+                    ext_sinfo: None,
+                    ext_shm: None,
+                    ext_unknown: vec![],
+                }
+                .into(),
+            }
+            .into();
 
-            let message = ZenohMessage::make_data(
-                key,
-                payload,
-                channel,
-                congestion_control,
-                data_info,
-                routing_context,
-                reply_context,
-                attachment,
-            );
-
-            peer_shm02_transport.schedule(message.clone()).unwrap();
+            peer_shm02_transport.schedule(message).unwrap();
         }
 
         // Wait a little bit
@@ -274,30 +302,24 @@ mod tests {
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 
-            let key = "test".into();
-            let payload: ZBuf = sbuf.into();
-            let channel = Channel {
-                priority: Priority::default(),
-                reliability: Reliability::Reliable,
-            };
-            let congestion_control = CongestionControl::Block;
-            let data_info = None;
-            let routing_context = None;
-            let reply_context = None;
-            let attachment = None;
+            let message: NetworkMessage = Push {
+                wire_expr: "test".into(),
+                ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+                ext_tstamp: None,
+                ext_nodeid: NodeIdType::default(),
+                payload: Put {
+                    payload: sbuf.into(),
+                    timestamp: None,
+                    encoding: Encoding::default(),
+                    ext_sinfo: None,
+                    ext_shm: None,
+                    ext_unknown: vec![],
+                }
+                .into(),
+            }
+            .into();
 
-            let message = ZenohMessage::make_data(
-                key,
-                payload,
-                channel,
-                congestion_control,
-                data_info,
-                routing_context,
-                reply_context,
-                attachment,
-            );
-
-            peer_net01_transport.schedule(message.clone()).unwrap();
+            peer_net01_transport.schedule(message).unwrap();
         }
 
         // Wait a little bit
@@ -322,7 +344,7 @@ mod tests {
         ztimeout!(peer_net01_transport.close()).unwrap();
 
         ztimeout!(async {
-            while !peer_shm01_manager.get_transports().is_empty() {
+            while !peer_shm01_manager.get_transports_unicast().await.is_empty() {
                 task::sleep(SLEEP).await;
             }
         });
@@ -347,7 +369,7 @@ mod tests {
         task::sleep(SLEEP).await;
     }
 
-    #[cfg(all(feature = "transport_tcp", feature = "shared-memory"))]
+    #[cfg(feature = "transport_tcp")]
     #[test]
     fn transport_tcp_shm() {
         let _ = env_logger::try_init();
@@ -356,10 +378,22 @@ mod tests {
         });
 
         let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
-        task::block_on(run(&endpoint));
+        task::block_on(run(&endpoint, false));
     }
 
-    #[cfg(all(feature = "transport_ws", feature = "shared-memory"))]
+    #[cfg(feature = "transport_tcp")]
+    #[test]
+    fn transport_tcp_shm_with_lowlatency_transport() {
+        let _ = env_logger::try_init();
+        task::block_on(async {
+            zasync_executor_init!();
+        });
+
+        let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14001).parse().unwrap();
+        task::block_on(run(&endpoint, true));
+    }
+
+    #[cfg(feature = "transport_ws")]
     #[test]
     fn transport_ws_shm() {
         let _ = env_logger::try_init();
@@ -368,6 +402,44 @@ mod tests {
         });
 
         let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14010).parse().unwrap();
-        task::block_on(run(&endpoint));
+        task::block_on(run(&endpoint, false));
+    }
+
+    #[cfg(feature = "transport_ws")]
+    #[test]
+    fn transport_ws_shm_with_lowlatency_transport() {
+        let _ = env_logger::try_init();
+        task::block_on(async {
+            zasync_executor_init!();
+        });
+
+        let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14011).parse().unwrap();
+        task::block_on(run(&endpoint, true));
+    }
+
+    #[cfg(feature = "transport_unixpipe")]
+    #[test]
+    fn transport_unixpipe_shm() {
+        let _ = env_logger::try_init();
+        task::block_on(async {
+            zasync_executor_init!();
+        });
+
+        let endpoint: EndPoint = "unixpipe/transport_unixpipe_shm".parse().unwrap();
+        task::block_on(run(&endpoint, false));
+    }
+
+    #[cfg(feature = "transport_unixpipe")]
+    #[test]
+    fn transport_unixpipe_shm_with_lowlatency_transport() {
+        let _ = env_logger::try_init();
+        task::block_on(async {
+            zasync_executor_init!();
+        });
+
+        let endpoint: EndPoint = "unixpipe/transport_unixpipe_shm_with_lowlatency_transport"
+            .parse()
+            .unwrap();
+        task::block_on(run(&endpoint, true));
     }
 }

@@ -11,17 +11,19 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::common::conduit::TransportChannelRx;
 use super::transport::{TransportMulticastInner, TransportMulticastPeer};
+use crate::common::priority::TransportChannelRx;
 use std::sync::MutexGuard;
+use zenoh_buffers::reader::{HasReader, Reader};
+use zenoh_buffers::ZSlice;
+use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::{zlock, zread};
-#[cfg(feature = "stats")]
-use zenoh_protocol::zenoh::ZenohBody;
-use zenoh_protocol::{
-    core::{Locator, Priority, Reliability, ZInt},
-    transport::{Frame, FramePayload, Join, TransportBody, TransportMessage},
-    zenoh::ZenohMessage,
+use zenoh_link::LinkMulticast;
+use zenoh_protocol::core::{Priority, Reliability};
+use zenoh_protocol::transport::{
+    BatchSize, Close, Fragment, Frame, Join, KeepAlive, TransportBody, TransportSn,
 };
+use zenoh_protocol::{core::Locator, network::NetworkMessage, transport::TransportMessage};
 use zenoh_result::{bail, zerror, ZResult};
 
 /*************************************/
@@ -32,97 +34,17 @@ impl TransportMulticastInner {
     fn trigger_callback(
         &self,
         #[allow(unused_mut)] // shared-memory feature requires mut
-        mut msg: ZenohMessage,
+        mut msg: NetworkMessage,
         peer: &TransportMulticastPeer,
     ) -> ZResult<()> {
-        #[cfg(feature = "stats")]
-        {
-            use zenoh_buffers::SplitBuffer;
-            self.stats.inc_rx_z_msgs(1);
-            match &msg.body {
-                ZenohBody::Data(data) => match data.reply_context {
-                    Some(_) => {
-                        self.stats.inc_rx_z_data_reply_msgs(1);
-                        self.stats
-                            .inc_rx_z_data_reply_payload_bytes(data.payload.len());
-                    }
-                    None => {
-                        self.stats.inc_rx_z_data_msgs(1);
-                        self.stats.inc_rx_z_data_payload_bytes(data.payload.len());
-                    }
-                },
-                ZenohBody::Unit(unit) => match unit.reply_context {
-                    Some(_) => self.stats.inc_rx_z_unit_reply_msgs(1),
-                    None => self.stats.inc_rx_z_unit_msgs(1),
-                },
-                ZenohBody::Pull(_) => self.stats.inc_rx_z_pull_msgs(1),
-                ZenohBody::Query(_) => self.stats.inc_rx_z_query_msgs(1),
-                ZenohBody::Declare(_) => self.stats.inc_rx_z_declare_msgs(1),
-                ZenohBody::LinkStateList(_) => self.stats.inc_rx_z_linkstate_msgs(1),
-            }
-        }
-
         #[cfg(feature = "shared-memory")]
         {
-            let _ = crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr)?;
+            if self.manager.config.multicast.is_shm {
+                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.state.multicast.shm.reader)?;
+            }
         }
 
         peer.handler.handle_message(msg)
-    }
-
-    fn handle_frame(
-        &self,
-        sn: ZInt,
-        payload: FramePayload,
-        mut guard: MutexGuard<'_, TransportChannelRx>,
-        peer: &TransportMulticastPeer,
-    ) -> ZResult<()> {
-        let precedes = guard.sn.precedes(sn)?;
-        if !precedes {
-            log::debug!(
-                "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
-                self.manager.config.zid,
-                sn,
-                guard.sn.next(),
-            );
-            // Drop the fragments if needed
-            if !guard.defrag.is_empty() {
-                guard.defrag.clear();
-            }
-            // Keep reading
-            return Ok(());
-        }
-
-        // Set will always return OK because we have already checked
-        // with precedes() that the sn has the right resolution
-        let _ = guard.sn.set(sn);
-        match payload {
-            FramePayload::Fragment { buffer, is_final } => {
-                if guard.defrag.is_empty() {
-                    let _ = guard.defrag.sync(sn);
-                }
-                guard.defrag.push(sn, buffer)?;
-                if is_final {
-                    // When shared-memory feature is disabled, msg does not need to be mutable
-                    let msg = guard.defrag.defragment().ok_or_else(|| {
-                        zerror!(
-                            "Transport {}: {}. Defragmentation error.",
-                            self.manager.config.zid,
-                            self.locator
-                        )
-                    })?;
-                    self.trigger_callback(msg, peer)
-                } else {
-                    Ok(())
-                }
-            }
-            FramePayload::Messages { mut messages } => {
-                for msg in messages.drain(..) {
-                    self.trigger_callback(msg, peer)?;
-                }
-                Ok(())
-            }
-        }
     }
 
     pub(super) fn handle_join_from_peer(
@@ -134,12 +56,12 @@ impl TransportMulticastInner {
         if join.version != peer.version
             || join.zid != peer.zid
             || join.whatami != peer.whatami
-            || join.sn_resolution != peer.sn_resolution
+            || join.resolution != peer.resolution
             || join.lease != peer.lease
-            || join.is_qos() != peer.is_qos()
+            || join.ext_qos.is_some() != peer.is_qos()
         {
             let e = format!(
-                "Ingoring Join on {} of peer: {}. Inconsistent parameters. Version",
+                "Ingoring Join on {} of peer: {}. Inconsistent parameters.",
                 peer.locator, peer.zid,
             );
             log::debug!("{}", e);
@@ -149,7 +71,12 @@ impl TransportMulticastInner {
         Ok(())
     }
 
-    pub(super) fn handle_join_from_unknown(&self, join: Join, locator: &Locator) -> ZResult<()> {
+    pub(super) fn handle_join_from_unknown(
+        &self,
+        join: Join,
+        locator: &Locator,
+        batch_size: BatchSize,
+    ) -> ZResult<()> {
         if zread!(self.peers).len() >= self.manager.config.multicast.max_sessions {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. Max sessions reached: {}.",
@@ -171,18 +98,29 @@ impl TransportMulticastInner {
             return Ok(());
         }
 
-        if join.sn_resolution > self.manager.config.sn_resolution {
+        if join.resolution != self.manager.config.resolution {
             log::debug!(
-                "Ingoring Join on {} from peer: {}. Unsupported SN resolution: {}. Expected: <= {}.",
+                "Ingoring Join on {} from peer: {}. Unsupported SN resolution: {:?}. Expected: {:?}.",
                 locator,
                 join.zid,
-                join.sn_resolution,
-                self.manager.config.sn_resolution,
+                join.resolution,
+                self.manager.config.resolution,
             );
             return Ok(());
         }
 
-        if !self.manager.config.multicast.is_qos && join.is_qos() {
+        if join.batch_size != batch_size {
+            log::debug!(
+                "Ingoring Join on {} from peer: {}. Unsupported Batch Size: {:?}. Expected: {:?}.",
+                locator,
+                join.zid,
+                join.batch_size,
+                batch_size,
+            );
+            return Ok(());
+        }
+
+        if !self.manager.config.multicast.is_qos && join.ext_qos.is_some() {
             log::debug!(
                 "Ingoring Join on {} from peer: {}. QoS is not supported.",
                 locator,
@@ -191,59 +129,177 @@ impl TransportMulticastInner {
             return Ok(());
         }
 
-        let _ = self.new_peer(locator, join);
+        self.new_peer(locator, join)
+    }
+
+    fn handle_frame(&self, frame: Frame, peer: &TransportMulticastPeer) -> ZResult<()> {
+        let Frame {
+            reliability,
+            sn,
+            ext_qos,
+            mut payload,
+        } = frame;
+
+        let priority = ext_qos.priority();
+        let c = if self.is_qos() {
+            &peer.priority_rx[priority as usize]
+        } else if priority == Priority::default() {
+            &peer.priority_rx[0]
+        } else {
+            bail!(
+                "Transport: {}. Peer: {}. Unknown priority: {:?}.",
+                self.manager.config.zid,
+                peer.zid,
+                priority
+            );
+        };
+
+        let mut guard = match reliability {
+            Reliability::Reliable => zlock!(c.reliable),
+            Reliability::BestEffort => zlock!(c.best_effort),
+        };
+
+        self.verify_sn(sn, &mut guard)?;
+
+        for msg in payload.drain(..) {
+            self.trigger_callback(msg, peer)?;
+        }
+        Ok(())
+    }
+
+    fn handle_fragment(&self, fragment: Fragment, peer: &TransportMulticastPeer) -> ZResult<()> {
+        let Fragment {
+            reliability,
+            more,
+            sn,
+            ext_qos,
+            payload,
+        } = fragment;
+
+        let priority = ext_qos.priority();
+        let c = if self.is_qos() {
+            &peer.priority_rx[priority as usize]
+        } else if priority == Priority::default() {
+            &peer.priority_rx[0]
+        } else {
+            bail!(
+                "Transport: {}. Peer: {}. Unknown priority: {:?}.",
+                self.manager.config.zid,
+                peer.zid,
+                priority
+            );
+        };
+
+        let mut guard = match reliability {
+            Reliability::Reliable => zlock!(c.reliable),
+            Reliability::BestEffort => zlock!(c.best_effort),
+        };
+
+        self.verify_sn(sn, &mut guard)?;
+
+        if guard.defrag.is_empty() {
+            let _ = guard.defrag.sync(sn);
+        }
+        guard.defrag.push(sn, payload)?;
+        if !more {
+            // When shared-memory feature is disabled, msg does not need to be mutable
+            let msg = guard.defrag.defragment().ok_or_else(|| {
+                zerror!(
+                    "Transport: {}. Peer: {}. Priority: {:?}. Defragmentation error.",
+                    self.manager.config.zid,
+                    peer.zid,
+                    priority
+                )
+            })?;
+            return self.trigger_callback(msg, peer);
+        }
 
         Ok(())
     }
 
-    pub(super) fn receive_message(&self, msg: TransportMessage, locator: &Locator) -> ZResult<()> {
-        // Process the received message
-        let r_guard = zread!(self.peers);
-        match r_guard.get(locator) {
-            Some(peer) => {
-                peer.active();
-
-                match msg.body {
-                    TransportBody::Frame(Frame {
-                        channel,
-                        sn,
-                        payload,
-                    }) => {
-                        let c = if self.is_qos() {
-                            &peer.conduit_rx[channel.priority as usize]
-                        } else if channel.priority == Priority::default() {
-                            &peer.conduit_rx[0]
-                        } else {
-                            bail!(
-                                "Transport {}: {}. Unknown conduit {:?} from {}.",
-                                self.manager.config.zid,
-                                self.locator,
-                                channel.priority,
-                                peer.locator
-                            );
-                        };
-
-                        let guard = match channel.reliability {
-                            Reliability::Reliable => zlock!(c.reliable),
-                            Reliability::BestEffort => zlock!(c.best_effort),
-                        };
-                        self.handle_frame(sn, payload, guard, peer)
-                    }
-                    TransportBody::Join(join) => self.handle_join_from_peer(join, peer),
-                    TransportBody::Close(close) => {
-                        drop(r_guard);
-                        self.del_peer(locator, close.reason)
-                    }
-                    _ => Ok(()),
-                }
+    fn verify_sn(
+        &self,
+        sn: TransportSn,
+        guard: &mut MutexGuard<'_, TransportChannelRx>,
+    ) -> ZResult<()> {
+        let precedes = guard.sn.precedes(sn)?;
+        if !precedes {
+            log::debug!(
+                "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
+                self.manager.config.zid,
+                sn,
+                guard.sn.next()
+            );
+            // Drop the fragments if needed
+            if !guard.defrag.is_empty() {
+                guard.defrag.clear();
             }
-            None => {
-                drop(r_guard);
-                match msg.body {
-                    TransportBody::Join(join) => self.handle_join_from_unknown(join, locator),
-                    _ => Ok(()),
+            // Keep reading
+            return Ok(());
+        }
+
+        // Set will always return OK because we have already checked
+        // with precedes() that the sn has the right resolution
+        let _ = guard.sn.set(sn);
+
+        Ok(())
+    }
+
+    pub(super) fn read_messages(
+        &self,
+        mut zslice: ZSlice,
+        link: &LinkMulticast,
+        batch_size: BatchSize,
+        locator: &Locator,
+        #[cfg(feature = "stats")] transport: &TransportMulticastInner,
+    ) -> ZResult<()> {
+        let codec = Zenoh080::new();
+        let mut reader = zslice.reader();
+        while reader.can_read() {
+            let msg: TransportMessage = codec
+                .read(&mut reader)
+                .map_err(|_| zerror!("{}: decoding error", link))?;
+
+            log::trace!("Received: {:?}", msg);
+
+            #[cfg(feature = "stats")]
+            {
+                transport.stats.inc_rx_t_msgs(1);
+            }
+
+            let r_guard = zread!(self.peers);
+            match r_guard.get(locator) {
+                Some(peer) => {
+                    peer.active();
+                    match msg.body {
+                        TransportBody::Frame(msg) => self.handle_frame(msg, peer)?,
+                        TransportBody::Fragment(fragment) => {
+                            self.handle_fragment(fragment, peer)?
+                        }
+                        TransportBody::Join(join) => self.handle_join_from_peer(join, peer)?,
+                        TransportBody::KeepAlive(KeepAlive { .. }) => {}
+                        TransportBody::Close(Close { reason, .. }) => {
+                            drop(r_guard);
+                            self.del_peer(locator, reason)?;
+                        }
+                        _ => {
+                            log::debug!(
+                                "Transport: {}. Message handling not implemented: {:?}",
+                                self.manager.config.zid,
+                                msg
+                            );
+                        }
+                    }
+                }
+                None => {
+                    drop(r_guard);
+                    if let TransportBody::Join(join) = msg.body {
+                        self.handle_join_from_unknown(join, locator, batch_size)?;
+                    }
                 }
             }
         }
+
+        Ok(())
     }
 }

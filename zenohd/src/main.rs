@@ -16,10 +16,9 @@ use clap::{ArgMatches, Command};
 use futures::future;
 use git_version::git_version;
 use std::collections::HashSet;
-use zenoh::config::{
-    Config, EndPoint, ModeDependentValue, PermissionsConf, PluginLoad, ValidatedMap,
-};
+use zenoh::config::{Config, ModeDependentValue, PermissionsConf, PluginLoad, ValidatedMap};
 use zenoh::plugins::PluginsManager;
+use zenoh::prelude::{EndPoint, WhatAmI};
 use zenoh::runtime::{AdminSpace, Runtime};
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
@@ -159,9 +158,7 @@ fn config_from_args(args: &ArgMatches) -> Config {
         });
 
     if config.mode().is_none() {
-        config
-            .set_mode(Some(zenoh::config::WhatAmI::Router))
-            .unwrap();
+        config.set_mode(Some(WhatAmI::Router)).unwrap();
     }
     if args.occurrences_of("id") > 0 {
         config

@@ -11,72 +11,63 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
     common::imsg,
-    core::ZenohId,
-    transport::{tmsg, KeepAlive},
+    transport::{
+        id,
+        keepalive::{flag, KeepAlive},
+    },
 };
 
-impl<W> WCodec<&KeepAlive, &mut W> for Zenoh060
+impl<W> WCodec<&KeepAlive, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
-    fn write(self, writer: &mut W, x: &KeepAlive) -> Self::Output {
+    fn write(self, writer: &mut W, _x: &KeepAlive) -> Self::Output {
         // Header
-        let mut header = tmsg::id::KEEP_ALIVE;
-        if x.zid.is_some() {
-            header |= tmsg::flag::I;
-        }
+        let header = id::KEEP_ALIVE;
         self.write(&mut *writer, header)?;
-
-        // Body
-        if let Some(p) = x.zid.as_ref() {
-            self.write(&mut *writer, p)?;
-        }
         Ok(())
     }
 }
 
-impl<R> RCodec<KeepAlive, &mut R> for Zenoh060
+impl<R> RCodec<KeepAlive, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<KeepAlive, Self::Error> {
-        let codec = Zenoh060Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<KeepAlive, &mut R> for Zenoh060Header
+impl<R> RCodec<KeepAlive, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<KeepAlive, Self::Error> {
-        if imsg::mid(self.header) != tmsg::id::KEEP_ALIVE {
+        if imsg::mid(self.header) != id::KEEP_ALIVE {
             return Err(DidntRead);
         }
 
-        let zid = if imsg::has_flag(self.header, tmsg::flag::I) {
-            let zid: ZenohId = self.codec.read(&mut *reader)?;
-            Some(zid)
-        } else {
-            None
-        };
+        // Extensions
+        let has_ext = imsg::has_flag(self.header, flag::Z);
+        if has_ext {
+            extension::skip_all(reader, "Unknown KeepAlive ext")?;
+        }
 
-        Ok(KeepAlive { zid })
+        Ok(KeepAlive)
     }
 }

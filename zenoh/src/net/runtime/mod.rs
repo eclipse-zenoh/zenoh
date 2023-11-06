@@ -37,10 +37,8 @@ use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
 use zenoh_link::{EndPoint, Link};
-use zenoh_protocol::{
-    core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId},
-    zenoh::{ZenohBody, ZenohMessage},
-};
+use zenoh_protocol::core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId};
+use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::{bail, ZResult};
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::{
@@ -278,25 +276,20 @@ pub(super) struct RuntimeSession {
 }
 
 impl TransportPeerEventHandler for RuntimeSession {
-    fn handle_message(&self, mut msg: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
         // critical path shortcut
-        if let ZenohBody::Data(data) = msg.body {
-            if data.reply_context.is_none() {
-                let face = &self.main_handler.face.state;
-                full_reentrant_route_data(
-                    &self.main_handler.tables.tables,
-                    face,
-                    &data.key,
-                    msg.channel,
-                    data.congestion_control,
-                    data.data_info,
-                    data.payload,
-                    msg.routing_context,
-                );
-                return Ok(());
-            } else {
-                msg.body = ZenohBody::Data(data);
-            }
+        if let NetworkBody::Push(data) = msg.body {
+            let face = &self.main_handler.face.state;
+
+            full_reentrant_route_data(
+                &self.main_handler.tables.tables,
+                face,
+                &data.wire_expr,
+                data.ext_qos,
+                data.payload,
+                data.ext_nodeid.node_id.into(),
+            );
+            return Ok(());
         }
 
         self.main_handler.handle_message(msg)
@@ -381,7 +374,7 @@ pub(super) struct RuntimeMuticastSession {
 }
 
 impl TransportPeerEventHandler for RuntimeMuticastSession {
-    fn handle_message(&self, msg: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
         self.main_handler.handle_message(msg)
     }
 

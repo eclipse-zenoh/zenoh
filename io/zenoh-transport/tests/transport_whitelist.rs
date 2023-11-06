@@ -17,7 +17,7 @@ use zenoh_core::zasync_executor_init;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{EndPoint, ZenohId},
-    zenoh::ZenohMessage,
+    network::NetworkMessage,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -58,7 +58,7 @@ impl TransportEventHandler for SHRouter {
 pub struct SCRouter;
 
 impl TransportPeerEventHandler for SCRouter {
-    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
 
@@ -87,11 +87,11 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the listener on the router
     for e in endpoints.iter() {
         println!("Listener endpoint: {e}");
-        let res = ztimeout!(router_manager.add_listener(e.clone()));
+        let res = ztimeout!(router_manager.add_listener_unicast(e.clone()));
         assert!(res.is_err());
 
         println!("Open endpoint: {e}");
-        let res = ztimeout!(router_manager.open_transport(e.clone()));
+        let res = ztimeout!(router_manager.open_transport_unicast(e.clone()));
         assert!(res.is_err());
     }
 
@@ -110,12 +110,12 @@ async fn run(endpoints: &[EndPoint]) {
     // Create the listener on the router
     for e in endpoints.iter() {
         println!("Listener endpoint: {e}");
-        let _ = ztimeout!(router_manager.add_listener(e.clone())).unwrap();
+        let _ = ztimeout!(router_manager.add_listener_unicast(e.clone())).unwrap();
 
         task::sleep(SLEEP).await;
 
         println!("Open endpoint: {e}");
-        let _ = ztimeout!(router_manager.open_transport(e.clone())).unwrap();
+        let _ = ztimeout!(router_manager.open_transport_unicast(e.clone())).unwrap();
 
         task::sleep(SLEEP).await;
     }
@@ -133,6 +133,24 @@ fn transport_whitelist_tcp() {
     let endpoints: Vec<EndPoint> = vec![
         format!("tcp/127.0.0.1:{}", 17000).parse().unwrap(),
         format!("tcp/[::1]:{}", 17001).parse().unwrap(),
+    ];
+    // Run
+    task::block_on(run(&endpoints));
+}
+
+#[cfg(feature = "transport_unixpipe")]
+#[test]
+#[ignore]
+fn transport_whitelist_unixpipe() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locators
+    let endpoints: Vec<EndPoint> = vec![
+        "unixpipe/transport_whitelist_unixpipe".parse().unwrap(),
+        "unixpipe/transport_whitelist_unixpipe2".parse().unwrap(),
     ];
     // Run
     task::block_on(run(&endpoints));

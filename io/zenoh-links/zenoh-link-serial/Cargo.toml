@@ -39,7 +39,6 @@ log = { workspace = true }
 tokio = { workspace = true, features = ["io-std", "macros", "net", "rt-multi-thread", "time", "io-util"] }
 uuid = { workspace = true, default-features = true }
 z-serial = { workspace = true }
-zenoh-cfg-properties = { workspace = true }
 zenoh-collections = { workspace = true }
 zenoh-config = { workspace = true }
 zenoh-core = { workspace = true }

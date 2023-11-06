@@ -69,12 +69,22 @@ impl<const N: usize> ZSliceBuffer for [u8; N] {
 /*************************************/
 /*               ZSLICE              */
 /*************************************/
+#[cfg(feature = "shared-memory")]
+#[derive(Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum ZSliceKind {
+    Raw = 0,
+    ShmPtr = 1,
+}
+
 /// A clonable wrapper to a contiguous slice of bytes.
 #[derive(Clone)]
 pub struct ZSlice {
-    pub buf: Arc<dyn ZSliceBuffer>,
+    pub(crate) buf: Arc<dyn ZSliceBuffer>,
     pub(crate) start: usize,
     pub(crate) end: usize,
+    #[cfg(feature = "shared-memory")]
+    pub kind: ZSliceKind,
 }
 
 impl ZSlice {
@@ -83,39 +93,62 @@ impl ZSlice {
         start: usize,
         end: usize,
     ) -> Result<ZSlice, Arc<dyn ZSliceBuffer>> {
-        if end <= buf.as_slice().len() {
-            Ok(ZSlice { buf, start, end })
+        if start <= end && end <= buf.as_slice().len() {
+            Ok(ZSlice {
+                buf,
+                start,
+                end,
+                #[cfg(feature = "shared-memory")]
+                kind: ZSliceKind::Raw,
+            })
         } else {
             Err(buf)
         }
     }
 
     #[inline]
-    pub fn range(&self) -> Range<usize> {
+    #[must_use]
+    pub fn downcast_ref<T>(&self) -> Option<&T>
+    where
+        T: Any,
+    {
+        self.buf.as_any().downcast_ref::<T>()
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn range(&self) -> Range<usize> {
         self.start..self.end
     }
 
     #[inline]
-    pub fn len(&self) -> usize {
+    #[must_use]
+    pub const fn len(&self) -> usize {
         self.end - self.start
     }
 
     #[inline]
-    pub fn is_empty(&self) -> bool {
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
     #[inline]
+    #[must_use]
     pub fn as_slice(&self) -> &[u8] {
-        &self.buf.as_slice()[self.range()]
+        // SAFETY: bounds checks are performed at `ZSlice` construction via `make()` or `subslice()`.
+        crate::unsafe_slice!(self.buf.as_slice(), self.range())
     }
 
-    pub(crate) fn new_sub_slice(&self, start: usize, end: usize) -> Option<ZSlice> {
-        if end <= self.len() {
+    #[must_use]
+    pub fn subslice(&self, start: usize, end: usize) -> Option<ZSlice> {
+        if start <= end && end <= self.len() {
             Some(ZSlice {
                 buf: self.buf.clone(),
                 start: self.start + start,
                 end: self.start + end,
+                #[cfg(feature = "shared-memory")]
+                kind: self.kind,
             })
         } else {
             None
@@ -133,7 +166,7 @@ impl Deref for ZSlice {
 
 impl AsRef<[u8]> for ZSlice {
     fn as_ref(&self) -> &[u8] {
-        self.deref()
+        self
     }
 }
 
@@ -165,7 +198,7 @@ impl Index<RangeFull> for ZSlice {
     type Output = [u8];
 
     fn index(&self, _range: RangeFull) -> &Self::Output {
-        self.deref()
+        self
     }
 }
 
@@ -220,7 +253,13 @@ where
 {
     fn from(buf: Arc<T>) -> Self {
         let end = buf.as_slice().len();
-        Self { buf, start: 0, end }
+        Self {
+            buf,
+            start: 0,
+            end,
+            #[cfg(feature = "shared-memory")]
+            kind: ZSliceKind::Raw,
+        }
     }
 }
 
@@ -229,12 +268,7 @@ where
     T: ZSliceBuffer + 'static,
 {
     fn from(buf: T) -> Self {
-        let end = buf.as_slice().len();
-        Self {
-            buf: Arc::new(buf),
-            start: 0,
-            end,
-        }
+        Self::from(Arc::new(buf))
     }
 }
 
@@ -276,7 +310,7 @@ impl Reader for &mut ZSlice {
     }
 
     fn read_zslice(&mut self, len: usize) -> Result<ZSlice, DidntRead> {
-        let res = self.new_sub_slice(0, len).ok_or(DidntRead)?;
+        let res = self.subslice(0, len).ok_or(DidntRead)?;
         self.start += len;
         Ok(res)
     }

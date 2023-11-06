@@ -23,11 +23,26 @@ on:
       runtests:
         description: "run tests"
         type: boolean
-      dockerhub:
-        description: "publish to dockerhub"
-        type: boolean
       doc:
         description: "generate doc"
+        type: boolean
+      build:
+        description: "build"
+        type: boolean
+      publish:
+        description: "publish"
+        type: boolean
+      githubrelease:
+        description: "publish as github release"
+        type: boolean
+      eclipse:
+        description: "publish to download.eclipse.org/zenoh"
+        type: boolean
+      cratesio:
+        description: "publish to crates.io"
+        type: boolean
+      dockerhub:
+        description: "publish to dockerhub"
         type: boolean
       features:
         description: "build with specified features (comma separated, no space)"
@@ -48,6 +63,9 @@ jobs:
         with:
           command: fmt
           args: -- --check
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
       - name: Clippy check
         uses: actions-rs/cargo@v1
         with:
@@ -116,19 +134,25 @@ jobs:
         run: rustup show
       - name: Install nextest
         run: cargo install cargo-nextest --locked
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+
       - name: Run tests
         uses: actions-rs/cargo@v1
         with:
           command: nextest
           args: run --release --features=${{ github.event.inputs.features}} --verbose
         env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
+
       - name: Run doctests
         uses: actions-rs/cargo@v1
         with:
           command: test
           args: --release --features=${{ github.event.inputs.features}} --doc
         env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
   doc:
@@ -142,16 +166,18 @@ jobs:
       - name: Install Rust toolchain nightly for docs gen
         run: rustup toolchain install nightly
       - name: generate doc
+        uses: actions-rs/cargo@v1
         env:
           RUSTDOCFLAGS: -Dwarnings
-        uses: actions-rs/cargo@v1
         with:
           toolchain: nightly
           command: rustdoc
-          args: --manifest-path ./zenoh/Cargo.toml --lib -Zrustdoc-map --features ${{ github.event.inputs.features}} -Z unstable-options --config build.rustdocflags='["-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--disable-per-crate-search", "--extern-html-root-takes-precedence"]' -Zunstable-options -Zrustdoc-scrape-examples -j3
+          # NOTE: force 'unstable' feature for doc generation, as forced for docs.rs build in zenoh/Cargo.toml
+          args: --manifest-path ./zenoh/Cargo.toml --lib -Zrustdoc-map --features unstable -Z unstable-options --config build.rustdocflags='["-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--disable-per-crate-search", "--extern-html-root-takes-precedence"]' -Zunstable-options -Zrustdoc-scrape-examples -j3
 
   builds:
     name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
+    if: ${{ !(github.event.inputs.build == 'false') }}
     needs: checks
     runs-on: ${{ matrix.job.os }}
     strategy:
@@ -247,6 +273,8 @@ jobs:
         with:
           command: deb
           args: --no-build --target=${{ matrix.job.target }} -p zenohd
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse          
 
       - name: Debian package - zenoh-plugin-storage-manager
         if: contains(matrix.job.target, '-linux-gnu')
@@ -254,6 +282,8 @@ jobs:
         with:
           command: deb
           args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-storage-manager
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse          
 
       - name: Debian package - zenoh-plugin-rest
         if: contains(matrix.job.target, '-linux-gnu')
@@ -261,6 +291,8 @@ jobs:
         with:
           command: deb
           args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-rest
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse          
 
       - name: Packaging
         id: package
@@ -314,7 +346,7 @@ jobs:
 
   publication:
     name: Release publication
-    if: ${{ needs.checks.outputs.IS_RELEASE == 'true' && !failure() }}
+    if: ${{ (needs.checks.outputs.IS_RELEASE == 'true' || github.event.inputs.publish == 'true') && !failure() }}
     needs: [checks, builds, tests, doc]
     runs-on: ubuntu-latest
     steps:
@@ -323,10 +355,12 @@ jobs:
         with:
           path: ARTIFACTS
       - name: Publish as github release
+        if: ${{ !(github.event.inputs.githubrelease == 'false') }}
         uses: softprops/action-gh-release@v1
         with:
           files: ARTIFACTS/*/*.*
       - name: Publish to download.eclipse.org/zenoh
+        if: ${{ !(github.event.inputs.eclipse == 'false') }}
         env:
           SSH_TARGET: genie.zenoh@projects-storage.eclipse.org
           ECLIPSE_BASE_DIR: /home/data/httpd/download.eclipse.org/zenoh
@@ -351,13 +385,18 @@ jobs:
           ssh-add -D
       - uses: actions/checkout@v2
       - name: Install Rust toolchain
+        if: ${{ !(github.event.inputs.cratesio == 'false') }}
         run: rustup show
       - name: Check crates
+        if: ${{ !(github.event.inputs.cratesio == 'false') }}
         shell: bash
         run: .github/workflows/crates_check.sh
       - name: Publish to crates.io
+        if: ${{ !(github.event.inputs.cratesio == 'false') }}
         shell: bash
-        run: .github/workflows/crates_publish.sh ${{ secrets.CRATES_IO_TOKEN }}
+        run: |
+          set +x
+          .github/workflows/crates_publish.sh ${{ secrets.CRATES_IO_TOKEN }}
       - name: Cancel workflow if fail # thus Docker job be interrupted
         if: failure()
         uses: andymckay/cancel-action@0.2

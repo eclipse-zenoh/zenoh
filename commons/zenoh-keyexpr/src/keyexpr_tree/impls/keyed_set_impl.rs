@@ -12,11 +12,21 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use core::hash::Hasher;
+#[cfg(not(feature = "std"))]
+// `SipHasher` is deprecated in favour of a symbol that only exists in `std`
+#[allow(deprecated)]
+use core::hash::SipHasher as DefaultHasher;
+#[cfg(feature = "std")]
+use std::collections::hash_map::DefaultHasher;
+
 use crate::keyexpr_tree::*;
 use keyed_set::{KeyExtractor, KeyedSet};
 
-pub struct KeyedSetProvider;
-impl<T: 'static> IChildrenProvider<T> for KeyedSetProvider {
+pub struct KeyedSetProvider<Hash: Hasher + Default + 'static = DefaultHasher>(
+    core::marker::PhantomData<Hash>,
+);
+impl<T: 'static, Hash: Hasher + Default + 'static> IChildrenProvider<T> for KeyedSetProvider<Hash> {
     type Assoc = KeyedSet<T, ChunkExtractor>;
 }
 #[derive(Debug, Default, Clone, Copy)]

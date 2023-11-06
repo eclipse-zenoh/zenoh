@@ -19,7 +19,7 @@ use socket2::{Domain, Protocol, Socket, Type};
 use std::sync::Arc;
 use std::{borrow::Cow, fmt};
 use zenoh_link_commons::{LinkManagerMulticastTrait, LinkMulticast, LinkMulticastTrait};
-use zenoh_protocol::core::{EndPoint, Locator};
+use zenoh_protocol::core::{Config, EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 
 pub struct LinkMulticastUdp {
@@ -154,22 +154,16 @@ impl LinkManagerMulticastUdp {
     async fn new_link_inner(
         &self,
         mcast_addr: &SocketAddr,
-        iface: Option<&str>,
+        config: Config<'_>,
     ) -> ZResult<(UdpSocket, UdpSocket, SocketAddr)> {
         let domain = match mcast_addr.ip() {
             IpAddr::V4(_) => Domain::IPV4,
             IpAddr::V6(_) => Domain::IPV6,
         };
 
-        // Defaults
-        let _default_ipv4_iface = Ipv4Addr::UNSPECIFIED;
-        let default_ipv6_iface = 0;
-        let default_ipv4_addr = Ipv4Addr::UNSPECIFIED;
-        let default_ipv6_addr = Ipv6Addr::UNSPECIFIED;
-
         // Get default iface address to bind the socket on if provided
         let mut iface_addr: Option<IpAddr> = None;
-        if let Some(iface) = iface {
+        if let Some(iface) = config.get(UDP_MULTICAST_IFACE) {
             iface_addr = match iface.parse() {
                 Ok(addr) => Some(addr),
                 Err(_) => zenoh_util::net::get_unicast_addresses_of_interface(iface)?
@@ -206,8 +200,8 @@ impl LinkManagerMulticastUdp {
                 match iface {
                     Some(iface) => iface,
                     None => match mcast_addr.ip() {
-                        IpAddr::V4(_) => IpAddr::V4(default_ipv4_addr),
-                        IpAddr::V6(_) => IpAddr::V6(default_ipv6_addr),
+                        IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+                        IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::UNSPECIFIED),
                     },
                 }
             }
@@ -223,20 +217,10 @@ impl LinkManagerMulticastUdp {
                     .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
             }
             IpAddr::V6(_) => match zenoh_util::net::get_index_of_interface(local_addr) {
-                Ok(Some(idx)) => ucast_sock
+                Ok(idx) => ucast_sock
                     .set_multicast_if_v6(idx)
                     .map_err(|e| zerror!("{}: {}", mcast_addr, e))?,
-                Ok(None) => bail!(
-                    "{}: Unable to find index of network interface for local id address {}",
-                    mcast_addr,
-                    local_addr
-                ),
-                Err(e) => bail!(
-                    "{}: Unable to find index of network interface for local id address {}: {}",
-                    mcast_addr,
-                    local_addr,
-                    e
-                ),
+                Err(e) => bail!("{}: {}", mcast_addr, e),
             },
         }
 
@@ -252,37 +236,57 @@ impl LinkManagerMulticastUdp {
         mcast_sock
             .set_reuse_address(true)
             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+        #[cfg(target_family = "unix")]
+        {
+            mcast_sock
+                .set_reuse_port(true)
+                .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+        }
 
-        // Bind the socket
-        let default_mcast_addr = {
-            #[cfg(unix)]
-            {
-                match mcast_addr.ip() {
-                    IpAddr::V4(ip4) => IpAddr::V4(ip4),
-                    IpAddr::V6(_) => local_addr,
-                }
-            } // See UNIX Network Programmping p.212
-            #[cfg(windows)]
-            {
-                match mcast_addr.ip() {
-                    IpAddr::V4(_) => IpAddr::V4(default_ipv4_addr),
-                    IpAddr::V6(_) => IpAddr::V6(default_ipv6_addr),
-                }
-            }
+        // Bind the socket: let's bing to the unspecified address so we can join and read
+        // from multiple multicast groups.
+        let bind_mcast_addr = match mcast_addr.ip() {
+            IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+            IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::UNSPECIFIED),
         };
         mcast_sock
-            .bind(&SocketAddr::new(default_mcast_addr, mcast_addr.port()).into())
+            .bind(&SocketAddr::new(bind_mcast_addr, mcast_addr.port()).into())
             .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
 
         // Join the multicast group
+        let join = config.values(UDP_MULTICAST_JOIN);
         match mcast_addr.ip() {
             IpAddr::V4(dst_ip4) => match local_addr {
-                IpAddr::V4(src_ip4) => mcast_sock.join_multicast_v4(&dst_ip4, &src_ip4),
-                IpAddr::V6(_) => panic!(),
+                IpAddr::V4(src_ip4) => {
+                    // Join default multicast group
+                    mcast_sock
+                        .join_multicast_v4(&dst_ip4, &src_ip4)
+                        .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+                    // Join any additional multicast group
+                    for g in join {
+                        let g: Ipv4Addr =
+                            g.parse().map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+                        mcast_sock
+                            .join_multicast_v4(&g, &src_ip4)
+                            .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+                    }
+                }
+                IpAddr::V6(src_ip6) => bail!("{}: unexepcted IPv6 source address", src_ip6),
             },
-            IpAddr::V6(dst_ip6) => mcast_sock.join_multicast_v6(&dst_ip6, default_ipv6_iface),
-        }
-        .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+            IpAddr::V6(dst_ip6) => {
+                // Join default multicast group
+                mcast_sock
+                    .join_multicast_v6(&dst_ip6, 0)
+                    .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+                // Join any additional multicast group
+                for g in join {
+                    let g: Ipv6Addr = g.parse().map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+                    mcast_sock
+                        .join_multicast_v6(&g, 0)
+                        .map_err(|e| zerror!("{}: {}", mcast_addr, e))?;
+                }
+            }
+        };
 
         // Build the async_std multicast UdpSocket
         let mcast_sock: UdpSocket = std::net::UdpSocket::from(mcast_sock).into();
@@ -306,10 +310,7 @@ impl LinkManagerMulticastTrait for LinkManagerMulticastUdp {
 
         let mut errs: Vec<ZError> = vec![];
         for maddr in mcast_addrs {
-            match self
-                .new_link_inner(&maddr, endpoint.config().get(UDP_MULTICAST_IFACE))
-                .await
-            {
+            match self.new_link_inner(&maddr, endpoint.config()).await {
                 Ok((mcast_sock, ucast_sock, ucast_addr)) => {
                     let link = Arc::new(LinkMulticastUdp::new(
                         ucast_addr, ucast_sock, maddr, mcast_sock,

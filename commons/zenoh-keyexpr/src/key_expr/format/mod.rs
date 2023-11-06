@@ -204,7 +204,9 @@ impl<'s, Storage: IKeFormatStorage<'s> + 's> TryFrom<&'s str> for KeFormat<'s, S
                 i += 1;
             }
         }
-        let IterativeConstructor::Complete(storage) = storage else {bail!("Couldn't construct KeFormat because its Storage construction was only partial after adding the last segment.")};
+        let IterativeConstructor::Complete(storage) = storage else {
+            bail!("Couldn't construct KeFormat because its Storage construction was only partial after adding the last segment.")
+        };
         let segments = storage.segments();
         for i in 0..(segments.len() - 1) {
             if segments[(i + 1)..]
@@ -382,7 +384,9 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
     pub fn set<S: Display>(&mut self, id: &str, value: S) -> Result<&mut Self, FormatSetError> {
         use core::fmt::Write;
         let segments = self.format.storage.segments();
-        let Some(i) = segments.iter().position(|s|s.spec.id() == id) else {return Err(FormatSetError::InvalidId)};
+        let Some(i) = segments.iter().position(|s| s.spec.id() == id) else {
+            return Err(FormatSetError::InvalidId);
+        };
         if let Some((start, end)) = self.values.as_ref()[i] {
             let end = end.get();
             let shift = end - start;
@@ -398,7 +402,9 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
         match (|| {
             let end = self.buffer.len();
             if !(end == start && pattern.as_str() == "**") {
-                let Ok(ke) = keyexpr::new(&self.buffer[start..end]) else {return Err(())};
+                let Ok(ke) = keyexpr::new(&self.buffer[start..end]) else {
+                    return Err(());
+                };
                 if end > u32::MAX as usize || !pattern.includes(ke) {
                     return Err(());
                 }

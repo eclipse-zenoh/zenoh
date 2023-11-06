@@ -12,85 +12,160 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 mod close;
+mod fragment;
 mod frame;
 mod init;
 mod join;
 mod keepalive;
+mod oam;
 mod open;
 
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{BacktrackableReader, DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
-    common::{imsg, Attachment},
+    common::{imsg, ZExtZ64},
+    network::NetworkMessage,
     transport::*,
 };
 
+// TransportMessageLowLatency
+impl<W> WCodec<&TransportMessageLowLatency, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &TransportMessageLowLatency) -> Self::Output {
+        match &x.body {
+            TransportBodyLowLatency::Network(b) => self.write(&mut *writer, b),
+            TransportBodyLowLatency::KeepAlive(b) => self.write(&mut *writer, b),
+            TransportBodyLowLatency::Close(b) => self.write(&mut *writer, b),
+        }
+    }
+}
+
+impl<R> RCodec<TransportMessageLowLatency, &mut R> for Zenoh080
+where
+    R: Reader + BacktrackableReader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<TransportMessageLowLatency, Self::Error> {
+        let header: u8 = self.read(&mut *reader)?;
+
+        let codec = Zenoh080Header::new(header);
+        let body = match imsg::mid(codec.header) {
+            id::KEEP_ALIVE => TransportBodyLowLatency::KeepAlive(codec.read(&mut *reader)?),
+            id::CLOSE => TransportBodyLowLatency::Close(codec.read(&mut *reader)?),
+            _ => {
+                let nw: NetworkMessage = codec.read(&mut *reader)?;
+                TransportBodyLowLatency::Network(nw)
+            }
+        };
+
+        Ok(TransportMessageLowLatency { body })
+    }
+}
+
 // TransportMessage
-impl<W> WCodec<&TransportMessage, &mut W> for Zenoh060
+impl<W> WCodec<&TransportMessage, &mut W> for Zenoh080
 where
     W: Writer,
 {
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &TransportMessage) -> Self::Output {
-        if let Some(a) = x.attachment.as_ref() {
-            self.write(&mut *writer, a)?;
-        }
         match &x.body {
+            TransportBody::Frame(b) => self.write(&mut *writer, b),
+            TransportBody::Fragment(b) => self.write(&mut *writer, b),
+            TransportBody::KeepAlive(b) => self.write(&mut *writer, b),
             TransportBody::InitSyn(b) => self.write(&mut *writer, b),
             TransportBody::InitAck(b) => self.write(&mut *writer, b),
             TransportBody::OpenSyn(b) => self.write(&mut *writer, b),
             TransportBody::OpenAck(b) => self.write(&mut *writer, b),
-            TransportBody::Join(b) => self.write(&mut *writer, b),
             TransportBody::Close(b) => self.write(&mut *writer, b),
-            TransportBody::KeepAlive(b) => self.write(&mut *writer, b),
-            TransportBody::Frame(b) => self.write(&mut *writer, b),
+            TransportBody::OAM(b) => self.write(&mut *writer, b),
+            TransportBody::Join(b) => self.write(&mut *writer, b),
         }
     }
 }
 
-impl<R> RCodec<TransportMessage, &mut R> for Zenoh060
+impl<R> RCodec<TransportMessage, &mut R> for Zenoh080
 where
     R: Reader + BacktrackableReader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<TransportMessage, Self::Error> {
-        let mut codec = Zenoh060Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
-        let mut attachment: Option<Attachment> = None;
-        if imsg::mid(codec.header) == tmsg::id::ATTACHMENT {
-            let a: Attachment = codec.read(&mut *reader)?;
-            attachment = Some(a);
-            codec.header = self.read(&mut *reader)?;
-        }
+        let header: u8 = self.read(&mut *reader)?;
+
+        let codec = Zenoh080Header::new(header);
         let body = match imsg::mid(codec.header) {
-            tmsg::id::INIT => {
-                if !imsg::has_flag(codec.header, tmsg::flag::A) {
+            id::FRAME => TransportBody::Frame(codec.read(&mut *reader)?),
+            id::FRAGMENT => TransportBody::Fragment(codec.read(&mut *reader)?),
+            id::KEEP_ALIVE => TransportBody::KeepAlive(codec.read(&mut *reader)?),
+            id::INIT => {
+                if !imsg::has_flag(codec.header, zenoh_protocol::transport::init::flag::A) {
                     TransportBody::InitSyn(codec.read(&mut *reader)?)
                 } else {
                     TransportBody::InitAck(codec.read(&mut *reader)?)
                 }
             }
-            tmsg::id::OPEN => {
-                if !imsg::has_flag(codec.header, tmsg::flag::A) {
+            id::OPEN => {
+                if !imsg::has_flag(codec.header, zenoh_protocol::transport::open::flag::A) {
                     TransportBody::OpenSyn(codec.read(&mut *reader)?)
                 } else {
                     TransportBody::OpenAck(codec.read(&mut *reader)?)
                 }
             }
-            tmsg::id::JOIN => TransportBody::Join(codec.read(&mut *reader)?),
-            tmsg::id::CLOSE => TransportBody::Close(codec.read(&mut *reader)?),
-            tmsg::id::KEEP_ALIVE => TransportBody::KeepAlive(codec.read(&mut *reader)?),
-            tmsg::id::PRIORITY | tmsg::id::FRAME => TransportBody::Frame(codec.read(&mut *reader)?),
+            id::CLOSE => TransportBody::Close(codec.read(&mut *reader)?),
+            id::OAM => TransportBody::OAM(codec.read(&mut *reader)?),
+            id::JOIN => TransportBody::Join(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 
-        Ok(TransportMessage { body, attachment })
+        Ok(body.into())
+    }
+}
+
+// Extensions: QoS
+impl<W, const ID: u8> WCodec<(ext::QoSType<{ ID }>, bool), &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: (ext::QoSType<{ ID }>, bool)) -> Self::Output {
+        let (x, more) = x;
+        let ext: ZExtZ64<{ ID }> = x.into();
+        self.write(&mut *writer, (&ext, more))
+    }
+}
+
+impl<R, const ID: u8> RCodec<(ext::QoSType<{ ID }>, bool), &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::QoSType<{ ID }>, bool), Self::Error> {
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+        codec.read(reader)
+    }
+}
+
+impl<R, const ID: u8> RCodec<(ext::QoSType<{ ID }>, bool), &mut R> for Zenoh080Header
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<(ext::QoSType<{ ID }>, bool), Self::Error> {
+        let (ext, more): (ZExtZ64<{ ID }>, bool) = self.read(&mut *reader)?;
+        Ok((ext.into(), more))
     }
 }

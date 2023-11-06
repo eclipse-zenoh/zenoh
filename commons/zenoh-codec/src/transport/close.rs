@@ -11,18 +11,20 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{RCodec, WCodec, Zenoh060, Zenoh060Header};
+use crate::{common::extension, RCodec, WCodec, Zenoh080, Zenoh080Header};
 use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
 use zenoh_protocol::{
     common::imsg,
-    core::ZenohId,
-    transport::{tmsg, Close},
+    transport::{
+        close::{flag, Close},
+        id,
+    },
 };
 
-impl<W> WCodec<&Close, &mut W> for Zenoh060
+impl<W> WCodec<&Close, &mut W> for Zenoh080
 where
     W: Writer,
 {
@@ -30,63 +32,54 @@ where
 
     fn write(self, writer: &mut W, x: &Close) -> Self::Output {
         // Header
-        let mut header = tmsg::id::CLOSE;
-        if x.zid.is_some() {
-            header |= tmsg::flag::I;
-        }
-        if x.link_only {
-            header |= tmsg::flag::K;
+        let mut header = id::CLOSE;
+        if x.session {
+            header |= flag::S;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        if let Some(p) = x.zid.as_ref() {
-            self.write(&mut *writer, p)?;
-        }
         self.write(&mut *writer, x.reason)?;
+
         Ok(())
     }
 }
 
-impl<R> RCodec<Close, &mut R> for Zenoh060
+impl<R> RCodec<Close, &mut R> for Zenoh080
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Close, Self::Error> {
-        let codec = Zenoh060Header {
-            header: self.read(&mut *reader)?,
-            ..Default::default()
-        };
+        let header: u8 = self.read(&mut *reader)?;
+        let codec = Zenoh080Header::new(header);
+
         codec.read(reader)
     }
 }
 
-impl<R> RCodec<Close, &mut R> for Zenoh060Header
+impl<R> RCodec<Close, &mut R> for Zenoh080Header
 where
     R: Reader,
 {
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<Close, Self::Error> {
-        if imsg::mid(self.header) != tmsg::id::CLOSE {
+        if imsg::mid(self.header) != id::CLOSE {
             return Err(DidntRead);
         }
+        let session = imsg::has_flag(self.header, flag::S);
 
-        let link_only = imsg::has_flag(self.header, tmsg::flag::K);
-        let zid = if imsg::has_flag(self.header, tmsg::flag::I) {
-            let zid: ZenohId = self.codec.read(&mut *reader)?;
-            Some(zid)
-        } else {
-            None
-        };
+        // Body
         let reason: u8 = self.codec.read(&mut *reader)?;
 
-        Ok(Close {
-            zid,
-            reason,
-            link_only,
-        })
+        // Extensions
+        let has_ext = imsg::has_flag(self.header, flag::Z);
+        if has_ext {
+            extension::skip_all(reader, "Close")?;
+        }
+
+        Ok(Close { reason, session })
     }
 }

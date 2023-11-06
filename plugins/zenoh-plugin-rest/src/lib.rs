@@ -29,11 +29,11 @@ use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
 use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
+use zenoh::properties::Properties;
 use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
 use zenoh::Session;
-use zenoh_cfg_properties::Properties;
 use zenoh_result::{bail, zerror, ZResult};
 
 mod config;
@@ -43,6 +43,7 @@ const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix =
 lazy_static::lazy_static! {
     static ref LONG_VERSION: String = format!("{} built with {}", GIT_VERSION, env!("RUSTC_VERSION"));
 }
+const RAW_KEY: &str = "_raw";
 
 fn value_to_json(value: Value) -> String {
     // @TODO: transcode to JSON when implemented in Value
@@ -108,6 +109,14 @@ async fn to_json(results: flume::Receiver<Reply>) -> String {
     format!("[\n{values}\n]\n")
 }
 
+async fn to_json_response(results: flume::Receiver<Reply>) -> Response {
+    response(
+        StatusCode::Ok,
+        Mime::from_str("application/json").unwrap(),
+        &to_json(results).await,
+    )
+}
+
 fn sample_to_html(sample: Sample) -> String {
     format!(
         "<dt>{}</dt>\n<dd>{}</dd>\n",
@@ -138,6 +147,28 @@ async fn to_html(results: flume::Receiver<Reply>) -> String {
     format!("<dl>\n{values}\n</dl>\n")
 }
 
+async fn to_html_response(results: flume::Receiver<Reply>) -> Response {
+    response(StatusCode::Ok, "text/html", &to_html(results).await)
+}
+
+async fn to_raw_response(results: flume::Receiver<Reply>) -> Response {
+    match results.recv_async().await {
+        Ok(reply) => match reply.sample {
+            Ok(sample) => response(
+                StatusCode::Ok,
+                sample.value.encoding.to_string().as_ref(),
+                String::from_utf8_lossy(&sample.payload.contiguous()).as_ref(),
+            ),
+            Err(value) => response(
+                StatusCode::Ok,
+                value.encoding.to_string().as_ref(),
+                String::from_utf8_lossy(&value.payload.contiguous()).as_ref(),
+            ),
+        },
+        Err(_) => response(StatusCode::Ok, "", ""),
+    }
+}
+
 fn method_to_kind(method: Method) -> SampleKind {
     match method {
         Method::Put => SampleKind::Put,
@@ -146,13 +177,15 @@ fn method_to_kind(method: Method) -> SampleKind {
     }
 }
 
-fn response(status: StatusCode, content_type: Mime, body: &str) -> Response {
-    Response::builder(status)
+fn response(status: StatusCode, content_type: impl TryInto<Mime>, body: &str) -> Response {
+    let mut builder = Response::builder(status)
         .header("content-length", body.len().to_string())
         .header("Access-Control-Allow-Origin", "*")
-        .content_type(content_type)
-        .body(body)
-        .build()
+        .body(body);
+    if let Ok(mime) = content_type.try_into() {
+        builder = builder.content_type(mime);
+    }
+    builder.build()
 }
 
 zenoh_plugin_trait::declare_plugin!(RestPlugin);
@@ -263,7 +296,7 @@ fn with_extended_string<R, F: FnMut(&mut String) -> R>(
     result
 }
 
-async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
+async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
     log::trace!("Incoming GET request: {:?}", req);
 
     let first_accept = match req.header("accept") {
@@ -341,13 +374,14 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
             },
         ))
     } else {
+        let body = req.body_bytes().await.unwrap_or_default();
         let url = req.url();
         let key_expr = match path_to_key_expr(url.path(), &req.state().1) {
             Ok(ke) => ke,
             Err(e) => {
                 return Ok(response(
                     StatusCode::BadRequest,
-                    Mime::from_str("text/plain").unwrap(),
+                    "text/plain",
                     &e.to_string(),
                 ))
             }
@@ -363,32 +397,28 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
         } else {
             QueryConsolidation::from(zenoh::query::ConsolidationMode::Latest)
         };
-        match req
-            .state()
-            .0
-            .get(&selector)
-            .consolidation(consolidation)
-            .res()
-            .await
-        {
+        let raw = selector.decode().any(|(k, _)| k.as_ref() == RAW_KEY);
+        let mut query = req.state().0.get(&selector).consolidation(consolidation);
+        if !body.is_empty() {
+            let encoding: Encoding = req
+                .content_type()
+                .map(|m| m.to_string().into())
+                .unwrap_or_default();
+            query = query.with_value(Value::from(body).encoding(encoding));
+        }
+        match query.res().await {
             Ok(receiver) => {
-                if first_accept == "text/html" {
-                    Ok(response(
-                        StatusCode::Ok,
-                        Mime::from_str("text/html").unwrap(),
-                        &to_html(receiver).await,
-                    ))
+                if raw {
+                    Ok(to_raw_response(receiver).await)
+                } else if first_accept == "text/html" {
+                    Ok(to_html_response(receiver).await)
                 } else {
-                    Ok(response(
-                        StatusCode::Ok,
-                        Mime::from_str("application/json").unwrap(),
-                        &to_json(receiver).await,
-                    ))
+                    Ok(to_json_response(receiver).await)
                 }
             }
             Err(e) => Ok(response(
                 StatusCode::InternalServerError,
-                Mime::from_str("text/plain").unwrap(),
+                "text/plain",
                 &e.to_string(),
             )),
         }
@@ -404,14 +434,14 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 Err(e) => {
                     return Ok(response(
                         StatusCode::BadRequest,
-                        Mime::from_str("text/plain").unwrap(),
+                        "text/plain",
                         &e.to_string(),
                     ))
                 }
             };
             let encoding: Encoding = req
                 .content_type()
-                .map(|m| m.essence().to_owned().into())
+                .map(|m| m.to_string().into())
                 .unwrap_or_default();
 
             // @TODO: Define the right congestion control value
@@ -427,14 +457,14 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                 Ok(_) => Ok(Response::new(StatusCode::Ok)),
                 Err(e) => Ok(response(
                     StatusCode::InternalServerError,
-                    Mime::from_str("text/plain").unwrap(),
+                    "text/plain",
                     &e.to_string(),
                 )),
             }
         }
         Err(e) => Ok(response(
             StatusCode::NoContent,
-            Mime::from_str("text/plain").unwrap(),
+            "text/plain",
             &e.to_string(),
         )),
     }
@@ -453,7 +483,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     app.with(
         tide::security::CorsMiddleware::new()
             .allow_methods(
-                "GET, PUT, PATCH, DELETE"
+                "GET, POST, PUT, PATCH, DELETE"
                     .parse::<http_types::headers::HeaderValue>()
                     .unwrap(),
             )
@@ -461,8 +491,18 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
             .allow_credentials(false),
     );
 
-    app.at("/").get(query).put(write).patch(write).delete(write);
-    app.at("*").get(query).put(write).patch(write).delete(write);
+    app.at("/")
+        .get(query)
+        .post(query)
+        .put(write)
+        .patch(write)
+        .delete(write);
+    app.at("*")
+        .get(query)
+        .post(query)
+        .put(write)
+        .patch(write)
+        .delete(write);
 
     if let Err(e) = app.listen(conf.http_port).await {
         log::error!("Unable to start http server for REST: {:?}", e);

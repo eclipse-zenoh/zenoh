@@ -83,12 +83,12 @@ use git_version::git_version;
 use handlers::DefaultHandler;
 #[zenoh_macros::unstable]
 use net::runtime::Runtime;
-use prelude::config::whatami::WhatAmIMatcher;
 use prelude::*;
 use scouting::ScoutBuilder;
 use std::future::Ready;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 pub use zenoh_macros::{kedefine, keformat, kewrite};
+use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::{zerror, ZResult};
 
 /// A zenoh error.
@@ -148,7 +148,7 @@ pub mod time {
 /// A map of key/value (String,String) properties.
 pub mod properties {
     use super::prelude::Value;
-    pub use zenoh_cfg_properties::Properties;
+    pub use zenoh_collections::Properties;
 
     /// Convert a set of [`Properties`] into a [`Value`].  
     /// For instance, Properties: `[("k1", "v1"), ("k2, v2")]`  
@@ -174,7 +174,7 @@ pub mod scouting;
 /// # Arguments
 ///
 /// * `what` - The kind of zenoh process to scout for
-/// * `config` - The configuration [`Properties`](crate::properties::Properties) to use for scouting
+/// * `config` - The configuration [`Config`] to use for scouting
 ///
 /// # Examples
 /// ```no_run

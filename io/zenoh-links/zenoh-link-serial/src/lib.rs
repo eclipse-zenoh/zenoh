@@ -53,6 +53,7 @@ impl LocatorInspector for SerialLocatorInspector {
     fn protocol(&self) -> &str {
         SERIAL_LOCATOR_PREFIX
     }
+
     async fn is_multicast(&self, _locator: &Locator) -> ZResult<bool> {
         Ok(false)
     }

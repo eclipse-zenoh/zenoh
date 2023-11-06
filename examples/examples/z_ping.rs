@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::{App, Arg};
+#[cfg(not(feature = "shared-memory"))]
+use std::process::exit;
 use std::time::{Duration, Instant};
 use zenoh::config::Config;
 use zenoh::prelude::sync::*;
@@ -98,6 +100,7 @@ fn parse_args() -> (Config, Duration, usize, usize) {
         .arg(Arg::from_usage(
             "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
         ))
+        .arg(Arg::from_usage("--enable-shm 'Enable SHM transport.'"))
         .arg(Arg::from_usage(
             "-c, --config=[FILE]      'A configuration file.'",
         ))
@@ -123,6 +126,16 @@ fn parse_args() -> (Config, Duration, usize, usize) {
     if args.is_present("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
+    if args.is_present("enable-shm") {
+        #[cfg(feature = "shared-memory")]
+        config.transport.shared_memory.set_enabled(true).unwrap();
+        #[cfg(not(feature = "shared-memory"))]
+        {
+            println!("enable-shm argument: SHM cannot be enabled, because Zenoh is compiled without shared-memory feature!");
+            exit(-1);
+        }
+    }
+
     let n: usize = args.value_of("samples").unwrap().parse().unwrap();
     let w: f64 = args.value_of("warmup").unwrap().parse().unwrap();
     let size: usize = args.value_of("PAYLOAD_SIZE").unwrap().parse().unwrap();

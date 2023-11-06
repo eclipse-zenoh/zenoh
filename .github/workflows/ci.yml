@@ -43,24 +43,31 @@ jobs:
         with:
           command: fmt
           args: -- --check
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Clippy
         uses: actions-rs/cargo@v1
         with:
           command: clippy
           args: --all-targets -- -D warnings
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Clippy unstable
         uses: actions-rs/cargo@v1
         with:
           command: clippy
           args: --all-targets --features unstable -- -D warnings
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Clippy shared-memory
+        if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets --features shared-memory -- -D warnings
+          args: --all-targets --features shared-memory --features transport_unixpipe -- -D warnings
 
   test:
     name: Run tests on ${{ matrix.os }}
@@ -90,8 +97,19 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: nextest
-          args: run
+          args: run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
         env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+          ASYNC_STD_THREAD_COUNT: 4
+
+      - name: Run tests with SHM
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        uses: actions-rs/cargo@v1
+        with:
+          command: nextest
+          args: run -F shared-memory -F transport_unixpipe -p zenoh-transport
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
       - name: Run doctests
@@ -100,6 +118,7 @@ jobs:
           command: test
           args: --doc
         env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
   nostd:
@@ -123,3 +142,5 @@ jobs:
         with:
           command: check
           args: --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
+        env:
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse

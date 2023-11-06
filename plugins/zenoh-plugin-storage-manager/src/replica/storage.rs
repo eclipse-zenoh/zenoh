@@ -23,6 +23,7 @@ use std::str::{self, FromStr};
 use std::time::{SystemTime, UNIX_EPOCH};
 use zenoh::buffers::ZBuf;
 use zenoh::prelude::r#async::*;
+use zenoh::query::ConsolidationMode;
 use zenoh::time::{Timestamp, NTP64};
 use zenoh::{Result as ZResult, Session};
 use zenoh_backend_traits::config::{GarbageCollectionConfig, StorageConfig};

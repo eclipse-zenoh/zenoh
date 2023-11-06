@@ -18,10 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use std::collections::HashMap;
-#[allow(unused_imports)]
 use std::sync::Arc;
-
-use zenoh_cfg_properties::Properties;
 use zenoh_config::Config;
 use zenoh_result::{bail, ZResult};
 
@@ -69,6 +66,13 @@ pub use zenoh_link_serial as serial;
 #[cfg(feature = "transport_serial")]
 use zenoh_link_serial::{LinkManagerUnicastSerial, SerialLocatorInspector, SERIAL_LOCATOR_PREFIX};
 
+#[cfg(feature = "transport_unixpipe")]
+pub use zenoh_link_unixpipe as unixpipe;
+#[cfg(feature = "transport_unixpipe")]
+use zenoh_link_unixpipe::{
+    LinkManagerUnicastPipe, UnixPipeConfigurator, UnixPipeLocatorInspector, UNIXPIPE_LOCATOR_PREFIX,
+};
+
 pub use zenoh_link_commons::*;
 pub use zenoh_protocol::core::{EndPoint, Locator};
 
@@ -87,6 +91,8 @@ pub const PROTOCOLS: &[&str] = &[
     unixsock_stream::UNIXSOCKSTREAM_LOCATOR_PREFIX,
     #[cfg(feature = "transport_serial")]
     serial::SERIAL_LOCATOR_PREFIX,
+    #[cfg(feature = "transport_unixpipe")]
+    unixpipe::UNIXPIPE_LOCATOR_PREFIX,
 ];
 
 #[derive(Default, Clone)]
@@ -105,6 +111,8 @@ pub struct LocatorInspector {
     unixsock_stream_inspector: UnixSockStreamLocatorInspector,
     #[cfg(feature = "transport_serial")]
     serial_inspector: SerialLocatorInspector,
+    #[cfg(feature = "transport_unixpipe")]
+    unixpipe_inspector: UnixPipeLocatorInspector,
 }
 impl LocatorInspector {
     pub async fn is_multicast(&self, locator: &Locator) -> ZResult<bool> {
@@ -128,6 +136,8 @@ impl LocatorInspector {
             WS_LOCATOR_PREFIX => self.ws_inspector.is_multicast(locator).await,
             #[cfg(feature = "transport_serial")]
             SERIAL_LOCATOR_PREFIX => self.serial_inspector.is_multicast(locator).await,
+            #[cfg(feature = "transport_unixpipe")]
+            UNIXPIPE_LOCATOR_PREFIX => self.unixpipe_inspector.is_multicast(locator).await,
             _ => bail!("Unsupported protocol: {}.", protocol),
         }
     }
@@ -138,19 +148,22 @@ pub struct LinkConfigurator {
     quic_inspector: QuicConfigurator,
     #[cfg(feature = "transport_tls")]
     tls_inspector: TlsConfigurator,
+    #[cfg(feature = "transport_unixpipe")]
+    unixpipe_inspector: UnixPipeConfigurator,
 }
+
 impl LinkConfigurator {
     #[allow(unused_variables, unused_mut)]
     pub async fn configurations(
         &self,
         config: &Config,
     ) -> (
-        HashMap<String, Properties>,
+        HashMap<String, String>,
         HashMap<String, zenoh_result::Error>,
     ) {
         let mut configs = HashMap::new();
         let mut errors = HashMap::new();
-        let mut insert_config = |proto: String, cfg: ZResult<Properties>| match cfg {
+        let mut insert_config = |proto: String, cfg: ZResult<String>| match cfg {
             Ok(v) => {
                 configs.insert(proto, v);
             }
@@ -170,6 +183,13 @@ impl LinkConfigurator {
             insert_config(
                 TLS_LOCATOR_PREFIX.into(),
                 self.tls_inspector.inspect_config(config).await,
+            );
+        }
+        #[cfg(feature = "transport_unixpipe")]
+        {
+            insert_config(
+                UNIXPIPE_LOCATOR_PREFIX.into(),
+                self.unixpipe_inspector.inspect_config(config).await,
             );
         }
         (configs, errors)
@@ -201,6 +221,8 @@ impl LinkManagerBuilderUnicast {
             WS_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastWs::new(_manager))),
             #[cfg(feature = "transport_serial")]
             SERIAL_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastSerial::new(_manager))),
+            #[cfg(feature = "transport_unixpipe")]
+            UNIXPIPE_LOCATOR_PREFIX => Ok(Arc::new(LinkManagerUnicastPipe::new(_manager))),
             _ => bail!("Unicast not supported for {} protocol", protocol),
         }
     }
@@ -221,5 +243,3 @@ impl LinkManagerBuilderMulticast {
         }
     }
 }
-
-pub const WBUF_SIZE: usize = 64;

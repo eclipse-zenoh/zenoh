@@ -17,7 +17,7 @@ use zenoh_core::zasync_executor_init;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::{
     core::{WhatAmI, ZenohId},
-    zenoh::ZenohMessage,
+    network::NetworkMessage,
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
@@ -63,7 +63,7 @@ impl TransportEventHandler for SH {
 pub struct SC;
 
 impl TransportPeerEventHandler for SC {
-    fn handle_message(&self, _message: ZenohMessage) -> ZResult<()> {
+    fn handle_message(&self, _message: NetworkMessage) -> ZResult<()> {
         Ok(())
     }
     fn new_link(&self, _link: Link) {}
@@ -175,6 +175,24 @@ fn endpoint_ws() {
         format!("ws/127.0.0.1:{}", 7020).parse().unwrap(),
         format!("ws/[::1]:{}", 7021).parse().unwrap(),
         format!("ws/localhost:{}", 7022).parse().unwrap(),
+    ];
+    task::block_on(run(&endpoints));
+}
+
+#[cfg(feature = "transport_unixpipe")]
+#[test]
+fn endpoint_unixpipe() {
+    let _ = env_logger::try_init();
+    task::block_on(async {
+        zasync_executor_init!();
+    });
+
+    // Define the locators
+    let endpoints: Vec<EndPoint> = vec![
+        "unixpipe/endpoint_unixpipe".parse().unwrap(),
+        "unixpipe/endpoint_unixpipe2".parse().unwrap(),
+        "unixpipe/endpoint_unixpipe3".parse().unwrap(),
+        "unixpipe/endpoint_unixpipe4".parse().unwrap(),
     ];
     task::block_on(run(&endpoints));
 }

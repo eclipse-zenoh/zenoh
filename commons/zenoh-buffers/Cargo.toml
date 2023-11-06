@@ -26,6 +26,7 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [features]
 default = ["std"]
+shared-memory = []
 std = []
 test = ["rand"]
 

@@ -10,73 +10,47 @@
 //
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
-// pub(crate) mod authenticator;
 pub(crate) mod establishment;
 pub(crate) mod link;
 pub(crate) mod manager;
 pub(crate) mod rx;
+#[cfg(feature = "shared-memory")]
+pub(crate) mod shm;
 pub(crate) mod transport;
 pub(crate) mod tx;
 
 use super::common;
-#[cfg(feature = "stats")]
-use super::common::stats::stats_struct;
 use crate::{TransportMulticastEventHandler, TransportPeer};
-pub use manager::*;
+pub use manager::{
+    TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
+    TransportManagerParamsMulticast,
+};
 use std::{
     fmt,
     sync::{Arc, Weak},
 };
-use transport::{TransportMulticastConfig, TransportMulticastInner};
-use zenoh_core::zread;
-use zenoh_link::Link;
-use zenoh_protocol::{core::ZInt, transport::tmsg, zenoh::ZenohMessage};
+use transport::TransportMulticastInner;
+use zenoh_core::{zcondfeat, zread};
+use zenoh_link::{Link, LinkMulticast};
+use zenoh_protocol::{
+    core::Bits,
+    network::NetworkMessage,
+    transport::{close, PrioritySn},
+};
 use zenoh_result::{zerror, ZResult};
-
-/*************************************/
-/*              STATS                */
-/*************************************/
-#[cfg(feature = "stats")]
-use serde::{Deserialize, Serialize};
-#[cfg(feature = "stats")]
-use std::sync::atomic::{AtomicUsize, Ordering};
-#[cfg(feature = "stats")]
-stats_struct! {
-    #[derive(Clone, Debug, Deserialize, Serialize)]
-    pub struct TransportMulticastStats {
-        pub tx_t_msgs,
-        pub tx_z_msgs,
-        pub tx_z_dropped,
-        pub tx_z_data_msgs,
-        pub tx_z_data_payload_bytes,
-        pub tx_z_data_reply_msgs,
-        pub tx_z_data_reply_payload_bytes,
-        pub tx_z_pull_msgs,
-        pub tx_z_query_msgs,
-        pub tx_z_declare_msgs,
-        pub tx_z_linkstate_msgs,
-        pub tx_z_unit_msgs,
-        pub tx_z_unit_reply_msgs,
-        pub tx_bytes,
-        pub rx_t_msgs,
-        pub rx_z_msgs,
-        pub rx_z_data_msgs,
-        pub rx_z_data_payload_bytes,
-        pub rx_z_data_reply_msgs,
-        pub rx_z_data_reply_payload_bytes,
-        pub rx_z_pull_msgs,
-        pub rx_z_query_msgs,
-        pub rx_z_declare_msgs,
-        pub rx_z_linkstate_msgs,
-        pub rx_z_unit_msgs,
-        pub rx_z_unit_reply_msgs,
-        pub rx_bytes,
-    }
-}
 
 /*************************************/
 /*       TRANSPORT MULTICAST         */
 /*************************************/
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct TransportConfigMulticast {
+    pub(crate) sn_resolution: Bits,
+    pub(crate) initial_sns: Box<[PrioritySn]>,
+    pub(crate) link: LinkMulticast,
+    #[cfg(feature = "shared-memory")]
+    pub(crate) is_shm: bool,
+}
+
 #[derive(Clone)]
 pub struct TransportMulticast(Weak<TransportMulticastInner>);
 
@@ -89,11 +63,12 @@ impl TransportMulticast {
     }
 
     #[inline(always)]
-    pub fn get_sn_resolution(&self) -> ZResult<ZInt> {
+    pub fn get_sn_resolution(&self) -> ZResult<Bits> {
         let transport = self.get_transport()?;
         Ok(transport.get_sn_resolution())
     }
 
+    #[cfg(feature = "shared-memory")]
     #[inline(always)]
     pub fn is_shm(&self) -> ZResult<bool> {
         let transport = self.get_transport()?;
@@ -128,26 +103,26 @@ impl TransportMulticast {
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the transport has already been closed
         match self.get_transport() {
-            Ok(transport) => transport.close(tmsg::close_reason::GENERIC).await,
+            Ok(transport) => transport.close(close::reason::GENERIC).await,
             Err(_) => Ok(()),
         }
     }
 
     #[inline(always)]
-    pub fn schedule(&self, message: ZenohMessage) -> ZResult<()> {
+    pub fn schedule(&self, message: NetworkMessage) -> ZResult<()> {
         let transport = self.get_transport()?;
         transport.schedule(message);
         Ok(())
     }
 
     #[inline(always)]
-    pub fn handle_message(&self, message: ZenohMessage) -> ZResult<()> {
+    pub fn handle_message(&self, message: NetworkMessage) -> ZResult<()> {
         self.schedule(message)
     }
 
     #[cfg(feature = "stats")]
-    pub fn get_stats(&self) -> ZResult<TransportMulticastStats> {
-        Ok(self.get_transport()?.stats.snapshot())
+    pub fn get_stats(&self) -> ZResult<Arc<common::stats::TransportStats>> {
+        Ok(self.get_transport()?.stats.clone())
     }
 }
 
@@ -169,6 +144,7 @@ impl fmt::Debug for TransportMulticast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.get_transport() {
             Ok(transport) => {
+                let is_shm = zcondfeat!("shared-memory", transport.is_shm(), false);
                 let peers: String = zread!(transport.peers)
                     .iter()
                     .map(|(l, p)| {
@@ -179,7 +155,7 @@ impl fmt::Debug for TransportMulticast {
                 f.debug_struct("Transport Multicast")
                     .field("sn_resolution", &transport.get_sn_resolution())
                     .field("is_qos", &transport.is_qos())
-                    .field("is_shm", &transport.is_shm())
+                    .field("is_shm", &is_shm)
                     .field("peers", &peers)
                     .finish()
             }
