@@ -113,13 +113,13 @@ struct OpenLink<'a> {
 }
 
 #[async_trait]
-impl<'a> OpenFsm for OpenLink<'a> {
+impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
     type Error = OpenError;
 
     type SendInitSynIn = (&'a mut TransportLinkUnicast, &'a mut State, SendInitSynIn);
     type SendInitSynOut = ();
     async fn send_init_syn(
-        &self,
+        self,
         input: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
         let (link, state, input) = input;
@@ -204,7 +204,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
     type RecvInitAckIn = (&'a mut TransportLinkUnicast, &'a mut State);
     type RecvInitAckOut = RecvInitAckOut;
     async fn recv_init_ack(
-        &self,
+        self,
         input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         let (link, state) = input;
@@ -335,7 +335,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
     type SendOpenSynIn = (&'a mut TransportLinkUnicast, &'a mut State, SendOpenSynIn);
     type SendOpenSynOut = SendOpenSynOut;
     async fn send_open_syn(
-        &self,
+        self,
         input: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
         let (link, state, input) = input;
@@ -422,7 +422,7 @@ impl<'a> OpenFsm for OpenLink<'a> {
     type RecvOpenAckIn = (&'a mut TransportLinkUnicast, &'a mut State);
     type RecvOpenAckOut = RecvOpenAckOut;
     async fn recv_open_ack(
-        &self,
+        self,
         input: Self::RecvOpenAckIn,
     ) -> Result<Self::RecvOpenAckOut, Self::Error> {
         let (link, state) = input;
@@ -516,7 +516,7 @@ pub(crate) async fn open_link(
         is_compression: false, // Perform the exchange Init/Open exchange with no compression
     };
     let mut link = TransportLinkUnicast::new(link, config);
-    let fsm = OpenLink {
+    let mut fsm = OpenLink {
         ext_qos: ext::qos::QoSFsm::new(),
         #[cfg(feature = "transport_multilink")]
         ext_mlink: manager.state.unicast.multilink.fsm(&manager.prng),

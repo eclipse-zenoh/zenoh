@@ -288,13 +288,13 @@ macro_rules! ztake {
 /*              OPEN                 */
 /*************************************/
 #[async_trait]
-impl<'a> OpenFsm for AuthFsm<'a> {
+impl<'a> OpenFsm for &'a AuthFsm<'a> {
     type Error = ZError;
 
     type SendInitSynIn = &'a StateOpen;
     type SendInitSynOut = Option<init::ext::Auth>;
     async fn send_init_syn(
-        &self,
+        self,
         state: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
         const S: &str = "Auth extension - Send InitSyn.";
@@ -341,7 +341,7 @@ impl<'a> OpenFsm for AuthFsm<'a> {
     type RecvInitAckIn = (&'a mut StateOpen, Option<init::ext::Auth>);
     type RecvInitAckOut = ();
     async fn recv_init_ack(
-        &self,
+        self,
         input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         const S: &str = "Auth extension - Recv InitAck.";
@@ -385,7 +385,7 @@ impl<'a> OpenFsm for AuthFsm<'a> {
     type SendOpenSynIn = &'a StateOpen;
     type SendOpenSynOut = Option<open::ext::Auth>;
     async fn send_open_syn(
-        &self,
+        self,
         state: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
         const S: &str = "Auth extension - Send OpenSyn.";
@@ -432,7 +432,7 @@ impl<'a> OpenFsm for AuthFsm<'a> {
     type RecvOpenAckIn = (&'a mut StateOpen, Option<open::ext::Auth>);
     type RecvOpenAckOut = ();
     async fn recv_open_ack(
-        &self,
+        self,
         input: Self::RecvOpenAckIn,
     ) -> Result<Self::RecvOpenAckOut, Self::Error> {
         const S: &str = "Auth extension - Recv OpenAck.";

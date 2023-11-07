@@ -363,13 +363,13 @@ impl StateOpen {
 }
 
 #[async_trait]
-impl<'a> OpenFsm for AuthPubKeyFsm<'a> {
+impl<'a> OpenFsm for &'a AuthPubKeyFsm<'a> {
     type Error = ZError;
 
     type SendInitSynIn = &'a StateOpen;
     type SendInitSynOut = Option<ext::InitSyn>;
     async fn send_init_syn(
-        &self,
+        self,
         _input: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
         const S: &str = "PubKey extension - Send InitSyn.";
@@ -392,7 +392,7 @@ impl<'a> OpenFsm for AuthPubKeyFsm<'a> {
     type RecvInitAckIn = (&'a mut StateOpen, Option<ext::InitAck>);
     type RecvInitAckOut = ();
     async fn recv_init_ack(
-        &self,
+        self,
         input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         const S: &str = "PubKey extension - Recv InitAck.";
@@ -438,7 +438,7 @@ impl<'a> OpenFsm for AuthPubKeyFsm<'a> {
     type SendOpenSynIn = &'a StateOpen;
     type SendOpenSynOut = Option<ext::OpenSyn>;
     async fn send_open_syn(
-        &self,
+        self,
         state: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
         const S: &str = "PubKey extension - Send OpenSyn.";
@@ -461,7 +461,7 @@ impl<'a> OpenFsm for AuthPubKeyFsm<'a> {
     type RecvOpenAckIn = (&'a mut StateOpen, Option<ext::OpenAck>);
     type RecvOpenAckOut = ();
     async fn recv_open_ack(
-        &self,
+        self,
         input: Self::RecvOpenAckIn,
     ) -> Result<Self::RecvOpenAckOut, Self::Error> {
         const S: &str = "PubKey extension - Recv OpenAck.";

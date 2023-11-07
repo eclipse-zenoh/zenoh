@@ -81,7 +81,7 @@ impl TransportLinkUnicast {
         Ok(len)
     }
 
-    pub async fn recv_batch<C, T>(&self, buff: C) -> ZResult<RBatch>
+    pub async fn recv_batch<C, T>(&mut self, buff: C) -> ZResult<RBatch>
     where
         C: Fn() -> T + Copy,
         T: ZSliceBuffer + 'static,
@@ -120,11 +120,10 @@ impl TransportLinkUnicast {
         Ok(batch)
     }
 
-    pub async fn recv(&self) -> ZResult<TransportMessage> {
+    pub async fn recv(&mut self) -> ZResult<TransportMessage> {
+        let mtu = self.link.get_mtu() as usize;
         let mut batch = self
-            .recv_batch(|| {
-                zenoh_buffers::vec::uninit(self.link.get_mtu() as usize).into_boxed_slice()
-            })
+            .recv_batch(|| zenoh_buffers::vec::uninit(mtu).into_boxed_slice())
             .await?;
         let msg = batch
             .decode()

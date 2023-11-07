@@ -227,7 +227,7 @@ async fn tx_task(
 }
 
 async fn rx_task(
-    link: TransportLinkUnicast,
+    mut link: TransportLinkUnicast,
     transport: TransportUnicastUniversal,
     lease: Duration,
     signal: Signal,
@@ -240,7 +240,7 @@ async fn rx_task(
     }
 
     async fn read<T, F>(
-        link: &TransportLinkUnicast,
+        link: &mut TransportLinkUnicast,
         pool: &RecyclingObjectPool<T, F>,
     ) -> ZResult<Action>
     where
@@ -269,7 +269,7 @@ async fn rx_task(
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Async read from the underlying link
-        let action = read(&link, &pool)
+        let action = read(&mut link, &pool)
             .race(stop(signal.clone()))
             .timeout(lease)
             .await
