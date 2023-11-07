@@ -75,28 +75,28 @@ pub trait AcceptFsm {
     type RecvInitSynIn;
     type RecvInitSynOut;
     async fn recv_init_syn(
-        &self,
+        self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error>;
 
     type SendInitAckIn;
     type SendInitAckOut;
     async fn send_init_ack(
-        &self,
+        self,
         input: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error>;
 
     type RecvOpenSynIn;
     type RecvOpenSynOut;
     async fn recv_open_syn(
-        &self,
+        self,
         input: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error>;
 
     type SendOpenAckIn;
     type SendOpenAckOut;
     async fn send_open_ack(
-        &self,
+        self,
         input: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error>;
 }
@@ -116,7 +116,7 @@ pub(super) fn compute_sn(zid1: ZenohId, zid2: ZenohId, resolution: Resolution) -
     TransportSn::from_le_bytes(array) & seq_num::get_mask(resolution.get(Field::FrameSN))
 }
 
-pub(super) async fn close_link(link: TransportLinkUnicast, reason: Option<u8>) {
+pub(super) async fn close_link(mut link: TransportLinkUnicast, reason: Option<u8>) {
     if let Some(reason) = reason {
         // Build the close message
         let message: TransportMessage = Close {

@@ -116,7 +116,7 @@ struct SendOpenAckOut {
 
 // Fsm
 struct AcceptLink<'a> {
-    link: &'a TransportLinkUnicast,
+    link: &'a mut TransportLinkUnicast,
     prng: &'a Mutex<PseudoRng>,
     cipher: &'a BlockCipher,
     ext_qos: ext::qos::QoSFsm<'a>,
@@ -132,13 +132,13 @@ struct AcceptLink<'a> {
 }
 
 #[async_trait]
-impl<'a> AcceptFsm for AcceptLink<'a> {
+impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
     type Error = AcceptError;
 
     type RecvInitSynIn = (&'a mut State, RecvInitSynIn);
     type RecvInitSynOut = RecvInitSynOut;
     async fn recv_init_syn(
-        &self,
+        self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         let (state, input) = input;
@@ -248,7 +248,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
     type SendInitAckIn = (State, SendInitAckIn);
     type SendInitAckOut = SendInitAckOut;
     async fn send_init_ack(
-        &self,
+        self,
         input: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
         #[allow(unused_mut)] // Required for "shared-memory" feature
@@ -373,7 +373,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
     type RecvOpenSynIn = RecvOpenSynIn;
     type RecvOpenSynOut = (State, RecvOpenSynOut);
     async fn recv_open_syn(
-        &self,
+        self,
         input: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         let msg = self
@@ -502,7 +502,7 @@ impl<'a> AcceptFsm for AcceptLink<'a> {
     type SendOpenAckIn = (&'a mut State, SendOpenAckIn);
     type SendOpenAckOut = SendOpenAckOut;
     async fn send_open_ack(
-        &self,
+        self,
         input: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         let (state, input) = input;
@@ -590,8 +590,8 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         is_compression: false,
     };
     let mut link = TransportLinkUnicast::new(link.clone(), config);
-    let fsm = AcceptLink {
-        link: &link,
+    let mut fsm = AcceptLink {
+        link: &mut link,
         prng: &manager.prng,
         cipher: &manager.cipher,
         ext_qos: ext::qos::QoSFsm::new(),

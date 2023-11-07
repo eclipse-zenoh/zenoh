@@ -148,13 +148,13 @@ where
 }
 
 #[async_trait]
-impl<'a> AcceptFsm for QoSFsm<'a> {
+impl<'a> AcceptFsm for &'a QoSFsm<'a> {
     type Error = ZError;
 
     type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::QoS>);
     type RecvInitSynOut = ();
     async fn recv_init_syn(
-        &self,
+        self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         let (state, other_ext) = input;
@@ -165,7 +165,7 @@ impl<'a> AcceptFsm for QoSFsm<'a> {
     type SendInitAckIn = &'a StateAccept;
     type SendInitAckOut = Option<init::ext::QoS>;
     async fn send_init_ack(
-        &self,
+        self,
         state: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
         let output = state.is_qos.then_some(init::ext::QoS::new());
@@ -175,7 +175,7 @@ impl<'a> AcceptFsm for QoSFsm<'a> {
     type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::QoS>);
     type RecvOpenSynOut = ();
     async fn recv_open_syn(
-        &self,
+        self,
         _state: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         Ok(())
@@ -184,7 +184,7 @@ impl<'a> AcceptFsm for QoSFsm<'a> {
     type SendOpenAckIn = &'a StateAccept;
     type SendOpenAckOut = Option<open::ext::QoS>;
     async fn send_open_ack(
-        &self,
+        self,
         _state: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         Ok(None)

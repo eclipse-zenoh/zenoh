@@ -173,7 +173,7 @@ impl TransportLinkUnicastUniversal {
 /*************************************/
 async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
-    link: TransportLinkUnicast,
+    mut link: TransportLinkUnicast,
     keep_alive: Duration,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {

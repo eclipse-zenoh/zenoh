@@ -55,7 +55,7 @@ impl TransportLinkUnicast {
         }
     }
 
-    pub async fn send_batch(&self, batch: &mut WBatch) -> ZResult<()> {
+    pub async fn send_batch(&mut self, batch: &mut WBatch) -> ZResult<()> {
         const ERR: &str = "Write error on link: ";
 
         batch.finalize().map_err(|_| zerror!("{ERR}{self}"))?;
@@ -70,7 +70,7 @@ impl TransportLinkUnicast {
         Ok(())
     }
 
-    pub async fn send(&self, msg: &TransportMessage) -> ZResult<usize> {
+    pub async fn send(&mut self, msg: &TransportMessage) -> ZResult<usize> {
         const ERR: &str = "Write error on link: ";
 
         // Create the batch for serializing the message

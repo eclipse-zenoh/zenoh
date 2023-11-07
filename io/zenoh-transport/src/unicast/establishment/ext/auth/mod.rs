@@ -478,13 +478,13 @@ impl<'a> OpenFsm for AuthFsm<'a> {
 /*            ACCEPT                 */
 /*************************************/
 #[async_trait]
-impl<'a> AcceptFsm for AuthFsm<'a> {
+impl<'a> AcceptFsm for &'a AuthFsm<'a> {
     type Error = ZError;
 
     type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::Auth>);
     type RecvInitSynOut = ();
     async fn recv_init_syn(
-        &self,
+        self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         const S: &str = "Auth extension - Recv InitSyn.";
@@ -528,7 +528,7 @@ impl<'a> AcceptFsm for AuthFsm<'a> {
     type SendInitAckIn = &'a StateAccept;
     type SendInitAckOut = Option<init::ext::Auth>;
     async fn send_init_ack(
-        &self,
+        self,
         state: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
         const S: &str = "Auth extension - Send InitAck.";
@@ -575,7 +575,7 @@ impl<'a> AcceptFsm for AuthFsm<'a> {
     type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::Auth>);
     type RecvOpenSynOut = ();
     async fn recv_open_syn(
-        &self,
+        self,
         input: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         const S: &str = "Auth extension - Recv OpenSyn.";
@@ -619,7 +619,7 @@ impl<'a> AcceptFsm for AuthFsm<'a> {
     type SendOpenAckIn = &'a StateAccept;
     type SendOpenAckOut = Option<open::ext::Auth>;
     async fn send_open_ack(
-        &self,
+        self,
         state: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         const S: &str = "Auth extension - Send OpenAck.";
@@ -663,133 +663,3 @@ impl<'a> AcceptFsm for AuthFsm<'a> {
         Ok(output)
     }
 }
-
-// #[derive(Clone)]
-// pub struct TransportAuthenticator(Arc<dyn TransportAuthenticatorTrait>);
-
-// impl TransportAuthenticator {
-//     pub async fn from_config(_config: &Config) -> ZResult<HashSet<TransportAuthenticator>> {
-//         #[allow(unused_mut)]
-//         let mut pas = HashSet::new();
-
-//         #[cfg(feature = "auth_pubkey")]
-//         {
-//             let mut res = PubKeyAuthenticator::from_config(_config).await?;
-//             if let Some(pa) = res.take() {
-//                 pas.insert(pa.into());
-//             }
-//         }
-
-//         #[cfg(feature = "auth_usrpwd")]
-//         {
-//             let mut res = UserPasswordAuthenticator::from_config(_config).await?;
-//             if let Some(pa) = res.take() {
-//                 pas.insert(pa.into());
-//             }
-//         }
-
-//         Ok(pas)
-//     }
-// }
-
-/*************************************/
-/*             ACCEPT                */
-/*************************************/
-
-// Return the attachment to be included in the InitSyn message.
-//
-// # Arguments
-// * `link`        - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the initial InitSyn message will be sent on
-//
-// * `node_id`     - The [`ZenohId`][ZenohId] of the sender of the InitSyn, i.e., the peer
-//                   initiating a new transport.
-//
-// async fn get_init_syn_properties(
-//     &self,
-//     link: &AuthenticatedLink,
-//     node_id: &ZenohId,
-// ) -> ZResult<Option<Vec<u8>>>;
-
-// Return the attachment to be included in the InitAck message to be sent
-// in response of the authenticated InitSyn.
-//
-// # Arguments
-// * `link`            - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the InitSyn message was received on
-//
-// * `cookie`          - The Cookie containing the internal state
-//
-// * `property`        - The optional `Property` included in the InitSyn message
-//
-// async fn handle_init_syn(
-//     &self,
-//     link: &AuthenticatedLink,
-//     cookie: &Cookie,
-//     property: Option<Vec<u8>>,
-// ) -> ZResult<(Option<Vec<u8>>, Option<Vec<u8>>)>; // (Attachment, Cookie)
-
-// Return the attachment to be included in the OpenSyn message to be sent
-// in response of the authenticated InitAck.
-//
-// # Arguments
-// * `link` - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the InitSyn message was received on
-//
-// * `node_id` - The [`ZenohId`][ZenohId] of the sender of the InitAck message
-//
-// * `sn_resolution`   - The sn_resolution negotiated by the sender of the InitAck message
-//
-// * `properties`      - The optional `Property` included in the InitAck message
-//
-// async fn handle_init_ack(
-//     &self,
-//     link: &AuthenticatedLink,
-//     node_id: &ZenohId,
-//     sn_resolution: u64,
-//     property: Option<Vec<u8>>,
-// ) -> ZResult<Option<Vec<u8>>>;
-
-// Return the attachment to be included in the OpenAck message to be sent
-// in response of the authenticated OpenSyn.
-//
-// # Arguments
-// * `link` - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the OpenSyn message was received on
-//
-// * `properties`      - The optional `Property` included in the OpenSyn message
-//
-// * `cookie`          - The optional `Property` included in the OpenSyn message
-//
-// async fn handle_open_syn(
-//     &self,
-//     link: &AuthenticatedLink,
-//     cookie: &Cookie,
-//     property: (Option<Vec<u8>>, Option<Vec<u8>>), // (Attachment, Cookie)
-// ) -> ZResult<Option<Vec<u8>>>;
-
-// Auhtenticate the OpenAck. No message is sent back in response to an OpenAck
-//
-// # Arguments
-// * `link` - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] the OpenAck message was received on
-//
-// * `properties`      - The optional `Property` included in the OpenAck message
-//
-// async fn handle_open_ack(
-//     &self,
-//     link: &AuthenticatedLink,
-//     property: Option<Vec<u8>>,
-// ) -> ZResult<Option<Vec<u8>>>;
-
-// Handle any error on a link. This callback is mainly used to clean-up any internal state
-// of the authenticator in such a way no unnecessary data is left around
-//
-// # Arguments
-// * `link` - The [`AuthenticatedPeerLink`][AuthenticatedPeerLink] generating the error
-//
-// async fn handle_link_err(&self, link: &AuthenticatedLink);
-
-// Handle any error on a link. This callback is mainly used to clean-up any internal state
-// of the authenticator in such a way no unnecessary data is left around
-//
-// # Arguments
-// * `peerd_id` - The [`ZenohId`][ZenohId] of the transport being closed.
-//
-// async fn handle_close(&self, node_id: &ZenohId);
-// }

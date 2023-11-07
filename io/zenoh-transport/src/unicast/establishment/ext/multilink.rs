@@ -267,13 +267,13 @@ where
 }
 
 #[async_trait]
-impl<'a> AcceptFsm for MultiLinkFsm<'a> {
+impl<'a> AcceptFsm for &'a MultiLinkFsm<'a> {
     type Error = ZError;
 
     type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::MultiLink>);
     type RecvInitSynOut = ();
     async fn recv_init_syn(
-        &self,
+        self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         const S: &str = "MultiLink extension - Recv InitSyn.";
@@ -309,7 +309,7 @@ impl<'a> AcceptFsm for MultiLinkFsm<'a> {
     type SendInitAckIn = &'a StateAccept;
     type SendInitAckOut = Option<init::ext::MultiLink>;
     async fn send_init_ack(
-        &self,
+        self,
         input: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
         let pubkey = match input.pubkey.as_ref() {
@@ -328,7 +328,7 @@ impl<'a> AcceptFsm for MultiLinkFsm<'a> {
     type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::MultiLinkSyn>);
     type RecvOpenSynOut = ();
     async fn recv_open_syn(
-        &self,
+        self,
         input: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         let (state, ext) = input;
@@ -345,7 +345,7 @@ impl<'a> AcceptFsm for MultiLinkFsm<'a> {
     type SendOpenAckIn = &'a StateAccept;
     type SendOpenAckOut = Option<open::ext::MultiLinkAck>;
     async fn send_open_ack(
-        &self,
+        self,
         input: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         let pubkey = match input.pubkey.as_ref() {

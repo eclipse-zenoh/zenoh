@@ -150,13 +150,13 @@ where
 }
 
 #[async_trait]
-impl<'a> AcceptFsm for CompressionFsm<'a> {
+impl<'a> AcceptFsm for &'a CompressionFsm<'a> {
     type Error = ZError;
 
     type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::Compression>);
     type RecvInitSynOut = ();
     async fn recv_init_syn(
-        &self,
+        self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         let (state, other_ext) = input;
@@ -167,7 +167,7 @@ impl<'a> AcceptFsm for CompressionFsm<'a> {
     type SendInitAckIn = &'a StateAccept;
     type SendInitAckOut = Option<init::ext::Compression>;
     async fn send_init_ack(
-        &self,
+        self,
         state: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
         let output = state
@@ -179,7 +179,7 @@ impl<'a> AcceptFsm for CompressionFsm<'a> {
     type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::Compression>);
     type RecvOpenSynOut = ();
     async fn recv_open_syn(
-        &self,
+        self,
         _state: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error> {
         Ok(())
@@ -188,7 +188,7 @@ impl<'a> AcceptFsm for CompressionFsm<'a> {
     type SendOpenAckIn = &'a StateAccept;
     type SendOpenAckOut = Option<open::ext::Compression>;
     async fn send_open_ack(
-        &self,
+        self,
         _state: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         Ok(None)
