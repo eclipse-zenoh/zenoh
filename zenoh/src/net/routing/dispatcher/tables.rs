@@ -19,6 +19,7 @@ use super::face::FaceState;
 pub use super::pubsub::*;
 pub use super::queries::*;
 pub use super::resource::*;
+use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use std::sync::{Mutex, RwLock};
@@ -71,7 +72,7 @@ pub struct Tables {
     pub(crate) mcast_groups: Vec<Arc<FaceState>>,
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
     pub(crate) pull_caches_lock: Mutex<()>,
-    pub(crate) hat: HatTables,
+    pub(crate) hat: Box<dyn Any + Send + Sync>,
 }
 
 impl Tables {
@@ -96,7 +97,7 @@ impl Tables {
             mcast_groups: vec![],
             mcast_faces: vec![],
             pull_caches_lock: Mutex::new(()),
-            hat: HatTables::new(router_peers_failover_brokering),
+            hat: Box::new(HatTables::new(router_peers_failover_brokering)),
         }
     }
 

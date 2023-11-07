@@ -523,94 +523,94 @@ zenoh_build{{version="{}"}} 1
     }
 }
 
-fn routers_linkstate_data(context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!("@/router/{}/linkstate/routers", context.zid_str)
-        .try_into()
-        .unwrap();
+fn routers_linkstate_data(_context: &AdminContext, _query: Query) {
+    // let reply_key: OwnedKeyExpr = format!("@/router/{}/linkstate/routers", context.zid_str)
+    //     .try_into()
+    //     .unwrap();
 
-    let tables = zread!(context.runtime.router.tables.tables);
+    // let tables = zread!(context.runtime.router.tables.tables);
 
-    if let Err(e) = query
-        .reply(Ok(Sample::new(
-            reply_key,
-            Value::from(
-                tables
-                    .hat
-                    .routers_net
-                    .as_ref()
-                    .map(|net| net.dot())
-                    .unwrap_or_else(|| "graph {}".to_string())
-                    .as_bytes()
-                    .to_vec(),
-            )
-            .encoding(KnownEncoding::TextPlain.into()),
-        )))
-        .res()
-    {
-        log::error!("Error sending AdminSpace reply: {:?}", e);
-    }
+    // if let Err(e) = query
+    //     .reply(Ok(Sample::new(
+    //         reply_key,
+    //         Value::from(
+    //             tables
+    //                 .hat
+    //                 .routers_net
+    //                 .as_ref()
+    //                 .map(|net| net.dot())
+    //                 .unwrap_or_else(|| "graph {}".to_string())
+    //                 .as_bytes()
+    //                 .to_vec(),
+    //         )
+    //         .encoding(KnownEncoding::TextPlain.into()),
+    //     )))
+    //     .res()
+    // {
+    //     log::error!("Error sending AdminSpace reply: {:?}", e);
+    // }
 }
 
-fn peers_linkstate_data(context: &AdminContext, query: Query) {
-    let reply_key: OwnedKeyExpr = format!("@/router/{}/linkstate/peers", context.zid_str)
-        .try_into()
-        .unwrap();
+fn peers_linkstate_data(_context: &AdminContext, _query: Query) {
+    // let reply_key: OwnedKeyExpr = format!("@/router/{}/linkstate/peers", context.zid_str)
+    //     .try_into()
+    //     .unwrap();
 
-    let tables = zread!(context.runtime.router.tables.tables);
+    // let tables = zread!(context.runtime.router.tables.tables);
 
-    if let Err(e) = query
-        .reply(Ok(Sample::new(
-            reply_key,
-            Value::from(
-                tables
-                    .hat
-                    .peers_net
-                    .as_ref()
-                    .map(|net| net.dot())
-                    .unwrap_or_else(|| "graph {}".to_string())
-                    .as_bytes()
-                    .to_vec(),
-            )
-            .encoding(KnownEncoding::TextPlain.into()),
-        )))
-        .res()
-    {
-        log::error!("Error sending AdminSpace reply: {:?}", e);
-    }
+    // if let Err(e) = query
+    //     .reply(Ok(Sample::new(
+    //         reply_key,
+    //         Value::from(
+    //             tables
+    //                 .hat
+    //                 .peers_net
+    //                 .as_ref()
+    //                 .map(|net| net.dot())
+    //                 .unwrap_or_else(|| "graph {}".to_string())
+    //                 .as_bytes()
+    //                 .to_vec(),
+    //         )
+    //         .encoding(KnownEncoding::TextPlain.into()),
+    //     )))
+    //     .res()
+    // {
+    //     log::error!("Error sending AdminSpace reply: {:?}", e);
+    // }
 }
 
-fn subscribers_data(context: &AdminContext, query: Query) {
-    let tables = zread!(context.runtime.router.tables.tables);
-    for sub in tables.hat.router_subs.iter() {
-        let key = KeyExpr::try_from(format!(
-            "@/router/{}/subscriber/{}",
-            context.zid_str,
-            sub.expr()
-        ))
-        .unwrap();
-        if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
-                log::error!("Error sending AdminSpace reply: {:?}", e);
-            }
-        }
-    }
+fn subscribers_data(_context: &AdminContext, _query: Query) {
+    // let tables = zread!(context.runtime.router.tables.tables);
+    // for sub in tables.hat.router_subs.iter() {
+    //     let key = KeyExpr::try_from(format!(
+    //         "@/router/{}/subscriber/{}",
+    //         context.zid_str,
+    //         sub.expr()
+    //     ))
+    //     .unwrap();
+    //     if query.key_expr().intersects(&key) {
+    //         if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
+    //             log::error!("Error sending AdminSpace reply: {:?}", e);
+    //         }
+    //     }
+    // }
 }
 
-fn queryables_data(context: &AdminContext, query: Query) {
-    let tables = zread!(context.runtime.router.tables.tables);
-    for qabl in tables.hat.router_qabls.iter() {
-        let key = KeyExpr::try_from(format!(
-            "@/router/{}/queryable/{}",
-            context.zid_str,
-            qabl.expr()
-        ))
-        .unwrap();
-        if query.key_expr().intersects(&key) {
-            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
-                log::error!("Error sending AdminSpace reply: {:?}", e);
-            }
-        }
-    }
+fn queryables_data(_context: &AdminContext, _query: Query) {
+    // let tables = zread!(context.runtime.router.tables.tables);
+    // for qabl in tables.hat.router_qabls.iter() {
+    //     let key = KeyExpr::try_from(format!(
+    //         "@/router/{}/queryable/{}",
+    //         context.zid_str,
+    //         qabl.expr()
+    //     ))
+    //     .unwrap();
+    //     if query.key_expr().intersects(&key) {
+    //         if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
+    //             log::error!("Error sending AdminSpace reply: {:?}", e);
+    //         }
+    //     }
+    // }
 }
 
 fn plugins_status(context: &AdminContext, query: Query) {

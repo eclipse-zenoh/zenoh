@@ -14,6 +14,7 @@
 use super::face::FaceState;
 use super::tables::{Tables, TablesLock};
 use crate::net::routing::hat::HatContext;
+use std::any::Any;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
@@ -77,7 +78,7 @@ pub(crate) struct QueryRoutes {
 pub(crate) struct ResourceContext {
     pub(crate) matches: Vec<Weak<Resource>>,
     pub(crate) matching_pulls: Arc<PullCaches>,
-    pub(crate) hat: HatContext,
+    pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) valid_data_routes: bool,
     pub(crate) routers_data_routes: Vec<Arc<Route>>,
     pub(crate) peers_data_routes: Vec<Arc<Route>>,
@@ -95,7 +96,7 @@ impl ResourceContext {
         ResourceContext {
             matches: Vec::new(),
             matching_pulls: Arc::new(Vec::new()),
-            hat: HatContext::new(),
+            hat: Box::new(HatContext::new()),
             valid_data_routes: false,
             routers_data_routes: Vec::new(),
             peers_data_routes: Vec::new(),
@@ -263,69 +264,69 @@ impl Resource {
         }
     }
 
-    #[inline(always)]
-    pub(crate) fn routers_query_route(
-        &self,
-        context: RoutingContext,
-    ) -> Option<Arc<QueryTargetQablSet>> {
-        match &self.context {
-            Some(ctx) => {
-                if ctx.valid_query_routes {
-                    (ctx.routers_query_routes.len() > context as usize)
-                        .then(|| ctx.routers_query_routes[context as usize].clone())
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
+    // #[inline(always)]
+    // pub(crate) fn routers_query_route(
+    //     &self,
+    //     context: RoutingContext,
+    // ) -> Option<Arc<QueryTargetQablSet>> {
+    //     match &self.context {
+    //         Some(ctx) => {
+    //             if ctx.valid_query_routes {
+    //                 (ctx.routers_query_routes.len() > context as usize)
+    //                     .then(|| ctx.routers_query_routes[context as usize].clone())
+    //             } else {
+    //                 None
+    //             }
+    //         }
+    //         None => None,
+    //     }
+    // }
 
-    #[inline(always)]
-    pub(crate) fn peers_query_route(
-        &self,
-        context: RoutingContext,
-    ) -> Option<Arc<QueryTargetQablSet>> {
-        match &self.context {
-            Some(ctx) => {
-                if ctx.valid_query_routes {
-                    (ctx.peers_query_routes.len() > context as usize)
-                        .then(|| ctx.peers_query_routes[context as usize].clone())
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
+    // #[inline(always)]
+    // pub(crate) fn peers_query_route(
+    //     &self,
+    //     context: RoutingContext,
+    // ) -> Option<Arc<QueryTargetQablSet>> {
+    //     match &self.context {
+    //         Some(ctx) => {
+    //             if ctx.valid_query_routes {
+    //                 (ctx.peers_query_routes.len() > context as usize)
+    //                     .then(|| ctx.peers_query_routes[context as usize].clone())
+    //             } else {
+    //                 None
+    //             }
+    //         }
+    //         None => None,
+    //     }
+    // }
 
-    #[inline(always)]
-    pub(crate) fn peer_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
-        match &self.context {
-            Some(ctx) => {
-                if ctx.valid_query_routes {
-                    ctx.peer_query_route.clone()
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
+    // #[inline(always)]
+    // pub(crate) fn peer_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
+    //     match &self.context {
+    //         Some(ctx) => {
+    //             if ctx.valid_query_routes {
+    //                 ctx.peer_query_route.clone()
+    //             } else {
+    //                 None
+    //             }
+    //         }
+    //         None => None,
+    //     }
+    // }
 
-    #[inline(always)]
-    pub(crate) fn client_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
-        match &self.context {
-            Some(ctx) => {
-                if ctx.valid_query_routes {
-                    ctx.client_query_route.clone()
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
+    // #[inline(always)]
+    // pub(crate) fn client_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
+    //     match &self.context {
+    //         Some(ctx) => {
+    //             if ctx.valid_query_routes {
+    //                 ctx.client_query_route.clone()
+    //             } else {
+    //                 None
+    //             }
+    //         }
+    //         None => None,
+    //     }
+    // }
 
     pub fn root() -> Arc<Resource> {
         Arc::new(Resource {

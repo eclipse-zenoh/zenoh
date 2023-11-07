@@ -17,12 +17,13 @@ pub use super::dispatcher::queries::*;
 pub use super::dispatcher::resource::*;
 use super::dispatcher::tables::Tables;
 use super::dispatcher::tables::TablesLock;
-use super::hat::network::{shared_nodes, Network};
+use super::hat::closing;
+use super::hat::init;
+use super::hat::new_transport_unicast;
 pub use super::hat::pubsub::*;
 pub use super::hat::queries::*;
 use super::runtime::Runtime;
-use crate::net::codec::Zenoh080Routing;
-use crate::net::protocol::linkstate::LinkStateList;
+use crate::net::routing::hat::handle_oam;
 use std::any::Any;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -30,19 +31,17 @@ use std::sync::{Mutex, RwLock};
 use std::time::Duration;
 use uhlc::HLC;
 use zenoh_link::Link;
-use zenoh_protocol::common::ZExtBody;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, ZenohId};
-use zenoh_protocol::network::oam::id::OAM_LINKSTATE;
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_transport::{
-    DeMux, DummyPrimitives, McastMux, Mux, Primitives, TransportMulticast, TransportPeer,
+    DeMux, DummyPrimitives, McastMux, Primitives, TransportMulticast, TransportPeer,
     TransportPeerEventHandler, TransportUnicast,
 };
 // use zenoh_collections::Timer;
 use zenoh_result::ZResult;
 
 pub struct Router {
-    whatami: WhatAmI,
+    // whatami: WhatAmI,
     pub tables: Arc<TablesLock>,
 }
 
@@ -56,7 +55,7 @@ impl Router {
         queries_default_timeout: Duration,
     ) -> Self {
         Router {
-            whatami,
+            // whatami,
             tables: Arc::new(TablesLock {
                 tables: RwLock::new(Tables::new(
                     zid,
@@ -83,37 +82,16 @@ impl Router {
         gossip_multihop: bool,
         autoconnect: WhatAmIMatcher,
     ) {
-        let mut tables = zwrite!(self.tables.tables);
-        if router_full_linkstate | gossip {
-            tables.hat.routers_net = Some(Network::new(
-                "[Routers network]".to_string(),
-                tables.zid,
-                runtime.clone(),
-                router_full_linkstate,
-                router_peers_failover_brokering,
-                gossip,
-                gossip_multihop,
-                autoconnect,
-            ));
-        }
-        if peer_full_linkstate | gossip {
-            tables.hat.peers_net = Some(Network::new(
-                "[Peers network]".to_string(),
-                tables.zid,
-                runtime,
-                peer_full_linkstate,
-                router_peers_failover_brokering,
-                gossip,
-                gossip_multihop,
-                autoconnect,
-            ));
-        }
-        if router_full_linkstate && peer_full_linkstate {
-            tables.hat.shared_nodes = shared_nodes(
-                tables.hat.routers_net.as_ref().unwrap(),
-                tables.hat.peers_net.as_ref().unwrap(),
-            );
-        }
+        init(
+            &self.tables,
+            runtime,
+            router_full_linkstate,
+            peer_full_linkstate,
+            router_peers_failover_brokering,
+            gossip,
+            gossip_multihop,
+            autoconnect,
+        )
     }
 
     pub fn new_primitives(&self, primitives: Arc<dyn Primitives + Send + Sync>) -> Arc<Face> {
@@ -138,75 +116,14 @@ impl Router {
         &self,
         transport: TransportUnicast,
     ) -> ZResult<Arc<LinkStateInterceptor>> {
-        let ctrl_lock = zlock!(self.tables.ctrl_lock);
-        let mut tables = zwrite!(self.tables.tables);
-        let whatami = transport.get_whatami()?;
-
-        let link_id = match (self.whatami, whatami) {
-            (WhatAmI::Router, WhatAmI::Router) => tables
-                .hat
-                .routers_net
-                .as_mut()
-                .unwrap()
-                .add_link(transport.clone()),
-            (WhatAmI::Router, WhatAmI::Peer)
-            | (WhatAmI::Peer, WhatAmI::Router)
-            | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if let Some(net) = tables.hat.peers_net.as_mut() {
-                    net.add_link(transport.clone())
-                } else {
-                    0
-                }
-            }
-            _ => 0,
-        };
-
-        if tables.hat.full_net(WhatAmI::Router) && tables.hat.full_net(WhatAmI::Peer) {
-            tables.hat.shared_nodes = shared_nodes(
-                tables.hat.routers_net.as_ref().unwrap(),
-                tables.hat.peers_net.as_ref().unwrap(),
-            );
-        }
-
-        let handler = Arc::new(LinkStateInterceptor::new(
+        Ok(Arc::new(LinkStateInterceptor::new(
             transport.clone(),
             self.tables.clone(),
             Face {
                 tables: self.tables.clone(),
-                state: tables
-                    .open_net_face(
-                        transport.get_zid().unwrap(),
-                        whatami,
-                        #[cfg(feature = "stats")]
-                        transport.get_stats().unwrap(),
-                        Arc::new(Mux::new(transport)),
-                        link_id,
-                    )
-                    .upgrade()
-                    .unwrap(),
+                state: new_transport_unicast(&self.tables, transport)?,
             },
-        ));
-
-        match (self.whatami, whatami) {
-            (WhatAmI::Router, WhatAmI::Router) => {
-                tables
-                    .hat
-                    .schedule_compute_trees(self.tables.clone(), WhatAmI::Router);
-            }
-            (WhatAmI::Router, WhatAmI::Peer)
-            | (WhatAmI::Peer, WhatAmI::Router)
-            | (WhatAmI::Peer, WhatAmI::Peer) => {
-                if tables.hat.full_net(WhatAmI::Peer) {
-                    tables
-                        .hat
-                        .schedule_compute_trees(self.tables.clone(), WhatAmI::Peer);
-                }
-            }
-            _ => (),
-        }
-        drop(tables);
-        drop(ctrl_lock);
-        Ok(handler)
+        )))
     }
 
     pub fn new_transport_multicast(&self, transport: TransportMulticast) -> ZResult<()> {
@@ -282,109 +199,7 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
     fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
         log::trace!("Recv {:?}", msg);
         match msg.body {
-            NetworkBody::OAM(oam) => {
-                if oam.id == OAM_LINKSTATE {
-                    if let ZExtBody::ZBuf(buf) = oam.body {
-                        if let Ok(zid) = self.transport.get_zid() {
-                            use zenoh_buffers::reader::HasReader;
-                            use zenoh_codec::RCodec;
-                            let codec = Zenoh080Routing::new();
-                            let mut reader = buf.reader();
-                            let list: LinkStateList = codec.read(&mut reader).unwrap();
-
-                            let ctrl_lock = zlock!(self.tables.ctrl_lock);
-                            let mut tables = zwrite!(self.tables.tables);
-                            let whatami = self.transport.get_whatami()?;
-                            match (tables.whatami, whatami) {
-                                (WhatAmI::Router, WhatAmI::Router) => {
-                                    for (_, removed_node) in tables
-                                        .hat
-                                        .routers_net
-                                        .as_mut()
-                                        .unwrap()
-                                        .link_states(list.link_states, zid)
-                                        .removed_nodes
-                                    {
-                                        pubsub_remove_node(
-                                            &mut tables,
-                                            &removed_node.zid,
-                                            WhatAmI::Router,
-                                        );
-                                        queries_remove_node(
-                                            &mut tables,
-                                            &removed_node.zid,
-                                            WhatAmI::Router,
-                                        );
-                                    }
-
-                                    if tables.hat.full_net(WhatAmI::Peer) {
-                                        tables.hat.shared_nodes = shared_nodes(
-                                            tables.hat.routers_net.as_ref().unwrap(),
-                                            tables.hat.peers_net.as_ref().unwrap(),
-                                        );
-                                    }
-
-                                    tables.hat.schedule_compute_trees(
-                                        self.tables.clone(),
-                                        WhatAmI::Router,
-                                    );
-                                }
-                                (WhatAmI::Router, WhatAmI::Peer)
-                                | (WhatAmI::Peer, WhatAmI::Router)
-                                | (WhatAmI::Peer, WhatAmI::Peer) => {
-                                    if let Some(net) = tables.hat.peers_net.as_mut() {
-                                        let changes = net.link_states(list.link_states, zid);
-                                        if tables.hat.full_net(WhatAmI::Peer) {
-                                            for (_, removed_node) in changes.removed_nodes {
-                                                pubsub_remove_node(
-                                                    &mut tables,
-                                                    &removed_node.zid,
-                                                    WhatAmI::Peer,
-                                                );
-                                                queries_remove_node(
-                                                    &mut tables,
-                                                    &removed_node.zid,
-                                                    WhatAmI::Peer,
-                                                );
-                                            }
-
-                                            if tables.whatami == WhatAmI::Router {
-                                                tables.hat.shared_nodes = shared_nodes(
-                                                    tables.hat.routers_net.as_ref().unwrap(),
-                                                    tables.hat.peers_net.as_ref().unwrap(),
-                                                );
-                                            }
-
-                                            tables.hat.schedule_compute_trees(
-                                                self.tables.clone(),
-                                                WhatAmI::Peer,
-                                            );
-                                        } else {
-                                            for (_, updated_node) in changes.updated_nodes {
-                                                pubsub_linkstate_change(
-                                                    &mut tables,
-                                                    &updated_node.zid,
-                                                    &updated_node.links,
-                                                );
-                                                queries_linkstate_change(
-                                                    &mut tables,
-                                                    &updated_node.zid,
-                                                    &updated_node.links,
-                                                );
-                                            }
-                                        }
-                                    }
-                                }
-                                _ => (),
-                            };
-                            drop(tables);
-                            drop(ctrl_lock);
-                        }
-                    }
-                }
-
-                Ok(())
-            }
+            NetworkBody::OAM(oam) => handle_oam(&self.tables, oam, &self.transport),
             _ => self.demux.handle_message(msg),
         }
     }
@@ -395,63 +210,7 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
 
     fn closing(&self) {
         self.demux.closing();
-        let tables_ref = self.tables.clone();
-        match (self.transport.get_zid(), self.transport.get_whatami()) {
-            (Ok(zid), Ok(whatami)) => {
-                let ctrl_lock = zlock!(tables_ref.ctrl_lock);
-                let mut tables = zwrite!(tables_ref.tables);
-                match (tables.whatami, whatami) {
-                    (WhatAmI::Router, WhatAmI::Router) => {
-                        for (_, removed_node) in
-                            tables.hat.routers_net.as_mut().unwrap().remove_link(&zid)
-                        {
-                            pubsub_remove_node(&mut tables, &removed_node.zid, WhatAmI::Router);
-                            queries_remove_node(&mut tables, &removed_node.zid, WhatAmI::Router);
-                        }
-
-                        if tables.hat.full_net(WhatAmI::Peer) {
-                            tables.hat.shared_nodes = shared_nodes(
-                                tables.hat.routers_net.as_ref().unwrap(),
-                                tables.hat.peers_net.as_ref().unwrap(),
-                            );
-                        }
-
-                        tables
-                            .hat
-                            .schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
-                    }
-                    (WhatAmI::Router, WhatAmI::Peer)
-                    | (WhatAmI::Peer, WhatAmI::Router)
-                    | (WhatAmI::Peer, WhatAmI::Peer) => {
-                        if tables.hat.full_net(WhatAmI::Peer) {
-                            for (_, removed_node) in
-                                tables.hat.peers_net.as_mut().unwrap().remove_link(&zid)
-                            {
-                                pubsub_remove_node(&mut tables, &removed_node.zid, WhatAmI::Peer);
-                                queries_remove_node(&mut tables, &removed_node.zid, WhatAmI::Peer);
-                            }
-
-                            if tables.whatami == WhatAmI::Router {
-                                tables.hat.shared_nodes = shared_nodes(
-                                    tables.hat.routers_net.as_ref().unwrap(),
-                                    tables.hat.peers_net.as_ref().unwrap(),
-                                );
-                            }
-
-                            tables
-                                .hat
-                                .schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
-                        } else if let Some(net) = tables.hat.peers_net.as_mut() {
-                            net.remove_link(&zid);
-                        }
-                    }
-                    _ => (),
-                };
-                drop(tables);
-                drop(ctrl_lock);
-            }
-            (_, _) => log::error!("Closed transport in session closing!"),
-        }
+        let _ = closing(&self.tables, &self.transport);
     }
 
     fn closed(&self) {}
