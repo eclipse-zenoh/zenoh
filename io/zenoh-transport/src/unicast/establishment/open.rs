@@ -607,13 +607,15 @@ pub(crate) async fn open_link(
         is_shm: state.ext_shm.is_shm(),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
     };
-    link.config.mtu = state.transport.batch_size;
-    #[cfg(feature = "transport_compression")]
-    {
-        link.config.is_compression = state.link.ext_compression.is_compression();
-    }
-    let c_link = link.clone();
-    let transport = step!(manager.init_transport_unicast(config, c_link).await);
+
+    let o_config = TransportLinkUnicastConfig {
+        mtu: state.transport.batch_size,
+        direction: TransportLinkUnicastDirection::Inbound,
+        #[cfg(feature = "transport_compression")]
+        is_compression: state.link.ext_compression.is_compression(),
+    };
+    let o_link = TransportLinkUnicast::new(link.link.clone(), o_config);
+    let transport = step!(manager.init_transport_unicast(config, o_link).await);
 
     // Sync the RX sequence number
     let _ = step!(transport

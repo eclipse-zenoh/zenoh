@@ -701,23 +701,20 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
     };
     link.config.mtu = state.transport.batch_size;
 
-    let mut c_link = link.clone();
-    #[cfg(feature = "transport_compression")]
-    {
-        c_link.config.is_compression = state.link.ext_compression.is_compression();
-    }
-    let transport = step!(manager.init_transport_unicast(config, c_link).await);
+    let a_config = TransportLinkUnicastConfig {
+        mtu: state.transport.batch_size,
+        direction: TransportLinkUnicastDirection::Inbound,
+        #[cfg(feature = "transport_compression")]
+        is_compression: state.link.ext_compression.is_compression(),
+    };
+    let a_link = TransportLinkUnicast::new(link.link.clone(), a_config);
+    let transport = step!(manager.init_transport_unicast(config, a_link).await);
 
     // Send the open_ack on the link
     step!(link
         .send(&oack_out.open_ack.into())
         .await
         .map_err(|e| (e, Some(close::reason::GENERIC))));
-
-    #[cfg(feature = "transport_compression")]
-    {
-        link.config.is_compression = state.link.ext_compression.is_compression();
-    }
 
     // Sync the RX sequence number
     let _ = step!(transport

@@ -206,6 +206,7 @@ impl WBatch {
         #[cfg(feature = "transport_compression")]
         if self.header.is_compression() {
             let buffer = buffer.ok_or_else(|| zerror!("Support buffer not provided"))?;
+            buffer.clear();
             return self.compress(buffer);
         }
 
@@ -213,9 +214,9 @@ impl WBatch {
     }
 
     #[cfg(feature = "transport_compression")]
-    fn compress(&mut self, buffer: &mut BBuf) -> ZResult<Finalize> {
+    fn compress(&mut self, support: &mut BBuf) -> ZResult<Finalize> {
         // Write the initial bytes for the batch
-        let mut writer = buffer.writer();
+        let mut writer = support.writer();
         if let Some(h) = self.header.get() {
             let _ = writer.write_u8(h.get());
         }
@@ -229,7 +230,7 @@ impl WBatch {
             .map_err(|_| zerror!("Compression error"))?;
 
         // Verify wether the resulting compressed data is smaller than the initial input
-        if buffer.len() < self.buffer.len() {
+        if support.len() < self.buffer.len() {
             Ok(Finalize::Buffer)
         } else {
             // Keep the original uncompressed buffer and unset the compression flag from the header

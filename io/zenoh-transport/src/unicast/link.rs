@@ -67,6 +67,8 @@ impl TransportLinkUnicast {
     pub async fn send_batch(&mut self, batch: &mut WBatch) -> ZResult<()> {
         const ERR: &str = "Write error on link: ";
 
+        log::trace!("WBatch: {:?}", batch);
+
         let res = batch
             .finalize(
                 #[cfg(feature = "transport_compression")]
@@ -84,9 +86,15 @@ impl TransportLinkUnicast {
                 .as_slice(),
         };
 
+        log::trace!("WBytes: {:02x?}", bytes);
+
         // Send the message on the link
         if self.link.is_streamed() {
-            let len = bytes.len().to_le_bytes();
+            let len: BatchSize = bytes
+                .len()
+                .try_into()
+                .map_err(|_| zerror!("Invalid batch length"))?;
+            let len = len.to_le_bytes();
             self.link.write_all(&len).await?;
         }
         self.link.write_all(bytes).await?;
@@ -131,15 +139,16 @@ impl TransportLinkUnicast {
             self.link.read(into.as_mut_slice()).await?
         };
 
+        log::trace!("RBytes: {:02x?}", &into.as_slice()[0..end]);
+
         let buffer = ZSlice::make(Arc::new(into), 0, end)
             .map_err(|_| zerror!("{ERR}{self}. ZSlice index(es) out of bounds"))?;
-
-        log::trace!("RBatch: {:?}", buffer);
-
         let mut batch = RBatch::new(self.batch_config(), buffer);
         batch
             .initialize(buff)
             .map_err(|e| zerror!("{ERR}{self}. {e}."))?;
+
+        log::trace!("RBatch: {:?}", batch);
 
         Ok(batch)
     }
