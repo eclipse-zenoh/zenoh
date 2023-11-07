@@ -14,9 +14,9 @@
 use super::super::hat::pubsub::{compute_data_route, compute_data_routes, compute_data_routes_};
 use super::face::FaceState;
 use super::resource::{DataRoutes, Direction, PullCaches, Resource};
-use super::tables::{compute_matching_pulls, RoutingContext, RoutingExpr, Tables};
+use super::tables::{RoutingContext, RoutingExpr, Tables};
 use crate::net::routing::hat::map_routing_context;
-use crate::net::routing::hat::pubsub::{egress_filter, ingress_filter};
+use crate::net::routing::hat::pubsub::{compute_matching_pulls, egress_filter, ingress_filter};
 use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_core::zread;

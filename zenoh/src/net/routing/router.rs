@@ -20,8 +20,6 @@ use super::dispatcher::tables::TablesLock;
 use super::hat::closing;
 use super::hat::init;
 use super::hat::new_transport_unicast;
-pub use super::hat::pubsub::*;
-pub use super::hat::queries::*;
 use super::runtime::Runtime;
 use crate::net::routing::hat::handle_oam;
 use std::any::Any;

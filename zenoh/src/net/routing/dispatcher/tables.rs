@@ -13,8 +13,8 @@ use crate::net::routing::hat::HatTables;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub use super::super::hat::pubsub::*;
-pub use super::super::hat::queries::*;
+use super::super::hat::pubsub::*;
+use super::super::hat::queries::*;
 use super::face::FaceState;
 pub use super::pubsub::*;
 pub use super::queries::*;

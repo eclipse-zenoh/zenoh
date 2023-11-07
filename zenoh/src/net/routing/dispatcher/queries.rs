@@ -1,5 +1,3 @@
-use crate::net::routing::hat::pubsub::ingress_filter;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -19,9 +17,10 @@ use super::super::hat::queries::compute_query_routes;
 use super::super::hat::queries::compute_query_routes_;
 use super::face::FaceState;
 use super::resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource};
-use super::tables::egress_filter;
 use super::tables::RoutingContext;
 use super::tables::{RoutingExpr, Tables, TablesLock};
+use crate::net::routing::hat::pubsub::egress_filter;
+use crate::net::routing::hat::pubsub::ingress_filter;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};

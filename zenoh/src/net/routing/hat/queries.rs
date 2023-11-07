@@ -369,7 +369,7 @@ fn register_router_queryable(
     propagate_simple_queryable(tables, res, face);
 }
 
-pub fn declare_router_queryable(
+fn declare_router_queryable(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -456,7 +456,7 @@ fn register_peer_queryable(
     }
 }
 
-pub fn declare_peer_queryable(
+fn declare_peer_queryable(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -541,7 +541,7 @@ fn register_client_queryable(
     face_hat_mut!(face).remote_qabls.insert(res.clone());
 }
 
-pub fn declare_client_queryable(
+fn declare_client_queryable(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -627,7 +627,7 @@ pub fn declare_client_queryable(
     }
 }
 
-pub fn declare_queryable(
+pub(crate) fn declare_queryable(
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
@@ -852,7 +852,7 @@ fn undeclare_router_queryable(
     }
 }
 
-pub fn forget_router_queryable(
+fn forget_router_queryable(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -914,7 +914,7 @@ fn undeclare_peer_queryable(
     }
 }
 
-pub fn forget_peer_queryable(
+fn forget_peer_queryable(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -1029,7 +1029,7 @@ pub(crate) fn undeclare_client_queryable(
     }
 }
 
-pub fn forget_client_queryable(
+fn forget_client_queryable(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -1063,7 +1063,7 @@ pub fn forget_client_queryable(
     }
 }
 
-pub fn forget_queryable(
+pub(crate) fn forget_queryable(
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,

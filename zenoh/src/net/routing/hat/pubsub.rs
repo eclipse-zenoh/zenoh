@@ -511,7 +511,7 @@ fn declare_client_subscription(
     }
 }
 
-pub fn declare_subscription(
+pub(crate) fn declare_subscription(
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
@@ -934,7 +934,7 @@ fn forget_client_subscription(
     }
 }
 
-pub fn forget_subscription(
+pub(crate) fn forget_subscription(
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,

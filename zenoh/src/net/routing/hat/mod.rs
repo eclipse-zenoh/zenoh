@@ -19,12 +19,12 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use self::{
     network::Network,
-    pubsub::undeclare_client_subscription,
+    pubsub::{compute_data_routes_, undeclare_client_subscription},
     queries::{compute_query_routes_, undeclare_client_queryable},
 };
 use super::dispatcher::{
     face::FaceState,
-    tables::{compute_data_routes_, Resource, RoutingContext, Tables, TablesLock},
+    tables::{Resource, RoutingContext, Tables, TablesLock},
 };
 use crate::{
     hat, hat_mut,
@@ -63,16 +63,16 @@ zconfigurable! {
 }
 
 pub struct HatTables {
-    pub(crate) router_subs: HashSet<Arc<Resource>>,
-    pub(crate) peer_subs: HashSet<Arc<Resource>>,
-    pub(crate) router_qabls: HashSet<Arc<Resource>>,
-    pub(crate) peer_qabls: HashSet<Arc<Resource>>,
-    pub(crate) routers_net: Option<Network>,
-    pub(crate) peers_net: Option<Network>,
-    pub(crate) shared_nodes: Vec<ZenohId>,
-    pub(crate) routers_trees_task: Option<JoinHandle<()>>,
-    pub(crate) peers_trees_task: Option<JoinHandle<()>>,
-    pub(crate) router_peers_failover_brokering: bool,
+    router_subs: HashSet<Arc<Resource>>,
+    peer_subs: HashSet<Arc<Resource>>,
+    router_qabls: HashSet<Arc<Resource>>,
+    peer_qabls: HashSet<Arc<Resource>>,
+    routers_net: Option<Network>,
+    peers_net: Option<Network>,
+    shared_nodes: Vec<ZenohId>,
+    routers_trees_task: Option<JoinHandle<()>>,
+    peers_trees_task: Option<JoinHandle<()>>,
+    router_peers_failover_brokering: bool,
 }
 
 impl HatTables {
@@ -92,7 +92,7 @@ impl HatTables {
     }
 
     #[inline]
-    pub(crate) fn get_net(&self, net_type: WhatAmI) -> Option<&Network> {
+    fn get_net(&self, net_type: WhatAmI) -> Option<&Network> {
         match net_type {
             WhatAmI::Router => self.routers_net.as_ref(),
             WhatAmI::Peer => self.peers_net.as_ref(),
@@ -101,7 +101,7 @@ impl HatTables {
     }
 
     #[inline]
-    pub(crate) fn full_net(&self, net_type: WhatAmI) -> bool {
+    fn full_net(&self, net_type: WhatAmI) -> bool {
         match net_type {
             WhatAmI::Router => self
                 .routers_net
@@ -118,7 +118,7 @@ impl HatTables {
     }
 
     #[inline]
-    pub(crate) fn get_router_links(&self, peer: ZenohId) -> impl Iterator<Item = &ZenohId> + '_ {
+    fn get_router_links(&self, peer: ZenohId) -> impl Iterator<Item = &ZenohId> + '_ {
         self.peers_net
             .as_ref()
             .unwrap()
@@ -134,7 +134,7 @@ impl HatTables {
     }
 
     #[inline]
-    pub(crate) fn elect_router<'a>(
+    fn elect_router<'a>(
         &'a self,
         self_zid: &'a ZenohId,
         key_expr: &str,
@@ -168,13 +168,13 @@ impl HatTables {
     }
 
     #[inline]
-    pub(crate) fn failover_brokering_to(source_links: &[ZenohId], dest: ZenohId) -> bool {
+    fn failover_brokering_to(source_links: &[ZenohId], dest: ZenohId) -> bool {
         // if source_links is empty then gossip is probably disabled in source peer
         !source_links.is_empty() && !source_links.contains(&dest)
     }
 
     #[inline]
-    pub(crate) fn failover_brokering(&self, peer1: ZenohId, peer2: ZenohId) -> bool {
+    fn failover_brokering(&self, peer1: ZenohId, peer2: ZenohId) -> bool {
         self.router_peers_failover_brokering
             && self
                 .peers_net
@@ -229,7 +229,7 @@ pub(crate) struct HatContext {
 }
 
 impl HatContext {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             router_subs: HashSet::new(),
             peer_subs: HashSet::new(),
@@ -240,14 +240,14 @@ impl HatContext {
 }
 
 pub(crate) struct HatFace {
-    pub(crate) local_subs: HashSet<Arc<Resource>>,
-    pub(crate) remote_subs: HashSet<Arc<Resource>>,
-    pub(crate) local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
-    pub(crate) remote_qabls: HashSet<Arc<Resource>>,
+    local_subs: HashSet<Arc<Resource>>,
+    remote_subs: HashSet<Arc<Resource>>,
+    local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
+    remote_qabls: HashSet<Arc<Resource>>,
 }
 
 impl HatFace {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             local_subs: HashSet::new(),
             remote_subs: HashSet::new(),

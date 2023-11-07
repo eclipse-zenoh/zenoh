@@ -1,5 +1,3 @@
-use crate::net::routing::hat::HatFace;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -16,6 +14,9 @@ use crate::net::routing::hat::HatFace;
 use super::super::router::*;
 use super::tables::TablesLock;
 use super::{resource::*, tables};
+use crate::net::routing::hat::pubsub::*;
+use crate::net::routing::hat::queries::*;
+use crate::net::routing::hat::HatFace;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt;

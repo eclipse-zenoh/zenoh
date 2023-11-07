@@ -38,12 +38,12 @@ struct Details {
 }
 
 #[derive(Clone)]
-pub(crate) struct Node {
-    pub(crate) zid: ZenohId,
-    pub(crate) whatami: Option<WhatAmI>,
-    pub(crate) locators: Option<Vec<Locator>>,
-    pub(crate) sn: u64,
-    pub(crate) links: Vec<ZenohId>,
+pub(super) struct Node {
+    pub(super) zid: ZenohId,
+    pub(super) whatami: Option<WhatAmI>,
+    pub(super) locators: Option<Vec<Locator>>,
+    pub(super) sn: u64,
+    pub(super) links: Vec<ZenohId>,
 }
 
 impl std::fmt::Debug for Node {
@@ -52,8 +52,8 @@ impl std::fmt::Debug for Node {
     }
 }
 
-pub(crate) struct Link {
-    pub(crate) transport: TransportUnicast,
+pub(super) struct Link {
+    pub(super) transport: TransportUnicast,
     zid: ZenohId,
     mappings: VecMap<ZenohId>,
     local_mappings: VecMap<u64>,
@@ -71,57 +71,57 @@ impl Link {
     }
 
     #[inline]
-    pub(crate) fn set_zid_mapping(&mut self, psid: u64, zid: ZenohId) {
+    pub(super) fn set_zid_mapping(&mut self, psid: u64, zid: ZenohId) {
         self.mappings.insert(psid.try_into().unwrap(), zid);
     }
 
     #[inline]
-    pub(crate) fn get_zid(&self, psid: &u64) -> Option<&ZenohId> {
+    pub(super) fn get_zid(&self, psid: &u64) -> Option<&ZenohId> {
         self.mappings.get((*psid).try_into().unwrap())
     }
 
     #[inline]
-    pub(crate) fn set_local_psid_mapping(&mut self, psid: u64, local_psid: u64) {
+    pub(super) fn set_local_psid_mapping(&mut self, psid: u64, local_psid: u64) {
         self.local_mappings
             .insert(psid.try_into().unwrap(), local_psid);
     }
 
     #[inline]
-    pub(crate) fn get_local_psid(&self, psid: &u64) -> Option<&u64> {
+    pub(super) fn get_local_psid(&self, psid: &u64) -> Option<&u64> {
         self.local_mappings.get((*psid).try_into().unwrap())
     }
 }
 
-pub(crate) struct Changes {
-    pub(crate) updated_nodes: Vec<(NodeIndex, Node)>,
-    pub(crate) removed_nodes: Vec<(NodeIndex, Node)>,
+pub(super) struct Changes {
+    pub(super) updated_nodes: Vec<(NodeIndex, Node)>,
+    pub(super) removed_nodes: Vec<(NodeIndex, Node)>,
 }
 
 #[derive(Clone)]
-pub(crate) struct Tree {
-    pub(crate) parent: Option<NodeIndex>,
-    pub(crate) childs: Vec<NodeIndex>,
-    pub(crate) directions: Vec<Option<NodeIndex>>,
+pub(super) struct Tree {
+    pub(super) parent: Option<NodeIndex>,
+    pub(super) childs: Vec<NodeIndex>,
+    pub(super) directions: Vec<Option<NodeIndex>>,
 }
 
-pub(crate) struct Network {
-    pub(crate) name: String,
-    pub(crate) full_linkstate: bool,
-    pub(crate) router_peers_failover_brokering: bool,
-    pub(crate) gossip: bool,
-    pub(crate) gossip_multihop: bool,
-    pub(crate) autoconnect: WhatAmIMatcher,
-    pub(crate) idx: NodeIndex,
-    pub(crate) links: VecMap<Link>,
-    pub(crate) trees: Vec<Tree>,
-    pub(crate) distances: Vec<f64>,
-    pub(crate) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
-    pub(crate) runtime: Runtime,
+pub(super) struct Network {
+    pub(super) name: String,
+    pub(super) full_linkstate: bool,
+    pub(super) router_peers_failover_brokering: bool,
+    pub(super) gossip: bool,
+    pub(super) gossip_multihop: bool,
+    pub(super) autoconnect: WhatAmIMatcher,
+    pub(super) idx: NodeIndex,
+    pub(super) links: VecMap<Link>,
+    pub(super) trees: Vec<Tree>,
+    pub(super) distances: Vec<f64>,
+    pub(super) graph: petgraph::stable_graph::StableUnGraph<Node, f64>,
+    pub(super) runtime: Runtime,
 }
 
 impl Network {
     #[allow(clippy::too_many_arguments)]
-    pub(crate) fn new(
+    pub(super) fn new(
         name: String,
         zid: ZenohId,
         runtime: Runtime,
@@ -161,7 +161,7 @@ impl Network {
     }
 
     //noinspection ALL
-    // pub(crate) fn dot(&self) -> String {
+    // pub(super) fn dot(&self) -> String {
     //     std::format!(
     //         "{:?}",
     //         petgraph::dot::Dot::with_config(&self.graph, &[petgraph::dot::Config::EdgeNoLabel])
@@ -169,29 +169,29 @@ impl Network {
     // }
 
     #[inline]
-    pub(crate) fn get_node(&self, zid: &ZenohId) -> Option<&Node> {
+    pub(super) fn get_node(&self, zid: &ZenohId) -> Option<&Node> {
         self.graph.node_weights().find(|weight| weight.zid == *zid)
     }
 
     #[inline]
-    pub(crate) fn get_idx(&self, zid: &ZenohId) -> Option<NodeIndex> {
+    pub(super) fn get_idx(&self, zid: &ZenohId) -> Option<NodeIndex> {
         self.graph
             .node_indices()
             .find(|idx| self.graph[*idx].zid == *zid)
     }
 
     #[inline]
-    pub(crate) fn get_link(&self, id: usize) -> Option<&Link> {
+    pub(super) fn get_link(&self, id: usize) -> Option<&Link> {
         self.links.get(id)
     }
 
     #[inline]
-    pub(crate) fn get_link_from_zid(&self, zid: &ZenohId) -> Option<&Link> {
+    pub(super) fn get_link_from_zid(&self, zid: &ZenohId) -> Option<&Link> {
         self.links.values().find(|link| link.zid == *zid)
     }
 
     #[inline]
-    pub(crate) fn get_local_context(
+    pub(super) fn get_local_context(
         &self,
         context: RoutingContext,
         link_id: usize,
@@ -345,7 +345,7 @@ impl Network {
         self.graph.update_edge(idx1, idx2, weight);
     }
 
-    pub(crate) fn link_states(&mut self, link_states: Vec<LinkState>, src: ZenohId) -> Changes {
+    pub(super) fn link_states(&mut self, link_states: Vec<LinkState>, src: ZenohId) -> Changes {
         log::trace!("{} Received from {} raw: {:?}", self.name, src, link_states);
 
         let graph = &self.graph;
@@ -698,7 +698,7 @@ impl Network {
         }
     }
 
-    pub(crate) fn add_link(&mut self, transport: TransportUnicast) -> usize {
+    pub(super) fn add_link(&mut self, transport: TransportUnicast) -> usize {
         let free_index = {
             let mut i = 0;
             while self.links.contains_key(i) {
@@ -810,7 +810,7 @@ impl Network {
         free_index
     }
 
-    pub(crate) fn remove_link(&mut self, zid: &ZenohId) -> Vec<(NodeIndex, Node)> {
+    pub(super) fn remove_link(&mut self, zid: &ZenohId) -> Vec<(NodeIndex, Node)> {
         log::trace!("{} remove_link {}", self.name, zid);
         self.links.retain(|_, link| link.zid != *zid);
         self.graph[self.idx].links.retain(|link| *link != *zid);
@@ -889,7 +889,7 @@ impl Network {
         removed
     }
 
-    pub(crate) fn compute_trees(&mut self) -> Vec<Vec<NodeIndex>> {
+    pub(super) fn compute_trees(&mut self) -> Vec<Vec<NodeIndex>> {
         let indexes = self.graph.node_indices().collect::<Vec<NodeIndex>>();
         let max_idx = indexes.iter().max().unwrap();
 
@@ -990,7 +990,7 @@ impl Network {
     }
 
     #[inline]
-    pub(crate) fn get_links(&self, node: ZenohId) -> &[ZenohId] {
+    pub(super) fn get_links(&self, node: ZenohId) -> &[ZenohId] {
         self.get_node(&node)
             .map(|node| &node.links[..])
             .unwrap_or_default()
@@ -998,7 +998,7 @@ impl Network {
 }
 
 #[inline]
-pub(crate) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<ZenohId> {
+pub(super) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<ZenohId> {
     net1.graph
         .node_references()
         .filter_map(|(_, node1)| {
