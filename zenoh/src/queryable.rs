@@ -280,6 +280,7 @@ impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> 
 /// queryable.undeclare().res().await.unwrap();
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryableUndeclaration<'a> {
     queryable: CallbackQueryable<'a>,
 }
@@ -325,8 +326,8 @@ impl Drop for CallbackQueryable<'_> {
 /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
 /// # })
 /// ```
-#[derive(Debug)]
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[derive(Debug)]
 pub struct QueryableBuilder<'a, 'b, Handler> {
     pub(crate) session: SessionRef<'a>,
     pub(crate) key_expr: ZResult<KeyExpr<'b>>,
