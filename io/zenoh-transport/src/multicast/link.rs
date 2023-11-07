@@ -77,7 +77,8 @@ impl TransportLinkMulticast {
 
     pub async fn send_batch(&self, batch: &mut WBatch) -> ZResult<()> {
         const ERR: &str = "Write error on link: ";
-        batch.finalize().map_err(|_| zerror!("{ERR}{self}"))?;
+        // @TODO: add support buffer
+        batch.finalize(None).map_err(|_| zerror!("{ERR}{self}"))?;
         // Send the message on the link
         self.link.write_all(batch.as_slice()).await?;
 

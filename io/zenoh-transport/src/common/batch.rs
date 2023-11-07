@@ -108,6 +108,14 @@ impl WBatchStats {
     }
 }
 
+#[repr(u8)]
+#[derive(Debug)]
+pub enum Finalize {
+    Batch,
+    #[cfg(feature = "transport_compression")]
+    Buffer,
+}
+
 /// Write Batch
 ///
 /// A [`WBatch`][WBatch] is a non-expandable and contiguous region of memory
@@ -191,23 +199,21 @@ impl WBatch {
         zsplit!(self.buffer.as_slice(), self.header)
     }
 
-    pub fn finalize(&mut self) -> ZResult<()> {
+    pub fn finalize(
+        &mut self,
+        #[cfg(feature = "transport_compression")] buffer: Option<&mut BBuf>,
+    ) -> ZResult<Finalize> {
         #[cfg(feature = "transport_compression")]
         if self.header.is_compression() {
-            self.compress()?;
+            let buffer = buffer.ok_or_else(|| zerror!("Support buffer not provided"))?;
+            return self.compress(buffer);
         }
 
-        Ok(())
+        Ok(Finalize::Batch)
     }
 
     #[cfg(feature = "transport_compression")]
-    fn compress(&mut self) -> ZResult<()> {
-        let (_header, payload) = self.split();
-
-        // Create a new empty buffer
-        let mut buffer =
-            BBuf::with_capacity(lz4_flex::block::get_maximum_output_size(self.buffer.len()));
-
+    fn compress(&mut self, buffer: &mut BBuf) -> ZResult<Finalize> {
         // Write the initial bytes for the batch
         let mut writer = buffer.writer();
         if let Some(h) = self.header.get() {
@@ -215,6 +221,7 @@ impl WBatch {
         }
 
         // Compress the actual content
+        let (_header, payload) = self.split();
         writer
             .with_slot(writer.remaining(), |b| {
                 lz4_flex::block::compress_into(payload, b).unwrap_or(0)
@@ -223,8 +230,7 @@ impl WBatch {
 
         // Verify wether the resulting compressed data is smaller than the initial input
         if buffer.len() < self.buffer.len() {
-            // Replace the buffer in this batch
-            self.buffer = buffer;
+            Ok(Finalize::Buffer)
         } else {
             // Keep the original uncompressed buffer and unset the compression flag from the header
             let h = self
@@ -233,9 +239,8 @@ impl WBatch {
                 .get_mut(BatchHeader::INDEX)
                 .ok_or_else(|| zerror!("Header not present"))?;
             *h &= !BatchHeader::COMPRESSION;
+            Ok(Finalize::Batch)
         }
-
-        Ok(())
     }
 }
 
@@ -406,8 +411,24 @@ mod tests {
                 let mut wbatch = WBatch::new(config);
                 wbatch.encode(&msg_in).unwrap();
                 println!("Encoded WBatch: {:?}", wbatch);
-                wbatch.finalize().unwrap();
-                println!("Finalized WBatch: {:?}", wbatch);
+
+                #[cfg(feature = "transport_compression")]
+                let mut buffer = config.is_compression.then_some(BBuf::with_capacity(
+                    lz4_flex::block::get_maximum_output_size(wbatch.as_slice().len()),
+                ));
+
+                let res = wbatch
+                    .finalize(
+                        #[cfg(feature = "transport_compression")]
+                        buffer.as_mut(),
+                    )
+                    .unwrap();
+                let bytes = match res {
+                    Finalize::Batch => wbatch.as_slice(),
+                    #[cfg(feature = "transport_compression")]
+                    Finalize::Buffer => buffer.as_mut().unwrap().as_slice(),
+                };
+                println!("Finalized WBatch: {:?}", bytes);
 
                 let mut rbatch = RBatch::new(
                     config,

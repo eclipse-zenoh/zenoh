@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::common::batch::{BatchConfig, Decode, Encode, RBatch, WBatch};
+use crate::common::batch::{BatchConfig, Decode, Encode, Finalize, RBatch, WBatch};
 use std::fmt;
 use std::sync::Arc;
-use zenoh_buffers::{ZSlice, ZSliceBuffer};
+use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::transport::{BatchSize, TransportMessage};
 use zenoh_result::{zerror, ZResult};
@@ -40,11 +40,20 @@ pub(crate) struct TransportLinkUnicastConfig {
 pub(crate) struct TransportLinkUnicast {
     pub(crate) link: LinkUnicast,
     pub(crate) config: TransportLinkUnicastConfig,
+    #[cfg(feature = "transport_compression")]
+    pub(crate) buffer: Option<BBuf>,
 }
 
 impl TransportLinkUnicast {
     pub fn new(link: LinkUnicast, config: TransportLinkUnicastConfig) -> Self {
-        Self { link, config }
+        Self {
+            link,
+            config,
+            #[cfg(feature = "transport_compression")]
+            buffer: config.is_compression.then_some(BBuf::with_capacity(
+                lz4_flex::block::get_maximum_output_size(config.mtu as usize),
+            )),
+        }
     }
 
     const fn batch_config(&self) -> BatchConfig {
@@ -58,14 +67,29 @@ impl TransportLinkUnicast {
     pub async fn send_batch(&mut self, batch: &mut WBatch) -> ZResult<()> {
         const ERR: &str = "Write error on link: ";
 
-        batch.finalize().map_err(|_| zerror!("{ERR}{self}"))?;
+        let res = batch
+            .finalize(
+                #[cfg(feature = "transport_compression")]
+                self.buffer.as_mut(),
+            )
+            .map_err(|_| zerror!("{ERR}{self}"))?;
+
+        let bytes = match res {
+            Finalize::Batch => batch.as_slice(),
+            #[cfg(feature = "transport_compression")]
+            Finalize::Buffer => self
+                .buffer
+                .as_ref()
+                .ok_or_else(|| zerror!("Invalid buffer finalization"))?
+                .as_slice(),
+        };
 
         // Send the message on the link
         if self.link.is_streamed() {
-            let len = batch.len().to_le_bytes();
+            let len = bytes.len().to_le_bytes();
             self.link.write_all(&len).await?;
         }
-        self.link.write_all(batch.as_slice()).await?;
+        self.link.write_all(bytes).await?;
 
         Ok(())
     }
