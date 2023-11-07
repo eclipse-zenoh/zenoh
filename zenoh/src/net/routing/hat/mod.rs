@@ -183,7 +183,7 @@ impl HatTables {
                 .unwrap_or(false)
     }
 
-    fn schedule_compute_trees_(&mut self, tables_ref: Arc<TablesLock>, net_type: WhatAmI) {
+    fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>, net_type: WhatAmI) {
         log::trace!("Schedule computations");
         if (net_type == WhatAmI::Router && self.routers_trees_task.is_none())
             || (net_type == WhatAmI::Peer && self.peers_trees_task.is_none())
@@ -446,13 +446,13 @@ pub(crate) fn new_transport_unicast(
 
     match (tables.whatami, whatami) {
         (WhatAmI::Router, WhatAmI::Router) => {
-            hat_mut!(tables).schedule_compute_trees_(tables_ref.clone(), WhatAmI::Router);
+            hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
         }
         (WhatAmI::Router, WhatAmI::Peer)
         | (WhatAmI::Peer, WhatAmI::Router)
         | (WhatAmI::Peer, WhatAmI::Peer) => {
             if hat_mut!(tables).full_net(WhatAmI::Peer) {
-                hat_mut!(tables).schedule_compute_trees_(tables_ref.clone(), WhatAmI::Peer);
+                hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
             }
         }
         _ => (),
@@ -500,7 +500,7 @@ pub(crate) fn handle_oam(
                         }
 
                         hat_mut!(tables)
-                            .schedule_compute_trees_(tables_ref.clone(), WhatAmI::Router);
+                            .schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
                     }
                     (WhatAmI::Router, WhatAmI::Peer)
                     | (WhatAmI::Peer, WhatAmI::Router)
@@ -529,7 +529,7 @@ pub(crate) fn handle_oam(
                                 }
 
                                 hat_mut!(tables)
-                                    .schedule_compute_trees_(tables_ref.clone(), WhatAmI::Peer);
+                                    .schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
                             } else {
                                 for (_, updated_node) in changes.updated_nodes {
                                     pubsub_linkstate_change(
@@ -581,7 +581,7 @@ pub(crate) fn closing(tables_ref: &Arc<TablesLock>, transport: &TransportUnicast
                         );
                     }
 
-                    hat_mut!(tables).schedule_compute_trees_(tables_ref.clone(), WhatAmI::Router);
+                    hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
                 }
                 (WhatAmI::Router, WhatAmI::Peer)
                 | (WhatAmI::Peer, WhatAmI::Router)
@@ -604,7 +604,7 @@ pub(crate) fn closing(tables_ref: &Arc<TablesLock>, transport: &TransportUnicast
                             );
                         }
 
-                        hat_mut!(tables).schedule_compute_trees_(tables_ref.clone(), WhatAmI::Peer);
+                        hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
                     } else if let Some(net) = hat_mut!(tables).peers_net.as_mut() {
                         net.remove_link(&zid);
                     }
