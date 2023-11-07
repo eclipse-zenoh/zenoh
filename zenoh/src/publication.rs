@@ -404,6 +404,7 @@ impl Drop for Publisher<'_> {
 
 /// A [`Resolvable`] returned by [`Publisher::put()`](Publisher::put),
 /// [`Publisher::delete()`](Publisher::delete) and [`Publisher::write()`](Publisher::write).
+#[must_use]
 pub struct Publication<'a> {
     publisher: &'a Publisher<'a>,
     value: Value,
