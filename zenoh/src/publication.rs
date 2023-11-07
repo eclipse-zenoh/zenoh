@@ -427,6 +427,7 @@ impl SyncResolve for Publication<'_> {
             .as_ref()
             .unwrap()
             .clone();
+        let timestamp = publisher.session.runtime.new_timestamp();
 
         if publisher.destination != Locality::SessionLocal {
             primitives.send_push(Push {
@@ -439,7 +440,7 @@ impl SyncResolve for Publication<'_> {
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
                 payload: PushBody::Put(Put {
-                    timestamp: publisher.session.runtime.new_timestamp(),
+                    timestamp,
                     encoding: value.encoding.clone(),
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
@@ -453,7 +454,7 @@ impl SyncResolve for Publication<'_> {
             let data_info = DataInfo {
                 kind,
                 encoding: Some(value.encoding),
-                timestamp: publisher.session.runtime.new_timestamp(),
+                timestamp,
                 ..Default::default()
             };
             publisher.session.handle_data(
