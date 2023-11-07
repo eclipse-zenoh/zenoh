@@ -49,21 +49,24 @@ impl PluginCondition {
     pub fn add_warning<S: Into<Cow<'static, str>>>(&mut self, warning: S) {
         self.warnings.push(warning.into());
     }
-    pub fn catch_error<T, F: FnOnce() -> ZResult<T>>(&mut self, f: F) -> ZResult<T> {
-        self.clear();
-        match f() {
-            Ok(v) => Ok(v),
-            Err(e) => {
-                self.add_error(format!("{}", e));
-                Err(e)
-            }
-        }
-    }
     pub fn errors(&self) -> &[Cow<'static, str>] {
         &self.errors
     }
     pub fn warnings(&self) -> &[Cow<'static, str>] {
         &self.warnings
+    }
+}
+
+pub trait PluginConditionAddError {
+    fn add_error(self, condition: &mut PluginCondition) -> Self;
+}
+
+impl<T, E: ToString> PluginConditionAddError for core::result::Result<T, E> {
+    fn add_error(self, condition: &mut PluginCondition) -> Self {
+        if let Err(e) = &self {
+            condition.add_error(e.to_string());
+        }
+        self
     }
 }
 
@@ -136,6 +139,7 @@ where
         PluginStatus {
             state: self
                 .instance
+                .as_ref()
                 .map_or(PluginState::Loaded, |_| PluginState::Running),
             condition: PluginCondition::new(), // TODO: request runnnig plugin status
         }
@@ -336,11 +340,9 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
 {
     fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>> {
         if self.starter.is_none() {
-            self.condition.catch_error(|| {
-                let (lib, path) = self.source.load()?;
-                self.starter = Some(DynamicPluginStarter::new(lib, path)?);
-                Ok(())
-            })?;
+            let (lib, path) = self.source.load().add_error(&mut self.condition)?;
+            let starter = DynamicPluginStarter::new(lib, path).add_error(&mut self.condition)?;
+            self.starter = Some(starter);
         }
         Ok(self)
     }
@@ -364,17 +366,18 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
     LoadedPlugin<StartArgs, Instance> for DynamicPlugin<StartArgs, Instance>
 {
     fn run(&mut self, args: &StartArgs) -> ZResult<&mut dyn RunningPlugin<StartArgs, Instance>> {
-        self.condition.catch_error(|| {
-            let starter = self
-                .starter
-                .as_ref()
-                .ok_or_else(|| format!("Plugin `{}` not loaded", self.name))?;
-            let already_running = self.instance.is_some();
-            if !already_running {
-                self.instance = Some(starter.start(self.name(), args)?);
-            }
-            Ok(())
-        })?;
+        let starter = self
+            .starter
+            .as_ref()
+            .ok_or_else(|| format!("Plugin `{}` not loaded", self.name))
+            .add_error(&mut self.condition)?;
+        let already_running = self.instance.is_some();
+        if !already_running {
+            let instance = starter
+                .start(self.name(), args)
+                .add_error(&mut self.condition)?;
+            self.instance = Some(instance);
+        }
         Ok(self)
     }
     fn running(&self) -> Option<&dyn RunningPlugin<StartArgs, Instance>> {
@@ -407,12 +410,52 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
     }
 }
 
+struct PluginRecord<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>(
+    Box<dyn DeclaredPlugin<StartArgs, Instance>>,
+);
+
+impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
+    PluginRecord<StartArgs, Instance>
+{
+    fn new<P: DeclaredPlugin<StartArgs, Instance> + 'static>(plugin: P) -> Self {
+        Self(Box::new(plugin))
+    }
+}
+
+impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> PluginInfo
+    for PluginRecord<StartArgs, Instance>
+{
+    fn name(&self) -> &str {
+        self.0.name()
+    }
+    fn path(&self) -> &str {
+        self.0.path()
+    }
+    fn status(&self) -> PluginStatus {
+        self.0.status()
+    }
+}
+
+impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
+    DeclaredPlugin<StartArgs, Instance> for PluginRecord<StartArgs, Instance>
+{
+    fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>> {
+        self.0.load()
+    }
+    fn loaded(&self) -> Option<&dyn LoadedPlugin<StartArgs, Instance>> {
+        self.0.loaded()
+    }
+    fn loaded_mut(&mut self) -> Option<&mut dyn LoadedPlugin<StartArgs, Instance>> {
+        self.0.loaded_mut()
+    }
+}
+
 /// A plugins manager that handles starting and stopping plugins.
 /// Plugins can be loaded from shared libraries using [`Self::load_plugin_by_name`] or [`Self::load_plugin_by_paths`], or added directly from the binary if available using [`Self::add_static`].
 pub struct PluginsManager<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> {
     default_lib_prefix: String,
     loader: Option<LibLoader>,
-    plugins: Vec<Box<dyn DeclaredPlugin<StartArgs, Instance>>>,
+    plugins: Vec<PluginRecord<StartArgs, Instance>>,
 }
 
 impl<StartArgs: 'static + CompatibilityVersion, Instance: 'static + CompatibilityVersion>
@@ -442,7 +485,7 @@ impl<StartArgs: 'static + CompatibilityVersion, Instance: 'static + Compatibilit
         mut self,
     ) -> Self {
         let plugin_loader: StaticPlugin<StartArgs, Instance, P> = StaticPlugin::new();
-        self.plugins.push(Box::new(plugin_loader));
+        self.plugins.push(PluginRecord::new(plugin_loader));
         self
     }
 
@@ -459,13 +502,11 @@ impl<StartArgs: 'static + CompatibilityVersion, Instance: 'static + Compatibilit
             .ok_or("Dynamic plugin loading is disabled")?
             .clone();
         let loader = DynamicPlugin::new(
-            plugin_name,
+            name.into(),
             DynamicPluginSource::ByName((libloader, plugin_name)),
         );
-        self.plugins.push(Box::new(loader));
-        let plugin = self.plugins.last_mut().unwrap();
-        let plugin = plugin as &mut dyn DeclaredPlugin<StartArgs, Instance>;
-        Ok(plugin)
+        self.plugins.push(PluginRecord::new(loader));
+        Ok(self.plugins.last_mut().unwrap())
     }
 
     /// Add first available dynamic plugin from the list of paths to the plugin files
@@ -477,10 +518,8 @@ impl<StartArgs: 'static + CompatibilityVersion, Instance: 'static + Compatibilit
         let name = name.into();
         let paths = paths.iter().map(|p| p.as_ref().into()).collect();
         let loader = DynamicPlugin::new(name, DynamicPluginSource::ByPaths(paths));
-        self.plugins.push(Box::new(loader));
-        let plugin = self.plugins.last_mut().unwrap();
-        let plugin = plugin as &mut dyn DeclaredPlugin<StartArgs, Instance>;
-        Ok(plugin)
+        self.plugins.push(PluginRecord::new(loader));
+        Ok(self.plugins.last_mut().unwrap())
     }
 
     fn get_plugin_index(&self, name: &str) -> Option<usize> {
@@ -494,14 +533,18 @@ impl<StartArgs: 'static + CompatibilityVersion, Instance: 'static + Compatibilit
 
     /// Lists all plugins
     pub fn plugins(&self) -> impl Iterator<Item = &dyn DeclaredPlugin<StartArgs, Instance>> + '_ {
-        self.plugins.iter().map(|p| p.as_ref())
+        self.plugins
+            .iter()
+            .map(|p| p as &dyn DeclaredPlugin<StartArgs, Instance>)
     }
 
     /// Lists all plugins mutable
-    pub fn plugins_mut<'a>(
-        &'a mut self,
-    ) -> impl Iterator<Item = &'a mut (dyn DeclaredPlugin<StartArgs, Instance>+'a )> + 'a {
-        self.plugins.iter_mut().map(move|p| p.as_mut())
+    pub fn plugins_mut(
+        &mut self,
+    ) -> impl Iterator<Item = &mut dyn DeclaredPlugin<StartArgs, Instance>> + '_ {
+        self.plugins
+            .iter_mut()
+            .map(|p| p as &mut dyn DeclaredPlugin<StartArgs, Instance>)
     }
 
     /// Lists the loaded plugins
@@ -515,6 +558,7 @@ impl<StartArgs: 'static + CompatibilityVersion, Instance: 'static + Compatibilit
     pub fn loaded_plugins_mut(
         &mut self,
     ) -> impl Iterator<Item = &mut dyn LoadedPlugin<StartArgs, Instance>> + '_ {
+        // self.plugins_mut().filter_map(|p| p.loaded_mut())
         self.plugins_mut().filter_map(|p| p.loaded_mut())
     }
 
