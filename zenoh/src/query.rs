@@ -114,6 +114,7 @@ pub(crate) struct QueryState {
 /// }
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) session: &'a Session,

@@ -308,6 +308,7 @@ pub fn init(runtime: Runtime) -> InitBuilder {
 }
 
 /// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[doc(hidden)]
 #[zenoh_macros::unstable]
 pub struct InitBuilder {
