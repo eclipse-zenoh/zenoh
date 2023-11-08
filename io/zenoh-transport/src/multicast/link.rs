@@ -15,7 +15,7 @@
 use crate::stats::TransportStats;
 use crate::{
     common::{
-        batch::{BatchConfig, Encode, RBatch, WBatch},
+        batch::{BatchConfig, Encode, Finalize, RBatch, WBatch},
         pipeline::{
             TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
             TransmissionPipelineProducer,
@@ -34,7 +34,7 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use zenoh_buffers::{ZSlice, ZSliceBuffer};
+use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
 use zenoh_core::zlock;
 use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::{
@@ -60,11 +60,20 @@ pub(crate) struct TransportLinkMulticastConfig {
 pub(crate) struct TransportLinkMulticast {
     pub(crate) link: LinkMulticast,
     pub(crate) config: TransportLinkMulticastConfig,
+    #[cfg(feature = "transport_compression")]
+    pub(crate) buffer: Option<BBuf>,
 }
 
 impl TransportLinkMulticast {
     pub fn new(link: LinkMulticast, config: TransportLinkMulticastConfig) -> Self {
-        Self { link, config }
+        Self {
+            link,
+            config,
+            #[cfg(feature = "transport_compression")]
+            buffer: config.is_compression.then_some(BBuf::with_capacity(
+                lz4_flex::block::get_maximum_output_size(config.mtu as usize),
+            )),
+        }
     }
 
     const fn batch_config(&self) -> BatchConfig {
@@ -75,17 +84,33 @@ impl TransportLinkMulticast {
         }
     }
 
-    pub async fn send_batch(&self, batch: &mut WBatch) -> ZResult<()> {
+    pub async fn send_batch(&mut self, batch: &mut WBatch) -> ZResult<()> {
         const ERR: &str = "Write error on link: ";
-        // @TODO: add support buffer
-        batch.finalize(None).map_err(|_| zerror!("{ERR}{self}"))?;
+
+        let res = batch
+            .finalize(
+                #[cfg(feature = "transport_compression")]
+                self.buffer.as_mut(),
+            )
+            .map_err(|_| zerror!("{ERR}{self}"))?;
+
+        let bytes = match res {
+            Finalize::Batch => batch.as_slice(),
+            #[cfg(feature = "transport_compression")]
+            Finalize::Buffer => self
+                .buffer
+                .as_ref()
+                .ok_or_else(|| zerror!("Invalid buffer finalization"))?
+                .as_slice(),
+        };
+
         // Send the message on the link
-        self.link.write_all(batch.as_slice()).await?;
+        self.link.write_all(bytes).await?;
 
         Ok(())
     }
 
-    pub async fn send(&self, msg: &TransportMessage) -> ZResult<usize> {
+    pub async fn send(&mut self, msg: &TransportMessage) -> ZResult<usize> {
         const ERR: &str = "Write error on link: ";
         // Create the batch for serializing the message
         let mut batch = WBatch::new(self.batch_config());
@@ -222,7 +247,7 @@ impl TransportLinkMulticastUniversal {
             let tpc = TransmissionPipelineConf {
                 is_streamed: false,
                 #[cfg(feature = "transport_compression")]
-                is_compression: false,
+                is_compression: self.link.config.is_compression,
                 batch_size: config.batch_size,
                 queue_size: self.transport.manager.config.queue_size,
                 backoff: self.transport.manager.config.queue_backoff,
@@ -320,7 +345,7 @@ impl TransportLinkMulticastUniversal {
 /*************************************/
 async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
-    link: TransportLinkMulticast,
+    mut link: TransportLinkMulticast,
     config: TransportLinkMulticastConfigUniversal,
     mut last_sns: Vec<PrioritySn>,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,

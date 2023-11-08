@@ -216,8 +216,6 @@ impl TransportManagerBuilderUnicast {
             max_links: self.max_links,
             #[cfg(feature = "shared-memory")]
             is_shm: self.is_shm,
-            #[cfg(all(feature = "unstable", feature = "transport_compression"))]
-            is_compressed: self.is_compressed,
             is_lowlatency: self.is_lowlatency,
             #[cfg(feature = "transport_compression")]
             is_compression: self.is_compression,
