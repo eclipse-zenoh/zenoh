@@ -82,28 +82,24 @@ pub trait PluginInfo {
     fn status(&self) -> PluginStatus;
 }
 
-pub trait DeclaredPlugin<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>:
-    PluginInfo
-{
+pub trait DeclaredPlugin<StartArgs, Instance>: PluginInfo {
     fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>>;
     fn loaded(&self) -> Option<&dyn LoadedPlugin<StartArgs, Instance>>;
     fn loaded_mut(&mut self) -> Option<&mut dyn LoadedPlugin<StartArgs, Instance>>;
 }
-pub trait LoadedPlugin<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>:
-    PluginInfo
-{
+pub trait LoadedPlugin<StartArgs, Instance>: PluginInfo {
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>>;
     fn started(&self) -> Option<&dyn StartedPlugin<StartArgs, Instance>>;
     fn started_mut(&mut self) -> Option<&mut dyn StartedPlugin<StartArgs, Instance>>;
 }
 
-pub trait StartedPlugin<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> : PluginInfo {
+pub trait StartedPlugin<StartArgs, Instance>: PluginInfo {
     fn stop(&mut self);
     fn instance(&self) -> &Instance;
     fn instance_mut(&mut self) -> &mut Instance;
 }
 
-struct StaticPlugin<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion, P>
+struct StaticPlugin<StartArgs, Instance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
@@ -111,8 +107,7 @@ where
     phantom: PhantomData<P>,
 }
 
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion, P>
-    StaticPlugin<StartArgs, Instance, P>
+impl<StartArgs, Instance, P> StaticPlugin<StartArgs, Instance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
@@ -124,7 +119,7 @@ where
     }
 }
 
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion, P> PluginInfo
+impl<StartArgs, Instance, P> PluginInfo
     for StaticPlugin<StartArgs, Instance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
@@ -146,7 +141,7 @@ where
     }
 }
 
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion, P>
+impl<StartArgs, Instance, P>
     DeclaredPlugin<StartArgs, Instance> for StaticPlugin<StartArgs, Instance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
@@ -162,7 +157,7 @@ where
     }
 }
 
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion, P>
+impl<StartArgs, Instance, P>
     LoadedPlugin<StartArgs, Instance> for StaticPlugin<StartArgs, Instance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
@@ -189,7 +184,7 @@ where
     }
 }
 
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion, P>
+impl<StartArgs, Instance, P>
     StartedPlugin<StartArgs, Instance> for StaticPlugin<StartArgs, Instance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
@@ -231,13 +226,13 @@ impl DynamicPluginSource {
     }
 }
 
-struct DynamicPluginStarter<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> {
+struct DynamicPluginStarter<StartArgs, Instance> {
     _lib: Library,
     path: PathBuf,
     vtable: PluginVTable<StartArgs, Instance>,
 }
 
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
+impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
     DynamicPluginStarter<StartArgs, Instance>
 {
     fn get_vtable(lib: &Library, path: &Path) -> ZResult<PluginVTable<StartArgs, Instance>> {
@@ -288,7 +283,7 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
     }
 }
 
-struct DynamicPlugin<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> {
+struct DynamicPlugin<StartArgs, Instance> {
     name: String,
     condition: PluginCondition,
     source: DynamicPluginSource,
@@ -296,7 +291,7 @@ struct DynamicPlugin<StartArgs: CompatibilityVersion, Instance: CompatibilityVer
     instance: Option<Instance>,
 }
 
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
+impl<StartArgs, Instance>
     DynamicPlugin<StartArgs, Instance>
 {
     fn new(name: String, source: DynamicPluginSource) -> Self {
@@ -310,7 +305,7 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
     }
 }
 
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> PluginInfo
+impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginInfo
     for DynamicPlugin<StartArgs, Instance>
 {
     fn name(&self) -> &str {
@@ -335,7 +330,7 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> PluginInfo
     }
 }
 
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
+impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
     DeclaredPlugin<StartArgs, Instance> for DynamicPlugin<StartArgs, Instance>
 {
     fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>> {
@@ -362,7 +357,7 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
     }
 }
 
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
+impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
     LoadedPlugin<StartArgs, Instance> for DynamicPlugin<StartArgs, Instance>
 {
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>> {
@@ -396,7 +391,7 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
     }
 }
 
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
+impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
     StartedPlugin<StartArgs, Instance> for DynamicPlugin<StartArgs, Instance>
 {
     fn stop(&mut self) {
@@ -410,11 +405,11 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
     }
 }
 
-struct PluginRecord<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>(
+struct PluginRecord<StartArgs: PluginStartArgs, Instance: PluginInstance>(
     Box<dyn DeclaredPlugin<StartArgs, Instance> + Send>,
 );
 
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
+impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
     PluginRecord<StartArgs, Instance>
 {
     fn new<P: DeclaredPlugin<StartArgs, Instance> + Send + 'static>(plugin: P) -> Self {
@@ -422,7 +417,7 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
     }
 }
 
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> PluginInfo
+impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginInfo
     for PluginRecord<StartArgs, Instance>
 {
     fn name(&self) -> &str {
@@ -436,7 +431,7 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion> PluginInfo
     }
 }
 
-impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
+impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
     DeclaredPlugin<StartArgs, Instance> for PluginRecord<StartArgs, Instance>
 {
     fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>> {
@@ -452,14 +447,16 @@ impl<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>
 
 /// A plugins manager that handles starting and stopping plugins.
 /// Plugins can be loaded from shared libraries using [`Self::load_plugin_by_name`] or [`Self::load_plugin_by_paths`], or added directly from the binary if available using [`Self::add_static`].
-pub struct PluginsManager<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion + Send> {
+pub struct PluginsManager<StartArgs: PluginStartArgs, Instance: PluginInstance> {
     default_lib_prefix: String,
     loader: Option<LibLoader>,
     plugins: Vec<PluginRecord<StartArgs, Instance>>,
 }
 
-impl<StartArgs: 'static + CompatibilityVersion, Instance: 'static + CompatibilityVersion + Send>
-    PluginsManager<StartArgs, Instance>
+impl<
+        StartArgs: PluginStartArgs + 'static,
+        Instance: PluginInstance + 'static,
+    > PluginsManager<StartArgs, Instance>
 {
     /// Constructs a new plugin manager with dynamic library loading enabled.
     pub fn dynamic<S: Into<String>>(loader: LibLoader, default_lib_prefix: S) -> Self {
@@ -588,9 +585,7 @@ impl<StartArgs: 'static + CompatibilityVersion, Instance: 'static + Compatibilit
 
     /// Returns loaded plugin record
     pub fn loaded_plugin(&self, name: &str) -> Option<&dyn LoadedPlugin<StartArgs, Instance>> {
-        self
-            .plugin(name)?
-            .loaded()
+        self.plugin(name)?.loaded()
     }
 
     /// Returns mutable loaded plugin record
@@ -598,16 +593,12 @@ impl<StartArgs: 'static + CompatibilityVersion, Instance: 'static + Compatibilit
         &mut self,
         name: &str,
     ) -> Option<&mut dyn LoadedPlugin<StartArgs, Instance>> {
-        self
-            .plugin_mut(name)?
-            .loaded_mut()
+        self.plugin_mut(name)?.loaded_mut()
     }
 
     /// Returns started plugin record
     pub fn started_plugin(&self, name: &str) -> Option<&dyn StartedPlugin<StartArgs, Instance>> {
-        self
-            .loaded_plugin(name)?
-            .started()
+        self.loaded_plugin(name)?.started()
     }
 
     /// Returns mutable started plugin record
@@ -615,8 +606,6 @@ impl<StartArgs: 'static + CompatibilityVersion, Instance: 'static + Compatibilit
         &mut self,
         name: &str,
     ) -> Option<&mut dyn StartedPlugin<StartArgs, Instance>> {
-        self
-            .loaded_plugin_mut(name)?
-            .started_mut()
+        self.loaded_plugin_mut(name)?.started_mut()
     }
 }

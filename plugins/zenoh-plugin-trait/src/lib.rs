@@ -54,9 +54,12 @@ pub trait PluginControl {
     // fn status(&self, name: &str) -> PluginStatus;
 }
 
+pub trait PluginStartArgs : CompatibilityVersion {}
+pub trait PluginInstance : CompatibilityVersion + PluginControl + Send {}
+
 pub trait Plugin: Sized + 'static {
-    type StartArgs: CompatibilityVersion;
-    type Instance: CompatibilityVersion;
+    type StartArgs: PluginStartArgs;
+    type Instance: PluginInstance;
     /// Your plugins' default name when statically linked.
     const STATIC_NAME: &'static str;
     /// Starts your plugin. Use `Ok` to return your plugin's control structure

@@ -139,7 +139,7 @@ use zenoh::queryable::ReplyBuilder;
 use zenoh::time::Timestamp;
 use zenoh::value::Value;
 pub use zenoh::Result as ZResult;
-use zenoh_plugin_trait::{concat_enabled_features, CompatibilityVersion};
+use zenoh_plugin_trait::{concat_enabled_features, CompatibilityVersion, PluginControl, PluginInstance};
 
 pub mod config;
 use config::{StorageConfig, VolumeConfig};
@@ -231,6 +231,14 @@ impl CompatibilityVersion for VolumePlugin {
         concatcp!(zenoh::FEATURES, crate::FEATURES)
     }
 }
+
+impl PluginControl for VolumePlugin {
+    fn plugins(&self) -> Vec<&str> {
+        Vec::new()
+    }
+}
+
+impl PluginInstance for VolumePlugin {}
 
 /// Trait to be implemented by a Storage.
 #[async_trait]

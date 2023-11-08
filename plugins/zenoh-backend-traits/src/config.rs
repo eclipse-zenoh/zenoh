@@ -18,7 +18,7 @@ use serde_json::{Map, Value};
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::{key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult};
-use zenoh_plugin_trait::CompatibilityVersion;
+use zenoh_plugin_trait::{CompatibilityVersion, PluginStartArgs};
 use zenoh_result::{bail, zerror, Error};
 
 #[derive(JsonSchema, Debug, Clone, AsMut, AsRef)]
@@ -77,6 +77,8 @@ impl CompatibilityVersion for VolumeConfig {
         concatcp!(zenoh::FEATURES, crate::FEATURES)
     }
 }
+
+impl PluginStartArgs for VolumeConfig {}
 
 impl Default for ReplicaConfig {
     fn default() -> Self {

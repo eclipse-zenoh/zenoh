@@ -40,6 +40,14 @@ impl CompatibilityVersion for RunningPlugin {
     }
 }
 
+impl PluginControl for RunningPlugin {
+    fn plugins(&self) -> Vec<&str> {
+        Vec::new()
+    }
+}
+
+impl PluginInstance for RunningPlugin {}
+
 #[non_exhaustive]
 #[derive(serde::Serialize, Debug, Clone)]
 /// A Response for the administration space.
@@ -86,3 +94,5 @@ pub type PluginsManager = zenoh_plugin_trait::loading::PluginsManager<StartArgs,
 
 pub use zenoh_plugin_trait::CompatibilityVersion;
 pub use zenoh_plugin_trait::Plugin;
+use zenoh_plugin_trait::PluginControl;
+use zenoh_plugin_trait::PluginInstance;

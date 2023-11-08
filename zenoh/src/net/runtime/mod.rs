@@ -37,7 +37,7 @@ use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
 use zenoh_link::{EndPoint, Link};
-use zenoh_plugin_trait::CompatibilityVersion;
+use zenoh_plugin_trait::{CompatibilityVersion, PluginStartArgs};
 use zenoh_protocol::core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId};
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::{bail, ZResult};
@@ -73,6 +73,8 @@ impl CompatibilityVersion for Runtime {
         crate::FEATURES
     }
 }
+
+impl PluginStartArgs for Runtime {}
 
 impl Runtime {
     pub async fn new(config: Config) -> ZResult<Runtime> {
