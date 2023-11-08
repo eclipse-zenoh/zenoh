@@ -210,8 +210,11 @@ async fn rx_task_stream(
         let mut length = [0_u8, 0_u8, 0_u8, 0_u8];
         link.link.read_exact(&mut length).await?;
         let n = u32::from_le_bytes(length) as usize;
-
-        link.link.read_exact(&mut buffer[0..n]).await?;
+        let len = buffer.len();
+        let b = buffer.get_mut(0..n).ok_or_else(|| {
+            zerror!("Batch len is invalid. Received {n} but negotiated max len is {len}.")
+        })?;
+        link.link.read_exact(b).await?;
         Ok(n)
     }
 

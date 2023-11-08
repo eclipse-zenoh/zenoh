@@ -42,6 +42,7 @@ hashbrown = { workspace = true }
 [dev-dependencies]
 criterion = { workspace = true }
 lazy_static = { workspace = true }
+rand = { workspace = true, features = ["default"] }
 
 [[bench]]
 name = "keyexpr_tree"

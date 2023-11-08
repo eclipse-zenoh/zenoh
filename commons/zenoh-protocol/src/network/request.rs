@@ -93,7 +93,7 @@ pub mod ext {
     impl TargetType {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
-            use rand::prelude::SliceRandom;
+            use rand::prelude::*;
             let mut rng = rand::thread_rng();
 
             *[

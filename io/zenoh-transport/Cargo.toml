@@ -46,6 +46,7 @@ transport_unixpipe = ["zenoh-link/transport_unixpipe"]
 stats = ["zenoh-protocol/stats"]
 test = []
 unstable = []
+default = ["test", "transport_multilink"]
 
 [dependencies]
 async-executor = { workspace = true }
@@ -78,5 +79,3 @@ zenoh-util = { workspace = true }
 env_logger = { workspace = true }
 panic-message = { workspace = true }
 zenoh-protocol = { workspace = true, features = ["test"] }
-zenoh-transport = { workspace = true, features = ["test", "transport_multilink"] }
-

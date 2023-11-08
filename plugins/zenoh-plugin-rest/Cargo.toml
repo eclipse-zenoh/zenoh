@@ -69,4 +69,4 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2022 ZettaScale Technology"
 section = "net"
 license-file = ["../../LICENSE", "0"]
-depends = "zenohd (=0.10.0-dev)"
+depends = "zenohd (=0.11.0-dev)"

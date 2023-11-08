@@ -296,7 +296,7 @@ fn with_extended_string<R, F: FnMut(&mut String) -> R>(
     result
 }
 
-async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
+async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
     log::trace!("Incoming GET request: {:?}", req);
 
     let first_accept = match req.header("accept") {
@@ -374,6 +374,7 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
             },
         ))
     } else {
+        let body = req.body_bytes().await.unwrap_or_default();
         let url = req.url();
         let key_expr = match path_to_key_expr(url.path(), &req.state().1) {
             Ok(ke) => ke,
@@ -397,14 +398,15 @@ async fn query(req: Request<(Arc<Session>, String)>) -> tide::Result<Response> {
             QueryConsolidation::from(zenoh::query::ConsolidationMode::Latest)
         };
         let raw = selector.decode().any(|(k, _)| k.as_ref() == RAW_KEY);
-        match req
-            .state()
-            .0
-            .get(&selector)
-            .consolidation(consolidation)
-            .res()
-            .await
-        {
+        let mut query = req.state().0.get(&selector).consolidation(consolidation);
+        if !body.is_empty() {
+            let encoding: Encoding = req
+                .content_type()
+                .map(|m| m.to_string().into())
+                .unwrap_or_default();
+            query = query.with_value(Value::from(body).encoding(encoding));
+        }
+        match query.res().await {
             Ok(receiver) => {
                 if raw {
                     Ok(to_raw_response(receiver).await)
@@ -439,7 +441,7 @@ async fn write(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
             };
             let encoding: Encoding = req
                 .content_type()
-                .map(|m| m.essence().to_owned().into())
+                .map(|m| m.to_string().into())
                 .unwrap_or_default();
 
             // @TODO: Define the right congestion control value
@@ -481,7 +483,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     app.with(
         tide::security::CorsMiddleware::new()
             .allow_methods(
-                "GET, PUT, PATCH, DELETE"
+                "GET, POST, PUT, PATCH, DELETE"
                     .parse::<http_types::headers::HeaderValue>()
                     .unwrap(),
             )
@@ -489,8 +491,18 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
             .allow_credentials(false),
     );
 
-    app.at("/").get(query).put(write).patch(write).delete(write);
-    app.at("*").get(query).put(write).patch(write).delete(write);
+    app.at("/")
+        .get(query)
+        .post(query)
+        .put(write)
+        .patch(write)
+        .delete(write);
+    app.at("*")
+        .get(query)
+        .post(query)
+        .put(write)
+        .patch(write)
+        .delete(write);
 
     if let Err(e) = app.listen(conf.http_port).await {
         log::error!("Unable to start http server for REST: {:?}", e);

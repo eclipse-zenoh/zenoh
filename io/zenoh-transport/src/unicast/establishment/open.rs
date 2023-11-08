@@ -638,10 +638,10 @@ pub(crate) async fn open_link(
     }
 
     log::debug!(
-        "New transport link opened from {} to {}: {}",
+        "New transport link opened from {} to {}: {}.",
         manager.config.zid,
         iack_out.other_zid,
-        s_link
+        s_link,
     );
 
     Ok(transport)

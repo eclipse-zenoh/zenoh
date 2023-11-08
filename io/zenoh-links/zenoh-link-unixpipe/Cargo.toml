@@ -32,7 +32,7 @@ async-std = { workspace = true }
 async-trait = { workspace = true }
 async-io = ">= 1.13.0"
 log = { workspace = true }
-rand = { workspace = true }
+rand = { workspace = true, features = ["default"] }
 zenoh-buffers = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-config = { workspace = true }

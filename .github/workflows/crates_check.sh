@@ -16,6 +16,7 @@ cargo check -p zenoh-link-udp --manifest-path io/zenoh-links/zenoh-link-udp/Carg
 cargo check -p zenoh-link-tcp --manifest-path io/zenoh-links/zenoh-link-tcp/Cargo.toml &&
 cargo check -p zenoh-link-tls --manifest-path io/zenoh-links/zenoh-link-tls/Cargo.toml &&
 cargo check -p zenoh-link-quic --manifest-path io/zenoh-links/zenoh-link-quic/Cargo.toml &&
+cargo check -p zenoh-link-unixpipe --manifest-path io/zenoh-links/zenoh-link-unixpipe/Cargo.toml &&
 cargo check -p zenoh-link-unixsock_stream --manifest-path io/zenoh-links/zenoh-link-unixsock_stream/Cargo.toml &&
 cargo check -p zenoh-link-serial --manifest-path io/zenoh-links/zenoh-link-serial/Cargo.toml &&
 cargo check -p zenoh-link-ws --manifest-path io/zenoh-links/zenoh-link-ws/Cargo.toml &&

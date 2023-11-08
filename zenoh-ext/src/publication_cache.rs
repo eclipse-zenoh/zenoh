@@ -21,14 +21,15 @@ use std::future::Ready;
 use zenoh::prelude::r#async::*;
 use zenoh::queryable::{Query, Queryable};
 use zenoh::subscriber::FlumeSubscriber;
-use zenoh::Session;
+use zenoh::SessionRef;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 use zenoh_result::{bail, ZResult};
 use zenoh_util::core::ResolveFuture;
 
 /// The builder of PublicationCache, allowing to configure it.
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct PublicationCacheBuilder<'a, 'b, 'c> {
-    session: &'a Session,
+    session: SessionRef<'a>,
     pub_key_expr: ZResult<KeyExpr<'b>>,
     queryable_prefix: Option<ZResult<KeyExpr<'c>>>,
     queryable_origin: Locality,
@@ -38,7 +39,7 @@ pub struct PublicationCacheBuilder<'a, 'b, 'c> {
 
 impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     pub(crate) fn new(
-        session: &'a Session,
+        session: SessionRef<'a>,
         pub_key_expr: ZResult<KeyExpr<'b>>,
     ) -> PublicationCacheBuilder<'a, 'b, 'c> {
         PublicationCacheBuilder {
@@ -136,18 +137,28 @@ impl<'a> PublicationCache<'a> {
         }
 
         // declare the local subscriber that will store the local publications
-        let local_sub = conf
-            .session
-            .declare_subscriber(&key_expr)
-            .allowed_origin(Locality::SessionLocal)
-            .res_sync()?;
-
-        // declare the queryable that will answer to queries on cache
-        let queryable = conf
-            .session
-            .declare_queryable(&queryable_key_expr)
-            .allowed_origin(conf.queryable_origin)
-            .res_sync()?;
+        let (local_sub, queryable) = match conf.session.clone() {
+            SessionRef::Borrow(session) => (
+                session
+                    .declare_subscriber(&key_expr)
+                    .allowed_origin(Locality::SessionLocal)
+                    .res_sync()?,
+                session
+                    .declare_queryable(&queryable_key_expr)
+                    .allowed_origin(conf.queryable_origin)
+                    .res_sync()?,
+            ),
+            SessionRef::Shared(session) => (
+                session
+                    .declare_subscriber(&key_expr)
+                    .allowed_origin(Locality::SessionLocal)
+                    .res_sync()?,
+                session
+                    .declare_queryable(&queryable_key_expr)
+                    .allowed_origin(conf.queryable_origin)
+                    .res_sync()?,
+            ),
+        };
 
         // take local ownership of stuff to be moved into task
         let sub_recv = local_sub.receiver.clone();
