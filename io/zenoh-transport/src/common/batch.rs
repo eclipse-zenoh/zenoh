@@ -299,9 +299,12 @@ pub struct RBatch {
 }
 
 impl RBatch {
-    pub fn new(config: BatchConfig, buffer: ZSlice) -> Self {
+    pub fn new<T>(config: BatchConfig, buffer: T) -> Self
+    where
+        T: Into<ZSlice>,
+    {
         Self {
-            buffer,
+            buffer: buffer.into(),
             codec: Zenoh080Batch::new(),
             header: config.header(),
         }
@@ -337,7 +340,7 @@ impl RBatch {
                 self.buffer = self
                     .buffer
                     .subslice(BatchHeader::INDEX + 1, self.buffer.len())
-                    .ok_or_else(|| zerror!("Batch length is invalid"))?;
+                    .ok_or_else(|| zerror!("Invalid batch length"))?;
             }
         }
 
@@ -431,10 +434,8 @@ mod tests {
                 };
                 println!("Finalized WBatch: {:?}", bytes);
 
-                let mut rbatch = RBatch::new(
-                    config,
-                    wbatch.buffer.as_slice().to_vec().into_boxed_slice().into(),
-                );
+                let mut rbatch =
+                    RBatch::new(config, wbatch.buffer.as_slice().to_vec().into_boxed_slice());
                 println!("Decoded RBatch: {:?}", rbatch);
                 rbatch
                     .initialize(|| {
