@@ -164,7 +164,9 @@ impl StorageRuntimeInner {
     fn spawn_volume(&mut self, config: VolumeConfig) -> ZResult<()> {
         let volume_id = config.name();
         let backend_name = config.backend();
-        let declared = if let Some(paths) = config.paths() {
+        let declared = if let Some(declared) = self.plugins_manager.plugin_mut(volume_id) {
+            declared
+        } else if let Some(paths) = config.paths() {
             self.plugins_manager.add_dynamic_plugin_by_paths(volume_id, paths)?
         } else {
             self.plugins_manager
