@@ -281,7 +281,7 @@ async fn handle_incoming_connections(
 }
 
 struct UnicastPipeListener {
-    listening_task_handle: JoinHandle<ZResult<()>>,
+    listening_task_handle: JoinHandle<()>,
     uplink_locator: Locator,
 }
 impl UnicastPipeListener {
@@ -297,18 +297,22 @@ impl UnicastPipeListener {
         let mut request_channel = PipeR::new(&path_uplink, access_mode).await?;
 
         // create listening task
-        let listening_task_handle = tokio::task::spawn(async move {
-            loop {
-                let _ = handle_incoming_connections(
-                    &endpoint,
-                    &manager,
-                    &mut request_channel,
-                    &path_downlink,
-                    &path_uplink,
-                    access_mode,
-                )
-                .await;
-            }
+        let listening_task_handle = tokio::task::spawn_blocking(move || {
+            async_global_executor::block_on(
+                async move {
+                    loop {
+                        let _ = handle_incoming_connections(
+                            &endpoint,
+                            &manager,
+                            &mut request_channel,
+                            &path_downlink,
+                            &path_uplink,
+                            access_mode,
+                        )
+                        .await;
+                    }
+                }
+            );
         });
 
         Ok(Self {
