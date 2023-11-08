@@ -244,8 +244,9 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         {
             let guard = zasyncread_upgradable!(self.link);
 
-            let existing_unixpipe = guard.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
-            let new_unixpipe = link.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
+            let existing_unixpipe =
+                guard.link.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
+            let new_unixpipe = link.link.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
             match (existing_unixpipe, new_unixpipe) {
                 (false, true) => {
                     // LowLatency transport suports only a single link, but code here also handles upgrade from non-unixpipe link to unixpipe link!

@@ -291,7 +291,7 @@ impl<'a, 'b: 'a> OpenFsm for &'a mut OpenLink<'b> {
         #[cfg(feature = "shared-memory")]
         let shm_challenge = self
             .ext_shm
-            .recv_init_ack((&mut state.ext_shm, init_ack.ext_shm))
+            .recv_init_ack((&mut state.transport.ext_shm, init_ack.ext_shm))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -604,7 +604,7 @@ pub(crate) async fn open_link(
         #[cfg(feature = "transport_multilink")]
         multilink: state.transport.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]
-        is_shm: state.ext_shm.is_shm(),
+        is_shm: state.transport.ext_shm.is_shm(),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
     };
 

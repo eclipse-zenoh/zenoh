@@ -186,7 +186,7 @@ impl From<BBuf> for ZSlice {
             start: 0,
             end: value.len,
             #[cfg(feature = "shared-memory")]
-            kind: ZSliceKind::Raw,
+            kind: crate::ZSliceKind::Raw,
         }
     }
 }

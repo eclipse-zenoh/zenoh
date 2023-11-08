@@ -205,7 +205,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         #[cfg(feature = "shared-memory")]
         let ext_shm = self
             .ext_shm
-            .recv_init_syn((&mut state.ext_shm, init_syn.ext_shm))
+            .recv_init_syn((&mut state.transport.ext_shm, init_syn.ext_shm))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -459,7 +459,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         // Extension Shm
         #[cfg(feature = "shared-memory")]
         self.ext_shm
-            .recv_open_syn((&mut state.ext_shm, open_syn.ext_shm))
+            .recv_open_syn((&mut state.transport.ext_shm, open_syn.ext_shm))
             .await
             .map_err(|e| (e, Some(close::reason::GENERIC)))?;
 
@@ -525,7 +525,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
         let ext_shm = zcondfeat!(
             "shared-memory",
             self.ext_shm
-                .send_open_ack(&mut state.ext_shm)
+                .send_open_ack(&mut state.transport.ext_shm)
                 .await
                 .map_err(|e| (e, Some(close::reason::GENERIC)))?,
             None
@@ -696,7 +696,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         #[cfg(feature = "transport_multilink")]
         multilink: state.transport.ext_mlink.multilink(),
         #[cfg(feature = "shared-memory")]
-        is_shm: state.ext_shm.is_shm(),
+        is_shm: state.transport.ext_shm.is_shm(),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
     };
 
