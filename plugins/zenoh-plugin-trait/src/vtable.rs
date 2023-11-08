@@ -1,4 +1,3 @@
-use std::fmt::Display;
 
 //
 // Copyright (c) 2023 ZettaScale Technology
@@ -16,19 +15,20 @@ use std::fmt::Display;
 use crate::*;
 pub use no_mangle::*;
 use zenoh_result::ZResult;
+use std::fmt::Display;
 
 pub type PluginLoaderVersion = u64;
 pub const PLUGIN_LOADER_VERSION: PluginLoaderVersion = 1;
 pub const FEATURES: &str =
     concat_enabled_features!(prefix = "zenoh-plugin-trait", features = ["default"]);
 
-type StartFn<StartArgs, RunningPlugin> = fn(&str, &StartArgs) -> ZResult<RunningPlugin>;
+type StartFn<StartArgs, Instance> = fn(&str, &StartArgs) -> ZResult<Instance>;
 
 #[repr(C)]
-pub struct PluginVTable<StartArgs, RunningPlugin> {
-    pub start: StartFn<StartArgs, RunningPlugin>,
+pub struct PluginVTable<StartArgs, Instance> {
+    pub start: StartFn<StartArgs, Instance>,
 }
-impl<StartArgs, RunningPlugin> CompatibilityVersion for PluginVTable<StartArgs, RunningPlugin> {
+impl<StartArgs, Instance> CompatibilityVersion for PluginVTable<StartArgs, Instance> {
     fn version() -> u64 {
         1
     }
@@ -71,27 +71,27 @@ pub struct Compatibility {
     rust_version: RustVersion,
     vtable_version: StructVersion,
     start_args_version: StructVersion,
-    running_plugin_version: StructVersion,
+    instance_version: StructVersion,
 }
 
 impl Compatibility {
-    pub fn new<StartArgs: CompatibilityVersion, RunningPlugin: CompatibilityVersion>() -> Self {
+    pub fn new<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>() -> Self {
         let rust_version = RustVersion::new();
-        let vtable_version = StructVersion::new::<PluginVTable<StartArgs, RunningPlugin>>();
+        let vtable_version = StructVersion::new::<PluginVTable<StartArgs, Instance>>();
         let start_args_version = StructVersion::new::<StartArgs>();
-        let running_plugin_version = StructVersion::new::<RunningPlugin>();
+        let instance_version = StructVersion::new::<Instance>();
         Self {
             rust_version,
             vtable_version,
             start_args_version,
-            running_plugin_version,
+            instance_version,
         }
     }
     pub fn are_compatible(&self, other: &Self) -> bool {
         RustVersion::are_compatible(&self.rust_version, &other.rust_version)
             && self.vtable_version == other.vtable_version
             && self.start_args_version == other.start_args_version
-            && self.running_plugin_version == other.running_plugin_version
+            && self.instance_version == other.instance_version
     }
 }
 
@@ -99,11 +99,11 @@ impl Display for Compatibility {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}\nVTable:{}StartArgs:{}RunningPlugin:{}",
+            "{}\nVTable:{}StartArgs:{}Instance:{}",
             self.rust_version,
             self.vtable_version,
             self.start_args_version,
-            self.running_plugin_version
+            self.instance_version
         )
     }
 }
@@ -165,8 +165,8 @@ impl Default for RustVersion {
     }
 }
 
-impl<StartArgs, RunningPlugin> PluginVTable<StartArgs, RunningPlugin> {
-    pub fn new<ConcretePlugin: Plugin<StartArgs = StartArgs, Instance = RunningPlugin>>() -> Self {
+impl<StartArgs, Instance> PluginVTable<StartArgs, Instance> {
+    pub fn new<ConcretePlugin: Plugin<StartArgs = StartArgs, Instance = Instance>>() -> Self {
         Self {
             start: ConcretePlugin::start,
         }
@@ -190,14 +190,14 @@ pub mod no_mangle {
                 // TODO: add vtable version (including type parameters) to the compatibility information
                 $crate::prelude::Compatibility::new::<
                     <$ty as $crate::prelude::Plugin>::StartArgs,
-                    <$ty as $crate::prelude::Plugin>::RunningPlugin,
+                    <$ty as $crate::prelude::Plugin>::Instance,
                 >()
             }
 
             #[no_mangle]
             fn load_plugin() -> $crate::prelude::PluginVTable<
                 <$ty as $crate::prelude::Plugin>::StartArgs,
-                <$ty as $crate::prelude::Plugin>::RunningPlugin,
+                <$ty as $crate::prelude::Plugin>::Instance,
             > {
                 $crate::prelude::PluginVTable::new::<$ty>()
             }

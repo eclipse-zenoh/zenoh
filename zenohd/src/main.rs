@@ -15,6 +15,7 @@ use async_std::task;
 use clap::{ArgMatches, Command};
 use futures::future;
 use git_version::git_version;
+use zenoh::Result;
 use std::collections::HashSet;
 use zenoh::config::{Config, ModeDependentValue, PermissionsConf, PluginLoad, ValidatedMap};
 use zenoh::plugins::PluginsManager;
@@ -28,6 +29,32 @@ lazy_static::lazy_static!(
 );
 
 const DEFAULT_LISTENER: &str = "tcp/[::]:7447";
+
+fn load_plugin(
+    plugin_mgr: &mut PluginsManager,
+    name: &str,
+    paths: &Option<Vec<String>>,
+) -> Result<()> {
+    let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
+        log::warn!("Plugin `{}` was already declared", declared.name());
+        declared
+    } else if let Some(paths) = paths {
+        plugin_mgr.add_dynamic_plugin_by_paths(name, paths)?
+    } else {
+        plugin_mgr.add_dynamic_plugin_by_name(name, name)?
+    };
+
+    if let Some(loaded) = declared.loaded_mut() {
+        log::warn!(
+            "Plugin `{}` was already loaded from {}",
+            loaded.name(),
+            loaded.path()
+        );
+    } else {
+        let _ = declared.load()?;
+    };
+    Ok(())
+}
 
 fn main() {
     task::block_on(async {
@@ -89,10 +116,7 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
                 "Loading {req} plugin \"{name}\"",
                 req = if required { "required" } else { "" }
             );
-            if let Err(e) = match paths {
-                None => plugin_mgr.load_plugin_by_backend_name(&name, &name),
-                Some(paths) => plugin_mgr.load_plugin_by_paths(name.clone(), &paths),
-            } {
+            if let Err(e) = load_plugin(&mut plugin_mgr, &name, &paths) {
                 if required {
                     panic!("Plugin load failure: {}", e)
                 } else {
@@ -112,14 +136,14 @@ clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_na
             }
         };
 
-        for plugin in plugin_mgr.plugins_mut() {
+        for plugin in plugin_mgr.loaded_plugins_mut() {
             let required = required_plugins.contains(plugin.name());
             log::info!(
                 "Starting {req} plugin \"{name}\"",
                 req = if required { "required" } else { "" },
                 name = plugin.name()
             );
-            match plugin.run(&runtime) {
+            match plugin.start(&runtime) {
                 Ok(_) => {
                     log::info!(
                         "Successfully started plugin {} from {:?}",

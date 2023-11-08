@@ -155,20 +155,23 @@ impl StorageRuntimeInner {
                     .map(|s| async move { s.send(StorageMessage::Stop) }),
             ));
         }
-        self.plugins_manager.running_plugin_mut(name)?.stop();
+        self.plugins_manager.started_plugin_mut(name).ok_or(format!(
+            "Cannot find volume {} to stop it",
+            name
+        ))?.stop();
         Ok(())
     }
     fn spawn_volume(&mut self, config: VolumeConfig) -> ZResult<()> {
         let volume_id = config.name();
         let backend_name = config.backend();
-        if let Some(paths) = config.paths() {
-            self.plugins_manager
-                .load_plugin_by_paths(volume_id, paths)?;
+        let declared = if let Some(paths) = config.paths() {
+            self.plugins_manager.add_dynamic_plugin_by_paths(volume_id, paths)?
         } else {
             self.plugins_manager
-                .load_plugin_by_backend_name(volume_id, backend_name)?;
-        }
-        self.plugins_manager.plugin_mut(volume_id)?.run(&config)?;
+                .add_dynamic_plugin_by_name(volume_id, backend_name)?
+        };
+        let loaded = declared.load()?;
+        loaded.start(&config)?;
         Ok(())
     }
     fn kill_storage(&mut self, config: StorageConfig) {
@@ -188,7 +191,9 @@ impl StorageRuntimeInner {
     fn spawn_storage(&mut self, storage: StorageConfig) -> ZResult<()> {
         let admin_key = self.status_key() + "/storages/" + &storage.name;
         let volume_id = storage.volume_id.clone();
-        let backend = self.plugins_manager.running_plugin(&volume_id)?;
+        let backend = self.plugins_manager.started_plugin(&volume_id).ok_or(
+            format!("Cannot find volume {} to spawn storage {}", volume_id, storage.name),
+        )?;
         let storage_name = storage.name.clone();
         let in_interceptor = backend.instance().incoming_data_interceptor();
         let out_interceptor = backend.instance().outgoing_data_interceptor();
@@ -251,7 +256,7 @@ impl RunningPluginTrait for StorageRuntime {
         });
         let guard = self.0.lock().unwrap();
         with_extended_string(&mut key, &["/volumes/"], |key| {
-            for plugin in guard.plugins_manager.running_plugins() {
+            for plugin in guard.plugins_manager.started_plugins() {
                 with_extended_string(key, &[plugin.name()], |key| {
                     with_extended_string(key, &["/__path__"], |key| {
                         if keyexpr::new(key.as_str())

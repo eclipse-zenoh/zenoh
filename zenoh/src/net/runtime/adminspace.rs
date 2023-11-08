@@ -73,12 +73,55 @@ impl ConfigValidator for AdminSpace {
         new: &serde_json::Map<String, serde_json::Value>,
     ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
         let plugins_mgr = zlock!(self.context.plugins_mgr);
-        let plugin = plugins_mgr.running_plugin(name)?;
+        let plugin = plugins_mgr.started_plugin(name).ok_or(format!(
+            "Plugin `{}` is not running, but its configuration is being changed",
+            name
+        ))?;
         plugin.instance().config_checker(path, current, new)
     }
 }
 
 impl AdminSpace {
+    fn start_plugin(
+        plugin_mgr: &mut plugins::PluginsManager,
+        config: &crate::config::PluginLoad,
+        start_args: &Runtime,
+    ) -> ZResult<()> {
+        let name = &config.name;
+        let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
+            log::warn!("Plugin `{}` was already declared", declared.name());
+            declared
+        } else if let Some(paths) = &config.paths {
+            plugin_mgr.add_dynamic_plugin_by_paths(name, paths)?
+        } else {
+            plugin_mgr.add_dynamic_plugin_by_name(name, name)?
+        };
+
+        let loaded = if let Some(loaded) = declared.loaded_mut() {
+            log::warn!(
+                "Plugin `{}` was already loaded from {}",
+                loaded.name(),
+                loaded.path()
+            );
+            loaded
+        } else {
+            declared.load()?
+        };
+
+        if let Some(started) = loaded.started_mut() {
+            log::warn!("Plugin `{}` was already started", started.name());
+        } else {
+            let started = loaded.start(start_args)?;
+            log::info!(
+                "Successfully started plugin `{}` from {}",
+                started.name(),
+                started.path()
+            );
+        };
+
+        Ok(())
+    }
+
     pub async fn start(runtime: &Runtime, plugins_mgr: plugins::PluginsManager, version: String) {
         let zid_str = runtime.state.zid.to_string();
         let metadata = runtime.state.metadata.clone();
@@ -122,7 +165,7 @@ impl AdminSpace {
         );
 
         let mut active_plugins = plugins_mgr
-            .running_plugins()
+            .started_plugins()
             .map(|rec| (rec.name().to_string(), rec.path().to_string()))
             .collect::<HashMap<_, _>>();
 
@@ -188,67 +231,31 @@ impl AdminSpace {
                         match diff {
                             PluginDiff::Delete(name) => {
                                 active_plugins.remove(name.as_str());
-                                if let Ok(running) = plugins_mgr.running_plugin_mut(&name) {
+                                if let Some(running) = plugins_mgr.started_plugin_mut(&name) {
                                     running.stop()
                                 }
                             }
                             PluginDiff::Start(plugin) => {
-                                let name = &plugin.name;
-                                let rec = if let Some(paths) = &plugin.paths {
-                                    plugins_mgr.load_plugin_by_paths(name, paths)
-                                } else {
-                                    plugins_mgr.load_plugin_by_backend_name(name, &plugin.name)
-                                };
-                                match rec {
-                                    Ok((loaded, rec)) => {
-                                        if loaded {
-                                            log::info!(
-                                                "Loaded plugin `{}` from {}",
-                                                rec.name(),
-                                                rec.path()
-                                            );
-                                        } else {
-                                            log::warn!(
-                                                "Plugin `{}` was already loaded from {}",
-                                                rec.name(),
-                                                rec.path()
-                                            );
-                                        }
-                                        match rec.run(&admin.context.runtime) {
-                                            Ok((true, rec)) => {
-                                                active_plugins
-                                                    .insert(name.into(), rec.path().to_string());
-                                                log::info!(
-                                                    "Successfully started plugin `{}` from {}",
-                                                    rec.name(),
-                                                    rec.path()
-                                                );
-                                            }
-                                            Ok((false, _)) => {
-                                                log::warn!("Plugin `{}` was already running", name)
-                                            }
-                                            Err(e) => {
-                                                log::error!(
-                                                    "Failed to start plugin `{}`: {}",
-                                                    name,
-                                                    e
-                                                )
-                                            }
-                                        }
-                                    }
-                                    Err(e) => {
-                                        if plugin.required {
-                                            panic!("Failed to load plugin `{}`: {}", name, e)
-                                        } else {
-                                            log::error!("Failed to load plugin `{}`: {}", name, e)
-                                        }
+                                if let Err(e) = Self::start_plugin(
+                                    &mut plugins_mgr,
+                                    &plugin,
+                                    &admin.context.runtime,
+                                ) {
+                                    if plugin.required {
+                                        panic!("Failed to load plugin `{}`: {}", plugin.name, e)
+                                    } else {
+                                        log::error!(
+                                            "Failed to load plugin `{}`: {}",
+                                            plugin.name,
+                                            e
+                                        )
                                     }
                                 }
                             }
                         }
                     }
-                    log::info!("Running plugins: {:?}", &active_plugins)
                 }
+                log::info!("Running plugins: {:?}", &active_plugins)
             }
         });
 
@@ -443,7 +450,7 @@ fn router_data(context: &AdminContext, query: Query) {
     let plugins: serde_json::Value = {
         let plugins_mgr = zlock!(context.plugins_mgr);
         plugins_mgr
-            .running_plugins()
+            .started_plugins()
             .map(|rec| (rec.name(), json!({ "path": rec.path() })))
             .collect()
     };
@@ -648,7 +655,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
     let guard = zlock!(context.plugins_mgr);
     let mut root_key = format!("@/router/{}/status/plugins/", &context.zid_str);
 
-    for plugin in guard.running_plugins() {
+    for plugin in guard.started_plugins() {
         with_extended_string(&mut root_key, &[plugin.name()], |plugin_key| {
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
