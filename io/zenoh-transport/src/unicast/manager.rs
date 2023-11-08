@@ -29,7 +29,9 @@ use async_std::{prelude::FutureExt, sync::Mutex, task};
 use std::{collections::HashMap, sync::Arc, time::Duration};
 #[cfg(feature = "shared-memory")]
 use zenoh_config::SharedMemoryConf;
-use zenoh_config::{CompressionConf, Config, LinkTxConf, QoSConf, TransportUnicastConf};
+use zenoh_config::{
+    CompressionUnicastConf, Config, LinkTxConf, QoSUnicastConf, TransportUnicastConf,
+};
 use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_crypto::PseudoRng;
 use zenoh_link::*;
@@ -174,7 +176,7 @@ impl TransportManagerBuilderUnicast {
         ));
         self = self.accept_pending(*config.transport().unicast().accept_pending());
         self = self.max_sessions(*config.transport().unicast().max_sessions());
-        self = self.qos(*config.transport().qos().enabled());
+        self = self.qos(*config.transport().unicast().qos().enabled());
         self = self.lowlatency(*config.transport().unicast().lowlatency());
 
         #[cfg(feature = "transport_multilink")]
@@ -191,7 +193,7 @@ impl TransportManagerBuilderUnicast {
         }
         #[cfg(feature = "transport_compression")]
         {
-            self = self.compression(*config.transport().compression().enabled());
+            self = self.compression(*config.transport().unicast().compression().enabled());
         }
 
         Ok(self)
@@ -243,11 +245,11 @@ impl Default for TransportManagerBuilderUnicast {
     fn default() -> Self {
         let transport = TransportUnicastConf::default();
         let link_tx = LinkTxConf::default();
-        let qos = QoSConf::default();
+        let qos = QoSUnicastConf::default();
         #[cfg(feature = "shared-memory")]
         let shm = SharedMemoryConf::default();
         #[cfg(feature = "transport_compression")]
-        let compression = CompressionConf::default();
+        let compression = CompressionUnicastConf::default();
 
         Self {
             lease: Duration::from_millis(*link_tx.lease()),

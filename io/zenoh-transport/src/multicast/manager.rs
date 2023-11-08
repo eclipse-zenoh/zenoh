@@ -21,7 +21,7 @@ use std::sync::Arc;
 use std::time::Duration;
 #[cfg(feature = "shared-memory")]
 use zenoh_config::SharedMemoryConf;
-use zenoh_config::{CompressionConf, Config, LinkTxConf};
+use zenoh_config::{CompressionMulticastConf, Config, LinkTxConf};
 use zenoh_core::zasynclock;
 use zenoh_link::*;
 use zenoh_protocol::core::ZenohId;
@@ -117,9 +117,7 @@ impl TransportManagerBuilderMulticast {
             config.transport().multicast().join_interval().unwrap(),
         ));
         self = self.max_sessions(config.transport().multicast().max_sessions().unwrap());
-        // @TODO: Force QoS deactivation in multicast since it is not supported
-        // self = self.qos(*config.transport().qos().enabled());
-        self = self.qos(false);
+        self = self.qos(*config.transport().multicast().qos().enabled());
         #[cfg(feature = "shared-memory")]
         {
             self = self.shm(*config.transport().shared_memory().enabled());
@@ -160,7 +158,7 @@ impl Default for TransportManagerBuilderMulticast {
         #[cfg(feature = "shared-memory")]
         let shm = SharedMemoryConf::default();
         #[cfg(feature = "transport_compression")]
-        let compression = CompressionConf::default();
+        let compression = CompressionMulticastConf::default();
 
         let tmb = TransportManagerBuilderMulticast {
             lease: Duration::from_millis(*link_tx.lease()),
