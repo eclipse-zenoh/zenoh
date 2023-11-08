@@ -699,7 +699,6 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         is_shm: state.ext_shm.is_shm(),
         is_lowlatency: state.transport.ext_lowlatency.is_lowlatency(),
     };
-    link.config.mtu = state.transport.batch_size;
 
     let a_config = TransportLinkUnicastConfig {
         mtu: state.transport.batch_size,
@@ -708,6 +707,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         is_compression: state.link.ext_compression.is_compression(),
     };
     let a_link = TransportLinkUnicast::new(link.link.clone(), a_config);
+    let s_link = format!("{:?}", a_link);
     let transport = step!(manager.init_transport_unicast(config, a_link).await);
 
     // Send the open_ack on the link
@@ -734,10 +734,10 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         .map_err(|e| (e, Some(close::reason::INVALID))));
 
     log::debug!(
-        "New transport link accepted from {} to {}: {:?}",
+        "New transport link accepted from {} to {}: {}",
         osyn_out.other_zid,
         manager.config.zid,
-        link
+        s_link
     );
 
     Ok(())

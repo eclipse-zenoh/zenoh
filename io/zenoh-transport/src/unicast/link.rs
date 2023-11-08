@@ -36,7 +36,7 @@ pub(crate) struct TransportLinkUnicastConfig {
     pub(crate) is_compression: bool,
 }
 
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 pub(crate) struct TransportLinkUnicast {
     pub(crate) link: LinkUnicast,
     pub(crate) config: TransportLinkUnicastConfig,
@@ -67,7 +67,7 @@ impl TransportLinkUnicast {
     pub async fn send_batch(&mut self, batch: &mut WBatch) -> ZResult<()> {
         const ERR: &str = "Write error on link: ";
 
-        log::trace!("WBatch: {:?}", batch);
+        // log::trace!("WBatch: {:?}", batch);
 
         let res = batch
             .finalize(
@@ -86,7 +86,7 @@ impl TransportLinkUnicast {
                 .as_slice(),
         };
 
-        log::trace!("WBytes: {:02x?}", bytes);
+        // log::trace!("WBytes: {:02x?}", bytes);
 
         // Send the message on the link
         if self.link.is_streamed() {
@@ -139,7 +139,7 @@ impl TransportLinkUnicast {
             self.link.read(into.as_mut_slice()).await?
         };
 
-        log::trace!("RBytes: {:02x?}", &into.as_slice()[0..end]);
+        // log::trace!("RBytes: {:02x?}", &into.as_slice()[0..end]);
 
         let buffer = ZSlice::make(Arc::new(into), 0, end)
             .map_err(|_| zerror!("{ERR}{self}. ZSlice index(es) out of bounds"))?;
@@ -148,7 +148,7 @@ impl TransportLinkUnicast {
             .initialize(buff)
             .map_err(|e| zerror!("{ERR}{self}. {e}."))?;
 
-        log::trace!("RBatch: {:?}", batch);
+        // log::trace!("RBatch: {:?}", batch);
 
         Ok(batch)
     }
@@ -172,6 +172,16 @@ impl TransportLinkUnicast {
 impl fmt::Display for TransportLinkUnicast {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.link)
+    }
+}
+
+impl fmt::Debug for TransportLinkUnicast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TransportLinkUnicast")
+            .field("link", &self.link)
+            .field("config", &self.config)
+            .field("buffer", &self.buffer.as_ref().map(|b| b.capacity()))
+            .finish()
     }
 }
 

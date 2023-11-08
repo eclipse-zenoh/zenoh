@@ -615,6 +615,7 @@ pub(crate) async fn open_link(
         is_compression: state.link.ext_compression.is_compression(),
     };
     let o_link = TransportLinkUnicast::new(link.link.clone(), o_config);
+    let s_link = format!("{:?}", o_link);
     let transport = step!(manager.init_transport_unicast(config, o_link).await);
 
     // Sync the RX sequence number
@@ -637,10 +638,10 @@ pub(crate) async fn open_link(
     }
 
     log::debug!(
-        "New transport link opened from {} to {}: {:?}",
+        "New transport link opened from {} to {}: {}",
         manager.config.zid,
         iack_out.other_zid,
-        link
+        s_link
     );
 
     Ok(transport)
