@@ -318,7 +318,7 @@ impl<'a> Publisher<'a> {
     ///
     /// async_std::task::spawn(async move {
     ///     while let Ok(matching_status) = matching_listener.recv_async().await {
-    ///         if matching_status.is_matching() {
+    ///         if matching_status.matching_subscribers() {
     ///             println!("Publisher has matching subscribers.");
     ///         } else {
     ///             println!("Publisher has NO MORE matching subscribers.");
@@ -397,7 +397,7 @@ impl<'a> Publisher<'a> {
 
     /// Return the [`MatchingStatus`] of the publisher.
     ///
-    /// [`MatchingStatus::is_matching`] will return true if there exist Subscribers
+    /// [`MatchingStatus::matching_subscribers`] will return true if there exist Subscribers
     /// matching the Publisher's key expression and false otherwise.
     ///
     /// # Examples
@@ -407,7 +407,7 @@ impl<'a> Publisher<'a> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
-    /// let is_matching: bool = publisher.matching_status().res().await.unwrap().is_matching();
+    /// let matching_subscribers: bool = publisher.matching_status().res().await.unwrap().matching_subscribers();
     /// # })
     /// ```
     #[zenoh_macros::unstable]
@@ -432,7 +432,7 @@ impl<'a> Publisher<'a> {
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
     /// let matching_listener = publisher.matching_listener().res().await.unwrap();
     /// while let Ok(matching_status) = matching_listener.recv_async().await {
-    ///     if matching_status.is_matching() {
+    ///     if matching_status.matching_subscribers() {
     ///         println!("Publisher has matching subscribers.");
     ///     } else {
     ///         println!("Publisher has NO MORE matching subscribers.");
@@ -484,7 +484,7 @@ impl<'a> Publisher<'a> {
 ///
 /// async_std::task::spawn(async move {
 ///     while let Ok(matching_status) = matching_listener.recv_async().await {
-///         if matching_status.is_matching() {
+///         if matching_status.matching_subscribers() {
 ///             println!("Publisher has matching subscribers.");
 ///         } else {
 ///             println!("Publisher has NO MORE matching subscribers.");
@@ -506,7 +506,7 @@ pub trait PublisherDeclarations {
     ///
     /// async_std::task::spawn(async move {
     ///     while let Ok(matching_status) = matching_listener.recv_async().await {
-    ///         if matching_status.is_matching() {
+    ///         if matching_status.matching_subscribers() {
     ///             println!("Publisher has matching subscribers.");
     ///         } else {
     ///             println!("Publisher has NO MORE matching subscribers.");
@@ -532,7 +532,7 @@ impl PublisherDeclarations for std::sync::Arc<Publisher<'static>> {
     ///
     /// async_std::task::spawn(async move {
     ///     while let Ok(matching_status) = matching_listener.recv_async().await {
-    ///         if matching_status.is_matching() {
+    ///         if matching_status.matching_subscribers() {
     ///             println!("Publisher has matching subscribers.");
     ///         } else {
     ///             println!("Publisher has NO MORE matching subscribers.");
@@ -911,7 +911,7 @@ pub struct MatchingStatus {
 #[zenoh_macros::unstable]
 impl MatchingStatus {
     /// Return true if there exist Subscribers matching the Publisher's key expression.
-    pub fn is_matching(&self) -> bool {
+    pub fn matching_subscribers(&self) -> bool {
         self.matching
     }
 }
@@ -938,7 +938,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     /// let matching_listener = publisher
     ///     .matching_listener()
     ///     .callback(|matching_status| {
-    ///         if matching_status.is_matching() {
+    ///         if matching_status.matching_subscribers() {
     ///             println!("Publisher has matching subscribers.");
     ///         } else {
     ///             println!("Publisher has NO MORE matching subscribers.");
@@ -1011,7 +1011,7 @@ impl<'a> MatchingListenerBuilder<'a, DefaultHandler> {
     ///     .await
     ///     .unwrap();
     /// while let Ok(matching_status) = matching_listener.recv_async().await {
-    ///     if matching_status.is_matching() {
+    ///     if matching_status.matching_subscribers() {
     ///         println!("Publisher has matching subscribers.");
     ///     } else {
     ///         println!("Publisher has NO MORE matching subscribers.");
@@ -1132,7 +1132,7 @@ impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListene
 /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
 /// let matching_listener = publisher.matching_listener().res().await.unwrap();
 /// while let Ok(matching_status) = matching_listener.recv_async().await {
-///     if matching_status.is_matching() {
+///     if matching_status.matching_subscribers() {
 ///         println!("Publisher has matching subscribers.");
 ///     } else {
 ///         println!("Publisher has NO MORE matching subscribers.");

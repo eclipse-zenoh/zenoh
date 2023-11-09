@@ -50,7 +50,7 @@ fn zenoh_matching_status_any() {
         assert!(received_status.err() == Some(RecvTimeoutError::Timeout));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(!matching_status.is_matching());
+        assert!(!matching_status.matching_subscribers());
 
         let sub = ztimeout!(session1
             .declare_subscriber("zenoh_matching_status_any_test")
@@ -58,18 +58,18 @@ fn zenoh_matching_status_any() {
         .unwrap();
 
         let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-        assert!(received_status.ok().map(|s| s.is_matching()) == Some(true));
+        assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(true));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(matching_status.is_matching());
+        assert!(matching_status.matching_subscribers());
 
         ztimeout!(sub.undeclare().res_async()).unwrap();
 
         let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-        assert!(received_status.ok().map(|s| s.is_matching()) == Some(false));
+        assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(false));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(!matching_status.is_matching());
+        assert!(!matching_status.matching_subscribers());
 
         let sub = ztimeout!(session2
             .declare_subscriber("zenoh_matching_status_any_test")
@@ -77,18 +77,18 @@ fn zenoh_matching_status_any() {
         .unwrap();
 
         let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-        assert!(received_status.ok().map(|s| s.is_matching()) == Some(true));
+        assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(true));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(matching_status.is_matching());
+        assert!(matching_status.matching_subscribers());
 
         ztimeout!(sub.undeclare().res_async()).unwrap();
 
         let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-        assert!(received_status.ok().map(|s| s.is_matching()) == Some(false));
+        assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(false));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(!matching_status.is_matching());
+        assert!(!matching_status.matching_subscribers());
     });
 }
 
@@ -116,7 +116,7 @@ fn zenoh_matching_status_remote() {
         assert!(received_status.err() == Some(RecvTimeoutError::Timeout));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(!matching_status.is_matching());
+        assert!(!matching_status.matching_subscribers());
 
         let sub = ztimeout!(session1
             .declare_subscriber("zenoh_matching_status_remote_test")
@@ -127,7 +127,7 @@ fn zenoh_matching_status_remote() {
         assert!(received_status.err() == Some(RecvTimeoutError::Timeout));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(!matching_status.is_matching());
+        assert!(!matching_status.matching_subscribers());
 
         ztimeout!(sub.undeclare().res_async()).unwrap();
 
@@ -135,7 +135,7 @@ fn zenoh_matching_status_remote() {
         assert!(received_status.err() == Some(RecvTimeoutError::Timeout));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(!matching_status.is_matching());
+        assert!(!matching_status.matching_subscribers());
 
         let sub = ztimeout!(session2
             .declare_subscriber("zenoh_matching_status_remote_test")
@@ -143,18 +143,18 @@ fn zenoh_matching_status_remote() {
         .unwrap();
 
         let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-        assert!(received_status.ok().map(|s| s.is_matching()) == Some(true));
+        assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(true));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(matching_status.is_matching());
+        assert!(matching_status.matching_subscribers());
 
         ztimeout!(sub.undeclare().res_async()).unwrap();
 
         let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-        assert!(received_status.ok().map(|s| s.is_matching()) == Some(false));
+        assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(false));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(!matching_status.is_matching());
+        assert!(!matching_status.matching_subscribers());
     });
 }
 
@@ -182,7 +182,7 @@ fn zenoh_matching_status_local() {
         assert!(received_status.err() == Some(RecvTimeoutError::Timeout));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(!matching_status.is_matching());
+        assert!(!matching_status.matching_subscribers());
 
         let sub = ztimeout!(session1
             .declare_subscriber("zenoh_matching_status_local_test")
@@ -190,18 +190,18 @@ fn zenoh_matching_status_local() {
         .unwrap();
 
         let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-        assert!(received_status.ok().map(|s| s.is_matching()) == Some(true));
+        assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(true));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(matching_status.is_matching());
+        assert!(matching_status.matching_subscribers());
 
         ztimeout!(sub.undeclare().res_async()).unwrap();
 
         let received_status = matching_listener.recv_timeout(RECV_TIMEOUT);
-        assert!(received_status.ok().map(|s| s.is_matching()) == Some(false));
+        assert!(received_status.ok().map(|s| s.matching_subscribers()) == Some(false));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(!matching_status.is_matching());
+        assert!(!matching_status.matching_subscribers());
 
         let sub = ztimeout!(session2
             .declare_subscriber("zenoh_matching_status_local_test")
@@ -212,7 +212,7 @@ fn zenoh_matching_status_local() {
         assert!(received_status.err() == Some(RecvTimeoutError::Timeout));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(!matching_status.is_matching());
+        assert!(!matching_status.matching_subscribers());
 
         ztimeout!(sub.undeclare().res_async()).unwrap();
 
@@ -220,6 +220,6 @@ fn zenoh_matching_status_local() {
         assert!(received_status.err() == Some(RecvTimeoutError::Timeout));
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
-        assert!(!matching_status.is_matching());
+        assert!(!matching_status.matching_subscribers());
     });
 }

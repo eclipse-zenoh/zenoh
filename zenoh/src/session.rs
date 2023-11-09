@@ -1468,7 +1468,7 @@ impl Session {
             Ok(mut current) => {
                 if self
                     .matching_status(&publisher.key_expr, listener_state.destination)
-                    .map(|s| s.is_matching())
+                    .map(|s| s.matching_subscribers())
                     .unwrap_or(true)
                 {
                     *current = true;
@@ -1525,7 +1525,7 @@ impl Session {
                                     if let Ok(status) =
                                         session.matching_status(&msub.key_expr, msub.destination)
                                     {
-                                        if status.is_matching() {
+                                        if status.matching_subscribers() {
                                             *current = true;
                                             let callback = msub.callback.clone();
                                             (callback)(status)
@@ -1558,7 +1558,7 @@ impl Session {
                                     if let Ok(status) =
                                         session.matching_status(&msub.key_expr, msub.destination)
                                     {
-                                        if !status.is_matching() {
+                                        if !status.matching_subscribers() {
                                             *current = false;
                                             let callback = msub.callback.clone();
                                             (callback)(status)
