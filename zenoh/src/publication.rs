@@ -407,7 +407,12 @@ impl<'a> Publisher<'a> {
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
     /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
-    /// let matching_subscribers: bool = publisher.matching_status().res().await.unwrap().matching_subscribers();
+    /// let matching_subscribers: bool = publisher
+    ///     .matching_status()
+    ///     .res()
+    ///     .await
+    ///     .unwrap()
+    ///     .matching_subscribers();
     /// # })
     /// ```
     #[zenoh_macros::unstable]
@@ -902,6 +907,17 @@ impl From<Priority> for zenoh_protocol::core::Priority {
 }
 
 /// A struct that indicates if there exist Subscribers matching the Publisher's key expression.
+///
+/// # Examples
+/// ```
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+/// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+/// let matching_status = publisher.matching_status().res().await.unwrap();
+/// # })
+/// ```
 #[zenoh_macros::unstable]
 #[derive(Copy, Clone, Debug)]
 pub struct MatchingStatus {
@@ -911,6 +927,22 @@ pub struct MatchingStatus {
 #[zenoh_macros::unstable]
 impl MatchingStatus {
     /// Return true if there exist Subscribers matching the Publisher's key expression.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// let matching_subscribers: bool = publisher
+    ///     .matching_status()
+    ///     .res()
+    ///     .await
+    ///     .unwrap()
+    ///     .matching_subscribers();
+    /// # })
+    /// ```
     pub fn matching_subscribers(&self) -> bool {
         self.matching
     }
