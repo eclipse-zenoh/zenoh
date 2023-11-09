@@ -69,6 +69,7 @@ pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 ///     .unwrap();
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug, Clone)]
 pub struct PutBuilder<'a, 'b> {
     pub(crate) publisher: PublisherBuilder<'a, 'b>,
@@ -362,6 +363,7 @@ impl<'a> Undeclarable<(), PublisherUndeclaration<'a>> for Publisher<'a> {
 /// publisher.undeclare().res().await.unwrap();
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct PublisherUndeclaration<'a> {
     publisher: Publisher<'a>,
 }
@@ -404,6 +406,7 @@ impl Drop for Publisher<'_> {
 
 /// A [`Resolvable`] returned by [`Publisher::put()`](Publisher::put),
 /// [`Publisher::delete()`](Publisher::delete) and [`Publisher::write()`](Publisher::write).
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct Publication<'a> {
     publisher: &'a Publisher<'a>,
     value: Value,
@@ -427,6 +430,7 @@ impl SyncResolve for Publication<'_> {
             .as_ref()
             .unwrap()
             .clone();
+        let timestamp = publisher.session.runtime.new_timestamp();
 
         if publisher.destination != Locality::SessionLocal {
             primitives.send_push(Push {
@@ -439,7 +443,7 @@ impl SyncResolve for Publication<'_> {
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
                 payload: PushBody::Put(Put {
-                    timestamp: publisher.session.runtime.new_timestamp(),
+                    timestamp,
                     encoding: value.encoding.clone(),
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
@@ -453,7 +457,7 @@ impl SyncResolve for Publication<'_> {
             let data_info = DataInfo {
                 kind,
                 encoding: Some(value.encoding),
-                timestamp: publisher.session.runtime.new_timestamp(),
+                timestamp,
                 ..Default::default()
             };
             publisher.session.handle_data(
@@ -519,6 +523,7 @@ where
 ///     .unwrap();
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct PublisherBuilder<'a, 'b: 'a> {
     pub(crate) session: SessionRef<'a>,

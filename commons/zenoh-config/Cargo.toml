@@ -35,3 +35,4 @@ zenoh-core = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
+secrecy = { workspace = true }

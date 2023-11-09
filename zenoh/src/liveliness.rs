@@ -214,6 +214,7 @@ impl<'a> Liveliness<'a> {
 ///     .unwrap();
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct LivelinessTokenBuilder<'a, 'b> {
@@ -313,6 +314,7 @@ pub struct LivelinessToken<'a> {
 /// liveliness.undeclare().res().await.unwrap();
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[zenoh_macros::unstable]
 pub struct LivelinessTokenUndeclaration<'a> {
     token: LivelinessToken<'a>,
@@ -598,6 +600,7 @@ where
 /// }
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct LivelinessGetBuilder<'a, 'b, Handler> {
     pub(crate) session: &'a Session,

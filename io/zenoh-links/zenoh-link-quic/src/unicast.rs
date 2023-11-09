@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use crate::base64_decode;
 use crate::{
     config::*, get_quic_addr, verify::WebPkiVerifierAnyServerName, ALPN_QUIC_HTTP,
     QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
@@ -246,6 +247,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         // Read the certificates
         let f = if let Some(value) = epconf.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
             value.as_bytes().to_vec()
+        } else if let Some(b64_certificate) = epconf.get(TLS_ROOT_CA_CERTIFICATE_BASE64) {
+            base64_decode(b64_certificate)?
         } else if let Some(value) = epconf.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
             async_std::fs::read(value)
                 .await
@@ -334,6 +337,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
         let f = if let Some(value) = epconf.get(TLS_SERVER_CERTIFICATE_RAW) {
             value.as_bytes().to_vec()
+        } else if let Some(b64_certificate) = epconf.get(TLS_SERVER_CERTIFICATE_BASE64) {
+            base64_decode(b64_certificate)?
         } else if let Some(value) = epconf.get(TLS_SERVER_CERTIFICATE_FILE) {
             async_std::fs::read(value)
                 .await
@@ -350,6 +355,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         // Private keys
         let f = if let Some(value) = epconf.get(TLS_SERVER_PRIVATE_KEY_RAW) {
             value.as_bytes().to_vec()
+        } else if let Some(b64_key) = epconf.get(TLS_SERVER_PRIVATE_KEY_BASE64) {
+            base64_decode(b64_key)?
         } else if let Some(value) = epconf.get(TLS_SERVER_PRIVATE_KEY_FILE) {
             async_std::fs::read(value)
                 .await

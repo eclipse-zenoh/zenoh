@@ -74,6 +74,7 @@ impl<T, Output> Resolve<Output> for T where
 }
 
 // Closure to wait
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct ResolveClosure<C, To>(C)
 where
     To: Sized + Send,
@@ -120,6 +121,7 @@ where
 }
 
 // Future to wait
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct ResolveFuture<F, To>(F)
 where
     To: Sized + Send,

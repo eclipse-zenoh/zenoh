@@ -16,6 +16,7 @@
 pub mod defaults;
 mod include;
 use include::recursive_include;
+use secrecy::{CloneableSecret, DebugSecret, Secret, SerializableSecret, Zeroize};
 use serde::{
     de::{self, MapAccess, Visitor},
     Deserialize, Serialize,
@@ -45,6 +46,29 @@ use zenoh_protocol::{
 };
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_util::LibLoader;
+
+// Wrappers for secrecy of values
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
+pub struct SecretString(String);
+
+impl Deref for SecretString {
+    type Target = String;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl SerializableSecret for SecretString {}
+impl DebugSecret for SecretString {}
+impl CloneableSecret for SecretString {}
+impl Zeroize for SecretString {
+    fn zeroize(&mut self) {
+        self.0 = "".to_string();
+    }
+}
+
+pub type SecretValue = Secret<SecretString>;
 
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
@@ -299,8 +323,20 @@ validated_struct::validator! {
                     client_auth: Option<bool>,
                     client_private_key: Option<String>,
                     client_certificate: Option<String>,
-                    server_name_verification: Option<bool>
-                },
+                    server_name_verification: Option<bool>,
+                    // Skip serializing field because they contain secrets
+                    #[serde(skip_serializing)]
+                    root_ca_certificate_base64: Option<SecretValue>,
+                    #[serde(skip_serializing)]
+                    server_private_key_base64:  Option<SecretValue>,
+                    #[serde(skip_serializing)]
+                    server_certificate_base64: Option<SecretValue>,
+                    #[serde(skip_serializing)]
+                    client_private_key_base64 :  Option<SecretValue>,
+                    #[serde(skip_serializing)]
+                    client_certificate_base64 :  Option<SecretValue>,
+                }
+                ,
                 pub unixpipe: #[derive(Default)]
                 UnixPipeConf {
                     file_access_mask: Option<u32>

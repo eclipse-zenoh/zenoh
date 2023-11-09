@@ -585,6 +585,7 @@ impl<'a> Undeclarable<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
 /// session.undeclare(key_expr).res().await.unwrap();
 /// # })
 /// ```
+#[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct KeyExprUndeclaration<'a> {
     session: &'a Session,
     expr: KeyExpr<'a>,
