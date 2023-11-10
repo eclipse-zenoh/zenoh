@@ -21,6 +21,8 @@
 pub mod loading;
 pub mod vtable;
 
+use std::borrow::Cow;
+
 use zenoh_result::ZResult;
 
 pub mod prelude {
@@ -50,7 +52,7 @@ pub trait CompatibilityVersion {
 }
 
 pub trait PluginControl {
-    fn plugins(&self) -> Vec<&str>;
+    fn plugins(&self) -> Vec<Cow<'static,str>>;
     // fn status(&self, name: &str) -> PluginStatus;
 }
 

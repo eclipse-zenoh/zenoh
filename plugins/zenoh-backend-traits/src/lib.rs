@@ -133,6 +133,7 @@
 
 use async_trait::async_trait;
 use const_format::concatcp;
+use std::borrow::Cow;
 use std::sync::Arc;
 use zenoh::prelude::{KeyExpr, OwnedKeyExpr, Sample, Selector};
 use zenoh::queryable::ReplyBuilder;
@@ -233,7 +234,7 @@ impl CompatibilityVersion for VolumePlugin {
 }
 
 impl PluginControl for VolumePlugin {
-    fn plugins(&self) -> Vec<&str> {
+    fn plugins(&self) -> Vec<Cow<'static,str>> {
         Vec::new()
     }
 }

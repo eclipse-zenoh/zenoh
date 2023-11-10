@@ -14,6 +14,8 @@
 
 //! `zenohd`'s plugin system. For more details, consult the [detailed documentation](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Plugins/Zenoh%20Plugins.md).
 
+use std::borrow::Cow;
+
 use crate::prelude::Selector;
 pub use crate::runtime::Runtime;
 pub use crate::Result as ZResult;
@@ -41,7 +43,7 @@ impl CompatibilityVersion for RunningPlugin {
 }
 
 impl PluginControl for RunningPlugin {
-    fn plugins(&self) -> Vec<&str> {
+    fn plugins(&self) -> Vec<Cow<'static,str>> {
         Vec::new()
     }
 }

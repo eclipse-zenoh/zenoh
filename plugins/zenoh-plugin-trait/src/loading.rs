@@ -57,14 +57,21 @@ impl PluginCondition {
     }
 }
 
-pub trait PluginConditionAddError {
+pub trait PluginConditionSetter {
     fn add_error(self, condition: &mut PluginCondition) -> Self;
+    fn add_warning(self, condition: &mut PluginCondition) -> Self;
 }
 
-impl<T, E: ToString> PluginConditionAddError for core::result::Result<T, E> {
+impl<T, E: ToString> PluginConditionSetter for core::result::Result<T, E> {
     fn add_error(self, condition: &mut PluginCondition) -> Self {
         if let Err(e) = &self {
             condition.add_error(e.to_string());
+        }
+        self
+    }
+    fn add_warning(self, condition: &mut PluginCondition) -> Self {
+        if let Err(e) = &self {
+            condition.add_warning(e.to_string());
         }
         self
     }
