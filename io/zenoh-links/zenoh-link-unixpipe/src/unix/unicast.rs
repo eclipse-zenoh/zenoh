@@ -14,24 +14,24 @@
 use crate::config;
 #[cfg(not(target_os = "macos"))]
 use advisory_lock::{AdvisoryFileLock, FileLockMode};
-use async_io::Async;
+use filepath::FilePath;
+use tokio::fs::File as TokioFile;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use std::fs::File;
 use tokio::fs::remove_file;
 use tokio::task::JoinHandle;
 use async_trait::async_trait;
-use filepath::FilePath;
-use nix::libc;
+// use filepath::FilePath;
 use nix::unistd::unlink;
 use rand::Rng;
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt;
-use std::fs::{File, OpenOptions};
-use std::io::{Read, Write};
-use std::os::unix::fs::OpenOptionsExt;
+use std::io::Read;
 use std::sync::Arc;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_protocol::core::{EndPoint, Locator};
-use std::io::ErrorKind;
+use zenoh_result::zerror;
 
 use unix_named_pipe::{create, open_write};
 
@@ -91,14 +91,20 @@ impl Invitation {
 }
 
 struct PipeR {
-    pipe: Async<File>,
+    pipe: TokioFile,
 }
 
 impl Drop for PipeR {
     fn drop(&mut self) {
-        if let Ok(path) = self.pipe.as_mut().path() {
-            let _ = unlink(&path);
-        }
+        let _ = async_global_executor::block_on(async move {
+            // let _ = self.pipe.flush().await;
+            if let Ok(std_file) =  self.pipe.try_clone().await?.try_into_std() {
+                if let Ok(path) = std_file.path() {
+                    let _ = unlink(&path);
+                }
+            }
+            ZResult::Ok(())
+        });
     }
 }
 impl PipeR {
@@ -106,38 +112,17 @@ impl PipeR {
         // create, open and lock named pipe
         let pipe_file = Self::create_and_open_unique_pipe_for_read(path, access_mode).await?;
         // create async_io wrapper for pipe's file descriptor
-        let pipe = Async::new(pipe_file)?;
+        let pipe = TokioFile::from_std(pipe_file);
         Ok(Self { pipe })
     }
 
     async fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> ZResult<usize> {
-        let result = self
-            .pipe
-            .read_with_mut(|pipe| match pipe.read(&mut buf[..]) {
-                Ok(0) => Err(ErrorKind::WouldBlock.into()),
-                Ok(val) => Ok(val),
-                Err(e) => Err(e),
-            })
-            .await?;
-        ZResult::Ok(result)
+        self.pipe.read(buf).await.map_err(|e| zerror!(e).into())
     }
 
     async fn read_exact<'a>(&'a mut self, buf: &'a mut [u8]) -> ZResult<()> {
-        let mut r: usize = 0;
-        self.pipe
-            .read_with_mut(|pipe| match pipe.read(&mut buf[r..]) {
-                Ok(0) => Err(ErrorKind::WouldBlock.into()),
-                Ok(val) => {
-                    r += val;
-                    if r == buf.len() {
-                        return Ok(());
-                    }
-                    Err(ErrorKind::WouldBlock.into())
-                }
-                Err(e) => Err(e),
-            })
-            .await?;
-        ZResult::Ok(())
+        self.pipe.read_exact(buf).await?;
+        Ok(())
     }
 
     async fn create_and_open_unique_pipe_for_read(path_r: &str, access_mode: u32) -> ZResult<File> {
@@ -177,45 +162,23 @@ impl PipeR {
 }
 
 struct PipeW {
-    pipe: Async<File>,
+    pipe: TokioFile,
 }
 impl PipeW {
     async fn new(path: &str) -> ZResult<Self> {
         // create, open and lock named pipe
         let pipe_file = Self::open_unique_pipe_for_write(path)?;
         // create async_io wrapper for pipe's file descriptor
-        let pipe = Async::new(pipe_file)?;
+        let pipe = TokioFile::from_std(pipe_file);
         Ok(Self { pipe })
     }
 
     async fn write<'a>(&'a mut self, buf: &'a [u8]) -> ZResult<usize> {
-        let result = self
-            .pipe
-            .write_with_mut(|pipe| match pipe.write(buf) {
-                Ok(0) => Err(ErrorKind::WouldBlock.into()),
-                Ok(val) => Ok(val),
-                Err(e) => Err(e),
-            })
-            .await?;
-        ZResult::Ok(result)
+        self.pipe.write(buf).await.map_err(|e| zerror!(e).into())
     }
 
     async fn write_all<'a>(&'a mut self, buf: &'a [u8]) -> ZResult<()> {
-        let mut r: usize = 0;
-        self.pipe
-            .write_with_mut(|pipe| match pipe.write(&buf[r..]) {
-                Ok(0) => Err(ErrorKind::WouldBlock.into()),
-                Ok(val) => {
-                    r += val;
-                    if r == buf.len() {
-                        return Ok(());
-                    }
-                    Err(ErrorKind::WouldBlock.into())
-                }
-                Err(e) => Err(e),
-            })
-            .await?;
-        ZResult::Ok(())
+        self.pipe.write_all(buf).await.map_err(|e| zerror!(e).into())
     }
 
     fn open_unique_pipe_for_write(path: &str) -> ZResult<File> {
