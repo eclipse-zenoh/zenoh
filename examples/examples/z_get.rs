@@ -38,7 +38,6 @@ async fn main() {
     .await
     .unwrap();
     while let Ok(reply) = replies.recv_async().await {
-        println!("{reply:?}");
         match reply.sample {
             Ok(sample) => println!(
                 ">> Received ('{}': '{}')",

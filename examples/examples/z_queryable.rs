@@ -16,6 +16,7 @@ use clap::{App, Arg};
 use futures::prelude::*;
 use futures::select;
 use std::convert::TryFrom;
+use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
@@ -40,7 +41,7 @@ async fn main() {
         .await
         .unwrap();
 
-    println!("Enter 'q' to quit, 'e' for the next query to receive an error as response...");
+    println!("Enter 'q' to quit, 'e' to reply an error to next query...");
     let mut stdin = async_std::io::stdin();
     let mut input = [0_u8];
     loop {
@@ -51,10 +52,22 @@ async fn main() {
                     None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
                     Some(value) => println!(">> [Queryable ] Received Query '{}' with value '{}'", query.selector(), value),
                 }
-                let response = if send_errors.swap(false, std::sync::atomic::Ordering::Relaxed) {Err(value.clone().into())} else {Ok(Sample::new(key_expr.clone(), value.clone()))};
-                println!(">> [Queryable ] Responding {response:?}");
+                let reply = if send_errors.swap(false, Relaxed) {
+                    println!(
+                        ">> [Queryable ] Replying (ERROR: '{}')",
+                        value,
+                    );
+                    Err(value.clone().into())
+                } else {
+                    println!(
+                        ">> [Queryable ] Responding ('{}': '{}')",
+                        key_expr.as_str(),
+                        value,
+                    );
+                    Ok(Sample::new(key_expr.clone(), value.clone()))
+                };
                 query
-                    .reply(response)
+                    .reply(reply)
                     .res()
                     .await
                     .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
@@ -64,7 +77,7 @@ async fn main() {
                 match input[0] {
                     b'q' => break,
                     0 => sleep(Duration::from_secs(1)).await,
-                    b'e' => send_errors.store(true, std::sync::atomic::Ordering::Relaxed),
+                    b'e' => send_errors.store(true, Relaxed),
                     _ => (),
                 }
             }
