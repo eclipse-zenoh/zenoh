@@ -72,7 +72,7 @@ impl Plugin for StoragesPlugin {
     }
 }
 
-type PluginsManager = zenoh_plugin_trait::loading::PluginsManager<VolumeConfig, VolumePlugin>;
+type PluginsManager = zenoh_plugin_trait::PluginsManager<VolumeConfig, VolumePlugin>;
 
 struct StorageRuntime(Arc<Mutex<StorageRuntimeInner>>);
 struct StorageRuntimeInner {

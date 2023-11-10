@@ -37,7 +37,7 @@ use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
 use zenoh_link::{EndPoint, Link};
-use zenoh_plugin_trait::{CompatibilityVersion, PluginStartArgs};
+use zenoh_plugin_trait::{PluginStructVersion, PluginStartArgs};
 use zenoh_protocol::core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId};
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::{bail, ZResult};
@@ -65,7 +65,7 @@ pub struct Runtime {
     state: Arc<RuntimeState>,
 }
 
-impl CompatibilityVersion for Runtime {
+impl PluginStructVersion for Runtime {
     fn version() -> u64 {
         1
     }

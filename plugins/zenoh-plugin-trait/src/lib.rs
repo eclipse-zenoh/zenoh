@@ -18,16 +18,17 @@
 //!
 //! If building a plugin for [`zenohd`](https://crates.io/crates/zenoh), you should use the types exported in [`zenoh::plugins`](https://docs.rs/zenoh/latest/zenoh/plugins) to fill [`Plugin`]'s associated types.  
 //! To check your plugin typing for `zenohd`, have your plugin implement [`zenoh::plugins::ZenohPlugin`](https://docs.rs/zenoh/latest/zenoh/plugins/struct.ZenohPlugin)
-pub mod loading;
-pub mod vtable;
+//!
+mod loading;
+mod plugin;
+mod vtable;
 
-use std::borrow::Cow;
-
-use zenoh_result::ZResult;
-
-pub mod prelude {
-    pub use crate::{concat_enabled_features, loading::*, vtable::*, CompatibilityVersion, Plugin};
-}
+pub use loading::{DeclaredPlugin, LoadedPlugin, PluginsManager, StartedPlugin};
+pub use plugin::{
+    Plugin, PluginCondition, PluginConditionSetter, PluginControl, PluginInfo, PluginInstance,
+    PluginStartArgs, PluginState, PluginStatus, PluginStructVersion,
+};
+pub use vtable::{Compatibility, PluginLoaderVersion, PluginVTable, PLUGIN_LOADER_VERSION};
 
 #[macro_export]
 macro_rules! concat_enabled_features {
@@ -41,29 +42,5 @@ macro_rules! concat_enabled_features {
     };
 }
 
-pub trait CompatibilityVersion {
-    /// The version of the structure implementing this trait. After any channge in the structure or it's dependencies
-    /// whcich may affect the ABI, this version should be incremented.
-    fn version() -> u64;
-    /// The features enabled during comiplation of the structure implementing this trait.
-    /// Different features between the plugin and the host may cuase ABI incompatibility even if the structure version is the same.
-    /// Use `concat_enabled_features!` to generate this string
-    fn features() -> &'static str;
-}
-
-pub trait PluginControl {
-    fn plugins(&self) -> Vec<Cow<'static,str>>;
-    // fn status(&self, name: &str) -> PluginStatus;
-}
-
-pub trait PluginStartArgs : CompatibilityVersion {}
-pub trait PluginInstance : CompatibilityVersion + PluginControl + Send {}
-
-pub trait Plugin: Sized + 'static {
-    type StartArgs: PluginStartArgs;
-    type Instance: PluginInstance;
-    /// Your plugins' default name when statically linked.
-    const STATIC_NAME: &'static str;
-    /// Starts your plugin. Use `Ok` to return your plugin's control structure
-    fn start(name: &str, args: &Self::StartArgs) -> ZResult<Self::Instance>;
-}
+pub const FEATURES: &str =
+    concat_enabled_features!(prefix = "zenoh-plugin-trait", features = ["default"]);

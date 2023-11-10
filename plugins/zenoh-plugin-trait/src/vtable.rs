@@ -13,14 +13,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::*;
-pub use no_mangle::*;
 use zenoh_result::ZResult;
 use std::fmt::Display;
 
 pub type PluginLoaderVersion = u64;
 pub const PLUGIN_LOADER_VERSION: PluginLoaderVersion = 1;
-pub const FEATURES: &str =
-    concat_enabled_features!(prefix = "zenoh-plugin-trait", features = ["default"]);
 
 type StartFn<StartArgs, Instance> = fn(&str, &StartArgs) -> ZResult<Instance>;
 
@@ -28,7 +25,7 @@ type StartFn<StartArgs, Instance> = fn(&str, &StartArgs) -> ZResult<Instance>;
 pub struct PluginVTable<StartArgs, Instance> {
     pub start: StartFn<StartArgs, Instance>,
 }
-impl<StartArgs, Instance> CompatibilityVersion for PluginVTable<StartArgs, Instance> {
+impl<StartArgs, Instance> PluginStructVersion for PluginVTable<StartArgs, Instance> {
     fn version() -> u64 {
         1
     }
@@ -46,7 +43,7 @@ pub struct StructVersion {
 }
 
 impl StructVersion {
-    pub fn new<T: CompatibilityVersion>() -> Self {
+    pub fn new<T: PluginStructVersion>() -> Self {
         Self {
             version: T::version(),
             name: std::any::type_name::<T>(),
@@ -75,7 +72,7 @@ pub struct Compatibility {
 }
 
 impl Compatibility {
-    pub fn new<StartArgs: CompatibilityVersion, Instance: CompatibilityVersion>() -> Self {
+    pub fn new<StartArgs: PluginStructVersion, Instance: PluginStructVersion>() -> Self {
         let rust_version = RustVersion::new();
         let vtable_version = StructVersion::new::<PluginVTable<StartArgs, Instance>>();
         let start_args_version = StructVersion::new::<StartArgs>();
@@ -176,30 +173,29 @@ impl<StartArgs, Instance> PluginVTable<StartArgs, Instance> {
 pub use no_mangle::*;
 #[cfg(feature = "no_mangle")]
 pub mod no_mangle {
-    /// This macro will add a non-mangled `load_plugin` function to the library if feature `no_mangle` is enabled (which it is by default).
+    /// This macro will add a non-mangled functions which provides plugin version and loads it if feature `no_mangle` is enabled (which it is by default).
     #[macro_export]
     macro_rules! declare_plugin {
         ($ty: path) => {
             #[no_mangle]
-            fn get_plugin_loader_version() -> $crate::prelude::PluginLoaderVersion {
-                $crate::prelude::PLUGIN_LOADER_VERSION
+            fn get_plugin_loader_version() -> $crate::PluginLoaderVersion {
+                $crate::PLUGIN_LOADER_VERSION
             }
 
             #[no_mangle]
-            fn get_compatibility() -> $crate::prelude::Compatibility {
-                // TODO: add vtable version (including type parameters) to the compatibility information
-                $crate::prelude::Compatibility::new::<
-                    <$ty as $crate::prelude::Plugin>::StartArgs,
-                    <$ty as $crate::prelude::Plugin>::Instance,
+            fn get_compatibility() -> $crate::Compatibility {
+                $crate::Compatibility::new::<
+                    <$ty as $crate::Plugin>::StartArgs,
+                    <$ty as $crate::Plugin>::Instance,
                 >()
             }
 
             #[no_mangle]
-            fn load_plugin() -> $crate::prelude::PluginVTable<
-                <$ty as $crate::prelude::Plugin>::StartArgs,
-                <$ty as $crate::prelude::Plugin>::Instance,
+            fn load_plugin() -> $crate::PluginVTable<
+                <$ty as $crate::Plugin>::StartArgs,
+                <$ty as $crate::Plugin>::Instance,
             > {
-                $crate::prelude::PluginVTable::new::<$ty>()
+                $crate::PluginVTable::new::<$ty>()
             }
         };
     }

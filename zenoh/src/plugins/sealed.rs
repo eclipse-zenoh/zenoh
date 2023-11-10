@@ -33,7 +33,7 @@ pub type StartArgs = Runtime;
 /// A zenoh plugin, when started, must return this type.
 pub type RunningPlugin = Box<dyn RunningPluginTrait + 'static>;
 
-impl CompatibilityVersion for RunningPlugin {
+impl PluginStructVersion for RunningPlugin {
     fn version() -> u64 {
         1
     }
@@ -92,9 +92,9 @@ pub trait RunningPluginTrait: Send + Sync {
 }
 
 /// The zenoh plugins manager. It handles the full lifetime of plugins, from loading to destruction.
-pub type PluginsManager = zenoh_plugin_trait::loading::PluginsManager<StartArgs, RunningPlugin>;
+pub type PluginsManager = zenoh_plugin_trait::PluginsManager<StartArgs, RunningPlugin>;
 
-pub use zenoh_plugin_trait::CompatibilityVersion;
+pub use zenoh_plugin_trait::PluginStructVersion;
 pub use zenoh_plugin_trait::Plugin;
 use zenoh_plugin_trait::PluginControl;
 use zenoh_plugin_trait::PluginInstance;
