@@ -21,6 +21,7 @@ use async_std::prelude::FutureExt;
 use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
 use futures::StreamExt;
 use http_types::Method;
+use zenoh_plugin_trait::PluginControl;
 use std::convert::TryFrom;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -242,6 +243,9 @@ impl Plugin for RestPlugin {
 }
 
 struct RunningPlugin(Config);
+
+impl PluginControl for RunningPlugin {}
+
 impl RunningPluginTrait for RunningPlugin {
     fn config_checker(
         &self,

@@ -15,6 +15,7 @@
 
 use futures::select;
 use log::{debug, info};
+use zenoh_plugin_trait::PluginControl;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::{
@@ -85,6 +86,9 @@ struct RunningPluginInner {
 // The RunningPlugin struct implementing the RunningPluginTrait trait
 #[derive(Clone)]
 struct RunningPlugin(Arc<Mutex<RunningPluginInner>>);
+
+impl PluginControl for RunningPlugin {}
+
 impl RunningPluginTrait for RunningPlugin {
     fn config_checker(
         &self,

@@ -14,8 +14,6 @@
 
 //! `zenohd`'s plugin system. For more details, consult the [detailed documentation](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Plugins/Zenoh%20Plugins.md).
 
-use std::borrow::Cow;
-
 use crate::prelude::Selector;
 pub use crate::runtime::Runtime;
 pub use crate::Result as ZResult;
@@ -42,11 +40,7 @@ impl PluginStructVersion for RunningPlugin {
     }
 }
 
-impl PluginControl for RunningPlugin {
-    fn plugins(&self) -> Vec<Cow<'static,str>> {
-        Vec::new()
-    }
-}
+impl PluginControl for RunningPlugin {}
 
 impl PluginInstance for RunningPlugin {}
 
@@ -64,7 +58,7 @@ impl Response {
     }
 }
 
-pub trait RunningPluginTrait: Send + Sync {
+pub trait RunningPluginTrait: Send + Sync + PluginControl {
     /// Function that will be called when configuration relevant to the plugin is about to change.
     ///
     /// This function is called with 3 arguments:

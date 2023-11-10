@@ -22,6 +22,7 @@
 use async_std::task;
 use flume::Sender;
 use memory_backend::MemoryBackend;
+use zenoh_plugin_trait::PluginControl;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -217,6 +218,13 @@ impl StorageRuntimeInner {
 impl From<StorageRuntimeInner> for StorageRuntime {
     fn from(inner: StorageRuntimeInner) -> Self {
         StorageRuntime(Arc::new(Mutex::new(inner)))
+    }
+}
+
+impl PluginControl for StorageRuntime {
+    fn plugins(&self) -> Vec<String> {
+        let guard = self.0.lock().unwrap();
+        guard.plugins_manager.plugins()
     }
 }
 

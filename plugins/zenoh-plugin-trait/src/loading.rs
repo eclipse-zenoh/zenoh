@@ -10,14 +10,17 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-mod static_plugin;
 mod dynamic_plugin;
+mod static_plugin;
 
 use crate::*;
 use zenoh_result::ZResult;
 use zenoh_util::LibLoader;
 
-use self::{dynamic_plugin::{DynamicPlugin, DynamicPluginSource}, static_plugin::StaticPlugin};
+use self::{
+    dynamic_plugin::{DynamicPlugin, DynamicPluginSource},
+    static_plugin::StaticPlugin,
+};
 
 pub trait DeclaredPlugin<StartArgs, Instance>: PluginInfo {
     fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>>;
@@ -151,14 +154,14 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     }
 
     /// Lists all plugins
-    pub fn plugins(&self) -> impl Iterator<Item = &dyn DeclaredPlugin<StartArgs, Instance>> + '_ {
+    pub fn declared_plugins(&self) -> impl Iterator<Item = &dyn DeclaredPlugin<StartArgs, Instance>> + '_ {
         self.plugins
             .iter()
             .map(|p| p as &dyn DeclaredPlugin<StartArgs, Instance>)
     }
 
     /// Lists all plugins mutable
-    pub fn plugins_mut(
+    pub fn declared_plugins_mut(
         &mut self,
     ) -> impl Iterator<Item = &mut dyn DeclaredPlugin<StartArgs, Instance>> + '_ {
         self.plugins
@@ -170,7 +173,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     pub fn loaded_plugins(
         &self,
     ) -> impl Iterator<Item = &dyn LoadedPlugin<StartArgs, Instance>> + '_ {
-        self.plugins().filter_map(|p| p.loaded())
+        self.declared_plugins().filter_map(|p| p.loaded())
     }
 
     /// Lists the loaded plugins mutable
@@ -178,7 +181,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         &mut self,
     ) -> impl Iterator<Item = &mut dyn LoadedPlugin<StartArgs, Instance>> + '_ {
         // self.plugins_mut().filter_map(|p| p.loaded_mut())
-        self.plugins_mut().filter_map(|p| p.loaded_mut())
+        self.declared_plugins_mut().filter_map(|p| p.loaded_mut())
     }
 
     /// Lists the started plugins
@@ -234,5 +237,30 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         name: &str,
     ) -> Option<&mut dyn StartedPlugin<StartArgs, Instance>> {
         self.loaded_plugin_mut(name)?.started_mut()
+    }
+}
+
+impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> PluginControl
+    for PluginsManager<StartArgs, Instance>
+{
+    fn plugins(&self) -> Vec<String> {
+        let mut plugins = Vec::new();
+        for plugin in self.declared_plugins() {
+            plugins.push(plugin.name().to_string());
+            // for running plugins append their subplugins prepended with the running plugin name
+            if let Some(plugin) = plugin.loaded() {
+                if let Some(plugin) = plugin.started() {
+                    plugins.append(
+                        &mut plugin
+                            .instance()
+                            .plugins()
+                            .iter()
+                            .map(|p| format!("{}/{}", plugin.name(), p))
+                            .collect::<Vec<_>>(),
+                    );
+                }
+            }
+        }
+        plugins
     }
 }

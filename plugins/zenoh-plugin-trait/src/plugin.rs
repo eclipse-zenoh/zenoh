@@ -40,7 +40,7 @@ pub trait PluginInfo {
 }
 
 pub trait PluginControl {
-    fn plugins(&self) -> Vec<Cow<'static, str>>;
+    fn plugins(&self) -> Vec<String> { Vec::new() }
     // fn status(&self, name: &str) -> PluginStatus;
 }
 
