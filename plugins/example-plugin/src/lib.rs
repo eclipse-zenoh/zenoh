@@ -15,7 +15,6 @@
 
 use futures::select;
 use log::{debug, info};
-use zenoh_plugin_trait::PluginControl;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::{
@@ -26,6 +25,7 @@ use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
 use zenoh_core::zlock;
+use zenoh_plugin_trait::PluginControl;
 use zenoh_result::{bail, ZResult};
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits

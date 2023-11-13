@@ -14,6 +14,7 @@ mod dynamic_plugin;
 mod static_plugin;
 
 use crate::*;
+use zenoh_keyexpr::keyexpr;
 use zenoh_result::ZResult;
 use zenoh_util::LibLoader;
 
@@ -154,7 +155,9 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     }
 
     /// Lists all plugins
-    pub fn declared_plugins(&self) -> impl Iterator<Item = &dyn DeclaredPlugin<StartArgs, Instance>> + '_ {
+    pub fn declared_plugins(
+        &self,
+    ) -> impl Iterator<Item = &dyn DeclaredPlugin<StartArgs, Instance>> + '_ {
         self.plugins
             .iter()
             .map(|p| p as &dyn DeclaredPlugin<StartArgs, Instance>)
@@ -243,21 +246,18 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
 impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> PluginControl
     for PluginsManager<StartArgs, Instance>
 {
-    fn plugins(&self) -> Vec<String> {
+    fn plugins(&self, prefix: &keyexpr, names: &keyexpr) -> Vec<(String, PluginStatus)> {
         let mut plugins = Vec::new();
         for plugin in self.declared_plugins() {
-            plugins.push(plugin.name().to_string());
+            let name = prefix.join(plugin.name()).unwrap();
+            let name = unsafe { keyexpr::from_str_unchecked(plugin.name()) };
+            if names.includes(name) {
+                plugins.push((plugin.name().to_string(), plugin.status()));
+            }
             // for running plugins append their subplugins prepended with the running plugin name
             if let Some(plugin) = plugin.loaded() {
                 if let Some(plugin) = plugin.started() {
-                    plugins.append(
-                        &mut plugin
-                            .instance()
-                            .plugins()
-                            .iter()
-                            .map(|p| format!("{}/{}", plugin.name(), p))
-                            .collect::<Vec<_>>(),
-                    );
+                    plugins.append(&mut plugin.instance().plugins(names));
                 }
             }
         }
