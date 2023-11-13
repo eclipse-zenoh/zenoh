@@ -24,7 +24,7 @@ use self::{
 };
 use super::dispatcher::{
     face::FaceState,
-    tables::{Resource, RoutingContext, Tables, TablesLock},
+    tables::{Resource, RoutingContext, RoutingExpr, Tables, TablesLock},
 };
 use crate::{
     hat, hat_mut,
@@ -757,4 +757,49 @@ fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: RoutingContext) -> O
             None
         }
     }
+}
+
+#[inline]
+pub(crate) fn ingress_filter(tables: &Tables, face: &FaceState, expr: &mut RoutingExpr) -> bool {
+    tables.whatami != WhatAmI::Router
+        || face.whatami != WhatAmI::Peer
+        || hat!(tables).peers_net.is_none()
+        || tables.zid
+            == *hat!(tables).elect_router(
+                &tables.zid,
+                expr.full_expr(),
+                hat!(tables).get_router_links(face.zid),
+            )
+}
+
+#[inline]
+pub(crate) fn egress_filter(
+    tables: &Tables,
+    src_face: &FaceState,
+    out_face: &Arc<FaceState>,
+    expr: &mut RoutingExpr,
+) -> bool {
+    if src_face.id != out_face.id
+        && match (src_face.mcast_group.as_ref(), out_face.mcast_group.as_ref()) {
+            (Some(l), Some(r)) => l != r,
+            _ => true,
+        }
+    {
+        let dst_master = tables.whatami != WhatAmI::Router
+            || out_face.whatami != WhatAmI::Peer
+            || hat!(tables).peers_net.is_none()
+            || tables.zid
+                == *hat!(tables).elect_router(
+                    &tables.zid,
+                    expr.full_expr(),
+                    hat!(tables).get_router_links(out_face.zid),
+                );
+
+        return dst_master
+            && (src_face.whatami != WhatAmI::Peer
+                || out_face.whatami != WhatAmI::Peer
+                || hat!(tables).full_net(WhatAmI::Peer)
+                || hat!(tables).failover_brokering(src_face.zid, out_face.zid));
+    }
+    false
 }
