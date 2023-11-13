@@ -45,7 +45,7 @@ pub trait PluginControl {
         PluginCondition::default()
     }
     /// Collect information of sub-plugins matching `_names` keyexpr
-    fn plugins(&self, _names: &keyexpr) -> Vec<(String, PluginStatus)> {
+    fn plugins_status(&self, _names: &keyexpr) -> Vec<(String, PluginStatus)> {
         Vec::new()
     }
 }

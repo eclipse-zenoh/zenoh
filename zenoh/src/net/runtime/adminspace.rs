@@ -21,6 +21,8 @@ use crate::value::Value;
 use async_std::task;
 use log::{error, trace};
 use serde_json::json;
+use zenoh_plugin_trait::PluginControl;
+use zenoh_protocol::core::key_expr::keyexpr;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::convert::TryInto;
@@ -156,6 +158,12 @@ impl AdminSpace {
                 .try_into()
                 .unwrap(),
             Arc::new(queryables_data),
+        );
+        handlers.insert(
+            format!("@/router/{zid_str}/plugins/**")
+                .try_into()
+                .unwrap(),
+            Arc::new(plugins_data),
         );
         handlers.insert(
             format!("@/router/{zid_str}/status/plugins/**")
@@ -647,6 +655,16 @@ fn queryables_data(context: &AdminContext, query: Query) {
                 log::error!("Error sending AdminSpace reply: {:?}", e);
             }
         }
+    }
+}
+
+fn plugins_data(context: &AdminContext, query: Query) {
+    let guard = zlock!(context.plugins_mgr);
+    let root_key = format!("@/router/{}/plugins", &context.zid_str);
+    let root_key = unsafe { keyexpr::from_str_unchecked(&root_key) };
+    if let [names,..] = query.key_expr().strip_prefix(root_key)[..] {
+        let statuses = guard.plugins_status(names);
+        log::info!("Statuses: {:?}", statuses);
     }
 }
 

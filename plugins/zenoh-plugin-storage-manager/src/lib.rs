@@ -227,9 +227,9 @@ impl PluginControl for StorageRuntime {
     fn condition(&self) -> PluginCondition {
         PluginCondition::default()
     }
-    fn plugins(&self, names: &keyexpr) -> Vec<(String, PluginStatus)> {
+    fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatus)> {
         let guard = self.0.lock().unwrap();
-        guard.plugins_manager.plugins(names)
+        guard.plugins_manager.plugins_status(names)
     }
 }
 
