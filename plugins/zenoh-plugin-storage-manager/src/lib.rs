@@ -22,7 +22,9 @@
 use async_std::task;
 use flume::Sender;
 use memory_backend::MemoryBackend;
+use zenoh_plugin_trait::PluginCondition;
 use zenoh_plugin_trait::PluginControl;
+use zenoh_plugin_trait::PluginStatus;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -222,9 +224,12 @@ impl From<StorageRuntimeInner> for StorageRuntime {
 }
 
 impl PluginControl for StorageRuntime {
-    fn plugins(&self) -> Vec<String> {
+    fn condition(&self) -> PluginCondition {
+        PluginCondition::default()
+    }
+    fn plugins(&self, names: &keyexpr) -> Vec<(String, PluginStatus)> {
         let guard = self.0.lock().unwrap();
-        guard.plugins_manager.plugins()
+        guard.plugins_manager.plugins(names)
     }
 }
 

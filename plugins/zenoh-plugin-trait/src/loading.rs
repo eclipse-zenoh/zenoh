@@ -246,10 +246,9 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
 impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> PluginControl
     for PluginsManager<StartArgs, Instance>
 {
-    fn plugins(&self, prefix: &keyexpr, names: &keyexpr) -> Vec<(String, PluginStatus)> {
+    fn plugins(&self, names: &keyexpr) -> Vec<(String, PluginStatus)> {
         let mut plugins = Vec::new();
         for plugin in self.declared_plugins() {
-            let name = prefix.join(plugin.name()).unwrap();
             let name = unsafe { keyexpr::from_str_unchecked(plugin.name()) };
             if names.includes(name) {
                 plugins.push((plugin.name().to_string(), plugin.status()));
@@ -257,7 +256,9 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> P
             // for running plugins append their subplugins prepended with the running plugin name
             if let Some(plugin) = plugin.loaded() {
                 if let Some(plugin) = plugin.started() {
-                    plugins.append(&mut plugin.instance().plugins(names));
+                    if let [names, ..] = names.strip_prefix(name)[..] {
+                        plugins.append(&mut plugin.instance().plugins(names));
+                    }
                 }
             }
         }

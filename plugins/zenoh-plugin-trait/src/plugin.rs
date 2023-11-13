@@ -44,26 +44,8 @@ pub trait PluginControl {
     fn condition(&self) -> PluginCondition {
         PluginCondition::default()
     }
-    /// Collect information of sub-plugins matching `_names` keyexpr excluding `_prefix` part
-    /// The prefix parameter allows to pass a request to plugins tree without changing the request.
-    ///
-    /// For example:
-    /// - when request is "@/router/XXXX/plugins/**", it's passed to root plugin manager as
-    ///   `plugins("@/router/XXXX/plugins", "@/router/XXXX/plugins/**")`
-    /// - for plugin named `storages` the combined name is `@/router/XXXX/plugins/storages` which matches the request
-    /// - for sub-plugins of"storages" plugin the root manager calls
-    ///   `plugins("@/router/XXXX/plugins/storages", "@/router/XXXX/plugins/**")`
-    ///
-    /// Another example:
-    /// - when request is "@/router/XXXX/plugins/*/memory", it's passed to root plugin manager as
-    ///   `plugins("@/router/XXXX/plugins", "@/router/XXXX/plugins/*/memory")`
-    /// - storages plugin itself doesn't match the request: `@/router/XXXX/plugins/storages` doesn't match `@/router/XXXX/plugins/*/memory`
-    /// - request is passed to storages plugin anyway as
-    ///   `plugins("@/router/XXXX/plugins/storages", "@/router/XXXX/plugins/*/memory")`
-    /// - subplugin "memory" matches the request: `@/router/XXXX/plugins/storages/memory` matches `@/router/XXXX/plugins/*/memory`
-    ///
-    /// I.e. it's important that all items of plugin tree are checked for matching the request, no matter if parent plugin matches it or not.
-    fn plugins(&self, _prefix: &keyexpr, _names: &keyexpr) -> Vec<(String, PluginStatus)> {
+    /// Collect information of sub-plugins matching `_names` keyexpr
+    fn plugins(&self, _names: &keyexpr) -> Vec<(String, PluginStatus)> {
         Vec::new()
     }
 }
