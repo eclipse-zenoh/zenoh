@@ -112,7 +112,7 @@ impl StorageRuntimeInner {
         let session = Arc::new(zenoh::init(runtime.clone()).res_sync().unwrap());
 
         let plugins_manager = PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
-            .add_static_plugin::<MemoryBackend>();
+            .declare_static_plugin::<MemoryBackend>();
 
         let mut new_self = StorageRuntimeInner {
             name,
@@ -151,6 +151,7 @@ impl StorageRuntimeInner {
     }
     fn kill_volume<T: AsRef<str>>(&mut self, name: T) -> ZResult<()> {
         let name = name.as_ref();
+        log::info!("Killing volume {}", name);
         if let Some(storages) = self.storages.remove(name) {
             async_std::task::block_on(futures::future::join_all(
                 storages
@@ -167,13 +168,14 @@ impl StorageRuntimeInner {
     fn spawn_volume(&mut self, config: VolumeConfig) -> ZResult<()> {
         let volume_id = config.name();
         let backend_name = config.backend();
+        log::info!("Spawning volume {} with backend {}", volume_id, backend_name);
         let declared = if let Some(declared) = self.plugins_manager.plugin_mut(volume_id) {
             declared
         } else if let Some(paths) = config.paths() {
-            self.plugins_manager.add_dynamic_plugin_by_paths(volume_id, paths)?
+            self.plugins_manager.declare_dynamic_plugin_by_paths(volume_id, paths)?
         } else {
             self.plugins_manager
-                .add_dynamic_plugin_by_name(volume_id, backend_name)?
+                .declare_dynamic_plugin_by_name(volume_id, backend_name)?
         };
         let loaded = declared.load()?;
         loaded.start(&config)?;
@@ -181,6 +183,7 @@ impl StorageRuntimeInner {
     }
     fn kill_storage(&mut self, config: StorageConfig) {
         let volume = &config.volume_id;
+        log::info!("Killing storage {} from volume {}", config.name, volume);
         if let Some(storages) = self.storages.get_mut(volume) {
             if let Some(storage) = storages.get_mut(&config.name) {
                 log::debug!(
@@ -200,6 +203,12 @@ impl StorageRuntimeInner {
             format!("Cannot find volume {} to spawn storage {}", volume_id, storage.name),
         )?;
         let storage_name = storage.name.clone();
+        log::info!(
+            "Spawning storage {} from volume {} with backend {}",
+            storage_name,
+            volume_id,
+            backend.name()
+        );
         let in_interceptor = backend.instance().incoming_data_interceptor();
         let out_interceptor = backend.instance().outgoing_data_interceptor();
         let stopper = async_std::task::block_on(create_and_start_storage(

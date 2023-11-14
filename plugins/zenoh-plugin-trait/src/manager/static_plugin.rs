@@ -79,7 +79,10 @@ where
 {
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>> {
         if self.instance.is_none() {
+            log::debug!("Plugin `{}` started", self.name());
             self.instance = Some(P::start(self.name(), args)?);
+        } else {
+            log::warn!("Plugin `{}` already started", self.name());
         }
         Ok(self)
     }
@@ -104,7 +107,10 @@ impl<StartArgs, Instance, P> StartedPlugin<StartArgs, Instance>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
-    fn stop(&mut self) {}
+    fn stop(&mut self) {
+        log::debug!("Plugin `{}` stopped", self.name());
+        self.instance = None;
+    }
     fn instance(&self) -> &Instance {
         self.instance.as_ref().unwrap()
     }

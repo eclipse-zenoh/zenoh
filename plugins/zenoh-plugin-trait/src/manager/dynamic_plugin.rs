@@ -155,7 +155,10 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> DeclaredPlugin<StartA
         if self.starter.is_none() {
             let (lib, path) = self.source.load().add_error(&mut self.condition)?;
             let starter = DynamicPluginStarter::new(lib, path).add_error(&mut self.condition)?;
+            log::debug!("Plugin {} loaded from {}", self.name, starter.path());
             self.starter = Some(starter);
+        } else {
+            log::warn!("Plugin `{}` already loaded", self.name);
         }
         Ok(self)
     }
@@ -189,7 +192,10 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> LoadedPlugin<StartArg
             let instance = starter
                 .start(self.name(), args)
                 .add_error(&mut self.condition)?;
+            log::debug!("Plugin `{}` started", self.name);
             self.instance = Some(instance);
+        } else {
+            log::warn!("Plugin `{}` already started", self.name);
         }
         Ok(self)
     }
@@ -213,6 +219,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> StartedPlugin<StartAr
     for DynamicPlugin<StartArgs, Instance>
 {
     fn stop(&mut self) {
+        log::debug!("Plugin `{}` stopped", self.name);
         self.instance = None;
     }
     fn instance(&self) -> &Instance {

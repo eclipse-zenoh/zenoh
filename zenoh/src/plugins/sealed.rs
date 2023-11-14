@@ -40,7 +40,15 @@ impl PluginStructVersion for RunningPlugin {
     }
 }
 
-impl PluginControl for RunningPlugin {}
+impl PluginControl for RunningPlugin {
+    fn condition(&self) -> PluginCondition {
+        self.as_ref().condition()
+    }
+
+    fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatus)> {
+        self.as_ref().plugins_status(names)
+    }
+}
 
 impl PluginInstance for RunningPlugin {}
 
@@ -88,7 +96,10 @@ pub trait RunningPluginTrait: Send + Sync + PluginControl {
 /// The zenoh plugins manager. It handles the full lifetime of plugins, from loading to destruction.
 pub type PluginsManager = zenoh_plugin_trait::PluginsManager<StartArgs, RunningPlugin>;
 
+use zenoh_plugin_trait::PluginCondition;
+use zenoh_plugin_trait::PluginStatus;
 pub use zenoh_plugin_trait::PluginStructVersion;
 pub use zenoh_plugin_trait::Plugin;
 use zenoh_plugin_trait::PluginControl;
 use zenoh_plugin_trait::PluginInstance;
+use zenoh_protocol::core::key_expr::keyexpr;

@@ -94,9 +94,9 @@ impl AdminSpace {
             log::warn!("Plugin `{}` was already declared", declared.name());
             declared
         } else if let Some(paths) = &config.paths {
-            plugin_mgr.add_dynamic_plugin_by_paths(name, paths)?
+            plugin_mgr.declare_dynamic_plugin_by_paths(name, paths)?
         } else {
-            plugin_mgr.add_dynamic_plugin_by_name(name, name)?
+            plugin_mgr.declare_dynamic_plugin_by_name(name, name)?
         };
 
         let loaded = if let Some(loaded) = declared.loaded_mut() {

@@ -107,30 +107,33 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     }
 
     /// Adds a statically linked plugin to the manager.
-    pub fn add_static_plugin<
+    pub fn declare_static_plugin<
         P: Plugin<StartArgs = StartArgs, Instance = Instance> + Send + Sync,
     >(
         mut self,
     ) -> Self {
         let plugin_loader: StaticPlugin<StartArgs, Instance, P> = StaticPlugin::new();
         self.plugins.push(PluginRecord::new(plugin_loader));
+        log::debug!("Declared static plugin {}", self.plugins.last().unwrap().name());
         self
     }
 
     /// Add dynamic plugin to the manager by name, automatically prepending the default library prefix
-    pub fn add_dynamic_plugin_by_name<S: Into<String>>(
+    pub fn declare_dynamic_plugin_by_name<S: Into<String>>(
         &mut self,
         name: S,
         plugin_name: &str,
     ) -> ZResult<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
+        let name = name.into();
         let plugin_name = format!("{}{}", self.default_lib_prefix, plugin_name);
         let libloader = self
             .loader
             .as_ref()
             .ok_or("Dynamic plugin loading is disabled")?
             .clone();
+        log::debug!("Declared dynamic plugin {} by name {}", &name, &plugin_name);
         let loader = DynamicPlugin::new(
-            name.into(),
+            name,
             DynamicPluginSource::ByName((libloader, plugin_name)),
         );
         self.plugins.push(PluginRecord::new(loader));
@@ -138,13 +141,14 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     }
 
     /// Add first available dynamic plugin from the list of paths to the plugin files
-    pub fn add_dynamic_plugin_by_paths<S: Into<String>, P: AsRef<str> + std::fmt::Debug>(
+    pub fn declare_dynamic_plugin_by_paths<S: Into<String>, P: AsRef<str> + std::fmt::Debug>(
         &mut self,
         name: S,
         paths: &[P],
     ) -> ZResult<&mut dyn DeclaredPlugin<StartArgs, Instance>> {
         let name = name.into();
         let paths = paths.iter().map(|p| p.as_ref().into()).collect();
+        log::debug!("Declared dynamic plugin {} by paths {:?}", &name, &paths);
         let loader = DynamicPlugin::new(name, DynamicPluginSource::ByPaths(paths));
         self.plugins.push(PluginRecord::new(loader));
         Ok(self.plugins.last_mut().unwrap())
@@ -247,6 +251,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> P
     for PluginsManager<StartArgs, Instance>
 {
     fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatus)> {
+        log::debug!("Plugin manager with prefix `{}` : requested plugins_status {:?}", self.default_lib_prefix , names);
         let mut plugins = Vec::new();
         for plugin in self.declared_plugins() {
             let name = unsafe { keyexpr::from_str_unchecked(plugin.name()) };
@@ -257,7 +262,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> P
             if let Some(plugin) = plugin.loaded() {
                 if let Some(plugin) = plugin.started() {
                     if let [names, ..] = names.strip_prefix(name)[..] {
-                        plugins.append(&mut plugin.instance().plugins_status(names));
+                        plugins.append(&mut plugin.instance().plugins_status(names).iter().map(|(n, s)| (format!("{}/{}", name, n), s.clone())).collect());
                     }
                 }
             }
