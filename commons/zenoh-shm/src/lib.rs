@@ -22,6 +22,8 @@ use std::{
 use zenoh_buffers::ZSliceBuffer;
 use zenoh_result::{zerror, ShmError, ZResult};
 
+mod watchdog;
+
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
 const ACCOUNTED_OVERHEAD: usize = 4_096;
 const ZENOH_SHM_PREFIX: &str = "zenoh_shm_zid";
