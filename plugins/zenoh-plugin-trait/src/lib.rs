@@ -19,11 +19,11 @@
 //! If building a plugin for [`zenohd`](https://crates.io/crates/zenoh), you should use the types exported in [`zenoh::plugins`](https://docs.rs/zenoh/latest/zenoh/plugins) to fill [`Plugin`]'s associated types.  
 //! To check your plugin typing for `zenohd`, have your plugin implement [`zenoh::plugins::ZenohPlugin`](https://docs.rs/zenoh/latest/zenoh/plugins/struct.ZenohPlugin)
 //!
-mod loading;
+mod manager;
 mod plugin;
 mod vtable;
 
-pub use loading::{DeclaredPlugin, LoadedPlugin, PluginsManager, StartedPlugin};
+pub use manager::{DeclaredPlugin, LoadedPlugin, PluginsManager, StartedPlugin};
 pub use plugin::{
     Plugin, PluginCondition, PluginConditionSetter, PluginControl, PluginInfo, PluginInstance,
     PluginStartArgs, PluginState, PluginStatus, PluginStructVersion,
