@@ -19,6 +19,14 @@ pub use crate::runtime::Runtime;
 pub use crate::Result as ZResult;
 use zenoh_core::zconfigurable;
 
+use zenoh_plugin_trait::PluginCondition;
+use zenoh_plugin_trait::PluginStatus;
+use zenoh_plugin_trait::PluginStructVersion;
+use zenoh_plugin_trait::Plugin;
+use zenoh_plugin_trait::PluginControl;
+use zenoh_plugin_trait::PluginInstance;
+use zenoh_protocol::core::key_expr::keyexpr;
+
 zconfigurable! {
     pub static ref PLUGIN_PREFIX: String = "zenoh_plugin_".to_string();
 }
@@ -95,11 +103,3 @@ pub trait RunningPluginTrait: Send + Sync + PluginControl {
 
 /// The zenoh plugins manager. It handles the full lifetime of plugins, from loading to destruction.
 pub type PluginsManager = zenoh_plugin_trait::PluginsManager<StartArgs, RunningPlugin>;
-
-use zenoh_plugin_trait::PluginCondition;
-use zenoh_plugin_trait::PluginStatus;
-pub use zenoh_plugin_trait::PluginStructVersion;
-pub use zenoh_plugin_trait::Plugin;
-use zenoh_plugin_trait::PluginControl;
-use zenoh_plugin_trait::PluginInstance;
-use zenoh_protocol::core::key_expr::keyexpr;

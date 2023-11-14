@@ -15,17 +15,17 @@
 
 use futures::select;
 use log::{debug, info};
+use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
     Arc, Mutex,
 };
-use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
 use zenoh_core::zlock;
-use zenoh_plugin_trait::PluginControl;
+use zenoh_plugin_trait::{PluginControl, Plugin};
 use zenoh_result::{bail, ZResult};
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
@@ -48,6 +48,7 @@ impl Plugin for ExamplePlugin {
 
     // The first operation called by zenohd on the plugin
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
+        bail!("Tra-ta-ta");
         let config = runtime.config().lock();
         let self_cfg = config.plugin(name).unwrap().as_object().unwrap();
         // get the plugin's config details from self_cfg Map (here the "storage-selector" property)

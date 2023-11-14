@@ -22,6 +22,7 @@
 use async_std::task;
 use flume::Sender;
 use memory_backend::MemoryBackend;
+use zenoh_plugin_trait::Plugin;
 use zenoh_plugin_trait::PluginCondition;
 use zenoh_plugin_trait::PluginControl;
 use zenoh_plugin_trait::PluginStatus;
@@ -30,7 +31,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use std::sync::Mutex;
 use storages_mgt::StorageMessage;
-use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
+use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::sync::*;
 use zenoh::runtime::Runtime;
 use zenoh::Session;

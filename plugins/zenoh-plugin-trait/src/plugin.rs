@@ -25,7 +25,9 @@ pub enum PluginState {
 
 #[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct PluginCondition {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     warnings: Vec<Cow<'static, str>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     errors: Vec<Cow<'static, str>>,
 }
 

@@ -18,6 +18,10 @@ version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 
+[features]
+default = ["no_mangle"]
+no_mangle = ["zenoh-plugin-trait/no_mangle"]
+
 [lib]
 # When auto-detecting the "example" plugin, `zenohd` will look for a dynamic library named "zenoh_plugin_example"
 # `zenohd` will expect the file to be named according to OS conventions:
@@ -35,7 +39,7 @@ env_logger = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
 serde_json = { workspace = true }
-zenoh = { workspace = true }
+zenoh = { workspace = true, features = [ "unstable" ] }
 zenoh-core = { workspace = true }
 zenoh-plugin-trait = { workspace = true }
 zenoh-result = { workspace = true }
