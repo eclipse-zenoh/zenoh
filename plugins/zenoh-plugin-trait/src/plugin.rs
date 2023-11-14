@@ -14,21 +14,22 @@
 use std::borrow::Cow;
 use zenoh_keyexpr::keyexpr;
 use zenoh_result::ZResult;
+use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PluginState {
     Declared,
     Loaded,
     Started,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct PluginCondition {
     warnings: Vec<Cow<'static, str>>,
     errors: Vec<Cow<'static, str>>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginStatus {
     pub state: PluginState,
     pub condition: PluginCondition,

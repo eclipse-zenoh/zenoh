@@ -21,8 +21,6 @@ use crate::value::Value;
 use async_std::task;
 use log::{error, trace};
 use serde_json::json;
-use zenoh_plugin_trait::PluginControl;
-use zenoh_protocol::core::key_expr::keyexpr;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::convert::TryInto;
@@ -30,6 +28,8 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::SplitBuffer;
 use zenoh_config::{ConfigValidator, ValidatedMap};
+use zenoh_plugin_trait::PluginControl;
+use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
     network::{
@@ -160,9 +160,7 @@ impl AdminSpace {
             Arc::new(queryables_data),
         );
         handlers.insert(
-            format!("@/router/{zid_str}/plugins/**")
-                .try_into()
-                .unwrap(),
+            format!("@/router/{zid_str}/plugins/**").try_into().unwrap(),
             Arc::new(plugins_data),
         );
         handlers.insert(
@@ -662,9 +660,23 @@ fn plugins_data(context: &AdminContext, query: Query) {
     let guard = zlock!(context.plugins_mgr);
     let root_key = format!("@/router/{}/plugins", &context.zid_str);
     let root_key = unsafe { keyexpr::from_str_unchecked(&root_key) };
-    if let [names,..] = query.key_expr().strip_prefix(root_key)[..] {
+    log::debug!("requested plugins status {:?}", query.key_expr());
+    if let [names, ..] = query.key_expr().strip_prefix(root_key)[..] {
         let statuses = guard.plugins_status(names);
-        log::info!("Statuses: {:?}", statuses);
+        for (name, status) in statuses {
+            log::debug!("plugin {} status: {:?}", name, status);
+            let key = root_key.join(&name).unwrap();
+            let status = serde_json::to_value(status).unwrap();
+            if let Err(e) = query
+                .reply(Ok(Sample::new(
+                    key,
+                    Value::from(status)
+                )))
+                .res()
+            {
+                log::error!("Error sending AdminSpace reply: {:?}", e);
+            }
+        }
     }
 }
 

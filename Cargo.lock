@@ -4954,6 +4954,7 @@ dependencies = [
  "const_format",
  "libloading",
  "log",
+ "serde",
  "serde_json",
  "zenoh-keyexpr",
  "zenoh-macros",
