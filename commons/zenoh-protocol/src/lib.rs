@@ -48,7 +48,7 @@ pub const VERSION: u8 = 0x08;
 // # Variable length field
 //
 // The field size depends on the element definition and/or actual encoding. An example of variable
-// lenght element is an array of bytes (e.g., a payload or a string).
+// length element is an array of bytes (e.g., a payload or a string).
 //
 // ```text
 //  7 6 5 4 3 2 1 0
@@ -60,7 +60,7 @@ pub const VERSION: u8 = 0x08;
 //
 // # u64 field
 //
-// A u64 is a specialized variable lenght field that is used to encode an unsigned integer.
+// A u64 is a specialized variable length field that is used to encode an unsigned integer.
 //
 // ```text
 //  7 6 5 4 3 2 1 0

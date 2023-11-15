@@ -35,16 +35,27 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &OpenSyn) -> Self::Output {
+        let OpenSyn {
+            lease,
+            initial_sn,
+            cookie,
+            ext_qos,
+            ext_shm,
+            ext_auth,
+            ext_mlink,
+            ext_lowlatency,
+        } = x;
+
         // Header
         let mut header = id::OPEN;
-        if x.lease.as_millis() % 1_000 == 0 {
+        if lease.as_millis() % 1_000 == 0 {
             header |= flag::T;
         }
-        let mut n_exts = (x.ext_qos.is_some() as u8)
-            + (x.ext_shm.is_some() as u8)
-            + (x.ext_auth.is_some() as u8)
-            + (x.ext_mlink.is_some() as u8)
-            + (x.ext_lowlatency.is_some() as u8);
+        let mut n_exts = (ext_qos.is_some() as u8)
+            + (ext_shm.is_some() as u8)
+            + (ext_auth.is_some() as u8)
+            + (ext_mlink.is_some() as u8)
+            + (ext_lowlatency.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -52,31 +63,31 @@ where
 
         // Body
         if imsg::has_flag(header, flag::T) {
-            self.write(&mut *writer, x.lease.as_secs())?;
+            self.write(&mut *writer, lease.as_secs())?;
         } else {
-            self.write(&mut *writer, x.lease.as_millis() as u64)?;
+            self.write(&mut *writer, lease.as_millis() as u64)?;
         }
-        self.write(&mut *writer, x.initial_sn)?;
-        self.write(&mut *writer, &x.cookie)?;
+        self.write(&mut *writer, initial_sn)?;
+        self.write(&mut *writer, cookie)?;
 
         // Extensions
-        if let Some(qos) = x.ext_qos.as_ref() {
+        if let Some(qos) = ext_qos.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (qos, n_exts != 0))?;
         }
-        if let Some(shm) = x.ext_shm.as_ref() {
+        if let Some(shm) = ext_shm.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (shm, n_exts != 0))?;
         }
-        if let Some(auth) = x.ext_auth.as_ref() {
+        if let Some(auth) = ext_auth.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (auth, n_exts != 0))?;
         }
-        if let Some(mlink) = x.ext_mlink.as_ref() {
+        if let Some(mlink) = ext_mlink.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (mlink, n_exts != 0))?;
         }
-        if let Some(lowlatency) = x.ext_lowlatency.as_ref() {
+        if let Some(lowlatency) = ext_lowlatency.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (lowlatency, n_exts != 0))?;
         }
@@ -183,18 +194,28 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &OpenAck) -> Self::Output {
+        let OpenAck {
+            lease,
+            initial_sn,
+            ext_qos,
+            ext_shm,
+            ext_auth,
+            ext_mlink,
+            ext_lowlatency,
+        } = x;
+
         // Header
         let mut header = id::OPEN;
         header |= flag::A;
         // Verify that the timeout is expressed in seconds, i.e. subsec part is 0.
-        if x.lease.subsec_nanos() == 0 {
+        if lease.subsec_nanos() == 0 {
             header |= flag::T;
         }
-        let mut n_exts = (x.ext_qos.is_some() as u8)
-            + (x.ext_shm.is_some() as u8)
-            + (x.ext_auth.is_some() as u8)
-            + (x.ext_mlink.is_some() as u8)
-            + (x.ext_lowlatency.is_some() as u8);
+        let mut n_exts = (ext_qos.is_some() as u8)
+            + (ext_shm.is_some() as u8)
+            + (ext_auth.is_some() as u8)
+            + (ext_mlink.is_some() as u8)
+            + (ext_lowlatency.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -202,30 +223,30 @@ where
 
         // Body
         if imsg::has_flag(header, flag::T) {
-            self.write(&mut *writer, x.lease.as_secs())?;
+            self.write(&mut *writer, lease.as_secs())?;
         } else {
-            self.write(&mut *writer, x.lease.as_millis() as u64)?;
+            self.write(&mut *writer, lease.as_millis() as u64)?;
         }
-        self.write(&mut *writer, x.initial_sn)?;
+        self.write(&mut *writer, initial_sn)?;
 
         // Extensions
-        if let Some(qos) = x.ext_qos.as_ref() {
+        if let Some(qos) = ext_qos.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (qos, n_exts != 0))?;
         }
-        if let Some(shm) = x.ext_shm.as_ref() {
+        if let Some(shm) = ext_shm.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (shm, n_exts != 0))?;
         }
-        if let Some(auth) = x.ext_auth.as_ref() {
+        if let Some(auth) = ext_auth.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (auth, n_exts != 0))?;
         }
-        if let Some(mlink) = x.ext_mlink.as_ref() {
+        if let Some(mlink) = ext_mlink.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (mlink, n_exts != 0))?;
         }
-        if let Some(lowlatency) = x.ext_lowlatency.as_ref() {
+        if let Some(lowlatency) = ext_lowlatency.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (lowlatency, n_exts != 0))?;
         }

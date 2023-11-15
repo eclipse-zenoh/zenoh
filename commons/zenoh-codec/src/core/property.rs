@@ -26,8 +26,10 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Property) -> Self::Output {
-        self.write(&mut *writer, x.key)?;
-        self.write(&mut *writer, x.value.as_slice())?;
+        let Property { key, value } = x;
+
+        self.write(&mut *writer, key)?;
+        self.write(&mut *writer, value.as_slice())?;
         Ok(())
     }
 }

@@ -33,31 +33,38 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Hello) -> Self::Output {
+        let Hello {
+            version,
+            whatami,
+            zid,
+            locators,
+        } = x;
+
         // Header
         let mut header = id::HELLO;
-        if !x.locators.is_empty() {
+        if !locators.is_empty() {
             header |= flag::L;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.version)?;
+        self.write(&mut *writer, version)?;
 
         let mut flags: u8 = 0;
-        let whatami: u8 = match x.whatami {
+        let whatami: u8 = match whatami {
             WhatAmI::Router => 0b00,
             WhatAmI::Peer => 0b01,
             WhatAmI::Client => 0b10,
         };
         flags |= whatami & 0b11;
-        flags |= ((x.zid.size() - 1) as u8) << 4;
+        flags |= ((zid.size() - 1) as u8) << 4;
         self.write(&mut *writer, flags)?;
 
-        let lodec = Zenoh080Length::new(x.zid.size());
-        lodec.write(&mut *writer, &x.zid)?;
+        let lodec = Zenoh080Length::new(zid.size());
+        lodec.write(&mut *writer, zid)?;
 
-        if !x.locators.is_empty() {
-            self.write(&mut *writer, x.locators.as_slice())?;
+        if !locators.is_empty() {
+            self.write(&mut *writer, locators.as_slice())?;
         }
 
         Ok(())

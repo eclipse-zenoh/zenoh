@@ -31,15 +31,17 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Close) -> Self::Output {
+        let Close { reason, session } = x;
+
         // Header
         let mut header = id::CLOSE;
-        if x.session {
+        if *session {
             header |= flag::S;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.reason)?;
+        self.write(&mut *writer, reason)?;
 
         Ok(())
     }

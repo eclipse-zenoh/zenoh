@@ -50,7 +50,7 @@ impl BlockCipher {
 
     pub fn decrypt(&self, mut bytes: Vec<u8>) -> ZResult<Vec<u8>> {
         if bytes.len() % Self::BLOCK_SIZE != 0 {
-            bail!("Invalid bytes lenght to decode: {}", bytes.len());
+            bail!("Invalid bytes length to decode: {}", bytes.len());
         }
 
         let mut start: usize = 0;
