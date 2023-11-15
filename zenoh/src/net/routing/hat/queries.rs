@@ -16,7 +16,7 @@ use super::super::dispatcher::queries::*;
 use super::super::dispatcher::resource::{Resource, RoutingContext, SessionContext};
 use super::super::dispatcher::tables::{Tables, TablesLock};
 use super::network::Network;
-use super::{get_peer, get_router, HatContext, HatFace, HatTables};
+use super::{get_peer, get_router, HatCode, HatContext, HatFace, HatQueriesTrait, HatTables};
 use crate::net::routing::dispatcher::tables::{
     QueryRoutes, QueryTargetQabl, QueryTargetQablSet, RoutingExpr,
 };
@@ -627,35 +627,6 @@ fn declare_client_queryable(
     }
 }
 
-pub(crate) fn declare_queryable(
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    expr: &WireExpr,
-    qabl_info: &QueryableInfo,
-    node_id: RoutingContext,
-) {
-    let rtables = zread!(tables.tables);
-    match (rtables.whatami, face.whatami) {
-        (WhatAmI::Router, WhatAmI::Router) => {
-            if let Some(router) = get_router(&rtables, face, node_id) {
-                declare_router_queryable(tables, rtables, face, expr, qabl_info, router)
-            }
-        }
-        (WhatAmI::Router, WhatAmI::Peer)
-        | (WhatAmI::Peer, WhatAmI::Router)
-        | (WhatAmI::Peer, WhatAmI::Peer) => {
-            if hat!(rtables).full_net(WhatAmI::Peer) {
-                if let Some(peer) = get_peer(&rtables, face, node_id) {
-                    declare_peer_queryable(tables, rtables, face, expr, qabl_info, peer)
-                }
-            } else {
-                declare_client_queryable(tables, rtables, face, expr, qabl_info)
-            }
-        }
-        _ => declare_client_queryable(tables, rtables, face, expr, qabl_info),
-    }
-}
-
 #[inline]
 fn remote_router_qabls(tables: &Tables, res: &Arc<Resource>) -> bool {
     res.context.is_some()
@@ -960,7 +931,7 @@ fn forget_peer_queryable(
     }
 }
 
-pub(crate) fn undeclare_client_queryable(
+pub(super) fn undeclare_client_queryable(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -1063,35 +1034,7 @@ fn forget_client_queryable(
     }
 }
 
-pub(crate) fn forget_queryable(
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    expr: &WireExpr,
-    node_id: RoutingContext,
-) {
-    let rtables = zread!(tables.tables);
-    match (rtables.whatami, face.whatami) {
-        (WhatAmI::Router, WhatAmI::Router) => {
-            if let Some(router) = get_router(&rtables, face, node_id) {
-                forget_router_queryable(tables, rtables, face, expr, &router)
-            }
-        }
-        (WhatAmI::Router, WhatAmI::Peer)
-        | (WhatAmI::Peer, WhatAmI::Router)
-        | (WhatAmI::Peer, WhatAmI::Peer) => {
-            if hat!(rtables).full_net(WhatAmI::Peer) {
-                if let Some(peer) = get_peer(&rtables, face, node_id) {
-                    forget_peer_queryable(tables, rtables, face, expr, &peer)
-                }
-            } else {
-                forget_client_queryable(tables, rtables, face, expr)
-            }
-        }
-        _ => forget_client_queryable(tables, rtables, face, expr),
-    }
-}
-
-pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
+pub(super) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     match tables.whatami {
         WhatAmI::Router => {
             if face.whatami == WhatAmI::Client {
@@ -1190,7 +1133,7 @@ pub(crate) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     }
 }
 
-pub(crate) fn queries_remove_node(tables: &mut Tables, node: &ZenohId, net_type: WhatAmI) {
+pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohId, net_type: WhatAmI) {
     match net_type {
         WhatAmI::Router => {
             let mut qabls = vec![];
@@ -1249,7 +1192,7 @@ pub(crate) fn queries_remove_node(tables: &mut Tables, node: &ZenohId, net_type:
     }
 }
 
-pub(crate) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links: &[ZenohId]) {
+pub(super) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links: &[ZenohId]) {
     if let Some(src_face) = tables.get_face(zid) {
         if hat!(tables).router_peers_failover_brokering
             && tables.whatami == WhatAmI::Router
@@ -1324,7 +1267,7 @@ pub(crate) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
     }
 }
 
-pub(crate) fn queries_tree_change(
+pub(super) fn queries_tree_change(
     tables: &mut Tables,
     new_childs: &[Vec<NodeIndex>],
     net_type: WhatAmI,
@@ -1413,67 +1356,149 @@ fn insert_target_for_qabls(
 lazy_static::lazy_static! {
     static ref EMPTY_ROUTE: Arc<QueryTargetQablSet> = Arc::new(Vec::new());
 }
-pub(crate) fn compute_query_route(
-    tables: &Tables,
-    expr: &mut RoutingExpr,
-    source: RoutingContext,
-    source_type: WhatAmI,
-) -> Arc<QueryTargetQablSet> {
-    let mut route = QueryTargetQablSet::new();
-    let key_expr = expr.full_expr();
-    if key_expr.ends_with('/') {
-        return EMPTY_ROUTE.clone();
+
+impl HatQueriesTrait for HatCode {
+    fn declare_queryable(
+        &self,
+        tables: &TablesLock,
+        face: &mut Arc<FaceState>,
+        expr: &WireExpr,
+        qabl_info: &QueryableInfo,
+        node_id: RoutingContext,
+    ) {
+        let rtables = zread!(tables.tables);
+        match (rtables.whatami, face.whatami) {
+            (WhatAmI::Router, WhatAmI::Router) => {
+                if let Some(router) = get_router(&rtables, face, node_id) {
+                    declare_router_queryable(tables, rtables, face, expr, qabl_info, router)
+                }
+            }
+            (WhatAmI::Router, WhatAmI::Peer)
+            | (WhatAmI::Peer, WhatAmI::Router)
+            | (WhatAmI::Peer, WhatAmI::Peer) => {
+                if hat!(rtables).full_net(WhatAmI::Peer) {
+                    if let Some(peer) = get_peer(&rtables, face, node_id) {
+                        declare_peer_queryable(tables, rtables, face, expr, qabl_info, peer)
+                    }
+                } else {
+                    declare_client_queryable(tables, rtables, face, expr, qabl_info)
+                }
+            }
+            _ => declare_client_queryable(tables, rtables, face, expr, qabl_info),
+        }
     }
-    log::trace!(
-        "compute_query_route({}, {:?}, {:?})",
-        key_expr,
-        source,
-        source_type
-    );
-    let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-        Ok(ke) => ke,
-        Err(e) => {
-            log::warn!("Invalid KE reached the system: {}", e);
+
+    fn forget_queryable(
+        &self,
+        tables: &TablesLock,
+        face: &mut Arc<FaceState>,
+        expr: &WireExpr,
+        node_id: RoutingContext,
+    ) {
+        let rtables = zread!(tables.tables);
+        match (rtables.whatami, face.whatami) {
+            (WhatAmI::Router, WhatAmI::Router) => {
+                if let Some(router) = get_router(&rtables, face, node_id) {
+                    forget_router_queryable(tables, rtables, face, expr, &router)
+                }
+            }
+            (WhatAmI::Router, WhatAmI::Peer)
+            | (WhatAmI::Peer, WhatAmI::Router)
+            | (WhatAmI::Peer, WhatAmI::Peer) => {
+                if hat!(rtables).full_net(WhatAmI::Peer) {
+                    if let Some(peer) = get_peer(&rtables, face, node_id) {
+                        forget_peer_queryable(tables, rtables, face, expr, &peer)
+                    }
+                } else {
+                    forget_client_queryable(tables, rtables, face, expr)
+                }
+            }
+            _ => forget_client_queryable(tables, rtables, face, expr),
+        }
+    }
+
+    fn compute_query_route(
+        &self,
+        tables: &Tables,
+        expr: &mut RoutingExpr,
+        source: RoutingContext,
+        source_type: WhatAmI,
+    ) -> Arc<QueryTargetQablSet> {
+        let mut route = QueryTargetQablSet::new();
+        let key_expr = expr.full_expr();
+        if key_expr.ends_with('/') {
             return EMPTY_ROUTE.clone();
         }
-    };
-    let res = Resource::get_resource(expr.prefix, expr.suffix);
-    let matches = res
-        .as_ref()
-        .and_then(|res| res.context.as_ref())
-        .map(|ctx| Cow::from(&ctx.matches))
-        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+        log::trace!(
+            "compute_query_route({}, {:?}, {:?})",
+            key_expr,
+            source,
+            source_type
+        );
+        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
+            Ok(ke) => ke,
+            Err(e) => {
+                log::warn!("Invalid KE reached the system: {}", e);
+                return EMPTY_ROUTE.clone();
+            }
+        };
+        let res = Resource::get_resource(expr.prefix, expr.suffix);
+        let matches = res
+            .as_ref()
+            .and_then(|res| res.context.as_ref())
+            .map(|ctx| Cow::from(&ctx.matches))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
-    let master = tables.whatami != WhatAmI::Router
-        || !hat!(tables).full_net(WhatAmI::Peer)
-        || *hat!(tables).elect_router(&tables.zid, &key_expr, hat!(tables).shared_nodes.iter())
-            == tables.zid;
+        let master = tables.whatami != WhatAmI::Router
+            || !hat!(tables).full_net(WhatAmI::Peer)
+            || *hat!(tables).elect_router(&tables.zid, &key_expr, hat!(tables).shared_nodes.iter())
+                == tables.zid;
 
-    for mres in matches.iter() {
-        let mres = mres.upgrade().unwrap();
-        let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
-        if tables.whatami == WhatAmI::Router {
-            if master || source_type == WhatAmI::Router {
-                let net = hat!(tables).routers_net.as_ref().unwrap();
-                let router_source = match source_type {
-                    WhatAmI::Router => source,
-                    _ => net.idx.index() as RoutingContext,
-                };
-                insert_target_for_qabls(
-                    &mut route,
-                    expr,
-                    tables,
-                    net,
-                    router_source,
-                    &res_hat!(mres).router_qabls,
-                    complete,
-                );
+        for mres in matches.iter() {
+            let mres = mres.upgrade().unwrap();
+            let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
+            if tables.whatami == WhatAmI::Router {
+                if master || source_type == WhatAmI::Router {
+                    let net = hat!(tables).routers_net.as_ref().unwrap();
+                    let router_source = match source_type {
+                        WhatAmI::Router => source,
+                        _ => net.idx.index() as RoutingContext,
+                    };
+                    insert_target_for_qabls(
+                        &mut route,
+                        expr,
+                        tables,
+                        net,
+                        router_source,
+                        &res_hat!(mres).router_qabls,
+                        complete,
+                    );
+                }
+
+                if (master || source_type != WhatAmI::Router)
+                    && hat!(tables).full_net(WhatAmI::Peer)
+                {
+                    let net = hat!(tables).peers_net.as_ref().unwrap();
+                    let peer_source = match source_type {
+                        WhatAmI::Peer => source,
+                        _ => net.idx.index() as RoutingContext,
+                    };
+                    insert_target_for_qabls(
+                        &mut route,
+                        expr,
+                        tables,
+                        net,
+                        peer_source,
+                        &res_hat!(mres).peer_qabls,
+                        complete,
+                    );
+                }
             }
 
-            if (master || source_type != WhatAmI::Router) && hat!(tables).full_net(WhatAmI::Peer) {
+            if tables.whatami == WhatAmI::Peer && hat!(tables).full_net(WhatAmI::Peer) {
                 let net = hat!(tables).peers_net.as_ref().unwrap();
                 let peer_source = match source_type {
-                    WhatAmI::Peer => source,
+                    WhatAmI::Router | WhatAmI::Peer => source,
                     _ => net.idx.index() as RoutingContext,
                 };
                 insert_target_for_qabls(
@@ -1486,186 +1511,89 @@ pub(crate) fn compute_query_route(
                     complete,
                 );
             }
-        }
 
-        if tables.whatami == WhatAmI::Peer && hat!(tables).full_net(WhatAmI::Peer) {
-            let net = hat!(tables).peers_net.as_ref().unwrap();
-            let peer_source = match source_type {
-                WhatAmI::Router | WhatAmI::Peer => source,
-                _ => net.idx.index() as RoutingContext,
-            };
-            insert_target_for_qabls(
-                &mut route,
-                expr,
-                tables,
-                net,
-                peer_source,
-                &res_hat!(mres).peer_qabls,
-                complete,
-            );
-        }
-
-        if tables.whatami != WhatAmI::Router || master || source_type == WhatAmI::Router {
-            for (sid, context) in &mres.session_ctxs {
-                if match tables.whatami {
-                    WhatAmI::Router => context.face.whatami != WhatAmI::Router,
-                    _ => source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client,
-                } {
-                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                    if let Some(qabl_info) = context.qabl.as_ref() {
-                        route.push(QueryTargetQabl {
-                            direction: (
-                                context.face.clone(),
-                                key_expr.to_owned(),
-                                RoutingContext::default(),
-                            ),
-                            complete: if complete {
-                                qabl_info.complete as u64
-                            } else {
-                                0
-                            },
-                            distance: 0.5,
-                        });
+            if tables.whatami != WhatAmI::Router || master || source_type == WhatAmI::Router {
+                for (sid, context) in &mres.session_ctxs {
+                    if match tables.whatami {
+                        WhatAmI::Router => context.face.whatami != WhatAmI::Router,
+                        _ => {
+                            source_type == WhatAmI::Client
+                                || context.face.whatami == WhatAmI::Client
+                        }
+                    } {
+                        let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
+                        if let Some(qabl_info) = context.qabl.as_ref() {
+                            route.push(QueryTargetQabl {
+                                direction: (
+                                    context.face.clone(),
+                                    key_expr.to_owned(),
+                                    RoutingContext::default(),
+                                ),
+                                complete: if complete {
+                                    qabl_info.complete as u64
+                                } else {
+                                    0
+                                },
+                                distance: 0.5,
+                            });
+                        }
                     }
                 }
             }
         }
+        route.sort_by_key(|qabl| OrderedFloat(qabl.distance));
+        Arc::new(route)
     }
-    route.sort_by_key(|qabl| OrderedFloat(qabl.distance));
-    Arc::new(route)
-}
 
-#[inline]
-pub(crate) fn compute_local_replies(
-    tables: &Tables,
-    prefix: &Arc<Resource>,
-    suffix: &str,
-    face: &Arc<FaceState>,
-) -> Vec<(WireExpr<'static>, ZBuf)> {
-    let mut result = vec![];
-    // Only the first routing point in the query route
-    // should return the liveliness tokens
-    if face.whatami == WhatAmI::Client {
-        let key_expr = prefix.expr() + suffix;
-        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-            Ok(ke) => ke,
-            Err(e) => {
-                log::warn!("Invalid KE reached the system: {}", e);
-                return result;
-            }
-        };
-        if key_expr.starts_with(PREFIX_LIVELINESS) {
-            let res = Resource::get_resource(prefix, suffix);
-            let matches = res
-                .as_ref()
-                .and_then(|res| res.context.as_ref())
-                .map(|ctx| Cow::from(&ctx.matches))
-                .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
-            for mres in matches.iter() {
-                let mres = mres.upgrade().unwrap();
-                if (mres.context.is_some()
-                    && (!res_hat!(mres).router_subs.is_empty()
-                        || !res_hat!(mres).peer_subs.is_empty()))
-                    || mres.session_ctxs.values().any(|ctx| ctx.subs.is_some())
-                {
-                    result.push((Resource::get_best_key(&mres, "", face.id), ZBuf::default()));
+    #[inline]
+    fn compute_local_replies(
+        &self,
+        tables: &Tables,
+        prefix: &Arc<Resource>,
+        suffix: &str,
+        face: &Arc<FaceState>,
+    ) -> Vec<(WireExpr<'static>, ZBuf)> {
+        let mut result = vec![];
+        // Only the first routing point in the query route
+        // should return the liveliness tokens
+        if face.whatami == WhatAmI::Client {
+            let key_expr = prefix.expr() + suffix;
+            let key_expr = match OwnedKeyExpr::try_from(key_expr) {
+                Ok(ke) => ke,
+                Err(e) => {
+                    log::warn!("Invalid KE reached the system: {}", e);
+                    return result;
+                }
+            };
+            if key_expr.starts_with(PREFIX_LIVELINESS) {
+                let res = Resource::get_resource(prefix, suffix);
+                let matches = res
+                    .as_ref()
+                    .and_then(|res| res.context.as_ref())
+                    .map(|ctx| Cow::from(&ctx.matches))
+                    .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+                for mres in matches.iter() {
+                    let mres = mres.upgrade().unwrap();
+                    if (mres.context.is_some()
+                        && (!res_hat!(mres).router_subs.is_empty()
+                            || !res_hat!(mres).peer_subs.is_empty()))
+                        || mres.session_ctxs.values().any(|ctx| ctx.subs.is_some())
+                    {
+                        result.push((Resource::get_best_key(&mres, "", face.id), ZBuf::default()));
+                    }
                 }
             }
         }
+        result
     }
-    result
-}
 
-pub(crate) fn compute_query_routes_(tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
-    let mut routes = QueryRoutes {
-        routers_query_routes: vec![],
-        peers_query_routes: vec![],
-        peer_query_route: None,
-        client_query_route: None,
-    };
-    let mut expr = RoutingExpr::new(res, "");
-    if tables.whatami == WhatAmI::Router {
-        let indexes = hat!(tables)
-            .routers_net
-            .as_ref()
-            .unwrap()
-            .graph
-            .node_indices()
-            .collect::<Vec<NodeIndex>>();
-        let max_idx = indexes.iter().max().unwrap();
-        routes
-            .routers_query_routes
-            .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
-
-        for idx in &indexes {
-            routes.routers_query_routes[idx.index()] = compute_query_route(
-                tables,
-                &mut expr,
-                idx.index() as RoutingContext,
-                WhatAmI::Router,
-            );
-        }
-
-        routes.peer_query_route = Some(compute_query_route(
-            tables,
-            &mut expr,
-            RoutingContext::default(),
-            WhatAmI::Peer,
-        ));
-    }
-    if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
-        && hat!(tables).full_net(WhatAmI::Peer)
-    {
-        let indexes = hat!(tables)
-            .peers_net
-            .as_ref()
-            .unwrap()
-            .graph
-            .node_indices()
-            .collect::<Vec<NodeIndex>>();
-        let max_idx = indexes.iter().max().unwrap();
-        routes
-            .peers_query_routes
-            .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
-
-        for idx in &indexes {
-            routes.peers_query_routes[idx.index()] = compute_query_route(
-                tables,
-                &mut expr,
-                idx.index() as RoutingContext,
-                WhatAmI::Peer,
-            );
-        }
-    }
-    if tables.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer) {
-        routes.client_query_route = Some(compute_query_route(
-            tables,
-            &mut expr,
-            RoutingContext::default(),
-            WhatAmI::Client,
-        ));
-        routes.peer_query_route = Some(compute_query_route(
-            tables,
-            &mut expr,
-            RoutingContext::default(),
-            WhatAmI::Peer,
-        ));
-    }
-    if tables.whatami == WhatAmI::Client {
-        routes.client_query_route = Some(compute_query_route(
-            tables,
-            &mut expr,
-            RoutingContext::default(),
-            WhatAmI::Client,
-        ));
-    }
-    routes
-}
-
-pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
-    if res.context.is_some() {
-        let mut res_mut = res.clone();
-        let res_mut = get_mut_unchecked(&mut res_mut);
+    fn compute_query_routes_(&self, tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
+        let mut routes = QueryRoutes {
+            routers_query_routes: vec![],
+            peers_query_routes: vec![],
+            peer_query_route: None,
+            client_query_route: None,
+        };
         let mut expr = RoutingExpr::new(res, "");
         if tables.whatami == WhatAmI::Router {
             let indexes = hat!(tables)
@@ -1676,13 +1604,12 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
                 .node_indices()
                 .collect::<Vec<NodeIndex>>();
             let max_idx = indexes.iter().max().unwrap();
-            let routers_query_routes = &mut res_mut.context_mut().routers_query_routes;
-            routers_query_routes.clear();
-            routers_query_routes
+            routes
+                .routers_query_routes
                 .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
 
             for idx in &indexes {
-                routers_query_routes[idx.index()] = compute_query_route(
+                routes.routers_query_routes[idx.index()] = self.compute_query_route(
                     tables,
                     &mut expr,
                     idx.index() as RoutingContext,
@@ -1690,7 +1617,7 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
                 );
             }
 
-            res_mut.context_mut().peer_query_route = Some(compute_query_route(
+            routes.peer_query_route = Some(self.compute_query_route(
                 tables,
                 &mut expr,
                 RoutingContext::default(),
@@ -1708,13 +1635,12 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
                 .node_indices()
                 .collect::<Vec<NodeIndex>>();
             let max_idx = indexes.iter().max().unwrap();
-            let peers_query_routes = &mut res_mut.context_mut().peers_query_routes;
-            peers_query_routes.clear();
-            peers_query_routes
+            routes
+                .peers_query_routes
                 .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
 
             for idx in &indexes {
-                peers_query_routes[idx.index()] = compute_query_route(
+                routes.peers_query_routes[idx.index()] = self.compute_query_route(
                     tables,
                     &mut expr,
                     idx.index() as RoutingContext,
@@ -1723,13 +1649,13 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
             }
         }
         if tables.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer) {
-            res_mut.context_mut().client_query_route = Some(compute_query_route(
+            routes.client_query_route = Some(self.compute_query_route(
                 tables,
                 &mut expr,
                 RoutingContext::default(),
                 WhatAmI::Client,
             ));
-            res_mut.context_mut().peer_query_route = Some(compute_query_route(
+            routes.peer_query_route = Some(self.compute_query_route(
                 tables,
                 &mut expr,
                 RoutingContext::default(),
@@ -1737,12 +1663,98 @@ pub(crate) fn compute_query_routes(tables: &mut Tables, res: &mut Arc<Resource>)
             ));
         }
         if tables.whatami == WhatAmI::Client {
-            res_mut.context_mut().client_query_route = Some(compute_query_route(
+            routes.client_query_route = Some(self.compute_query_route(
                 tables,
                 &mut expr,
                 RoutingContext::default(),
                 WhatAmI::Client,
             ));
+        }
+        routes
+    }
+
+    fn compute_query_routes(&self, tables: &mut Tables, res: &mut Arc<Resource>) {
+        if res.context.is_some() {
+            let mut res_mut = res.clone();
+            let res_mut = get_mut_unchecked(&mut res_mut);
+            let mut expr = RoutingExpr::new(res, "");
+            if tables.whatami == WhatAmI::Router {
+                let indexes = hat!(tables)
+                    .routers_net
+                    .as_ref()
+                    .unwrap()
+                    .graph
+                    .node_indices()
+                    .collect::<Vec<NodeIndex>>();
+                let max_idx = indexes.iter().max().unwrap();
+                let routers_query_routes = &mut res_mut.context_mut().routers_query_routes;
+                routers_query_routes.clear();
+                routers_query_routes
+                    .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
+
+                for idx in &indexes {
+                    routers_query_routes[idx.index()] = self.compute_query_route(
+                        tables,
+                        &mut expr,
+                        idx.index() as RoutingContext,
+                        WhatAmI::Router,
+                    );
+                }
+
+                res_mut.context_mut().peer_query_route = Some(self.compute_query_route(
+                    tables,
+                    &mut expr,
+                    RoutingContext::default(),
+                    WhatAmI::Peer,
+                ));
+            }
+            if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
+                && hat!(tables).full_net(WhatAmI::Peer)
+            {
+                let indexes = hat!(tables)
+                    .peers_net
+                    .as_ref()
+                    .unwrap()
+                    .graph
+                    .node_indices()
+                    .collect::<Vec<NodeIndex>>();
+                let max_idx = indexes.iter().max().unwrap();
+                let peers_query_routes = &mut res_mut.context_mut().peers_query_routes;
+                peers_query_routes.clear();
+                peers_query_routes
+                    .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
+
+                for idx in &indexes {
+                    peers_query_routes[idx.index()] = self.compute_query_route(
+                        tables,
+                        &mut expr,
+                        idx.index() as RoutingContext,
+                        WhatAmI::Peer,
+                    );
+                }
+            }
+            if tables.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer) {
+                res_mut.context_mut().client_query_route = Some(self.compute_query_route(
+                    tables,
+                    &mut expr,
+                    RoutingContext::default(),
+                    WhatAmI::Client,
+                ));
+                res_mut.context_mut().peer_query_route = Some(self.compute_query_route(
+                    tables,
+                    &mut expr,
+                    RoutingContext::default(),
+                    WhatAmI::Peer,
+                ));
+            }
+            if tables.whatami == WhatAmI::Client {
+                res_mut.context_mut().client_query_route = Some(self.compute_query_route(
+                    tables,
+                    &mut expr,
+                    RoutingContext::default(),
+                    WhatAmI::Client,
+                ));
+            }
         }
     }
 }

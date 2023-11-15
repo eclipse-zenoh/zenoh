@@ -14,9 +14,6 @@
 use super::super::router::*;
 use super::tables::TablesLock;
 use super::{resource::*, tables};
-use crate::net::routing::hat::pubsub::*;
-use crate::net::routing::hat::queries::*;
-use crate::net::routing::hat::HatFace;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt;
@@ -55,6 +52,7 @@ impl FaceState {
         primitives: Arc<dyn Primitives + Send + Sync>,
         link_id: usize,
         mcast_group: Option<TransportMulticast>,
+        hat: Box<dyn Any + Send + Sync>,
     ) -> Arc<FaceState> {
         Arc::new(FaceState {
             id,
@@ -69,7 +67,7 @@ impl FaceState {
             next_qid: 0,
             pending_queries: HashMap::new(),
             mcast_group,
-            hat: Box::new(HatFace::new()),
+            hat,
         })
     }
 
@@ -118,7 +116,7 @@ impl Primitives for Face {
                 unregister_expr(&self.tables, &mut self.state.clone(), m.id);
             }
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
-                declare_subscription(
+                ctrl_lock.declare_subscription(
                     &self.tables,
                     &mut self.state.clone(),
                     &m.wire_expr,
@@ -127,7 +125,7 @@ impl Primitives for Face {
                 );
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
-                forget_subscription(
+                ctrl_lock.forget_subscription(
                     &self.tables,
                     &mut self.state.clone(),
                     &m.ext_wire_expr.wire_expr,
@@ -135,7 +133,7 @@ impl Primitives for Face {
                 );
             }
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
-                declare_queryable(
+                ctrl_lock.declare_queryable(
                     &self.tables,
                     &mut self.state.clone(),
                     &m.wire_expr,
@@ -144,7 +142,7 @@ impl Primitives for Face {
                 );
             }
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
-                forget_queryable(
+                ctrl_lock.forget_queryable(
                     &self.tables,
                     &mut self.state.clone(),
                     &m.ext_wire_expr.wire_expr,

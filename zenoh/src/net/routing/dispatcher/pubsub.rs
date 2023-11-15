@@ -11,12 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::hat::pubsub::{compute_data_route, compute_data_routes, compute_data_routes_};
 use super::face::FaceState;
 use super::resource::{DataRoutes, Direction, PullCaches, Resource};
 use super::tables::{RoutingContext, RoutingExpr, Tables};
-use crate::net::routing::hat::pubsub::compute_matching_pulls;
-use crate::net::routing::hat::{egress_filter, ingress_filter, map_routing_context};
 use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_core::zread;
@@ -28,7 +25,7 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 pub(crate) fn compute_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
-    compute_data_routes(tables, res);
+    tables.hat_code.clone().compute_data_routes(tables, res);
     let res = get_mut_unchecked(res);
     for child in res.childs.values_mut() {
         compute_data_routes_from(tables, child);
@@ -41,11 +38,14 @@ pub(crate) fn compute_matches_data_routes_<'a>(
 ) -> Vec<(Arc<Resource>, DataRoutes)> {
     let mut routes = vec![];
     if res.context.is_some() {
-        routes.push((res.clone(), compute_data_routes_(tables, res)));
+        routes.push((
+            res.clone(),
+            tables.hat_code.compute_data_routes_(tables, res),
+        ));
         for match_ in &res.context().matches {
             let match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
-                let match_routes = compute_data_routes_(tables, &match_);
+                let match_routes = tables.hat_code.compute_data_routes_(tables, &match_);
                 routes.push((match_, match_routes));
             }
         }
@@ -202,7 +202,7 @@ fn get_matching_pulls(
     res.as_ref()
         .and_then(|res| res.context.as_ref())
         .map(|ctx| ctx.matching_pulls.clone())
-        .unwrap_or_else(|| compute_matching_pulls(tables, expr))
+        .unwrap_or_else(|| tables.hat_code.compute_matching_pulls(tables, expr))
 }
 
 macro_rules! cache_data {
@@ -272,12 +272,20 @@ pub fn full_reentrant_route_data(
                 inc_stats!(face, rx, admin, payload)
             }
 
-            if ingress_filter(&tables, face, &mut expr) {
+            if tables.hat_code.ingress_filter(&tables, face, &mut expr) {
                 let res = Resource::get_resource(&prefix, expr.suffix);
 
                 // let route = get_data_route(&tables, face, &res, &mut expr, routing_context);
-                let local_context = map_routing_context(&tables, face, routing_context);
-                let route = compute_data_route(&tables, &mut expr, local_context, face.whatami);
+                let local_context =
+                    tables
+                        .hat_code
+                        .map_routing_context(&tables, face, routing_context);
+                let route = tables.hat_code.compute_data_route(
+                    &tables,
+                    &mut expr,
+                    local_context,
+                    face.whatami,
+                );
 
                 let matching_pulls = get_matching_pulls(&tables, &res, &mut expr);
 
@@ -286,7 +294,10 @@ pub fn full_reentrant_route_data(
 
                     if route.len() == 1 && matching_pulls.len() == 0 {
                         let (outface, key_expr, context) = route.values().next().unwrap();
-                        if egress_filter(&tables, face, outface, &mut expr) {
+                        if tables
+                            .hat_code
+                            .egress_filter(&tables, face, outface, &mut expr)
+                        {
                             drop(tables);
                             #[cfg(feature = "stats")]
                             if !admin {
@@ -314,7 +325,9 @@ pub fn full_reentrant_route_data(
                             let route = route
                                 .values()
                                 .filter(|(outface, _key_expr, _context)| {
-                                    egress_filter(&tables, face, outface, &mut expr)
+                                    tables
+                                        .hat_code
+                                        .egress_filter(&tables, face, outface, &mut expr)
                                 })
                                 .cloned()
                                 .collect::<Vec<Direction>>();

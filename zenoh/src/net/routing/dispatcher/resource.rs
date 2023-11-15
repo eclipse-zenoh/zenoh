@@ -13,7 +13,6 @@
 //
 use super::face::FaceState;
 use super::tables::{Tables, TablesLock};
-use crate::net::routing::hat::HatContext;
 use std::any::Any;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -92,11 +91,11 @@ pub(crate) struct ResourceContext {
 }
 
 impl ResourceContext {
-    fn new() -> ResourceContext {
+    fn new(hat: Box<dyn Any + Send + Sync>) -> ResourceContext {
         ResourceContext {
             matches: Vec::new(),
             matching_pulls: Arc::new(Vec::new()),
-            hat: Box::new(HatContext::new()),
+            hat,
             valid_data_routes: false,
             routers_data_routes: Vec::new(),
             peers_data_routes: Vec::new(),
@@ -375,12 +374,12 @@ impl Resource {
     }
 
     pub fn make_resource(
-        _tables: &mut Tables,
+        tables: &mut Tables,
         from: &mut Arc<Resource>,
         suffix: &str,
     ) -> Arc<Resource> {
         if suffix.is_empty() {
-            Resource::upgrade_resource(from);
+            Resource::upgrade_resource(from, tables.hat_code.new_resource());
             from.clone()
         } else if let Some(stripped_suffix) = suffix.strip_prefix('/') {
             let (chunk, rest) = match stripped_suffix.find('/') {
@@ -389,13 +388,13 @@ impl Resource {
             };
 
             match get_mut_unchecked(from).childs.get_mut(chunk) {
-                Some(res) => Resource::make_resource(_tables, res, rest),
+                Some(res) => Resource::make_resource(tables, res, rest),
                 None => {
                     let mut new = Arc::new(Resource::new(from, chunk, None));
                     if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
                         log::debug!("Register resource {}", new.expr());
                     }
-                    let res = Resource::make_resource(_tables, &mut new, rest);
+                    let res = Resource::make_resource(tables, &mut new, rest);
                     get_mut_unchecked(from)
                         .childs
                         .insert(String::from(chunk), new);
@@ -405,7 +404,7 @@ impl Resource {
         } else {
             match from.parent.clone() {
                 Some(mut parent) => {
-                    Resource::make_resource(_tables, &mut parent, &[&from.suffix, suffix].concat())
+                    Resource::make_resource(tables, &mut parent, &[&from.suffix, suffix].concat())
                 }
                 None => {
                     let (chunk, rest) = match suffix[1..].find('/') {
@@ -414,13 +413,13 @@ impl Resource {
                     };
 
                     match get_mut_unchecked(from).childs.get_mut(chunk) {
-                        Some(res) => Resource::make_resource(_tables, res, rest),
+                        Some(res) => Resource::make_resource(tables, res, rest),
                         None => {
                             let mut new = Arc::new(Resource::new(from, chunk, None));
                             if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
                                 log::debug!("Register resource {}", new.expr());
                             }
-                            let res = Resource::make_resource(_tables, &mut new, rest);
+                            let res = Resource::make_resource(tables, &mut new, rest);
                             get_mut_unchecked(from)
                                 .childs
                                 .insert(String::from(chunk), new);
@@ -676,9 +675,9 @@ impl Resource {
         }
     }
 
-    pub fn upgrade_resource(res: &mut Arc<Resource>) {
+    pub fn upgrade_resource(res: &mut Arc<Resource>, hat: Box<dyn Any + Send + Sync>) {
         if res.context.is_none() {
-            get_mut_unchecked(res).context = Some(ResourceContext::new());
+            get_mut_unchecked(res).context = Some(ResourceContext::new(hat));
         }
     }
 }

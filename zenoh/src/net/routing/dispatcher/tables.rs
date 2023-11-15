@@ -1,5 +1,4 @@
-use crate::net::routing::hat::HatTables;
-
+use crate::net::routing::hat::HatBaseTrait;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -13,12 +12,12 @@ use crate::net::routing::hat::HatTables;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::hat::pubsub::*;
-use super::super::hat::queries::*;
 use super::face::FaceState;
 pub use super::pubsub::*;
 pub use super::queries::*;
 pub use super::resource::*;
+use crate::net::routing::hat::HatCode;
+use crate::net::routing::hat::HatTrait;
 use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
@@ -29,7 +28,6 @@ use zenoh_protocol::core::{ExprId, WhatAmI, ZenohId};
 use zenoh_protocol::network::Mapping;
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
-use zenoh_transport::Primitives;
 // use zenoh_collections::Timer;
 use zenoh_sync::get_mut_unchecked;
 
@@ -73,6 +71,7 @@ pub struct Tables {
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
     pub(crate) pull_caches_lock: Mutex<()>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
+    pub(crate) hat_code: Arc<dyn HatTrait + Send + Sync>, // TODO make this a Box
 }
 
 impl Tables {
@@ -84,6 +83,7 @@ impl Tables {
         router_peers_failover_brokering: bool,
         _queries_default_timeout: Duration,
     ) -> Self {
+        let hat_code = Arc::new(HatCode {});
         Tables {
             zid,
             whatami,
@@ -97,7 +97,8 @@ impl Tables {
             mcast_groups: vec![],
             mcast_faces: vec![],
             pull_caches_lock: Mutex::new(()),
-            hat: Box::new(HatTables::new(router_peers_failover_brokering)),
+            hat: hat_code.new_tables(router_peers_failover_brokering),
+            hat_code,
         }
     }
 
@@ -129,75 +130,9 @@ impl Tables {
         self.faces.values().find(|face| face.zid == *zid)
     }
 
-    pub(crate) fn open_net_face(
-        &mut self,
-        zid: ZenohId,
-        whatami: WhatAmI,
-        #[cfg(feature = "stats")] stats: Arc<TransportStats>,
-        primitives: Arc<dyn Primitives + Send + Sync>,
-        link_id: usize,
-    ) -> Weak<FaceState> {
-        let fid = self.face_counter;
-        self.face_counter += 1;
-        let mut newface = self
-            .faces
-            .entry(fid)
-            .or_insert_with(|| {
-                FaceState::new(
-                    fid,
-                    zid,
-                    whatami,
-                    #[cfg(feature = "stats")]
-                    Some(stats),
-                    primitives.clone(),
-                    link_id,
-                    None,
-                )
-            })
-            .clone();
-        log::debug!("New {}", newface);
-
-        pubsub_new_face(self, &mut newface);
-        queries_new_face(self, &mut newface);
-
-        Arc::downgrade(&newface)
-    }
-
-    pub fn open_face(
-        &mut self,
-        zid: ZenohId,
-        whatami: WhatAmI,
-        primitives: Arc<dyn Primitives + Send + Sync>,
-    ) -> Weak<FaceState> {
-        let fid = self.face_counter;
-        self.face_counter += 1;
-        let mut newface = self
-            .faces
-            .entry(fid)
-            .or_insert_with(|| {
-                FaceState::new(
-                    fid,
-                    zid,
-                    whatami,
-                    #[cfg(feature = "stats")]
-                    None,
-                    primitives.clone(),
-                    0,
-                    None,
-                )
-            })
-            .clone();
-        log::debug!("New {}", newface);
-
-        pubsub_new_face(self, &mut newface);
-        queries_new_face(self, &mut newface);
-
-        Arc::downgrade(&newface)
-    }
-
     fn compute_routes(&mut self, res: &mut Arc<Resource>) {
-        compute_data_routes(self, res);
-        compute_query_routes(self, res);
+        self.hat_code.clone().compute_data_routes(self, res);
+        self.hat_code.clone().compute_query_routes(self, res);
     }
 
     pub(crate) fn compute_matches_routes(&mut self, res: &mut Arc<Resource>) {
@@ -228,6 +163,6 @@ pub fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
 
 pub struct TablesLock {
     pub tables: RwLock<Tables>,
-    pub ctrl_lock: Mutex<()>,
+    pub(crate) ctrl_lock: Box<Mutex<dyn HatTrait + Send + Sync>>,
     pub queries_lock: RwLock<()>,
 }

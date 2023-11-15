@@ -11,15 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::hat::queries::compute_local_replies;
-use super::super::hat::queries::compute_query_route;
-use super::super::hat::queries::compute_query_routes;
-use super::super::hat::queries::compute_query_routes_;
 use super::face::FaceState;
 use super::resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource};
 use super::tables::RoutingContext;
 use super::tables::{RoutingExpr, Tables, TablesLock};
-use crate::net::routing::hat::{egress_filter, ingress_filter};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
@@ -41,7 +36,7 @@ pub(crate) struct Query {
 }
 
 pub(crate) fn compute_query_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
-    compute_query_routes(tables, res);
+    tables.hat_code.clone().compute_query_routes(tables, res);
     let res = get_mut_unchecked(res);
     for child in res.childs.values_mut() {
         compute_query_routes_from(tables, child);
@@ -54,11 +49,14 @@ pub(crate) fn compute_matches_query_routes_(
 ) -> Vec<(Arc<Resource>, QueryRoutes)> {
     let mut routes = vec![];
     if res.context.is_some() {
-        routes.push((res.clone(), compute_query_routes_(tables, res)));
+        routes.push((
+            res.clone(),
+            tables.hat_code.compute_query_routes_(tables, res),
+        ));
         for match_ in &res.context().matches {
             let match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
-                let match_routes = compute_query_routes_(tables, &match_);
+                let match_routes = tables.hat_code.compute_query_routes_(tables, &match_);
                 routes.push((match_, match_routes));
             }
         }
@@ -88,7 +86,10 @@ fn compute_final_route(
         TargetType::All => {
             let mut route = HashMap::new();
             for qabl in qabls.iter() {
-                if egress_filter(tables, src_face, &qabl.direction.0, expr) {
+                if tables
+                    .hat_code
+                    .egress_filter(tables, src_face, &qabl.direction.0, expr)
+                {
                     #[cfg(feature = "complete_n")]
                     {
                         route.entry(qabl.direction.0.id).or_insert_with(|| {
@@ -112,7 +113,11 @@ fn compute_final_route(
         TargetType::AllComplete => {
             let mut route = HashMap::new();
             for qabl in qabls.iter() {
-                if qabl.complete > 0 && egress_filter(tables, src_face, &qabl.direction.0, expr) {
+                if qabl.complete > 0
+                    && tables
+                        .hat_code
+                        .egress_filter(tables, src_face, &qabl.direction.0, expr)
+                {
                     #[cfg(feature = "complete_n")]
                     {
                         route.entry(qabl.direction.0.id).or_insert_with(|| {
@@ -442,9 +447,14 @@ pub fn route_query(
                 inc_req_stats!(face, rx, admin, body)
             }
 
-            if ingress_filter(&rtables, face, &mut expr) {
+            if rtables.hat_code.ingress_filter(&rtables, face, &mut expr) {
                 // let res = Resource::get_resource(&prefix, expr.suffix);
-                let route = compute_query_route(&rtables, &mut expr, routing_context, face.whatami);
+                let route = rtables.hat_code.compute_query_route(
+                    &rtables,
+                    &mut expr,
+                    routing_context,
+                    face.whatami,
+                );
 
                 let query = Arc::new(Query {
                     src_face: face.clone(),
@@ -453,7 +463,10 @@ pub fn route_query(
 
                 let queries_lock = zwrite!(tables_ref.queries_lock);
                 let route = compute_final_route(&rtables, &route, face, &mut expr, &target, query);
-                let local_replies = compute_local_replies(&rtables, &prefix, expr.suffix, face);
+                let local_replies =
+                    rtables
+                        .hat_code
+                        .compute_local_replies(&rtables, &prefix, expr.suffix, face);
                 let zid = rtables.zid;
 
                 drop(queries_lock);

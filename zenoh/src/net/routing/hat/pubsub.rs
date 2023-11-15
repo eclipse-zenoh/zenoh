@@ -17,7 +17,7 @@ use super::super::dispatcher::resource::{Resource, RoutingContext, SessionContex
 use super::super::dispatcher::tables::{Tables, TablesLock};
 use super::super::PREFIX_LIVELINESS;
 use super::network::Network;
-use super::{get_peer, get_router, HatContext, HatFace, HatTables};
+use super::{get_peer, get_router, HatCode, HatContext, HatFace, HatPubSubTrait, HatTables};
 use crate::net::routing::dispatcher::tables::{DataRoutes, PullCaches, Route, RoutingExpr};
 use crate::{face_hat, face_hat_mut, hat, hat_mut, res_hat, res_hat_mut};
 use petgraph::graph::NodeIndex;
@@ -511,35 +511,6 @@ fn declare_client_subscription(
     }
 }
 
-pub(crate) fn declare_subscription(
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    expr: &WireExpr,
-    sub_info: &SubscriberInfo,
-    node_id: RoutingContext,
-) {
-    let rtables = zread!(tables.tables);
-    match (rtables.whatami, face.whatami) {
-        (WhatAmI::Router, WhatAmI::Router) => {
-            if let Some(router) = get_router(&rtables, face, node_id) {
-                declare_router_subscription(tables, rtables, face, expr, sub_info, router)
-            }
-        }
-        (WhatAmI::Router, WhatAmI::Peer)
-        | (WhatAmI::Peer, WhatAmI::Router)
-        | (WhatAmI::Peer, WhatAmI::Peer) => {
-            if hat!(rtables).full_net(WhatAmI::Peer) {
-                if let Some(peer) = get_peer(&rtables, face, node_id) {
-                    declare_peer_subscription(tables, rtables, face, expr, sub_info, peer)
-                }
-            } else {
-                declare_client_subscription(tables, rtables, face, expr, sub_info)
-            }
-        }
-        _ => declare_client_subscription(tables, rtables, face, expr, sub_info),
-    }
-}
-
 #[inline]
 fn remote_router_subs(tables: &Tables, res: &Arc<Resource>) -> bool {
     res.context.is_some()
@@ -842,7 +813,7 @@ fn forget_peer_subscription(
     }
 }
 
-pub(crate) fn undeclare_client_subscription(
+pub(super) fn undeclare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
@@ -934,35 +905,7 @@ fn forget_client_subscription(
     }
 }
 
-pub(crate) fn forget_subscription(
-    tables: &TablesLock,
-    face: &mut Arc<FaceState>,
-    expr: &WireExpr,
-    node_id: RoutingContext,
-) {
-    let rtables = zread!(tables.tables);
-    match (rtables.whatami, face.whatami) {
-        (WhatAmI::Router, WhatAmI::Router) => {
-            if let Some(router) = get_router(&rtables, face, node_id) {
-                forget_router_subscription(tables, rtables, face, expr, &router)
-            }
-        }
-        (WhatAmI::Router, WhatAmI::Peer)
-        | (WhatAmI::Peer, WhatAmI::Router)
-        | (WhatAmI::Peer, WhatAmI::Peer) => {
-            if hat!(rtables).full_net(WhatAmI::Peer) {
-                if let Some(peer) = get_peer(&rtables, face, node_id) {
-                    forget_peer_subscription(tables, rtables, face, expr, &peer)
-                }
-            } else {
-                forget_client_subscription(tables, rtables, face, expr)
-            }
-        }
-        _ => forget_client_subscription(tables, rtables, face, expr),
-    }
-}
-
-pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
+pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable, // @TODO
         mode: Mode::Push,
@@ -1072,7 +1015,7 @@ pub(crate) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     }
 }
 
-pub(crate) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: WhatAmI) {
+pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: WhatAmI) {
     match net_type {
         WhatAmI::Router => {
             for mut res in hat!(tables)
@@ -1125,7 +1068,7 @@ pub(crate) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: 
     }
 }
 
-pub(crate) fn pubsub_tree_change(
+pub(super) fn pubsub_tree_change(
     tables: &mut Tables,
     new_childs: &[Vec<NodeIndex>],
     net_type: WhatAmI,
@@ -1174,7 +1117,7 @@ pub(crate) fn pubsub_tree_change(
     compute_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
-pub(crate) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links: &[ZenohId]) {
+pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links: &[ZenohId]) {
     if let Some(src_face) = tables.get_face(zid).cloned() {
         if hat!(tables).router_peers_failover_brokering
             && tables.whatami == WhatAmI::Router
@@ -1285,65 +1228,145 @@ fn insert_faces_for_subs(
     }
 }
 
-pub(crate) fn compute_data_route(
-    tables: &Tables,
-    expr: &mut RoutingExpr,
-    source: RoutingContext,
-    source_type: WhatAmI,
-) -> Arc<Route> {
-    let mut route = HashMap::new();
-    let key_expr = expr.full_expr();
-    if key_expr.ends_with('/') {
-        return Arc::new(route);
+impl HatPubSubTrait for HatCode {
+    fn declare_subscription(
+        &self,
+        tables: &TablesLock,
+        face: &mut Arc<FaceState>,
+        expr: &WireExpr,
+        sub_info: &SubscriberInfo,
+        node_id: RoutingContext,
+    ) {
+        let rtables = zread!(tables.tables);
+        match (rtables.whatami, face.whatami) {
+            (WhatAmI::Router, WhatAmI::Router) => {
+                if let Some(router) = get_router(&rtables, face, node_id) {
+                    declare_router_subscription(tables, rtables, face, expr, sub_info, router)
+                }
+            }
+            (WhatAmI::Router, WhatAmI::Peer)
+            | (WhatAmI::Peer, WhatAmI::Router)
+            | (WhatAmI::Peer, WhatAmI::Peer) => {
+                if hat!(rtables).full_net(WhatAmI::Peer) {
+                    if let Some(peer) = get_peer(&rtables, face, node_id) {
+                        declare_peer_subscription(tables, rtables, face, expr, sub_info, peer)
+                    }
+                } else {
+                    declare_client_subscription(tables, rtables, face, expr, sub_info)
+                }
+            }
+            _ => declare_client_subscription(tables, rtables, face, expr, sub_info),
+        }
     }
-    log::trace!(
-        "compute_data_route({}, {:?}, {:?})",
-        key_expr,
-        source,
-        source_type
-    );
-    let key_expr = match OwnedKeyExpr::try_from(key_expr) {
-        Ok(ke) => ke,
-        Err(e) => {
-            log::warn!("Invalid KE reached the system: {}", e);
+
+    fn forget_subscription(
+        &self,
+        tables: &TablesLock,
+        face: &mut Arc<FaceState>,
+        expr: &WireExpr,
+        node_id: RoutingContext,
+    ) {
+        let rtables = zread!(tables.tables);
+        match (rtables.whatami, face.whatami) {
+            (WhatAmI::Router, WhatAmI::Router) => {
+                if let Some(router) = get_router(&rtables, face, node_id) {
+                    forget_router_subscription(tables, rtables, face, expr, &router)
+                }
+            }
+            (WhatAmI::Router, WhatAmI::Peer)
+            | (WhatAmI::Peer, WhatAmI::Router)
+            | (WhatAmI::Peer, WhatAmI::Peer) => {
+                if hat!(rtables).full_net(WhatAmI::Peer) {
+                    if let Some(peer) = get_peer(&rtables, face, node_id) {
+                        forget_peer_subscription(tables, rtables, face, expr, &peer)
+                    }
+                } else {
+                    forget_client_subscription(tables, rtables, face, expr)
+                }
+            }
+            _ => forget_client_subscription(tables, rtables, face, expr),
+        }
+    }
+
+    fn compute_data_route(
+        &self,
+        tables: &Tables,
+        expr: &mut RoutingExpr,
+        source: RoutingContext,
+        source_type: WhatAmI,
+    ) -> Arc<Route> {
+        let mut route = HashMap::new();
+        let key_expr = expr.full_expr();
+        if key_expr.ends_with('/') {
             return Arc::new(route);
         }
-    };
-    let res = Resource::get_resource(expr.prefix, expr.suffix);
-    let matches = res
-        .as_ref()
-        .and_then(|res| res.context.as_ref())
-        .map(|ctx| Cow::from(&ctx.matches))
-        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
+        log::trace!(
+            "compute_data_route({}, {:?}, {:?})",
+            key_expr,
+            source,
+            source_type
+        );
+        let key_expr = match OwnedKeyExpr::try_from(key_expr) {
+            Ok(ke) => ke,
+            Err(e) => {
+                log::warn!("Invalid KE reached the system: {}", e);
+                return Arc::new(route);
+            }
+        };
+        let res = Resource::get_resource(expr.prefix, expr.suffix);
+        let matches = res
+            .as_ref()
+            .and_then(|res| res.context.as_ref())
+            .map(|ctx| Cow::from(&ctx.matches))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &key_expr)));
 
-    let master = tables.whatami != WhatAmI::Router
-        || !hat!(tables).full_net(WhatAmI::Peer)
-        || *hat!(tables).elect_router(&tables.zid, &key_expr, hat!(tables).shared_nodes.iter())
-            == tables.zid;
+        let master = tables.whatami != WhatAmI::Router
+            || !hat!(tables).full_net(WhatAmI::Peer)
+            || *hat!(tables).elect_router(&tables.zid, &key_expr, hat!(tables).shared_nodes.iter())
+                == tables.zid;
 
-    for mres in matches.iter() {
-        let mres = mres.upgrade().unwrap();
-        if tables.whatami == WhatAmI::Router {
-            if master || source_type == WhatAmI::Router {
-                let net = hat!(tables).routers_net.as_ref().unwrap();
-                let router_source = match source_type {
-                    WhatAmI::Router => source,
-                    _ => net.idx.index() as RoutingContext,
-                };
-                insert_faces_for_subs(
-                    &mut route,
-                    expr,
-                    tables,
-                    net,
-                    router_source,
-                    &res_hat!(mres).router_subs,
-                );
+        for mres in matches.iter() {
+            let mres = mres.upgrade().unwrap();
+            if tables.whatami == WhatAmI::Router {
+                if master || source_type == WhatAmI::Router {
+                    let net = hat!(tables).routers_net.as_ref().unwrap();
+                    let router_source = match source_type {
+                        WhatAmI::Router => source,
+                        _ => net.idx.index() as RoutingContext,
+                    };
+                    insert_faces_for_subs(
+                        &mut route,
+                        expr,
+                        tables,
+                        net,
+                        router_source,
+                        &res_hat!(mres).router_subs,
+                    );
+                }
+
+                if (master || source_type != WhatAmI::Router)
+                    && hat!(tables).full_net(WhatAmI::Peer)
+                {
+                    let net = hat!(tables).peers_net.as_ref().unwrap();
+                    let peer_source = match source_type {
+                        WhatAmI::Peer => source,
+                        _ => net.idx.index() as RoutingContext,
+                    };
+                    insert_faces_for_subs(
+                        &mut route,
+                        expr,
+                        tables,
+                        net,
+                        peer_source,
+                        &res_hat!(mres).peer_subs,
+                    );
+                }
             }
 
-            if (master || source_type != WhatAmI::Router) && hat!(tables).full_net(WhatAmI::Peer) {
+            if tables.whatami == WhatAmI::Peer && hat!(tables).full_net(WhatAmI::Peer) {
                 let net = hat!(tables).peers_net.as_ref().unwrap();
                 let peer_source = match source_type {
-                    WhatAmI::Peer => source,
+                    WhatAmI::Router | WhatAmI::Peer => source,
                     _ => net.idx.index() as RoutingContext,
                 };
                 insert_faces_for_subs(
@@ -1355,180 +1378,80 @@ pub(crate) fn compute_data_route(
                     &res_hat!(mres).peer_subs,
                 );
             }
-        }
 
-        if tables.whatami == WhatAmI::Peer && hat!(tables).full_net(WhatAmI::Peer) {
-            let net = hat!(tables).peers_net.as_ref().unwrap();
-            let peer_source = match source_type {
-                WhatAmI::Router | WhatAmI::Peer => source,
-                _ => net.idx.index() as RoutingContext,
-            };
-            insert_faces_for_subs(
-                &mut route,
-                expr,
-                tables,
-                net,
-                peer_source,
-                &res_hat!(mres).peer_subs,
-            );
-        }
-
-        if tables.whatami != WhatAmI::Router || master || source_type == WhatAmI::Router {
-            for (sid, context) in &mres.session_ctxs {
-                if let Some(subinfo) = &context.subs {
-                    if match tables.whatami {
-                        WhatAmI::Router => context.face.whatami != WhatAmI::Router,
-                        _ => {
-                            source_type == WhatAmI::Client
-                                || context.face.whatami == WhatAmI::Client
+            if tables.whatami != WhatAmI::Router || master || source_type == WhatAmI::Router {
+                for (sid, context) in &mres.session_ctxs {
+                    if let Some(subinfo) = &context.subs {
+                        if match tables.whatami {
+                            WhatAmI::Router => context.face.whatami != WhatAmI::Router,
+                            _ => {
+                                source_type == WhatAmI::Client
+                                    || context.face.whatami == WhatAmI::Client
+                            }
+                        } && subinfo.mode == Mode::Push
+                        {
+                            route.entry(*sid).or_insert_with(|| {
+                                let key_expr =
+                                    Resource::get_best_key(expr.prefix, expr.suffix, *sid);
+                                (
+                                    context.face.clone(),
+                                    key_expr.to_owned(),
+                                    RoutingContext::default(),
+                                )
+                            });
                         }
-                    } && subinfo.mode == Mode::Push
-                    {
-                        route.entry(*sid).or_insert_with(|| {
-                            let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                            (
-                                context.face.clone(),
-                                key_expr.to_owned(),
-                                RoutingContext::default(),
-                            )
-                        });
                     }
                 }
             }
         }
+        for mcast_group in &tables.mcast_groups {
+            route.insert(
+                mcast_group.id,
+                (
+                    mcast_group.clone(),
+                    expr.full_expr().to_string().into(),
+                    RoutingContext::default(),
+                ),
+            );
+        }
+        Arc::new(route)
     }
-    for mcast_group in &tables.mcast_groups {
-        route.insert(
-            mcast_group.id,
-            (
-                mcast_group.clone(),
-                expr.full_expr().to_string().into(),
-                RoutingContext::default(),
-            ),
-        );
-    }
-    Arc::new(route)
-}
 
-pub(crate) fn compute_matching_pulls(tables: &Tables, expr: &mut RoutingExpr) -> Arc<PullCaches> {
-    let mut pull_caches = vec![];
-    let ke = if let Ok(ke) = OwnedKeyExpr::try_from(expr.full_expr()) {
-        ke
-    } else {
-        return Arc::new(pull_caches);
-    };
-    let res = Resource::get_resource(expr.prefix, expr.suffix);
-    let matches = res
-        .as_ref()
-        .and_then(|res| res.context.as_ref())
-        .map(|ctx| Cow::from(&ctx.matches))
-        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &ke)));
+    fn compute_matching_pulls(&self, tables: &Tables, expr: &mut RoutingExpr) -> Arc<PullCaches> {
+        let mut pull_caches = vec![];
+        let ke = if let Ok(ke) = OwnedKeyExpr::try_from(expr.full_expr()) {
+            ke
+        } else {
+            return Arc::new(pull_caches);
+        };
+        let res = Resource::get_resource(expr.prefix, expr.suffix);
+        let matches = res
+            .as_ref()
+            .and_then(|res| res.context.as_ref())
+            .map(|ctx| Cow::from(&ctx.matches))
+            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &ke)));
 
-    for mres in matches.iter() {
-        let mres = mres.upgrade().unwrap();
-        for context in mres.session_ctxs.values() {
-            if let Some(subinfo) = &context.subs {
-                if subinfo.mode == Mode::Pull {
-                    pull_caches.push(context.clone());
+        for mres in matches.iter() {
+            let mres = mres.upgrade().unwrap();
+            for context in mres.session_ctxs.values() {
+                if let Some(subinfo) = &context.subs {
+                    if subinfo.mode == Mode::Pull {
+                        pull_caches.push(context.clone());
+                    }
                 }
             }
         }
+        Arc::new(pull_caches)
     }
-    Arc::new(pull_caches)
-}
 
-pub(crate) fn compute_data_routes_(tables: &Tables, res: &Arc<Resource>) -> DataRoutes {
-    let mut routes = DataRoutes {
-        matching_pulls: None,
-        routers_data_routes: vec![],
-        peers_data_routes: vec![],
-        peer_data_route: None,
-        client_data_route: None,
-    };
-    let mut expr = RoutingExpr::new(res, "");
-    if tables.whatami == WhatAmI::Router {
-        let indexes = hat!(tables)
-            .routers_net
-            .as_ref()
-            .unwrap()
-            .graph
-            .node_indices()
-            .collect::<Vec<NodeIndex>>();
-        let max_idx = indexes.iter().max().unwrap();
-        routes
-            .routers_data_routes
-            .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
-
-        for idx in &indexes {
-            routes.routers_data_routes[idx.index()] = compute_data_route(
-                tables,
-                &mut expr,
-                idx.index() as RoutingContext,
-                WhatAmI::Router,
-            );
-        }
-
-        routes.peer_data_route = Some(compute_data_route(
-            tables,
-            &mut expr,
-            RoutingContext::default(),
-            WhatAmI::Peer,
-        ));
-    }
-    if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
-        && hat!(tables).full_net(WhatAmI::Peer)
-    {
-        let indexes = hat!(tables)
-            .peers_net
-            .as_ref()
-            .unwrap()
-            .graph
-            .node_indices()
-            .collect::<Vec<NodeIndex>>();
-        let max_idx = indexes.iter().max().unwrap();
-        routes
-            .peers_data_routes
-            .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
-
-        for idx in &indexes {
-            routes.peers_data_routes[idx.index()] = compute_data_route(
-                tables,
-                &mut expr,
-                idx.index() as RoutingContext,
-                WhatAmI::Peer,
-            );
-        }
-    }
-    if tables.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer) {
-        routes.client_data_route = Some(compute_data_route(
-            tables,
-            &mut expr,
-            RoutingContext::default(),
-            WhatAmI::Client,
-        ));
-        routes.peer_data_route = Some(compute_data_route(
-            tables,
-            &mut expr,
-            RoutingContext::default(),
-            WhatAmI::Peer,
-        ));
-    }
-    if tables.whatami == WhatAmI::Client {
-        routes.client_data_route = Some(compute_data_route(
-            tables,
-            &mut expr,
-            RoutingContext::default(),
-            WhatAmI::Client,
-        ));
-    }
-    routes.matching_pulls = Some(compute_matching_pulls(tables, &mut expr));
-    routes
-}
-
-pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) {
-    if res.context.is_some() {
-        let mut res_mut = res.clone();
-        let res_mut = get_mut_unchecked(&mut res_mut);
+    fn compute_data_routes_(&self, tables: &Tables, res: &Arc<Resource>) -> DataRoutes {
+        let mut routes = DataRoutes {
+            matching_pulls: None,
+            routers_data_routes: vec![],
+            peers_data_routes: vec![],
+            peer_data_route: None,
+            client_data_route: None,
+        };
         let mut expr = RoutingExpr::new(res, "");
         if tables.whatami == WhatAmI::Router {
             let indexes = hat!(tables)
@@ -1539,12 +1462,12 @@ pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) 
                 .node_indices()
                 .collect::<Vec<NodeIndex>>();
             let max_idx = indexes.iter().max().unwrap();
-            let routers_data_routes = &mut res_mut.context_mut().routers_data_routes;
-            routers_data_routes.clear();
-            routers_data_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
+            routes
+                .routers_data_routes
+                .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
             for idx in &indexes {
-                routers_data_routes[idx.index()] = compute_data_route(
+                routes.routers_data_routes[idx.index()] = self.compute_data_route(
                     tables,
                     &mut expr,
                     idx.index() as RoutingContext,
@@ -1552,7 +1475,7 @@ pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) 
                 );
             }
 
-            res_mut.context_mut().peer_data_route = Some(compute_data_route(
+            routes.peer_data_route = Some(self.compute_data_route(
                 tables,
                 &mut expr,
                 RoutingContext::default(),
@@ -1570,12 +1493,12 @@ pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) 
                 .node_indices()
                 .collect::<Vec<NodeIndex>>();
             let max_idx = indexes.iter().max().unwrap();
-            let peers_data_routes = &mut res_mut.context_mut().peers_data_routes;
-            peers_data_routes.clear();
-            peers_data_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
+            routes
+                .peers_data_routes
+                .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
             for idx in &indexes {
-                peers_data_routes[idx.index()] = compute_data_route(
+                routes.peers_data_routes[idx.index()] = self.compute_data_route(
                     tables,
                     &mut expr,
                     idx.index() as RoutingContext,
@@ -1584,13 +1507,13 @@ pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) 
             }
         }
         if tables.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer) {
-            res_mut.context_mut().client_data_route = Some(compute_data_route(
+            routes.client_data_route = Some(self.compute_data_route(
                 tables,
                 &mut expr,
                 RoutingContext::default(),
                 WhatAmI::Client,
             ));
-            res_mut.context_mut().peer_data_route = Some(compute_data_route(
+            routes.peer_data_route = Some(self.compute_data_route(
                 tables,
                 &mut expr,
                 RoutingContext::default(),
@@ -1598,13 +1521,98 @@ pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) 
             ));
         }
         if tables.whatami == WhatAmI::Client {
-            res_mut.context_mut().client_data_route = Some(compute_data_route(
+            routes.client_data_route = Some(self.compute_data_route(
                 tables,
                 &mut expr,
                 RoutingContext::default(),
                 WhatAmI::Client,
             ));
         }
-        res_mut.context_mut().matching_pulls = compute_matching_pulls(tables, &mut expr);
+        routes.matching_pulls = Some(self.compute_matching_pulls(tables, &mut expr));
+        routes
+    }
+
+    fn compute_data_routes(&self, tables: &mut Tables, res: &mut Arc<Resource>) {
+        if res.context.is_some() {
+            let mut res_mut = res.clone();
+            let res_mut = get_mut_unchecked(&mut res_mut);
+            let mut expr = RoutingExpr::new(res, "");
+            if tables.whatami == WhatAmI::Router {
+                let indexes = hat!(tables)
+                    .routers_net
+                    .as_ref()
+                    .unwrap()
+                    .graph
+                    .node_indices()
+                    .collect::<Vec<NodeIndex>>();
+                let max_idx = indexes.iter().max().unwrap();
+                let routers_data_routes = &mut res_mut.context_mut().routers_data_routes;
+                routers_data_routes.clear();
+                routers_data_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
+
+                for idx in &indexes {
+                    routers_data_routes[idx.index()] = self.compute_data_route(
+                        tables,
+                        &mut expr,
+                        idx.index() as RoutingContext,
+                        WhatAmI::Router,
+                    );
+                }
+
+                res_mut.context_mut().peer_data_route = Some(self.compute_data_route(
+                    tables,
+                    &mut expr,
+                    RoutingContext::default(),
+                    WhatAmI::Peer,
+                ));
+            }
+            if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
+                && hat!(tables).full_net(WhatAmI::Peer)
+            {
+                let indexes = hat!(tables)
+                    .peers_net
+                    .as_ref()
+                    .unwrap()
+                    .graph
+                    .node_indices()
+                    .collect::<Vec<NodeIndex>>();
+                let max_idx = indexes.iter().max().unwrap();
+                let peers_data_routes = &mut res_mut.context_mut().peers_data_routes;
+                peers_data_routes.clear();
+                peers_data_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
+
+                for idx in &indexes {
+                    peers_data_routes[idx.index()] = self.compute_data_route(
+                        tables,
+                        &mut expr,
+                        idx.index() as RoutingContext,
+                        WhatAmI::Peer,
+                    );
+                }
+            }
+            if tables.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer) {
+                res_mut.context_mut().client_data_route = Some(self.compute_data_route(
+                    tables,
+                    &mut expr,
+                    RoutingContext::default(),
+                    WhatAmI::Client,
+                ));
+                res_mut.context_mut().peer_data_route = Some(self.compute_data_route(
+                    tables,
+                    &mut expr,
+                    RoutingContext::default(),
+                    WhatAmI::Peer,
+                ));
+            }
+            if tables.whatami == WhatAmI::Client {
+                res_mut.context_mut().client_data_route = Some(self.compute_data_route(
+                    tables,
+                    &mut expr,
+                    RoutingContext::default(),
+                    WhatAmI::Client,
+                ));
+            }
+            res_mut.context_mut().matching_pulls = self.compute_matching_pulls(tables, &mut expr);
+        }
     }
 }

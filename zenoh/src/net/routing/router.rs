@@ -17,11 +17,8 @@ pub use super::dispatcher::queries::*;
 pub use super::dispatcher::resource::*;
 use super::dispatcher::tables::Tables;
 use super::dispatcher::tables::TablesLock;
-use super::hat::closing;
-use super::hat::init;
-use super::hat::new_transport_unicast;
+use super::hat::HatCode;
 use super::runtime::Runtime;
-use crate::net::routing::hat::handle_oam;
 use std::any::Any;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -63,7 +60,7 @@ impl Router {
                     router_peers_failover_brokering,
                     queries_default_timeout,
                 )),
-                ctrl_lock: Mutex::new(()),
+                ctrl_lock: Box::new(Mutex::new(HatCode {})),
                 queries_lock: RwLock::new(()),
             }),
         }
@@ -80,8 +77,10 @@ impl Router {
         gossip_multihop: bool,
         autoconnect: WhatAmIMatcher,
     ) {
-        init(
-            &self.tables,
+        let ctrl_lock = zlock!(self.tables.ctrl_lock);
+        let mut tables = zwrite!(self.tables.tables);
+        ctrl_lock.init(
+            &mut tables,
             runtime,
             router_full_linkstate,
             peer_full_linkstate,
@@ -98,10 +97,8 @@ impl Router {
             state: {
                 let ctrl_lock = zlock!(self.tables.ctrl_lock);
                 let mut tables = zwrite!(self.tables.tables);
-                let zid = tables.zid;
-                let face = tables
-                    .open_face(zid, WhatAmI::Client, primitives)
-                    .upgrade()
+                let face = ctrl_lock
+                    .new_local_face(&mut tables, &self.tables, primitives)
                     .unwrap();
                 drop(tables);
                 drop(ctrl_lock);
@@ -114,12 +111,18 @@ impl Router {
         &self,
         transport: TransportUnicast,
     ) -> ZResult<Arc<LinkStateInterceptor>> {
+        let ctrl_lock = zlock!(self.tables.ctrl_lock);
+        let mut tables = zwrite!(self.tables.tables);
         Ok(Arc::new(LinkStateInterceptor::new(
             transport.clone(),
             self.tables.clone(),
             Face {
                 tables: self.tables.clone(),
-                state: new_transport_unicast(&self.tables, transport)?,
+                state: ctrl_lock.new_transport_unicast_face(
+                    &mut tables,
+                    &self.tables,
+                    transport,
+                )?,
             },
         )))
     }
@@ -128,6 +131,7 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
+        let hat_face = tables.hat_code.new_face();
         tables.mcast_groups.push(FaceState::new(
             fid,
             ZenohId::from_str("1").unwrap(),
@@ -137,6 +141,7 @@ impl Router {
             Arc::new(McastMux::new(transport.clone())),
             0,
             Some(transport),
+            hat_face,
         ));
 
         // recompute routes
@@ -162,6 +167,7 @@ impl Router {
             Arc::new(DummyPrimitives),
             0,
             Some(transport),
+            tables.hat_code.new_face(),
         );
         tables.mcast_faces.push(face_state.clone());
 
@@ -197,7 +203,11 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
     fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
         log::trace!("Recv {:?}", msg);
         match msg.body {
-            NetworkBody::OAM(oam) => handle_oam(&self.tables, oam, &self.transport),
+            NetworkBody::OAM(oam) => {
+                let ctrl_lock = zlock!(self.tables.ctrl_lock);
+                let mut tables = zwrite!(self.tables.tables);
+                ctrl_lock.handle_oam(&mut tables, &self.tables, oam, &self.transport)
+            }
             _ => self.demux.handle_message(msg),
         }
     }
@@ -208,7 +218,9 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
 
     fn closing(&self) {
         self.demux.closing();
-        let _ = closing(&self.tables, &self.transport);
+        let ctrl_lock = zlock!(self.tables.ctrl_lock);
+        let mut tables = zwrite!(self.tables.tables);
+        let _ = ctrl_lock.closing(&mut tables, &self.tables, &self.transport);
     }
 
     fn closed(&self) {}
