@@ -64,9 +64,9 @@ use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::{Mux, Primitives, TransportUnicast};
 
-pub mod network;
-pub mod pubsub;
-pub mod queries;
+mod network;
+mod pubsub;
+mod queries;
 
 zconfigurable! {
     static ref TREES_COMPUTATION_DELAY: u64 = 100;
@@ -386,6 +386,108 @@ impl HatBaseTrait for HatCode {
         Ok(newface)
     }
 
+    fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>) {
+        let mut wtables = zwrite!(tables.tables);
+        let mut face_clone = face.clone();
+        let face = get_mut_unchecked(face);
+        for res in face.remote_mappings.values_mut() {
+            get_mut_unchecked(res).session_ctxs.remove(&face.id);
+            Resource::clean(res);
+        }
+        face.remote_mappings.clear();
+        for res in face.local_mappings.values_mut() {
+            get_mut_unchecked(res).session_ctxs.remove(&face.id);
+            Resource::clean(res);
+        }
+        face.local_mappings.clear();
+
+        let mut subs_matches = vec![];
+        for mut res in face
+            .hat
+            .downcast_mut::<HatFace>()
+            .unwrap()
+            .remote_subs
+            .drain()
+        {
+            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
+            undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res);
+
+            if res.context.is_some() {
+                for match_ in &res.context().matches {
+                    let mut match_ = match_.upgrade().unwrap();
+                    if !Arc::ptr_eq(&match_, &res) {
+                        get_mut_unchecked(&mut match_)
+                            .context_mut()
+                            .valid_data_routes = false;
+                        subs_matches.push(match_);
+                    }
+                }
+                get_mut_unchecked(&mut res).context_mut().valid_data_routes = false;
+                subs_matches.push(res);
+            }
+        }
+
+        let mut qabls_matches = vec![];
+        for mut res in face
+            .hat
+            .downcast_mut::<HatFace>()
+            .unwrap()
+            .remote_qabls
+            .drain()
+        {
+            get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
+            undeclare_client_queryable(&mut wtables, &mut face_clone, &mut res);
+
+            if res.context.is_some() {
+                for match_ in &res.context().matches {
+                    let mut match_ = match_.upgrade().unwrap();
+                    if !Arc::ptr_eq(&match_, &res) {
+                        get_mut_unchecked(&mut match_)
+                            .context_mut()
+                            .valid_query_routes = false;
+                        qabls_matches.push(match_);
+                    }
+                }
+                get_mut_unchecked(&mut res).context_mut().valid_query_routes = false;
+                qabls_matches.push(res);
+            }
+        }
+        drop(wtables);
+
+        let mut matches_data_routes = vec![];
+        let mut matches_query_routes = vec![];
+        let rtables = zread!(tables.tables);
+        for _match in subs_matches.drain(..) {
+            matches_data_routes.push((
+                _match.clone(),
+                rtables.hat_code.compute_data_routes_(&rtables, &_match),
+            ));
+        }
+        for _match in qabls_matches.drain(..) {
+            matches_query_routes.push((
+                _match.clone(),
+                rtables.hat_code.compute_query_routes_(&rtables, &_match),
+            ));
+        }
+        drop(rtables);
+
+        let mut wtables = zwrite!(tables.tables);
+        for (mut res, data_routes) in matches_data_routes {
+            get_mut_unchecked(&mut res)
+                .context_mut()
+                .update_data_routes(data_routes);
+            Resource::clean(&mut res);
+        }
+        for (mut res, query_routes) in matches_query_routes {
+            get_mut_unchecked(&mut res)
+                .context_mut()
+                .update_query_routes(query_routes);
+            Resource::clean(&mut res);
+        }
+        wtables.faces.remove(&face.id);
+        drop(wtables);
+    }
+
     fn handle_oam(
         &self,
         tables: &mut Tables,
@@ -672,110 +774,6 @@ impl HatFace {
     }
 }
 
-pub(super) fn close_face(tables: &TablesLock, face: &mut Arc<FaceState>) {
-    let ctrl_lock = zlock!(tables.ctrl_lock);
-    let mut wtables = zwrite!(tables.tables);
-    let mut face_clone = face.clone();
-    let face = get_mut_unchecked(face);
-    for res in face.remote_mappings.values_mut() {
-        get_mut_unchecked(res).session_ctxs.remove(&face.id);
-        Resource::clean(res);
-    }
-    face.remote_mappings.clear();
-    for res in face.local_mappings.values_mut() {
-        get_mut_unchecked(res).session_ctxs.remove(&face.id);
-        Resource::clean(res);
-    }
-    face.local_mappings.clear();
-
-    let mut subs_matches = vec![];
-    for mut res in face
-        .hat
-        .downcast_mut::<HatFace>()
-        .unwrap()
-        .remote_subs
-        .drain()
-    {
-        get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-        undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res);
-
-        if res.context.is_some() {
-            for match_ in &res.context().matches {
-                let mut match_ = match_.upgrade().unwrap();
-                if !Arc::ptr_eq(&match_, &res) {
-                    get_mut_unchecked(&mut match_)
-                        .context_mut()
-                        .valid_data_routes = false;
-                    subs_matches.push(match_);
-                }
-            }
-            get_mut_unchecked(&mut res).context_mut().valid_data_routes = false;
-            subs_matches.push(res);
-        }
-    }
-
-    let mut qabls_matches = vec![];
-    for mut res in face
-        .hat
-        .downcast_mut::<HatFace>()
-        .unwrap()
-        .remote_qabls
-        .drain()
-    {
-        get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-        undeclare_client_queryable(&mut wtables, &mut face_clone, &mut res);
-
-        if res.context.is_some() {
-            for match_ in &res.context().matches {
-                let mut match_ = match_.upgrade().unwrap();
-                if !Arc::ptr_eq(&match_, &res) {
-                    get_mut_unchecked(&mut match_)
-                        .context_mut()
-                        .valid_query_routes = false;
-                    qabls_matches.push(match_);
-                }
-            }
-            get_mut_unchecked(&mut res).context_mut().valid_query_routes = false;
-            qabls_matches.push(res);
-        }
-    }
-    drop(wtables);
-
-    let mut matches_data_routes = vec![];
-    let mut matches_query_routes = vec![];
-    let rtables = zread!(tables.tables);
-    for _match in subs_matches.drain(..) {
-        matches_data_routes.push((
-            _match.clone(),
-            rtables.hat_code.compute_data_routes_(&rtables, &_match),
-        ));
-    }
-    for _match in qabls_matches.drain(..) {
-        matches_query_routes.push((
-            _match.clone(),
-            rtables.hat_code.compute_query_routes_(&rtables, &_match),
-        ));
-    }
-    drop(rtables);
-
-    let mut wtables = zwrite!(tables.tables);
-    for (mut res, data_routes) in matches_data_routes {
-        get_mut_unchecked(&mut res)
-            .context_mut()
-            .update_data_routes(data_routes);
-        Resource::clean(&mut res);
-    }
-    for (mut res, query_routes) in matches_query_routes {
-        get_mut_unchecked(&mut res)
-            .context_mut()
-            .update_query_routes(query_routes);
-        Resource::clean(&mut res);
-    }
-    wtables.faces.remove(&face.id);
-    drop(wtables);
-    drop(ctrl_lock);
-}
-
 #[macro_export]
 macro_rules! hat {
     ($t:expr) => {
@@ -953,6 +951,8 @@ pub(crate) trait HatBaseTrait {
         tables_ref: &Arc<TablesLock>,
         transport: &TransportUnicast,
     ) -> ZResult<()>;
+
+    fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>);
 }
 
 pub(crate) trait HatPubSubTrait {

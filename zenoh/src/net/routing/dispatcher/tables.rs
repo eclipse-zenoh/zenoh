@@ -155,7 +155,7 @@ pub fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
         Some(mut face) => {
             log::debug!("Close {}", face);
             finalize_pending_queries(tables, &mut face);
-            super::super::hat::close_face(tables, &mut face);
+            zlock!(tables.ctrl_lock).close_face(tables, &mut face);
         }
         None => log::error!("Face already closed!"),
     }
