@@ -35,6 +35,7 @@ where
         let Del {
             timestamp,
             ext_sinfo,
+            ext_attachment,
             ext_unknown,
         } = x;
 
@@ -43,7 +44,9 @@ where
         if timestamp.is_some() {
             header |= flag::T;
         }
-        let mut n_exts = (ext_sinfo.is_some()) as u8 + (ext_unknown.len() as u8);
+        let mut n_exts = (ext_sinfo.is_some()) as u8
+            + (ext_attachment.is_some()) as u8
+            + (ext_unknown.len() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -58,6 +61,10 @@ where
         if let Some(sinfo) = ext_sinfo.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
+        }
+        if let Some(att) = ext_attachment.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (att, n_exts != 0))?;
         }
         for u in ext_unknown.iter() {
             n_exts -= 1;
@@ -100,6 +107,7 @@ where
 
         // Extensions
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
+        let mut ext_attachment: Option<ext::AttachmentType> = None;
         let mut ext_unknown = Vec::new();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
@@ -110,6 +118,11 @@ where
                 ext::SourceInfo::ID => {
                     let (s, ext): (ext::SourceInfoType, bool) = eodec.read(&mut *reader)?;
                     ext_sinfo = Some(s);
+                    has_ext = ext;
+                }
+                ext::Attachment::ID => {
+                    let (a, ext): (ext::AttachmentType, bool) = eodec.read(&mut *reader)?;
+                    ext_attachment = Some(a);
                     has_ext = ext;
                 }
                 _ => {
@@ -123,6 +136,7 @@ where
         Ok(Del {
             timestamp,
             ext_sinfo,
+            ext_attachment,
             ext_unknown,
         })
     }

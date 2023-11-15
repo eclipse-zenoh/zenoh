@@ -42,6 +42,7 @@ pub mod flag {
 pub struct Del {
     pub timestamp: Option<Timestamp>,
     pub ext_sinfo: Option<ext::SourceInfoType>,
+    pub ext_attachment: Option<ext::AttachmentType>,
     pub ext_unknown: Vec<ZExtUnknown>,
 }
 
@@ -52,6 +53,10 @@ pub mod ext {
     /// Used to carry additional information about the source of data
     pub type SourceInfo = zextzbuf!(0x1, false);
     pub type SourceInfoType = crate::zenoh::ext::SourceInfoType<{ SourceInfo::ID }>;
+
+    /// # User attachment
+    pub type Attachment = zextzbuf!(0x2, false);
+    pub type AttachmentType = crate::zenoh::ext::AttachmentType<{ Attachment::ID }>;
 }
 
 impl Del {
@@ -67,10 +72,11 @@ impl Del {
             Timestamp::new(time, id)
         });
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
+        let ext_attachment = rng.gen_bool(0.5).then_some(ext::AttachmentType::rand());
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
             ext_unknown.push(ZExtUnknown::rand2(
-                iext::mid(ext::SourceInfo::ID) + 1,
+                iext::mid(ext::Attachment::ID) + 1,
                 false,
             ));
         }
@@ -78,6 +84,7 @@ impl Del {
         Self {
             timestamp,
             ext_sinfo,
+            ext_attachment,
             ext_unknown,
         }
     }
