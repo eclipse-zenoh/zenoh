@@ -11,15 +11,16 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::dispatcher::face::FaceState;
-use super::super::dispatcher::pubsub::*;
-use super::super::dispatcher::resource::{Resource, RoutingContext, SessionContext};
-use super::super::dispatcher::tables::{Tables, TablesLock};
-use super::super::PREFIX_LIVELINESS;
+use crate::net::routing::dispatcher::face::FaceState;
+use crate::net::routing::dispatcher::pubsub::*;
+use crate::net::routing::dispatcher::resource::{Resource, RoutingContext, SessionContext};
+use crate::net::routing::dispatcher::tables::{Tables, TablesLock};
+use crate::net::routing::PREFIX_LIVELINESS;
+use crate::net::routing::hat::HatPubSubTrait;
 use super::network::Network;
-use super::{get_peer, get_router, HatCode, HatContext, HatFace, HatPubSubTrait, HatTables};
+use super::{get_peer, get_router, HatCode, HatContext, HatFace, HatTables};
 use crate::net::routing::dispatcher::tables::{DataRoutes, PullCaches, Route, RoutingExpr};
-use crate::{face_hat, face_hat_mut, hat, hat_mut, res_hat, res_hat_mut};
+use super::{face_hat, face_hat_mut, hat, hat_mut, res_hat, res_hat_mut};
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};

@@ -1,4 +1,3 @@
-use crate::net::routing::hat::HatBaseTrait;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -16,7 +15,7 @@ use super::face::FaceState;
 pub use super::pubsub::*;
 pub use super::queries::*;
 pub use super::resource::*;
-use crate::net::routing::hat::HatCode;
+use crate::net::routing::hat;
 use crate::net::routing::hat::HatTrait;
 use std::any::Any;
 use std::collections::HashMap;
@@ -83,7 +82,7 @@ impl Tables {
         router_peers_failover_brokering: bool,
         _queries_default_timeout: Duration,
     ) -> Self {
-        let hat_code = Arc::new(HatCode {});
+        let hat_code = hat::new_hat(whatami);
         Tables {
             zid,
             whatami,
@@ -98,7 +97,7 @@ impl Tables {
             mcast_faces: vec![],
             pull_caches_lock: Mutex::new(()),
             hat: hat_code.new_tables(router_peers_failover_brokering),
-            hat_code,
+            hat_code: hat_code.into(),
         }
     }
 
@@ -163,6 +162,6 @@ pub fn close_face(tables: &TablesLock, face: &Weak<FaceState>) {
 
 pub struct TablesLock {
     pub tables: RwLock<Tables>,
-    pub(crate) ctrl_lock: Box<Mutex<dyn HatTrait + Send + Sync>>,
+    pub(crate) ctrl_lock: Mutex<Box<dyn HatTrait + Send + Sync>>,
     pub queries_lock: RwLock<()>,
 }

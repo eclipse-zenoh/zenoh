@@ -17,7 +17,7 @@ pub use super::dispatcher::queries::*;
 pub use super::dispatcher::resource::*;
 use super::dispatcher::tables::Tables;
 use super::dispatcher::tables::TablesLock;
-use super::hat::HatCode;
+use super::hat;
 use super::runtime::Runtime;
 use std::any::Any;
 use std::str::FromStr;
@@ -60,7 +60,7 @@ impl Router {
                     router_peers_failover_brokering,
                     queries_default_timeout,
                 )),
-                ctrl_lock: Box::new(Mutex::new(HatCode {})),
+                ctrl_lock: Mutex::new(hat::new_hat(whatami)),
                 queries_lock: RwLock::new(()),
             }),
         }
