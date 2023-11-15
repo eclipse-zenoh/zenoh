@@ -79,6 +79,7 @@ where
             ext_sinfo,
             ext_consolidation,
             ext_body,
+            ext_attachment,
             ext_unknown,
         } = x;
 
@@ -90,6 +91,7 @@ where
         let mut n_exts = (ext_sinfo.is_some() as u8)
             + ((ext_consolidation != &ext::ConsolidationType::default()) as u8)
             + (ext_body.is_some() as u8)
+            + (ext_attachment.is_some() as u8)
             + (ext_unknown.len() as u8);
         if n_exts != 0 {
             header |= flag::Z;
@@ -113,6 +115,10 @@ where
         if let Some(body) = ext_body.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (body, n_exts != 0))?;
+        }
+        if let Some(att) = ext_attachment.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (att, n_exts != 0))?;
         }
         for u in ext_unknown.iter() {
             n_exts -= 1;
@@ -157,6 +163,7 @@ where
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
         let mut ext_consolidation = ext::ConsolidationType::default();
         let mut ext_body: Option<ext::QueryBodyType> = None;
+        let mut ext_attachment: Option<ext::AttachmentType> = None;
         let mut ext_unknown = Vec::new();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
@@ -179,6 +186,11 @@ where
                     ext_body = Some(s);
                     has_ext = ext;
                 }
+                ext::Attachment::ID => {
+                    let (a, ext): (ext::AttachmentType, bool) = eodec.read(&mut *reader)?;
+                    ext_attachment = Some(a);
+                    has_ext = ext;
+                }
                 _ => {
                     let (u, ext) = extension::read(reader, "Query", ext)?;
                     ext_unknown.push(u);
@@ -192,6 +204,7 @@ where
             ext_sinfo,
             ext_consolidation,
             ext_body,
+            ext_attachment,
             ext_unknown,
         })
     }
