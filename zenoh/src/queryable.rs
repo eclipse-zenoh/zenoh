@@ -187,6 +187,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                         ext_consolidation: ConsolidationType::default(),
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
+                        ext_attachment: None, // @TODO: expose it in the API
                         ext_unknown: vec![],
                         payload,
                     }),

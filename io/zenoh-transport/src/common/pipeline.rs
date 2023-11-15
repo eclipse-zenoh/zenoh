@@ -753,6 +753,7 @@ mod tests {
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
+                    ext_attachment: None,
                     ext_unknown: vec![],
                     payload,
                 }),
@@ -882,6 +883,7 @@ mod tests {
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
+                    ext_attachment: None,
                     ext_unknown: vec![],
                     payload,
                 }),
@@ -993,6 +995,7 @@ mod tests {
                             ext_sinfo: None,
                             #[cfg(feature = "shared-memory")]
                             ext_shm: None,
+                            ext_attachment: None,
                             ext_unknown: vec![],
                             payload,
                         }),

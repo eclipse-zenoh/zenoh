@@ -154,12 +154,14 @@ impl SyncResolve for PutBuilder<'_, '_> {
                         ext_sinfo: None,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
+                        ext_attachment: None, // @TODO: expose it in the API
                         ext_unknown: vec![],
                         payload: value.payload.clone(),
                     }),
                     SampleKind::Delete => PushBody::Del(Del {
                         timestamp,
                         ext_sinfo: None,
+                        ext_attachment: None, // @TODO: expose it in the API
                         ext_unknown: vec![],
                     }),
                 },
@@ -448,6 +450,7 @@ impl SyncResolve for Publication<'_> {
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
+                    ext_attachment: None, // @TODO: expose it in the API
                     ext_unknown: vec![],
                     payload: value.payload.clone(),
                 }),
