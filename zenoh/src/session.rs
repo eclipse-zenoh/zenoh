@@ -1819,6 +1819,7 @@ impl Session {
                         encoding: v.encoding.clone(),
                         payload: v.payload.clone(),
                     }),
+                    ext_attachment: None, // @TODO: expose it in the API
                     ext_unknown: vec![],
                 }),
             });
