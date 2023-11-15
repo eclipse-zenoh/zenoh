@@ -106,7 +106,7 @@ where
         #[cfg(feature = "shared-memory")]
         {
             let codec = Zenoh080Sliced::<u32>::new(ext_shm.is_some());
-            codec.write(&mut *writer, &payload)?;
+            codec.write(&mut *writer, payload)?;
         }
 
         #[cfg(not(feature = "shared-memory"))]
