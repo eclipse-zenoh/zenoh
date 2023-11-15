@@ -89,7 +89,7 @@ impl PartialEq for ZBuf {
                 (None, _) | (_, None) => return false,
                 (Some(l), Some(r)) => {
                     let cmp_len = l.len().min(r.len());
-                    // SAFETY: cmp_len is the minimum lenght between l and r slices.
+                    // SAFETY: cmp_len is the minimum length between l and r slices.
                     let lhs = crate::unsafe_slice!(l, ..cmp_len);
                     let rhs = crate::unsafe_slice!(r, ..cmp_len);
                     if lhs != rhs {
@@ -98,14 +98,14 @@ impl PartialEq for ZBuf {
                     if cmp_len == l.len() {
                         current_self = self_slices.next();
                     } else {
-                        // SAFETY: cmp_len is the minimum lenght between l and r slices.
+                        // SAFETY: cmp_len is the minimum length between l and r slices.
                         let lhs = crate::unsafe_slice!(l, cmp_len..);
                         current_self = Some(lhs);
                     }
                     if cmp_len == r.len() {
                         current_other = other_slices.next();
                     } else {
-                        // SAFETY: cmp_len is the minimum lenght between l and r slices.
+                        // SAFETY: cmp_len is the minimum length between l and r slices.
                         let rhs = crate::unsafe_slice!(r, cmp_len..);
                         current_other = Some(rhs);
                     }
@@ -161,12 +161,12 @@ impl<'a> Reader for ZBufReader<'a> {
             // Take the minimum length among read and write slices
             let len = from.len().min(into.len());
             // Copy the slice content
-            // SAFETY: len is the minimum lenght between from and into slices.
+            // SAFETY: len is the minimum length between from and into slices.
             let lhs = crate::unsafe_slice_mut!(into, ..len);
             let rhs = crate::unsafe_slice!(from, ..len);
             lhs.copy_from_slice(rhs);
             // Advance the write slice
-            // SAFETY: len is the minimum lenght between from and into slices.
+            // SAFETY: len is the minimum length between from and into slices.
             into = crate::unsafe_slice_mut!(into, len..);
             // Update the counter
             read += len;
