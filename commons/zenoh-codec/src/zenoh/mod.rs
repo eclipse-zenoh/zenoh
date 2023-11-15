@@ -265,7 +265,7 @@ where
         #[cfg(feature = "shared-memory")]
         {
             let codec = Zenoh080Sliced::<u32>::new(ext_shm.is_some());
-            len += codec.w_len(&payload);
+            len += codec.w_len(payload);
         }
 
         #[cfg(not(feature = "shared-memory"))]
