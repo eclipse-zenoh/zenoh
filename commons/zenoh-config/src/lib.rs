@@ -1032,7 +1032,9 @@ impl<'a> serde::Deserialize<'a> for PluginsConfig {
 }
 impl std::fmt::Debug for PluginsConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", &self.values)
+        let mut json = serde_json::to_value(self).unwrap();
+        sift_privates(&mut json);
+        write!(f, "{json}")
     }
 }
 
