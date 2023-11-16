@@ -610,7 +610,7 @@ pub(crate) async fn open_link(
 
     let o_config = TransportLinkUnicastConfig {
         mtu: state.transport.batch_size,
-        direction: TransportLinkUnicastDirection::Inbound,
+        direction: TransportLinkUnicastDirection::Outbound,
         #[cfg(feature = "transport_compression")]
         is_compression: state.link.ext_compression.is_compression(),
     };
