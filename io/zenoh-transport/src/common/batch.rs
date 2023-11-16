@@ -432,10 +432,9 @@ mod tests {
                     #[cfg(feature = "transport_compression")]
                     Finalize::Buffer => buffer.as_mut().unwrap().as_slice(),
                 };
-                println!("Finalized WBatch: {:?}", bytes);
+                println!("Finalized WBatch: {:02x?}", bytes);
 
-                let mut rbatch =
-                    RBatch::new(config, wbatch.buffer.as_slice().to_vec().into_boxed_slice());
+                let mut rbatch = RBatch::new(config, bytes.to_vec().into_boxed_slice());
                 println!("Decoded RBatch: {:?}", rbatch);
                 rbatch
                     .initialize(|| {
