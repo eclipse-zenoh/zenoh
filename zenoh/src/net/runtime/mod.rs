@@ -20,6 +20,7 @@
 mod adminspace;
 pub mod orchestrator;
 
+use super::primitives::DeMux;
 use super::routing;
 use super::routing::dispatcher::face::Face;
 use super::routing::dispatcher::pubsub::full_reentrant_route_data;
@@ -42,8 +43,8 @@ use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::{bail, ZResult};
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::{
-    DeMux, TransportEventHandler, TransportManager, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
+    TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 
 pub struct RuntimeState {

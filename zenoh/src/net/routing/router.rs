@@ -1,3 +1,8 @@
+use crate::net::primitives::DeMux;
+use crate::net::primitives::DummyPrimitives;
+use crate::net::primitives::McastMux;
+use crate::net::primitives::Primitives;
+
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -29,8 +34,7 @@ use zenoh_link::Link;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_transport::{
-    DeMux, DummyPrimitives, McastMux, Primitives, TransportMulticast, TransportPeer,
-    TransportPeerEventHandler, TransportUnicast,
+    TransportMulticast, TransportPeer, TransportPeerEventHandler, TransportUnicast,
 };
 // use zenoh_collections::Timer;
 use zenoh_result::ZResult;

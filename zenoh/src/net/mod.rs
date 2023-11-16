@@ -20,13 +20,13 @@
 #[doc(hidden)]
 pub(crate) mod codec;
 #[doc(hidden)]
+pub(crate) mod primitives;
+#[doc(hidden)]
 pub(crate) mod protocol;
 #[doc(hidden)]
 pub(crate) mod routing;
 #[doc(hidden)]
 pub mod runtime;
-#[doc(hidden)]
-pub(crate) use zenoh_transport as transport;
 
 #[cfg(test)]
 pub(crate) mod tests;

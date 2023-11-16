@@ -20,7 +20,6 @@
 mod common;
 mod manager;
 mod multicast;
-mod primitives;
 pub mod unicast;
 
 #[cfg(feature = "stats")]
@@ -31,7 +30,6 @@ mod shm;
 
 pub use manager::*;
 pub use multicast::*;
-pub use primitives::*;
 use serde::Serialize;
 use std::any::Any;
 use std::sync::Arc;

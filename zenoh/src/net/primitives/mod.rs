@@ -35,12 +35,6 @@ pub trait Primitives: Send + Sync {
 #[derive(Default)]
 pub struct DummyPrimitives;
 
-impl DummyPrimitives {
-    pub fn new() -> Self {
-        Self
-    }
-}
-
 impl Primitives for DummyPrimitives {
     fn send_declare(&self, _msg: Declare) {}
 

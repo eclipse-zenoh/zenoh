@@ -11,18 +11,18 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use super::network::Network;
+use super::{face_hat, face_hat_mut, hat, hat_mut, res_hat, res_hat_mut};
+use super::{get_peer, get_router, HatCode, HatContext, HatFace, HatTables};
 use crate::net::routing::dispatcher::face::FaceState;
 use crate::net::routing::dispatcher::queries::*;
 use crate::net::routing::dispatcher::resource::{Resource, RoutingContext, SessionContext};
-use crate::net::routing::dispatcher::tables::{Tables, TablesLock};
-use crate::net::routing::hat::HatQueriesTrait;
-use super::network::Network;
-use super::{get_peer, get_router, HatCode, HatContext, HatFace, HatTables};
 use crate::net::routing::dispatcher::tables::{
     QueryRoutes, QueryTargetQabl, QueryTargetQablSet, RoutingExpr,
 };
+use crate::net::routing::dispatcher::tables::{Tables, TablesLock};
+use crate::net::routing::hat::HatQueriesTrait;
 use crate::net::routing::PREFIX_LIVELINESS;
-use super::{face_hat, face_hat_mut, hat, hat_mut, res_hat, res_hat_mut};
 use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;

@@ -12,11 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::Primitives;
-use crate::TransportPeerEventHandler;
 use std::any::Any;
 use zenoh_link::Link;
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::ZResult;
+use zenoh_transport::TransportPeerEventHandler;
 
 pub struct DeMux<P: Primitives> {
     primitives: P,

@@ -11,11 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::super::{TransportMulticast, TransportUnicast};
 use super::Primitives;
 use zenoh_protocol::network::{
     Declare, NetworkBody, NetworkMessage, Push, Request, Response, ResponseFinal,
 };
+use zenoh_transport::{TransportMulticast, TransportUnicast};
 
 pub struct Mux {
     handler: TransportUnicast,

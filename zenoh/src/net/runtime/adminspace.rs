@@ -13,6 +13,7 @@
 use super::routing::dispatcher::face::Face;
 use super::Runtime;
 use crate::key_expr::KeyExpr;
+use crate::net::primitives::Primitives;
 use crate::plugins::sealed as plugins;
 use crate::prelude::sync::{Sample, SyncResolve};
 use crate::queryable::Query;
@@ -38,7 +39,7 @@ use zenoh_protocol::{
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
-use zenoh_transport::{Primitives, TransportUnicast};
+use zenoh_transport::TransportUnicast;
 
 pub struct AdminContext {
     runtime: Runtime,

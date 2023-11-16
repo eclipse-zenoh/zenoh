@@ -18,20 +18,25 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use self::{
-    network::{Network, shared_nodes},
-    pubsub::{pubsub_linkstate_change, pubsub_new_face, pubsub_remove_node, undeclare_client_subscription},
-    queries::{queries_linkstate_change, queries_new_face, queries_remove_node, undeclare_client_queryable},
-};
-use super::{super::dispatcher::{
-    face::FaceState,
-    tables::{
-        Resource, RoutingContext,
-        RoutingExpr, Tables, TablesLock,
+    network::{shared_nodes, Network},
+    pubsub::{
+        pubsub_linkstate_change, pubsub_new_face, pubsub_remove_node, undeclare_client_subscription,
     },
-}, HatBaseTrait, HatTrait};
+    queries::{
+        queries_linkstate_change, queries_new_face, queries_remove_node, undeclare_client_queryable,
+    },
+};
+use super::{
+    super::dispatcher::{
+        face::FaceState,
+        tables::{Resource, RoutingContext, RoutingExpr, Tables, TablesLock},
+    },
+    HatBaseTrait, HatTrait,
+};
 use crate::{
     net::{
         codec::Zenoh080Routing,
+        primitives::{Mux, Primitives},
         protocol::linkstate::LinkStateList,
     },
     runtime::Runtime,
@@ -46,15 +51,11 @@ use std::{
 use zenoh_config::{WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
     common::ZExtBody,
-    network::{
-        declare::queryable::ext::QueryableInfo,
-        oam::id::OAM_LINKSTATE,
-        Oam,
-    },
+    network::{declare::queryable::ext::QueryableInfo, oam::id::OAM_LINKSTATE, Oam},
 };
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
-use zenoh_transport::{Mux, Primitives, TransportUnicast};
+use zenoh_transport::TransportUnicast;
 
 mod network;
 mod pubsub;
@@ -63,8 +64,6 @@ mod queries;
 zconfigurable! {
     static ref TREES_COMPUTATION_DELAY: u64 = 100;
 }
-
-
 
 macro_rules! hat {
     ($t:expr) => {
@@ -111,8 +110,6 @@ macro_rules! face_hat_mut {
     };
 }
 use face_hat_mut;
-
-
 
 struct HatTables {
     router_subs: HashSet<Arc<Resource>>,
@@ -322,11 +319,11 @@ impl HatBaseTrait for HatCode {
     fn new_tables(&self, router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync> {
         Box::new(HatTables::new(router_peers_failover_brokering))
     }
-    
+
     fn new_face(&self) -> Box<dyn Any + Send + Sync> {
         Box::new(HatFace::new())
     }
-    
+
     fn new_resource(&self) -> Box<dyn Any + Send + Sync> {
         Box::new(HatContext::new())
     }

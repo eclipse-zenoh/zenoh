@@ -24,11 +24,8 @@ use super::dispatcher::{
         RoutingExpr, Tables, TablesLock,
     },
 };
-use crate::runtime::Runtime;
-use std::{
-    any::Any,
-    sync::Arc,
-};
+use crate::{net::primitives::Primitives, runtime::Runtime};
+use std::{any::Any, sync::Arc};
 use zenoh_buffers::ZBuf;
 use zenoh_config::{WhatAmI, WhatAmIMatcher};
 use zenoh_protocol::{
@@ -39,7 +36,7 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
-use zenoh_transport::{Primitives, TransportUnicast};
+use zenoh_transport::TransportUnicast;
 
 mod client;
 mod peer;
