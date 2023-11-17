@@ -224,10 +224,10 @@ pub trait Volume: Send + Sync {
 pub type VolumePlugin = Box<dyn Volume + 'static>;
 
 impl PluginStructVersion for VolumePlugin {
-    fn version() -> u64 {
+    fn struct_version() -> u64 {
         1
     }
-    fn features() -> &'static str {
+    fn struct_features() -> &'static str {
         concatcp!(zenoh::FEATURES, crate::FEATURES)
     }
 }

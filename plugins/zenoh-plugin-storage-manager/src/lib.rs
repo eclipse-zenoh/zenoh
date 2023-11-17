@@ -23,7 +23,7 @@ use async_std::task;
 use flume::Sender;
 use memory_backend::MemoryBackend;
 use zenoh_plugin_trait::Plugin;
-use zenoh_plugin_trait::PluginCondition;
+use zenoh_plugin_trait::PluginReport;
 use zenoh_plugin_trait::PluginControl;
 use zenoh_plugin_trait::PluginStatus;
 use std::collections::HashMap;
@@ -59,7 +59,7 @@ zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
 pub struct StoragesPlugin {}
 impl ZenohPlugin for StoragesPlugin {}
 impl Plugin for StoragesPlugin {
-    const STATIC_NAME: &'static str = "storage_manager";
+    const DEFAULT_NAME: &'static str = "storage_manager";
 
     type StartArgs = Runtime;
     type Instance = zenoh::plugins::RunningPlugin;
@@ -234,8 +234,8 @@ impl From<StorageRuntimeInner> for StorageRuntime {
 }
 
 impl PluginControl for StorageRuntime {
-    fn condition(&self) -> PluginCondition {
-        PluginCondition::default()
+    fn report(&self) -> PluginReport {
+        PluginReport::default()
     }
     fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatus)> {
         let guard = self.0.lock().unwrap();

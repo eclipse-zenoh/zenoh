@@ -11,9 +11,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::*;
-use std::path::{PathBuf, Path};
+use std::{path::{PathBuf, Path}, borrow::Cow};
 
 use libloading::Library;
+use zenoh_keyexpr::keyexpr;
 use zenoh_result::{ZResult, bail};
 use zenoh_util::LibLoader;
 
@@ -49,13 +50,14 @@ impl DynamicPluginSource {
 struct DynamicPluginStarter<StartArgs, Instance> {
     _lib: Library,
     path: PathBuf,
+    plugin_version: Cow<'static, keyexpr>,
     vtable: PluginVTable<StartArgs, Instance>,
 }
 
 impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
     DynamicPluginStarter<StartArgs, Instance>
 {
-    fn get_vtable(lib: &Library, path: &Path) -> ZResult<PluginVTable<StartArgs, Instance>> {
+    fn new(lib: Library, path: &Path) -> ZResult<Self> {
         log::debug!("Loading plugin {}", &path.to_str().unwrap(),);
         let get_plugin_loader_version =
             unsafe { lib.get::<fn() -> PluginLoaderVersion>(b"get_plugin_loader_version")? };
@@ -70,7 +72,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
         }
         let get_compatibility = unsafe { lib.get::<fn() -> Compatibility>(b"get_compatibility")? };
         let plugin_compatibility_record = get_compatibility();
-        let host_compatibility_record = Compatibility::new::<StartArgs, Instance>();
+        let host_compatibility_record = Compatibility::with_plugin_version_keyexpr::<StartArgs, Instance>("**".try_into()? );
         log::debug!(
             "Plugin compativilty record: {:?}",
             &plugin_compatibility_record
@@ -85,13 +87,10 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
         let load_plugin =
             unsafe { lib.get::<fn() -> PluginVTable<StartArgs, Instance>>(b"load_plugin")? };
         let vtable = load_plugin();
-        Ok(vtable)
-    }
-    fn new(lib: Library, path: PathBuf) -> ZResult<Self> {
-        let vtable = Self::get_vtable(&lib, &path)?;
         Ok(Self {
             _lib: lib,
-            path,
+            path: path.to_path_buf(),
+            plugin_version: plugin_compatibility_record.plugin_version(),
             vtable,
         })
     }
@@ -105,7 +104,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
 
 pub struct DynamicPlugin<StartArgs, Instance> {
     name: String,
-    condition: PluginCondition,
+    report: PluginReport,
     source: DynamicPluginSource,
     starter: Option<DynamicPluginStarter<StartArgs, Instance>>,
     instance: Option<Instance>,
@@ -115,7 +114,7 @@ impl<StartArgs, Instance> DynamicPlugin<StartArgs, Instance> {
     pub fn new(name: String, source: DynamicPluginSource) -> Self {
         Self {
             name,
-            condition: PluginCondition::new(),
+            report: PluginReport::new(),
             source,
             starter: None,
             instance: None,
@@ -128,6 +127,9 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginInfo
 {
     fn name(&self) -> &str {
         self.name.as_str()
+    }
+    fn plugin_version(&self) -> Option<&str> {
+        self.starter.as_ref().map(|v| v.plugin_version)
     }
     fn path(&self) -> &str {
         self.starter.as_ref().map_or("<not loaded>", |v| v.path())
@@ -143,7 +145,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginInfo
             } else {
                 PluginState::Declared
             },
-            condition: self.condition.clone(), // TODO: request condition from started plugin
+            report: self.report.clone(), // TODO: request condition from started plugin
         }
     }
 }
@@ -153,8 +155,8 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> DeclaredPlugin<StartA
 {
     fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>> {
         if self.starter.is_none() {
-            let (lib, path) = self.source.load().add_error(&mut self.condition)?;
-            let starter = DynamicPluginStarter::new(lib, path).add_error(&mut self.condition)?;
+            let (lib, path) = self.source.load().add_error(&mut self.report)?;
+            let starter = DynamicPluginStarter::new(lib, path).add_error(&mut self.report)?;
             log::debug!("Plugin {} loaded from {}", self.name, starter.path());
             self.starter = Some(starter);
         } else {
@@ -186,12 +188,12 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> LoadedPlugin<StartArg
             .starter
             .as_ref()
             .ok_or_else(|| format!("Plugin `{}` not loaded", self.name))
-            .add_error(&mut self.condition)?;
+            .add_error(&mut self.report)?;
         let already_started = self.instance.is_some();
         if !already_started {
             let instance = starter
                 .start(self.name(), args)
-                .add_error(&mut self.condition)?;
+                .add_error(&mut self.report)?;
             log::debug!("Plugin `{}` started", self.name);
             self.instance = Some(instance);
         } else {

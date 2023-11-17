@@ -38,13 +38,7 @@ impl Plugin for ExampleBackend {
         Ok(Box::new(volume))
     }
 
-    const STATIC_NAME: &'static str = "example_backend";
-}
-
-#[no_mangle]
-pub fn create_volume(_config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
-    let volume = ExampleBackend {};
-    Ok(Box::new(volume))
+    const DEFAULT_NAME: &'static str = "example_backend";
 }
 
 pub struct ExampleBackend {}

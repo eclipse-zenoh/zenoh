@@ -25,7 +25,7 @@ mod vtable;
 
 pub use manager::{DeclaredPlugin, LoadedPlugin, PluginsManager, StartedPlugin};
 pub use plugin::{
-    Plugin, PluginCondition, PluginConditionSetter, PluginControl, PluginInfo, PluginInstance,
+    Plugin, PluginReport, PluginConditionSetter, PluginControl, PluginInfo, PluginInstance,
     PluginStartArgs, PluginState, PluginStatus, PluginStructVersion,
 };
 pub use vtable::{Compatibility, PluginLoaderVersion, PluginVTable, PLUGIN_LOADER_VERSION};

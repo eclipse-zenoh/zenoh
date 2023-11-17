@@ -217,7 +217,7 @@ impl ZenohPlugin for RestPlugin {}
 impl Plugin for RestPlugin {
     type StartArgs = Runtime;
     type Instance = zenoh::plugins::RunningPlugin;
-    const STATIC_NAME: &'static str = "rest";
+    const DEFAULT_NAME: &'static str = "rest";
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<zenoh::plugins::RunningPlugin> {
         // Try to initiate login.

@@ -40,7 +40,10 @@ where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
     fn name(&self) -> &str {
-        P::STATIC_NAME
+        P::DEFAULT_NAME
+    }
+    fn plugin_version(&self) -> Option<&str> {
+        Some(P::PLUGIN_VERSION)
     }
     fn path(&self) -> &str {
         "<static>"
@@ -51,7 +54,7 @@ where
                 .instance
                 .as_ref()
                 .map_or(PluginState::Loaded, |_| PluginState::Started),
-            condition: PluginCondition::new(), // TODO: request runnnig plugin status
+            report: PluginReport::new(), // TODO: request runnnig plugin status
         }
     }
 }

@@ -56,6 +56,9 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginInfo
     fn name(&self) -> &str {
         self.0.name()
     }
+    fn plugin_version(&self) -> Option<&str> {
+        self.0.plugin_version()
+    }
     fn path(&self) -> &str {
         self.0.path()
     }

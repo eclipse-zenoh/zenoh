@@ -19,7 +19,7 @@ pub use crate::runtime::Runtime;
 pub use crate::Result as ZResult;
 use zenoh_core::zconfigurable;
 
-use zenoh_plugin_trait::PluginCondition;
+use zenoh_plugin_trait::PluginReport;
 use zenoh_plugin_trait::PluginStatus;
 use zenoh_plugin_trait::PluginStructVersion;
 use zenoh_plugin_trait::Plugin;
@@ -40,17 +40,17 @@ pub type StartArgs = Runtime;
 pub type RunningPlugin = Box<dyn RunningPluginTrait + 'static>;
 
 impl PluginStructVersion for RunningPlugin {
-    fn version() -> u64 {
+    fn struct_version() -> u64 {
         1
     }
-    fn features() -> &'static str {
+    fn struct_features() -> &'static str {
         crate::FEATURES
     }
 }
 
 impl PluginControl for RunningPlugin {
-    fn condition(&self) -> PluginCondition {
-        self.as_ref().condition()
+    fn report(&self) -> PluginReport {
+        self.as_ref().report()
     }
 
     fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatus)> {

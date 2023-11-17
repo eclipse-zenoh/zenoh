@@ -70,10 +70,10 @@ pub struct ReplicaConfig {
 }
 
 impl PluginStructVersion for VolumeConfig {
-    fn version() -> u64 {
+    fn struct_version() -> u64 {
         1
     }
-    fn features() -> &'static str {
+    fn struct_features() -> &'static str {
         concatcp!(zenoh::FEATURES, crate::FEATURES)
     }
 }

@@ -44,7 +44,7 @@ impl Plugin for ExamplePlugin {
     type Instance = zenoh::plugins::RunningPlugin;
 
     // A mandatory const to define, in case of the plugin is built as a standalone executable
-    const STATIC_NAME: &'static str = "example";
+    const DEFAULT_NAME: &'static str = "example";
 
     // The first operation called by zenohd on the plugin
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {

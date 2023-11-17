@@ -32,7 +32,7 @@ impl Plugin for MemoryBackend {
     type StartArgs = VolumeConfig;
     type Instance = VolumePlugin;
 
-    const STATIC_NAME: &'static str = MEMORY_BACKEND_NAME;
+    const DEFAULT_NAME: &'static str = MEMORY_BACKEND_NAME;
 
     fn start(_: &str, args: &VolumeConfig) -> ZResult<VolumePlugin> {
         Ok(Box::new(MemoryBackend {

@@ -1,4 +1,3 @@
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -13,8 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::*;
+use std::{borrow::Cow, fmt::Display};
+use zenoh_keyexpr::keyexpr;
 use zenoh_result::ZResult;
-use std::fmt::Display;
 
 pub type PluginLoaderVersion = u64;
 pub const PLUGIN_LOADER_VERSION: PluginLoaderVersion = 1;
@@ -26,10 +26,10 @@ pub struct PluginVTable<StartArgs, Instance> {
     pub start: StartFn<StartArgs, Instance>,
 }
 impl<StartArgs, Instance> PluginStructVersion for PluginVTable<StartArgs, Instance> {
-    fn version() -> u64 {
+    fn struct_version() -> u64 {
         1
     }
-    fn features() -> &'static str {
+    fn struct_features() -> &'static str {
         FEATURES
     }
 }
@@ -45,9 +45,9 @@ pub struct StructVersion {
 impl StructVersion {
     pub fn new<T: PluginStructVersion>() -> Self {
         Self {
-            version: T::version(),
+            version: T::struct_version(),
             name: std::any::type_name::<T>(),
-            features: T::features(),
+            features: T::struct_features(),
         }
     }
 }
@@ -69,26 +69,57 @@ pub struct Compatibility {
     vtable_version: StructVersion,
     start_args_version: StructVersion,
     instance_version: StructVersion,
+    plugin_version: Cow<'static, keyexpr>,
 }
 
 impl Compatibility {
-    pub fn new<StartArgs: PluginStructVersion, Instance: PluginStructVersion>() -> Self {
+    pub fn new<
+        StartArgsType: PluginStartArgs,
+        InstanceType: PluginInstance,
+        PluginType: Plugin<StartArgs = StartArgsType, Instance = InstanceType>,
+    >() -> Self {
         let rust_version = RustVersion::new();
-        let vtable_version = StructVersion::new::<PluginVTable<StartArgs, Instance>>();
-        let start_args_version = StructVersion::new::<StartArgs>();
-        let instance_version = StructVersion::new::<Instance>();
+        let vtable_version = StructVersion::new::<PluginVTable<StartArgsType, InstanceType>>();
+        let start_args_version = StructVersion::new::<StartArgsType>();
+        let instance_version = StructVersion::new::<InstanceType>();
+        let plugin_version = Cow::Borrowed(PluginType::PLUGIN_VERSION);
         Self {
             rust_version,
             vtable_version,
             start_args_version,
             instance_version,
+            plugin_version,
         }
+    }
+    pub fn with_plugin_version_keyexpr<
+        StartArgsType: PluginStartArgs,
+        InstanceType: PluginInstance,
+    >(
+        plugin_version: Cow<'static, keyexpr>,
+    ) -> Self {
+        let rust_version = RustVersion::new();
+        let vtable_version = StructVersion::new::<PluginVTable<StartArgsType, InstanceType>>();
+        let start_args_version = StructVersion::new::<StartArgsType>();
+        let instance_version = StructVersion::new::<InstanceType>();
+        Self {
+            rust_version,
+            vtable_version,
+            start_args_version,
+            instance_version,
+            plugin_version,
+        }
+    }
+    pub fn plugin_version(&self) -> Cow<'static, keyexpr> {
+        self.plugin_version
     }
     pub fn are_compatible(&self, other: &Self) -> bool {
         RustVersion::are_compatible(&self.rust_version, &other.rust_version)
             && self.vtable_version == other.vtable_version
             && self.start_args_version == other.start_args_version
             && self.instance_version == other.instance_version
+            && self
+                .plugin_version
+                .intersects(other.plugin_version.as_ref())
     }
 }
 
@@ -96,11 +127,12 @@ impl Display for Compatibility {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}\nVTable:{}StartArgs:{}Instance:{}",
+            "{}\nVTable:{}StartArgs:{}Instance:{}Plugin:{}",
             self.rust_version,
             self.vtable_version,
             self.start_args_version,
-            self.instance_version
+            self.instance_version,
+            self.plugin_version
         )
     }
 }
