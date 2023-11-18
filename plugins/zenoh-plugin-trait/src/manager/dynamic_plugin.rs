@@ -11,7 +11,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::*;
-use std::path::PathBuf;
+use std::{borrow::Cow, path::PathBuf};
 
 use libloading::Library;
 use zenoh_result::{bail, ZResult};
@@ -86,11 +86,10 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
         let load_plugin =
             unsafe { lib.get::<fn() -> PluginVTable<StartArgs, Instance>>(b"load_plugin")? };
         let vtable = load_plugin();
-        let plugin_version = plugin_compatibility_record.plugin_version();
         Ok(Self {
             _lib: lib,
             path,
-            plugin_version,
+            plugin_version: plugin_compatibility_record.plugin_version(),
             vtable,
         })
     }
@@ -128,14 +127,13 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginInfo
     fn name(&self) -> &str {
         self.name.as_str()
     }
-    fn plugin_version(&self) -> Option<&str> {
-        self.starter.as_ref().map(|v| v.plugin_version)
-    }
-    fn path(&self) -> &str {
-        self.starter.as_ref().map_or("<not loaded>", |v| v.path())
-    }
     fn status(&self) -> PluginStatus {
         PluginStatus {
+            version: self
+                .starter
+                .as_ref()
+                .map(|v| Cow::Borrowed(v.plugin_version)),
+            path: self.starter.as_ref().map(|v| Cow::Borrowed(v.path())),
             state: if self.starter.is_some() {
                 if self.instance.is_some() {
                     PluginState::Started
@@ -145,7 +143,11 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginInfo
             } else {
                 PluginState::Declared
             },
-            report: self.report.clone(), // TODO: request condition from started plugin
+            report: if let Some(instance) = &self.instance {
+                instance.report()
+            } else {
+                self.report.clone()
+            },
         }
     }
 }

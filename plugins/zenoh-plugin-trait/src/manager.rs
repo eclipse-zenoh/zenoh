@@ -56,12 +56,6 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginInfo
     fn name(&self) -> &str {
         self.0.name()
     }
-    fn plugin_version(&self) -> Option<&str> {
-        self.0.plugin_version()
-    }
-    fn path(&self) -> &str {
-        self.0.path()
-    }
     fn status(&self) -> PluginStatus {
         self.0.status()
     }
@@ -117,7 +111,10 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     ) -> Self {
         let plugin_loader: StaticPlugin<StartArgs, Instance, P> = StaticPlugin::new();
         self.plugins.push(PluginRecord::new(plugin_loader));
-        log::debug!("Declared static plugin {}", self.plugins.last().unwrap().name());
+        log::debug!(
+            "Declared static plugin {}",
+            self.plugins.last().unwrap().name()
+        );
         self
     }
 
@@ -135,10 +132,8 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
             .ok_or("Dynamic plugin loading is disabled")?
             .clone();
         log::debug!("Declared dynamic plugin {} by name {}", &name, &plugin_name);
-        let loader = DynamicPlugin::new(
-            name,
-            DynamicPluginSource::ByName((libloader, plugin_name)),
-        );
+        let loader =
+            DynamicPlugin::new(name, DynamicPluginSource::ByName((libloader, plugin_name)));
         self.plugins.push(PluginRecord::new(loader));
         Ok(self.plugins.last_mut().unwrap())
     }
@@ -254,7 +249,11 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> P
     for PluginsManager<StartArgs, Instance>
 {
     fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatus)> {
-        log::debug!("Plugin manager with prefix `{}` : requested plugins_status {:?}", self.default_lib_prefix , names);
+        log::debug!(
+            "Plugin manager with prefix `{}` : requested plugins_status {:?}",
+            self.default_lib_prefix,
+            names
+        );
         let mut plugins = Vec::new();
         for plugin in self.declared_plugins() {
             let name = unsafe { keyexpr::from_str_unchecked(plugin.name()) };
@@ -265,7 +264,14 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> P
             if let Some(plugin) = plugin.loaded() {
                 if let Some(plugin) = plugin.started() {
                     if let [names, ..] = names.strip_prefix(name)[..] {
-                        plugins.append(&mut plugin.instance().plugins_status(names).iter().map(|(n, s)| (format!("{}/{}", name, n), s.clone())).collect());
+                        plugins.append(
+                            &mut plugin
+                                .instance()
+                                .plugins_status(names)
+                                .iter()
+                                .map(|(n, s)| (format!("{}/{}", name, n), s.clone()))
+                                .collect(),
+                        );
                     }
                 }
             }

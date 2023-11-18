@@ -12,10 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::*;
-use std::marker::PhantomData;
+use std::{borrow::Cow, marker::PhantomData};
 use zenoh_result::ZResult;
 
-pub struct StaticPlugin<StartArgs, Instance, P>
+pub struct StaticPlugin<StartArgs, Instance: PluginInstance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
@@ -23,7 +23,7 @@ where
     phantom: PhantomData<P>,
 }
 
-impl<StartArgs, Instance, P> StaticPlugin<StartArgs, Instance, P>
+impl<StartArgs, Instance: PluginInstance, P> StaticPlugin<StartArgs, Instance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
@@ -35,31 +35,31 @@ where
     }
 }
 
-impl<StartArgs, Instance, P> PluginInfo for StaticPlugin<StartArgs, Instance, P>
+impl<StartArgs, Instance: PluginInstance, P> PluginInfo for StaticPlugin<StartArgs, Instance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
     fn name(&self) -> &str {
         P::DEFAULT_NAME
     }
-    fn plugin_version(&self) -> Option<&str> {
-        Some(P::PLUGIN_VERSION)
-    }
-    fn path(&self) -> &str {
-        "<static>"
-    }
     fn status(&self) -> PluginStatus {
         PluginStatus {
+            version: Some(Cow::Borrowed(P::PLUGIN_VERSION)),
+            path: None,
             state: self
                 .instance
                 .as_ref()
                 .map_or(PluginState::Loaded, |_| PluginState::Started),
-            report: PluginReport::new(), // TODO: request runnnig plugin status
+            report: if let Some(instance) = &self.instance {
+                instance.report()
+            } else {
+                PluginReport::default()
+            },
         }
     }
 }
 
-impl<StartArgs, Instance, P> DeclaredPlugin<StartArgs, Instance>
+impl<StartArgs, Instance: PluginInstance, P> DeclaredPlugin<StartArgs, Instance>
     for StaticPlugin<StartArgs, Instance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
@@ -75,7 +75,7 @@ where
     }
 }
 
-impl<StartArgs, Instance, P> LoadedPlugin<StartArgs, Instance>
+impl<StartArgs, Instance: PluginInstance, P> LoadedPlugin<StartArgs, Instance>
     for StaticPlugin<StartArgs, Instance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
@@ -105,7 +105,7 @@ where
     }
 }
 
-impl<StartArgs, Instance, P> StartedPlugin<StartArgs, Instance>
+impl<StartArgs, Instance: PluginInstance, P> StartedPlugin<StartArgs, Instance>
     for StaticPlugin<StartArgs, Instance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,

@@ -49,9 +49,8 @@ impl BitOrAssign for PluginReportLevel {
 }
 
 /// A plugin report contains a severity level and a list of messages
-#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Default, Deserialize)]
 pub struct PluginReport {
-    version: Cow<'static, str>,
     level: PluginReportLevel,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     messages: Vec<Cow<'static, str>>,
@@ -60,15 +59,15 @@ pub struct PluginReport {
 /// The status of a plugin contains the plugin state (Declared, Loaded, Started) and a report
 /// describing the plugin's situation (for Declared state - dynamic library loading errors, for Loaded state - plugin start errors, etc)
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PluginStatus {
+pub struct PluginStatus<'a> {
+    pub version: Option<Cow<'a, str>>,
+    pub path: Option<Cow<'a, str>>,
     pub state: PluginState,
     pub report: PluginReport,
 }
 
 pub trait PluginInfo {
     fn name(&self) -> &str;
-    fn plugin_version(&self) -> Option<&str>;
-    fn path(&self) -> &str;
     fn status(&self) -> PluginStatus;
 }
 

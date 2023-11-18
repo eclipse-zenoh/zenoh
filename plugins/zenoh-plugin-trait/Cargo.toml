@@ -40,4 +40,3 @@ zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh-keyexpr = { workspace = true }
 const_format = { workspace = true }
-version-compare = { workspace = true }
