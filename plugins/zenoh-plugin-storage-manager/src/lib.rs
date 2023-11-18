@@ -22,10 +22,6 @@
 use async_std::task;
 use flume::Sender;
 use memory_backend::MemoryBackend;
-use zenoh_plugin_trait::Plugin;
-use zenoh_plugin_trait::PluginReport;
-use zenoh_plugin_trait::PluginControl;
-use zenoh_plugin_trait::PluginStatus;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -41,6 +37,10 @@ use zenoh_backend_traits::config::StorageConfig;
 use zenoh_backend_traits::config::VolumeConfig;
 use zenoh_backend_traits::VolumePlugin;
 use zenoh_core::zlock;
+use zenoh_plugin_trait::Plugin;
+use zenoh_plugin_trait::PluginControl;
+use zenoh_plugin_trait::PluginReport;
+use zenoh_plugin_trait::PluginStatus;
 use zenoh_result::ZResult;
 use zenoh_util::LibLoader;
 
@@ -60,6 +60,7 @@ pub struct StoragesPlugin {}
 impl ZenohPlugin for StoragesPlugin {}
 impl Plugin for StoragesPlugin {
     const DEFAULT_NAME: &'static str = "storage_manager";
+    const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
     type StartArgs = Runtime;
     type Instance = zenoh::plugins::RunningPlugin;
@@ -160,20 +161,25 @@ impl StorageRuntimeInner {
                     .map(|s| async move { s.send(StorageMessage::Stop) }),
             ));
         }
-        self.plugins_manager.started_plugin_mut(name).ok_or(format!(
-            "Cannot find volume {} to stop it",
-            name
-        ))?.stop();
+        self.plugins_manager
+            .started_plugin_mut(name)
+            .ok_or(format!("Cannot find volume {} to stop it", name))?
+            .stop();
         Ok(())
     }
     fn spawn_volume(&mut self, config: VolumeConfig) -> ZResult<()> {
         let volume_id = config.name();
         let backend_name = config.backend();
-        log::info!("Spawning volume {} with backend {}", volume_id, backend_name);
+        log::info!(
+            "Spawning volume {} with backend {}",
+            volume_id,
+            backend_name
+        );
         let declared = if let Some(declared) = self.plugins_manager.plugin_mut(volume_id) {
             declared
         } else if let Some(paths) = config.paths() {
-            self.plugins_manager.declare_dynamic_plugin_by_paths(volume_id, paths)?
+            self.plugins_manager
+                .declare_dynamic_plugin_by_paths(volume_id, paths)?
         } else {
             self.plugins_manager
                 .declare_dynamic_plugin_by_name(volume_id, backend_name)?
@@ -200,9 +206,13 @@ impl StorageRuntimeInner {
     fn spawn_storage(&mut self, storage: StorageConfig) -> ZResult<()> {
         let admin_key = self.status_key() + "/storages/" + &storage.name;
         let volume_id = storage.volume_id.clone();
-        let backend = self.plugins_manager.started_plugin(&volume_id).ok_or(
-            format!("Cannot find volume {} to spawn storage {}", volume_id, storage.name),
-        )?;
+        let backend = self
+            .plugins_manager
+            .started_plugin(&volume_id)
+            .ok_or(format!(
+                "Cannot find volume {} to spawn storage {}",
+                volume_id, storage.name
+            ))?;
         let storage_name = storage.name.clone();
         log::info!(
             "Spawning storage {} from volume {} with backend {}",

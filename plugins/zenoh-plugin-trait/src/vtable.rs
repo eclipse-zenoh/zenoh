@@ -12,8 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::*;
-use std::{borrow::Cow, fmt::Display};
-use zenoh_keyexpr::keyexpr;
+use std::fmt::Display;
 use zenoh_result::ZResult;
 
 pub type PluginLoaderVersion = u64;
@@ -69,11 +68,11 @@ pub struct Compatibility {
     vtable_version: StructVersion,
     start_args_version: StructVersion,
     instance_version: StructVersion,
-    plugin_version: Cow<'static, keyexpr>,
+    plugin_version: &'static str,
 }
 
 impl Compatibility {
-    pub fn new<
+    pub fn with_plugin_version<
         StartArgsType: PluginStartArgs,
         InstanceType: PluginInstance,
         PluginType: Plugin<StartArgs = StartArgsType, Instance = InstanceType>,
@@ -82,7 +81,7 @@ impl Compatibility {
         let vtable_version = StructVersion::new::<PluginVTable<StartArgsType, InstanceType>>();
         let start_args_version = StructVersion::new::<StartArgsType>();
         let instance_version = StructVersion::new::<InstanceType>();
-        let plugin_version = Cow::Borrowed(PluginType::PLUGIN_VERSION);
+        let plugin_version = PluginType::PLUGIN_VERSION;
         Self {
             rust_version,
             vtable_version,
@@ -91,12 +90,10 @@ impl Compatibility {
             plugin_version,
         }
     }
-    pub fn with_plugin_version_keyexpr<
+    pub fn with_empty_plugin_version<
         StartArgsType: PluginStartArgs,
         InstanceType: PluginInstance,
-    >(
-        plugin_version: Cow<'static, keyexpr>,
-    ) -> Self {
+    >() -> Self {
         let rust_version = RustVersion::new();
         let vtable_version = StructVersion::new::<PluginVTable<StartArgsType, InstanceType>>();
         let start_args_version = StructVersion::new::<StartArgsType>();
@@ -106,20 +103,20 @@ impl Compatibility {
             vtable_version,
             start_args_version,
             instance_version,
-            plugin_version,
+            plugin_version: "",
         }
     }
-    pub fn plugin_version(&self) -> Cow<'static, keyexpr> {
+    pub fn plugin_version(&self) -> &'static str {
         self.plugin_version
     }
+    /// Returns true if rust compiler and structures version are exactly the same and
+    /// plugin version is compatible with the requested version range in the configuration file
     pub fn are_compatible(&self, other: &Self) -> bool {
         RustVersion::are_compatible(&self.rust_version, &other.rust_version)
             && self.vtable_version == other.vtable_version
             && self.start_args_version == other.start_args_version
             && self.instance_version == other.instance_version
-            && self
-                .plugin_version
-                .intersects(other.plugin_version.as_ref())
+        // TODO: check plugin version may be added later
     }
 }
 
@@ -216,9 +213,10 @@ pub mod no_mangle {
 
             #[no_mangle]
             fn get_compatibility() -> $crate::Compatibility {
-                $crate::Compatibility::new::<
+                $crate::Compatibility::with_plugin_version::<
                     <$ty as $crate::Plugin>::StartArgs,
                     <$ty as $crate::Plugin>::Instance,
+                    $ty,
                 >()
             }
 

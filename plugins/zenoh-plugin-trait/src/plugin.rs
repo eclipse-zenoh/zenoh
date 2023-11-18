@@ -51,6 +51,7 @@ impl BitOrAssign for PluginReportLevel {
 /// A plugin report contains a severity level and a list of messages
 #[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct PluginReport {
+    version: Cow<'static, str>,
     level: PluginReportLevel,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     messages: Vec<Cow<'static, str>>,
@@ -100,11 +101,8 @@ pub trait Plugin: Sized + 'static {
     type Instance: PluginInstance;
     /// Plugins' default name when statically linked.
     const DEFAULT_NAME: &'static str;
-    /// Plugin's version. Defined as `keyexpr` to allow advanced plugin version validation.
-    /// At this moment this feature is not used: plugin mamager always matches plugin's version with "**".
-    /// But in the future it may be used to allow zenohd to load plugins with compatible versions only, accordingly 
-    /// to requested version range in the configuration file.
-    const PLUGIN_VERSION: &'static keyexpr;
+    /// Plugin's version. Used only for information purposes.
+    const PLUGIN_VERSION: &'static str;
     /// Starts your plugin. Use `Ok` to return your plugin's control structure
     fn start(name: &str, args: &Self::StartArgs) -> ZResult<Self::Instance>;
 }

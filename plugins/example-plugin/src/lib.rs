@@ -15,17 +15,17 @@
 
 use futures::select;
 use log::{debug, info};
-use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
     Arc, Mutex,
 };
+use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
 use zenoh_core::zlock;
-use zenoh_plugin_trait::{PluginControl, Plugin};
+use zenoh_plugin_trait::{Plugin, PluginControl};
 use zenoh_result::{bail, ZResult};
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
@@ -45,6 +45,7 @@ impl Plugin for ExamplePlugin {
 
     // A mandatory const to define, in case of the plugin is built as a standalone executable
     const DEFAULT_NAME: &'static str = "example";
+    const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
     // The first operation called by zenohd on the plugin
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {

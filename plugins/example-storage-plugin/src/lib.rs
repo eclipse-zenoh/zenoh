@@ -32,13 +32,13 @@ zenoh_plugin_trait::declare_plugin!(ExampleBackend);
 impl Plugin for ExampleBackend {
     type StartArgs = VolumeConfig;
     type Instance = VolumePlugin;
-
     fn start(_name: &str, _args: &Self::StartArgs) -> ZResult<Self::Instance> {
         let volume = ExampleBackend {};
         Ok(Box::new(volume))
     }
 
     const DEFAULT_NAME: &'static str = "example_backend";
+    const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 }
 
 pub struct ExampleBackend {}

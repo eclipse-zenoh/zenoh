@@ -11,13 +11,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::*;
-use std::{path::{PathBuf, Path}, borrow::Cow};
+use std::path::PathBuf;
 
 use libloading::Library;
-use zenoh_keyexpr::keyexpr;
-use zenoh_result::{ZResult, bail};
+use zenoh_result::{bail, ZResult};
 use zenoh_util::LibLoader;
-
 
 /// This enum contains information where to load the plugin from.
 pub enum DynamicPluginSource {
@@ -50,14 +48,14 @@ impl DynamicPluginSource {
 struct DynamicPluginStarter<StartArgs, Instance> {
     _lib: Library,
     path: PathBuf,
-    plugin_version: Cow<'static, keyexpr>,
+    plugin_version: &'static str,
     vtable: PluginVTable<StartArgs, Instance>,
 }
 
 impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
     DynamicPluginStarter<StartArgs, Instance>
 {
-    fn new(lib: Library, path: &Path) -> ZResult<Self> {
+    fn new(lib: Library, path: PathBuf) -> ZResult<Self> {
         log::debug!("Loading plugin {}", &path.to_str().unwrap(),);
         let get_plugin_loader_version =
             unsafe { lib.get::<fn() -> PluginLoaderVersion>(b"get_plugin_loader_version")? };
@@ -72,7 +70,8 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
         }
         let get_compatibility = unsafe { lib.get::<fn() -> Compatibility>(b"get_compatibility")? };
         let plugin_compatibility_record = get_compatibility();
-        let host_compatibility_record = Compatibility::with_plugin_version_keyexpr::<StartArgs, Instance>("**".try_into()? );
+        let host_compatibility_record =
+            Compatibility::with_empty_plugin_version::<StartArgs, Instance>();
         log::debug!(
             "Plugin compativilty record: {:?}",
             &plugin_compatibility_record
@@ -87,10 +86,11 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
         let load_plugin =
             unsafe { lib.get::<fn() -> PluginVTable<StartArgs, Instance>>(b"load_plugin")? };
         let vtable = load_plugin();
+        let plugin_version = plugin_compatibility_record.plugin_version();
         Ok(Self {
             _lib: lib,
-            path: path.to_path_buf(),
-            plugin_version: plugin_compatibility_record.plugin_version(),
+            path,
+            plugin_version,
             vtable,
         })
     }
@@ -231,4 +231,3 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> StartedPlugin<StartAr
         self.instance.as_mut().unwrap()
     }
 }
-

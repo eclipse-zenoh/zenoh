@@ -33,6 +33,7 @@ impl Plugin for MemoryBackend {
     type Instance = VolumePlugin;
 
     const DEFAULT_NAME: &'static str = MEMORY_BACKEND_NAME;
+    const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
     fn start(_: &str, args: &VolumeConfig) -> ZResult<VolumePlugin> {
         Ok(Box::new(MemoryBackend {
