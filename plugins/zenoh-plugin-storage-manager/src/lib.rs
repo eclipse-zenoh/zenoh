@@ -40,7 +40,7 @@ use zenoh_core::zlock;
 use zenoh_plugin_trait::Plugin;
 use zenoh_plugin_trait::PluginControl;
 use zenoh_plugin_trait::PluginReport;
-use zenoh_plugin_trait::PluginStatus;
+use zenoh_plugin_trait::PluginStatusRec;
 use zenoh_result::ZResult;
 use zenoh_util::LibLoader;
 
@@ -247,7 +247,7 @@ impl PluginControl for StorageRuntime {
     fn report(&self) -> PluginReport {
         PluginReport::default()
     }
-    fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatus)> {
+    fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatusRec)> {
         let guard = self.0.lock().unwrap();
         guard
             .plugins_manager

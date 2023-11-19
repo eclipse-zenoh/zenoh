@@ -121,7 +121,7 @@ impl<StartArgs, Instance> DynamicPlugin<StartArgs, Instance> {
     }
 }
 
-impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatusGetter
+impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatus
     for DynamicPlugin<StartArgs, Instance>
 {
     fn name(&self) -> &str {
@@ -161,6 +161,9 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatusGetter
 impl<StartArgs: PluginStartArgs, Instance: PluginInstance> DeclaredPlugin<StartArgs, Instance>
     for DynamicPlugin<StartArgs, Instance>
 {
+    fn as_status(&self) -> &dyn PluginStatus {
+        self
+    }
     fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>> {
         if self.starter.is_none() {
             let (lib, path) = self.source.load().add_error(&mut self.report)?;
@@ -191,6 +194,9 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> DeclaredPlugin<StartA
 impl<StartArgs: PluginStartArgs, Instance: PluginInstance> LoadedPlugin<StartArgs, Instance>
     for DynamicPlugin<StartArgs, Instance>
 {
+    fn as_status(&self) -> &dyn PluginStatus {
+        self
+    }
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>> {
         let starter = self
             .starter
@@ -228,6 +234,9 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> LoadedPlugin<StartArg
 impl<StartArgs: PluginStartArgs, Instance: PluginInstance> StartedPlugin<StartArgs, Instance>
     for DynamicPlugin<StartArgs, Instance>
 {
+    fn as_status(&self) -> &dyn PluginStatus {
+        self
+    }
     fn stop(&mut self) {
         log::debug!("Plugin `{}` stopped", self.name);
         self.report.clear();

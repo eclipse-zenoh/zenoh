@@ -59,7 +59,7 @@ pub struct PluginReport {
 
 /// The status of a plugin contains all information about the plugin in single cloneable structure
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct PluginStatus<'a> {
+pub struct PluginStatusRec<'a> {
     pub name: Cow<'a, str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<Cow<'a, str>>,
@@ -68,9 +68,20 @@ pub struct PluginStatus<'a> {
     pub report: PluginReport,
 }
 
-impl PluginStatus<'_> {
-    pub fn into_owned(self) -> PluginStatus<'static> {
-        PluginStatus {
+impl<'a> PluginStatusRec<'a> {
+    /// Construst status fructure from the getter interface
+    pub fn new<T: PluginStatus + ?Sized>(plugin: &'a T) -> Self {
+        Self {
+            name: Cow::Borrowed(plugin.name()),
+            version: plugin.version().map(Cow::Borrowed),
+            path: Cow::Borrowed(plugin.path()),
+            state: plugin.state(),
+            report: plugin.report(),
+        }
+    }
+    /// Convert status structure to owned version
+    pub fn into_owned(self) -> PluginStatusRec<'static> {
+        PluginStatusRec {
             name: Cow::Owned(self.name.into_owned()),
             version: self.version.map(|v| Cow::Owned(v.into_owned())),
             path: Cow::Owned(self.path.into_owned()),
@@ -80,7 +91,7 @@ impl PluginStatus<'_> {
     }
 }
 
-pub trait PluginStatusGetter {
+pub trait PluginStatus {
     /// Returns name of the plugin
     fn name(&self) -> &str;
     /// Returns version of the loaded plugin (usually the version of the plugin's crate)
@@ -92,16 +103,6 @@ pub trait PluginStatusGetter {
     /// Returns the plugin's current report: a list of messages and the severity level
     /// When status is changed, report is cleared
     fn report(&self) -> PluginReport;
-    /// Returns all the information about the plugin in signed structure
-    fn status(&self) -> PluginStatus {
-        PluginStatus {
-            name: Cow::Borrowed(self.name()),
-            version: self.version().map(Cow::Borrowed),
-            path: Cow::Borrowed(self.path()),
-            state: self.state(),
-            report: self.report(),
-        }
-    }
 }
 
 pub trait PluginControl {
@@ -109,7 +110,7 @@ pub trait PluginControl {
         PluginReport::default()
     }
     /// Collect information of sub-plugins matching `_names` keyexpr
-    fn plugins_status(&self, _names: &keyexpr) -> Vec<(String, PluginStatus)> {
+    fn plugins_status(&self, _names: &keyexpr) -> Vec<(String, PluginStatusRec)> {
         Vec::new()
     }
 }

@@ -35,8 +35,7 @@ where
     }
 }
 
-impl<StartArgs, Instance: PluginInstance, P> PluginStatusGetter
-    for StaticPlugin<StartArgs, Instance, P>
+impl<StartArgs, Instance: PluginInstance, P> PluginStatus for StaticPlugin<StartArgs, Instance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
@@ -68,6 +67,9 @@ impl<StartArgs, Instance: PluginInstance, P> DeclaredPlugin<StartArgs, Instance>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
+    fn as_status(&self) -> &dyn PluginStatus {
+        self
+    }
     fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>> {
         Ok(self)
     }
@@ -84,6 +86,9 @@ impl<StartArgs, Instance: PluginInstance, P> LoadedPlugin<StartArgs, Instance>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
+    fn as_status(&self) -> &dyn PluginStatus {
+        self
+    }
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>> {
         if self.instance.is_none() {
             log::debug!("Plugin `{}` started", self.name());
@@ -114,6 +119,9 @@ impl<StartArgs, Instance: PluginInstance, P> StartedPlugin<StartArgs, Instance>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
+    fn as_status(&self) -> &dyn PluginStatus {
+        self
+    }
     fn stop(&mut self) {
         log::debug!("Plugin `{}` stopped", self.name());
         self.instance = None;

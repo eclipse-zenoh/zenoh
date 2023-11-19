@@ -140,7 +140,7 @@ use zenoh::time::Timestamp;
 use zenoh::value::Value;
 pub use zenoh::Result as ZResult;
 use zenoh_plugin_trait::{
-    concat_enabled_features, PluginControl, PluginInstance, PluginStatus, PluginStructVersion,
+    concat_enabled_features, PluginControl, PluginInstance, PluginStatusRec, PluginStructVersion,
 };
 
 pub mod config;
@@ -235,7 +235,7 @@ impl PluginStructVersion for VolumePlugin {
 }
 
 impl PluginControl for VolumePlugin {
-    fn plugins_status(&self, _names: &zenoh::prelude::keyexpr) -> Vec<(String, PluginStatus)> {
+    fn plugins_status(&self, _names: &zenoh::prelude::keyexpr) -> Vec<(String, PluginStatusRec)> {
         Vec::new()
     }
 }

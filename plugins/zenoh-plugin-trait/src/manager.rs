@@ -23,18 +23,21 @@ use self::{
     static_plugin::StaticPlugin,
 };
 
-pub trait DeclaredPlugin<StartArgs, Instance>: PluginStatusGetter {
+pub trait DeclaredPlugin<StartArgs, Instance>: PluginStatus {
+    fn as_status(&self) -> &dyn PluginStatus;
     fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>>;
     fn loaded(&self) -> Option<&dyn LoadedPlugin<StartArgs, Instance>>;
     fn loaded_mut(&mut self) -> Option<&mut dyn LoadedPlugin<StartArgs, Instance>>;
 }
-pub trait LoadedPlugin<StartArgs, Instance>: PluginStatusGetter {
+pub trait LoadedPlugin<StartArgs, Instance>: PluginStatus {
+    fn as_status(&self) -> &dyn PluginStatus;
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>>;
     fn started(&self) -> Option<&dyn StartedPlugin<StartArgs, Instance>>;
     fn started_mut(&mut self) -> Option<&mut dyn StartedPlugin<StartArgs, Instance>>;
 }
 
-pub trait StartedPlugin<StartArgs, Instance>: PluginStatusGetter {
+pub trait StartedPlugin<StartArgs, Instance>: PluginStatus {
+    fn as_status(&self) -> &dyn PluginStatus;
     fn stop(&mut self);
     fn instance(&self) -> &Instance;
     fn instance_mut(&mut self) -> &mut Instance;
@@ -50,7 +53,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginRecord<StartArg
     }
 }
 
-impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatusGetter
+impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatus
     for PluginRecord<StartArgs, Instance>
 {
     fn name(&self) -> &str {
@@ -68,14 +71,14 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatusGetter
     fn report(&self) -> PluginReport {
         self.0.report()
     }
-    fn status(&self) -> PluginStatus {
-        self.0.status()
-    }
 }
 
 impl<StartArgs: PluginStartArgs, Instance: PluginInstance> DeclaredPlugin<StartArgs, Instance>
     for PluginRecord<StartArgs, Instance>
 {
+    fn as_status(&self) -> &dyn PluginStatus {
+        self
+    }
     fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>> {
         self.0.load()
     }
@@ -260,17 +263,18 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
 impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> PluginControl
     for PluginsManager<StartArgs, Instance>
 {
-    fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatus)> {
+    fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatusRec)> {
         log::debug!(
             "Plugin manager with prefix `{}` : requested plugins_status {:?}",
             self.default_lib_prefix,
             names
         );
-        let mut plugins: Vec<(String, PluginStatus)> = Vec::new();
+        let mut plugins: Vec<(String, PluginStatusRec)> = Vec::new();
         for plugin in self.declared_plugins() {
             let name = unsafe { keyexpr::from_str_unchecked(plugin.name()) };
             if names.includes(name) {
-                plugins.push((plugin.name().to_string(), plugin.status()));
+                let status = PluginStatusRec::new(plugin.as_status());
+                plugins.push((plugin.name().to_string(), status));
             }
             // for running plugins append their subplugins prepended with the running plugin name
             if let Some(plugin) = plugin.loaded() {

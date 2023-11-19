@@ -23,7 +23,7 @@ use zenoh_plugin_trait::Plugin;
 use zenoh_plugin_trait::PluginControl;
 use zenoh_plugin_trait::PluginInstance;
 use zenoh_plugin_trait::PluginReport;
-use zenoh_plugin_trait::PluginStatus;
+use zenoh_plugin_trait::PluginStatusRec;
 use zenoh_plugin_trait::PluginStructVersion;
 use zenoh_protocol::core::key_expr::keyexpr;
 
@@ -53,7 +53,7 @@ impl PluginControl for RunningPlugin {
         self.as_ref().report()
     }
 
-    fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatus)> {
+    fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatusRec)> {
         self.as_ref().plugins_status(names)
     }
 }
