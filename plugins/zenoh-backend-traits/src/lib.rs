@@ -235,7 +235,7 @@ impl PluginStructVersion for VolumePlugin {
 }
 
 impl PluginControl for VolumePlugin {
-    fn plugins_status(&self, _names: &zenoh::prelude::keyexpr) -> Vec<(String, PluginStatusRec)> {
+    fn plugins_status(&self, _names: &zenoh::prelude::keyexpr) -> Vec<PluginStatusRec> {
         Vec::new()
     }
 }

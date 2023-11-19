@@ -53,7 +53,7 @@ impl PluginControl for RunningPlugin {
         self.as_ref().report()
     }
 
-    fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatusRec)> {
+    fn plugins_status(&self, names: &keyexpr) -> Vec<PluginStatusRec> {
         self.as_ref().plugins_status(names)
     }
 }

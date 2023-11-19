@@ -57,7 +57,22 @@ pub struct PluginReport {
     messages: Vec<Cow<'static, str>>,
 }
 
-/// The status of a plugin contains all information about the plugin in single cloneable structure
+/// Trait allowing to get all information about the plugin
+pub trait PluginStatus {
+    /// Returns name of the plugin
+    fn name(&self) -> &str;
+    /// Returns version of the loaded plugin (usually the version of the plugin's crate)
+    fn version(&self) -> Option<&str>;
+    /// Returns path of the loaded plugin
+    fn path(&self) -> &str;
+    /// Returns the plugin's state (Declared, Loaded, Started)
+    fn state(&self) -> PluginState;
+    /// Returns the plugin's current report: a list of messages and the severity level
+    /// When status is changed, report is cleared
+    fn report(&self) -> PluginReport;
+}
+
+/// The structure which contains all information about the plugin status in single cloneable structure
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginStatusRec<'a> {
     pub name: Cow<'a, str>,
@@ -66,6 +81,24 @@ pub struct PluginStatusRec<'a> {
     pub path: Cow<'a, str>,
     pub state: PluginState,
     pub report: PluginReport,
+}
+
+impl PluginStatus for PluginStatusRec<'_> {
+    fn name(&self) -> &str {
+        &self.name
+    }
+    fn version(&self) -> Option<&str> {
+        self.version.as_deref()
+    }
+    fn path(&self) -> &str {
+        &self.path
+    }
+    fn state(&self) -> PluginState {
+        self.state
+    }
+    fn report(&self) -> PluginReport {
+        self.report.clone()
+    }
 }
 
 impl<'a> PluginStatusRec<'a> {
@@ -89,20 +122,12 @@ impl<'a> PluginStatusRec<'a> {
             report: self.report,
         }
     }
-}
-
-pub trait PluginStatus {
-    /// Returns name of the plugin
-    fn name(&self) -> &str;
-    /// Returns version of the loaded plugin (usually the version of the plugin's crate)
-    fn version(&self) -> Option<&str>;
-    /// Returns path of the loaded plugin
-    fn path(&self) -> &str;
-    /// Returns the plugin's state (Declared, Loaded, Started)
-    fn state(&self) -> PluginState;
-    /// Returns the plugin's current report: a list of messages and the severity level
-    /// When status is changed, report is cleared
-    fn report(&self) -> PluginReport;
+    pub(crate) fn prepend_name(self, prefix: &str) -> Self {
+        Self {
+            name: Cow::Owned(format!("{}/{}", prefix, self.name)),
+            ..self
+        }
+    }
 }
 
 pub trait PluginControl {
@@ -110,7 +135,7 @@ pub trait PluginControl {
         PluginReport::default()
     }
     /// Collect information of sub-plugins matching `_names` keyexpr
-    fn plugins_status(&self, _names: &keyexpr) -> Vec<(String, PluginStatusRec)> {
+    fn plugins_status(&self, _names: &keyexpr) -> Vec<PluginStatusRec> {
         Vec::new()
     }
 }

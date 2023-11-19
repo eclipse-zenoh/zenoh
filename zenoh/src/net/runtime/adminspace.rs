@@ -28,7 +28,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::SplitBuffer;
 use zenoh_config::{ConfigValidator, ValidatedMap};
-use zenoh_plugin_trait::PluginControl;
+use zenoh_plugin_trait::{PluginControl, PluginStatus};
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
@@ -663,9 +663,9 @@ fn plugins_data(context: &AdminContext, query: Query) {
     log::debug!("requested plugins status {:?}", query.key_expr());
     if let [names, ..] = query.key_expr().strip_prefix(root_key)[..] {
         let statuses = guard.plugins_status(names);
-        for (name, status) in statuses {
-            log::debug!("plugin {} status: {:?}", name, status);
-            let key = root_key.join(&name).unwrap();
+        for status in statuses {
+            log::debug!("plugin status: {:?}", status);
+            let key = root_key.join(status.name()).unwrap();
             let status = serde_json::to_value(status).unwrap();
             if let Err(e) = query.reply(Ok(Sample::new(key, Value::from(status)))).res() {
                 log::error!("Error sending AdminSpace reply: {:?}", e);

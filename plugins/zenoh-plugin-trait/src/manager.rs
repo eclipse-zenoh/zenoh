@@ -263,18 +263,18 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
 impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> PluginControl
     for PluginsManager<StartArgs, Instance>
 {
-    fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatusRec)> {
+    fn plugins_status(&self, names: &keyexpr) -> Vec<PluginStatusRec> {
         log::debug!(
             "Plugin manager with prefix `{}` : requested plugins_status {:?}",
             self.default_lib_prefix,
             names
         );
-        let mut plugins: Vec<(String, PluginStatusRec)> = Vec::new();
+        let mut plugins = Vec::new();
         for plugin in self.declared_plugins() {
             let name = unsafe { keyexpr::from_str_unchecked(plugin.name()) };
             if names.includes(name) {
                 let status = PluginStatusRec::new(plugin.as_status());
-                plugins.push((plugin.name().to_string(), status));
+                plugins.push(status);
             }
             // for running plugins append their subplugins prepended with the running plugin name
             if let Some(plugin) = plugin.loaded() {
@@ -284,8 +284,8 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> P
                             &mut plugin
                                 .instance()
                                 .plugins_status(names)
-                                .iter()
-                                .map(|(n, s)| (format!("{}/{}", name, n), s.clone()))
+                                .into_iter()
+                                .map(|s| s.prepend_name(name))
                                 .collect(),
                         );
                     }
