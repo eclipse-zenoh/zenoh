@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::*;
-use std::{borrow::Cow, marker::PhantomData};
+use std::marker::PhantomData;
 use zenoh_result::ZResult;
 
 pub struct StaticPlugin<StartArgs, Instance: PluginInstance, P>
@@ -35,26 +35,30 @@ where
     }
 }
 
-impl<StartArgs, Instance: PluginInstance, P> PluginInfo for StaticPlugin<StartArgs, Instance, P>
+impl<StartArgs, Instance: PluginInstance, P> PluginStatusGetter
+    for StaticPlugin<StartArgs, Instance, P>
 where
     P: Plugin<StartArgs = StartArgs, Instance = Instance>,
 {
     fn name(&self) -> &str {
         P::DEFAULT_NAME
     }
-    fn status(&self) -> PluginStatus {
-        PluginStatus {
-            version: Some(Cow::Borrowed(P::PLUGIN_VERSION)),
-            path: None,
-            state: self
-                .instance
-                .as_ref()
-                .map_or(PluginState::Loaded, |_| PluginState::Started),
-            report: if let Some(instance) = &self.instance {
-                instance.report()
-            } else {
-                PluginReport::default()
-            },
+    fn version(&self) -> Option<&str> {
+        Some(P::PLUGIN_VERSION)
+    }
+    fn path(&self) -> &str {
+        "<static>"
+    }
+    fn state(&self) -> PluginState {
+        self.instance
+            .as_ref()
+            .map_or(PluginState::Loaded, |_| PluginState::Started)
+    }
+    fn report(&self) -> PluginReport {
+        if let Some(instance) = &self.instance {
+            instance.report()
+        } else {
+            PluginReport::default()
         }
     }
 }

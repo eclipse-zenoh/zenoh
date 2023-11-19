@@ -11,7 +11,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::*;
-use std::{borrow::Cow, path::PathBuf};
+use std::path::PathBuf;
 
 use libloading::Library;
 use zenoh_result::{bail, ZResult};
@@ -121,33 +121,39 @@ impl<StartArgs, Instance> DynamicPlugin<StartArgs, Instance> {
     }
 }
 
-impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginInfo
+impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatusGetter
     for DynamicPlugin<StartArgs, Instance>
 {
     fn name(&self) -> &str {
         self.name.as_str()
     }
-    fn status(&self) -> PluginStatus {
-        PluginStatus {
-            version: self
-                .starter
-                .as_ref()
-                .map(|v| Cow::Borrowed(v.plugin_version)),
-            path: self.starter.as_ref().map(|v| Cow::Borrowed(v.path())),
-            state: if self.starter.is_some() {
-                if self.instance.is_some() {
-                    PluginState::Started
-                } else {
-                    PluginState::Loaded
-                }
+    fn version(&self) -> Option<&str> {
+        self.starter.as_ref().map(|v| v.plugin_version)
+    }
+
+    fn path(&self) -> &str {
+        if let Some(starter) = &self.starter {
+            starter.path()
+        } else {
+            "<not loaded>"
+        }
+    }
+    fn state(&self) -> PluginState {
+        if self.starter.is_some() {
+            if self.instance.is_some() {
+                PluginState::Started
             } else {
-                PluginState::Declared
-            },
-            report: if let Some(instance) = &self.instance {
-                instance.report()
-            } else {
-                self.report.clone()
-            },
+                PluginState::Loaded
+            }
+        } else {
+            PluginState::Declared
+        }
+    }
+    fn report(&self) -> PluginReport {
+        if let Some(instance) = &self.instance {
+            instance.report()
+        } else {
+            self.report.clone()
         }
     }
 }
@@ -224,6 +230,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> StartedPlugin<StartAr
 {
     fn stop(&mut self) {
         log::debug!("Plugin `{}` stopped", self.name);
+        self.report.clear();
         self.instance = None;
     }
     fn instance(&self) -> &Instance {

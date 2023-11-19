@@ -49,6 +49,7 @@ impl BitOrAssign for PluginReportLevel {
 }
 
 /// A plugin report contains a severity level and a list of messages
+/// describing the plugin's situation (for Declared state - dynamic library loading errors, for Loaded state - plugin start errors, etc)
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Default, Deserialize)]
 pub struct PluginReport {
     level: PluginReportLevel,
@@ -56,19 +57,51 @@ pub struct PluginReport {
     messages: Vec<Cow<'static, str>>,
 }
 
-/// The status of a plugin contains the plugin state (Declared, Loaded, Started) and a report
-/// describing the plugin's situation (for Declared state - dynamic library loading errors, for Loaded state - plugin start errors, etc)
+/// The status of a plugin contains all information about the plugin in single cloneable structure
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginStatus<'a> {
+    pub name: Cow<'a, str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<Cow<'a, str>>,
-    pub path: Option<Cow<'a, str>>,
+    pub path: Cow<'a, str>,
     pub state: PluginState,
     pub report: PluginReport,
 }
 
-pub trait PluginInfo {
+impl PluginStatus<'_> {
+    pub fn into_owned(self) -> PluginStatus<'static> {
+        PluginStatus {
+            name: Cow::Owned(self.name.into_owned()),
+            version: self.version.map(|v| Cow::Owned(v.into_owned())),
+            path: Cow::Owned(self.path.into_owned()),
+            state: self.state,
+            report: self.report,
+        }
+    }
+}
+
+pub trait PluginStatusGetter {
+    /// Returns name of the plugin
     fn name(&self) -> &str;
-    fn status(&self) -> PluginStatus;
+    /// Returns version of the loaded plugin (usually the version of the plugin's crate)
+    fn version(&self) -> Option<&str>;
+    /// Returns path of the loaded plugin
+    fn path(&self) -> &str;
+    /// Returns the plugin's state (Declared, Loaded, Started)
+    fn state(&self) -> PluginState;
+    /// Returns the plugin's current report: a list of messages and the severity level
+    /// When status is changed, report is cleared
+    fn report(&self) -> PluginReport;
+    /// Returns all the information about the plugin in signed structure
+    fn status(&self) -> PluginStatus {
+        PluginStatus {
+            name: Cow::Borrowed(self.name()),
+            version: self.version().map(Cow::Borrowed),
+            path: Cow::Borrowed(self.path()),
+            state: self.state(),
+            report: self.report(),
+        }
+    }
 }
 
 pub trait PluginControl {

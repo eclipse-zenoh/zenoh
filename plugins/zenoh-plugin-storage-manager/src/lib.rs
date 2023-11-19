@@ -249,7 +249,12 @@ impl PluginControl for StorageRuntime {
     }
     fn plugins_status(&self, names: &keyexpr) -> Vec<(String, PluginStatus)> {
         let guard = self.0.lock().unwrap();
-        guard.plugins_manager.plugins_status(names)
+        guard
+            .plugins_manager
+            .plugins_status(names)
+            .into_iter()
+            .map(|(k, v)| (k, v.into_owned()))
+            .collect()
     }
 }
 

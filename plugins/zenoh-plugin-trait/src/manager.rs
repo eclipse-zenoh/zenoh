@@ -23,18 +23,18 @@ use self::{
     static_plugin::StaticPlugin,
 };
 
-pub trait DeclaredPlugin<StartArgs, Instance>: PluginInfo {
+pub trait DeclaredPlugin<StartArgs, Instance>: PluginStatusGetter {
     fn load(&mut self) -> ZResult<&mut dyn LoadedPlugin<StartArgs, Instance>>;
     fn loaded(&self) -> Option<&dyn LoadedPlugin<StartArgs, Instance>>;
     fn loaded_mut(&mut self) -> Option<&mut dyn LoadedPlugin<StartArgs, Instance>>;
 }
-pub trait LoadedPlugin<StartArgs, Instance>: PluginInfo {
+pub trait LoadedPlugin<StartArgs, Instance>: PluginStatusGetter {
     fn start(&mut self, args: &StartArgs) -> ZResult<&mut dyn StartedPlugin<StartArgs, Instance>>;
     fn started(&self) -> Option<&dyn StartedPlugin<StartArgs, Instance>>;
     fn started_mut(&mut self) -> Option<&mut dyn StartedPlugin<StartArgs, Instance>>;
 }
 
-pub trait StartedPlugin<StartArgs, Instance>: PluginInfo {
+pub trait StartedPlugin<StartArgs, Instance>: PluginStatusGetter {
     fn stop(&mut self);
     fn instance(&self) -> &Instance;
     fn instance_mut(&mut self) -> &mut Instance;
@@ -50,11 +50,23 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginRecord<StartArg
     }
 }
 
-impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginInfo
+impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatusGetter
     for PluginRecord<StartArgs, Instance>
 {
     fn name(&self) -> &str {
         self.0.name()
+    }
+    fn version(&self) -> Option<&str> {
+        self.0.version()
+    }
+    fn path(&self) -> &str {
+        self.0.path()
+    }
+    fn state(&self) -> PluginState {
+        self.0.state()
+    }
+    fn report(&self) -> PluginReport {
+        self.0.report()
     }
     fn status(&self) -> PluginStatus {
         self.0.status()
@@ -254,7 +266,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> P
             self.default_lib_prefix,
             names
         );
-        let mut plugins = Vec::new();
+        let mut plugins: Vec<(String, PluginStatus)> = Vec::new();
         for plugin in self.declared_plugins() {
             let name = unsafe { keyexpr::from_str_unchecked(plugin.name()) };
             if names.includes(name) {
