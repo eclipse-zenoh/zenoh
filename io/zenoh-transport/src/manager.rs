@@ -49,14 +49,14 @@ use zenoh_result::{bail, ZResult};
 /// impl TransportEventHandler for MySH {
 ///     fn new_unicast(&self,
 ///         _peer: TransportPeer,
-///         _transport: TransportUnicast
+///         _transport: unicast::TransportUnicast
 ///     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
 ///         Ok(Arc::new(DummyTransportPeerEventHandler))
 ///     }
 ///
 ///     fn new_multicast(
 ///         &self,
-///         _transport: TransportMulticast,
+///         _transport: multicast::TransportMulticast,
 ///     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
 ///         Ok(Arc::new(DummyTransportMulticastEventHandler))
 ///     }
