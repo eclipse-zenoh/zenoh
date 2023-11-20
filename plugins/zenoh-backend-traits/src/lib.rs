@@ -62,7 +62,7 @@
 //!         }
 //!     }
 //!
-//!     async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
+//!     async fn create_storage(&self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
 //!         // The properties are the ones passed via a PUT in the admin space for Storage creation.
 //!         Ok(Box::new(MyStorage::new(properties).await?))
 //!     }
