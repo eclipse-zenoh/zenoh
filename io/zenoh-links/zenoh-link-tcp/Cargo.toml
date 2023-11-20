@@ -28,6 +28,7 @@ description = "Internal crate for zenoh."
 async-std = { workspace = true }
 async-trait = { workspace = true }
 tokio = { workspace = true, features = ["net", "io-util", "rt", "time"] }
+async-global-executor = { workspace = true, features = ["tokio"] }
 log = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }

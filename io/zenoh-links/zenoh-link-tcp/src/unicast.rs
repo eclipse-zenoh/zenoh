@@ -169,7 +169,7 @@ impl LinkUnicastTrait for LinkUnicastTcp {
 impl Drop for LinkUnicastTcp {
     fn drop(&mut self) {
         // Close the underlying TCP socket
-        tokio::runtime::Runtime::new().unwrap().block_on(async {
+        async_global_executor::block_on(async {
             let _ = self.get_mut_socket().shutdown().await;
         });
     }
