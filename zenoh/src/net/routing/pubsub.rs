@@ -1421,7 +1421,10 @@ pub(super) fn compute_data_routes_(tables: &Tables, res: &Arc<Resource>) -> Data
                 compute_data_route(tables, &mut expr, Some(idx.index()), WhatAmI::Router);
         }
 
-        routes.peer_data_route = Some(compute_data_route(tables, &mut expr, None, WhatAmI::Peer));
+        if !tables.full_net(WhatAmI::Peer) {
+            routes.peer_data_route =
+                Some(compute_data_route(tables, &mut expr, None, WhatAmI::Peer));
+        }
     }
     if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
         && tables.full_net(WhatAmI::Peer)
@@ -1479,8 +1482,10 @@ pub(crate) fn compute_data_routes(tables: &mut Tables, res: &mut Arc<Resource>) 
                     compute_data_route(tables, &mut expr, Some(idx.index()), WhatAmI::Router);
             }
 
-            res_mut.context_mut().peer_data_route =
-                Some(compute_data_route(tables, &mut expr, None, WhatAmI::Peer));
+            if !tables.full_net(WhatAmI::Peer) {
+                res_mut.context_mut().peer_data_route =
+                    Some(compute_data_route(tables, &mut expr, None, WhatAmI::Peer));
+            }
         }
         if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
             && tables.full_net(WhatAmI::Peer)
