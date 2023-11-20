@@ -39,7 +39,7 @@ impl Segment {
 
             match ShmemConf::new()
                 .size(alloc_size)
-                .flink(format!("watchdog_{id}"))
+                .flink(Self::filename(id))
                 .create()
             {
                 Ok(shmem) => return Ok(Segment { shmem, id }),
@@ -52,9 +52,13 @@ impl Segment {
 
     pub fn open(id: SegmentID) -> ZResult<Self> {
         let shmem = ShmemConf::new()
-            .flink(format!("watchdog_{id}"))
+            .flink(Self::filename(id))
             .open()
             .map_err(|e| zerror!("Unable to open watchdog shm segment: {}", e))?;
         Ok(Self { shmem, id })
+    }
+
+    fn filename(id: SegmentID) -> String {
+        format!("watchdog_{id}")
     }
 }

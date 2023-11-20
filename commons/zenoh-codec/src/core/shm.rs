@@ -16,7 +16,20 @@ use zenoh_buffers::{
     reader::{DidntRead, Reader},
     writer::{DidntWrite, Writer},
 };
-use zenoh_shm::SharedMemoryBufInfo;
+use zenoh_shm::{watchdog::descriptor::Descriptor, SharedMemoryBufInfo};
+
+impl<W> WCodec<&Descriptor, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &Descriptor) -> Self::Output {
+        self.write(&mut *writer, x.id)?;
+        self.write(&mut *writer, x.index_and_bitpos)?;
+        Ok(())
+    }
+}
 
 impl<W> WCodec<&SharedMemoryBufInfo, &mut W> for Zenoh080
 where
@@ -29,7 +42,25 @@ where
         self.write(&mut *writer, x.length)?;
         self.write(&mut *writer, x.shm_manager.as_str())?;
         self.write(&mut *writer, x.kind)?;
+        self.write(&mut *writer, &x.watchdog_descriptor)?;
         Ok(())
+    }
+}
+
+impl<R> RCodec<Descriptor, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<Descriptor, Self::Error> {
+        let id: u32 = self.read(&mut *reader)?;
+        let index_and_bitpos: u32 = self.read(&mut *reader)?;
+
+        Ok(Descriptor {
+            id,
+            index_and_bitpos,
+        })
     }
 }
 
@@ -44,8 +75,10 @@ where
         let length: usize = self.read(&mut *reader)?;
         let shm_manager: String = self.read(&mut *reader)?;
         let kind: u8 = self.read(&mut *reader)?;
+        let watchdog_descriptor: Descriptor = self.read(&mut *reader)?;
 
-        let shm_info = SharedMemoryBufInfo::new(offset, length, shm_manager, kind);
+        let shm_info =
+            SharedMemoryBufInfo::new(offset, length, shm_manager, kind, watchdog_descriptor);
         Ok(shm_info)
     }
 }

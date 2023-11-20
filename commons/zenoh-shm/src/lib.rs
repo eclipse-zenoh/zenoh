@@ -17,12 +17,20 @@ use std::{
     cmp,
     collections::{binary_heap::BinaryHeap, HashMap},
     fmt, mem,
-    sync::atomic::{AtomicPtr, AtomicUsize, Ordering},
+    sync::{
+        atomic::{AtomicPtr, AtomicUsize, Ordering},
+        Arc,
+    },
+};
+use watchdog::{
+    confirmator::{ConfirmedDescriptor, GLOBAL_CONFIRMATOR},
+    descriptor::Descriptor,
+    storage::GLOBAL_STORAGE,
 };
 use zenoh_buffers::ZSliceBuffer;
 use zenoh_result::{zerror, ShmError, ZResult};
 
-mod watchdog;
+pub mod watchdog;
 
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
 const ACCOUNTED_OVERHEAD: usize = 4_096;
@@ -78,15 +86,24 @@ pub struct SharedMemoryBufInfo {
     pub shm_manager: String,
     /// The kind of buffer.
     pub kind: u8,
+    /// The watchdog descriptor of buffer.
+    pub watchdog_descriptor: Descriptor,
 }
 
 impl SharedMemoryBufInfo {
-    pub fn new(offset: usize, length: usize, manager: String, kind: u8) -> SharedMemoryBufInfo {
+    pub fn new(
+        offset: usize,
+        length: usize,
+        manager: String,
+        kind: u8,
+        watchdog_descriptor: Descriptor,
+    ) -> SharedMemoryBufInfo {
         SharedMemoryBufInfo {
             offset,
             length,
             shm_manager: manager,
             kind,
+            watchdog_descriptor,
         }
     }
 }
@@ -98,6 +115,7 @@ pub struct SharedMemoryBuf {
     pub buf: AtomicPtr<u8>,
     pub len: usize,
     pub info: SharedMemoryBufInfo,
+    pub watchdog: Arc<ConfirmedDescriptor>,
 }
 
 impl std::fmt::Debug for SharedMemoryBuf {
@@ -134,20 +152,20 @@ impl SharedMemoryBuf {
         self.info.shm_manager.clone()
     }
 
-    pub fn ref_count(&self) -> usize {
-        let rc = self.rc_ptr.load(Ordering::SeqCst);
-        unsafe { (*rc).load(Ordering::SeqCst) }
-    }
-
-    pub fn inc_ref_count(&self) {
-        let rc = self.rc_ptr.load(Ordering::SeqCst);
-        unsafe { (*rc).fetch_add(1, Ordering::SeqCst) };
-    }
-
-    pub fn dec_ref_count(&self) {
-        let rc = self.rc_ptr.load(Ordering::SeqCst);
-        unsafe { (*rc).fetch_sub(1, Ordering::SeqCst) };
-    }
+    //pub fn ref_count(&self) -> usize {
+    //    let rc = self.rc_ptr.load(Ordering::SeqCst);
+    //    unsafe { (*rc).load(Ordering::SeqCst) }
+    //}
+    //
+    //pub fn inc_ref_count(&self) {
+    //    let rc = self.rc_ptr.load(Ordering::SeqCst);
+    //    unsafe { (*rc).fetch_add(1, Ordering::SeqCst) };
+    //}
+    //
+    //pub fn dec_ref_count(&self) {
+    //    let rc = self.rc_ptr.load(Ordering::SeqCst);
+    //    unsafe { (*rc).fetch_sub(1, Ordering::SeqCst) };
+    //}
 
     pub fn as_slice(&self) -> &[u8] {
         log::trace!("SharedMemoryBuf::as_slice() == len = {:?}", self.len);
@@ -172,15 +190,15 @@ impl SharedMemoryBuf {
     }
 }
 
-impl Drop for SharedMemoryBuf {
-    fn drop(&mut self) {
-        self.dec_ref_count();
-    }
-}
+//impl Drop for SharedMemoryBuf {
+//    fn drop(&mut self) {
+//        self.dec_ref_count();
+//    }
+//}
 
 impl Clone for SharedMemoryBuf {
     fn clone(&self) -> Self {
-        self.inc_ref_count();
+        //self.inc_ref_count();
         let rc = self.rc_ptr.load(Ordering::SeqCst);
         let bp = self.buf.load(Ordering::SeqCst);
         SharedMemoryBuf {
@@ -188,6 +206,7 @@ impl Clone for SharedMemoryBuf {
             buf: AtomicPtr::new(bp),
             len: self.len,
             info: self.info.clone(),
+            watchdog: self.watchdog.clone(),
         }
     }
 }
@@ -241,6 +260,7 @@ impl SharedMemoryReader {
                     buf: AtomicPtr::new(buf),
                     len: info.length - CHUNK_HEADER_SIZE,
                     info: info.clone(),
+                    watchdog: Arc::new(GLOBAL_CONFIRMATOR.add(&info.watchdog_descriptor)?),
                 };
                 Ok(shmb)
             }
@@ -291,6 +311,10 @@ pub struct SharedMemoryManager {
 unsafe impl Send for SharedMemoryManager {}
 
 impl SharedMemoryManager {
+    pub fn available(&self) -> usize {
+        self.available
+    }
+
     /// Creates a new SharedMemoryManager managing allocations of a region of the
     /// given size.
     pub fn make(id: String, size: usize) -> ZResult<SharedMemoryManager> {
@@ -347,20 +371,27 @@ impl SharedMemoryManager {
     }
 
     fn free_chunk_map_to_shmbuf(&self, chunk: &Chunk) -> SharedMemoryBuf {
+        let rc = chunk.base_addr as *mut ChunkHeaderType;
+        unsafe { (*rc).store(1, Ordering::SeqCst) };
+        let rc_ptr = AtomicPtr::<ChunkHeaderType>::new(rc);
+
+        let watchdog = GLOBAL_STORAGE
+            .allocate_watchdog(AtomicPtr::<ChunkHeaderType>::new(rc))
+            .unwrap();
+
         let info = SharedMemoryBufInfo {
             offset: chunk.offset,
             length: chunk.size,
             shm_manager: self.segment_path.clone(),
             kind: 0,
+            watchdog_descriptor: Descriptor::from(&watchdog.owned),
         };
-        let rc = chunk.base_addr as *mut ChunkHeaderType;
-        unsafe { (*rc).store(1, Ordering::SeqCst) };
-        let rc_ptr = AtomicPtr::<ChunkHeaderType>::new(rc);
         SharedMemoryBuf {
             rc_ptr,
             buf: AtomicPtr::<u8>::new(unsafe { chunk.base_addr.add(CHUNK_HEADER_SIZE) }),
             len: chunk.size - CHUNK_HEADER_SIZE,
             info,
+            watchdog: Arc::new(watchdog),
         }
     }
 

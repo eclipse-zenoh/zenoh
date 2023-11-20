@@ -195,7 +195,7 @@ pub fn map_zslice_to_shminfo(shmb: &SharedMemoryBuf) -> ZResult<ZSlice> {
         .write(&mut writer, &shmb.info)
         .map_err(|e| zerror!("{:?}", e))?;
     // Increase the reference count so to keep the SharedMemoryBuf valid
-    shmb.inc_ref_count();
+    //shmb.inc_ref_count();
     // Replace the content of the slice
     let mut zslice: ZSlice = info.into();
     zslice.kind = ZSliceKind::ShmPtr;

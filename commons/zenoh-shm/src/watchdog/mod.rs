@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+pub mod confirmator;
 pub mod descriptor;
+mod shm;
 pub mod storage;
 mod validator;
-pub mod confirmator;
-mod shm;

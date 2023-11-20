@@ -18,7 +18,7 @@ use super::shm::Segment;
 
 pub type SegmentID = u32;
 
-#[derive(Clone, Eq, Hash, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Eq, Hash, PartialEq, PartialOrd, Ord, Debug)]
 pub struct Descriptor {
     pub id: SegmentID,
     pub index_and_bitpos: u32,
@@ -64,6 +64,7 @@ impl OwnedDescriptor {
 }
 
 unsafe impl Send for OwnedDescriptor {}
+unsafe impl Sync for OwnedDescriptor {}
 
 impl Ord for OwnedDescriptor {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {

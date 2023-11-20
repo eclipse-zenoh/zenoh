@@ -13,7 +13,7 @@
 //
 
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::BTreeMap,
     sync::{
         atomic::{AtomicBool, AtomicU64},
         Arc, Mutex,
@@ -24,7 +24,7 @@ use std::{
 
 use lazy_static::lazy_static;
 use log::error;
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_result::{zerror, ZResult};
 
 use super::{
     descriptor::{Descriptor, OwnedDescriptor, SegmentID},
@@ -37,25 +37,34 @@ lazy_static! {
 }
 
 pub struct ConfirmedDescriptor {
-    owned: OwnedDescriptor,
-    confirmed: Arc<Mutex<BTreeSet<OwnedDescriptor>>>,
+    pub owned: OwnedDescriptor,
+    confirmed: Arc<Mutex<BTreeMap<OwnedDescriptor, usize>>>,
 }
 
 impl Drop for ConfirmedDescriptor {
     fn drop(&mut self) {
         match self.confirmed.lock() {
-            Ok(mut guard) => {
-                if !guard.remove(&self.owned) {
-                    error!("Watchdog not found!")
+            Ok(mut guard) => match guard.entry(self.owned.clone()) {
+                std::collections::btree_map::Entry::Occupied(mut e) => {
+                    let val = e.get_mut();
+                    if *val == 1 {
+                        e.remove();
+                    } else {
+                        *val -= 1;
+                    }
                 }
-            }
+                std::collections::btree_map::Entry::Vacant(_) => error!("Watchdog not found!"),
+            },
             Err(e) => error!("{e}"),
         }
     }
 }
 
 impl ConfirmedDescriptor {
-    fn new(owned: OwnedDescriptor, confirmed: Arc<Mutex<BTreeSet<OwnedDescriptor>>>) -> Self {
+    fn new(
+        owned: OwnedDescriptor,
+        confirmed: Arc<Mutex<BTreeMap<OwnedDescriptor, usize>>>,
+    ) -> Self {
         Self { owned, confirmed }
     }
 }
@@ -64,7 +73,7 @@ impl ConfirmedDescriptor {
 // todo: think about linked table cleanup
 pub struct WatchdogConfirmator {
     linked_table: Mutex<BTreeMap<SegmentID, Arc<Segment>>>,
-    confirmed: Arc<Mutex<BTreeSet<OwnedDescriptor>>>,
+    confirmed: Arc<Mutex<BTreeMap<OwnedDescriptor, usize>>>,
     running: Arc<AtomicBool>,
 }
 
@@ -77,7 +86,7 @@ impl Drop for WatchdogConfirmator {
 
 impl WatchdogConfirmator {
     fn new(interval: Duration) -> Self {
-        let confirmed = Arc::new(Mutex::new(BTreeSet::<OwnedDescriptor>::default()));
+        let confirmed = Arc::new(Mutex::new(BTreeMap::<OwnedDescriptor, usize>::default()));
         let running = Arc::new(AtomicBool::new(true));
 
         let c_confirmed = confirmed.clone();
@@ -85,7 +94,7 @@ impl WatchdogConfirmator {
         let _ = thread::spawn(move || {
             while c_running.load(std::sync::atomic::Ordering::Relaxed) {
                 let guard = c_confirmed.lock().unwrap();
-                for descriptor in guard.iter() {
+                for (descriptor, _count) in guard.iter() {
                     descriptor.confirm();
                 }
                 drop(guard);
@@ -103,20 +112,24 @@ impl WatchdogConfirmator {
     pub fn add_owned(&self, watchdog: OwnedDescriptor) -> ZResult<ConfirmedDescriptor> {
         watchdog.confirm();
         let mut guard = self.confirmed.lock().map_err(|e| zerror!("{e}"))?;
-        let ok = guard.insert(watchdog.clone());
-        drop(guard);
-        if ok {
-            return Ok(ConfirmedDescriptor::new(watchdog, self.confirmed.clone()));
+        match guard.entry(watchdog.clone()) {
+            std::collections::btree_map::Entry::Vacant(vacant) => {
+                vacant.insert(1);
+            }
+            std::collections::btree_map::Entry::Occupied(mut occupied) => {
+                *occupied.get_mut() += 1;
+            }
         }
-        bail!("Watchdog already exists!")
+        drop(guard);
+        Ok(ConfirmedDescriptor::new(watchdog, self.confirmed.clone()))
     }
 
-    pub fn add(&self, descriptor: Descriptor) -> ZResult<ConfirmedDescriptor> {
+    pub fn add(&self, descriptor: &Descriptor) -> ZResult<ConfirmedDescriptor> {
         let watchdog = self.link(descriptor)?;
         self.add_owned(watchdog)
     }
 
-    fn link(&self, descriptor: Descriptor) -> ZResult<OwnedDescriptor> {
+    fn link(&self, descriptor: &Descriptor) -> ZResult<OwnedDescriptor> {
         let mut guard = self.linked_table.lock().map_err(|e| zerror!("{e}"))?;
 
         let segment = match guard.entry(descriptor.id) {
