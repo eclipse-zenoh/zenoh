@@ -18,7 +18,7 @@ use serde_json::{Map, Value};
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::{key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult};
-use zenoh_plugin_trait::{PluginStructVersion, PluginStartArgs};
+use zenoh_plugin_trait::{PluginStartArgs, PluginStructVersion};
 use zenoh_result::{bail, zerror, Error};
 
 #[derive(JsonSchema, Debug, Clone, AsMut, AsRef)]

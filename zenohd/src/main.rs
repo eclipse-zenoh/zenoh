@@ -15,12 +15,12 @@ use async_std::task;
 use clap::{ArgMatches, Command};
 use futures::future;
 use git_version::git_version;
-use zenoh::Result;
 use std::collections::HashSet;
 use zenoh::config::{Config, ModeDependentValue, PermissionsConf, PluginLoad, ValidatedMap};
 use zenoh::plugins::PluginsManager;
 use zenoh::prelude::{EndPoint, WhatAmI};
 use zenoh::runtime::{AdminSpace, Runtime};
+use zenoh::Result;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
