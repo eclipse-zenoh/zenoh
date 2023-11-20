@@ -629,7 +629,9 @@ impl Config {
 
 impl std::fmt::Display for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", serde_json::to_string(self).unwrap())
+        let mut json = serde_json::to_value(self).unwrap();
+        sift_privates(&mut json);
+        write!(f, "{json}")
     }
 }
 

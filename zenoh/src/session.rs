@@ -2046,151 +2046,203 @@ impl Primitives for Session {
 
     fn send_response(&self, msg: Response) {
         trace!("recv Response {:?}", msg);
-        if let ResponseBody::Reply(m) = msg.payload {
-            let mut state = zwrite!(self.state);
-            let key_expr = match state.remote_key_to_expr(&msg.wire_expr) {
-                Ok(key) => key.into_owned(),
-                Err(e) => {
-                    error!("Received ReplyData for unkown key_expr: {}", e);
-                    return;
+        match msg.payload {
+            ResponseBody::Ack(_) => {
+                log::warn!(
+                    "Received a ResponseBody::Ack, but this isn't supported yet. Dropping message."
+                )
+            }
+            ResponseBody::Put(_) => {
+                log::warn!(
+                    "Received a ResponseBody::Put, but this isn't supported yet. Dropping message."
+                )
+            }
+            ResponseBody::Err(e) => {
+                let mut state = zwrite!(self.state);
+                match state.queries.get_mut(&msg.rid) {
+                    Some(query) => {
+                        let callback = query.callback.clone();
+                        std::mem::drop(state);
+                        let value = match e.ext_body {
+                            Some(body) => Value {
+                                payload: body.payload,
+                                encoding: body.encoding,
+                            },
+                            None => Value {
+                                payload: ZBuf::empty(),
+                                encoding: zenoh_protocol::core::Encoding::EMPTY,
+                            },
+                        };
+                        let replier_id = match e.ext_sinfo {
+                            Some(info) => info.zid,
+                            None => ZenohId::rand(),
+                        };
+                        let new_reply = Reply {
+                            replier_id,
+                            sample: Err(value),
+                        };
+                        callback(new_reply);
+                    }
+                    None => {
+                        log::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                    }
                 }
-            };
-            match state.queries.get_mut(&msg.rid) {
-                Some(query) => {
-                    if !matches!(
-                        query
-                            .selector
-                            .parameters()
-                            .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
-                        Ok([true])
-                    ) && !query.selector.key_expr.intersects(&key_expr)
-                    {
-                        log::warn!(
-                            "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",
-                            key_expr,
-                            msg.ext_respid,
-                            query.selector
-                        );
+            }
+            ResponseBody::Reply(m) => {
+                let mut state = zwrite!(self.state);
+                let key_expr = match state.remote_key_to_expr(&msg.wire_expr) {
+                    Ok(key) => key.into_owned(),
+                    Err(e) => {
+                        error!("Received ReplyData for unkown key_expr: {}", e);
                         return;
                     }
-                    let key_expr = match &query.scope {
-                        Some(scope) => {
-                            if !key_expr.starts_with(&***scope) {
-                                log::warn!(
-                                    "Received Reply for `{}` from `{:?}, which didn't start with scope `{}`: dropping Reply.",
-                                    key_expr,
-                                    msg.ext_respid,
-                                    scope,
-                                );
-                                return;
-                            }
-                            match KeyExpr::try_from(&key_expr[(scope.len() + 1)..]) {
-                                Ok(key_expr) => key_expr,
-                                Err(e) => {
+                };
+                match state.queries.get_mut(&msg.rid) {
+                    Some(query) => {
+                        if !matches!(
+                            query
+                                .selector
+                                .parameters()
+                                .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
+                            Ok([true])
+                        ) && !query.selector.key_expr.intersects(&key_expr)
+                        {
+                            log::warn!(
+                                "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",
+                                key_expr,
+                                msg.ext_respid,
+                                query.selector
+                            );
+                            return;
+                        }
+                        let key_expr = match &query.scope {
+                            Some(scope) => {
+                                if !key_expr.starts_with(&***scope) {
                                     log::warn!(
-                                        "Error unscoping received Reply for `{}` from `{:?}: {}",
+                                        "Received Reply for `{}` from `{:?}, which didn't start with scope `{}`: dropping Reply.",
                                         key_expr,
                                         msg.ext_respid,
-                                        e,
+                                        scope,
                                     );
                                     return;
                                 }
-                            }
-                        }
-                        None => key_expr,
-                    };
-                    let info = DataInfo {
-                        kind: SampleKind::Put,
-                        encoding: Some(m.encoding),
-                        timestamp: m.timestamp,
-                        source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
-                        source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
-                    };
-                    let new_reply = Reply {
-                        sample: Ok(Sample::with_info(
-                            key_expr.into_owned(),
-                            m.payload,
-                            Some(info),
-                        )),
-                        replier_id: ZenohId::rand(), // TOTO
-                    };
-                    let callback = match query.reception_mode {
-                        ConsolidationMode::None => Some((query.callback.clone(), new_reply)),
-                        ConsolidationMode::Monotonic => {
-                            match query
-                                .replies
-                                .as_ref()
-                                .unwrap()
-                                .get(new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr())
-                            {
-                                Some(reply) => {
-                                    if new_reply.sample.as_ref().unwrap().timestamp
-                                        > reply.sample.as_ref().unwrap().timestamp
-                                    {
-                                        query.replies.as_mut().unwrap().insert(
-                                            new_reply
-                                                .sample
-                                                .as_ref()
-                                                .unwrap()
-                                                .key_expr
-                                                .clone()
-                                                .into(),
-                                            new_reply.clone(),
+                                match KeyExpr::try_from(&key_expr[(scope.len() + 1)..]) {
+                                    Ok(key_expr) => key_expr,
+                                    Err(e) => {
+                                        log::warn!(
+                                            "Error unscoping received Reply for `{}` from `{:?}: {}",
+                                            key_expr,
+                                            msg.ext_respid,
+                                            e,
                                         );
-                                        Some((query.callback.clone(), new_reply))
-                                    } else {
-                                        None
+                                        return;
                                     }
                                 }
-                                None => {
-                                    query.replies.as_mut().unwrap().insert(
-                                        new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
-                                        new_reply.clone(),
-                                    );
+                            }
+                            None => key_expr,
+                        };
+                        let info = DataInfo {
+                            kind: SampleKind::Put,
+                            encoding: Some(m.encoding),
+                            timestamp: m.timestamp,
+                            source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
+                            source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
+                        };
+                        let new_reply = Reply {
+                            sample: Ok(Sample::with_info(
+                                key_expr.into_owned(),
+                                m.payload,
+                                Some(info),
+                            )),
+                            replier_id: ZenohId::rand(), // TODO
+                        };
+                        let callback =
+                            match query.reception_mode {
+                                ConsolidationMode::None => {
                                     Some((query.callback.clone(), new_reply))
                                 }
-                            }
-                        }
-                        ConsolidationMode::Latest => {
-                            match query
-                                .replies
-                                .as_ref()
-                                .unwrap()
-                                .get(new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr())
-                            {
-                                Some(reply) => {
-                                    if new_reply.sample.as_ref().unwrap().timestamp
-                                        > reply.sample.as_ref().unwrap().timestamp
-                                    {
-                                        query.replies.as_mut().unwrap().insert(
-                                            new_reply
-                                                .sample
-                                                .as_ref()
-                                                .unwrap()
-                                                .key_expr
-                                                .clone()
-                                                .into(),
-                                            new_reply,
-                                        );
+                                ConsolidationMode::Monotonic => {
+                                    match query.replies.as_ref().unwrap().get(
+                                        new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr(),
+                                    ) {
+                                        Some(reply) => {
+                                            if new_reply.sample.as_ref().unwrap().timestamp
+                                                > reply.sample.as_ref().unwrap().timestamp
+                                            {
+                                                query.replies.as_mut().unwrap().insert(
+                                                    new_reply
+                                                        .sample
+                                                        .as_ref()
+                                                        .unwrap()
+                                                        .key_expr
+                                                        .clone()
+                                                        .into(),
+                                                    new_reply.clone(),
+                                                );
+                                                Some((query.callback.clone(), new_reply))
+                                            } else {
+                                                None
+                                            }
+                                        }
+                                        None => {
+                                            query.replies.as_mut().unwrap().insert(
+                                                new_reply
+                                                    .sample
+                                                    .as_ref()
+                                                    .unwrap()
+                                                    .key_expr
+                                                    .clone()
+                                                    .into(),
+                                                new_reply.clone(),
+                                            );
+                                            Some((query.callback.clone(), new_reply))
+                                        }
                                     }
                                 }
-                                None => {
-                                    query.replies.as_mut().unwrap().insert(
-                                        new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
-                                        new_reply,
-                                    );
+                                ConsolidationMode::Latest => {
+                                    match query.replies.as_ref().unwrap().get(
+                                        new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr(),
+                                    ) {
+                                        Some(reply) => {
+                                            if new_reply.sample.as_ref().unwrap().timestamp
+                                                > reply.sample.as_ref().unwrap().timestamp
+                                            {
+                                                query.replies.as_mut().unwrap().insert(
+                                                    new_reply
+                                                        .sample
+                                                        .as_ref()
+                                                        .unwrap()
+                                                        .key_expr
+                                                        .clone()
+                                                        .into(),
+                                                    new_reply,
+                                                );
+                                            }
+                                        }
+                                        None => {
+                                            query.replies.as_mut().unwrap().insert(
+                                                new_reply
+                                                    .sample
+                                                    .as_ref()
+                                                    .unwrap()
+                                                    .key_expr
+                                                    .clone()
+                                                    .into(),
+                                                new_reply,
+                                            );
+                                        }
+                                    };
+                                    None
                                 }
                             };
-                            None
+                        std::mem::drop(state);
+                        if let Some((callback, new_reply)) = callback {
+                            callback(new_reply);
                         }
-                    };
-                    std::mem::drop(state);
-                    if let Some((callback, new_reply)) = callback {
-                        callback(new_reply);
                     }
-                }
-                None => {
-                    log::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                    None => {
+                        log::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                    }
                 }
             }
         }
