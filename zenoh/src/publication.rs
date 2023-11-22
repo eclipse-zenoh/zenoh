@@ -204,13 +204,13 @@ use zenoh_result::Error;
 
 #[zenoh_macros::unstable]
 #[derive(Clone)]
-pub enum PublisherRef<'a, 'b: 'a> {
-    Borrow(&'a Publisher<'b>),
+pub enum PublisherRef<'a> {
+    Borrow(&'a Publisher<'a>),
     Shared(std::sync::Arc<Publisher<'static>>),
 }
 
 #[zenoh_macros::unstable]
-impl<'a> std::ops::Deref for PublisherRef<'_, 'a> {
+impl<'a> std::ops::Deref for PublisherRef<'a> {
     type Target = Publisher<'a>;
 
     fn deref(&self) -> &Self::Target {
@@ -222,7 +222,7 @@ impl<'a> std::ops::Deref for PublisherRef<'_, 'a> {
 }
 
 #[zenoh_macros::unstable]
-impl std::fmt::Debug for PublisherRef<'_, '_> {
+impl std::fmt::Debug for PublisherRef<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             PublisherRef::Borrow(b) => Publisher::fmt(b, f),
@@ -952,7 +952,7 @@ impl MatchingStatus {
 #[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct MatchingListenerBuilder<'a, Handler> {
-    pub(crate) publisher: PublisherRef<'a, 'a>,
+    pub(crate) publisher: PublisherRef<'a>,
     pub handler: Handler,
 }
 
@@ -1132,7 +1132,7 @@ impl std::fmt::Debug for MatchingListenerState {
 
 #[zenoh_macros::unstable]
 pub(crate) struct MatchingListenerInner<'a> {
-    pub(crate) publisher: PublisherRef<'a, 'a>,
+    pub(crate) publisher: PublisherRef<'a>,
     pub(crate) state: std::sync::Arc<MatchingListenerState>,
     pub(crate) alive: bool,
 }
