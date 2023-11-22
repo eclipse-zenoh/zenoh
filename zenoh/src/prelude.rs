@@ -51,6 +51,8 @@ pub(crate) mod common {
     pub use zenoh_protocol::core::SampleKind;
 
     pub use crate::publication::Priority;
+    #[zenoh_macros::unstable]
+    pub use crate::publication::PublisherDeclarations;
     pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
 
     /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
