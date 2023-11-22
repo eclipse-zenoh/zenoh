@@ -28,10 +28,7 @@ description = "Internal crate for zenoh."
 transport_unixpipe = []
 
 [dependencies]
-async-std = { workspace = true }
 async-trait = { workspace = true }
-async-io = ">= 1.13.0"
-async-global-executor = { workspace = true, features = ["tokio"] }
 log = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 zenoh-buffers = { workspace = true }
@@ -40,6 +37,7 @@ zenoh-config = { workspace = true }
 zenoh-link-commons = { workspace = true }
 zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
+zenoh-runtime = { workspace = true }
 tokio = { workspace = true, features = ["sync", "fs", "io-util", "macros"] }
 
 [target.'cfg(unix)'.dependencies]

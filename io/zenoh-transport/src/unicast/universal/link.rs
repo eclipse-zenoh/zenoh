@@ -14,7 +14,6 @@
 use super::transport::TransportUnicastUniversal;
 #[cfg(feature = "stats")]
 use crate::common::stats::TransportStats;
-use crate::TransportExecutor;
 use tokio::task;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
@@ -28,6 +27,7 @@ use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::transport::{BatchSize, KeepAlive, TransportMessage};
 use zenoh_result::{bail, zerror, ZResult};
 use zenoh_sync::{RecyclingObjectPool, Signal};
+use zenoh_runtime::ZRuntime;
 
 #[cfg(all(feature = "unstable", feature = "transport_compression"))]
 const HEADER_BYTES_SIZE: usize = 2;
@@ -117,9 +117,6 @@ impl TransportLinkUnicastUniversal {
 impl TransportLinkUnicastUniversal {
     pub(super) fn start_tx(
         &mut self,
-        transport: TransportUnicastUniversal,
-        consumer: TransmissionPipelineConsumer,
-        executor: &TransportExecutor,
         keep_alive: Duration,
     ) {
         let mut guard = zwrite!(self.tasks.handle_tx);
@@ -127,7 +124,7 @@ impl TransportLinkUnicastUniversal {
             // Spawn the TX task
             let c_link = self.link.clone();
             let c_transport = self.transport.clone();
-            let handle = executor.runtime.spawn(async move {
+            let handle = ZRuntime::TX.handle().spawn(async move {
                 let res = tx_task(
                     consumer,
                     &mut tx,

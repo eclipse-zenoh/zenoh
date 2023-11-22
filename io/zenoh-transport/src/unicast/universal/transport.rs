@@ -16,7 +16,7 @@ use crate::stats::TransportStats;
 use crate::transport_unicast_inner::TransportUnicastTrait;
 use crate::unicast::universal::link::TransportLinkUnicast;
 use crate::TransportConfigUnicast;
-use crate::{TransportExecutor, TransportManager, TransportPeerEventHandler};
+use crate::{TransportManager, TransportPeerEventHandler};
 use async_trait::async_trait;
 use std::fmt::DebugStruct;
 use std::sync::{Arc, RwLock};
@@ -435,6 +435,46 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         match self.internal_schedule(msg) {
             true => Ok(()),
             false => bail!("error scheduling message!"),
+        }
+    }
+
+    fn start_tx(
+        &self,
+        link: &LinkUnicast,
+        keep_alive: Duration,
+        batch_size: u16,
+    ) -> ZResult<()> {
+        let mut guard = zwrite!(self.links);
+        match zlinkgetmut!(guard, link) {
+            Some(l) => {
+                assert!(!self.priority_tx.is_empty());
+                l.start_tx(keep_alive, batch_size, &self.priority_tx);
+                Ok(())
+            }
+            None => {
+                bail!(
+                    "Can not start Link TX {} with peer: {}",
+                    link,
+                    self.config.zid
+                )
+            }
+        }
+    }
+
+    fn start_rx(&self, link: &LinkUnicast, lease: Duration, batch_size: u16) -> ZResult<()> {
+        let mut guard = zwrite!(self.links);
+        match zlinkgetmut!(guard, link) {
+            Some(l) => {
+                l.start_rx(lease, batch_size);
+                Ok(())
+            }
+            None => {
+                bail!(
+                    "Can not start Link RX {} with peer: {}",
+                    link,
+                    self.config.zid
+                )
+            }
         }
     }
 

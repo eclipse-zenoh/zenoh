@@ -316,27 +316,6 @@ impl Default for TransportManagerBuilder {
     }
 }
 
-pub(crate) struct TransportExecutor {
-    pub runtime: tokio::runtime::Runtime,
-}
-
-impl TransportExecutor {
-    fn new(num_threads: usize) -> ZResult<Self> {
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        use tokio::runtime::Builder;
-        let runtime = Builder::new_multi_thread()
-            .enable_time()
-            .worker_threads(num_threads)
-            .thread_name_fn(|| {
-                static ATOMIC_TX_THREAD_ID: AtomicUsize = AtomicUsize::new(0);
-                let id = ATOMIC_TX_THREAD_ID.fetch_add(1, Ordering::SeqCst);
-                format!("zenoh-tx-{}", id)
-            })
-            .build()?;
-        Ok(TransportExecutor { runtime })
-    }
-}
-
 #[derive(Clone)]
 pub struct TransportManager {
     pub config: Arc<TransportManagerConfig>,
@@ -345,7 +324,6 @@ pub struct TransportManager {
     pub(crate) cipher: Arc<BlockCipher>,
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
-    pub(crate) tx_executor: Arc<TransportExecutor>,
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
 }
@@ -360,7 +338,12 @@ impl TransportManager {
         // @TODO: this should be moved into the unicast module
         let (new_unicast_link_sender, new_unicast_link_receiver) = flume::unbounded();
 
-        let tx_threads = params.config.tx_threads;
+        use zenoh_runtime::ZRUNTIME_CONFIG;
+        ZRUNTIME_CONFIG
+            .lock()
+            .expect("Failed to configure ZRUNTIME")
+            .tx_threads = params.config.tx_threads;
+
         let this = TransportManager {
             config: Arc::new(params.config),
             state: Arc::new(params.state),
@@ -368,7 +351,6 @@ impl TransportManager {
             cipher: Arc::new(cipher),
             locator_inspector: Default::default(),
             new_unicast_link_sender,
-            tx_executor: Arc::new(TransportExecutor::new(tx_threads).unwrap()),
             #[cfg(feature = "stats")]
             stats: std::sync::Arc::new(crate::stats::TransportStats::default()),
         };
@@ -433,7 +415,7 @@ impl TransportManager {
     }
 
     pub fn get_listeners(&self) -> Vec<EndPoint> {
-        let handle = tokio::runtime::Handle::current();
+        let handle = zenoh_runtime::ZRuntime::Accept.handle();
         let mut lsu = handle.block_on(self.get_listeners_unicast());
         let mut lsm = handle.block_on(self.get_listeners_multicast());
         lsu.append(&mut lsm);
@@ -441,8 +423,9 @@ impl TransportManager {
     }
 
     pub fn get_locators(&self) -> Vec<Locator> {
-        let mut lsu = async_global_executor::block_on(self.get_locators_unicast());
-        let mut lsm = async_global_executor::block_on(self.get_locators_multicast());
+        let handle = zenoh_runtime::ZRuntime::Accept.handle();
+        let mut lsu = handle.block_on(self.get_locators_unicast());
+        let mut lsm = handle.block_on(self.get_locators_multicast());
         lsu.append(&mut lsm);
         lsu
     }

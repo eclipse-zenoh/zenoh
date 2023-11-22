@@ -14,8 +14,7 @@
 use super::transport::TransportUnicastLowlatency;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
-use crate::TransportExecutor;
-use tokio::{sync::RwLock, task};
+use tokio::sync::RwLock;
 use zenoh_codec::*;
 use zenoh_core::{zasyncread, zasyncwrite};
 
@@ -27,6 +26,7 @@ use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_protocol::transport::{KeepAlive, TransportBodyLowLatency, TransportMessageLowLatency};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::RecyclingObjectPool;
+use zenoh_runtime::ZRuntime;
 
 pub(crate) async fn send_with_link(
     link: &TransportLinkUnicast,
@@ -74,7 +74,7 @@ pub(crate) async fn send_with_link(
 
 impl TransportUnicastLowlatency {
     pub(super) fn send(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
-        async_global_executor::block_on(self.send_async(msg))
+        ZRuntime::TX.handle().block_on(self.send_async(msg))
     }
 
     pub(super) async fn send_async(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
@@ -89,10 +89,12 @@ impl TransportUnicastLowlatency {
         .await
     }
 
-    pub(super) fn start_keepalive(&self, executor: &TransportExecutor, keep_alive: Duration) {
-        let mut guard = async_global_executor::block_on(async { zasyncwrite!(self.handle_keepalive) });
+    pub(super) fn start_keepalive(&self, keep_alive: Duration) {
+        let tx_rt = ZRuntime::TX.handle();
+        dbg!(&tx_rt);
+        let mut guard = tx_rt.block_on(async { zasyncwrite!(self.handle_keepalive) });
         let c_transport = self.clone();
-        let handle = executor.runtime.spawn(async move {
+        let handle = tx_rt.spawn(async move {
             let res = keepalive_task(
                 c_transport.link.clone(),
                 keep_alive,
@@ -131,9 +133,10 @@ impl TransportUnicastLowlatency {
     }
 
     pub(super) fn internal_start_rx(&self, lease: Duration, batch_size: u16) {
-        let mut guard = async_global_executor::block_on(async { zasyncwrite!(self.handle_rx) });
+        let rx_rt = ZRuntime::RX.handle();
+        let mut guard = rx_rt.block_on(async { zasyncwrite!(self.handle_rx) });
         let c_transport = self.clone();
-        let handle = task::spawn(async move {
+        let handle = rx_rt.spawn(async move {
             let guard = zasyncread!(c_transport.link);
             let link = guard.as_ref().unwrap().rx();
             drop(guard);
