@@ -143,7 +143,6 @@ impl Router {
             #[cfg(feature = "stats")]
             None,
             Arc::new(McastMux::new(transport.clone())),
-            0,
             Some(transport),
             hat_face,
         ));
@@ -169,7 +168,6 @@ impl Router {
             #[cfg(feature = "stats")]
             Some(transport.get_stats().unwrap()),
             Arc::new(DummyPrimitives),
-            0,
             Some(transport),
             tables.hat_code.new_face(),
         );

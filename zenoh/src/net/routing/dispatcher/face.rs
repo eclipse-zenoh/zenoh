@@ -36,7 +36,6 @@ pub struct FaceState {
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn Primitives + Send + Sync>,
-    pub(crate) link_id: usize,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
@@ -52,7 +51,6 @@ impl FaceState {
         whatami: WhatAmI,
         #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn Primitives + Send + Sync>,
-        link_id: usize,
         mcast_group: Option<TransportMulticast>,
         hat: Box<dyn Any + Send + Sync>,
     ) -> Arc<FaceState> {
@@ -63,7 +61,6 @@ impl FaceState {
             #[cfg(feature = "stats")]
             stats,
             primitives,
-            link_id,
             local_mappings: HashMap::new(),
             remote_mappings: HashMap::new(),
             next_qid: 0,

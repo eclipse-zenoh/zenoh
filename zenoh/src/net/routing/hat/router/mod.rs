@@ -347,7 +347,6 @@ impl HatBaseTrait for HatCode {
                     #[cfg(feature = "stats")]
                     None,
                     primitives.clone(),
-                    0,
                     None,
                     Box::new(HatFace::new()),
                 )
@@ -410,13 +409,14 @@ impl HatBaseTrait for HatCode {
                     #[cfg(feature = "stats")]
                     Some(stats),
                     Arc::new(Mux::new(transport)),
-                    link_id,
                     None,
                     Box::new(HatFace::new()),
                 )
             })
             .clone();
         log::debug!("New {}", newface);
+
+        face_hat_mut!(&mut newface).link_id = link_id;
 
         pubsub_new_face(tables, &mut newface);
         queries_new_face(tables, &mut newface);
@@ -644,14 +644,14 @@ impl HatBaseTrait for HatCode {
                     .routers_net
                     .as_ref()
                     .unwrap()
-                    .get_local_context(routing_context, face.link_id),
+                    .get_local_context(routing_context, face_hat!(face).link_id),
                 WhatAmI::Peer => {
                     if hat!(tables).full_net(WhatAmI::Peer) {
                         hat!(tables)
                             .peers_net
                             .as_ref()
                             .unwrap()
-                            .get_local_context(routing_context, face.link_id)
+                            .get_local_context(routing_context, face_hat!(face).link_id)
                     } else {
                         0
                     }
@@ -664,7 +664,7 @@ impl HatBaseTrait for HatCode {
                         .peers_net
                         .as_ref()
                         .unwrap()
-                        .get_local_context(routing_context, face.link_id)
+                        .get_local_context(routing_context, face_hat!(face).link_id)
                 } else {
                     0
                 }
@@ -808,6 +808,7 @@ impl HatContext {
 }
 
 struct HatFace {
+    link_id: usize,
     local_subs: HashSet<Arc<Resource>>,
     remote_subs: HashSet<Arc<Resource>>,
     local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
@@ -817,6 +818,7 @@ struct HatFace {
 impl HatFace {
     fn new() -> Self {
         Self {
+            link_id: 0,
             local_subs: HashSet::new(),
             remote_subs: HashSet::new(),
             local_qabls: HashMap::new(),
@@ -830,7 +832,7 @@ fn get_router(tables: &Tables, face: &Arc<FaceState>, nodeid: RoutingContext) ->
         .routers_net
         .as_ref()
         .unwrap()
-        .get_link(face.link_id)
+        .get_link(face_hat!(face).link_id)
     {
         Some(link) => match link.get_zid(&(nodeid as u64)) {
             Some(router) => Some(*router),
@@ -857,7 +859,7 @@ fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: RoutingContext) -> O
         .peers_net
         .as_ref()
         .unwrap()
-        .get_link(face.link_id)
+        .get_link(face_hat!(face).link_id)
     {
         Some(link) => match link.get_zid(&(nodeid as u64)) {
             Some(router) => Some(*router),
