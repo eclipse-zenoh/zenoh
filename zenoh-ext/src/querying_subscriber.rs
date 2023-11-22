@@ -922,7 +922,7 @@ where
     TryIntoSample: TryInto<Sample>,
     <TryIntoSample as TryInto<Sample>>::Error: Into<zenoh_core::Error>,
 {
-    log::debug!("Fetch");
+    log::debug!("Fetch data for FetchingSubscriber");
     (fetch)(Box::new(move |s: TryIntoSample| match s.try_into() {
         Ok(s) => {
             let mut state = zlock!(handler.state);
