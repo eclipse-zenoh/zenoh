@@ -19,6 +19,7 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 pub mod dispatcher;
 pub mod hat;
+pub mod interceptor;
 pub mod router;
 
 use super::runtime;

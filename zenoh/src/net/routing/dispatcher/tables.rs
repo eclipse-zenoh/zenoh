@@ -17,6 +17,8 @@ pub use super::queries::*;
 pub use super::resource::*;
 use crate::net::routing::hat;
 use crate::net::routing::hat::HatTrait;
+use crate::net::routing::interceptor::interceptors;
+use crate::net::routing::interceptor::Interceptor;
 use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
@@ -68,6 +70,7 @@ pub struct Tables {
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
     pub(crate) mcast_groups: Vec<Arc<FaceState>>,
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
+    pub(crate) interceptors: Vec<Box<dyn Interceptor + Send + Sync>>,
     pub(crate) pull_caches_lock: Mutex<()>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) hat_code: Arc<dyn HatTrait + Send + Sync>, // TODO make this a Box
@@ -95,6 +98,7 @@ impl Tables {
             faces: HashMap::new(),
             mcast_groups: vec![],
             mcast_faces: vec![],
+            interceptors: interceptors(),
             pull_caches_lock: Mutex::new(()),
             hat: hat_code.new_tables(router_peers_failover_brokering),
             hat_code: hat_code.into(),

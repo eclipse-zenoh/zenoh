@@ -12,60 +12,77 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::Primitives;
+use crate::net::routing::interceptor::EgressObj;
 use zenoh_protocol::network::{
     Declare, NetworkBody, NetworkMessage, Push, Request, Response, ResponseFinal,
 };
 use zenoh_transport::{TransportMulticast, TransportUnicast};
 
 pub struct Mux {
-    handler: TransportUnicast,
+    pub handler: TransportUnicast,
+    pub(crate) intercept: EgressObj,
 }
 
 impl Mux {
-    pub fn new(handler: TransportUnicast) -> Mux {
-        Mux { handler }
+    pub(crate) fn new(handler: TransportUnicast, intercept: EgressObj) -> Mux {
+        Mux { handler, intercept }
     }
 }
 
 impl Primitives for Mux {
     fn send_declare(&self, msg: Declare) {
-        let _ = self.handler.schedule(NetworkMessage {
+        let msg = NetworkMessage {
             body: NetworkBody::Declare(msg),
             #[cfg(feature = "stats")]
             size: None,
-        });
+        };
+        if let Some(msg) = self.intercept.intercept(msg) {
+            let _ = self.handler.schedule(msg);
+        }
     }
 
     fn send_push(&self, msg: Push) {
-        let _ = self.handler.schedule(NetworkMessage {
+        let msg = NetworkMessage {
             body: NetworkBody::Push(msg),
             #[cfg(feature = "stats")]
             size: None,
-        });
+        };
+        if let Some(msg) = self.intercept.intercept(msg) {
+            let _ = self.handler.schedule(msg);
+        }
     }
 
     fn send_request(&self, msg: Request) {
-        let _ = self.handler.schedule(NetworkMessage {
+        let msg = NetworkMessage {
             body: NetworkBody::Request(msg),
             #[cfg(feature = "stats")]
             size: None,
-        });
+        };
+        if let Some(msg) = self.intercept.intercept(msg) {
+            let _ = self.handler.schedule(msg);
+        }
     }
 
     fn send_response(&self, msg: Response) {
-        let _ = self.handler.schedule(NetworkMessage {
+        let msg = NetworkMessage {
             body: NetworkBody::Response(msg),
             #[cfg(feature = "stats")]
             size: None,
-        });
+        };
+        if let Some(msg) = self.intercept.intercept(msg) {
+            let _ = self.handler.schedule(msg);
+        }
     }
 
     fn send_response_final(&self, msg: ResponseFinal) {
-        let _ = self.handler.schedule(NetworkMessage {
+        let msg = NetworkMessage {
             body: NetworkBody::ResponseFinal(msg),
             #[cfg(feature = "stats")]
             size: None,
-        });
+        };
+        if let Some(msg) = self.intercept.intercept(msg) {
+            let _ = self.handler.schedule(msg);
+        }
     }
 
     fn send_close(&self) {
@@ -74,54 +91,70 @@ impl Primitives for Mux {
 }
 
 pub struct McastMux {
-    handler: TransportMulticast,
+    pub handler: TransportMulticast,
+    pub(crate) intercept: EgressObj,
 }
 
 impl McastMux {
-    pub fn new(handler: TransportMulticast) -> McastMux {
-        McastMux { handler }
+    pub(crate) fn new(handler: TransportMulticast, intercept: EgressObj) -> McastMux {
+        McastMux { handler, intercept }
     }
 }
 
 impl Primitives for McastMux {
     fn send_declare(&self, msg: Declare) {
-        let _ = self.handler.handle_message(NetworkMessage {
+        let msg = NetworkMessage {
             body: NetworkBody::Declare(msg),
             #[cfg(feature = "stats")]
             size: None,
-        });
+        };
+        if let Some(msg) = self.intercept.intercept(msg) {
+            let _ = self.handler.schedule(msg);
+        }
     }
 
     fn send_push(&self, msg: Push) {
-        let _ = self.handler.handle_message(NetworkMessage {
+        let msg = NetworkMessage {
             body: NetworkBody::Push(msg),
             #[cfg(feature = "stats")]
             size: None,
-        });
+        };
+        if let Some(msg) = self.intercept.intercept(msg) {
+            let _ = self.handler.schedule(msg);
+        }
     }
 
     fn send_request(&self, msg: Request) {
-        let _ = self.handler.handle_message(NetworkMessage {
+        let msg = NetworkMessage {
             body: NetworkBody::Request(msg),
             #[cfg(feature = "stats")]
             size: None,
-        });
+        };
+        if let Some(msg) = self.intercept.intercept(msg) {
+            let _ = self.handler.schedule(msg);
+        }
     }
 
     fn send_response(&self, msg: Response) {
-        let _ = self.handler.handle_message(NetworkMessage {
+        let msg = NetworkMessage {
             body: NetworkBody::Response(msg),
             #[cfg(feature = "stats")]
             size: None,
-        });
+        };
+        if let Some(msg) = self.intercept.intercept(msg) {
+            let _ = self.handler.schedule(msg);
+        }
     }
 
     fn send_response_final(&self, msg: ResponseFinal) {
-        let _ = self.handler.handle_message(NetworkMessage {
+        let msg = NetworkMessage {
             body: NetworkBody::ResponseFinal(msg),
             #[cfg(feature = "stats")]
             size: None,
-        });
+        };
+        if let Some(msg) = self.intercept.intercept(msg) {
+            let _ = self.handler.schedule(msg);
+        }
     }
 
     fn send_close(&self) {
