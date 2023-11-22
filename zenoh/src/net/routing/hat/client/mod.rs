@@ -35,9 +35,7 @@ use super::{
 };
 use crate::{
     net::{
-        codec::Zenoh080Routing,
-        primitives::{Mux, Primitives},
-        protocol::linkstate::LinkStateList,
+        codec::Zenoh080Routing, protocol::linkstate::LinkStateList, routing::dispatcher::face::Face,
     },
     runtime::Runtime,
 };
@@ -332,43 +330,21 @@ impl HatBaseTrait for HatCode {
         &self,
         tables: &mut Tables,
         _tables_ref: &Arc<TablesLock>,
-        primitives: Arc<dyn Primitives + Send + Sync>,
-    ) -> ZResult<Arc<FaceState>> {
-        let fid = tables.face_counter;
-        tables.face_counter += 1;
-        let mut newface = tables
-            .faces
-            .entry(fid)
-            .or_insert_with(|| {
-                FaceState::new(
-                    fid,
-                    tables.zid,
-                    WhatAmI::Client,
-                    #[cfg(feature = "stats")]
-                    None,
-                    primitives.clone(),
-                    None,
-                    Box::new(HatFace::new()),
-                )
-            })
-            .clone();
-        log::debug!("New {}", newface);
-
-        pubsub_new_face(tables, &mut newface);
-        queries_new_face(tables, &mut newface);
-
-        Ok(newface)
+        face: &mut Face,
+    ) -> ZResult<()> {
+        pubsub_new_face(tables, &mut face.state);
+        queries_new_face(tables, &mut face.state);
+        Ok(())
     }
 
     fn new_transport_unicast_face(
         &self,
         tables: &mut Tables,
         tables_ref: &Arc<TablesLock>,
-        transport: TransportUnicast,
-    ) -> ZResult<Arc<FaceState>> {
-        let whatami = transport.get_whatami()?;
-
-        let link_id = match (tables.whatami, whatami) {
+        face: &mut Face,
+        transport: &TransportUnicast,
+    ) -> ZResult<()> {
+        let link_id = match (tables.whatami, face.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => hat_mut!(tables)
                 .routers_net
                 .as_mut()
@@ -393,35 +369,12 @@ impl HatBaseTrait for HatCode {
             );
         }
 
-        let fid = tables.face_counter;
-        tables.face_counter += 1;
-        let zid = transport.get_zid()?;
-        #[cfg(feature = "stats")]
-        let stats = transport.get_stats()?;
-        let mut newface = tables
-            .faces
-            .entry(fid)
-            .or_insert_with(|| {
-                FaceState::new(
-                    fid,
-                    zid,
-                    whatami,
-                    #[cfg(feature = "stats")]
-                    Some(stats),
-                    Arc::new(Mux::new(transport)),
-                    None,
-                    Box::new(HatFace::new()),
-                )
-            })
-            .clone();
-        log::debug!("New {}", newface);
+        face_hat_mut!(&mut face.state).link_id = link_id;
 
-        face_hat_mut!(&mut newface).link_id = link_id;
+        pubsub_new_face(tables, &mut face.state);
+        queries_new_face(tables, &mut face.state);
 
-        pubsub_new_face(tables, &mut newface);
-        queries_new_face(tables, &mut newface);
-
-        match (tables.whatami, whatami) {
+        match (tables.whatami, face.state.whatami) {
             (WhatAmI::Router, WhatAmI::Router) => {
                 hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
             }
@@ -434,7 +387,7 @@ impl HatBaseTrait for HatCode {
             }
             _ => (),
         }
-        Ok(newface)
+        Ok(())
     }
 
     fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>) {

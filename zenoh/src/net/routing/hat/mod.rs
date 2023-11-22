@@ -18,13 +18,13 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use super::dispatcher::{
-    face::FaceState,
+    face::{Face, FaceState},
     tables::{
         DataRoutes, PullCaches, QueryRoutes, QueryTargetQablSet, Resource, Route, RoutingContext,
         RoutingExpr, Tables, TablesLock,
     },
 };
-use crate::{net::primitives::Primitives, runtime::Runtime};
+use crate::runtime::Runtime;
 use std::{any::Any, sync::Arc};
 use zenoh_buffers::ZBuf;
 use zenoh_config::{WhatAmI, WhatAmIMatcher};
@@ -74,15 +74,16 @@ pub(crate) trait HatBaseTrait {
         &self,
         tables: &mut Tables,
         tables_ref: &Arc<TablesLock>,
-        primitives: Arc<dyn Primitives + Send + Sync>,
-    ) -> ZResult<Arc<FaceState>>;
+        face: &mut Face,
+    ) -> ZResult<()>;
 
     fn new_transport_unicast_face(
         &self,
         tables: &mut Tables,
         tables_ref: &Arc<TablesLock>,
-        transport: TransportUnicast,
-    ) -> ZResult<Arc<FaceState>>;
+        face: &mut Face,
+        transport: &TransportUnicast,
+    ) -> ZResult<()>;
 
     fn handle_oam(
         &self,

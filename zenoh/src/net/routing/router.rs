@@ -1,6 +1,7 @@
 use crate::net::primitives::DeMux;
 use crate::net::primitives::DummyPrimitives;
 use crate::net::primitives::McastMux;
+use crate::net::primitives::Mux;
 use crate::net::primitives::Primitives;
 
 //
@@ -96,19 +97,40 @@ impl Router {
     }
 
     pub fn new_primitives(&self, primitives: Arc<dyn Primitives + Send + Sync>) -> Arc<Face> {
-        Arc::new(Face {
+        let ctrl_lock = zlock!(self.tables.ctrl_lock);
+        let mut tables = zwrite!(self.tables.tables);
+
+        let zid = tables.zid;
+        let fid = tables.face_counter;
+        tables.face_counter += 1;
+        let newface = tables
+            .faces
+            .entry(fid)
+            .or_insert_with(|| {
+                FaceState::new(
+                    fid,
+                    zid,
+                    WhatAmI::Client,
+                    #[cfg(feature = "stats")]
+                    None,
+                    primitives.clone(),
+                    None,
+                    ctrl_lock.new_face(),
+                )
+            })
+            .clone();
+        log::debug!("New {}", newface);
+
+        let mut face = Face {
             tables: self.tables.clone(),
-            state: {
-                let ctrl_lock = zlock!(self.tables.ctrl_lock);
-                let mut tables = zwrite!(self.tables.tables);
-                let face = ctrl_lock
-                    .new_local_face(&mut tables, &self.tables, primitives)
-                    .unwrap();
-                drop(tables);
-                drop(ctrl_lock);
-                face
-            },
-        })
+            state: newface,
+        };
+        ctrl_lock
+            .new_local_face(&mut tables, &self.tables, &mut face)
+            .unwrap();
+        drop(tables);
+        drop(ctrl_lock);
+        Arc::new(face)
     }
 
     pub fn new_transport_unicast(
@@ -117,17 +139,42 @@ impl Router {
     ) -> ZResult<Arc<LinkStateInterceptor>> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
+
+        let whatami = transport.get_whatami()?;
+        let fid = tables.face_counter;
+        tables.face_counter += 1;
+        let zid = transport.get_zid()?;
+        #[cfg(feature = "stats")]
+        let stats = transport.get_stats()?;
+        let newface = tables
+            .faces
+            .entry(fid)
+            .or_insert_with(|| {
+                FaceState::new(
+                    fid,
+                    zid,
+                    whatami,
+                    #[cfg(feature = "stats")]
+                    Some(stats),
+                    Arc::new(Mux::new(transport.clone())),
+                    None,
+                    ctrl_lock.new_face(),
+                )
+            })
+            .clone();
+        log::debug!("New {}", newface);
+
+        let mut face = Face {
+            tables: self.tables.clone(),
+            state: newface,
+        };
+
+        ctrl_lock.new_transport_unicast_face(&mut tables, &self.tables, &mut face, &transport)?;
+
         Ok(Arc::new(LinkStateInterceptor::new(
             transport.clone(),
             self.tables.clone(),
-            Face {
-                tables: self.tables.clone(),
-                state: ctrl_lock.new_transport_unicast_face(
-                    &mut tables,
-                    &self.tables,
-                    transport,
-                )?,
-            },
+            face,
         )))
     }
 
