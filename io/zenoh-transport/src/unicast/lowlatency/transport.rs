@@ -211,19 +211,13 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         _link: &TransportLinkUnicast,
         executor: &TransportExecutor,
         keep_alive: Duration,
-        _batch_size: u16,
     ) -> ZResult<()> {
         self.start_keepalive(executor, keep_alive);
         Ok(())
     }
 
-    fn start_rx(
-        &self,
-        _link: &TransportLinkUnicast,
-        lease: Duration,
-        batch_size: u16,
-    ) -> ZResult<()> {
-        self.internal_start_rx(lease, batch_size);
+    fn start_rx(&self, _link: &TransportLinkUnicast, lease: Duration) -> ZResult<()> {
+        self.internal_start_rx(lease);
         Ok(())
     }
 

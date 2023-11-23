@@ -28,7 +28,7 @@ use std::time::Duration;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Field, Resolution, ZenohId},
-    transport::{BatchSize, Close, TransportMessage, TransportSn},
+    transport::{Close, TransportMessage, TransportSn},
 };
 use zenoh_result::ZResult;
 
@@ -135,7 +135,6 @@ pub(super) async fn close_link(mut link: TransportLinkUnicast, reason: Option<u8
 pub(super) struct InputFinalize {
     pub(super) transport: TransportUnicast,
     pub(super) other_lease: Duration,
-    pub(super) agreed_batch_size: BatchSize,
 }
 // Finalize the transport, notify the callback and start the link tasks
 pub(super) async fn finalize_transport(
@@ -148,12 +147,7 @@ pub(super) async fn finalize_transport(
 
     // Start the TX loop
     let keep_alive = manager.config.unicast.lease / manager.config.unicast.keep_alive as u32;
-    transport.start_tx(
-        link,
-        &manager.tx_executor,
-        keep_alive,
-        input.agreed_batch_size,
-    )?;
+    transport.start_tx(link, &manager.tx_executor, keep_alive)?;
 
     // Assign a callback if the transport is new
     // Keep the lock to avoid concurrent new_transport and closing/closed notifications
@@ -185,7 +179,7 @@ pub(super) async fn finalize_transport(
     drop(a_guard);
 
     // Start the RX loop
-    transport.start_rx(link, input.other_lease, input.agreed_batch_size)?;
+    transport.start_rx(link, input.other_lease)?;
 
     Ok(())
 }

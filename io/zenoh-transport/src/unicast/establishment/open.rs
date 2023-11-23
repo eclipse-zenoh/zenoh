@@ -628,7 +628,6 @@ pub(crate) async fn open_link(
     let output = InputFinalize {
         transport,
         other_lease: oack_out.other_lease,
-        agreed_batch_size: state.transport.batch_size,
     };
     let transport = output.transport.clone();
     let res = finalize_transport(&link, manager, output).await;

@@ -31,7 +31,7 @@ use async_std::task;
 use async_std::task::JoinHandle;
 use std::{sync::Arc, time::Duration};
 use zenoh_buffers::ZSliceBuffer;
-use zenoh_protocol::transport::{BatchSize, KeepAlive, TransportMessage};
+use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
 
@@ -67,7 +67,6 @@ impl TransportLinkUnicastUniversal {
         &mut self,
         executor: &TransportExecutor,
         keep_alive: Duration,
-        batch_size: BatchSize,
         priority_tx: &[TransportPriorityTx],
     ) {
         if self.handle_tx.is_none() {
@@ -75,7 +74,7 @@ impl TransportLinkUnicastUniversal {
                 is_streamed: self.link.link.is_streamed(),
                 #[cfg(feature = "transport_compression")]
                 is_compression: self.link.config.is_compression,
-                batch_size: batch_size.min(self.link.link.get_mtu()),
+                batch_size: self.link.config.mtu,
                 queue_size: self.transport.manager.config.queue_size,
                 backoff: self.transport.manager.config.queue_backoff,
             };
@@ -113,7 +112,7 @@ impl TransportLinkUnicastUniversal {
         }
     }
 
-    pub(super) fn start_rx(&mut self, lease: Duration, batch_size: u16) {
+    pub(super) fn start_rx(&mut self, lease: Duration) {
         if self.handle_rx.is_none() {
             // Spawn the RX task
             let c_link = self.link.clone();
@@ -128,7 +127,6 @@ impl TransportLinkUnicastUniversal {
                     c_transport.clone(),
                     lease,
                     c_signal.clone(),
-                    batch_size,
                     c_rx_buffer_size,
                 )
                 .await;
@@ -231,7 +229,6 @@ async fn rx_task(
     transport: TransportUnicastUniversal,
     lease: Duration,
     signal: Signal,
-    rx_batch_size: BatchSize,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     enum Action {
@@ -260,7 +257,7 @@ async fn rx_task(
     }
 
     // The pool of buffers
-    let mtu = link.link.get_mtu().min(rx_batch_size) as usize;
+    let mtu = link.config.mtu as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;

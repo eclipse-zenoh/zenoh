@@ -22,9 +22,7 @@ use std::time::Duration;
 use zenoh_buffers::{writer::HasWriter, ZSlice};
 use zenoh_codec::*;
 use zenoh_core::{zasyncread, zasyncwrite};
-use zenoh_protocol::transport::{
-    BatchSize, KeepAlive, TransportBodyLowLatency, TransportMessageLowLatency,
-};
+use zenoh_protocol::transport::{KeepAlive, TransportBodyLowLatency, TransportMessageLowLatency};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::RecyclingObjectPool;
 
@@ -129,7 +127,7 @@ impl TransportUnicastLowlatency {
         }
     }
 
-    pub(super) fn internal_start_rx(&self, lease: Duration, batch_size: u16) {
+    pub(super) fn internal_start_rx(&self, lease: Duration) {
         let mut guard = async_std::task::block_on(async { zasyncwrite!(self.handle_rx) });
         let c_transport = self.clone();
         let handle = task::spawn(async move {
@@ -139,7 +137,7 @@ impl TransportUnicastLowlatency {
             let rx_buffer_size = c_transport.manager.config.link_rx_buffer_size;
 
             // Start the rx task
-            let res = rx_task(link, c_transport.clone(), lease, batch_size, rx_buffer_size).await;
+            let res = rx_task(link, c_transport.clone(), lease, rx_buffer_size).await;
             log::debug!(
                 "[{}] Rx task finished with result {:?}",
                 c_transport.manager.config.zid,
@@ -202,7 +200,6 @@ async fn rx_task_stream(
     link: TransportLinkUnicast,
     transport: TransportUnicastLowlatency,
     lease: Duration,
-    rx_batch_size: BatchSize,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     async fn read(link: &TransportLinkUnicast, buffer: &mut [u8]) -> ZResult<usize> {
@@ -219,7 +216,7 @@ async fn rx_task_stream(
     }
 
     // The pool of buffers
-    let mtu = link.link.get_mtu().min(rx_batch_size) as usize;
+    let mtu = link.config.mtu as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -248,11 +245,10 @@ async fn rx_task_dgram(
     link: TransportLinkUnicast,
     transport: TransportUnicastLowlatency,
     lease: Duration,
-    rx_batch_size: BatchSize,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     // The pool of buffers
-    let mtu = link.link.get_mtu().min(rx_batch_size) as usize;
+    let mtu = link.config.mtu as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -284,12 +280,11 @@ async fn rx_task(
     link: TransportLinkUnicast,
     transport: TransportUnicastLowlatency,
     lease: Duration,
-    rx_batch_size: u16,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     if link.link.is_streamed() {
-        rx_task_stream(link, transport, lease, rx_batch_size, rx_buffer_size).await
+        rx_task_stream(link, transport, lease, rx_buffer_size).await
     } else {
-        rx_task_dgram(link, transport, lease, rx_batch_size, rx_buffer_size).await
+        rx_task_dgram(link, transport, lease, rx_buffer_size).await
     }
 }

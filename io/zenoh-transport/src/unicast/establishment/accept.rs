@@ -727,7 +727,6 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
     let input = InputFinalize {
         transport: transport.clone(),
         other_lease: osyn_out.other_lease,
-        agreed_batch_size: state.transport.batch_size,
     };
     step!(finalize_transport(&link, manager, input)
         .await

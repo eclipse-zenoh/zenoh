@@ -30,10 +30,9 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_core::{zasynclock, zcondfeat, zread, zwrite};
 use zenoh_link::Link;
-use zenoh_protocol::network::NetworkMessage;
-use zenoh_protocol::transport::BatchSize;
 use zenoh_protocol::{
     core::{Priority, WhatAmI, ZenohId},
+    network::NetworkMessage,
     transport::{Close, PrioritySn, TransportMessage, TransportSn},
 };
 use zenoh_result::{bail, zerror, ZResult};
@@ -433,13 +432,12 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         link: &TransportLinkUnicast,
         executor: &TransportExecutor,
         keep_alive: Duration,
-        batch_size: BatchSize,
     ) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, link) {
             Some(l) => {
                 assert!(!self.priority_tx.is_empty());
-                l.start_tx(executor, keep_alive, batch_size, &self.priority_tx);
+                l.start_tx(executor, keep_alive, &self.priority_tx);
                 Ok(())
             }
             None => {
@@ -452,16 +450,11 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         }
     }
 
-    fn start_rx(
-        &self,
-        link: &TransportLinkUnicast,
-        lease: Duration,
-        batch_size: u16,
-    ) -> ZResult<()> {
+    fn start_rx(&self, link: &TransportLinkUnicast, lease: Duration) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, link) {
             Some(l) => {
-                l.start_rx(lease, batch_size);
+                l.start_rx(lease);
                 Ok(())
             }
             None => {
