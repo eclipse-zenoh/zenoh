@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::Primitives;
-use crate::net::routing::interceptor::EgressObj;
+use crate::net::routing::interceptor::EgressIntercept;
 use zenoh_protocol::network::{
     Declare, NetworkBody, NetworkMessage, Push, Request, Response, ResponseFinal,
 };
@@ -20,11 +20,11 @@ use zenoh_transport::{TransportMulticast, TransportUnicast};
 
 pub struct Mux {
     pub handler: TransportUnicast,
-    pub(crate) intercept: EgressObj,
+    pub(crate) intercept: EgressIntercept,
 }
 
 impl Mux {
-    pub(crate) fn new(handler: TransportUnicast, intercept: EgressObj) -> Mux {
+    pub(crate) fn new(handler: TransportUnicast, intercept: EgressIntercept) -> Mux {
         Mux { handler, intercept }
     }
 }
@@ -92,11 +92,11 @@ impl Primitives for Mux {
 
 pub struct McastMux {
     pub handler: TransportMulticast,
-    pub(crate) intercept: EgressObj,
+    pub(crate) intercept: EgressIntercept,
 }
 
 impl McastMux {
-    pub(crate) fn new(handler: TransportMulticast, intercept: EgressObj) -> McastMux {
+    pub(crate) fn new(handler: TransportMulticast, intercept: EgressIntercept) -> McastMux {
         McastMux { handler, intercept }
     }
 }

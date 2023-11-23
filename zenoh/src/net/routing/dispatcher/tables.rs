@@ -70,7 +70,7 @@ pub struct Tables {
     pub(crate) faces: HashMap<usize, Arc<FaceState>>,
     pub(crate) mcast_groups: Vec<Arc<FaceState>>,
     pub(crate) mcast_faces: Vec<Arc<FaceState>>,
-    pub(crate) interceptors: Vec<Box<dyn Interceptor + Send + Sync>>,
+    pub(crate) interceptors: Vec<Interceptor>,
     pub(crate) pull_caches_lock: Mutex<()>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) hat_code: Arc<dyn HatTrait + Send + Sync>, // TODO make this a Box

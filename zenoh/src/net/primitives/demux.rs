@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::Primitives;
-use crate::net::routing::interceptor::IngressObj;
+use crate::net::routing::interceptor::IngressIntercept;
 use std::any::Any;
 use zenoh_link::Link;
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
@@ -21,11 +21,11 @@ use zenoh_transport::TransportPeerEventHandler;
 
 pub struct DeMux<P: Primitives> {
     primitives: P,
-    pub(crate) intercept: IngressObj,
+    pub(crate) intercept: IngressIntercept,
 }
 
 impl<P: Primitives> DeMux<P> {
-    pub(crate) fn new(primitives: P, intercept: IngressObj) -> DeMux<P> {
+    pub(crate) fn new(primitives: P, intercept: IngressIntercept) -> DeMux<P> {
         DeMux {
             primitives,
             intercept,

@@ -18,7 +18,7 @@ pub use super::dispatcher::resource::*;
 use super::dispatcher::tables::Tables;
 use super::dispatcher::tables::TablesLock;
 use super::hat;
-use super::interceptor::EgressObj;
+use super::interceptor::EgressIntercept;
 use super::interceptor::InterceptsChain;
 use super::runtime::Runtime;
 use crate::net::primitives::DeMux;
@@ -26,7 +26,7 @@ use crate::net::primitives::DummyPrimitives;
 use crate::net::primitives::McastMux;
 use crate::net::primitives::Mux;
 use crate::net::primitives::Primitives;
-use crate::net::routing::interceptor::IngressObj;
+use crate::net::routing::interceptor::IngressIntercept;
 use std::any::Any;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -204,7 +204,7 @@ impl Router {
                 .interceptors
                 .iter()
                 .filter_map(|itor| itor.new_transport_multicast(&transport))
-                .collect::<Vec<EgressObj>>(),
+                .collect::<Vec<EgressIntercept>>(),
         ));
         tables.mcast_groups.push(FaceState::new(
             fid,
@@ -237,7 +237,7 @@ impl Router {
                 .interceptors
                 .iter()
                 .filter_map(|itor| itor.new_peer_multicast(&transport))
-                .collect::<Vec<IngressObj>>(),
+                .collect::<Vec<IngressIntercept>>(),
         ));
         let face_state = FaceState::new(
             fid,
@@ -276,7 +276,7 @@ impl LinkStateInterceptor {
         transport: TransportUnicast,
         tables: Arc<TablesLock>,
         face: Face,
-        ingress: IngressObj,
+        ingress: IngressIntercept,
     ) -> Self {
         LinkStateInterceptor {
             transport,

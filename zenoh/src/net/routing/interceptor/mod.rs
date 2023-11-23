@@ -20,12 +20,12 @@
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_transport::{TransportMulticast, TransportUnicast};
 
-pub(crate) trait Intercept {
+pub(crate) trait InterceptTrait {
     fn intercept(&self, msg: NetworkMessage) -> Option<NetworkMessage>;
 }
 
 pub(crate) struct InterceptsChain {
-    pub(crate) intercepts: Vec<Box<dyn Intercept + Send + Sync>>,
+    pub(crate) intercepts: Vec<Intercept>,
 }
 
 impl InterceptsChain {
@@ -35,13 +35,13 @@ impl InterceptsChain {
     }
 }
 
-impl From<Vec<Box<dyn Intercept + Send + Sync>>> for InterceptsChain {
-    fn from(intercepts: Vec<Box<dyn Intercept + Send + Sync>>) -> Self {
+impl From<Vec<Intercept>> for InterceptsChain {
+    fn from(intercepts: Vec<Intercept>) -> Self {
         InterceptsChain { intercepts }
     }
 }
 
-impl Intercept for InterceptsChain {
+impl InterceptTrait for InterceptsChain {
     fn intercept(&self, mut msg: NetworkMessage) -> Option<NetworkMessage> {
         for intercept in &self.intercepts {
             match intercept.intercept(msg) {
@@ -56,19 +56,22 @@ impl Intercept for InterceptsChain {
     }
 }
 
-pub(crate) type IngressObj = Box<dyn Intercept + Send + Sync>;
-pub(crate) type EgressObj = Box<dyn Intercept + Send + Sync>;
+pub(crate) type Intercept = Box<dyn InterceptTrait + Send + Sync>;
+pub(crate) type IngressIntercept = Intercept;
+pub(crate) type EgressIntercept = Intercept;
 
-pub(crate) trait Interceptor {
+pub(crate) trait InterceptorTrait {
     fn new_transport_unicast(
         &self,
         transport: &TransportUnicast,
-    ) -> (Option<IngressObj>, Option<EgressObj>);
-    fn new_transport_multicast(&self, transport: &TransportMulticast) -> Option<EgressObj>;
-    fn new_peer_multicast(&self, transport: &TransportMulticast) -> Option<IngressObj>;
+    ) -> (Option<IngressIntercept>, Option<EgressIntercept>);
+    fn new_transport_multicast(&self, transport: &TransportMulticast) -> Option<EgressIntercept>;
+    fn new_peer_multicast(&self, transport: &TransportMulticast) -> Option<IngressIntercept>;
 }
 
-pub(crate) fn interceptors() -> Vec<Box<dyn Interceptor + Send + Sync>> {
+pub(crate) type Interceptor = Box<dyn InterceptorTrait + Send + Sync>;
+
+pub(crate) fn interceptors() -> Vec<Interceptor> {
     // Add interceptors here
     vec![]
 }
