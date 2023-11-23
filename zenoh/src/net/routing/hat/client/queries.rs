@@ -16,7 +16,7 @@ use super::{face_hat, face_hat_mut, hat, hat_mut, res_hat, res_hat_mut};
 use super::{get_peer, get_router, HatCode, HatContext, HatFace, HatTables};
 use crate::net::routing::dispatcher::face::FaceState;
 use crate::net::routing::dispatcher::queries::*;
-use crate::net::routing::dispatcher::resource::{Resource, RoutingContext, SessionContext};
+use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::{
     QueryRoutes, QueryTargetQabl, QueryTargetQablSet, RoutingExpr,
 };
@@ -197,7 +197,7 @@ fn send_sourced_queryable_to_net_childs(
     res: &Arc<Resource>,
     qabl_info: &QueryableInfo,
     src_face: Option<&mut Arc<FaceState>>,
-    routing_context: RoutingContext,
+    routing_context: NodeId,
 ) {
     for child in childs {
         if net.graph.contains_node(*child) {
@@ -308,7 +308,7 @@ fn propagate_sourced_queryable(
                     res,
                     qabl_info,
                     src_face,
-                    tree_sid.index() as RoutingContext,
+                    tree_sid.index() as NodeId,
                 );
             } else {
                 log::trace!(
@@ -667,7 +667,7 @@ fn send_forget_sourced_queryable_to_net_childs(
     childs: &[NodeIndex],
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
-    routing_context: RoutingContext,
+    routing_context: NodeId,
 ) {
     for child in childs {
         if net.graph.contains_node(*child) {
@@ -771,7 +771,7 @@ fn propagate_forget_sourced_queryable(
                     &net.trees[tree_sid.index()].childs,
                     res,
                     src_face,
-                    tree_sid.index() as RoutingContext,
+                    tree_sid.index() as NodeId,
                 );
             } else {
                 log::trace!(
@@ -1299,7 +1299,7 @@ pub(super) fn queries_tree_change(
                             res,
                             qabl_info,
                             None,
-                            tree_sid as RoutingContext,
+                            tree_sid as NodeId,
                         );
                     }
                 }
@@ -1318,7 +1318,7 @@ fn insert_target_for_qabls(
     expr: &mut RoutingExpr,
     tables: &Tables,
     net: &Network,
-    source: RoutingContext,
+    source: NodeId,
     qabls: &HashMap<ZenohId, QueryableInfo>,
     complete: bool,
 ) {
@@ -1365,7 +1365,7 @@ impl HatQueriesTrait for HatCode {
         face: &mut Arc<FaceState>,
         expr: &WireExpr,
         qabl_info: &QueryableInfo,
-        node_id: RoutingContext,
+        node_id: NodeId,
     ) {
         let rtables = zread!(tables.tables);
         match (rtables.whatami, face.whatami) {
@@ -1394,7 +1394,7 @@ impl HatQueriesTrait for HatCode {
         tables: &TablesLock,
         face: &mut Arc<FaceState>,
         expr: &WireExpr,
-        node_id: RoutingContext,
+        node_id: NodeId,
     ) {
         let rtables = zread!(tables.tables);
         match (rtables.whatami, face.whatami) {
@@ -1422,7 +1422,7 @@ impl HatQueriesTrait for HatCode {
         &self,
         tables: &Tables,
         expr: &mut RoutingExpr,
-        source: RoutingContext,
+        source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet> {
         let mut route = QueryTargetQablSet::new();
@@ -1463,7 +1463,7 @@ impl HatQueriesTrait for HatCode {
                     let net = hat!(tables).routers_net.as_ref().unwrap();
                     let router_source = match source_type {
                         WhatAmI::Router => source,
-                        _ => net.idx.index() as RoutingContext,
+                        _ => net.idx.index() as NodeId,
                     };
                     insert_target_for_qabls(
                         &mut route,
@@ -1482,7 +1482,7 @@ impl HatQueriesTrait for HatCode {
                     let net = hat!(tables).peers_net.as_ref().unwrap();
                     let peer_source = match source_type {
                         WhatAmI::Peer => source,
-                        _ => net.idx.index() as RoutingContext,
+                        _ => net.idx.index() as NodeId,
                     };
                     insert_target_for_qabls(
                         &mut route,
@@ -1500,7 +1500,7 @@ impl HatQueriesTrait for HatCode {
                 let net = hat!(tables).peers_net.as_ref().unwrap();
                 let peer_source = match source_type {
                     WhatAmI::Router | WhatAmI::Peer => source,
-                    _ => net.idx.index() as RoutingContext,
+                    _ => net.idx.index() as NodeId,
                 };
                 insert_target_for_qabls(
                     &mut route,
@@ -1528,7 +1528,7 @@ impl HatQueriesTrait for HatCode {
                                 direction: (
                                     context.face.clone(),
                                     key_expr.to_owned(),
-                                    RoutingContext::default(),
+                                    NodeId::default(),
                                 ),
                                 complete: if complete {
                                     qabl_info.complete as u64
@@ -1613,17 +1613,13 @@ impl HatQueriesTrait for HatCode {
                 routes.routers_query_routes[idx.index()] = self.compute_query_route(
                     tables,
                     &mut expr,
-                    idx.index() as RoutingContext,
+                    idx.index() as NodeId,
                     WhatAmI::Router,
                 );
             }
 
-            routes.peer_query_route = Some(self.compute_query_route(
-                tables,
-                &mut expr,
-                RoutingContext::default(),
-                WhatAmI::Peer,
-            ));
+            routes.peer_query_route =
+                Some(self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer));
         }
         if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
             && hat!(tables).full_net(WhatAmI::Peer)
@@ -1644,7 +1640,7 @@ impl HatQueriesTrait for HatCode {
                 routes.peers_query_routes[idx.index()] = self.compute_query_route(
                     tables,
                     &mut expr,
-                    idx.index() as RoutingContext,
+                    idx.index() as NodeId,
                     WhatAmI::Peer,
                 );
             }
@@ -1653,21 +1649,17 @@ impl HatQueriesTrait for HatCode {
             routes.client_query_route = Some(self.compute_query_route(
                 tables,
                 &mut expr,
-                RoutingContext::default(),
+                NodeId::default(),
                 WhatAmI::Client,
             ));
-            routes.peer_query_route = Some(self.compute_query_route(
-                tables,
-                &mut expr,
-                RoutingContext::default(),
-                WhatAmI::Peer,
-            ));
+            routes.peer_query_route =
+                Some(self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer));
         }
         if tables.whatami == WhatAmI::Client {
             routes.client_query_route = Some(self.compute_query_route(
                 tables,
                 &mut expr,
-                RoutingContext::default(),
+                NodeId::default(),
                 WhatAmI::Client,
             ));
         }
@@ -1697,7 +1689,7 @@ impl HatQueriesTrait for HatCode {
                     routers_query_routes[idx.index()] = self.compute_query_route(
                         tables,
                         &mut expr,
-                        idx.index() as RoutingContext,
+                        idx.index() as NodeId,
                         WhatAmI::Router,
                     );
                 }
@@ -1705,7 +1697,7 @@ impl HatQueriesTrait for HatCode {
                 res_mut.context_mut().peer_query_route = Some(self.compute_query_route(
                     tables,
                     &mut expr,
-                    RoutingContext::default(),
+                    NodeId::default(),
                     WhatAmI::Peer,
                 ));
             }
@@ -1729,7 +1721,7 @@ impl HatQueriesTrait for HatCode {
                     peers_query_routes[idx.index()] = self.compute_query_route(
                         tables,
                         &mut expr,
-                        idx.index() as RoutingContext,
+                        idx.index() as NodeId,
                         WhatAmI::Peer,
                     );
                 }
@@ -1738,13 +1730,13 @@ impl HatQueriesTrait for HatCode {
                 res_mut.context_mut().client_query_route = Some(self.compute_query_route(
                     tables,
                     &mut expr,
-                    RoutingContext::default(),
+                    NodeId::default(),
                     WhatAmI::Client,
                 ));
                 res_mut.context_mut().peer_query_route = Some(self.compute_query_route(
                     tables,
                     &mut expr,
-                    RoutingContext::default(),
+                    NodeId::default(),
                     WhatAmI::Peer,
                 ));
             }
@@ -1752,7 +1744,7 @@ impl HatQueriesTrait for HatCode {
                 res_mut.context_mut().client_query_route = Some(self.compute_query_route(
                     tables,
                     &mut expr,
-                    RoutingContext::default(),
+                    NodeId::default(),
                     WhatAmI::Client,
                 ));
             }

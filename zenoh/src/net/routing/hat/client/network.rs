@@ -13,7 +13,7 @@
 //
 use crate::net::codec::Zenoh080Routing;
 use crate::net::protocol::linkstate::{LinkState, LinkStateList};
-use crate::net::routing::dispatcher::tables::RoutingContext;
+use crate::net::routing::dispatcher::tables::NodeId;
 use crate::net::runtime::Runtime;
 use async_std::task;
 use petgraph::graph::NodeIndex;
@@ -191,11 +191,7 @@ impl Network {
     }
 
     #[inline]
-    pub(super) fn get_local_context(
-        &self,
-        context: RoutingContext,
-        link_id: usize,
-    ) -> RoutingContext {
+    pub(super) fn get_local_context(&self, context: NodeId, link_id: usize) -> NodeId {
         match self.get_link(link_id) {
             Some(link) => match link.get_local_psid(&(context as u64)) {
                 Some(psid) => (*psid).try_into().unwrap_or(0),

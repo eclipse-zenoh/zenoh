@@ -20,7 +20,7 @@
 use super::dispatcher::{
     face::{Face, FaceState},
     tables::{
-        DataRoutes, PullCaches, QueryRoutes, QueryTargetQablSet, Resource, Route, RoutingContext,
+        DataRoutes, NodeId, PullCaches, QueryRoutes, QueryTargetQablSet, Resource, Route,
         RoutingExpr, Tables, TablesLock,
     },
 };
@@ -97,8 +97,8 @@ pub(crate) trait HatBaseTrait {
         &self,
         tables: &Tables,
         face: &FaceState,
-        routing_context: RoutingContext,
-    ) -> RoutingContext;
+        routing_context: NodeId,
+    ) -> NodeId;
 
     fn ingress_filter(&self, tables: &Tables, face: &FaceState, expr: &mut RoutingExpr) -> bool;
 
@@ -127,21 +127,21 @@ pub(crate) trait HatPubSubTrait {
         face: &mut Arc<FaceState>,
         expr: &WireExpr,
         sub_info: &SubscriberInfo,
-        node_id: RoutingContext,
+        node_id: NodeId,
     );
     fn forget_subscription(
         &self,
         tables: &TablesLock,
         face: &mut Arc<FaceState>,
         expr: &WireExpr,
-        node_id: RoutingContext,
+        node_id: NodeId,
     );
 
     fn compute_data_route(
         &self,
         tables: &Tables,
         expr: &mut RoutingExpr,
-        source: RoutingContext,
+        source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<Route>;
 
@@ -159,20 +159,20 @@ pub(crate) trait HatQueriesTrait {
         face: &mut Arc<FaceState>,
         expr: &WireExpr,
         qabl_info: &QueryableInfo,
-        node_id: RoutingContext,
+        node_id: NodeId,
     );
     fn forget_queryable(
         &self,
         tables: &TablesLock,
         face: &mut Arc<FaceState>,
         expr: &WireExpr,
-        node_id: RoutingContext,
+        node_id: NodeId,
     );
     fn compute_query_route(
         &self,
         tables: &Tables,
         expr: &mut RoutingExpr,
-        source: RoutingContext,
+        source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet>;
     fn compute_query_routes(&self, tables: &mut Tables, res: &mut Arc<Resource>);

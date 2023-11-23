@@ -34,9 +34,9 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-pub(crate) type RoutingContext = u16;
+pub(crate) type NodeId = u16;
 
-pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, RoutingContext);
+pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
 pub(crate) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
 pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId, TargetType)>;
@@ -205,7 +205,7 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub fn routers_data_route(&self, context: RoutingContext) -> Option<Arc<Route>> {
+    pub fn routers_data_route(&self, context: NodeId) -> Option<Arc<Route>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_data_routes {
@@ -221,7 +221,7 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub fn peers_data_route(&self, context: RoutingContext) -> Option<Arc<Route>> {
+    pub fn peers_data_route(&self, context: NodeId) -> Option<Arc<Route>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_data_routes {
@@ -266,7 +266,7 @@ impl Resource {
     // #[inline(always)]
     // pub(crate) fn routers_query_route(
     //     &self,
-    //     context: RoutingContext,
+    //     context: NodeId,
     // ) -> Option<Arc<QueryTargetQablSet>> {
     //     match &self.context {
     //         Some(ctx) => {
@@ -284,7 +284,7 @@ impl Resource {
     // #[inline(always)]
     // pub(crate) fn peers_query_route(
     //     &self,
-    //     context: RoutingContext,
+    //     context: NodeId,
     // ) -> Option<Arc<QueryTargetQablSet>> {
     //     match &self.context {
     //         Some(ctx) => {

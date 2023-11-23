@@ -29,7 +29,7 @@ use self::{
 use super::{
     super::dispatcher::{
         face::FaceState,
-        tables::{Resource, RoutingContext, RoutingExpr, Tables, TablesLock},
+        tables::{NodeId, Resource, RoutingExpr, Tables, TablesLock},
     },
     HatBaseTrait, HatTrait,
 };
@@ -588,8 +588,8 @@ impl HatBaseTrait for HatCode {
         &self,
         tables: &Tables,
         face: &FaceState,
-        routing_context: RoutingContext,
-    ) -> RoutingContext {
+        routing_context: NodeId,
+    ) -> NodeId {
         match tables.whatami {
             WhatAmI::Router => match face.whatami {
                 WhatAmI::Router => hat!(tables)
@@ -779,7 +779,7 @@ impl HatFace {
     }
 }
 
-fn get_router(tables: &Tables, face: &Arc<FaceState>, nodeid: RoutingContext) -> Option<ZenohId> {
+fn get_router(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<ZenohId> {
     match hat!(tables)
         .routers_net
         .as_ref()
@@ -806,7 +806,7 @@ fn get_router(tables: &Tables, face: &Arc<FaceState>, nodeid: RoutingContext) ->
     }
 }
 
-fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: RoutingContext) -> Option<ZenohId> {
+fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<ZenohId> {
     match hat!(tables)
         .peers_net
         .as_ref()

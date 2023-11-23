@@ -13,7 +13,7 @@
 //
 use super::face::FaceState;
 use super::resource::{DataRoutes, Direction, PullCaches, Resource};
-use super::tables::{RoutingContext, RoutingExpr, Tables};
+use super::tables::{NodeId, RoutingExpr, Tables};
 use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_core::zread;
@@ -109,7 +109,7 @@ macro_rules! treat_timestamp {
 //     face: &FaceState,
 //     res: &Option<Arc<Resource>>,
 //     expr: &mut RoutingExpr,
-//     routing_context: RoutingContext,
+//     routing_context: NodeId,
 // ) -> Arc<Route> {
 //     let local_context = map_routing_context(tables, face, routing_context);
 //     match tables.whatami {
@@ -135,7 +135,7 @@ macro_rules! treat_timestamp {
 //                             compute_data_route(
 //                                 tables,
 //                                 expr,
-//                                 RoutingContext::default(),
+//                                 NodeId::default(),
 //                                 face.whatami,
 //                             )
 //                         })
@@ -143,9 +143,9 @@ macro_rules! treat_timestamp {
 //             }
 //             _ => res
 //                 .as_ref()
-//                 .and_then(|res| res.routers_data_route(RoutingContext::default()))
+//                 .and_then(|res| res.routers_data_route(NodeId::default()))
 //                 .unwrap_or_else(|| {
-//                     compute_data_route(tables, expr, RoutingContext::default(), face.whatami)
+//                     compute_data_route(tables, expr, NodeId::default(), face.whatami)
 //                 }),
 //         },
 //         WhatAmI::Peer => {
@@ -163,12 +163,12 @@ macro_rules! treat_timestamp {
 //                     }
 //                     _ => res
 //                         .as_ref()
-//                         .and_then(|res| res.peers_data_route(RoutingContext::default()))
+//                         .and_then(|res| res.peers_data_route(NodeId::default()))
 //                         .unwrap_or_else(|| {
 //                             compute_data_route(
 //                                 tables,
 //                                 expr,
-//                                 RoutingContext::default(),
+//                                 NodeId::default(),
 //                                 face.whatami,
 //                             )
 //                         }),
@@ -180,7 +180,7 @@ macro_rules! treat_timestamp {
 //                         _ => res.peer_data_route(),
 //                     })
 //                     .unwrap_or_else(|| {
-//                         compute_data_route(tables, expr, RoutingContext::default(), face.whatami)
+//                         compute_data_route(tables, expr, NodeId::default(), face.whatami)
 //                     })
 //             }
 //         }
@@ -188,7 +188,7 @@ macro_rules! treat_timestamp {
 //             .as_ref()
 //             .and_then(|res| res.client_data_route())
 //             .unwrap_or_else(|| {
-//                 compute_data_route(tables, expr, RoutingContext::default(), face.whatami)
+//                 compute_data_route(tables, expr, NodeId::default(), face.whatami)
 //             }),
 //     }
 // }
@@ -251,7 +251,7 @@ pub fn full_reentrant_route_data(
     expr: &WireExpr,
     ext_qos: ext::QoSType,
     mut payload: PushBody,
-    routing_context: RoutingContext,
+    routing_context: NodeId,
 ) {
     let tables = zread!(tables_ref);
     match tables.get_mapping(face, &expr.scope, expr.mapping).cloned() {

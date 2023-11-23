@@ -13,7 +13,7 @@
 //
 use super::face::FaceState;
 use super::resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource};
-use super::tables::RoutingContext;
+use super::tables::NodeId;
 use super::tables::{RoutingExpr, Tables, TablesLock};
 use async_trait::async_trait;
 use std::collections::HashMap;
@@ -263,7 +263,7 @@ pub(crate) fn disable_matches_query_routes(_tables: &mut Tables, res: &mut Arc<R
 //     face: &FaceState,
 //     res: &Option<Arc<Resource>>,
 //     expr: &mut RoutingExpr,
-//     routing_context: RoutingContext,
+//     routing_context: NodeId,
 // ) -> Arc<QueryTargetQablSet> {
 //     match tables.whatami {
 //         WhatAmI::Router => match face.whatami {
@@ -292,7 +292,7 @@ pub(crate) fn disable_matches_query_routes(_tables: &mut Tables, res: &mut Arc<R
 //                             compute_query_route(
 //                                 tables,
 //                                 expr,
-//                                 RoutingContext::default(),
+//                                 NodeId::default(),
 //                                 face.whatami,
 //                             )
 //                         })
@@ -300,9 +300,9 @@ pub(crate) fn disable_matches_query_routes(_tables: &mut Tables, res: &mut Arc<R
 //             }
 //             _ => res
 //                 .as_ref()
-//                 .and_then(|res| res.routers_query_route(RoutingContext::default()))
+//                 .and_then(|res| res.routers_query_route(NodeId::default()))
 //                 .unwrap_or_else(|| {
-//                     compute_query_route(tables, expr, RoutingContext::default(), face.whatami)
+//                     compute_query_route(tables, expr, NodeId::default(), face.whatami)
 //                 }),
 //         },
 //         WhatAmI::Peer => {
@@ -320,12 +320,12 @@ pub(crate) fn disable_matches_query_routes(_tables: &mut Tables, res: &mut Arc<R
 //                     }
 //                     _ => res
 //                         .as_ref()
-//                         .and_then(|res| res.peers_query_route(RoutingContext::default()))
+//                         .and_then(|res| res.peers_query_route(NodeId::default()))
 //                         .unwrap_or_else(|| {
 //                             compute_query_route(
 //                                 tables,
 //                                 expr,
-//                                 RoutingContext::default(),
+//                                 NodeId::default(),
 //                                 face.whatami,
 //                             )
 //                         }),
@@ -337,7 +337,7 @@ pub(crate) fn disable_matches_query_routes(_tables: &mut Tables, res: &mut Arc<R
 //                         _ => res.peer_query_route(),
 //                     })
 //                     .unwrap_or_else(|| {
-//                         compute_query_route(tables, expr, RoutingContext::default(), face.whatami)
+//                         compute_query_route(tables, expr, NodeId::default(), face.whatami)
 //                     })
 //             }
 //         }
@@ -345,7 +345,7 @@ pub(crate) fn disable_matches_query_routes(_tables: &mut Tables, res: &mut Arc<R
 //             .as_ref()
 //             .and_then(|res| res.client_query_route())
 //             .unwrap_or_else(|| {
-//                 compute_query_route(tables, expr, RoutingContext::default(), face.whatami)
+//                 compute_query_route(tables, expr, NodeId::default(), face.whatami)
 //             }),
 //     }
 // }
@@ -423,7 +423,7 @@ pub fn route_query(
     qid: RequestId,
     target: TargetType,
     body: RequestBody,
-    routing_context: RoutingContext,
+    routing_context: NodeId,
 ) {
     let rtables = zread!(tables_ref.tables);
     match rtables.get_mapping(face, &expr.scope, expr.mapping) {

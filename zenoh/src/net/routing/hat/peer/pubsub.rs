@@ -16,7 +16,7 @@ use super::{face_hat, face_hat_mut, hat, hat_mut, res_hat, res_hat_mut};
 use super::{get_peer, get_router, HatCode, HatContext, HatFace, HatTables};
 use crate::net::routing::dispatcher::face::FaceState;
 use crate::net::routing::dispatcher::pubsub::*;
-use crate::net::routing::dispatcher::resource::{Resource, RoutingContext, SessionContext};
+use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
 use crate::net::routing::dispatcher::tables::{DataRoutes, PullCaches, Route, RoutingExpr};
 use crate::net::routing::dispatcher::tables::{Tables, TablesLock};
 use crate::net::routing::hat::HatPubSubTrait;
@@ -44,7 +44,7 @@ fn send_sourced_subscription_to_net_childs(
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
     sub_info: &SubscriberInfo,
-    routing_context: RoutingContext,
+    routing_context: NodeId,
 ) {
     for child in childs {
         if net.graph.contains_node(*child) {
@@ -165,7 +165,7 @@ fn propagate_sourced_subscription(
                     res,
                     src_face,
                     sub_info,
-                    tree_sid.index() as RoutingContext,
+                    tree_sid.index() as NodeId,
                 );
             } else {
                 log::trace!(
@@ -551,7 +551,7 @@ fn send_forget_sourced_subscription_to_net_childs(
     childs: &[NodeIndex],
     res: &Arc<Resource>,
     src_face: Option<&Arc<FaceState>>,
-    routing_context: Option<RoutingContext>,
+    routing_context: Option<NodeId>,
 ) {
     for child in childs {
         if net.graph.contains_node(*child) {
@@ -654,7 +654,7 @@ fn propagate_forget_sourced_subscription(
                     &net.trees[tree_sid.index()].childs,
                     res,
                     src_face,
-                    Some(tree_sid.index() as RoutingContext),
+                    Some(tree_sid.index() as NodeId),
                 );
             } else {
                 log::trace!(
@@ -1105,7 +1105,7 @@ pub(super) fn pubsub_tree_change(
                                 res,
                                 None,
                                 &sub_info,
-                                tree_sid as RoutingContext,
+                                tree_sid as NodeId,
                             );
                         }
                     }
@@ -1202,7 +1202,7 @@ fn insert_faces_for_subs(
     expr: &RoutingExpr,
     tables: &Tables,
     net: &Network,
-    source: RoutingContext,
+    source: NodeId,
     subs: &HashSet<ZenohId>,
 ) {
     if net.trees.len() > source as usize {
@@ -1236,7 +1236,7 @@ impl HatPubSubTrait for HatCode {
         face: &mut Arc<FaceState>,
         expr: &WireExpr,
         sub_info: &SubscriberInfo,
-        node_id: RoutingContext,
+        node_id: NodeId,
     ) {
         let rtables = zread!(tables.tables);
         match (rtables.whatami, face.whatami) {
@@ -1265,7 +1265,7 @@ impl HatPubSubTrait for HatCode {
         tables: &TablesLock,
         face: &mut Arc<FaceState>,
         expr: &WireExpr,
-        node_id: RoutingContext,
+        node_id: NodeId,
     ) {
         let rtables = zread!(tables.tables);
         match (rtables.whatami, face.whatami) {
@@ -1293,7 +1293,7 @@ impl HatPubSubTrait for HatCode {
         &self,
         tables: &Tables,
         expr: &mut RoutingExpr,
-        source: RoutingContext,
+        source: NodeId,
         source_type: WhatAmI,
     ) -> Arc<Route> {
         let mut route = HashMap::new();
@@ -1333,7 +1333,7 @@ impl HatPubSubTrait for HatCode {
                     let net = hat!(tables).routers_net.as_ref().unwrap();
                     let router_source = match source_type {
                         WhatAmI::Router => source,
-                        _ => net.idx.index() as RoutingContext,
+                        _ => net.idx.index() as NodeId,
                     };
                     insert_faces_for_subs(
                         &mut route,
@@ -1351,7 +1351,7 @@ impl HatPubSubTrait for HatCode {
                     let net = hat!(tables).peers_net.as_ref().unwrap();
                     let peer_source = match source_type {
                         WhatAmI::Peer => source,
-                        _ => net.idx.index() as RoutingContext,
+                        _ => net.idx.index() as NodeId,
                     };
                     insert_faces_for_subs(
                         &mut route,
@@ -1368,7 +1368,7 @@ impl HatPubSubTrait for HatCode {
                 let net = hat!(tables).peers_net.as_ref().unwrap();
                 let peer_source = match source_type {
                     WhatAmI::Router | WhatAmI::Peer => source,
-                    _ => net.idx.index() as RoutingContext,
+                    _ => net.idx.index() as NodeId,
                 };
                 insert_faces_for_subs(
                     &mut route,
@@ -1394,11 +1394,7 @@ impl HatPubSubTrait for HatCode {
                             route.entry(*sid).or_insert_with(|| {
                                 let key_expr =
                                     Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                                (
-                                    context.face.clone(),
-                                    key_expr.to_owned(),
-                                    RoutingContext::default(),
-                                )
+                                (context.face.clone(), key_expr.to_owned(), NodeId::default())
                             });
                         }
                     }
@@ -1411,7 +1407,7 @@ impl HatPubSubTrait for HatCode {
                 (
                     mcast_group.clone(),
                     expr.full_expr().to_string().into(),
-                    RoutingContext::default(),
+                    NodeId::default(),
                 ),
             );
         }
@@ -1471,17 +1467,13 @@ impl HatPubSubTrait for HatCode {
                 routes.routers_data_routes[idx.index()] = self.compute_data_route(
                     tables,
                     &mut expr,
-                    idx.index() as RoutingContext,
+                    idx.index() as NodeId,
                     WhatAmI::Router,
                 );
             }
 
-            routes.peer_data_route = Some(self.compute_data_route(
-                tables,
-                &mut expr,
-                RoutingContext::default(),
-                WhatAmI::Peer,
-            ));
+            routes.peer_data_route =
+                Some(self.compute_data_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer));
         }
         if (tables.whatami == WhatAmI::Router || tables.whatami == WhatAmI::Peer)
             && hat!(tables).full_net(WhatAmI::Peer)
@@ -1502,7 +1494,7 @@ impl HatPubSubTrait for HatCode {
                 routes.peers_data_routes[idx.index()] = self.compute_data_route(
                     tables,
                     &mut expr,
-                    idx.index() as RoutingContext,
+                    idx.index() as NodeId,
                     WhatAmI::Peer,
                 );
             }
@@ -1511,21 +1503,17 @@ impl HatPubSubTrait for HatCode {
             routes.client_data_route = Some(self.compute_data_route(
                 tables,
                 &mut expr,
-                RoutingContext::default(),
+                NodeId::default(),
                 WhatAmI::Client,
             ));
-            routes.peer_data_route = Some(self.compute_data_route(
-                tables,
-                &mut expr,
-                RoutingContext::default(),
-                WhatAmI::Peer,
-            ));
+            routes.peer_data_route =
+                Some(self.compute_data_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer));
         }
         if tables.whatami == WhatAmI::Client {
             routes.client_data_route = Some(self.compute_data_route(
                 tables,
                 &mut expr,
-                RoutingContext::default(),
+                NodeId::default(),
                 WhatAmI::Client,
             ));
         }
@@ -1555,7 +1543,7 @@ impl HatPubSubTrait for HatCode {
                     routers_data_routes[idx.index()] = self.compute_data_route(
                         tables,
                         &mut expr,
-                        idx.index() as RoutingContext,
+                        idx.index() as NodeId,
                         WhatAmI::Router,
                     );
                 }
@@ -1563,7 +1551,7 @@ impl HatPubSubTrait for HatCode {
                 res_mut.context_mut().peer_data_route = Some(self.compute_data_route(
                     tables,
                     &mut expr,
-                    RoutingContext::default(),
+                    NodeId::default(),
                     WhatAmI::Peer,
                 ));
             }
@@ -1586,7 +1574,7 @@ impl HatPubSubTrait for HatCode {
                     peers_data_routes[idx.index()] = self.compute_data_route(
                         tables,
                         &mut expr,
-                        idx.index() as RoutingContext,
+                        idx.index() as NodeId,
                         WhatAmI::Peer,
                     );
                 }
@@ -1595,13 +1583,13 @@ impl HatPubSubTrait for HatCode {
                 res_mut.context_mut().client_data_route = Some(self.compute_data_route(
                     tables,
                     &mut expr,
-                    RoutingContext::default(),
+                    NodeId::default(),
                     WhatAmI::Client,
                 ));
                 res_mut.context_mut().peer_data_route = Some(self.compute_data_route(
                     tables,
                     &mut expr,
-                    RoutingContext::default(),
+                    NodeId::default(),
                     WhatAmI::Peer,
                 ));
             }
@@ -1609,7 +1597,7 @@ impl HatPubSubTrait for HatCode {
                 res_mut.context_mut().client_data_route = Some(self.compute_data_route(
                     tables,
                     &mut expr,
-                    RoutingContext::default(),
+                    NodeId::default(),
                     WhatAmI::Client,
                 ));
             }
