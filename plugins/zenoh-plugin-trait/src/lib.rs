@@ -42,5 +42,7 @@ macro_rules! concat_enabled_features {
     };
 }
 
-pub const FEATURES: &str =
-    concat_enabled_features!(prefix = "zenoh-plugin-trait", features = ["default"]);
+pub const FEATURES: &str = concat_enabled_features!(
+    prefix = "zenoh-plugin-trait",
+    features = ["default", "no_mangle"]
+);
