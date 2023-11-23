@@ -28,7 +28,7 @@ use std::time::Duration;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Field, Resolution, ZenohId},
-    transport::{Close, TransportMessage, TransportSn},
+    transport::TransportSn,
 };
 use zenoh_result::ZResult;
 
@@ -114,22 +114,6 @@ pub(super) fn compute_sn(zid1: ZenohId, zid2: ZenohId, resolution: Resolution) -
     let mut array = (0 as TransportSn).to_le_bytes();
     hasher.finalize_xof().read(&mut array);
     TransportSn::from_le_bytes(array) & seq_num::get_mask(resolution.get(Field::FrameSN))
-}
-
-pub(super) async fn close_link(mut link: TransportLinkUnicast, reason: Option<u8>) {
-    if let Some(reason) = reason {
-        // Build the close message
-        let message: TransportMessage = Close {
-            reason,
-            session: false,
-        }
-        .into();
-        // Send the close message on the link
-        let _ = link.send(&message).await;
-    }
-
-    // Close the link
-    let _ = link.close().await;
 }
 
 pub(super) struct InputFinalize {

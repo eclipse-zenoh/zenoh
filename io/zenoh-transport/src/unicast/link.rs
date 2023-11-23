@@ -16,7 +16,7 @@ use std::fmt;
 use std::sync::Arc;
 use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
 use zenoh_link::{Link, LinkUnicast};
-use zenoh_protocol::transport::{BatchSize, TransportMessage};
+use zenoh_protocol::transport::{BatchSize, Close, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -164,7 +164,17 @@ impl TransportLinkUnicast {
         Ok(msg)
     }
 
-    pub async fn close(&self) -> ZResult<()> {
+    pub async fn close(&mut self, reason: Option<u8>) -> ZResult<()> {
+        if let Some(reason) = reason {
+            // Build the close message
+            let message: TransportMessage = Close {
+                reason,
+                session: false,
+            }
+            .into();
+            // Send the close message on the link
+            let _ = self.send(&message).await;
+        }
         self.link.close().await
     }
 }

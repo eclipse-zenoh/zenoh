@@ -32,16 +32,19 @@ use std::sync::{Arc, RwLock as SyncRwLock};
 use std::time::Duration;
 #[cfg(feature = "transport_unixpipe")]
 use zenoh_core::zasyncread_upgradable;
-use zenoh_core::{zasynclock, zasyncread, zread, zwrite};
+use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
 #[cfg(feature = "transport_unixpipe")]
 use zenoh_link::unixpipe::UNIXPIPE_LOCATOR_PREFIX;
 #[cfg(feature = "transport_unixpipe")]
 use zenoh_link::Link;
-use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::transport::TransportBodyLowLatency;
 use zenoh_protocol::transport::TransportMessageLowLatency;
 use zenoh_protocol::transport::{Close, TransportSn};
+use zenoh_protocol::{
+    core::{WhatAmI, ZenohId},
+    transport::close,
+};
 #[cfg(not(feature = "transport_unixpipe"))]
 use zenoh_result::bail;
 use zenoh_result::{zerror, ZResult};
@@ -139,7 +142,9 @@ impl TransportUnicastLowlatency {
         // Close and drop the link
         self.stop_keepalive().await;
         self.stop_rx().await;
-        let _ = zasyncread!(self.link).close().await;
+        let _ = zasyncwrite!(self.link)
+            .close(Some(close::reason::GENERIC))
+            .await;
 
         // Notify the callback that we have closed the transport
         if let Some(cb) = callback.as_ref() {

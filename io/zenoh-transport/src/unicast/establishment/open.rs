@@ -15,7 +15,7 @@
 use crate::unicast::shared_memory_unicast::Challenge;
 use crate::{
     unicast::{
-        establishment::{close_link, compute_sn, ext, finalize_transport, InputFinalize, OpenFsm},
+        establishment::{compute_sn, ext, finalize_transport, InputFinalize, OpenFsm},
         link::{TransportLinkUnicast, TransportLinkUnicastConfig, TransportLinkUnicastDirection},
         TransportConfigUnicast, TransportUnicast,
     },
@@ -565,7 +565,7 @@ pub(crate) async fn open_link(
             match $s {
                 Ok(output) => output,
                 Err((e, reason)) => {
-                    close_link(link, reason).await;
+                    let _ = link.close(reason).await;
                     return Err(e);
                 }
             }

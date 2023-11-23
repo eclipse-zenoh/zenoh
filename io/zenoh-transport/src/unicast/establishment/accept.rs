@@ -16,8 +16,7 @@ use crate::unicast::shared_memory_unicast::Challenge;
 use crate::{
     unicast::{
         establishment::{
-            close_link, compute_sn, ext, finalize_transport, AcceptFsm, Cookie, InputFinalize,
-            Zenoh080Cookie,
+            compute_sn, ext, finalize_transport, AcceptFsm, Cookie, InputFinalize, Zenoh080Cookie,
         },
         link::{TransportLinkUnicast, TransportLinkUnicastConfig, TransportLinkUnicastDirection},
         TransportConfigUnicast,
@@ -613,7 +612,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
                 Ok(output) => output,
                 Err((e, reason)) => {
                     log::debug!("{}", e);
-                    close_link(link, reason).await;
+                    let _ = link.close(reason).await;
                     return Err(e);
                 }
             }

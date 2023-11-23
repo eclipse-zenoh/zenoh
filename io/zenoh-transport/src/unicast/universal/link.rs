@@ -31,7 +31,7 @@ use async_std::task;
 use async_std::task::JoinHandle;
 use std::{sync::Arc, time::Duration};
 use zenoh_buffers::ZSliceBuffer;
-use zenoh_protocol::transport::{KeepAlive, TransportMessage};
+use zenoh_protocol::transport::{close, KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
 
@@ -162,7 +162,7 @@ impl TransportLinkUnicastUniversal {
             handle_tx.await;
         }
 
-        self.link.close().await
+        self.link.close(Some(close::reason::GENERIC)).await
     }
 }
 
