@@ -778,7 +778,7 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
         Fetch: FnOnce(Box<dyn Fn(TryIntoSample) + Send + Sync>) -> ZResult<()> + Send + Sync,
         TryIntoSample,
     >(
-        &mut self,
+        &self,
         fetch: Fetch,
     ) -> impl Resolve<ZResult<()>>
     where
