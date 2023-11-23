@@ -435,8 +435,8 @@ mod tests {
 
         // Define the locators
         let endpoints: Vec<EndPoint> = vec![
-            format!("tcp/127.0.0.1:{}", 16000).parse().unwrap(),
-            format!("tcp/[::1]:{}", 16001).parse().unwrap(),
+            format!("tcp/127.0.0.1:{}", 19000).parse().unwrap(),
+            format!("tcp/[::1]:{}", 19001).parse().unwrap(),
         ];
         // Define the reliability and congestion control
         let channel = [
@@ -467,7 +467,7 @@ mod tests {
         });
 
         // Define the locators
-        let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 16100).parse().unwrap()];
+        let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 19100).parse().unwrap()];
         // Define the reliability and congestion control
         let channel = [
             Channel {
@@ -498,8 +498,8 @@ mod tests {
 
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
-            format!("udp/127.0.0.1:{}", 16010).parse().unwrap(),
-            format!("udp/[::1]:{}", 16011).parse().unwrap(),
+            format!("udp/127.0.0.1:{}", 19010).parse().unwrap(),
+            format!("udp/[::1]:{}", 19011).parse().unwrap(),
         ];
         // Define the reliability and congestion control
         let channel = [
@@ -530,7 +530,7 @@ mod tests {
         });
 
         // Define the locator
-        let endpoints: Vec<EndPoint> = vec![format!("udp/127.0.0.1:{}", 16110).parse().unwrap()];
+        let endpoints: Vec<EndPoint> = vec![format!("udp/127.0.0.1:{}", 19110).parse().unwrap()];
         // Define the reliability and congestion control
         let channel = [
             Channel {

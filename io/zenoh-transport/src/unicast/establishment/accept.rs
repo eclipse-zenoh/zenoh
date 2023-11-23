@@ -582,8 +582,9 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
 }
 
 pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) -> ZResult<()> {
+    let mtu = link.get_mtu();
     let config = TransportLinkUnicastConfig {
-        mtu: link.get_mtu(),
+        mtu,
         direction: TransportLinkUnicastDirection::Inbound,
         #[cfg(feature = "transport_compression")]
         is_compression: false,
@@ -622,7 +623,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
     let iack_out = {
         let mut state = State {
             transport: StateTransport {
-                batch_size: manager.config.batch_size,
+                batch_size: manager.config.batch_size.min(batch_size::UNICAST).min(mtu),
                 resolution: manager.config.resolution,
                 ext_qos: ext::qos::StateAccept::new(manager.config.unicast.is_qos),
                 #[cfg(feature = "transport_multilink")]

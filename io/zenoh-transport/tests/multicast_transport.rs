@@ -330,7 +330,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "transport_udp")]
+    #[cfg(all(feature = "transport_compression", feature = "transport_udp"))]
     #[test]
     fn transport_multicast_udp_only() {
         env_logger::init();
@@ -342,7 +342,7 @@ mod tests {
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
             format!(
-                "udp/224.{}.{}.{}:7447",
+                "udp/224.{}.{}.{}:20000",
                 rand::random::<u8>(),
                 rand::random::<u8>(),
                 rand::random::<u8>()

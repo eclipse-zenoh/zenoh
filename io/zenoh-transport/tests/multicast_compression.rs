@@ -14,7 +14,7 @@
 
 // Restricting to macos by default because of no IPv6 support
 // on GitHub CI actions on Linux and Windows.
-#[cfg(target_family = "unix")]
+#[cfg(all(target_family = "unix", feature = "transport_compression"))]
 mod tests {
     use async_std::{prelude::FutureExt, task};
     use std::{
@@ -346,7 +346,7 @@ mod tests {
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
             format!(
-                "udp/224.{}.{}.{}:7447",
+                "udp/224.{}.{}.{}:21000",
                 rand::random::<u8>(),
                 rand::random::<u8>(),
                 rand::random::<u8>()

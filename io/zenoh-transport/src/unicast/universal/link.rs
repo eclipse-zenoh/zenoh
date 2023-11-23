@@ -23,7 +23,7 @@ use crate::{
         },
         priority::TransportPriorityTx,
     },
-    unicast::link::TransportLinkUnicast,
+    unicast::link::{TransportLinkUnicast, TransportLinkUnicastRx, TransportLinkUnicastTx},
     TransportExecutor,
 };
 use async_std::prelude::FutureExt;
@@ -89,7 +89,7 @@ impl TransportLinkUnicastUniversal {
             let handle = executor.spawn(async move {
                 let res = tx_task(
                     consumer,
-                    c_link.clone(),
+                    c_link.tx(),
                     keep_alive,
                     #[cfg(feature = "stats")]
                     c_transport.stats.clone(),
@@ -123,7 +123,7 @@ impl TransportLinkUnicastUniversal {
             let handle = task::spawn(async move {
                 // Start the consume task
                 let res = rx_task(
-                    c_link.clone(),
+                    c_link.rx(),
                     c_transport.clone(),
                     lease,
                     c_signal.clone(),
@@ -171,7 +171,7 @@ impl TransportLinkUnicastUniversal {
 /*************************************/
 async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
-    mut link: TransportLinkUnicast,
+    mut link: TransportLinkUnicastTx,
     keep_alive: Duration,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
@@ -225,7 +225,7 @@ async fn tx_task(
 }
 
 async fn rx_task(
-    mut link: TransportLinkUnicast,
+    mut link: TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
     lease: Duration,
     signal: Signal,
@@ -237,7 +237,7 @@ async fn rx_task(
     }
 
     async fn read<T, F>(
-        link: &mut TransportLinkUnicast,
+        link: &mut TransportLinkUnicastRx,
         pool: &RecyclingObjectPool<T, F>,
     ) -> ZResult<Action>
     where
@@ -257,7 +257,7 @@ async fn rx_task(
     }
 
     // The pool of buffers
-    let mtu = link.config.mtu as usize;
+    let mtu = link.inner.config.mtu as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -277,7 +277,7 @@ async fn rx_task(
                 {
                     transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
                 }
-                transport.read_messages(batch, &link)?;
+                transport.read_messages(batch, &link.inner)?;
             }
             Action::Stop => break,
         }

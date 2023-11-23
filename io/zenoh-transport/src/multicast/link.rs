@@ -65,7 +65,8 @@ pub(crate) struct TransportLinkMulticast {
 }
 
 impl TransportLinkMulticast {
-    pub fn new(link: LinkMulticast, config: TransportLinkMulticastConfig) -> Self {
+    pub fn new(link: LinkMulticast, mut config: TransportLinkMulticastConfig) -> Self {
+        config.mtu = link.get_mtu().min(config.mtu);
         Self {
             link,
             config,

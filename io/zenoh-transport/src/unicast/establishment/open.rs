@@ -531,7 +531,11 @@ pub(crate) async fn open_link(
 
     let mut state = State {
         transport: StateTransport {
-            batch_size: manager.config.batch_size.min(batch_size::UNICAST),
+            batch_size: manager
+                .config
+                .batch_size
+                .min(batch_size::UNICAST)
+                .min(link.config.mtu),
             resolution: manager.config.resolution,
             ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos),
             #[cfg(feature = "transport_multilink")]
