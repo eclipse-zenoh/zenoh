@@ -1041,7 +1041,7 @@ impl std::fmt::Debug for PluginsConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut values: Value = self.values.clone();
         sift_privates(&mut values);
-        write!(f, "{values}")
+        write!(f, "{:?}", values)
     }
 }
 
