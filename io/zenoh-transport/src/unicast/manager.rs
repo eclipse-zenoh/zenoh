@@ -764,7 +764,7 @@ impl TransportManager {
         super::establishment::open::open_link(link, self).await
     }
 
-    pub async fn get_transport_unicast(&self, peer: &ZenohId) -> Option<TransportUnicast> {
+    pub fn get_transport_unicast(&self, peer: &ZenohId) -> Option<TransportUnicast> {
         self.state.unicast.transports
             .get(peer)
             .map(|t| {

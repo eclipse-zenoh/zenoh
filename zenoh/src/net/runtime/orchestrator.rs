@@ -415,6 +415,9 @@ impl Runtime {
             }
         }
         log::info!("zenohd listening scout messages on {}", sockaddr);
+
+        // Must set to nonblocking according to the doc of tokio
+        socket.set_nonblocking(true)?;
         Ok(UdpSocket::from_std(socket.into())?)
     }
 
@@ -441,6 +444,9 @@ impl Runtime {
                 bail!(err => "Unable to bind udp port {}:0", addr);
             }
         }
+
+        // Must set to nonblocking according to the doc of tokio
+        socket.set_nonblocking(true)?;
         Ok(UdpSocket::from_std(socket.into())?)
     }
 
@@ -662,7 +668,7 @@ impl Runtime {
     pub async fn connect_peer(&self, zid: &ZenohId, locators: &[Locator]) {
         let manager = self.manager();
         if zid != &manager.zid() {
-            let has_unicast = manager.get_transport_unicast(zid).await.is_some();
+            let has_unicast = manager.get_transport_unicast(zid).is_some();
             let has_multicast = {
                 let mut hm = manager.get_transport_multicast(zid).await.is_some();
                 for t in manager.get_transports_multicast().await {
