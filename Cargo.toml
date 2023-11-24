@@ -183,9 +183,9 @@ zenoh-link-udp = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-udp
 zenoh-link-ws = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-ws" }
 zenoh-link-unixpipe = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-unixpipe" }
 zenoh-link-serial = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-serial" }
-zenoh-link = { version = "0.11.0-dev", path = "io/zenoh-link" }
+zenoh-link = { version = "0.11.0-dev", path = "io/zenoh-link", default-features = false }
 zenoh-link-commons = { version = "0.11.0-dev", path = "io/zenoh-link-commons" }
-zenoh = { version = "0.11.0-dev", path = "zenoh" }
+zenoh = { version = "0.11.0-dev", path = "zenoh", default-features = false }
 
 [profile.dev]
 debug = true
