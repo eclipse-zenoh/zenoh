@@ -31,7 +31,6 @@ use zenoh_link_commons::{
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
 use zenoh_sync::Signal;
-use zenoh_runtime::ZRuntime;
 
 use super::{
     get_tcp_addrs, TCP_ACCEPT_THROTTLE_TIME, TCP_DEFAULT_MTU, TCP_LINGER_TIMEOUT,
@@ -167,14 +166,16 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     }
 }
 
-impl Drop for LinkUnicastTcp {
-    fn drop(&mut self) {
-        // Close the underlying TCP socket
-        ZRuntime::TX.handle().block_on(async {
-            let _ = self.get_mut_socket().shutdown().await;
-        });
-    }
-}
+// WARN assume the drop of TcpStream would clean itself
+// https://docs.rs/tokio/latest/tokio/net/struct.TcpStream.html#method.into_split
+// impl Drop for LinkUnicastTcp {
+//     fn drop(&mut self) {
+//         // Close the underlying TCP socket
+//         ZRuntime::TX.handle().block_on(async {
+//             let _ = self.get_mut_socket().shutdown().await;
+//         });
+//     }
+// }
 
 impl fmt::Display for LinkUnicastTcp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -305,7 +306,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
                     let c_manager = self.manager.clone();
                     let c_listeners = self.listeners.clone();
                     let c_addr = local_addr;
-                    let handle = tokio::spawn(async move {
+                    let handle = zenoh_runtime::ZRuntime::Accept.handle().spawn(async move {
                         // Wait for the accept loop to terminate
                         let res = accept_task(socket, c_active, c_signal, c_manager).await;
                         zwrite!(c_listeners).remove(&c_addr);

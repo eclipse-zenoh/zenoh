@@ -50,7 +50,17 @@ default = ["test", "transport_multilink"]
 
 [dependencies]
 async-trait = { workspace = true }
-tokio = { workspace = true, features = ["sync", "rt", "fs", "time", "macros", "rt-multi-thread", "io-util", "net"] }
+tokio = { workspace = true, features = [
+  "sync",
+  "rt",
+  "fs",
+  "time",
+  "macros",
+  "rt-multi-thread",
+  "io-util",
+  "net",
+  "tracing"
+] }
 flume = { workspace = true }
 log = { workspace = true }
 lz4_flex = { workspace = true }
@@ -73,6 +83,8 @@ zenoh-shm = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
 zenoh-runtime = { workspace = true }
+dashmap = { workspace = true }
+
 
 [dev-dependencies]
 futures-util = { workspace = true }

@@ -57,17 +57,15 @@ pub struct Auth {
 }
 
 impl Auth {
-    pub(crate) async fn from_config(config: &Config) -> ZResult<Self> {
+    pub(crate) fn from_config(config: &Config) -> ZResult<Self> {
         let auth = config.transport().auth();
 
         Ok(Self {
             #[cfg(feature = "auth_pubkey")]
-            pubkey: AuthPubKey::from_config(auth.pubkey())
-                .await?
+            pubkey: AuthPubKey::from_config(auth.pubkey())?
                 .map(RwLock::new),
             #[cfg(feature = "auth_usrpwd")]
-            usrpwd: AuthUsrPwd::from_config(auth.usrpwd())
-                .await?
+            usrpwd: AuthUsrPwd::from_config(auth.usrpwd())?
                 .map(RwLock::new),
         })
     }

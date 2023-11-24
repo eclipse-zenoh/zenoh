@@ -153,7 +153,7 @@ pub struct LinkConfigurator {
 
 impl LinkConfigurator {
     #[allow(unused_variables, unused_mut)]
-    pub async fn configurations(
+    pub fn configurations(
         &self,
         config: &Config,
     ) -> (
@@ -174,21 +174,21 @@ impl LinkConfigurator {
         {
             insert_config(
                 QUIC_LOCATOR_PREFIX.into(),
-                self.quic_inspector.inspect_config(config).await,
+                self.quic_inspector.inspect_config(config),
             );
         }
         #[cfg(feature = "transport_tls")]
         {
             insert_config(
                 TLS_LOCATOR_PREFIX.into(),
-                self.tls_inspector.inspect_config(config).await,
+                self.tls_inspector.inspect_config(config),
             );
         }
         #[cfg(feature = "transport_unixpipe")]
         {
             insert_config(
                 UNIXPIPE_LOCATOR_PREFIX.into(),
-                self.unixpipe_inspector.inspect_config(config).await,
+                self.unixpipe_inspector.inspect_config(config),
             );
         }
         (configs, errors)

@@ -68,9 +68,8 @@ impl LocatorInspector for QuicLocatorInspector {
 #[derive(Default, Clone, Copy, Debug)]
 pub struct QuicConfigurator;
 
-#[async_trait]
 impl ConfigurationInspector<Config> for QuicConfigurator {
-    async fn inspect_config(&self, config: &Config) -> ZResult<String> {
+    fn inspect_config(&self, config: &Config) -> ZResult<String> {
         let mut ps: Vec<(&str, &str)> = vec![];
 
         let c = config.transport().link().tls();

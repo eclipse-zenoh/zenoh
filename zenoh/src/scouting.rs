@@ -307,7 +307,7 @@ fn scout(
             .filter_map(|iface| Runtime::bind_ucast_port(iface).ok())
             .collect();
         if !sockets.is_empty() {
-            tokio::task::spawn(async move {
+            zenoh_runtime::ZRuntime::Net.handle().spawn(async move {
                 let mut stop_receiver = stop_receiver.stream();
                 let scout = Runtime::scout(&sockets, what, &addr, move |hello| {
                     let callback = callback.clone();

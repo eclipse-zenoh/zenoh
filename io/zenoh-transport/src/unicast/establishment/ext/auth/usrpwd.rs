@@ -63,13 +63,12 @@ impl AuthUsrPwd {
         Ok(())
     }
 
-    pub async fn from_config(config: &UsrPwdConf) -> ZResult<Option<Self>> {
+    pub fn from_config(config: &UsrPwdConf) -> ZResult<Option<Self>> {
         const S: &str = "UsrPwd extension - From config.";
 
         let mut lookup: HashMap<User, Password> = HashMap::new();
         if let Some(dict) = config.dictionary_file() {
-            let content = fs::read_to_string(dict)
-                .await
+            let content = std::fs::read_to_string(dict)
                 .map_err(|e| zerror!("{S} Invalid user-password dictionary file: {}.", e))?;
 
             // Populate the user-password dictionary

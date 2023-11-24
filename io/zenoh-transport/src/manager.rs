@@ -216,8 +216,7 @@ impl TransportManagerBuilder {
         self = self.protocols(link.protocols().clone());
 
         let (c, errors) = zenoh_link::LinkConfigurator::default()
-            .configurations(config)
-            .await;
+            .configurations(config);
         if !errors.is_empty() {
             use std::fmt::Write;
             let mut formatter = String::from("Some protocols reported configuration errors:\r\n");
@@ -229,13 +228,11 @@ impl TransportManagerBuilder {
         self = self.endpoints(c);
         self = self.unicast(
             TransportManagerBuilderUnicast::default()
-                .from_config(config)
-                .await?,
+                .from_config(config)?
         );
         self = self.multicast(
             TransportManagerBuilderMulticast::default()
-                .from_config(config)
-                .await?,
+                .from_config(config)?
         );
 
         Ok(self)
@@ -356,7 +353,7 @@ impl TransportManager {
         };
 
         // @TODO: this should be moved into the unicast module
-        tokio::task::spawn({
+        zenoh_runtime::ZRuntime::Net.handle().spawn({
             let this = this.clone();
             async move {
                 while let Ok(link) = new_unicast_link_receiver.recv_async().await {
@@ -408,24 +405,22 @@ impl TransportManager {
             .is_multicast(&endpoint.to_locator())
             .await?
         {
-            self.del_listener_multicast(endpoint).await
+            self.del_listener_multicast(endpoint)
         } else {
             self.del_listener_unicast(endpoint).await
         }
     }
 
     pub fn get_listeners(&self) -> Vec<EndPoint> {
-        let handle = zenoh_runtime::ZRuntime::Accept.handle();
-        let mut lsu = handle.block_on(self.get_listeners_unicast());
-        let mut lsm = handle.block_on(self.get_listeners_multicast());
+        let mut lsu = self.get_listeners_unicast();
+        let mut lsm = self.get_listeners_multicast();
         lsu.append(&mut lsm);
         lsu
     }
 
     pub fn get_locators(&self) -> Vec<Locator> {
-        let handle = zenoh_runtime::ZRuntime::Accept.handle();
-        let mut lsu = handle.block_on(self.get_locators_unicast());
-        let mut lsm = handle.block_on(self.get_locators_multicast());
+        let mut lsu = self.get_locators_unicast();
+        let mut lsm = self.get_locators_multicast();
         lsu.append(&mut lsm);
         lsu
     }

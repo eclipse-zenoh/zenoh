@@ -159,7 +159,7 @@ impl Runtime {
 
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("Runtime::close())");
-        self.cancel_token.cancel();
+        // self.cancel_token.cancel();
         self.manager().close().await;
         Ok(())
     }
@@ -177,12 +177,11 @@ impl Runtime {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        let handle = zenoh_runtime::ZRuntime::Net.handle();
         let child_token = self.cancel_token.child_token();
-        handle.spawn(async move {
+        zenoh_runtime::ZRuntime::Net.handle().spawn(async move {
             tokio::select! {
-                _ = child_token.cancelled() => { }
-                _ = future => { }
+                _ = child_token.cancelled() => {}
+                _ = future => {}
             }
         })
     }

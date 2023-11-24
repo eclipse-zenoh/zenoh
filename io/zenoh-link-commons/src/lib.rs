@@ -56,9 +56,8 @@ pub trait LocatorInspector: Default {
     async fn is_multicast(&self, locator: &Locator) -> ZResult<bool>;
 }
 
-#[async_trait]
 pub trait ConfigurationInspector<C>: Default {
-    async fn inspect_config(&self, configuration: &C) -> ZResult<String>;
+    fn inspect_config(&self, configuration: &C) -> ZResult<String>;
 }
 
 impl fmt::Display for Link {

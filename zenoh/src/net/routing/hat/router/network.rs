@@ -491,7 +491,7 @@ impl Network {
 
                         if !self.autoconnect.is_empty() {
                             // Connect discovered peers
-                            if async_global_executor::block_on(self.runtime.manager().get_transport_unicast(&zid))
+                            if zenoh_runtime::ZRuntime::Net.handle().block_on(self.runtime.manager().get_transport_unicast(&zid))
                                 .is_none()
                                 && self.autoconnect.matches(whatami)
                             {
@@ -610,7 +610,7 @@ impl Network {
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
                 if let Some(whatami) = node.whatami {
-                    if async_global_executor::block_on(
+                    if zenoh_runtime::ZRuntime::Net.handle().block_on(
                         self.runtime.manager().get_transport_unicast(&node.zid),
                     )
                     .is_none()

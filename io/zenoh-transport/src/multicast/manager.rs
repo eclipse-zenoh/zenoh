@@ -15,7 +15,7 @@
 use crate::multicast::shm::SharedMemoryMulticast;
 use crate::multicast::{transport::TransportMulticastInner, TransportMulticast};
 use crate::TransportManager;
-use std::collections::HashMap;
+use dashmap::DashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -54,9 +54,9 @@ pub struct TransportManagerBuilderMulticast {
 
 pub struct TransportManagerStateMulticast {
     // Established listeners
-    pub(crate) protocols: Arc<Mutex<HashMap<String, LinkManagerMulticast>>>,
+    pub(crate) protocols: Arc<DashMap<String, LinkManagerMulticast>>,
     // Established transports
-    pub(crate) transports: Arc<Mutex<HashMap<Locator, Arc<TransportMulticastInner>>>>,
+    pub(crate) transports: Arc<DashMap<Locator, Arc<TransportMulticastInner>>>,
     // Shared memory
     #[cfg(feature = "shared-memory")]
     pub(super) shm: Arc<SharedMemoryMulticast>,
@@ -99,13 +99,7 @@ impl TransportManagerBuilderMulticast {
         self
     }
 
-    #[cfg(feature = "transport_compression")]
-    pub fn compression(mut self, is_compression: bool) -> Self {
-        self.is_compression = is_compression;
-        self
-    }
-
-    pub async fn from_config(
+    pub fn from_config(
         mut self,
         config: &Config,
     ) -> ZResult<TransportManagerBuilderMulticast> {
@@ -140,8 +134,8 @@ impl TransportManagerBuilderMulticast {
         };
 
         let state = TransportManagerStateMulticast {
-            protocols: Arc::new(Mutex::new(HashMap::new())),
-            transports: Arc::new(Mutex::new(HashMap::new())),
+            protocols: Arc::new(DashMap::new()),
+            transports: Arc::new(DashMap::new()),
             #[cfg(feature = "shared-memory")]
             shm: Arc::new(SharedMemoryMulticast::make()?),
         };
@@ -171,10 +165,8 @@ impl Default for TransportManagerBuilderMulticast {
             #[cfg(feature = "transport_compression")]
             is_compression: *compression.enabled(),
         };
-        zenoh_runtime::ZRuntime::TX
-            .handle()
-            .block_on(tmb.from_config(&Config::default()))
-            .unwrap()
+
+        tmb.from_config(&Config::default()).unwrap()
     }
 }
 
@@ -186,11 +178,12 @@ impl TransportManager {
     pub async fn close_multicast(&self) {
         log::trace!("TransportManagerMulticast::clear())");
 
-        zasynclock!(self.state.multicast.protocols).clear();
+        self.state.multicast.protocols.clear();
 
-        for (_, tm) in zasynclock!(self.state.multicast.transports).drain() {
+        for tm in self.state.multicast.transports.iter() {
             let _ = tm.close(close::reason::GENERIC).await;
         }
+        self.state.multicast.transports.clear();
     }
 
     /*************************************/
@@ -205,19 +198,18 @@ impl TransportManager {
             );
         }
 
-        let mut w_guard = zasynclock!(self.state.multicast.protocols);
-        match w_guard.get(protocol) {
+        match self.state.multicast.protocols.get(protocol) {
             Some(lm) => Ok(lm.clone()),
             None => {
                 let lm = LinkManagerBuilderMulticast::make(protocol)?;
-                w_guard.insert(protocol.to_string(), lm.clone());
+                let _ = self.state.multicast.protocols.insert(protocol.to_string(), lm.clone());
                 Ok(lm)
             }
         }
     }
 
-    async fn del_link_manager_multicast(&self, protocol: &str) -> ZResult<()> {
-        match zasynclock!(self.state.multicast.protocols).remove(protocol) {
+    fn del_link_manager_multicast(&self, protocol: &str) -> ZResult<()> {
+        match self.state.multicast.protocols.remove(protocol) {
             Some(_) => Ok(()),
             None => bail!(
                 "Can not delete the link manager for protocol ({}) because it has not been found.",
@@ -274,32 +266,30 @@ impl TransportManager {
     }
 
     pub async fn get_transport_multicast(&self, zid: &ZenohId) -> Option<TransportMulticast> {
-        for t in zasynclock!(self.state.multicast.transports).values() {
+        for t in self.state.multicast.transports.iter() {
             if t.get_peers().iter().any(|p| p.zid == *zid) {
-                return Some(t.into());
+                return Some(t.value().into());
             }
         }
         None
     }
 
     pub async fn get_transports_multicast(&self) -> Vec<TransportMulticast> {
-        zasynclock!(self.state.multicast.transports)
-            .values()
-            .map(|t| t.into())
+        self.state.multicast.transports
+            .iter()
+            .map(|t| t.value().into())
             .collect()
     }
 
     pub(super) async fn del_transport_multicast(&self, locator: &Locator) -> ZResult<()> {
-        let mut guard = zasynclock!(self.state.multicast.transports);
-        let res = guard.remove(locator);
+        let res = self.state.multicast.transports.remove(locator);
 
-        if !guard
+        if !self.state.multicast.transports
             .iter()
-            .any(|(l, _)| l.protocol() == locator.protocol())
+            .any(|pair| pair.key().protocol() == locator.protocol())
         {
-            let _ = self
-                .del_link_manager_multicast(locator.protocol().as_str())
-                .await;
+            self
+                .del_link_manager_multicast(locator.protocol().as_str())?;
         }
 
         res.map(|_| ()).ok_or_else(|| {
@@ -318,19 +308,17 @@ impl TransportManager {
         Ok(locator)
     }
 
-    pub async fn del_listener_multicast(&self, endpoint: &EndPoint) -> ZResult<()> {
+    pub fn del_listener_multicast(&self, endpoint: &EndPoint) -> ZResult<()> {
         let locator = endpoint.to_locator();
 
-        let mut guard = zasynclock!(self.state.multicast.transports);
-        let res = guard.remove(&locator);
+        let res = self.state.multicast.transports.remove(&locator);
 
-        if !guard
+        if !self.state.multicast.transports
             .iter()
-            .any(|(l, _)| l.protocol() == locator.protocol())
+            .any(|pair| pair.key().protocol() == locator.protocol())
         {
-            let _ = self
-                .del_link_manager_multicast(locator.protocol().as_str())
-                .await;
+            self
+                .del_link_manager_multicast(locator.protocol().as_str())?;
         }
 
         res.map(|_| ()).ok_or_else(|| {
@@ -340,16 +328,16 @@ impl TransportManager {
         })
     }
 
-    pub async fn get_listeners_multicast(&self) -> Vec<EndPoint> {
-        zasynclock!(self.state.multicast.transports)
-            .values()
+    pub fn get_listeners_multicast(&self) -> Vec<EndPoint> {
+        self.state.multicast.transports
+            .iter()
             .map(|t| t.locator.clone().into())
             .collect()
     }
 
-    pub async fn get_locators_multicast(&self) -> Vec<Locator> {
-        zasynclock!(self.state.multicast.transports)
-            .values()
+    pub fn get_locators_multicast(&self) -> Vec<Locator> {
+        self.state.multicast.transports
+            .iter()
             .map(|t| t.locator.clone())
             .collect()
     }

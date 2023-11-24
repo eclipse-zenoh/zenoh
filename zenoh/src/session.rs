@@ -1744,7 +1744,7 @@ impl Session {
             Locality::Any => 2,
             _ => 1,
         };
-        task::spawn({
+        zenoh_runtime::ZRuntime::Net.handle().spawn({
             let state = self.state.clone();
             let zid = self.runtime.zid();
             async move {

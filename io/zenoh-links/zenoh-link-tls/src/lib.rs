@@ -65,9 +65,8 @@ impl LocatorInspector for TlsLocatorInspector {
 #[derive(Default, Clone, Copy, Debug)]
 pub struct TlsConfigurator;
 
-#[async_trait]
 impl ConfigurationInspector<Config> for TlsConfigurator {
-    async fn inspect_config(&self, config: &Config) -> ZResult<String> {
+    fn inspect_config(&self, config: &Config) -> ZResult<String> {
         let mut ps: Vec<(&str, &str)> = vec![];
 
         let c = config.transport().link().tls();

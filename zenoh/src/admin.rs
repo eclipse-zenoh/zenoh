@@ -91,14 +91,14 @@ pub(crate) fn on_admin_query(session: &Session, query: Query) {
     }
 
     if let Ok(own_zid) = keyexpr::new(&session.zid().to_string()) {
-        for transport in tokio::runtime::Handle::current()
+        for transport in zenoh_runtime::ZRuntime::Net.handle()
             .block_on(session.runtime.manager().get_transports_unicast())
         {
             if let Ok(peer) = transport.get_peer() {
                 reply_peer(own_zid, &query, peer);
             }
         }
-        for transport in tokio::runtime::Handle::current()
+        for transport in zenoh_runtime::ZRuntime::Net.handle()
             .block_on(session.runtime.manager().get_transports_multicast())
         {
             for peer in transport.get_peers().unwrap_or_default() {

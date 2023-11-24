@@ -57,7 +57,7 @@ impl TransportUnicastUniversal {
         let c_link = link.clone();
         // Spawn a task to avoid a deadlock waiting for this same task
         // to finish in the link close() joining the rx handle
-        task::spawn(async move {
+        zenoh_runtime::ZRuntime::Net.handle().spawn(async move {
             if session {
                 let _ = c_transport.delete().await;
             } else {

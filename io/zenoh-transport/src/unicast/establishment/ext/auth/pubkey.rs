@@ -76,7 +76,7 @@ impl AuthPubKey {
         Ok(())
     }
 
-    pub async fn from_config(config: &PubKeyConf) -> ZResult<Option<Self>> {
+    pub fn from_config(config: &PubKeyConf) -> ZResult<Option<Self>> {
         const S: &str = "PubKey extension - From config.";
 
         // First, check if PEM keys are provided

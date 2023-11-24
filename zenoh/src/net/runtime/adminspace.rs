@@ -524,7 +524,7 @@ fn router_data(context: &AdminContext, query: Query) {
         }
         json
     };
-    let transports: Vec<serde_json::Value> = tokio::runtime::Handle::current()
+    let transports: Vec<serde_json::Value> = zenoh_runtime::ZRuntime::Net.handle()
         .block_on(transport_mgr.get_transports_unicast())
         .iter()
         .map(transport_to_json)
