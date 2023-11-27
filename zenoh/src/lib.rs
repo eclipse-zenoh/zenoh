@@ -85,6 +85,7 @@ use handlers::DefaultHandler;
 use net::runtime::Runtime;
 use prelude::*;
 use scouting::ScoutBuilder;
+use zenoh_util::concat_enabled_features;
 use std::future::Ready;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 pub use zenoh_macros::{kedefine, keformat, kewrite};
@@ -97,6 +98,28 @@ pub use zenoh_result::Error;
 pub use zenoh_result::ZResult as Result;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
+
+pub const FEATURES: &str = concat_enabled_features!(
+    prefix = "zenoh",
+    features = [
+        "auth_pubkey",
+        "auth_usrpwd",
+        "complete_n",
+        "shared-memory",
+        "stats",
+        "transport_multilink",
+        "transport_quic",
+        "transport_serial",
+        "transport_unixpipe",
+        "transport_tcp",
+        "transport_tls",
+        "transport_udp",
+        "transport_unixsock-stream",
+        "transport_ws",
+        "unstable",
+        "default"
+    ]
+);
 
 mod admin;
 #[macro_use]
