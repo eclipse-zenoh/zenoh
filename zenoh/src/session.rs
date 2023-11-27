@@ -101,6 +101,8 @@ pub(crate) struct SessionState {
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     #[cfg(feature = "unstable")]
     pub(crate) tokens: HashMap<Id, Arc<LivelinessTokenState>>,
+    #[cfg(feature = "unstable")]
+    pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
     pub(crate) queries: HashMap<RequestId, QueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     //pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
@@ -123,6 +125,8 @@ impl SessionState {
             queryables: HashMap::new(),
             #[cfg(feature = "unstable")]
             tokens: HashMap::new(),
+            #[cfg(feature = "unstable")]
+            matching_listeners: HashMap::new(),
             queries: HashMap::new(),
             aggregated_subscribers,
             //aggregated_publishers,
@@ -1099,6 +1103,12 @@ impl Session {
                     ext_info: *info,
                 }),
             });
+
+            #[cfg(feature = "unstable")]
+            {
+                let state = zread!(self.state);
+                self.update_status_up(&state, &key_expr)
+            }
         }
 
         Ok(sub_state)
@@ -1157,6 +1167,12 @@ impl Session {
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             });
+
+                            #[cfg(feature = "unstable")]
+                            {
+                                let state = zread!(self.state);
+                                self.update_status_down(&state, &sub_state.key_expr)
+                            }
                         }
                     }
                     None => {
@@ -1178,6 +1194,12 @@ impl Session {
                                     },
                                 }),
                             });
+
+                            #[cfg(feature = "unstable")]
+                            {
+                                let state = zread!(self.state);
+                                self.update_status_down(&state, &sub_state.key_expr)
+                            }
                         }
                     }
                 };
@@ -1420,6 +1442,148 @@ impl Session {
             Ok(())
         } else {
             Err(zerror!("Unable to find liveliness token").into())
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn declare_matches_listener_inner(
+        &self,
+        publisher: &Publisher,
+        callback: Callback<'static, MatchingStatus>,
+    ) -> ZResult<Arc<MatchingListenerState>> {
+        let mut state = zwrite!(self.state);
+
+        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        log::trace!("matches_listener({:?}) => {id}", publisher.key_expr);
+        let listener_state = Arc::new(MatchingListenerState {
+            id,
+            current: std::sync::Mutex::new(false),
+            destination: publisher.destination,
+            key_expr: publisher.key_expr.clone().into_owned(),
+            callback,
+        });
+        state.matching_listeners.insert(id, listener_state.clone());
+        drop(state);
+        match listener_state.current.lock() {
+            Ok(mut current) => {
+                if self
+                    .matching_status(&publisher.key_expr, listener_state.destination)
+                    .map(|s| s.matching_subscribers())
+                    .unwrap_or(true)
+                {
+                    *current = true;
+                    (listener_state.callback)(MatchingStatus { matching: true });
+                }
+            }
+            Err(e) => log::error!("Error trying to acquire MathginListener lock: {}", e),
+        }
+        Ok(listener_state)
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn matching_status(
+        &self,
+        key_expr: &KeyExpr,
+        destination: Locality,
+    ) -> ZResult<MatchingStatus> {
+        use crate::net::routing::router::RoutingExpr;
+        use zenoh_protocol::core::WhatAmI;
+        let tables = zread!(self.runtime.router.tables.tables);
+        let res = crate::net::routing::resource::Resource::get_resource(
+            &tables.root_res,
+            key_expr.as_str(),
+        );
+
+        let route = crate::net::routing::pubsub::get_data_route(
+            &tables,
+            WhatAmI::Client,
+            0,
+            &res,
+            &mut RoutingExpr::new(&tables.root_res, key_expr.as_str()),
+            0,
+        );
+        let matching = match destination {
+            Locality::Any => !route.is_empty(),
+            Locality::Remote => route.values().any(|dir| !dir.0.is_local()),
+            Locality::SessionLocal => route.values().any(|dir| dir.0.is_local()),
+        };
+        Ok(MatchingStatus { matching })
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn update_status_up(&self, state: &SessionState, key_expr: &KeyExpr) {
+        for msub in state.matching_listeners.values() {
+            if key_expr.intersects(&msub.key_expr) {
+                // Cannot hold session lock when calling tables (matching_status())
+                async_std::task::spawn({
+                    let session = self.clone();
+                    let msub = msub.clone();
+                    async move {
+                        match msub.current.lock() {
+                            Ok(mut current) => {
+                                if !*current {
+                                    if let Ok(status) =
+                                        session.matching_status(&msub.key_expr, msub.destination)
+                                    {
+                                        if status.matching_subscribers() {
+                                            *current = true;
+                                            let callback = msub.callback.clone();
+                                            (callback)(status)
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("Error trying to acquire MathginListener lock: {}", e);
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn update_status_down(&self, state: &SessionState, key_expr: &KeyExpr) {
+        for msub in state.matching_listeners.values() {
+            if key_expr.intersects(&msub.key_expr) {
+                // Cannot hold session lock when calling tables (matching_status())
+                async_std::task::spawn({
+                    let session = self.clone();
+                    let msub = msub.clone();
+                    async move {
+                        match msub.current.lock() {
+                            Ok(mut current) => {
+                                if *current {
+                                    if let Ok(status) =
+                                        session.matching_status(&msub.key_expr, msub.destination)
+                                    {
+                                        if !status.matching_subscribers() {
+                                            *current = false;
+                                            let callback = msub.callback.clone();
+                                            (callback)(status)
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("Error trying to acquire MathginListener lock: {}", e);
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn undeclare_matches_listener_inner(&self, sid: usize) -> ZResult<()> {
+        let mut state = zwrite!(self.state);
+        if let Some(state) = state.matching_listeners.remove(&sid) {
+            trace!("undeclare_matches_listener_inner({:?})", state);
+            Ok(())
+        } else {
+            Err(zerror!("Unable to find MatchingListener").into())
         }
     }
 
@@ -1939,6 +2103,8 @@ impl Primitives for Session {
                     let state = zread!(self.state);
                     match state.wireexpr_to_keyexpr(&m.wire_expr, false) {
                         Ok(expr) => {
+                            self.update_status_up(&state, &expr);
+
                             if expr
                                 .as_str()
                                 .starts_with(crate::liveliness::PREFIX_LIVELINESS)
@@ -1960,6 +2126,8 @@ impl Primitives for Session {
                     let state = zread!(self.state);
                     match state.wireexpr_to_keyexpr(&m.ext_wire_expr.wire_expr, false) {
                         Ok(expr) => {
+                            self.update_status_down(&state, &expr);
+
                             if expr
                                 .as_str()
                                 .starts_with(crate::liveliness::PREFIX_LIVELINESS)
@@ -2043,151 +2211,203 @@ impl Primitives for Session {
 
     fn send_response(&self, msg: Response) {
         trace!("recv Response {:?}", msg);
-        if let ResponseBody::Reply(m) = msg.payload {
-            let mut state = zwrite!(self.state);
-            let key_expr = match state.remote_key_to_expr(&msg.wire_expr) {
-                Ok(key) => key.into_owned(),
-                Err(e) => {
-                    error!("Received ReplyData for unkown key_expr: {}", e);
-                    return;
+        match msg.payload {
+            ResponseBody::Ack(_) => {
+                log::warn!(
+                    "Received a ResponseBody::Ack, but this isn't supported yet. Dropping message."
+                )
+            }
+            ResponseBody::Put(_) => {
+                log::warn!(
+                    "Received a ResponseBody::Put, but this isn't supported yet. Dropping message."
+                )
+            }
+            ResponseBody::Err(e) => {
+                let mut state = zwrite!(self.state);
+                match state.queries.get_mut(&msg.rid) {
+                    Some(query) => {
+                        let callback = query.callback.clone();
+                        std::mem::drop(state);
+                        let value = match e.ext_body {
+                            Some(body) => Value {
+                                payload: body.payload,
+                                encoding: body.encoding,
+                            },
+                            None => Value {
+                                payload: ZBuf::empty(),
+                                encoding: zenoh_protocol::core::Encoding::EMPTY,
+                            },
+                        };
+                        let replier_id = match e.ext_sinfo {
+                            Some(info) => info.zid,
+                            None => ZenohId::rand(),
+                        };
+                        let new_reply = Reply {
+                            replier_id,
+                            sample: Err(value),
+                        };
+                        callback(new_reply);
+                    }
+                    None => {
+                        log::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                    }
                 }
-            };
-            match state.queries.get_mut(&msg.rid) {
-                Some(query) => {
-                    if !matches!(
-                        query
-                            .selector
-                            .parameters()
-                            .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
-                        Ok([true])
-                    ) && !query.selector.key_expr.intersects(&key_expr)
-                    {
-                        log::warn!(
-                            "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",
-                            key_expr,
-                            msg.ext_respid,
-                            query.selector
-                        );
+            }
+            ResponseBody::Reply(m) => {
+                let mut state = zwrite!(self.state);
+                let key_expr = match state.remote_key_to_expr(&msg.wire_expr) {
+                    Ok(key) => key.into_owned(),
+                    Err(e) => {
+                        error!("Received ReplyData for unkown key_expr: {}", e);
                         return;
                     }
-                    let key_expr = match &query.scope {
-                        Some(scope) => {
-                            if !key_expr.starts_with(&***scope) {
-                                log::warn!(
-                                    "Received Reply for `{}` from `{:?}, which didn't start with scope `{}`: dropping Reply.",
-                                    key_expr,
-                                    msg.ext_respid,
-                                    scope,
-                                );
-                                return;
-                            }
-                            match KeyExpr::try_from(&key_expr[(scope.len() + 1)..]) {
-                                Ok(key_expr) => key_expr,
-                                Err(e) => {
+                };
+                match state.queries.get_mut(&msg.rid) {
+                    Some(query) => {
+                        if !matches!(
+                            query
+                                .selector
+                                .parameters()
+                                .get_bools([crate::query::_REPLY_KEY_EXPR_ANY_SEL_PARAM]),
+                            Ok([true])
+                        ) && !query.selector.key_expr.intersects(&key_expr)
+                        {
+                            log::warn!(
+                                "Received Reply for `{}` from `{:?}, which didn't match query `{}`: dropping Reply.",
+                                key_expr,
+                                msg.ext_respid,
+                                query.selector
+                            );
+                            return;
+                        }
+                        let key_expr = match &query.scope {
+                            Some(scope) => {
+                                if !key_expr.starts_with(&***scope) {
                                     log::warn!(
-                                        "Error unscoping received Reply for `{}` from `{:?}: {}",
+                                        "Received Reply for `{}` from `{:?}, which didn't start with scope `{}`: dropping Reply.",
                                         key_expr,
                                         msg.ext_respid,
-                                        e,
+                                        scope,
                                     );
                                     return;
                                 }
-                            }
-                        }
-                        None => key_expr,
-                    };
-                    let info = DataInfo {
-                        kind: SampleKind::Put,
-                        encoding: Some(m.encoding),
-                        timestamp: m.timestamp,
-                        source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
-                        source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
-                    };
-                    let new_reply = Reply {
-                        sample: Ok(Sample::with_info(
-                            key_expr.into_owned(),
-                            m.payload,
-                            Some(info),
-                        )),
-                        replier_id: ZenohId::rand(), // TOTO
-                    };
-                    let callback = match query.reception_mode {
-                        ConsolidationMode::None => Some((query.callback.clone(), new_reply)),
-                        ConsolidationMode::Monotonic => {
-                            match query
-                                .replies
-                                .as_ref()
-                                .unwrap()
-                                .get(new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr())
-                            {
-                                Some(reply) => {
-                                    if new_reply.sample.as_ref().unwrap().timestamp
-                                        > reply.sample.as_ref().unwrap().timestamp
-                                    {
-                                        query.replies.as_mut().unwrap().insert(
-                                            new_reply
-                                                .sample
-                                                .as_ref()
-                                                .unwrap()
-                                                .key_expr
-                                                .clone()
-                                                .into(),
-                                            new_reply.clone(),
+                                match KeyExpr::try_from(&key_expr[(scope.len() + 1)..]) {
+                                    Ok(key_expr) => key_expr,
+                                    Err(e) => {
+                                        log::warn!(
+                                            "Error unscoping received Reply for `{}` from `{:?}: {}",
+                                            key_expr,
+                                            msg.ext_respid,
+                                            e,
                                         );
-                                        Some((query.callback.clone(), new_reply))
-                                    } else {
-                                        None
+                                        return;
                                     }
                                 }
-                                None => {
-                                    query.replies.as_mut().unwrap().insert(
-                                        new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
-                                        new_reply.clone(),
-                                    );
+                            }
+                            None => key_expr,
+                        };
+                        let info = DataInfo {
+                            kind: SampleKind::Put,
+                            encoding: Some(m.encoding),
+                            timestamp: m.timestamp,
+                            source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
+                            source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
+                        };
+                        let new_reply = Reply {
+                            sample: Ok(Sample::with_info(
+                                key_expr.into_owned(),
+                                m.payload,
+                                Some(info),
+                            )),
+                            replier_id: ZenohId::rand(), // TODO
+                        };
+                        let callback =
+                            match query.reception_mode {
+                                ConsolidationMode::None => {
                                     Some((query.callback.clone(), new_reply))
                                 }
-                            }
-                        }
-                        ConsolidationMode::Latest => {
-                            match query
-                                .replies
-                                .as_ref()
-                                .unwrap()
-                                .get(new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr())
-                            {
-                                Some(reply) => {
-                                    if new_reply.sample.as_ref().unwrap().timestamp
-                                        > reply.sample.as_ref().unwrap().timestamp
-                                    {
-                                        query.replies.as_mut().unwrap().insert(
-                                            new_reply
-                                                .sample
-                                                .as_ref()
-                                                .unwrap()
-                                                .key_expr
-                                                .clone()
-                                                .into(),
-                                            new_reply,
-                                        );
+                                ConsolidationMode::Monotonic => {
+                                    match query.replies.as_ref().unwrap().get(
+                                        new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr(),
+                                    ) {
+                                        Some(reply) => {
+                                            if new_reply.sample.as_ref().unwrap().timestamp
+                                                > reply.sample.as_ref().unwrap().timestamp
+                                            {
+                                                query.replies.as_mut().unwrap().insert(
+                                                    new_reply
+                                                        .sample
+                                                        .as_ref()
+                                                        .unwrap()
+                                                        .key_expr
+                                                        .clone()
+                                                        .into(),
+                                                    new_reply.clone(),
+                                                );
+                                                Some((query.callback.clone(), new_reply))
+                                            } else {
+                                                None
+                                            }
+                                        }
+                                        None => {
+                                            query.replies.as_mut().unwrap().insert(
+                                                new_reply
+                                                    .sample
+                                                    .as_ref()
+                                                    .unwrap()
+                                                    .key_expr
+                                                    .clone()
+                                                    .into(),
+                                                new_reply.clone(),
+                                            );
+                                            Some((query.callback.clone(), new_reply))
+                                        }
                                     }
                                 }
-                                None => {
-                                    query.replies.as_mut().unwrap().insert(
-                                        new_reply.sample.as_ref().unwrap().key_expr.clone().into(),
-                                        new_reply,
-                                    );
+                                ConsolidationMode::Latest => {
+                                    match query.replies.as_ref().unwrap().get(
+                                        new_reply.sample.as_ref().unwrap().key_expr.as_keyexpr(),
+                                    ) {
+                                        Some(reply) => {
+                                            if new_reply.sample.as_ref().unwrap().timestamp
+                                                > reply.sample.as_ref().unwrap().timestamp
+                                            {
+                                                query.replies.as_mut().unwrap().insert(
+                                                    new_reply
+                                                        .sample
+                                                        .as_ref()
+                                                        .unwrap()
+                                                        .key_expr
+                                                        .clone()
+                                                        .into(),
+                                                    new_reply,
+                                                );
+                                            }
+                                        }
+                                        None => {
+                                            query.replies.as_mut().unwrap().insert(
+                                                new_reply
+                                                    .sample
+                                                    .as_ref()
+                                                    .unwrap()
+                                                    .key_expr
+                                                    .clone()
+                                                    .into(),
+                                                new_reply,
+                                            );
+                                        }
+                                    };
+                                    None
                                 }
                             };
-                            None
+                        std::mem::drop(state);
+                        if let Some((callback, new_reply)) = callback {
+                            callback(new_reply);
                         }
-                    };
-                    std::mem::drop(state);
-                    if let Some((callback, new_reply)) = callback {
-                        callback(new_reply);
                     }
-                }
-                None => {
-                    log::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                    None => {
+                        log::warn!("Received ReplyData for unkown Query: {}", msg.rid);
+                    }
                 }
             }
         }

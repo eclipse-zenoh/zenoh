@@ -625,7 +625,15 @@ impl Config {
 
 impl std::fmt::Display for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", serde_json::to_string(self).unwrap())
+        serde_json::to_value(self)
+            .map(|mut json| {
+                sift_privates(&mut json);
+                write!(f, "{json}")
+            })
+            .map_err(|e| {
+                _ = write!(f, "{e:?}");
+                fmt::Error
+            })?
     }
 }
 
@@ -1030,9 +1038,12 @@ impl<'a> serde::Deserialize<'a> for PluginsConfig {
         })
     }
 }
+
 impl std::fmt::Debug for PluginsConfig {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", &self.values)
+        let mut values: Value = self.values.clone();
+        sift_privates(&mut values);
+        write!(f, "{:?}", values)
     }
 }
 
