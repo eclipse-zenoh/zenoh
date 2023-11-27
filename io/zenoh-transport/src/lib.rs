@@ -17,7 +17,7 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-mod common;
+pub mod common;
 pub mod manager;
 pub mod multicast;
 pub mod primitives;
