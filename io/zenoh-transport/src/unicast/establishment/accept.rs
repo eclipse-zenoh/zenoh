@@ -628,17 +628,18 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         is_lowlatency: state.ext_lowlatency.is_lowlatency(),
     };
 
-    let transport = step!(
-        manager
-            .init_transport_unicast(config, link.clone(), LinkUnicastDirection::Inbound)
-            .await
-    );
-
     // Send the open_ack on the link
     step!(link
         .send(&oack_out.open_ack.into())
         .await
         .map_err(|e| (e, Some(close::reason::GENERIC))));
+
+    // init the transport
+    let transport = step!(
+        manager
+            .init_transport_unicast(config, link.clone(), LinkUnicastDirection::Inbound)
+            .await
+    );
 
     // Sync the RX sequence number
     let _ = step!(transport
