@@ -24,6 +24,7 @@ categories = { workspace = true }
 description = "Internal crate for zenoh."
 readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+publish = false
 
 [features]
 shared-memory = ["zenoh/shared-memory"]
