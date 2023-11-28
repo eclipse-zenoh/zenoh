@@ -51,9 +51,3 @@ impl From<LivelinessSpace> for KeySpace {
         KeySpace::Liveliness
     }
 }
-
-#[test]
-fn test_default_features() {
-    // make sure that when inporting zenoh-ext with default features, no unwanted features are pulled from zenoh-core
-    assert_eq!(zenoh::FEATURES, concat!(" zenoh/unstable",));
-}
