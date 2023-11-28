@@ -213,15 +213,19 @@ impl LinkManagerBuilderUnicast {
             #[cfg(feature = "transport_quic")]
             QUIC_LOCATOR_PREFIX => Ok(std::sync::Arc::new(LinkManagerUnicastQuic::new(_manager))),
             #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-            UNIXSOCKSTREAM_LOCATOR_PREFIX => {
-                Ok(std::sync::Arc::new(LinkManagerUnicastUnixSocketStream::new(_manager)))
-            }
+            UNIXSOCKSTREAM_LOCATOR_PREFIX => Ok(std::sync::Arc::new(
+                LinkManagerUnicastUnixSocketStream::new(_manager),
+            )),
             #[cfg(feature = "transport_ws")]
             WS_LOCATOR_PREFIX => Ok(std::sync::Arc::new(LinkManagerUnicastWs::new(_manager))),
             #[cfg(feature = "transport_serial")]
-            SERIAL_LOCATOR_PREFIX => Ok(std::sync::Arc::new(LinkManagerUnicastSerial::new(_manager))),
+            SERIAL_LOCATOR_PREFIX => {
+                Ok(std::sync::Arc::new(LinkManagerUnicastSerial::new(_manager)))
+            }
             #[cfg(feature = "transport_unixpipe")]
-            UNIXPIPE_LOCATOR_PREFIX => Ok(std::sync::Arc::new(LinkManagerUnicastPipe::new(_manager))),
+            UNIXPIPE_LOCATOR_PREFIX => {
+                Ok(std::sync::Arc::new(LinkManagerUnicastPipe::new(_manager)))
+            }
             _ => bail!("Unicast not supported for {} protocol", protocol),
         }
     }
