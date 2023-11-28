@@ -85,12 +85,12 @@ use handlers::DefaultHandler;
 use net::runtime::Runtime;
 use prelude::*;
 use scouting::ScoutBuilder;
-use zenoh_util::concat_enabled_features;
 use std::future::Ready;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 pub use zenoh_macros::{kedefine, keformat, kewrite};
 use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::{zerror, ZResult};
+use zenoh_util::concat_enabled_features;
 
 /// A zenoh error.
 pub use zenoh_result::Error;

@@ -311,45 +311,51 @@ fn config_from_args(args: &ArgMatches) -> Config {
 #[test]
 #[cfg(feature = "default")]
 fn test_default_features() {
-    assert_eq!(zenoh::FEATURES, concat!(
-        " zenoh/auth_pubkey",
-        " zenoh/auth_usrpwd",
-        // " zenoh/complete_n",
-        // " zenoh/shared-memory",
-        // " zenoh/stats",
-        " zenoh/transport_multilink",
-        " zenoh/transport_quic",
-        // " zenoh/transport_serial",
-        // " zenoh/transport_unixpipe",
-        " zenoh/transport_tcp",
-        " zenoh/transport_tls",
-        " zenoh/transport_udp",
-        " zenoh/transport_unixsock-stream",
-        " zenoh/transport_ws",
-        " zenoh/unstable",
-        " zenoh/default",
-    ));      
+    assert_eq!(
+        zenoh::FEATURES,
+        concat!(
+            " zenoh/auth_pubkey",
+            " zenoh/auth_usrpwd",
+            // " zenoh/complete_n",
+            // " zenoh/shared-memory",
+            // " zenoh/stats",
+            " zenoh/transport_multilink",
+            " zenoh/transport_quic",
+            // " zenoh/transport_serial",
+            // " zenoh/transport_unixpipe",
+            " zenoh/transport_tcp",
+            " zenoh/transport_tls",
+            " zenoh/transport_udp",
+            " zenoh/transport_unixsock-stream",
+            " zenoh/transport_ws",
+            " zenoh/unstable",
+            " zenoh/default",
+        )
+    );
 }
 
 #[test]
 #[cfg(not(feature = "default"))]
 fn test_no_default_features() {
-    assert_eq!(zenoh::FEATURES, concat!(
-        // " zenoh/auth_pubkey",
-        // " zenoh/auth_usrpwd",
-        // " zenoh/complete_n",
-        // " zenoh/shared-memory",
-        // " zenoh/stats",
-        // " zenoh/transport_multilink",
-        // " zenoh/transport_quic",
-        // " zenoh/transport_serial",
-        // " zenoh/transport_unixpipe",
-        // " zenoh/transport_tcp",
-        // " zenoh/transport_tls",
-        // " zenoh/transport_udp",
-        // " zenoh/transport_unixsock-stream",
-        // " zenoh/transport_ws",
-        " zenoh/unstable",
-        // " zenoh/default",
-    ));      
+    assert_eq!(
+        zenoh::FEATURES,
+        concat!(
+            // " zenoh/auth_pubkey",
+            // " zenoh/auth_usrpwd",
+            // " zenoh/complete_n",
+            // " zenoh/shared-memory",
+            // " zenoh/stats",
+            // " zenoh/transport_multilink",
+            // " zenoh/transport_quic",
+            // " zenoh/transport_serial",
+            // " zenoh/transport_unixpipe",
+            // " zenoh/transport_tcp",
+            // " zenoh/transport_tls",
+            // " zenoh/transport_udp",
+            // " zenoh/transport_unixsock-stream",
+            // " zenoh/transport_ws",
+            " zenoh/unstable",
+            // " zenoh/default",
+        )
+    );
 }
