@@ -26,6 +26,7 @@ readme = "README.md"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [features]
+default = ["zenoh/default"]
 shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
@@ -37,7 +38,7 @@ git-version = { workspace = true }
 json5 = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
-zenoh = { workspace = true, default-features = true, features = ["unstable"] }
+zenoh = { workspace = true, features = ["unstable"] }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
