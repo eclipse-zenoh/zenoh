@@ -185,7 +185,7 @@ zenoh-link-unixpipe = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-lin
 zenoh-link-serial = { version = "0.11.0-dev", path = "io/zenoh-links/zenoh-link-serial" }
 zenoh-link = { version = "0.11.0-dev", path = "io/zenoh-link" }
 zenoh-link-commons = { version = "0.11.0-dev", path = "io/zenoh-link-commons" }
-zenoh = { version = "0.11.0-dev", path = "zenoh" }
+zenoh = { version = "0.11.0-dev", path = "zenoh", default-features = false }
 
 [profile.dev]
 debug = true
