@@ -67,6 +67,7 @@ async-global-executor = { workspace = true }
 async-std = { workspace = true, features = ["attributes"] }
 async-trait = { workspace = true }
 base64 = { workspace = true }
+const_format = { workspace = true }
 env_logger = { workspace = true }
 event-listener = { workspace = true }
 flume = { workspace = true }

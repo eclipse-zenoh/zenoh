@@ -112,6 +112,13 @@ jobs:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
+      - name: Check for feature leaks
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        uses: actions-rs/cargo@v1
+        with:
+          command: nextest
+          args: run -p zenohd --no-default-features
+
       - name: Run doctests
         uses: actions-rs/cargo@v1
         with:

@@ -285,8 +285,8 @@ impl Tables {
             .clone();
         log::debug!("New {}", newface);
 
-        pubsub_new_face(self, &mut newface);
         queries_new_face(self, &mut newface);
+        pubsub_new_face(self, &mut newface);
 
         Arc::downgrade(&newface)
     }
@@ -318,8 +318,8 @@ impl Tables {
             .clone();
         log::debug!("New {}", newface);
 
-        pubsub_new_face(self, &mut newface);
         queries_new_face(self, &mut newface);
+        pubsub_new_face(self, &mut newface);
 
         Arc::downgrade(&newface)
     }
@@ -364,8 +364,8 @@ impl Tables {
                 };
 
                 log::trace!("Compute routes");
-                pubsub_tree_change(&mut tables, &new_childs, net_type);
                 queries_tree_change(&mut tables, &new_childs, net_type);
+                pubsub_tree_change(&mut tables, &new_childs, net_type);
 
                 log::trace!("Computations completed");
                 match net_type {
@@ -742,12 +742,12 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
                                         .link_states(list.link_states, zid)
                                         .removed_nodes
                                     {
-                                        pubsub_remove_node(
+                                        queries_remove_node(
                                             &mut tables,
                                             &removed_node.zid,
                                             WhatAmI::Router,
                                         );
-                                        queries_remove_node(
+                                        pubsub_remove_node(
                                             &mut tables,
                                             &removed_node.zid,
                                             WhatAmI::Router,
@@ -798,12 +798,12 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
                                             );
                                         } else {
                                             for (_, updated_node) in changes.updated_nodes {
-                                                pubsub_linkstate_change(
+                                                queries_linkstate_change(
                                                     &mut tables,
                                                     &updated_node.zid,
                                                     &updated_node.links,
                                                 );
-                                                queries_linkstate_change(
+                                                pubsub_linkstate_change(
                                                     &mut tables,
                                                     &updated_node.zid,
                                                     &updated_node.links,
@@ -842,8 +842,8 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
                         for (_, removed_node) in
                             tables.routers_net.as_mut().unwrap().remove_link(&zid)
                         {
-                            pubsub_remove_node(&mut tables, &removed_node.zid, WhatAmI::Router);
                             queries_remove_node(&mut tables, &removed_node.zid, WhatAmI::Router);
+                            pubsub_remove_node(&mut tables, &removed_node.zid, WhatAmI::Router);
                         }
 
                         if tables.full_net(WhatAmI::Peer) {
@@ -862,8 +862,8 @@ impl TransportPeerEventHandler for LinkStateInterceptor {
                             for (_, removed_node) in
                                 tables.peers_net.as_mut().unwrap().remove_link(&zid)
                             {
-                                pubsub_remove_node(&mut tables, &removed_node.zid, WhatAmI::Peer);
                                 queries_remove_node(&mut tables, &removed_node.zid, WhatAmI::Peer);
+                                pubsub_remove_node(&mut tables, &removed_node.zid, WhatAmI::Peer);
                             }
 
                             if tables.whatami == WhatAmI::Router {
