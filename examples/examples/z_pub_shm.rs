@@ -26,7 +26,12 @@ async fn main() -> Result<(), zenoh::Error> {
     // Initiate logging
     env_logger::init();
 
-    let (config, path, value) = parse_args();
+    let (mut config, path, value) = parse_args();
+
+    // A probing procedure for shared memory is performed upon session opening. To enable `z_pub_shm` to operate
+    // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
+    // subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
+    config.transport.shared_memory.set_enabled(true).unwrap();
 
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
@@ -39,6 +44,7 @@ async fn main() -> Result<(), zenoh::Error> {
     let publisher = session.declare_publisher(&path).res().await.unwrap();
 
     for idx in 0..(K * N as u32) {
+        sleep(Duration::from_secs(1)).await;
         let mut sbuf = match shm.alloc(1024) {
             Ok(buf) => buf,
             Err(_) => {
@@ -88,7 +94,6 @@ async fn main() -> Result<(), zenoh::Error> {
             let defrag = shm.defragment();
             println!("De-framented {defrag} bytes");
         }
-        // sleep(Duration::from_millis(100)).await;
         // Dropping the SharedMemoryBuf means to free it.
         drop(sbuf);
     }

@@ -91,6 +91,7 @@ pub use zenoh_macros::{kedefine, keformat, kewrite};
 use zenoh_plugin_trait::concat_enabled_features;
 use zenoh_protocol::core::WhatAmIMatcher;
 use zenoh_result::{zerror, ZResult};
+use zenoh_util::concat_enabled_features;
 
 /// A zenoh error.
 pub use zenoh_result::Error;

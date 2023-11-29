@@ -21,7 +21,12 @@ use zenoh::shm::SharedMemoryManager;
 async fn main() {
     // initiate logging
     env_logger::init();
-    let (config, sm_size, size) = parse_args();
+    let (mut config, sm_size, size) = parse_args();
+
+    // A probing procedure for shared memory is performed upon session opening. To enable `z_pub_shm_thr` to operate
+    // over shared memory (and to not fallback on network mode), shared memory needs to be enabled also on the
+    // subscriber side. By doing so, the probing procedure will succeed and shared memory will operate as expected.
+    config.transport.shared_memory.set_enabled(true).unwrap();
 
     let z = zenoh::open(config).res().await.unwrap();
     let id = z.zid();
