@@ -55,6 +55,7 @@ struct StateTransport {
     ext_lowlatency: ext::lowlatency::StateAccept,
 }
 
+#[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
 struct StateLink {
     #[cfg(feature = "transport_auth")]
     ext_auth: ext::auth::StateAccept,
@@ -64,6 +65,7 @@ struct StateLink {
 
 struct State {
     transport: StateTransport,
+    #[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
     link: StateLink,
 }
 
@@ -441,6 +443,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
                 ext_shm: cookie.ext_shm,
                 ext_lowlatency: cookie.ext_lowlatency,
             },
+            #[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
             link: StateLink {
                 #[cfg(feature = "transport_auth")]
                 ext_auth: cookie.ext_auth,
@@ -638,6 +641,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
                     manager.config.unicast.is_lowlatency,
                 ),
             },
+            #[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
             link: StateLink {
                 #[cfg(feature = "transport_auth")]
                 ext_auth: manager

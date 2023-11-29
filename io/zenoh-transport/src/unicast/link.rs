@@ -14,7 +14,9 @@
 use crate::common::batch::{BatchConfig, Decode, Encode, Finalize, RBatch, WBatch};
 use std::fmt;
 use std::sync::Arc;
-use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
+#[cfg(feature = "transport_compression")]
+use zenoh_buffers::BBuf;
+use zenoh_buffers::{ZSlice, ZSliceBuffer};
 use zenoh_link::{Link, LinkUnicast};
 use zenoh_protocol::transport::{BatchSize, Close, TransportMessage};
 use zenoh_result::{zerror, ZResult};

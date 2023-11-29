@@ -11,10 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::{
-    num::{NonZeroU8, NonZeroUsize},
-    sync::Arc,
-};
+use std::num::{NonZeroU8, NonZeroUsize};
 use zenoh_buffers::{
     buffer::Buffer,
     reader::{DidntRead, HasReader},
@@ -26,13 +23,15 @@ use zenoh_codec::{
     RCodec, WCodec,
 };
 use zenoh_protocol::{
-    common::imsg,
     network::NetworkMessage,
     transport::{fragment::FragmentHeader, frame::FrameHeader, BatchSize, TransportMessage},
 };
-use zenoh_result::{zerror, ZResult};
+use zenoh_result::ZResult;
+#[cfg(feature = "transport_compression")]
+use {std::sync::Arc, zenoh_protocol::common::imsg, zenoh_result::zerror};
 
 // Split the inner buffer into (length, header, payload) inmutable slices
+#[cfg(feature = "transport_compression")]
 macro_rules! zsplit {
     ($slice:expr, $header:expr) => {{
         match $header.get() {
@@ -52,6 +51,7 @@ pub struct BatchConfig {
 
 impl BatchConfig {
     fn header(&self) -> BatchHeader {
+        #[allow(unused_mut)] // No need for mut when "transport_compression" is disabled
         let mut h = 0;
         #[cfg(feature = "transport_compression")]
         if self.is_compression {
@@ -67,8 +67,8 @@ impl BatchConfig {
 pub struct BatchHeader(Option<NonZeroU8>);
 
 impl BatchHeader {
+    #[cfg(feature = "transport_compression")]
     const INDEX: usize = 0;
-
     #[cfg(feature = "transport_compression")]
     const COMPRESSION: u8 = 1;
 
@@ -76,6 +76,7 @@ impl BatchHeader {
         Self(NonZeroU8::new(h))
     }
 
+    #[cfg(feature = "transport_compression")]
     const fn is_empty(&self) -> bool {
         self.0.is_none()
     }
@@ -195,6 +196,7 @@ impl WBatch {
 
     // Split (length, header, payload) internal buffer slice
     #[inline(always)]
+    #[cfg(feature = "transport_compression")]
     fn split(&self) -> (&[u8], &[u8]) {
         zsplit!(self.buffer.as_slice(), self.header)
     }
@@ -295,17 +297,19 @@ pub struct RBatch {
     // The batch codec
     codec: Zenoh080Batch,
     // It contains 1 byte as additional header, e.g. to signal the batch is compressed
+    #[cfg(feature = "transport_compression")]
     header: BatchHeader,
 }
 
 impl RBatch {
-    pub fn new<T>(config: BatchConfig, buffer: T) -> Self
+    pub fn new<T>(#[allow(unused_variables)] config: BatchConfig, buffer: T) -> Self
     where
         T: Into<ZSlice>,
     {
         Self {
             buffer: buffer.into(),
             codec: Zenoh080Batch::new(),
+            #[cfg(feature = "transport_compression")]
             header: config.header(),
         }
     }
@@ -317,11 +321,12 @@ impl RBatch {
 
     // Split (length, header, payload) internal buffer slice
     #[inline(always)]
+    #[cfg(feature = "transport_compression")]
     fn split(&self) -> (&[u8], &[u8]) {
         zsplit!(self.buffer.as_slice(), self.header)
     }
 
-    pub fn initialize<C, T>(&mut self, buff: C) -> ZResult<()>
+    pub fn initialize<C, T>(&mut self, #[allow(unused_variables)] buff: C) -> ZResult<()>
     where
         C: Fn() -> T + Copy,
         T: ZSliceBuffer + 'static,

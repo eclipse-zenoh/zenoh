@@ -34,7 +34,9 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
+#[cfg(feature = "transport_compression")]
+use zenoh_buffers::BBuf;
+use zenoh_buffers::{ZSlice, ZSliceBuffer};
 use zenoh_core::zlock;
 use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::{

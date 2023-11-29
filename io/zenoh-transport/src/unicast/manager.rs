@@ -27,11 +27,11 @@ use crate::{
 };
 use async_std::{prelude::FutureExt, sync::Mutex, task};
 use std::{collections::HashMap, sync::Arc, time::Duration};
+#[cfg(feature = "transport_compression")]
+use zenoh_config::CompressionUnicastConf;
 #[cfg(feature = "shared-memory")]
 use zenoh_config::SharedMemoryConf;
-use zenoh_config::{
-    CompressionUnicastConf, Config, LinkTxConf, QoSUnicastConf, TransportUnicastConf,
-};
+use zenoh_config::{Config, LinkTxConf, QoSUnicastConf, TransportUnicastConf};
 use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_crypto::PseudoRng;
 use zenoh_link::*;

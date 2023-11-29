@@ -50,6 +50,7 @@ struct StateTransport {
     ext_lowlatency: ext::lowlatency::StateOpen,
 }
 
+#[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
 struct StateLink {
     #[cfg(feature = "transport_auth")]
     ext_auth: ext::auth::StateOpen,
@@ -59,6 +60,7 @@ struct StateLink {
 
 struct State {
     transport: StateTransport,
+    #[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
     link: StateLink,
 }
 
@@ -549,6 +551,7 @@ pub(crate) async fn open_link(
 
             ext_lowlatency: ext::lowlatency::StateOpen::new(manager.config.unicast.is_lowlatency),
         },
+        #[cfg(any(feature = "transport_auth", feature = "transport_compression"))]
         link: StateLink {
             #[cfg(feature = "transport_auth")]
             ext_auth: manager

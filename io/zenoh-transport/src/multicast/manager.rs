@@ -19,9 +19,11 @@ use async_std::sync::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+#[cfg(feature = "transport_compression")]
+use zenoh_config::CompressionMulticastConf;
 #[cfg(feature = "shared-memory")]
 use zenoh_config::SharedMemoryConf;
-use zenoh_config::{CompressionMulticastConf, Config, LinkTxConf};
+use zenoh_config::{Config, LinkTxConf};
 use zenoh_core::zasynclock;
 use zenoh_link::*;
 use zenoh_protocol::core::ZenohId;
