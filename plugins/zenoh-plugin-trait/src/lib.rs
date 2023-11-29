@@ -29,18 +29,7 @@ pub use plugin::{
     PluginState, PluginStatus, PluginStatusRec, PluginStructVersion,
 };
 pub use vtable::{Compatibility, PluginLoaderVersion, PluginVTable, PLUGIN_LOADER_VERSION};
-
-#[macro_export]
-macro_rules! concat_enabled_features {
-    (prefix = $prefix:literal, features = [$($feature:literal),*]) => {
-        {
-            use const_format::concatcp;
-            concatcp!("" $(,
-                if cfg!(feature = $feature) { concatcp!(" ", concatcp!($prefix, "/", $feature)) } else { "" }
-            )*)
-        }
-    };
-}
+use zenoh_util::concat_enabled_features;
 
 pub const FEATURES: &str = concat_enabled_features!(
     prefix = "zenoh-plugin-trait",

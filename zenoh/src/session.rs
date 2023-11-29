@@ -1491,7 +1491,8 @@ impl Session {
     ) -> ZResult<MatchingStatus> {
         use crate::net::routing::router::RoutingExpr;
         use zenoh_protocol::core::WhatAmI;
-        let tables = zread!(self.runtime.router.tables.tables);
+        let router = self.runtime.router();
+        let tables = zread!(router.tables.tables);
         let res = crate::net::routing::resource::Resource::get_resource(
             &tables.root_res,
             key_expr.as_str(),
