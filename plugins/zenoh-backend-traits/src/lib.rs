@@ -139,9 +139,8 @@ use zenoh::queryable::ReplyBuilder;
 use zenoh::time::Timestamp;
 use zenoh::value::Value;
 pub use zenoh::Result as ZResult;
-use zenoh_plugin_trait::{
-    concat_enabled_features, PluginControl, PluginInstance, PluginStatusRec, PluginStructVersion,
-};
+use zenoh_plugin_trait::{PluginControl, PluginInstance, PluginStatusRec, PluginStructVersion};
+use zenoh_util::concat_enabled_features;
 
 pub mod config;
 use config::{StorageConfig, VolumeConfig};
