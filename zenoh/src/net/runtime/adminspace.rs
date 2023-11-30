@@ -21,13 +21,15 @@ use crate::value::Value;
 use async_std::task;
 use log::{error, trace};
 use serde_json::json;
+use zenoh_plugin_trait::{PluginControl, PluginStatus};
+use zenoh_protocol::core::key_expr::keyexpr;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::ValidatedMap;
+use zenoh_config::{ValidatedMap, ConfigValidator};
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
     network::{
