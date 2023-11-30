@@ -37,8 +37,10 @@ use zenoh_protocol::network::{Mapping, NetworkBody, NetworkMessage};
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{
-    DeMux, DummyPrimitives, McastMux, Mux, Primitives, TransportMulticast, TransportPeer,
-    TransportPeerEventHandler, TransportUnicast,
+    multicast::TransportMulticast,
+    primitives::{DeMux, DummyPrimitives, McastMux, Mux, Primitives},
+    unicast::TransportUnicast,
+    TransportPeer, TransportPeerEventHandler,
 };
 // use zenoh_collections::Timer;
 use zenoh_core::zconfigurable;

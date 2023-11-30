@@ -23,11 +23,11 @@ use zenoh_protocol::transport::{init, open};
 use zenoh_result::Error as ZError;
 
 // Extension Fsm
-pub(crate) struct QoSFsm<'a> {
+pub(crate) struct CompressionFsm<'a> {
     _a: PhantomData<&'a ()>,
 }
 
-impl<'a> QoSFsm<'a> {
+impl<'a> CompressionFsm<'a> {
     pub(crate) const fn new() -> Self {
         Self { _a: PhantomData }
     }
@@ -38,46 +38,48 @@ impl<'a> QoSFsm<'a> {
 /*************************************/
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StateOpen {
-    is_qos: bool,
+    is_compression: bool,
 }
 
 impl StateOpen {
-    pub(crate) const fn new(is_qos: bool) -> Self {
-        Self { is_qos }
+    pub(crate) const fn new(is_compression: bool) -> Self {
+        Self { is_compression }
     }
 
-    pub(crate) const fn is_qos(&self) -> bool {
-        self.is_qos
+    pub(crate) const fn is_compression(&self) -> bool {
+        self.is_compression
     }
 }
 
 #[async_trait]
-impl<'a> OpenFsm for &'a QoSFsm<'a> {
+impl<'a> OpenFsm for &'a CompressionFsm<'a> {
     type Error = ZError;
 
     type SendInitSynIn = &'a StateOpen;
-    type SendInitSynOut = Option<init::ext::QoS>;
+    type SendInitSynOut = Option<init::ext::Compression>;
     async fn send_init_syn(
         self,
         state: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
-        let output = state.is_qos.then_some(init::ext::QoS::new());
+        let output = state
+            .is_compression
+            .then_some(init::ext::Compression::new());
         Ok(output)
     }
 
-    type RecvInitAckIn = (&'a mut StateOpen, Option<init::ext::QoS>);
+    type RecvInitAckIn = (&'a mut StateOpen, Option<init::ext::Compression>);
     type RecvInitAckOut = ();
     async fn recv_init_ack(
         self,
         input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         let (state, other_ext) = input;
-        state.is_qos &= other_ext.is_some();
+        state.is_compression &= other_ext.is_some();
         Ok(())
     }
 
     type SendOpenSynIn = &'a StateOpen;
-    type SendOpenSynOut = Option<open::ext::QoS>;
+    type SendOpenSynOut = Option<open::ext::Compression>;
     async fn send_open_syn(
         self,
         _state: Self::SendOpenSynIn,
@@ -85,7 +87,7 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
         Ok(None)
     }
 
-    type RecvOpenAckIn = (&'a mut StateOpen, Option<open::ext::QoS>);
+    type RecvOpenAckIn = (&'a mut StateOpen, Option<open::ext::Compression>);
     type RecvOpenAckOut = ();
     async fn recv_open_ack(
         self,
@@ -100,16 +102,16 @@ impl<'a> OpenFsm for &'a QoSFsm<'a> {
 /*************************************/
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct StateAccept {
-    is_qos: bool,
+    is_compression: bool,
 }
 
 impl StateAccept {
-    pub(crate) const fn new(is_qos: bool) -> Self {
-        Self { is_qos }
+    pub(crate) const fn new(is_compression: bool) -> Self {
+        Self { is_compression }
     }
 
-    pub(crate) const fn is_qos(&self) -> bool {
-        self.is_qos
+    pub(crate) const fn is_compression(&self) -> bool {
+        self.is_compression
     }
 
     #[cfg(test)]
@@ -128,8 +130,8 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &StateAccept) -> Self::Output {
-        let is_qos = u8::from(x.is_qos);
-        self.write(&mut *writer, is_qos)?;
+        let is_compression = u8::from(x.is_compression);
+        self.write(&mut *writer, is_compression)?;
         Ok(())
     }
 }
@@ -141,38 +143,40 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<StateAccept, Self::Error> {
-        let is_qos: u8 = self.read(&mut *reader)?;
-        let is_qos = is_qos == 1;
-        Ok(StateAccept { is_qos })
+        let is_compression: u8 = self.read(&mut *reader)?;
+        let is_compression = is_compression == 1;
+        Ok(StateAccept { is_compression })
     }
 }
 
 #[async_trait]
-impl<'a> AcceptFsm for &'a QoSFsm<'a> {
+impl<'a> AcceptFsm for &'a CompressionFsm<'a> {
     type Error = ZError;
 
-    type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::QoS>);
+    type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::Compression>);
     type RecvInitSynOut = ();
     async fn recv_init_syn(
         self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         let (state, other_ext) = input;
-        state.is_qos &= other_ext.is_some();
+        state.is_compression &= other_ext.is_some();
         Ok(())
     }
 
     type SendInitAckIn = &'a StateAccept;
-    type SendInitAckOut = Option<init::ext::QoS>;
+    type SendInitAckOut = Option<init::ext::Compression>;
     async fn send_init_ack(
         self,
         state: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
-        let output = state.is_qos.then_some(init::ext::QoS::new());
+        let output = state
+            .is_compression
+            .then_some(init::ext::Compression::new());
         Ok(output)
     }
 
-    type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::QoS>);
+    type RecvOpenSynIn = (&'a mut StateAccept, Option<open::ext::Compression>);
     type RecvOpenSynOut = ();
     async fn recv_open_syn(
         self,
@@ -182,7 +186,7 @@ impl<'a> AcceptFsm for &'a QoSFsm<'a> {
     }
 
     type SendOpenAckIn = &'a StateAccept;
-    type SendOpenAckOut = Option<open::ext::QoS>;
+    type SendOpenAckOut = Option<open::ext::Compression>;
     async fn send_open_ack(
         self,
         _state: Self::SendOpenAckIn,

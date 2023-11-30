@@ -12,11 +12,12 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
+    buffer::{Buffer, SplitBuffer},
     reader::HasReader,
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
 };
 use alloc::vec::Vec;
-use core::{mem, num::NonZeroUsize};
+use core::{mem, num::NonZeroUsize, option};
 
 /// Allocate a vector with a given capacity and sets the length to that capacity.
 #[must_use]
@@ -28,6 +29,34 @@ pub fn uninit(capacity: usize) -> Vec<u8> {
         vbuf.set_len(capacity);
     }
     vbuf
+}
+
+// Buffer
+impl Buffer for Vec<u8> {
+    fn len(&self) -> usize {
+        Vec::len(self)
+    }
+}
+
+impl Buffer for &Vec<u8> {
+    fn len(&self) -> usize {
+        Vec::len(self)
+    }
+}
+
+impl Buffer for &mut Vec<u8> {
+    fn len(&self) -> usize {
+        Vec::len(self)
+    }
+}
+
+// SplitBuffer
+impl SplitBuffer for Vec<u8> {
+    type Slices<'a> = option::IntoIter<&'a [u8]>;
+
+    fn slices(&self) -> Self::Slices<'_> {
+        Some(self.as_slice()).into_iter()
+    }
 }
 
 // Writer

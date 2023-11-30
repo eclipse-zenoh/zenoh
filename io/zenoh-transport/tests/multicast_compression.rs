@@ -14,7 +14,7 @@
 
 // Restricting to macos by default because of no IPv6 support
 // on GitHub CI actions on Linux and Windows.
-#[cfg(target_family = "unix")]
+#[cfg(all(target_family = "unix", feature = "transport_compression"))]
 mod tests {
     use async_std::{prelude::FutureExt, task};
     use std::{
@@ -42,8 +42,10 @@ mod tests {
     };
     use zenoh_result::ZResult;
     use zenoh_transport::{
-        multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
-        TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
+        multicast::{TransportManagerBuilderMulticast, TransportMulticast},
+        unicast::TransportUnicast,
+        TransportEventHandler, TransportManager, TransportMulticastEventHandler, TransportPeer,
+        TransportPeerEventHandler,
     };
 
     const TIMEOUT: Duration = Duration::from_secs(60);
@@ -156,14 +158,16 @@ mod tests {
         let peer01_manager = TransportManager::builder()
             .zid(peer01_id)
             .whatami(WhatAmI::Peer)
+            .multicast(TransportManagerBuilderMulticast::default().compression(true))
             .build(peer01_handler.clone())
             .unwrap();
 
         // Create the peer02 transport manager
         let peer02_handler = Arc::new(SHPeer::default());
         let peer02_manager = TransportManager::builder()
-            .whatami(WhatAmI::Peer)
             .zid(peer02_id)
+            .whatami(WhatAmI::Peer)
+            .multicast(TransportManagerBuilderMulticast::default().compression(true))
             .build(peer02_handler.clone())
             .unwrap();
 
@@ -330,9 +334,9 @@ mod tests {
         }
     }
 
-    #[cfg(all(feature = "transport_compression", feature = "transport_udp"))]
+    #[cfg(feature = "transport_udp")]
     #[test]
-    fn transport_multicast_udp_only() {
+    fn transport_multicast_compression_udp_only() {
         env_logger::init();
 
         task::block_on(async {
@@ -342,7 +346,7 @@ mod tests {
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
             format!(
-                "udp/224.{}.{}.{}:20000",
+                "udp/224.{}.{}.{}:21000",
                 rand::random::<u8>(),
                 rand::random::<u8>(),
                 rand::random::<u8>()

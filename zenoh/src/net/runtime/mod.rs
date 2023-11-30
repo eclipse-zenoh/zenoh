@@ -43,8 +43,9 @@ use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::{bail, ZResult};
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::{
-    DeMux, TransportEventHandler, TransportManager, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    multicast::TransportMulticast, primitives::DeMux, unicast::TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticastEventHandler, TransportPeer,
+    TransportPeerEventHandler,
 };
 
 struct RuntimeState {
