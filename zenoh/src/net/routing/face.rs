@@ -25,7 +25,7 @@ use zenoh_protocol::{
 };
 #[cfg(feature = "stats")]
 use zenoh_transport::stats::TransportStats;
-use zenoh_transport::{Primitives, TransportMulticast};
+use zenoh_transport::{multicast::TransportMulticast, primitives::Primitives};
 
 pub struct FaceState {
     pub(super) id: usize,

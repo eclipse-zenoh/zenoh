@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub(crate) mod batch;
+pub mod batch;
 pub(crate) mod defragmentation;
 pub(crate) mod pipeline;
 pub(crate) mod priority;

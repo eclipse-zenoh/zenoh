@@ -32,9 +32,18 @@ fn zenoh_liveliness() {
     task::block_on(async {
         zasync_executor_init!();
 
-        let session1 = ztimeout!(zenoh::open(config::peer()).res_async()).unwrap();
-
-        let session2 = ztimeout!(zenoh::open(config::peer()).res_async()).unwrap();
+        let mut c1 = config::peer();
+        c1.listen
+            .set_endpoints(vec!["tcp/localhost:47447".parse().unwrap()])
+            .unwrap();
+        c1.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session1 = ztimeout!(zenoh::open(c1).res_async()).unwrap();
+        let mut c2 = config::peer();
+        c2.connect
+            .set_endpoints(vec!["tcp/localhost:47447".parse().unwrap()])
+            .unwrap();
+        c2.scouting.multicast.set_enabled(Some(false)).unwrap();
+        let session2 = ztimeout!(zenoh::open(c2).res_async()).unwrap();
 
         let replies = ztimeout!(session2
             .liveliness()

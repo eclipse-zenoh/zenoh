@@ -34,7 +34,7 @@ impl TransportUnicastUniversal {
         if let Some(pl) = guard
             .iter()
             .filter_map(|tl| {
-                if msg.is_reliable() == tl.link.is_reliable() {
+                if msg.is_reliable() == tl.link.link.is_reliable() {
                     tl.pipeline.as_ref()
                 } else {
                     None
