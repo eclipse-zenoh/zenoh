@@ -10,7 +10,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-
 fn main() {
     // Add rustc version to zenohd
     let version_meta = rustc_version::version_meta().unwrap();

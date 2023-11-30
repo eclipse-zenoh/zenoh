@@ -19,12 +19,7 @@ pub use crate::runtime::Runtime;
 pub use crate::Result as ZResult;
 use zenoh_core::zconfigurable;
 
-use zenoh_plugin_trait::Plugin;
-use zenoh_plugin_trait::PluginControl;
-use zenoh_plugin_trait::PluginInstance;
-use zenoh_plugin_trait::PluginReport;
-use zenoh_plugin_trait::PluginStatusRec;
-use zenoh_plugin_trait::PluginStructVersion;
+use zenoh_plugin_trait::{Plugin, PluginControl, PluginInstance, PluginReport, PluginStatusRec, PluginStructVersion};
 use zenoh_protocol::core::key_expr::keyexpr;
 
 zconfigurable! {
