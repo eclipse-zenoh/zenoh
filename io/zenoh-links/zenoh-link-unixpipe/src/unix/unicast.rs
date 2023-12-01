@@ -584,12 +584,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastPipe {
     }
 
     fn get_locators(&self) -> Vec<Locator> {
-        ZRuntime::Accept
-            .handle()
-            .block_on(async { zasyncread!(self.listeners) })
-            .values()
-            .map(|v| v.uplink_locator.clone())
-            .collect()
+        tokio::task::block_in_place(|| {
+            ZRuntime::Net
+                .handle()
+                .block_on(async { zasyncread!(self.listeners) })
+                .values()
+                .map(|v| v.uplink_locator.clone())
+                .collect()
+        })
     }
 }
 

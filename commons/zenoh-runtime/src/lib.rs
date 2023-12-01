@@ -1,5 +1,6 @@
 use lazy_static::lazy_static;
 use std::collections::HashMap;
+use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 use tokio::runtime::{Handle, Runtime};
@@ -83,6 +84,13 @@ impl ZRuntime {
     }
 
     pub fn handle(&self) -> &Handle {
+        ZRUNTIME_POOL.get(self)
+    }
+}
+
+impl Deref for ZRuntime {
+    type Target = Handle;
+    fn deref(&self) -> &Self::Target {
         ZRUNTIME_POOL.get(self)
     }
 }

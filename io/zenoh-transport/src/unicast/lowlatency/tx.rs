@@ -12,13 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::TransportUnicastLowlatency;
-use zenoh_protocol::{
-    network::NetworkMessage,
-    transport::{TransportBodyLowLatency, TransportMessageLowLatency},
-};
+use zenoh_protocol::{network::NetworkMessage, transport::TransportMessageLowLatency};
 #[cfg(feature = "shared-memory")]
 use zenoh_result::bail;
-use zenoh_result::ZResult;
+use zenoh_result::{bail, zerror, ZResult};
 
 impl TransportUnicastLowlatency {
     #[allow(unused_mut)] // When feature "shared-memory" is not enabled
@@ -37,18 +34,11 @@ impl TransportUnicastLowlatency {
             }
         }
 
-        let msg = TransportMessageLowLatency {
-            body: TransportBodyLowLatency::Network(msg),
-        };
-        let res = self.send(msg);
-
-        #[cfg(feature = "stats")]
-        if res.is_ok() {
-            self.stats.inc_tx_n_msgs(1);
+        if let Some(tx) = &*(self.msg_queue_tx.try_read().map_err(|e| zerror!("{e}"))?) {
+            tx.send(TransportMessageLowLatency::try_from(msg)?)?;
         } else {
-            self.stats.inc_tx_n_dropped(1);
+            bail!("Message queue tx isn't initialized.");
         }
-
-        res
+        Ok(())
     }
 }
