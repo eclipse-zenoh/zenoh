@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -11,8 +13,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::Primitives;
-use crate::net::routing::interceptor::EgressIntercept;
+use super::{EPrimitives, Primitives};
+use crate::net::routing::{
+    dispatcher::{face::Face, tables::TablesLock},
+    interceptor::EgressIntercept,
+    RoutingContext,
+};
 use zenoh_protocol::network::{
     Declare, NetworkBody, NetworkMessage, Push, Request, Response, ResponseFinal,
 };
@@ -20,12 +26,24 @@ use zenoh_transport::{TransportMulticast, TransportUnicast};
 
 pub struct Mux {
     pub handler: TransportUnicast,
+    pub(crate) fid: usize,
+    pub(crate) tables: Arc<TablesLock>,
     pub(crate) intercept: EgressIntercept,
 }
 
 impl Mux {
-    pub(crate) fn new(handler: TransportUnicast, intercept: EgressIntercept) -> Mux {
-        Mux { handler, intercept }
+    pub(crate) fn new(
+        handler: TransportUnicast,
+        fid: usize,
+        tables: Arc<TablesLock>,
+        intercept: EgressIntercept,
+    ) -> Mux {
+        Mux {
+            handler,
+            fid,
+            tables,
+            intercept,
+        }
     }
 }
 
@@ -36,8 +54,20 @@ impl Primitives for Mux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(msg) = self.intercept.intercept(msg) {
-            let _ = self.handler.schedule(msg);
+        let tables = zread!(self.tables.tables);
+        let face = tables.faces.get(&self.fid).cloned();
+        drop(tables);
+        if let Some(face) = face {
+            let ctx = RoutingContext::with_face(
+                msg,
+                Face {
+                    tables: self.tables.clone(),
+                    state: face.clone(),
+                },
+            );
+            if let Some(ctx) = self.intercept.intercept(ctx) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
         }
     }
 
@@ -47,8 +77,20 @@ impl Primitives for Mux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(msg) = self.intercept.intercept(msg) {
-            let _ = self.handler.schedule(msg);
+        let tables = zread!(self.tables.tables);
+        let face = tables.faces.get(&self.fid).cloned();
+        drop(tables);
+        if let Some(face) = face {
+            let ctx = RoutingContext::with_face(
+                msg,
+                Face {
+                    tables: self.tables.clone(),
+                    state: face.clone(),
+                },
+            );
+            if let Some(ctx) = self.intercept.intercept(ctx) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
         }
     }
 
@@ -58,8 +100,20 @@ impl Primitives for Mux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(msg) = self.intercept.intercept(msg) {
-            let _ = self.handler.schedule(msg);
+        let tables = zread!(self.tables.tables);
+        let face = tables.faces.get(&self.fid).cloned();
+        drop(tables);
+        if let Some(face) = face {
+            let ctx = RoutingContext::with_face(
+                msg,
+                Face {
+                    tables: self.tables.clone(),
+                    state: face.clone(),
+                },
+            );
+            if let Some(ctx) = self.intercept.intercept(ctx) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
         }
     }
 
@@ -69,8 +123,20 @@ impl Primitives for Mux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(msg) = self.intercept.intercept(msg) {
-            let _ = self.handler.schedule(msg);
+        let tables = zread!(self.tables.tables);
+        let face = tables.faces.get(&self.fid).cloned();
+        drop(tables);
+        if let Some(face) = face {
+            let ctx = RoutingContext::with_face(
+                msg,
+                Face {
+                    tables: self.tables.clone(),
+                    state: face.clone(),
+                },
+            );
+            if let Some(ctx) = self.intercept.intercept(ctx) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
         }
     }
 
@@ -80,8 +146,106 @@ impl Primitives for Mux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(msg) = self.intercept.intercept(msg) {
-            let _ = self.handler.schedule(msg);
+        let tables = zread!(self.tables.tables);
+        let face = tables.faces.get(&self.fid).cloned();
+        drop(tables);
+        if let Some(face) = face {
+            let ctx = RoutingContext::with_face(
+                msg,
+                Face {
+                    tables: self.tables.clone(),
+                    state: face.clone(),
+                },
+            );
+            if let Some(ctx) = self.intercept.intercept(ctx) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+        }
+    }
+
+    fn send_close(&self) {
+        // self.handler.closing().await;
+    }
+}
+
+impl EPrimitives for Mux {
+    fn send_declare(&self, ctx: RoutingContext<Declare>) {
+        let ctx = RoutingContext {
+            msg: NetworkMessage {
+                body: NetworkBody::Declare(ctx.msg),
+                #[cfg(feature = "stats")]
+                size: None,
+            },
+            inface: ctx.inface,
+            prefix: ctx.prefix,
+            full_expr: ctx.full_expr,
+        };
+        if let Some(ctx) = self.intercept.intercept(ctx) {
+            let _ = self.handler.schedule(ctx.msg);
+        }
+    }
+
+    fn send_push(&self, ctx: RoutingContext<Push>) {
+        let ctx = RoutingContext {
+            msg: NetworkMessage {
+                body: NetworkBody::Push(ctx.msg),
+                #[cfg(feature = "stats")]
+                size: None,
+            },
+            inface: ctx.inface,
+            prefix: ctx.prefix,
+            full_expr: ctx.full_expr,
+        };
+        if let Some(ctx) = self.intercept.intercept(ctx) {
+            let _ = self.handler.schedule(ctx.msg);
+        }
+    }
+
+    fn send_request(&self, ctx: RoutingContext<Request>) {
+        let ctx = RoutingContext {
+            msg: NetworkMessage {
+                body: NetworkBody::Request(ctx.msg),
+                #[cfg(feature = "stats")]
+                size: None,
+            },
+            inface: ctx.inface,
+            prefix: ctx.prefix,
+            full_expr: ctx.full_expr,
+        };
+        if let Some(ctx) = self.intercept.intercept(ctx) {
+            let _ = self.handler.schedule(ctx.msg);
+        }
+    }
+
+    fn send_response(&self, ctx: RoutingContext<Response>) {
+        let ctx = RoutingContext {
+            msg: NetworkMessage {
+                body: NetworkBody::Response(ctx.msg),
+                #[cfg(feature = "stats")]
+                size: None,
+            },
+            inface: ctx.inface,
+            prefix: ctx.prefix,
+            full_expr: ctx.full_expr,
+        };
+        if let Some(ctx) = self.intercept.intercept(ctx) {
+            let _ = self.handler.schedule(ctx.msg);
+        }
+    }
+
+    fn send_response_final(&self, ctx: RoutingContext<ResponseFinal>) {
+        let ctx = RoutingContext {
+            msg: NetworkMessage {
+                body: NetworkBody::ResponseFinal(ctx.msg),
+                #[cfg(feature = "stats")]
+                size: None,
+            },
+            inface: ctx.inface,
+            prefix: ctx.prefix,
+            full_expr: ctx.full_expr,
+        };
+        if let Some(ctx) = self.intercept.intercept(ctx) {
+            let _ = self.handler.schedule(ctx.msg);
         }
     }
 
@@ -92,12 +256,24 @@ impl Primitives for Mux {
 
 pub struct McastMux {
     pub handler: TransportMulticast,
+    pub(crate) fid: usize,
+    pub(crate) tables: Arc<TablesLock>,
     pub(crate) intercept: EgressIntercept,
 }
 
 impl McastMux {
-    pub(crate) fn new(handler: TransportMulticast, intercept: EgressIntercept) -> McastMux {
-        McastMux { handler, intercept }
+    pub(crate) fn new(
+        handler: TransportMulticast,
+        fid: usize,
+        tables: Arc<TablesLock>,
+        intercept: EgressIntercept,
+    ) -> McastMux {
+        McastMux {
+            handler,
+            fid,
+            tables,
+            intercept,
+        }
     }
 }
 
@@ -108,8 +284,17 @@ impl Primitives for McastMux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(msg) = self.intercept.intercept(msg) {
-            let _ = self.handler.schedule(msg);
+        if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
+            let ctx = RoutingContext::with_face(
+                msg,
+                Face {
+                    tables: self.tables.clone(),
+                    state: face.clone(),
+                },
+            );
+            if let Some(ctx) = self.intercept.intercept(ctx) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
         }
     }
 
@@ -119,8 +304,17 @@ impl Primitives for McastMux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(msg) = self.intercept.intercept(msg) {
-            let _ = self.handler.schedule(msg);
+        if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
+            let ctx = RoutingContext::with_face(
+                msg,
+                Face {
+                    tables: self.tables.clone(),
+                    state: face.clone(),
+                },
+            );
+            if let Some(ctx) = self.intercept.intercept(ctx) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
         }
     }
 
@@ -130,8 +324,17 @@ impl Primitives for McastMux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(msg) = self.intercept.intercept(msg) {
-            let _ = self.handler.schedule(msg);
+        if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
+            let ctx = RoutingContext::with_face(
+                msg,
+                Face {
+                    tables: self.tables.clone(),
+                    state: face.clone(),
+                },
+            );
+            if let Some(ctx) = self.intercept.intercept(ctx) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
         }
     }
 
@@ -141,8 +344,17 @@ impl Primitives for McastMux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(msg) = self.intercept.intercept(msg) {
-            let _ = self.handler.schedule(msg);
+        if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
+            let ctx = RoutingContext::with_face(
+                msg,
+                Face {
+                    tables: self.tables.clone(),
+                    state: face.clone(),
+                },
+            );
+            if let Some(ctx) = self.intercept.intercept(ctx) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
         }
     }
 
@@ -152,8 +364,103 @@ impl Primitives for McastMux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(msg) = self.intercept.intercept(msg) {
-            let _ = self.handler.schedule(msg);
+        if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
+            let ctx = RoutingContext::with_face(
+                msg,
+                Face {
+                    tables: self.tables.clone(),
+                    state: face.clone(),
+                },
+            );
+            if let Some(ctx) = self.intercept.intercept(ctx) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+        }
+    }
+
+    fn send_close(&self) {
+        // self.handler.closing().await;
+    }
+}
+
+impl EPrimitives for McastMux {
+    fn send_declare(&self, ctx: RoutingContext<Declare>) {
+        let ctx = RoutingContext {
+            msg: NetworkMessage {
+                body: NetworkBody::Declare(ctx.msg),
+                #[cfg(feature = "stats")]
+                size: None,
+            },
+            inface: ctx.inface,
+            prefix: ctx.prefix,
+            full_expr: ctx.full_expr,
+        };
+        if let Some(ctx) = self.intercept.intercept(ctx) {
+            let _ = self.handler.schedule(ctx.msg);
+        }
+    }
+
+    fn send_push(&self, ctx: RoutingContext<Push>) {
+        let ctx = RoutingContext {
+            msg: NetworkMessage {
+                body: NetworkBody::Push(ctx.msg),
+                #[cfg(feature = "stats")]
+                size: None,
+            },
+            inface: ctx.inface,
+            prefix: ctx.prefix,
+            full_expr: ctx.full_expr,
+        };
+        if let Some(ctx) = self.intercept.intercept(ctx) {
+            let _ = self.handler.schedule(ctx.msg);
+        }
+    }
+
+    fn send_request(&self, ctx: RoutingContext<Request>) {
+        let ctx = RoutingContext {
+            msg: NetworkMessage {
+                body: NetworkBody::Request(ctx.msg),
+                #[cfg(feature = "stats")]
+                size: None,
+            },
+            inface: ctx.inface,
+            prefix: ctx.prefix,
+            full_expr: ctx.full_expr,
+        };
+        if let Some(ctx) = self.intercept.intercept(ctx) {
+            let _ = self.handler.schedule(ctx.msg);
+        }
+    }
+
+    fn send_response(&self, ctx: RoutingContext<Response>) {
+        let ctx = RoutingContext {
+            msg: NetworkMessage {
+                body: NetworkBody::Response(ctx.msg),
+                #[cfg(feature = "stats")]
+                size: None,
+            },
+            inface: ctx.inface,
+            prefix: ctx.prefix,
+            full_expr: ctx.full_expr,
+        };
+        if let Some(ctx) = self.intercept.intercept(ctx) {
+            let _ = self.handler.schedule(ctx.msg);
+        }
+    }
+
+    fn send_response_final(&self, ctx: RoutingContext<ResponseFinal>) {
+        let ctx = RoutingContext {
+            msg: NetworkMessage {
+                body: NetworkBody::ResponseFinal(ctx.msg),
+                #[cfg(feature = "stats")]
+                size: None,
+            },
+            inface: ctx.inface,
+            prefix: ctx.prefix,
+            full_expr: ctx.full_expr,
+        };
+        if let Some(ctx) = self.intercept.intercept(ctx) {
+            let _ = self.handler.schedule(ctx.msg);
         }
     }
 

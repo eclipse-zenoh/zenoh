@@ -12,42 +12,49 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::Primitives;
-use crate::net::routing::interceptor::IngressIntercept;
+use crate::net::routing::{dispatcher::face::Face, interceptor::IngressIntercept, RoutingContext};
 use std::any::Any;
 use zenoh_link::Link;
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::ZResult;
 use zenoh_transport::TransportPeerEventHandler;
 
-pub struct DeMux<P: Primitives> {
-    primitives: P,
+pub struct DeMux {
+    face: Face,
     pub(crate) intercept: IngressIntercept,
 }
 
-impl<P: Primitives> DeMux<P> {
-    pub(crate) fn new(primitives: P, intercept: IngressIntercept) -> DeMux<P> {
-        DeMux {
-            primitives,
-            intercept,
-        }
+impl DeMux {
+    pub(crate) fn new(face: Face, intercept: IngressIntercept) -> Self {
+        Self { face, intercept }
     }
 }
 
-impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
+impl TransportPeerEventHandler for DeMux {
     fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
-        let msg = match self.intercept.intercept(msg) {
-            Some(msg) => msg,
+        let ctx = RoutingContext::with_face(msg, self.face.clone());
+        let ctx = match self.intercept.intercept(ctx) {
+            Some(ctx) => ctx,
             None => return Ok(()),
         };
 
-        match msg.body {
-            NetworkBody::Declare(m) => self.primitives.send_declare(m),
-            NetworkBody::Push(m) => self.primitives.send_push(m),
-            NetworkBody::Request(m) => self.primitives.send_request(m),
-            NetworkBody::Response(m) => self.primitives.send_response(m),
-            NetworkBody::ResponseFinal(m) => self.primitives.send_response_final(m),
+        match ctx.msg.body {
+            NetworkBody::Declare(m) => self.face.send_declare(m),
+            NetworkBody::Push(m) => self.face.send_push(m),
+            NetworkBody::Request(m) => self.face.send_request(m),
+            NetworkBody::Response(m) => self.face.send_response(m),
+            NetworkBody::ResponseFinal(m) => self.face.send_response_final(m),
             NetworkBody::OAM(_m) => (),
         }
+
+        // match ctx.msg.body {
+        //     NetworkBody::Declare(m) => self.face.send_declare(RoutingContext::new(m, ctx.inface)),
+        //     NetworkBody::Push(m) => self.face.send_push(RoutingContext::new(m, ctx.inface)),
+        //     NetworkBody::Request(m) => self.face.send_request(RoutingContext::new(m, ctx.inface)),
+        //     NetworkBody::Response(m) => self.face.send_response(RoutingContext::new(m, ctx.inface)),
+        //     NetworkBody::ResponseFinal(m) => self.face.send_response_final(RoutingContext::new(m, ctx.inface)),
+        //     NetworkBody::OAM(_m) => (),
+        // }
 
         Ok(())
     }
@@ -57,7 +64,7 @@ impl<P: 'static + Primitives> TransportPeerEventHandler for DeMux<P> {
     fn del_link(&self, _link: Link) {}
 
     fn closing(&self) {
-        self.primitives.send_close();
+        self.face.send_close();
     }
 
     fn closed(&self) {}

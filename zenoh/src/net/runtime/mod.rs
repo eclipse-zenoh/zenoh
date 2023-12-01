@@ -22,8 +22,6 @@ pub mod orchestrator;
 
 use super::primitives::DeMux;
 use super::routing;
-use super::routing::dispatcher::face::Face;
-use super::routing::dispatcher::pubsub::full_reentrant_route_data;
 use super::routing::router::{LinkStateInterceptor, Router};
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
 use crate::GIT_VERSION;
@@ -39,7 +37,7 @@ use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId};
-use zenoh_protocol::network::{NetworkBody, NetworkMessage};
+use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::{bail, ZResult};
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::{
@@ -278,21 +276,6 @@ pub(super) struct RuntimeSession {
 
 impl TransportPeerEventHandler for RuntimeSession {
     fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
-        // critical path shortcut
-        if let NetworkBody::Push(data) = msg.body {
-            let face = &self.main_handler.face.state;
-
-            full_reentrant_route_data(
-                &self.main_handler.tables.tables,
-                face,
-                &data.wire_expr,
-                data.ext_qos,
-                data.payload,
-                data.ext_nodeid.node_id,
-            );
-            return Ok(());
-        }
-
         self.main_handler.handle_message(msg)
     }
 
@@ -370,7 +353,7 @@ impl TransportMulticastEventHandler for RuntimeMuticastGroup {
 }
 
 pub(super) struct RuntimeMuticastSession {
-    pub(super) main_handler: Arc<DeMux<Face>>,
+    pub(super) main_handler: Arc<DeMux>,
     pub(super) slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>>,
 }
 

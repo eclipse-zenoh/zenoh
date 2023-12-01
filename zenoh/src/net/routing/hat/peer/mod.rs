@@ -370,7 +370,6 @@ impl HatBaseTrait for HatCode {
         }
 
         face_hat_mut!(&mut face.state).link_id = link_id;
-
         pubsub_new_face(tables, &mut face.state);
         queries_new_face(tables, &mut face.state);
 

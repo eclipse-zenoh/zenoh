@@ -1,3 +1,5 @@
+use crate::net::routing::RoutingContext;
+
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -472,7 +474,7 @@ pub fn route_query(
                 drop(queries_lock);
                 drop(rtables);
 
-                for (expr, payload) in local_replies {
+                for (wexpr, payload) in local_replies {
                     let payload = ResponseBody::Reply(Reply {
                         timestamp: None,
                         encoding: Encoding::default(),
@@ -490,17 +492,22 @@ pub fn route_query(
                         inc_res_stats!(face, tx, admin, payload)
                     }
 
-                    face.primitives.clone().send_response(Response {
-                        rid: qid,
-                        wire_expr: expr,
-                        payload,
-                        ext_qos: response::ext::QoSType::declare_default(),
-                        ext_tstamp: None,
-                        ext_respid: Some(response::ext::ResponderIdType {
-                            zid,
-                            eid: 0, // TODO
-                        }),
-                    });
+                    face.primitives
+                        .clone()
+                        .send_response(RoutingContext::with_expr(
+                            Response {
+                                rid: qid,
+                                wire_expr: wexpr,
+                                payload,
+                                ext_qos: response::ext::QoSType::declare_default(),
+                                ext_tstamp: None,
+                                ext_respid: Some(response::ext::ResponderIdType {
+                                    zid,
+                                    eid: 0, // TODO
+                                }),
+                            },
+                            expr.full_expr().to_string(),
+                        ));
                 }
 
                 if route.is_empty() {
@@ -509,11 +516,16 @@ pub fn route_query(
                         face,
                         qid
                     );
-                    face.primitives.clone().send_response_final(ResponseFinal {
-                        rid: qid,
-                        ext_qos: response::ext::QoSType::response_final_default(),
-                        ext_tstamp: None,
-                    });
+                    face.primitives
+                        .clone()
+                        .send_response_final(RoutingContext::with_expr(
+                            ResponseFinal {
+                                rid: qid,
+                                ext_qos: response::ext::QoSType::response_final_default(),
+                                ext_tstamp: None,
+                            },
+                            expr.full_expr().to_string(),
+                        ));
                 } else {
                     // let timer = tables.timer.clone();
                     // let timeout = tables.queries_default_timeout;
@@ -569,28 +581,36 @@ pub fn route_query(
                             }
 
                             log::trace!("Propagate query {}:{} to {}", face, qid, outface);
-                            outface.primitives.send_request(Request {
-                                id: *qid,
-                                wire_expr: key_expr.into(),
-                                ext_qos: ext::QoSType::request_default(),
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType { node_id: *context },
-                                ext_target: target,
-                                ext_budget: None,
-                                ext_timeout: None,
-                                payload: body.clone(),
-                            });
+                            outface.primitives.send_request(RoutingContext::with_expr(
+                                Request {
+                                    id: *qid,
+                                    wire_expr: key_expr.into(),
+                                    ext_qos: ext::QoSType::request_default(),
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType { node_id: *context },
+                                    ext_target: target,
+                                    ext_budget: None,
+                                    ext_timeout: None,
+                                    payload: body.clone(),
+                                },
+                                expr.full_expr().to_string(),
+                            ));
                         }
                     }
                 }
             } else {
                 log::debug!("Send final reply {}:{} (not master)", face, qid);
                 drop(rtables);
-                face.primitives.clone().send_response_final(ResponseFinal {
-                    rid: qid,
-                    ext_qos: response::ext::QoSType::response_final_default(),
-                    ext_tstamp: None,
-                });
+                face.primitives
+                    .clone()
+                    .send_response_final(RoutingContext::with_expr(
+                        ResponseFinal {
+                            rid: qid,
+                            ext_qos: response::ext::QoSType::response_final_default(),
+                            ext_tstamp: None,
+                        },
+                        expr.full_expr().to_string(),
+                    ));
             }
         }
         None => {
@@ -599,11 +619,16 @@ pub fn route_query(
                 expr.scope
             );
             drop(rtables);
-            face.primitives.clone().send_response_final(ResponseFinal {
-                rid: qid,
-                ext_qos: response::ext::QoSType::response_final_default(),
-                ext_tstamp: None,
-            });
+            face.primitives
+                .clone()
+                .send_response_final(RoutingContext::with_expr(
+                    ResponseFinal {
+                        rid: qid,
+                        ext_qos: response::ext::QoSType::response_final_default(),
+                        ext_tstamp: None,
+                    },
+                    "".to_string(),
+                )); // TODO
         }
     }
 }
@@ -638,14 +663,21 @@ pub(crate) fn route_send_response(
                 inc_res_stats!(query.src_face, tx, admin, body)
             }
 
-            query.src_face.primitives.clone().send_response(Response {
-                rid: query.src_qid,
-                wire_expr: key_expr.to_owned(),
-                payload: body,
-                ext_qos: response::ext::QoSType::response_default(),
-                ext_tstamp: None,
-                ext_respid,
-            });
+            query
+                .src_face
+                .primitives
+                .clone()
+                .send_response(RoutingContext::with_expr(
+                    Response {
+                        rid: query.src_qid,
+                        wire_expr: key_expr.to_owned(),
+                        payload: body,
+                        ext_qos: response::ext::QoSType::response_default(),
+                        ext_tstamp: None,
+                        ext_respid,
+                    },
+                    "".to_string(),
+                )); // TODO
         }
         None => log::warn!(
             "Route reply {}:{} from {}: Query nof found!",
@@ -697,10 +729,13 @@ pub(crate) fn finalize_pending_query(query: Arc<Query>) {
             .src_face
             .primitives
             .clone()
-            .send_response_final(ResponseFinal {
-                rid: query.src_qid,
-                ext_qos: response::ext::QoSType::response_final_default(),
-                ext_tstamp: None,
-            });
+            .send_response_final(RoutingContext::with_expr(
+                ResponseFinal {
+                    rid: query.src_qid,
+                    ext_qos: response::ext::QoSType::response_final_default(),
+                    ext_tstamp: None,
+                },
+                "".to_string(),
+            )); // TODO
     }
 }

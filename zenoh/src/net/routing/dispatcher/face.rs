@@ -1,5 +1,3 @@
-use crate::net::primitives::Primitives;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -16,6 +14,7 @@ use crate::net::primitives::Primitives;
 use super::super::router::*;
 use super::tables::TablesLock;
 use super::{resource::*, tables};
+use crate::net::primitives::Primitives;
 use std::any::Any;
 use std::collections::HashMap;
 use std::fmt;
@@ -35,7 +34,7 @@ pub struct FaceState {
     pub(crate) whatami: WhatAmI,
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
-    pub(crate) primitives: Arc<dyn Primitives + Send + Sync>,
+    pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
     pub(crate) local_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) remote_mappings: HashMap<ExprId, Arc<Resource>>,
     pub(crate) next_qid: RequestId,
@@ -50,7 +49,7 @@ impl FaceState {
         zid: ZenohId,
         whatami: WhatAmI,
         #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
-        primitives: Arc<dyn Primitives + Send + Sync>,
+        primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
         mcast_group: Option<TransportMulticast>,
         hat: Box<dyn Any + Send + Sync>,
     ) -> Arc<FaceState> {

@@ -1,3 +1,5 @@
+use crate::net::routing::RoutingContext;
+
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -516,15 +518,18 @@ impl Resource {
                     get_mut_unchecked(face)
                         .local_mappings
                         .insert(expr_id, nonwild_prefix.clone());
-                    face.primitives.send_declare(Declare {
-                        ext_qos: ext::QoSType::declare_default(),
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
-                        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
-                            id: expr_id,
-                            wire_expr: nonwild_prefix.expr().into(),
-                        }),
-                    });
+                    face.primitives.send_declare(RoutingContext::with_expr(
+                        Declare {
+                            ext_qos: ext::QoSType::declare_default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                                id: expr_id,
+                                wire_expr: nonwild_prefix.expr().into(),
+                            }),
+                        },
+                        nonwild_prefix.expr(),
+                    ));
                     WireExpr {
                         scope: expr_id,
                         suffix: wildsuffix.into(),

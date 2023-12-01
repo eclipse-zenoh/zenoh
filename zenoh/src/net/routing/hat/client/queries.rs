@@ -22,7 +22,7 @@ use crate::net::routing::dispatcher::tables::{
 };
 use crate::net::routing::dispatcher::tables::{Tables, TablesLock};
 use crate::net::routing::hat::HatQueriesTrait;
-use crate::net::routing::PREFIX_LIVELINESS;
+use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
@@ -208,18 +208,21 @@ fn send_sourced_queryable_to_net_childs(
 
                         log::debug!("Send queryable {} on {}", res.expr(), someface);
 
-                        someface.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::declare_default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType {
-                                node_id: routing_context,
+                        someface.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::declare_default(),
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType {
+                                    node_id: routing_context,
+                                },
+                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                    id: 0, // TODO
+                                    wire_expr: key_expr,
+                                    ext_info: *qabl_info,
+                                }),
                             },
-                            body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                id: 0, // TODO
-                                wire_expr: key_expr,
-                                ext_info: *qabl_info,
-                            }),
-                        });
+                            res.expr(),
+                        ));
                     }
                 }
                 None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -275,16 +278,19 @@ fn propagate_simple_queryable(
                 .local_qabls
                 .insert(res.clone(), info);
             let key_expr = Resource::decl_key(res, &mut dst_face);
-            dst_face.primitives.send_declare(Declare {
-                ext_qos: ext::QoSType::declare_default(),
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::default(),
-                body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                    id: 0, // TODO
-                    wire_expr: key_expr,
-                    ext_info: info,
-                }),
-            });
+            dst_face.primitives.send_declare(RoutingContext::with_expr(
+                Declare {
+                    ext_qos: ext::QoSType::declare_default(),
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::default(),
+                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                        id: 0, // TODO
+                        wire_expr: key_expr,
+                        ext_info: info,
+                    }),
+                },
+                res.expr(),
+            ));
         }
     }
 }
@@ -678,17 +684,20 @@ fn send_forget_sourced_queryable_to_net_childs(
 
                         log::debug!("Send forget queryable {}  on {}", res.expr(), someface);
 
-                        someface.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::declare_default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType {
-                                node_id: routing_context,
+                        someface.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::declare_default(),
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType {
+                                    node_id: routing_context,
+                                },
+                                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                                    id: 0, // TODO
+                                    ext_wire_expr: WireExprType { wire_expr },
+                                }),
                             },
-                            body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                id: 0, // TODO
-                                ext_wire_expr: WireExprType { wire_expr },
-                            }),
-                        });
+                            res.expr(),
+                        ));
                     }
                 }
                 None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -701,15 +710,18 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
     for face in tables.faces.values_mut() {
         if face_hat!(face).local_qabls.contains_key(res) {
             let wire_expr = Resource::get_best_key(res, "", face.id);
-            face.primitives.send_declare(Declare {
-                ext_qos: ext::QoSType::declare_default(),
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::default(),
-                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                    id: 0, // TODO
-                    ext_wire_expr: WireExprType { wire_expr },
-                }),
-            });
+            face.primitives.send_declare(RoutingContext::with_expr(
+                Declare {
+                    ext_qos: ext::QoSType::declare_default(),
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::default(),
+                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                        id: 0, // TODO
+                        ext_wire_expr: WireExprType { wire_expr },
+                    }),
+                },
+                res.expr(),
+            ));
 
             face_hat_mut!(face).local_qabls.remove(res);
         }
@@ -738,15 +750,18 @@ fn propagate_forget_simple_queryable_to_peers(tables: &mut Tables, res: &mut Arc
                 })
             {
                 let wire_expr = Resource::get_best_key(res, "", face.id);
-                face.primitives.send_declare(Declare {
-                    ext_qos: ext::QoSType::declare_default(),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
-                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                        id: 0, // TODO
-                        ext_wire_expr: WireExprType { wire_expr },
-                    }),
-                });
+                face.primitives.send_declare(RoutingContext::with_expr(
+                    Declare {
+                        ext_qos: ext::QoSType::declare_default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                            id: 0, // TODO
+                            ext_wire_expr: WireExprType { wire_expr },
+                        }),
+                    },
+                    res.expr(),
+                ));
 
                 face_hat_mut!(&mut face).local_qabls.remove(res);
             }
@@ -986,15 +1001,18 @@ pub(super) fn undeclare_client_queryable(
         let face = &mut client_qabls[0];
         if face_hat!(face).local_qabls.contains_key(res) {
             let wire_expr = Resource::get_best_key(res, "", face.id);
-            face.primitives.send_declare(Declare {
-                ext_qos: ext::QoSType::declare_default(),
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::default(),
-                body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                    id: 0, // TODO
-                    ext_wire_expr: WireExprType { wire_expr },
-                }),
-            });
+            face.primitives.send_declare(RoutingContext::with_expr(
+                Declare {
+                    ext_qos: ext::QoSType::declare_default(),
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::default(),
+                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                        id: 0, // TODO
+                        ext_wire_expr: WireExprType { wire_expr },
+                    }),
+                },
+                res.expr(),
+            ));
 
             face_hat_mut!(face).local_qabls.remove(res);
         }
@@ -1044,16 +1062,19 @@ pub(super) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                         let info = local_qabl_info(tables, qabl, face);
                         face_hat_mut!(face).local_qabls.insert(qabl.clone(), info);
                         let key_expr = Resource::decl_key(qabl, face);
-                        face.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::declare_default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
-                            body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                id: 0, // TODO
-                                wire_expr: key_expr,
-                                ext_info: info,
-                            }),
-                        });
+                        face.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::declare_default(),
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::default(),
+                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                    id: 0, // TODO
+                                    wire_expr: key_expr,
+                                    ext_info: info,
+                                }),
+                            },
+                            qabl.expr(),
+                        ));
                     }
                 }
             } else if face.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer) {
@@ -1071,16 +1092,19 @@ pub(super) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                         let info = local_qabl_info(tables, qabl, face);
                         face_hat_mut!(face).local_qabls.insert(qabl.clone(), info);
                         let key_expr = Resource::decl_key(qabl, face);
-                        face.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::declare_default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
-                            body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                id: 0, // TODO
-                                wire_expr: key_expr,
-                                ext_info: info,
-                            }),
-                        });
+                        face.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::declare_default(),
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::default(),
+                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                    id: 0, // TODO
+                                    wire_expr: key_expr,
+                                    ext_info: info,
+                                }),
+                            },
+                            qabl.expr(),
+                        ));
                     }
                 }
             }
@@ -1093,16 +1117,19 @@ pub(super) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                             let info = local_qabl_info(tables, qabl, face);
                             face_hat_mut!(face).local_qabls.insert(qabl.clone(), info);
                             let key_expr = Resource::decl_key(qabl, face);
-                            face.primitives.send_declare(Declare {
-                                ext_qos: ext::QoSType::declare_default(),
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::default(),
-                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                    id: 0, // TODO
-                                    wire_expr: key_expr,
-                                    ext_info: info,
-                                }),
-                            });
+                            face.primitives.send_declare(RoutingContext::with_expr(
+                                Declare {
+                                    ext_qos: ext::QoSType::declare_default(),
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::default(),
+                                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                        id: 0, // TODO
+                                        wire_expr: key_expr,
+                                        ext_info: info,
+                                    }),
+                                },
+                                qabl.expr(),
+                            ));
                         }
                     }
                 }
@@ -1230,15 +1257,20 @@ pub(super) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                                     };
                                 if forget {
                                     let wire_expr = Resource::get_best_key(res, "", dst_face.id);
-                                    dst_face.primitives.send_declare(Declare {
-                                        ext_qos: ext::QoSType::declare_default(),
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::default(),
-                                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                            id: 0, // TODO
-                                            ext_wire_expr: WireExprType { wire_expr },
-                                        }),
-                                    });
+                                    dst_face.primitives.send_declare(RoutingContext::with_expr(
+                                        Declare {
+                                            ext_qos: ext::QoSType::declare_default(),
+                                            ext_tstamp: None,
+                                            ext_nodeid: ext::NodeIdType::default(),
+                                            body: DeclareBody::UndeclareQueryable(
+                                                UndeclareQueryable {
+                                                    id: 0, // TODO
+                                                    ext_wire_expr: WireExprType { wire_expr },
+                                                },
+                                            ),
+                                        },
+                                        res.expr(),
+                                    ));
 
                                     face_hat_mut!(dst_face).local_qabls.remove(res);
                                 }
@@ -1249,16 +1281,19 @@ pub(super) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                                     .local_qabls
                                     .insert(res.clone(), info);
                                 let key_expr = Resource::decl_key(res, dst_face);
-                                dst_face.primitives.send_declare(Declare {
-                                    ext_qos: ext::QoSType::declare_default(),
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::default(),
-                                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                        id: 0, // TODO
-                                        wire_expr: key_expr,
-                                        ext_info: info,
-                                    }),
-                                });
+                                dst_face.primitives.send_declare(RoutingContext::with_expr(
+                                    Declare {
+                                        ext_qos: ext::QoSType::declare_default(),
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::default(),
+                                        body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                                            id: 0, // TODO
+                                            wire_expr: key_expr,
+                                            ext_info: info,
+                                        }),
+                                    },
+                                    res.expr(),
+                                ));
                             }
                         }
                     }

@@ -23,9 +23,9 @@ use super::interceptor::InterceptsChain;
 use super::runtime::Runtime;
 use crate::net::primitives::DeMux;
 use crate::net::primitives::DummyPrimitives;
+use crate::net::primitives::EPrimitives;
 use crate::net::primitives::McastMux;
 use crate::net::primitives::Mux;
-use crate::net::primitives::Primitives;
 use crate::net::routing::interceptor::IngressIntercept;
 use std::any::Any;
 use std::str::FromStr;
@@ -98,7 +98,10 @@ impl Router {
         )
     }
 
-    pub fn new_primitives(&self, primitives: Arc<dyn Primitives + Send + Sync>) -> Arc<Face> {
+    pub(crate) fn new_primitives(
+        &self,
+        primitives: Arc<dyn EPrimitives + Send + Sync>,
+    ) -> Arc<Face> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
 
@@ -171,7 +174,12 @@ impl Router {
                     whatami,
                     #[cfg(feature = "stats")]
                     Some(stats),
-                    Arc::new(Mux::new(transport.clone(), egress)),
+                    Arc::new(Mux::new(
+                        transport.clone(),
+                        fid,
+                        self.tables.clone(),
+                        egress,
+                    )),
                     None,
                     ctrl_lock.new_face(),
                 )
@@ -212,7 +220,12 @@ impl Router {
             WhatAmI::Peer,
             #[cfg(feature = "stats")]
             None,
-            Arc::new(McastMux::new(transport.clone(), intercept)),
+            Arc::new(McastMux::new(
+                transport.clone(),
+                fid,
+                self.tables.clone(),
+                intercept,
+            )),
             Some(transport),
             ctrl_lock.new_face(),
         ));
@@ -227,7 +240,7 @@ impl Router {
         &self,
         transport: TransportMulticast,
         peer: TransportPeer,
-    ) -> ZResult<Arc<DeMux<Face>>> {
+    ) -> ZResult<Arc<DeMux>> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
@@ -267,8 +280,7 @@ impl Router {
 pub struct LinkStateInterceptor {
     pub(crate) transport: TransportUnicast,
     pub(crate) tables: Arc<TablesLock>,
-    pub(crate) face: Face,
-    pub(crate) demux: DeMux<Face>,
+    pub(crate) demux: DeMux,
 }
 
 impl LinkStateInterceptor {
@@ -281,7 +293,6 @@ impl LinkStateInterceptor {
         LinkStateInterceptor {
             transport,
             tables,
-            face: face.clone(),
             demux: DeMux::new(face, ingress),
         }
     }

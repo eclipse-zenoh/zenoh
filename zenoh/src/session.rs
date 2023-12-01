@@ -2374,3 +2374,35 @@ pub trait SessionDeclarations {
     #[zenoh_macros::unstable]
     fn liveliness(&self) -> Liveliness<'static>;
 }
+
+impl crate::net::primitives::EPrimitives for Session {
+    #[inline]
+    fn send_declare(&self, ctx: crate::net::routing::RoutingContext<Declare>) {
+        (self as &dyn Primitives).send_declare(ctx.msg)
+    }
+
+    #[inline]
+    fn send_push(&self, ctx: crate::net::routing::RoutingContext<Push>) {
+        (self as &dyn Primitives).send_push(ctx.msg)
+    }
+
+    #[inline]
+    fn send_request(&self, ctx: crate::net::routing::RoutingContext<Request>) {
+        (self as &dyn Primitives).send_request(ctx.msg)
+    }
+
+    #[inline]
+    fn send_response(&self, ctx: crate::net::routing::RoutingContext<Response>) {
+        (self as &dyn Primitives).send_response(ctx.msg)
+    }
+
+    #[inline]
+    fn send_response_final(&self, ctx: crate::net::routing::RoutingContext<ResponseFinal>) {
+        (self as &dyn Primitives).send_response_final(ctx.msg)
+    }
+
+    #[inline]
+    fn send_close(&self) {
+        (self as &dyn Primitives).send_close()
+    }
+}

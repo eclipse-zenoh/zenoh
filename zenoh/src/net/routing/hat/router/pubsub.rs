@@ -20,7 +20,7 @@ use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext
 use crate::net::routing::dispatcher::tables::{DataRoutes, PullCaches, Route, RoutingExpr};
 use crate::net::routing::dispatcher::tables::{Tables, TablesLock};
 use crate::net::routing::hat::HatPubSubTrait;
-use crate::net::routing::PREFIX_LIVELINESS;
+use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
@@ -55,18 +55,21 @@ fn send_sourced_subscription_to_net_childs(
 
                         log::debug!("Send subscription {} on {}", res.expr(), someface);
 
-                        someface.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::declare_default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType {
-                                node_id: routing_context,
+                        someface.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::declare_default(),
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType {
+                                    node_id: routing_context,
+                                },
+                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                    id: 0, // TODO
+                                    wire_expr: key_expr,
+                                    ext_info: *sub_info,
+                                }),
                             },
-                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                id: 0, // TODO
-                                wire_expr: key_expr,
-                                ext_info: *sub_info,
-                            }),
-                        });
+                            res.expr(),
+                        ));
                     }
                 }
                 None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -109,16 +112,19 @@ fn propagate_simple_subscription_to(
     {
         face_hat_mut!(dst_face).local_subs.insert(res.clone());
         let key_expr = Resource::decl_key(res, dst_face);
-        dst_face.primitives.send_declare(Declare {
-            ext_qos: ext::QoSType::declare_default(),
-            ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
-            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                id: 0, // TODO
-                wire_expr: key_expr,
-                ext_info: *sub_info,
-            }),
-        });
+        dst_face.primitives.send_declare(RoutingContext::with_expr(
+            Declare {
+                ext_qos: ext::QoSType::declare_default(),
+                ext_tstamp: None,
+                ext_nodeid: ext::NodeIdType::default(),
+                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                    id: 0, // TODO
+                    wire_expr: key_expr,
+                    ext_info: *sub_info,
+                }),
+            },
+            res.expr(),
+        ));
     }
 }
 
@@ -461,16 +467,21 @@ fn declare_client_subscription(
                         // TODO: Let's deactivate this on windows until Fixed
                         #[cfg(not(windows))]
                         for mcast_group in &wtables.mcast_groups {
-                            mcast_group.primitives.send_declare(Declare {
-                                ext_qos: ext::QoSType::declare_default(),
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::default(),
-                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                    id: 0, // TODO
-                                    wire_expr: res.expr().into(),
-                                    ext_info: *sub_info,
-                                }),
-                            })
+                            mcast_group
+                                .primitives
+                                .send_declare(RoutingContext::with_expr(
+                                    Declare {
+                                        ext_qos: ext::QoSType::declare_default(),
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::default(),
+                                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                            id: 0, // TODO
+                                            wire_expr: res.expr().into(),
+                                            ext_info: *sub_info,
+                                        }),
+                                    },
+                                    res.expr(),
+                                ))
                         }
                     }
                 }
@@ -480,16 +491,21 @@ fn declare_client_subscription(
                     // TODO: Let's deactivate this on windows until Fixed
                     #[cfg(not(windows))]
                     for mcast_group in &wtables.mcast_groups {
-                        mcast_group.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::declare_default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
-                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                id: 0, // TODO
-                                wire_expr: res.expr().into(),
-                                ext_info: *sub_info,
-                            }),
-                        })
+                        mcast_group
+                            .primitives
+                            .send_declare(RoutingContext::with_expr(
+                                Declare {
+                                    ext_qos: ext::QoSType::declare_default(),
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::default(),
+                                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                        id: 0, // TODO
+                                        wire_expr: res.expr().into(),
+                                        ext_info: *sub_info,
+                                    }),
+                                },
+                                res.expr(),
+                            ))
                     }
                 }
             }
@@ -562,17 +578,20 @@ fn send_forget_sourced_subscription_to_net_childs(
 
                         log::debug!("Send forget subscription {} on {}", res.expr(), someface);
 
-                        someface.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::declare_default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType {
-                                node_id: routing_context.unwrap_or(0),
+                        someface.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::declare_default(),
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType {
+                                    node_id: routing_context.unwrap_or(0),
+                                },
+                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                                    id: 0, // TODO
+                                    ext_wire_expr: WireExprType { wire_expr },
+                                }),
                             },
-                            body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                id: 0, // TODO
-                                ext_wire_expr: WireExprType { wire_expr },
-                            }),
-                        });
+                            res.expr(),
+                        ));
                     }
                 }
                 None => log::trace!("Unable to find face for zid {}", net.graph[*child].zid),
@@ -585,15 +604,18 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
     for face in tables.faces.values_mut() {
         if face_hat!(face).local_subs.contains(res) {
             let wire_expr = Resource::get_best_key(res, "", face.id);
-            face.primitives.send_declare(Declare {
-                ext_qos: ext::QoSType::declare_default(),
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::default(),
-                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                    id: 0, // TODO
-                    ext_wire_expr: WireExprType { wire_expr },
-                }),
-            });
+            face.primitives.send_declare(RoutingContext::with_expr(
+                Declare {
+                    ext_qos: ext::QoSType::declare_default(),
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::default(),
+                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                        id: 0, // TODO
+                        ext_wire_expr: WireExprType { wire_expr },
+                    }),
+                },
+                res.expr(),
+            ));
             face_hat_mut!(face).local_subs.remove(res);
         }
     }
@@ -621,15 +643,18 @@ fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<
                 })
             {
                 let wire_expr = Resource::get_best_key(res, "", face.id);
-                face.primitives.send_declare(Declare {
-                    ext_qos: ext::QoSType::declare_default(),
-                    ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
-                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id: 0, // TODO
-                        ext_wire_expr: WireExprType { wire_expr },
-                    }),
-                });
+                face.primitives.send_declare(RoutingContext::with_expr(
+                    Declare {
+                        ext_qos: ext::QoSType::declare_default(),
+                        ext_tstamp: None,
+                        ext_nodeid: ext::NodeIdType::default(),
+                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                            id: 0, // TODO
+                            ext_wire_expr: WireExprType { wire_expr },
+                        }),
+                    },
+                    res.expr(),
+                ));
 
                 face_hat_mut!(&mut face).local_subs.remove(res);
             }
@@ -857,15 +882,18 @@ pub(super) fn undeclare_client_subscription(
             && !(face.whatami == WhatAmI::Client && res.expr().starts_with(PREFIX_LIVELINESS))
         {
             let wire_expr = Resource::get_best_key(res, "", face.id);
-            face.primitives.send_declare(Declare {
-                ext_qos: ext::QoSType::declare_default(),
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::default(),
-                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                    id: 0, // TODO
-                    ext_wire_expr: WireExprType { wire_expr },
-                }),
-            });
+            face.primitives.send_declare(RoutingContext::with_expr(
+                Declare {
+                    ext_qos: ext::QoSType::declare_default(),
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::default(),
+                    body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                        id: 0, // TODO
+                        ext_wire_expr: WireExprType { wire_expr },
+                    }),
+                },
+                res.expr(),
+            ));
 
             face_hat_mut!(face).local_subs.remove(res);
         }
@@ -917,16 +945,19 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                 for sub in &hat!(tables).router_subs {
                     face_hat_mut!(face).local_subs.insert(sub.clone());
                     let key_expr = Resource::decl_key(sub, face);
-                    face.primitives.send_declare(Declare {
-                        ext_qos: ext::QoSType::declare_default(),
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
-                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                            id: 0, // TODO
-                            wire_expr: key_expr,
-                            ext_info: sub_info,
-                        }),
-                    });
+                    face.primitives.send_declare(RoutingContext::with_expr(
+                        Declare {
+                            ext_qos: ext::QoSType::declare_default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                id: 0, // TODO
+                                wire_expr: key_expr,
+                                ext_info: sub_info,
+                            }),
+                        },
+                        sub.expr(),
+                    ));
                 }
             } else if face.whatami == WhatAmI::Peer && !hat!(tables).full_net(WhatAmI::Peer) {
                 for sub in &hat!(tables).router_subs {
@@ -942,16 +973,19 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                     {
                         face_hat_mut!(face).local_subs.insert(sub.clone());
                         let key_expr = Resource::decl_key(sub, face);
-                        face.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::declare_default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
-                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                id: 0, // TODO
-                                wire_expr: key_expr,
-                                ext_info: sub_info,
-                            }),
-                        });
+                        face.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::declare_default(),
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::default(),
+                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                    id: 0, // TODO
+                                    wire_expr: key_expr,
+                                    ext_info: sub_info,
+                                }),
+                            },
+                            sub.expr(),
+                        ));
                     }
                 }
             }
@@ -962,16 +996,19 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                     for sub in &hat!(tables).peer_subs {
                         face_hat_mut!(face).local_subs.insert(sub.clone());
                         let key_expr = Resource::decl_key(sub, face);
-                        face.primitives.send_declare(Declare {
-                            ext_qos: ext::QoSType::declare_default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
-                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                id: 0, // TODO
-                                wire_expr: key_expr,
-                                ext_info: sub_info,
-                            }),
-                        });
+                        face.primitives.send_declare(RoutingContext::with_expr(
+                            Declare {
+                                ext_qos: ext::QoSType::declare_default(),
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType::default(),
+                                body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                    id: 0, // TODO
+                                    wire_expr: key_expr,
+                                    ext_info: sub_info,
+                                }),
+                            },
+                            sub.expr(),
+                        ));
                     }
                 }
             } else {
@@ -1155,17 +1192,20 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                     };
                                 if forget {
                                     let wire_expr = Resource::get_best_key(res, "", dst_face.id);
-                                    dst_face.primitives.send_declare(Declare {
-                                        ext_qos: ext::QoSType::declare_default(),
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::default(),
-                                        body: DeclareBody::UndeclareSubscriber(
-                                            UndeclareSubscriber {
-                                                id: 0, // TODO
-                                                ext_wire_expr: WireExprType { wire_expr },
-                                            },
-                                        ),
-                                    });
+                                    dst_face.primitives.send_declare(RoutingContext::with_expr(
+                                        Declare {
+                                            ext_qos: ext::QoSType::declare_default(),
+                                            ext_tstamp: None,
+                                            ext_nodeid: ext::NodeIdType::default(),
+                                            body: DeclareBody::UndeclareSubscriber(
+                                                UndeclareSubscriber {
+                                                    id: 0, // TODO
+                                                    ext_wire_expr: WireExprType { wire_expr },
+                                                },
+                                            ),
+                                        },
+                                        res.expr(),
+                                    ));
 
                                     face_hat_mut!(dst_face).local_subs.remove(res);
                                 }
@@ -1177,16 +1217,19 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                     reliability: Reliability::Reliable, // TODO
                                     mode: Mode::Push,
                                 };
-                                dst_face.primitives.send_declare(Declare {
-                                    ext_qos: ext::QoSType::declare_default(),
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::default(),
-                                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                        id: 0, // TODO
-                                        wire_expr: key_expr,
-                                        ext_info: sub_info,
-                                    }),
-                                });
+                                dst_face.primitives.send_declare(RoutingContext::with_expr(
+                                    Declare {
+                                        ext_qos: ext::QoSType::declare_default(),
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType::default(),
+                                        body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                                            id: 0, // TODO
+                                            wire_expr: key_expr,
+                                            ext_info: sub_info,
+                                        }),
+                                    },
+                                    res.expr(),
+                                ));
                             }
                         }
                     }
