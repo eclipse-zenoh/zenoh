@@ -88,8 +88,6 @@ impl Runtime {
 
     pub(crate) async fn init(config: Config) -> ZResult<Runtime> {
         log::debug!("Zenoh Rust API {}", GIT_VERSION);
-        // Make sure to have have enough threads spawned in the async futures executor
-        zasync_executor_init!();
 
         let zid = *config.id();
 

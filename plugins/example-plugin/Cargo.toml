@@ -17,6 +17,7 @@ name = "zenoh-plugin-example"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
+publish = false
 
 [features]
 default = ["no_mangle"]

@@ -133,17 +133,25 @@
       /// NOTE: Due to the note above, 'lowlatency' is incompatible with 'qos' option, so in order to
       ///       enable 'lowlatency' you need to explicitly disable 'qos'.
       lowlatency: false,
+      /// Enables QoS on unicast communications.
       qos: {
         enabled: true,
       },
+      /// Enables compression on unicast communications.
+      /// Compression capabilities are negotiated during session establishment. 
+      /// If both Zenoh nodes support compression, then compression is activated.
       compression: {
         enabled: false,
       },
-    },
+    },    
     multicast: {
+      /// Enables QoS on multicast communication. 
+      /// Default to false for Zenoh-to-Zenoh-Pico out-of-the-box compatibility.
       qos: {
-        enabled: true,
+        enabled: false,
       },
+      /// Enables compression on multicast communication. 
+      /// Default to false for Zenoh-to-Zenoh-Pico out-of-the-box compatibility.
       compression: {
         enabled: false,
       },
