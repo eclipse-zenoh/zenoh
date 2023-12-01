@@ -67,14 +67,14 @@ impl TransportUnicastUniversal {
 
         // Delete and clean up
         let c_transport = self.clone();
-        let c_link = link.clone();
+        let c_link = link.into();
         // Spawn a task to avoid a deadlock waiting for this same task
         // to finish in the link close() joining the rx handle
         task::spawn(async move {
             if session {
                 let _ = c_transport.delete().await;
             } else {
-                let _ = c_transport.del_link(&c_link).await;
+                let _ = c_transport.del_link(c_link).await;
             }
         });
 

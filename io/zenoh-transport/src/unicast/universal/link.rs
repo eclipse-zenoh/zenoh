@@ -99,7 +99,7 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link(&c_link).await });
+                    task::spawn(async move { c_transport.del_link(c_link.into()).await });
                 }
             });
             self.handle_tx = Some(Arc::new(handle));
@@ -135,7 +135,7 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link(&c_link).await });
+                    task::spawn(async move { c_transport.del_link(c_link.into()).await });
                 }
             });
             self.handle_rx = Some(Arc::new(handle));

@@ -40,7 +40,7 @@ use zenoh_result::{bail, zerror, ZResult};
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {
         // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-        $guard.iter().find(|tl| &tl.link.link == &$link.link)
+        $guard.iter().find(|tl| $link == tl.link.link)
     };
 }
 
@@ -54,7 +54,7 @@ macro_rules! zlinkgetmut {
 macro_rules! zlinkindex {
     ($guard:expr, $link:expr) => {
         // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-        $guard.iter().position(|tl| &tl.link.link == &$link.link)
+        $guard.iter().position(|tl| $link == &tl.link.link)
     };
 }
 
@@ -170,7 +170,7 @@ impl TransportUnicastUniversal {
         Ok(())
     }
 
-    pub(crate) async fn del_link(&self, link: &TransportLinkUnicast) -> ZResult<()> {
+    pub(crate) async fn del_link(&self, link: Link) -> ZResult<()> {
         enum Target {
             Transport,
             Link(Box<TransportLinkUnicastUniversal>),
@@ -180,7 +180,7 @@ impl TransportUnicastUniversal {
         let target = {
             let mut guard = zwrite!(self.links);
 
-            if let Some(index) = zlinkindex!(guard, link) {
+            if let Some(index) = zlinkindex!(guard, &link) {
                 let is_last = guard.len() == 1;
                 if is_last {
                     // Close the whole transport
@@ -200,12 +200,12 @@ impl TransportUnicastUniversal {
                     link,
                     self.config.zid
                 )
-            }
+            } 
         };
 
         // Notify the callback
         if let Some(callback) = zread!(self.callback).as_ref() {
-            callback.del_link(Link::from(link));
+            callback.del_link(link);
         }
 
         match target {
@@ -367,14 +367,15 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
-    async fn close_link(&self, link: &TransportLinkUnicast, reason: u8) -> ZResult<()> {
+    async fn close_link(&self, link: Link, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.config.zid);
 
-        let mut pipeline = zlinkget!(zread!(self.links), link)
-            .map(|l| l.pipeline.clone())
-            .ok_or_else(|| zerror!("Cannot close Link {:?}: not found", link))?;
+        
+        let mut transport_link = zlinkget!(zread!(self.links), link)
+            .ok_or_else(|| zerror!("Cannot close Link {:?}: not found", link))?
+            .pipeline.clone();
 
-        if let Some(p) = pipeline.take() {
+        if let Some(p) = transport_link.take() {
             // Close message to be sent on the target link
             let msg: TransportMessage = Close {
                 reason,
@@ -384,6 +385,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
             p.push_transport_message(msg, Priority::Background);
         }
+        
 
         // Remove the link from the channel
         self.del_link(link).await
@@ -413,8 +415,8 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         self.delete().await
     }
 
-    fn get_links(&self) -> Vec<TransportLinkUnicast> {
-        zread!(self.links).iter().map(|l| l.link.clone()).collect()
+    fn get_links(&self) -> Vec<Link> {
+        zread!(self.links).iter().map(|l| (&l.link).into()).collect()
     }
 
     /*************************************/

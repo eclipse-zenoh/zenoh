@@ -28,6 +28,7 @@ use async_std::sync::RwLockUpgradableReadGuard;
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
+use zenoh_link::Link;
 use std::sync::{Arc, RwLock as SyncRwLock};
 use std::time::Duration;
 #[cfg(feature = "transport_unixpipe")]
@@ -169,9 +170,9 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         zasynclock!(self.alive)
     }
 
-    fn get_links(&self) -> Vec<TransportLinkUnicast> {
+    fn get_links(&self) -> Vec<Link> {
         let guard = async_std::task::block_on(async { zasyncread!(self.link) });
-        [guard.clone()].to_vec()
+        [(&guard.link).into()].to_vec()
     }
 
     fn get_zid(&self) -> ZenohId {
@@ -315,7 +316,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
-    async fn close_link(&self, link: &TransportLinkUnicast, reason: u8) -> ZResult<()> {
+    async fn close_link(&self, link: Link, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.config.zid);
         self.finalize(reason).await
     }

@@ -18,6 +18,7 @@ use crate::{
 };
 use async_std::sync::MutexGuard as AsyncMutexGuard;
 use async_trait::async_trait;
+use zenoh_link::Link;
 use std::{fmt::DebugStruct, sync::Arc, time::Duration};
 use zenoh_protocol::{
     core::{WhatAmI, ZenohId},
@@ -39,7 +40,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     fn get_zid(&self) -> ZenohId;
     fn get_whatami(&self) -> WhatAmI;
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>>;
-    fn get_links(&self) -> Vec<TransportLinkUnicast>;
+    fn get_links(&self) -> Vec<Link>;
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool;
     fn is_qos(&self) -> bool;
@@ -76,7 +77,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     /*            TERMINATION            */
     /*************************************/
-    async fn close_link(&self, link: &TransportLinkUnicast, reason: u8) -> ZResult<()>;
+    async fn close_link(&self, link: Link, reason: u8) -> ZResult<()>;
     async fn close(&self, reason: u8) -> ZResult<()>;
 
     fn add_debug_fields<'a, 'b: 'a, 'c>(
