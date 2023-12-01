@@ -575,12 +575,14 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastPipe {
     }
 
     fn get_listeners(&self) -> Vec<EndPoint> {
-        ZRuntime::Accept
-            .handle()
-            .block_on(async { zasyncread!(self.listeners) })
-            .keys()
-            .cloned()
-            .collect()
+        tokio::task::block_in_place(|| {
+            ZRuntime::Net
+                .handle()
+                .block_on(async { zasyncread!(self.listeners) })
+                .keys()
+                .cloned()
+                .collect()
+        })
     }
 
     fn get_locators(&self) -> Vec<Locator> {
