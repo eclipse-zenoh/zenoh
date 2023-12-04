@@ -165,9 +165,9 @@ where
     fn res_sync(self) -> <Self as Resolvable>::To {
         tokio::task::block_in_place(move || {
             zenoh_runtime::ZRuntime::Application
-                .handle()
                 .block_on(self.0)
         })
+
         // std::thread::scope(move |s| {
         //     s.spawn(|| {
         //         zenoh_runtime::ZRuntime::Application

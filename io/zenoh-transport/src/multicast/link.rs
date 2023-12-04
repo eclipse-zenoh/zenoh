@@ -22,7 +22,6 @@ use std::convert::TryInto;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::task::JoinHandle;
-use tokio::{select, task};
 use zenoh_buffers::ZSlice;
 use zenoh_core::zlock;
 use zenoh_link::{LinkMulticast, Locator};
@@ -321,7 +320,7 @@ impl TransportLinkMulticastUniversal {
             // Spawn the TX task
             let c_link = self.link.clone();
             let ctransport = self.transport.clone();
-            let handle = zenoh_runtime::ZRuntime::TX.handle().spawn(async move {
+            let handle = zenoh_runtime::ZRuntime::TX.spawn(async move {
                 let res = tx_task(
                     consumer,
                     c_link.tx(),
@@ -335,7 +334,7 @@ impl TransportLinkMulticastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    zenoh_runtime::ZRuntime::Net.handle().spawn(async move { ctransport.delete().await });
+                    zenoh_runtime::ZRuntime::Net.spawn(async move { ctransport.delete().await });
                 }
             });
             self.handle_tx = Some(Arc::new(handle));
@@ -356,7 +355,7 @@ impl TransportLinkMulticastUniversal {
             let c_signal = self.signal_rx.clone();
             let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
 
-            let handle = zenoh_runtime::ZRuntime::RX.handle().spawn(async move {
+            let handle = zenoh_runtime::ZRuntime::RX.spawn(async move {
                 // Start the consume task
                 let res = rx_task(
                     c_link.rx(),
@@ -371,7 +370,7 @@ impl TransportLinkMulticastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    zenoh_runtime::ZRuntime::Net.handle().spawn(async move { ctransport.delete().await });
+                    zenoh_runtime::ZRuntime::Net.spawn(async move { ctransport.delete().await });
                 }
             });
             self.handle_rx = Some(Arc::new(handle));
@@ -412,7 +411,6 @@ async fn tx_task(
     mut last_sns: Vec<PrioritySn>,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
-
     async fn join(last_join: Instant, join_interval: Duration) {
         let now = Instant::now();
         let target = last_join + join_interval;
@@ -424,7 +422,7 @@ async fn tx_task(
 
     let mut last_join = Instant::now().checked_sub(config.join_interval).unwrap();
     loop {
-        select! {
+        tokio::select! {
             res = pipeline.pull() => {
                 match res {
                     Some((batch, priority)) => {
@@ -543,7 +541,7 @@ async fn rx_task(
         // Retrieve one buffer
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
-        select! {
+        tokio::select! {
             _ = signal.wait() => break,
             res = read(&link, &mut buffer) => {
                 let (n, loc) = res?;

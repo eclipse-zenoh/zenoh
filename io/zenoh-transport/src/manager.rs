@@ -353,7 +353,7 @@ impl TransportManager {
         };
 
         // @TODO: this should be moved into the unicast module
-        zenoh_runtime::ZRuntime::Net.handle().spawn({
+        zenoh_runtime::ZRuntime::Net.spawn({
             let this = this.clone();
             async move {
                 while let Ok(link) = new_unicast_link_receiver.recv_async().await {

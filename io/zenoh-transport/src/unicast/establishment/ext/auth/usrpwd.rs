@@ -15,7 +15,7 @@ use crate::unicast::establishment::{ext::auth::id, AcceptFsm, OpenFsm};
 use async_trait::async_trait;
 use rand::{CryptoRng, Rng};
 use std::{collections::HashMap, fmt};
-use tokio::{fs, sync::RwLock};
+use tokio::sync::RwLock;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, HasWriter, Writer},

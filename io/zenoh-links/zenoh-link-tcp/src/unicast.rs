@@ -306,7 +306,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTcp {
                     let c_manager = self.manager.clone();
                     let c_listeners = self.listeners.clone();
                     let c_addr = local_addr;
-                    let handle = zenoh_runtime::ZRuntime::Accept.handle().spawn(async move {
+                    let handle = zenoh_runtime::ZRuntime::Accept.spawn(async move {
                         // Wait for the accept loop to terminate
                         let res = accept_task(socket, c_active, c_signal, c_manager).await;
                         zwrite!(c_listeners).remove(&c_addr);

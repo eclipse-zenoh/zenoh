@@ -81,7 +81,7 @@ impl<'a> Resolvable for RoutersZidBuilder<'a> {
 impl<'a> SyncResolve for RoutersZidBuilder<'a> {
     fn res_sync(self) -> Self::To {
         Box::new(
-            zenoh_runtime::ZRuntime::Application.handle()
+            zenoh_runtime::ZRuntime::Application
                 .block_on(self.session.runtime.manager().get_transports_unicast())
                 .into_iter()
                 .filter_map(|s| {
@@ -129,7 +129,7 @@ impl<'a> Resolvable for PeersZidBuilder<'a> {
 impl<'a> SyncResolve for PeersZidBuilder<'a> {
     fn res_sync(self) -> <Self as Resolvable>::To {
         Box::new(
-            zenoh_runtime::ZRuntime::Application.handle()
+            zenoh_runtime::ZRuntime::Application
                 .block_on(self.session.runtime.manager().get_transports_unicast())
                 .into_iter()
                 .filter_map(|s| {

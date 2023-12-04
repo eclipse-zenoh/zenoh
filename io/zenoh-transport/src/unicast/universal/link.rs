@@ -14,7 +14,6 @@
 use super::transport::TransportUnicastUniversal;
 #[cfg(feature = "stats")]
 use crate::common::stats::TransportStats;
-use tokio::task;
 use tokio::task::JoinHandle;
 use tokio::time::timeout;
 
@@ -124,7 +123,7 @@ impl TransportLinkUnicastUniversal {
             // Spawn the TX task
             let c_link = self.link.clone();
             let c_transport = self.transport.clone();
-            let handle = ZRuntime::TX.handle().spawn(async move {
+            let handle = ZRuntime::TX.spawn(async move {
                 let res = tx_task(
                     consumer,
                     &mut tx,
@@ -137,7 +136,7 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    zenoh_runtime::ZRuntime::Net.handle().spawn(async move { c_transport.del_link(&c_link).await });
+                    zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.del_link(&c_link).await });
                 }
             });
             *guard = Some(handle);
@@ -155,7 +154,7 @@ impl TransportLinkUnicastUniversal {
             let mut rx = self.link.rx();
             let c_signal = self.tasks.signal_rx.clone();
 
-            let handle = zenoh_runtime::ZRuntime::RX.handle().spawn(async move {
+            let handle = zenoh_runtime::ZRuntime::RX.spawn(async move {
                 // Start the consume task
                 let res = rx_task(
                     &mut rx,
@@ -170,7 +169,7 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    zenoh_runtime::ZRuntime::Net.handle().spawn(async move { c_transport.del_link(&c_link).await });
+                    zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.del_link(&c_link).await });
                 }
             });
             *guard = Some(handle);

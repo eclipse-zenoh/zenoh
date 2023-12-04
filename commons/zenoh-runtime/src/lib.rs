@@ -83,9 +83,6 @@ impl ZRuntime {
         Ok(rt)
     }
 
-    pub fn handle(&self) -> &Handle {
-        ZRUNTIME_POOL.get(self)
-    }
 }
 
 impl Deref for ZRuntime {
