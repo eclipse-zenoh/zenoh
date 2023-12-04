@@ -33,5 +33,5 @@ use zenoh_util::concat_enabled_features;
 
 pub const FEATURES: &str = concat_enabled_features!(
     prefix = "zenoh-plugin-trait",
-    features = ["default", "no_mangle"]
+    features = ["default"]
 );

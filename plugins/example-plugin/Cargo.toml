@@ -21,7 +21,7 @@ publish = false
 
 [features]
 default = ["no_mangle"]
-no_mangle = ["zenoh-plugin-trait/no_mangle"]
+no_mangle = []
 
 [lib]
 # When auto-detecting the "example" plugin, `zenohd` will look for a dynamic library named "zenoh_plugin_example"

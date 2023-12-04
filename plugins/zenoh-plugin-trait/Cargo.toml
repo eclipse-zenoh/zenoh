@@ -26,10 +26,6 @@ description = { workspace = true }
 [lib]
 name = "zenoh_plugin_trait"
 
-[features]
-default = ["no_mangle"]
-no_mangle = []
-
 [dependencies]
 libloading = { workspace = true }
 log = { workspace = true }

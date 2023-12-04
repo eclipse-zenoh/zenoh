@@ -25,7 +25,7 @@ description = "The zenoh storages plugin."
 
 [features]
 default = ["no_mangle"]
-no_mangle = ["zenoh-plugin-trait/no_mangle"]
+no_mangle = []
 
 [lib]
 name = "zenoh_plugin_storage_manager"

@@ -199,41 +199,33 @@ impl<StartArgs, Instance> PluginVTable<StartArgs, Instance> {
     }
 }
 
-pub use no_mangle::*;
-#[cfg(feature = "no_mangle")]
-pub mod no_mangle {
-    /// This macro will add a non-mangled functions which provides plugin version and loads it if feature `no_mangle` is enabled (which it is by default).
-    #[macro_export]
-    macro_rules! declare_plugin {
-        ($ty: path) => {
-            #[no_mangle]
-            fn get_plugin_loader_version() -> $crate::PluginLoaderVersion {
-                $crate::PLUGIN_LOADER_VERSION
-            }
+/// This macro will add a non-mangled functions which provides plugin version and loads it if feature `no_mangle` is enabled in the destination crate.
+#[macro_export]
+macro_rules! declare_plugin {
+    ($ty: path) => {
+        #[cfg(feature = "no_mangle")]
+        #[no_mangle]
+        fn get_plugin_loader_version() -> $crate::PluginLoaderVersion {
+            $crate::PLUGIN_LOADER_VERSION
+        }
 
-            #[no_mangle]
-            fn get_compatibility() -> $crate::Compatibility {
-                $crate::Compatibility::with_plugin_version::<
-                    <$ty as $crate::Plugin>::StartArgs,
-                    <$ty as $crate::Plugin>::Instance,
-                    $ty,
-                >()
-            }
-
-            #[no_mangle]
-            fn load_plugin() -> $crate::PluginVTable<
+        #[cfg(feature = "no_mangle")]
+        #[no_mangle]
+        fn get_compatibility() -> $crate::Compatibility {
+            $crate::Compatibility::with_plugin_version::<
                 <$ty as $crate::Plugin>::StartArgs,
                 <$ty as $crate::Plugin>::Instance,
-            > {
-                $crate::PluginVTable::new::<$ty>()
-            }
-        };
-    }
-}
-#[cfg(not(feature = "no_mangle"))]
-pub mod no_mangle {
-    #[macro_export]
-    macro_rules! declare_plugin {
-        ($ty: path) => {};
-    }
+                $ty,
+            >()
+        }
+
+        #[cfg(feature = "no_mangle")]
+        #[no_mangle]
+        fn load_plugin() -> $crate::PluginVTable<
+            <$ty as $crate::Plugin>::StartArgs,
+            <$ty as $crate::Plugin>::Instance,
+        > {
+            $crate::PluginVTable::new::<$ty>()
+        }
+    };
 }
