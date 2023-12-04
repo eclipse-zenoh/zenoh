@@ -88,7 +88,17 @@ impl ZRuntime {
 impl Deref for ZRuntime {
     type Target = Handle;
     fn deref(&self) -> &Self::Target {
-        ZRUNTIME_POOL.get(self)
+        ZRUNTIME_POOL.get(&Self::TX)
+        // use ZRuntime::*;
+        // match self {
+        //     Application | Accept | RX => {
+        //         ZRUNTIME_POOL.get(&TX)
+        //     }
+        //     _ => {
+        //         ZRUNTIME_POOL.get(&self)
+        //     }
+        // }
+        // ZRUNTIME_POOL.get(self)
     }
 }
 
@@ -129,6 +139,11 @@ impl Default for ZRuntimeConfig {
             accept_threads: 2,
             application_threads: 2,
             net_threads: 2,
+            // tx_threads: 1,
+            // rx_threads: 1,
+            // accept_threads: 1,
+            // application_threads: 1,
+            // net_threads: 1,
         }
     }
 }
