@@ -224,6 +224,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
 
     fn start_tx(&self, _link: &LinkUnicast, keep_alive: Duration, _batch_size: u16) -> ZResult<()> {
         let token = self.cancellation_token.child_token();
+        let mut interval = tokio::time::interval(keep_alive);
 
         // TODO: Check the necessity of clone
         let link = self.link.clone();
@@ -243,7 +244,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
                     }
 
                     // Send KeepAlive periodically
-                    _ = tokio::time::sleep(keep_alive.clone()) => {
+                    _ = interval.tick() => {
                         // TODO: Don not create a new message every time
                         let keepailve = TransportMessageLowLatency {
                             body: TransportBodyLowLatency::KeepAlive(KeepAlive),
