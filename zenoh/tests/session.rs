@@ -13,11 +13,11 @@
 //
 use async_std::prelude::FutureExt;
 use async_std::task;
-use zenoh::runtime::Runtime;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
+use zenoh::runtime::Runtime;
 use zenoh_core::zasync_executor_init;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
