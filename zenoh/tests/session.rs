@@ -13,6 +13,7 @@
 //
 use async_std::prelude::FutureExt;
 use async_std::task;
+use zenoh::runtime::Runtime;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -67,6 +68,29 @@ async fn open_session_multicast(endpoint01: &str, endpoint02: &str) -> (Session,
     config.scouting.multicast.set_enabled(Some(true)).unwrap();
     println!("[  ][02a] Opening peer02 session: {}", endpoint02);
     let peer02 = ztimeout!(zenoh::open(config).res_async()).unwrap();
+
+    (peer01, peer02)
+}
+
+async fn open_session_unicast_runtime(endpoints: &[&str]) -> (Runtime, Runtime) {
+    // Open the sessions
+    let mut config = config::peer();
+    config.listen.endpoints = endpoints
+        .iter()
+        .map(|e| e.parse().unwrap())
+        .collect::<Vec<_>>();
+    config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    println!("[  ][01a] Creating peer01 session runtime: {:?}", endpoints);
+    let peer01 = Runtime::new(config).await.unwrap();
+
+    let mut config = config::peer();
+    config.connect.endpoints = endpoints
+        .iter()
+        .map(|e| e.parse().unwrap())
+        .collect::<Vec<_>>();
+    config.scouting.multicast.set_enabled(Some(false)).unwrap();
+    println!("[  ][02a] Creating peer02 session runtime: {:?}", endpoints);
+    let peer02 = Runtime::new(config).await.unwrap();
 
     (peer01, peer02)
 }
@@ -209,5 +233,23 @@ fn zenoh_session_multicast() {
             open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17448").await;
         test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
         close_session(peer01, peer02).await;
+    });
+}
+
+#[test]
+fn zenoh_session_runtime_init() {
+    task::block_on(async {
+        zasync_executor_init!();
+        let (r1, r2) = open_session_unicast_runtime(&["tcp/127.0.1:17447"]).await;
+        println!("[RI][02a] Creating peer01 session from runtime 1");
+        let peer01 = zenoh::init(r1.clone()).res_async().await.unwrap();
+        println!("[RI][02b] Creating peer02 session from runtime 2");
+        let peer02 = zenoh::init(r2.clone()).res_async().await.unwrap();
+        println!("[RI][02c] Creating peer01a session from runtime 1");
+        let peer01a = zenoh::init(r2.clone()).res_async().await.unwrap();
+        test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
+        println!("[RI][02d] Closing peer02a session");
+        std::mem::drop(peer01a);
+        test_session_pubsub(&peer01, &peer02, Reliability::Reliable).await;
     });
 }
