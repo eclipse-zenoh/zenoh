@@ -214,7 +214,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
 
     fn start_tx(
         &self,
-        _link: &TransportLinkUnicast,
+        _link: &Link,
         executor: &TransportExecutor,
         keep_alive: Duration,
     ) -> ZResult<()> {
@@ -222,7 +222,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         Ok(())
     }
 
-    fn start_rx(&self, _link: &TransportLinkUnicast, lease: Duration) -> ZResult<()> {
+    fn start_rx(&self, _link: &Link, lease: Duration) -> ZResult<()> {
         self.internal_start_rx(lease);
         Ok(())
     }

@@ -51,6 +51,14 @@ macro_rules! zlinkgetmut {
     };
 }
 
+
+macro_rules! zlinkgetmut2 {
+    ($guard:expr, $link:expr) => {
+        // Compare LinkUnicast link to not compare TransportLinkUnicast direction
+        $guard.iter_mut().find(|tl| $link == &tl.link.link)
+    };
+}
+
 macro_rules! zlinkindex {
     ($guard:expr, $link:expr) => {
         // Compare LinkUnicast link to not compare TransportLinkUnicast direction
@@ -416,7 +424,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     fn get_links(&self) -> Vec<Link> {
-        zread!(self.links).iter().map(|l| (&l.link).into()).collect()
+        zread!(self.links).iter().map(|l| (&l.link.link).into()).collect()
     }
 
     /*************************************/
@@ -431,12 +439,12 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
     fn start_tx(
         &self,
-        link: &TransportLinkUnicast,
+        link: &Link,
         executor: &TransportExecutor,
         keep_alive: Duration,
     ) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
-        match zlinkgetmut!(guard, link) {
+        match zlinkgetmut2!(guard, link) {
             Some(l) => {
                 assert!(!self.priority_tx.is_empty());
                 l.start_tx(executor, keep_alive, &self.priority_tx);
@@ -452,9 +460,9 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         }
     }
 
-    fn start_rx(&self, link: &TransportLinkUnicast, lease: Duration) -> ZResult<()> {
+    fn start_rx(&self, link: &Link, lease: Duration) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
-        match zlinkgetmut!(guard, link) {
+        match zlinkgetmut2!(guard, link) {
             Some(l) => {
                 l.start_rx(lease);
                 Ok(())

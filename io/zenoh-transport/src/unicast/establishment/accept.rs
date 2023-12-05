@@ -584,7 +584,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
     }
 }
 
-pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) -> ZResult<()> {
+pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -> ZResult<()> {
     let mtu = link.get_mtu();
     let config = TransportLinkUnicastConfig {
         mtu,
@@ -592,7 +592,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         #[cfg(feature = "transport_compression")]
         is_compression: false,
     };
-    let mut link = TransportLinkUnicast::new(link.clone(), config);
+    let mut link = TransportLinkUnicast::new(link, config);
     let mut fsm = AcceptLink {
         link: &mut link,
         prng: &manager.prng,
@@ -710,15 +710,9 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
         #[cfg(feature = "transport_compression")]
         is_compression: state.link.ext_compression.is_compression(),
     };
-    let a_link = TransportLinkUnicast::new(link.link.clone(), a_config);
+    let a_link = TransportLinkUnicast::new(link.link, a_config);
     let s_link = format!("{:?}", a_link);
     let transport = step!(manager.init_transport_unicast(config, a_link).await);
-
-    // Send the open_ack on the link
-    step!(link
-        .send(&oack_out.open_ack.into())
-        .await
-        .map_err(|e| (e, Some(close::reason::GENERIC))));
 
     // Sync the RX sequence number
     let _ = step!(transport
@@ -735,6 +729,12 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
     step!(finalize_transport(&link, manager, input)
         .await
         .map_err(|e| (e, Some(close::reason::INVALID))));
+
+    // Send the open_ack on the link
+    step!(link
+        .send(&oack_out.open_ack.into())
+        .await
+        .map_err(|e| (e, Some(close::reason::GENERIC))));
 
     log::debug!(
         "New transport link accepted from {} to {}: {}.",

@@ -38,7 +38,7 @@ use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicastUniversal {
     // The underlying link
-    pub(super) link: TransportLinkUnicast,
+    pub(super) link: Arc<TransportLinkUnicast>,
     // The transmission pipeline
     pub(super) pipeline: Option<TransmissionPipelineProducer>,
     // The transport this link is associated to
@@ -52,7 +52,7 @@ pub(super) struct TransportLinkUnicastUniversal {
 impl TransportLinkUnicastUniversal {
     pub(super) fn new(transport: TransportUnicastUniversal, link: TransportLinkUnicast) -> Self {
         Self {
-            link,
+            link: Arc::new(link),
             pipeline: None,
             transport,
             handle_tx: None,
@@ -84,12 +84,12 @@ impl TransportLinkUnicastUniversal {
             self.pipeline = Some(producer);
 
             // Spawn the TX task
-            let c_link = self.link.clone();
+            let tx = self.link.tx();
             let c_transport = self.transport.clone();
             let handle = executor.spawn(async move {
                 let res = tx_task(
                     consumer,
-                    c_link.tx(),
+                    &mut tx,
                     keep_alive,
                     #[cfg(feature = "stats")]
                     c_transport.stats.clone(),
@@ -99,7 +99,7 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link(c_link.into()).await });
+                    task::spawn(async move { c_transport.del_link((&tx.inner.link).into()).await });
                 }
             });
             self.handle_tx = Some(Arc::new(handle));
@@ -115,7 +115,7 @@ impl TransportLinkUnicastUniversal {
     pub(super) fn start_rx(&mut self, lease: Duration) {
         if self.handle_rx.is_none() {
             // Spawn the RX task
-            let c_link = self.link.clone();
+            let rx = self.link.rx();
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
             let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
@@ -123,7 +123,7 @@ impl TransportLinkUnicastUniversal {
             let handle = task::spawn(async move {
                 // Start the consume task
                 let res = rx_task(
-                    c_link.rx(),
+                    &mut rx,
                     c_transport.clone(),
                     lease,
                     c_signal.clone(),
@@ -135,7 +135,7 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link(c_link.into()).await });
+                    task::spawn(async move { c_transport.del_link((&rx.inner.link).into()).await });
                 }
             });
             self.handle_rx = Some(Arc::new(handle));
@@ -171,7 +171,7 @@ impl TransportLinkUnicastUniversal {
 /*************************************/
 async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
-    mut link: TransportLinkUnicastTx,
+    link: &mut TransportLinkUnicastTx,
     keep_alive: Duration,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
@@ -225,7 +225,7 @@ async fn tx_task(
 }
 
 async fn rx_task(
-    mut link: TransportLinkUnicastRx,
+    link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
     lease: Duration,
     signal: Signal,
@@ -266,7 +266,7 @@ async fn rx_task(
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
     while !signal.is_triggered() {
         // Async read from the underlying link
-        let action = read(&mut link, &pool)
+        let action = read(link, &pool)
             .race(stop(signal.clone()))
             .timeout(lease)
             .await

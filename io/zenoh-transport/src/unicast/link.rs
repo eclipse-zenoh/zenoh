@@ -38,7 +38,7 @@ pub(crate) struct TransportLinkUnicastConfig {
     pub(crate) is_compression: bool,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub(crate) struct TransportLinkUnicast {
     pub(crate) link: LinkUnicast,
     pub(crate) config: TransportLinkUnicastConfig,

@@ -59,7 +59,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     fn schedule(&self, msg: NetworkMessage) -> ZResult<()>;
     fn start_tx(
         &self,
-        link: &TransportLinkUnicast,
+        link: &Link,
         executor: &TransportExecutor,
         keep_alive: Duration,
     ) -> ZResult<()>;
@@ -67,7 +67,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     /*                RX                 */
     /*************************************/
-    fn start_rx(&self, link: &TransportLinkUnicast, lease: Duration) -> ZResult<()>;
+    fn start_rx(&self, link: &Link, lease: Duration) -> ZResult<()>;
 
     /*************************************/
     /*           INITIATION              */

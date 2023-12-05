@@ -621,16 +621,18 @@ pub(crate) async fn open_link(
         #[cfg(feature = "transport_compression")]
         is_compression: state.link.ext_compression.is_compression(),
     };
-    let o_link = TransportLinkUnicast::new(link.link.clone(), o_config);
+    let o_link = TransportLinkUnicast::new(link.link, o_config);
     let s_link = format!("{:?}", o_link);
-    let transport = step!(manager.init_transport_unicast(config, o_link).await);
-
-    // Sync the RX sequence number
-    let _ = step!(transport
-        .get_inner()
-        .map_err(|e| (e, Some(close::reason::INVALID))))
-    .sync(oack_out.other_initial_sn)
-    .await;
+    let transport = step!(
+        manager
+            .init_transport_unicast(
+                config,
+                o_link,
+                oack_out.other_initial_sn,
+                oack_out.other_lease
+            )
+            .await
+    );
 
     let output = InputFinalize {
         transport,
