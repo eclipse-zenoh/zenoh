@@ -18,6 +18,9 @@ use crate::handlers::{locked, DefaultHandler};
 use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::query::ReplyKeyExpr;
+#[zenoh_macros::unstable]
+use crate::sample::Attachments;
+use crate::sample::DataInfo;
 use crate::SessionRef;
 use crate::Undeclarable;
 
@@ -45,6 +48,8 @@ pub(crate) struct QueryInner {
     pub(crate) qid: RequestId,
     pub(crate) zid: ZenohId,
     pub(crate) primitives: Arc<dyn Primitives>,
+    #[cfg(feature = "unstable")]
+    pub(crate) attachments: Option<Attachments>,
 }
 
 impl Drop for QueryInner {
@@ -89,6 +94,11 @@ impl Query {
     #[inline(always)]
     pub fn value(&self) -> Option<&Value> {
         self.inner.value.as_ref()
+    }
+
+    #[zenoh_macros::unstable]
+    pub fn attachments(&self) -> Option<&Attachments> {
+        self.inner.attachments.as_ref()
     }
 
     /// Sends a reply to this Query.
@@ -150,6 +160,39 @@ pub struct ReplyBuilder<'a> {
     result: Result<Sample, Value>,
 }
 
+impl<'a> ReplyBuilder<'a> {
+    #[zenoh_macros::unstable]
+    pub fn attachments(&self) -> Option<&Attachments> {
+        match &self.result {
+            Ok(sample) => sample.attachments.as_ref(),
+            Err(_) => None,
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    pub fn attachments_mut(&mut self) -> Option<&mut Option<Attachments>> {
+        match &mut self.result {
+            Ok(sample) => Some(&mut sample.attachments),
+            Err(_) => None,
+        }
+    }
+
+    #[allow(clippy::result_large_err)]
+    #[zenoh_macros::unstable]
+    pub fn with_attachments(
+        mut self,
+        attachments: Attachments,
+    ) -> Result<Self, (Self, Attachments)> {
+        match &mut self.result {
+            Ok(sample) => {
+                sample.attachments = Some(attachments);
+                Ok(self)
+            }
+            Err(_) => Err((self, attachments)),
+        }
+    }
+}
+
 impl<'a> Resolvable for ReplyBuilder<'a> {
     type To = ZResult<()>;
 }
@@ -163,7 +206,34 @@ impl SyncResolve for ReplyBuilder<'_> {
                 {
                     bail!("Attempted to reply on `{}`, which does not intersect with query `{}`, despite query only allowing replies on matching key expressions", sample.key_expr, self.query.key_expr())
                 }
-                let (key_expr, payload, data_info) = sample.split();
+                let Sample {
+                    key_expr,
+                    value: Value { payload, encoding },
+                    kind,
+                    timestamp,
+                    #[cfg(feature = "unstable")]
+                    source_info,
+                    #[cfg(feature = "unstable")]
+                    attachments,
+                } = sample;
+                #[allow(unused_mut)]
+                let mut data_info = DataInfo {
+                    kind,
+                    encoding: Some(encoding),
+                    timestamp,
+                    source_id: None,
+                    source_sn: None,
+                };
+                #[allow(unused_mut)]
+                let mut ext_attachment = None;
+                #[cfg(feature = "unstable")]
+                {
+                    data_info.source_id = source_info.source_id;
+                    data_info.source_sn = source_info.source_sn;
+                    if let Some(attachments) = attachments {
+                        ext_attachment = Some(attachments.into());
+                    }
+                }
                 self.query.inner.primitives.send_response(Response {
                     rid: self.query.inner.qid,
                     wire_expr: WireExpr {
@@ -187,7 +257,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                         ext_consolidation: ConsolidationType::default(),
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
-                        ext_attachment: None, // @TODO: expose it in the API
+                        ext_attachment,
                         ext_unknown: vec![],
                         payload,
                     }),

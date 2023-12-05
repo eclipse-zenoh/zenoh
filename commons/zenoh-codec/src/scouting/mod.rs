@@ -31,7 +31,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &ScoutingMessage) -> Self::Output {
-        let ScoutingMessage { body } = x;
+        let ScoutingMessage { body, .. } = x;
 
         match body {
             ScoutingBody::Scout(s) => self.write(&mut *writer, s),

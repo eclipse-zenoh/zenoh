@@ -98,6 +98,193 @@ impl From<Option<DataInfo>> for SourceInfo {
     }
 }
 
+mod attachments {
+    #[zenoh_macros::unstable]
+    use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZBufReader, ZSlice};
+    #[zenoh_macros::unstable]
+    use zenoh_codec::{LCodec, RCodec, WCodec, Zenoh080};
+    #[zenoh_macros::unstable]
+    use zenoh_protocol::zenoh::ext::AttachmentType;
+
+    #[zenoh_macros::unstable]
+    #[derive(Clone)]
+    pub struct Attachments {
+        pub(crate) inner: ZBuf,
+    }
+    #[zenoh_macros::unstable]
+    impl Default for Attachments {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+    #[zenoh_macros::unstable]
+    impl<const ID: u8> From<Attachments> for AttachmentType<ID> {
+        fn from(this: Attachments) -> Self {
+            AttachmentType { buffer: this.inner }
+        }
+    }
+    #[zenoh_macros::unstable]
+    impl<const ID: u8> From<AttachmentType<ID>> for Attachments {
+        fn from(this: AttachmentType<ID>) -> Self {
+            Attachments { inner: this.buffer }
+        }
+    }
+    #[zenoh_macros::unstable]
+    impl Attachments {
+        pub fn new() -> Self {
+            Self {
+                inner: vec![0u8].into(),
+            }
+        }
+        pub fn is_empty(&self) -> bool {
+            self.len() == 0
+        }
+        pub fn len(&self) -> usize {
+            Zenoh080.read(&mut self.inner.reader()).unwrap_or(0)
+        }
+        pub fn iter(&self) -> AttachmentsIterator {
+            self.into_iter()
+        }
+        fn _get(&self, key: &[u8]) -> Option<ZSlice> {
+            self.iter()
+                .find_map(|(k, v)| (k.as_slice() == key).then_some(v))
+        }
+        pub fn get<Key: AsRef<[u8]>>(&self, key: &Key) -> Option<ZSlice> {
+            self._get(key.as_ref())
+        }
+        fn _insert(&mut self, key: &[u8], value: &[u8]) {
+            let codec = Zenoh080;
+            let mut len = self.len();
+            let prevlen = codec.w_len(len);
+            len += 1;
+
+            let mut writer = self.inner.writer();
+            codec.write(&mut writer, key).unwrap(); // Infallible, barring alloc failure
+            codec.write(&mut writer, value).unwrap(); // Infallible, barring alloc failure
+
+            let mut buf = [0u8; 10];
+            let buf = {
+                let mut writer = buf.writer();
+                codec.write(&mut writer, len).unwrap(); // Infallible
+                let len = 10 - writer.len();
+                &buf[..len]
+            };
+
+            self.inner.splice(..prevlen, buf);
+        }
+        pub fn insert<Key: AsRef<[u8]> + ?Sized, Value: AsRef<[u8]> + ?Sized>(
+            &mut self,
+            key: &Key,
+            value: &Value,
+        ) {
+            self._insert(key.as_ref(), value.as_ref())
+        }
+    }
+    #[zenoh_macros::unstable]
+    pub struct AttachmentsIterator<'a> {
+        reader: ZBufReader<'a>,
+        remaining: usize,
+    }
+    #[zenoh_macros::unstable]
+    impl<'a> core::iter::IntoIterator for &'a Attachments {
+        type Item = (ZSlice, ZSlice);
+        type IntoIter = AttachmentsIterator<'a>;
+        fn into_iter(self) -> Self::IntoIter {
+            let mut reader = self.inner.reader();
+            match Zenoh080.read(&mut reader) {
+                Ok(remaining) => AttachmentsIterator { reader, remaining },
+                Err(_) => AttachmentsIterator {
+                    reader,
+                    remaining: 0,
+                },
+            }
+        }
+    }
+    #[zenoh_macros::unstable]
+    impl core::fmt::Debug for Attachments {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{{")?;
+            for (key, value) in self {
+                let key = key.as_slice();
+                let value = value.as_slice();
+                match core::str::from_utf8(key) {
+                    Ok(key) => write!(f, "\"{key}\": ")?,
+                    Err(_) => {
+                        write!(f, "0x")?;
+                        for byte in key {
+                            write!(f, "{byte:02X}")?
+                        }
+                    }
+                }
+                match core::str::from_utf8(value) {
+                    Ok(value) => write!(f, "\"{value}\", ")?,
+                    Err(_) => {
+                        write!(f, "0x")?;
+                        for byte in value {
+                            write!(f, "{byte:02X}")?
+                        }
+                        write!(f, ", ")?
+                    }
+                }
+            }
+            write!(f, "}}")
+        }
+    }
+    #[zenoh_macros::unstable]
+    impl<'a> core::iter::Iterator for AttachmentsIterator<'a> {
+        type Item = (ZSlice, ZSlice);
+        fn next(&mut self) -> Option<Self::Item> {
+            if self.remaining == 0 {
+                return None;
+            }
+            let Ok(key) = Zenoh080.read(&mut self.reader) else {
+                self.remaining = 0;
+                return None;
+            };
+            let Ok(value) = Zenoh080.read(&mut self.reader) else {
+                self.remaining = 0;
+                return None;
+            };
+            Some((key, value))
+        }
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            (self.remaining, Some(self.remaining))
+        }
+    }
+    #[zenoh_macros::unstable]
+    impl core::iter::ExactSizeIterator for AttachmentsIterator<'_> {}
+    #[zenoh_macros::unstable]
+    impl<'a> core::iter::FromIterator<(&'a [u8], &'a [u8])> for Attachments {
+        fn from_iter<T: IntoIterator<Item = (&'a [u8], &'a [u8])>>(iter: T) -> Self {
+            let codec = Zenoh080;
+            let mut buffer: Vec<u8> = Vec::new();
+            buffer.push(0);
+            let mut writer = buffer.writer();
+            let mut n = 0usize;
+            for (key, value) in iter {
+                codec.write(&mut writer, key).unwrap(); // Infallible, barring allocation failures
+                codec.write(&mut writer, value).unwrap(); // Infallible, barring allocation failures
+                n += 1;
+            }
+            if n < 128 {
+                buffer[0] = n as u8
+            } else {
+                let mut buf = [0u8; 10];
+                let mut len = buf.writer();
+                codec.write(&mut len, n).unwrap(); // Infallible
+                let len = 10 - len.len();
+                let buf = &buf[..len];
+                buffer.splice(..1, buf.iter().copied());
+            }
+            Self {
+                inner: buffer.into(),
+            }
+        }
+    }
+}
+#[zenoh_macros::unstable]
+pub use attachments::{Attachments, AttachmentsIterator};
+
 /// A zenoh sample.
 #[non_exhaustive]
 #[derive(Clone, Debug)]
@@ -120,6 +307,16 @@ pub struct Sample {
     ///
     /// Infos on the source of this Sample.
     pub source_info: SourceInfo,
+
+    #[cfg(feature = "unstable")]
+    /// <div class="stab unstable">
+    ///   <span class="emoji">🔬</span>
+    ///   This API has been marked as unstable: it works as advertised, but we may change it in a future release.
+    ///   To use it, you must enable zenoh's <code>unstable</code> feature flag.
+    /// </div>
+    ///
+    /// A map of key-value pairs, where each key and value are byte-slices.
+    pub attachments: Option<Attachments>,
 }
 
 impl Sample {
@@ -137,6 +334,8 @@ impl Sample {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            attachments: None,
         }
     }
     /// Creates a new Sample.
@@ -157,6 +356,8 @@ impl Sample {
             timestamp: None,
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
+            #[cfg(feature = "unstable")]
+            attachments: None,
         })
     }
 
@@ -179,6 +380,8 @@ impl Sample {
                 timestamp: data_info.timestamp,
                 #[cfg(feature = "unstable")]
                 source_info: data_info.into(),
+                #[cfg(feature = "unstable")]
+                attachments: None,
             }
         } else {
             Sample {
@@ -188,26 +391,10 @@ impl Sample {
                 timestamp: None,
                 #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
+                #[cfg(feature = "unstable")]
+                attachments: None,
             }
         }
-    }
-
-    #[inline]
-    pub(crate) fn split(self) -> (KeyExpr<'static>, ZBuf, DataInfo) {
-        let info = DataInfo {
-            kind: self.kind,
-            encoding: Some(self.value.encoding),
-            timestamp: self.timestamp,
-            #[cfg(feature = "unstable")]
-            source_id: self.source_info.source_id,
-            #[cfg(not(feature = "unstable"))]
-            source_id: None,
-            #[cfg(feature = "unstable")]
-            source_sn: self.source_info.source_sn,
-            #[cfg(not(feature = "unstable"))]
-            source_sn: None,
-        };
-        (self.key_expr, self.value.payload, info)
     }
 
     /// Gets the timestamp of this Sample.
@@ -243,6 +430,23 @@ impl Sample {
             self.timestamp = Some(timestamp);
             self.timestamp.as_ref().unwrap()
         }
+    }
+
+    #[zenoh_macros::unstable]
+    pub fn attachments(&self) -> Option<&Attachments> {
+        self.attachments.as_ref()
+    }
+
+    #[zenoh_macros::unstable]
+    pub fn attachments_mut(&mut self) -> &mut Option<Attachments> {
+        &mut self.attachments
+    }
+
+    #[allow(clippy::result_large_err)]
+    #[zenoh_macros::unstable]
+    pub fn with_attachments(mut self, attachments: Attachments) -> Self {
+        self.attachments = Some(attachments);
+        self
     }
 }
 

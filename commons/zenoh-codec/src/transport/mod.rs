@@ -80,7 +80,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &TransportMessage) -> Self::Output {
-        let TransportMessage { body } = x;
+        let TransportMessage { body, .. } = x;
 
         match body {
             TransportBody::Frame(b) => self.write(&mut *writer, b),

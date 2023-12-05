@@ -16,6 +16,8 @@
 
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::prelude::*;
+#[zenoh_macros::unstable]
+use crate::sample::Attachments;
 use crate::Session;
 use std::collections::HashMap;
 use std::future::Ready;
@@ -126,6 +128,8 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
     pub(crate) value: Option<Value>,
+    #[cfg(feature = "unstable")]
+    pub(crate) attachments: Option<Attachments>,
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
@@ -159,6 +163,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             destination,
             timeout,
             value,
+            #[cfg(feature = "unstable")]
+            attachments,
             handler: _,
         } = self;
         GetBuilder {
@@ -170,6 +176,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             destination,
             timeout,
             value,
+            #[cfg(feature = "unstable")]
+            attachments,
             handler: callback,
         }
     }
@@ -238,6 +246,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             destination,
             timeout,
             value,
+            #[cfg(feature = "unstable")]
+            attachments,
             handler: _,
         } = self;
         GetBuilder {
@@ -249,6 +259,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             destination,
             timeout,
             value,
+            #[cfg(feature = "unstable")]
+            attachments,
             handler,
         }
     }
@@ -294,6 +306,22 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         self
     }
 
+    #[zenoh_macros::unstable]
+    pub fn attachments(&self) -> Option<&Attachments> {
+        self.attachments.as_ref()
+    }
+
+    #[zenoh_macros::unstable]
+    pub fn attachments_mut(&mut self) -> &mut Option<Attachments> {
+        &mut self.attachments
+    }
+
+    #[zenoh_macros::unstable]
+    pub fn with_attachments(mut self, attachments: Attachments) -> Self {
+        self.attachments = Some(attachments);
+        self
+    }
+
     /// By default, `get` guarantees that it will only receive replies whose key expressions intersect
     /// with the queried key expression.
     ///
@@ -310,6 +338,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
             destination,
             timeout,
             value,
+            attachments,
             handler,
         } = self;
         Self {
@@ -321,6 +350,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
             destination,
             timeout,
             value,
+            attachments,
             handler,
         }
     }
@@ -369,6 +399,8 @@ where
                 self.destination,
                 self.timeout,
                 self.value,
+                #[cfg(feature = "unstable")]
+                self.attachments,
                 callback,
             )
             .map(|_| receiver)

@@ -38,7 +38,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &NetworkMessage) -> Self::Output {
-        let NetworkMessage { body } = x;
+        let NetworkMessage { body, .. } = x;
 
         match body {
             NetworkBody::Push(b) => self.write(&mut *writer, b),
