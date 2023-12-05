@@ -22,6 +22,18 @@ extern crate alloc;
 #[cfg_attr(feature = "std", macro_use)]
 extern crate lazy_static;
 
+#[macro_export]
+macro_rules! concat_enabled_features {
+    (prefix = $prefix:literal, features = [$($feature:literal),*]) => {
+        {
+            use const_format::concatcp;
+            concatcp!("" $(,
+                if cfg!(feature = $feature) { concatcp!(" ", concatcp!($prefix, "/", $feature)) } else { "" }
+            )*)
+        }
+    };
+}
+
 #[deprecated = "This module is now a separate crate. Use the `zenoh_core` crate directly for shorter compile-times. You may disable this re-export by disabling `zenoh-util`'s default features."]
 pub use zenoh_core as core;
 
