@@ -31,7 +31,6 @@ use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
 use std::sync::Arc;
-use std::time::Duration;
 use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
@@ -93,8 +92,6 @@ impl Runtime {
         let metadata = config.metadata().clone();
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
-        let drop_future_timestamp =
-            unwrap_or_default!(config.timestamping().drop_future_timestamp());
 
         let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
         let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
@@ -109,17 +106,8 @@ impl Runtime {
             && unwrap_or_default!(config.routing().peer().mode()) == *"linkstate";
         let router_peers_failover_brokering =
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
-        let queries_default_timeout =
-            Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
 
-        let router = Arc::new(Router::new(
-            zid,
-            whatami,
-            hlc.clone(),
-            drop_future_timestamp,
-            router_peers_failover_brokering,
-            queries_default_timeout,
-        ));
+        let router = Arc::new(Router::new(zid, whatami, hlc.clone(), &config));
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(None),

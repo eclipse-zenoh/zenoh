@@ -31,8 +31,8 @@ use std::any::Any;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::{Mutex, RwLock};
-use std::time::Duration;
 use uhlc::HLC;
+use zenoh_config::Config;
 use zenoh_link::Link;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
@@ -48,25 +48,11 @@ pub struct Router {
 }
 
 impl Router {
-    pub fn new(
-        zid: ZenohId,
-        whatami: WhatAmI,
-        hlc: Option<Arc<HLC>>,
-        drop_future_timestamp: bool,
-        router_peers_failover_brokering: bool,
-        queries_default_timeout: Duration,
-    ) -> Self {
+    pub fn new(zid: ZenohId, whatami: WhatAmI, hlc: Option<Arc<HLC>>, config: &Config) -> Self {
         Router {
             // whatami,
             tables: Arc::new(TablesLock {
-                tables: RwLock::new(Tables::new(
-                    zid,
-                    whatami,
-                    hlc,
-                    drop_future_timestamp,
-                    router_peers_failover_brokering,
-                    queries_default_timeout,
-                )),
+                tables: RwLock::new(Tables::new(zid, whatami, hlc, config)),
                 ctrl_lock: Mutex::new(hat::new_hat(whatami)),
                 queries_lock: RwLock::new(()),
             }),

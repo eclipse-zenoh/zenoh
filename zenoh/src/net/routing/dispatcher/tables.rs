@@ -23,8 +23,9 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use std::sync::{Mutex, RwLock};
-use std::time::Duration;
 use uhlc::HLC;
+use zenoh_config::unwrap_or_default;
+use zenoh_config::Config;
 use zenoh_protocol::core::{ExprId, WhatAmI, ZenohId};
 use zenoh_protocol::network::Mapping;
 #[cfg(feature = "stats")]
@@ -77,14 +78,13 @@ pub struct Tables {
 }
 
 impl Tables {
-    pub fn new(
-        zid: ZenohId,
-        whatami: WhatAmI,
-        hlc: Option<Arc<HLC>>,
-        drop_future_timestamp: bool,
-        router_peers_failover_brokering: bool,
-        _queries_default_timeout: Duration,
-    ) -> Self {
+    pub fn new(zid: ZenohId, whatami: WhatAmI, hlc: Option<Arc<HLC>>, config: &Config) -> Self {
+        let drop_future_timestamp =
+            unwrap_or_default!(config.timestamping().drop_future_timestamp());
+        let router_peers_failover_brokering =
+            unwrap_or_default!(config.routing().router().peers_failover_brokering());
+        // let queries_default_timeout =
+        //     Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
         let hat_code = hat::new_hat(whatami);
         Tables {
             zid,
@@ -98,7 +98,7 @@ impl Tables {
             faces: HashMap::new(),
             mcast_groups: vec![],
             mcast_faces: vec![],
-            interceptors: interceptors(),
+            interceptors: interceptors(config),
             pull_caches_lock: Mutex::new(()),
             hat: hat_code.new_tables(router_peers_failover_brokering),
             hat_code: hat_code.into(),

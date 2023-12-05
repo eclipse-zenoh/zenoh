@@ -18,6 +18,7 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 use super::RoutingContext;
+use zenoh_config::Config;
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_transport::{TransportMulticast, TransportUnicast};
 
@@ -43,7 +44,7 @@ pub(crate) trait InterceptorTrait {
 
 pub(crate) type Interceptor = Box<dyn InterceptorTrait + Send + Sync>;
 
-pub(crate) fn interceptors() -> Vec<Interceptor> {
+pub(crate) fn interceptors(_config: &Config) -> Vec<Interceptor> {
     // Add interceptors here
     // vec![Box::new(LoggerInterceptor {})]
     vec![]
