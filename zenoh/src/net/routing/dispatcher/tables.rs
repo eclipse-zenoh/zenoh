@@ -85,7 +85,7 @@ impl Tables {
             unwrap_or_default!(config.routing().router().peers_failover_brokering());
         // let queries_default_timeout =
         //     Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
-        let hat_code = hat::new_hat(whatami);
+        let hat_code = hat::new_hat(whatami, config);
         Tables {
             zid,
             whatami,

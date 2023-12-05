@@ -53,7 +53,7 @@ impl Router {
             // whatami,
             tables: Arc::new(TablesLock {
                 tables: RwLock::new(Tables::new(zid, whatami, hlc, config)),
-                ctrl_lock: Mutex::new(hat::new_hat(whatami)),
+                ctrl_lock: Mutex::new(hat::new_hat(whatami, config)),
                 queries_lock: RwLock::new(()),
             }),
         }

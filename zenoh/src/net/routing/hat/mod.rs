@@ -27,7 +27,7 @@ use super::dispatcher::{
 use crate::runtime::Runtime;
 use std::{any::Any, sync::Arc};
 use zenoh_buffers::ZBuf;
-use zenoh_config::{WhatAmI, WhatAmIMatcher};
+use zenoh_config::{unwrap_or_default, Config, WhatAmI, WhatAmIMatcher};
 use zenoh_protocol::{
     core::WireExpr,
     network::{
@@ -39,7 +39,8 @@ use zenoh_result::ZResult;
 use zenoh_transport::TransportUnicast;
 
 mod client;
-mod peer;
+mod linkstate_peer;
+mod p2p_peer;
 mod router;
 
 zconfigurable! {
@@ -186,10 +187,16 @@ pub(crate) trait HatQueriesTrait {
     ) -> Vec<(WireExpr<'static>, ZBuf)>;
 }
 
-pub(crate) fn new_hat(whatami: WhatAmI) -> Box<dyn HatTrait + Send + Sync> {
+pub(crate) fn new_hat(whatami: WhatAmI, config: &Config) -> Box<dyn HatTrait + Send + Sync> {
     match whatami {
         WhatAmI::Client => Box::new(client::HatCode {}),
-        WhatAmI::Peer => Box::new(peer::HatCode {}),
+        WhatAmI::Peer => {
+            if unwrap_or_default!(config.routing().peer().mode()) == *"linkstate" {
+                Box::new(linkstate_peer::HatCode {})
+            } else {
+                Box::new(p2p_peer::HatCode {})
+            }
+        }
         WhatAmI::Router => Box::new(router::HatCode {}),
     }
 }
