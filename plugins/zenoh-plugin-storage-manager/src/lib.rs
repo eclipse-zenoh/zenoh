@@ -38,6 +38,7 @@ use zenoh_backend_traits::config::VolumeConfig;
 use zenoh_backend_traits::VolumePlugin;
 use zenoh_core::zlock;
 use zenoh_plugin_trait::Plugin;
+use zenoh_plugin_trait::PluginConditionSetter;
 use zenoh_plugin_trait::PluginControl;
 use zenoh_plugin_trait::PluginReport;
 use zenoh_plugin_trait::PluginStatusRec;
@@ -111,10 +112,13 @@ impl StorageRuntimeInner {
             .map(|search_dirs| LibLoader::new(&search_dirs, false))
             .unwrap_or_default();
 
-        let session = Arc::new(zenoh::init(runtime.clone()).res_sync().unwrap());
-
         let plugins_manager = PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
             .declare_static_plugin::<MemoryBackend>();
+
+
+        let session = Arc::new(zenoh::init(runtime.clone()).res_sync()?);
+
+        // After this moment result should be only Ok. Failure of loading of one voulme or storage should not affect others.
 
         let mut new_self = StorageRuntimeInner {
             name,
@@ -123,19 +127,21 @@ impl StorageRuntimeInner {
             storages: Default::default(),
             plugins_manager,
         };
-        new_self.spawn_volume(VolumeConfig {
+        let _ = new_self.spawn_volume(VolumeConfig {
             name: MEMORY_BACKEND_NAME.into(),
             backend: None,
             paths: None,
             required: false,
             rest: Default::default(),
-        })?;
-        new_self.update(
-            volumes
-                .into_iter()
-                .map(ConfigDiff::AddVolume)
-                .chain(storages.into_iter().map(ConfigDiff::AddStorage)),
-        )?;
+        });
+        for volume in volumes {
+            let _ = new_self
+                .spawn_volume(volume);
+        }
+        for storage in storages {
+            let _ = new_self
+                .spawn_storage(storage);
+        }
         Ok(new_self)
     }
     fn update<I: IntoIterator<Item = ConfigDiff>>(&mut self, diffs: I) -> ZResult<()> {
