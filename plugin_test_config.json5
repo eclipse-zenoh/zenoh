@@ -24,5 +24,8 @@
     },
     "example": {
     },
+    "dds": {
+      "__path__": ["../zenoh-plugin-dds/target/debug/libzenoh_plugin_dds.so","../zenoh-plugin-dds/target/debug/libzenoh_plugin_dds.dylib"],
+    }
   }
 }
