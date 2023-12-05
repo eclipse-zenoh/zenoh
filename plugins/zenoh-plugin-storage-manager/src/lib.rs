@@ -38,7 +38,6 @@ use zenoh_backend_traits::config::VolumeConfig;
 use zenoh_backend_traits::VolumePlugin;
 use zenoh_core::zlock;
 use zenoh_plugin_trait::Plugin;
-use zenoh_plugin_trait::PluginConditionSetter;
 use zenoh_plugin_trait::PluginControl;
 use zenoh_plugin_trait::PluginReport;
 use zenoh_plugin_trait::PluginStatusRec;
