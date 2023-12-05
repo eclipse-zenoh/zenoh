@@ -33,8 +33,8 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
-    TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
+    TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
 const MSG_COUNT: usize = 1_000;

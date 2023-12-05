@@ -13,12 +13,11 @@
 //
 
 //! Publishing primitives.
-
 #[zenoh_macros::unstable]
 use crate::handlers::Callback;
 #[zenoh_macros::unstable]
 use crate::handlers::DefaultHandler;
-use crate::net::transport::Primitives;
+use crate::net::transport::primitives::Primitives;
 use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::sample::Attachments;

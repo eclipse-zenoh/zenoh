@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 pub mod establishment;
+pub(crate) mod link;
 pub(crate) mod lowlatency;
 pub(crate) mod manager;
 pub(crate) mod transport_unicast_inner;
@@ -134,7 +135,7 @@ impl TransportUnicast {
         let link = transport
             .get_links()
             .into_iter()
-            .find(|l| l.get_src() == &link.src && l.get_dst() == &link.dst)
+            .find(|l| l.link.get_src() == &link.src && l.link.get_dst() == &link.dst)
             .ok_or_else(|| zerror!("Invalid link"))?;
         transport.close_link(&link, close::reason::GENERIC).await?;
         Ok(())

@@ -15,10 +15,13 @@
 use super::link::send_with_link;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
-use crate::transport_unicast_inner::TransportUnicastTrait;
-use crate::TransportConfigUnicast;
-use crate::TransportManager;
-use crate::{TransportExecutor, TransportPeerEventHandler};
+use crate::{
+    unicast::{
+        link::TransportLinkUnicast, transport_unicast_inner::TransportUnicastTrait,
+        TransportConfigUnicast,
+    },
+    TransportExecutor, TransportManager, TransportPeerEventHandler,
+};
 use async_executor::Task;
 #[cfg(feature = "transport_unixpipe")]
 use async_std::sync::RwLockUpgradableReadGuard;
@@ -29,17 +32,19 @@ use std::sync::{Arc, RwLock as SyncRwLock};
 use std::time::Duration;
 #[cfg(feature = "transport_unixpipe")]
 use zenoh_core::zasyncread_upgradable;
-use zenoh_core::{zasynclock, zasyncread, zread, zwrite};
+use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
 #[cfg(feature = "transport_unixpipe")]
 use zenoh_link::unixpipe::UNIXPIPE_LOCATOR_PREFIX;
 #[cfg(feature = "transport_unixpipe")]
 use zenoh_link::Link;
-use zenoh_link::{LinkUnicast, LinkUnicastDirection};
-use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::transport::TransportBodyLowLatency;
 use zenoh_protocol::transport::TransportMessageLowLatency;
 use zenoh_protocol::transport::{Close, TransportSn};
+use zenoh_protocol::{
+    core::{WhatAmI, ZenohId},
+    transport::close,
+};
 #[cfg(not(feature = "transport_unixpipe"))]
 use zenoh_result::bail;
 use zenoh_result::{zerror, ZResult};
@@ -54,7 +59,7 @@ pub(crate) struct TransportUnicastLowlatency {
     // Transport config
     pub(super) config: TransportConfigUnicast,
     // The link associated to the transport
-    pub(super) link: Arc<RwLock<LinkUnicast>>,
+    pub(super) link: Arc<RwLock<TransportLinkUnicast>>,
     // The callback
     pub(super) callback: Arc<SyncRwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
     // Mutex for notification
@@ -72,7 +77,7 @@ impl TransportUnicastLowlatency {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
-        link: LinkUnicast,
+        link: TransportLinkUnicast,
     ) -> ZResult<TransportUnicastLowlatency> {
         #[cfg(feature = "stats")]
         let stats = Arc::new(TransportStats::new(Some(manager.get_stats().clone())));
@@ -137,7 +142,9 @@ impl TransportUnicastLowlatency {
         // Close and drop the link
         self.stop_keepalive().await;
         self.stop_rx().await;
-        let _ = zasyncread!(self.link).close().await;
+        let _ = zasyncwrite!(self.link)
+            .close(Some(close::reason::GENERIC))
+            .await;
 
         // Notify the callback that we have closed the transport
         if let Some(cb) = callback.as_ref() {
@@ -162,7 +169,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         zasynclock!(self.alive)
     }
 
-    fn get_links(&self) -> Vec<LinkUnicast> {
+    fn get_links(&self) -> Vec<TransportLinkUnicast> {
         let guard = async_std::task::block_on(async { zasyncread!(self.link) });
         [guard.clone()].to_vec()
     }
@@ -206,24 +213,23 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
 
     fn start_tx(
         &self,
-        _link: &LinkUnicast,
+        _link: &TransportLinkUnicast,
         executor: &TransportExecutor,
         keep_alive: Duration,
-        _batch_size: u16,
     ) -> ZResult<()> {
         self.start_keepalive(executor, keep_alive);
         Ok(())
     }
 
-    fn start_rx(&self, _link: &LinkUnicast, lease: Duration, batch_size: u16) -> ZResult<()> {
-        self.internal_start_rx(lease, batch_size);
+    fn start_rx(&self, _link: &TransportLinkUnicast, lease: Duration) -> ZResult<()> {
+        self.internal_start_rx(lease);
         Ok(())
     }
 
     /*************************************/
     /*               LINK                */
     /*************************************/
-    async fn add_link(&self, link: LinkUnicast, _direction: LinkUnicastDirection) -> ZResult<()> {
+    async fn add_link(&self, link: TransportLinkUnicast) -> ZResult<()> {
         log::trace!("Adding link: {}", link);
 
         #[cfg(not(feature = "transport_unixpipe"))]
@@ -237,8 +243,9 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         {
             let guard = zasyncread_upgradable!(self.link);
 
-            let existing_unixpipe = guard.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
-            let new_unixpipe = link.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
+            let existing_unixpipe =
+                guard.link.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
+            let new_unixpipe = link.link.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
             match (existing_unixpipe, new_unixpipe) {
                 (false, true) => {
                     // LowLatency transport suports only a single link, but code here also handles upgrade from non-unixpipe link to unixpipe link!
@@ -308,7 +315,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
-    async fn close_link(&self, link: &LinkUnicast, reason: u8) -> ZResult<()> {
+    async fn close_link(&self, link: &TransportLinkUnicast, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.config.zid);
         self.finalize(reason).await
     }

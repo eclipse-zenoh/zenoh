@@ -247,17 +247,32 @@ validated_struct::validator! {
                 /// This option does not make LowLatency transport mandatory, the actual implementation of transport
                 /// used will depend on Establish procedure and other party's settings
                 lowlatency: bool,
+                pub qos: QoSUnicastConf {
+                    /// Whether QoS is enabled or not.
+                    /// If set to `false`, the QoS will be disabled. (default `true`).
+                    enabled: bool
+                },
+                pub compression: CompressionUnicastConf {
+                    /// You must compile zenoh with "transport_compression" feature to be able to enable compression.
+                    /// When enabled is true, batches will be sent compressed. (default `false`).
+                    enabled: bool,
+                },
             },
             pub multicast: TransportMulticastConf {
                 /// Link join interval duration in milliseconds (default: 2500)
                 join_interval: Option<u64>,
                 /// Maximum number of multicast sessions (default: 1000)
                 max_sessions: Option<usize>,
-            },
-            pub qos: QoSConf {
-                /// Whether QoS is enabled or not.
-                /// If set to `false`, the QoS will be disabled. (default `true`).
-                enabled: bool
+                pub qos: QoSMulticastConf {
+                    /// Whether QoS is enabled or not.
+                    /// If set to `false`, the QoS will be disabled. (default `false`).
+                    enabled: bool
+                },
+                pub compression: CompressionMulticastConf {
+                    /// You must compile zenoh with "transport_compression" feature to be able to enable compression.
+                    /// When enabled is true, batches will be sent compressed. (default `false`).
+                    enabled: bool,
+                },
             },
             pub link: #[derive(Default)]
             TransportLinkConf {
@@ -329,24 +344,11 @@ validated_struct::validator! {
                     client_private_key_base64 :  Option<SecretValue>,
                     #[serde(skip_serializing)]
                     client_certificate_base64 :  Option<SecretValue>,
-                }
-                ,
+                },
                 pub unixpipe: #[derive(Default)]
                 UnixPipeConf {
                     file_access_mask: Option<u32>
                 },
-                pub compression: #[derive(Default)]
-                /// **Experimental** compression feature.
-                /// Will compress the batches hop to hop (as opposed to end to end). May cause errors when
-                /// the batches's complexity is too high, causing the resulting compression to be bigger in
-                /// size than the MTU.
-                /// You must use the features "transport_compression" and "unstable" to enable this.
-                CompressionConf {
-                    /// When enabled is true, batches will be sent compressed. It does not affect the
-                    /// reception, which always expects compressed batches when built with thes features
-                    /// "transport_compression" and "unstable".
-                    enabled: bool,
-                }
             },
             pub shared_memory:
             SharedMemoryConf {

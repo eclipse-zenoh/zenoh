@@ -11,65 +11,110 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::num::NonZeroUsize;
+use std::num::{NonZeroU8, NonZeroUsize};
 use zenoh_buffers::{
-    reader::{Reader, SiphonableReader},
-    writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
-    BBuf, ZBufReader,
+    buffer::Buffer,
+    reader::{DidntRead, HasReader},
+    writer::{DidntWrite, HasWriter, Writer},
+    BBuf, ZBufReader, ZSlice, ZSliceBuffer,
 };
-use zenoh_codec::{WCodec, Zenoh080};
+use zenoh_codec::{
+    transport::batch::{BatchError, Zenoh080Batch},
+    RCodec, WCodec,
+};
 use zenoh_protocol::{
-    core::Reliability,
     network::NetworkMessage,
-    transport::{
-        fragment::FragmentHeader, frame::FrameHeader, BatchSize, TransportMessage, TransportSn,
-    },
+    transport::{fragment::FragmentHeader, frame::FrameHeader, BatchSize, TransportMessage},
 };
+use zenoh_result::ZResult;
+#[cfg(feature = "transport_compression")]
+use {std::sync::Arc, zenoh_protocol::common::imsg, zenoh_result::zerror};
 
-const LENGTH_BYTES: [u8; 2] = u16::MIN.to_be_bytes();
-
-pub(crate) trait Encode<Message> {
-    type Output;
-    fn encode(self, message: Message) -> Self::Output;
+// Split the inner buffer into (length, header, payload) inmutable slices
+#[cfg(feature = "transport_compression")]
+macro_rules! zsplit {
+    ($slice:expr, $header:expr) => {{
+        match $header.get() {
+            Some(_) => $slice.split_at(BatchHeader::INDEX + 1),
+            None => (&[], $slice),
+        }
+    }};
 }
 
-pub(crate) trait Decode<Message> {
-    type Error;
-    fn decode(self) -> Result<Message, Self::Error>;
+// Batch config
+#[derive(Copy, Clone, Debug)]
+pub struct BatchConfig {
+    pub mtu: BatchSize,
+    #[cfg(feature = "transport_compression")]
+    pub is_compression: bool,
 }
 
-#[derive(Clone, Copy, Debug)]
-#[repr(u8)]
-pub(crate) enum CurrentFrame {
-    Reliable,
-    BestEffort,
-    None,
-}
-
-#[derive(Clone, Copy, Debug)]
-pub(crate) struct LatestSn {
-    pub(crate) reliable: Option<TransportSn>,
-    pub(crate) best_effort: Option<TransportSn>,
-}
-
-impl LatestSn {
-    fn clear(&mut self) {
-        self.reliable = None;
-        self.best_effort = None;
+impl BatchConfig {
+    fn header(&self) -> BatchHeader {
+        #[allow(unused_mut)] // No need for mut when "transport_compression" is disabled
+        let mut h = 0;
+        #[cfg(feature = "transport_compression")]
+        if self.is_compression {
+            h |= BatchHeader::COMPRESSION;
+        }
+        BatchHeader::new(h)
     }
 }
 
+// Batch header
+#[repr(transparent)]
+#[derive(Copy, Clone, Debug)]
+pub struct BatchHeader(Option<NonZeroU8>);
+
+impl BatchHeader {
+    #[cfg(feature = "transport_compression")]
+    const INDEX: usize = 0;
+    #[cfg(feature = "transport_compression")]
+    const COMPRESSION: u8 = 1;
+
+    fn new(h: u8) -> Self {
+        Self(NonZeroU8::new(h))
+    }
+
+    #[cfg(feature = "transport_compression")]
+    const fn is_empty(&self) -> bool {
+        self.0.is_none()
+    }
+
+    const fn get(&self) -> Option<NonZeroU8> {
+        self.0
+    }
+
+    /// Verify that the [`WBatch`][WBatch] is for a stream-based protocol, i.e., the first
+    /// 2 bytes are reserved to encode the total amount of serialized bytes as 16-bits little endian.
+    #[cfg(feature = "transport_compression")]
+    #[inline(always)]
+    pub fn is_compression(&self) -> bool {
+        self.0
+            .is_some_and(|h| imsg::has_flag(h.get(), Self::COMPRESSION))
+    }
+}
+
+// WRITE BATCH
 #[cfg(feature = "stats")]
 #[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct SerializationBatchStats {
-    pub(crate) t_msgs: usize,
+pub struct WBatchStats {
+    pub t_msgs: usize,
 }
 
 #[cfg(feature = "stats")]
-impl SerializationBatchStats {
+impl WBatchStats {
     fn clear(&mut self) {
         self.t_msgs = 0;
     }
+}
+
+#[repr(u8)]
+#[derive(Debug)]
+pub enum Finalize {
+    Batch,
+    #[cfg(feature = "transport_compression")]
+    Buffer,
 }
 
 /// Write Batch
@@ -80,44 +125,38 @@ impl SerializationBatchStats {
 /// [`TransportMessage`][TransportMessage] are always serialized on the batch as they are, while
 /// [`ZenohMessage`][ZenohMessage] are always serializaed on the batch as part of a [`TransportMessage`]
 /// [TransportMessage] Frame. Reliable and Best Effort Frames can be interleaved on the same
-/// [`SerializationBatch`][SerializationBatch] as long as they fit in the remaining buffer capacity.
+/// [`WBatch`][WBatch] as long as they fit in the remaining buffer capacity.
 ///
-/// In the serialized form, the [`SerializationBatch`][SerializationBatch] always contains one or more
+/// In the serialized form, the [`WBatch`][WBatch] always contains one or more
 /// [`TransportMessage`][TransportMessage]. In the particular case of [`TransportMessage`][TransportMessage] Frame,
 /// its payload is either (i) one or more complete [`ZenohMessage`][ZenohMessage] or (ii) a fragment of a
 /// a [`ZenohMessage`][ZenohMessage].
 ///
-/// As an example, the content of the [`SerializationBatch`][SerializationBatch] in memory could be:
+/// As an example, the content of the [`WBatch`][WBatch] in memory could be:
 ///
 /// | Keep Alive | Frame Reliable<Zenoh Message, Zenoh Message> | Frame Best Effort<Zenoh Message Fragment> |
 ///
-#[derive(Debug)]
-pub(crate) struct WBatch {
+#[derive(Clone, Debug)]
+pub struct WBatch {
     // The buffer to perform the batching on
-    buffer: BBuf,
-    // It is a streamed batch
-    is_streamed: bool,
-    // The current frame being serialized: BestEffort/Reliable
-    current_frame: CurrentFrame,
-    // The latest SN
-    pub(crate) latest_sn: LatestSn,
+    pub buffer: BBuf,
+    // The batch codec
+    pub codec: Zenoh080Batch,
+    // It contains 1 byte as additional header, e.g. to signal the batch is compressed
+    pub header: BatchHeader,
     // Statistics related to this batch
     #[cfg(feature = "stats")]
-    pub(crate) stats: SerializationBatchStats,
+    pub stats: WBatchStats,
 }
 
 impl WBatch {
-    pub(crate) fn new(size: BatchSize, is_streamed: bool) -> Self {
+    pub fn new(config: BatchConfig) -> Self {
         let mut batch = Self {
-            buffer: BBuf::with_capacity(size as usize),
-            is_streamed,
-            current_frame: CurrentFrame::None,
-            latest_sn: LatestSn {
-                reliable: None,
-                best_effort: None,
-            },
+            buffer: BBuf::with_capacity(config.mtu as usize),
+            codec: Zenoh080Batch::new(),
+            header: config.header(),
             #[cfg(feature = "stats")]
-            stats: SerializationBatchStats::default(),
+            stats: WBatchStats::default(),
         };
 
         // Bring the batch in a clear state
@@ -126,237 +165,302 @@ impl WBatch {
         batch
     }
 
-    /// Verify that the [`SerializationBatch`][SerializationBatch] has no serialized bytes.
+    /// Verify that the [`WBatch`][WBatch] has no serialized bytes.
     #[inline(always)]
-    pub(crate) fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    /// Get the total number of bytes that have been serialized on the [`SerializationBatch`][SerializationBatch].
+    /// Get the total number of bytes that have been serialized on the [`WBatch`][WBatch].
     #[inline(always)]
-    pub(crate) fn len(&self) -> BatchSize {
-        let len = self.buffer.len() as BatchSize;
-        if self.is_streamed() {
-            len - (LENGTH_BYTES.len() as BatchSize)
-        } else {
-            len
-        }
+    pub fn len(&self) -> BatchSize {
+        self.buffer.len() as BatchSize
     }
 
-    /// Verify that the [`SerializationBatch`][SerializationBatch] is for a stream-based protocol, i.e., the first
-    /// 2 bytes are reserved to encode the total amount of serialized bytes as 16-bits little endian.
+    /// Clear the [`WBatch`][WBatch] memory buffer and related internal state.
     #[inline(always)]
-    pub(crate) fn is_streamed(&self) -> bool {
-        self.is_streamed
-    }
-
-    /// Clear the [`SerializationBatch`][SerializationBatch] memory buffer and related internal state.
-    #[inline(always)]
-    pub(crate) fn clear(&mut self) {
+    pub fn clear(&mut self) {
         self.buffer.clear();
-        self.current_frame = CurrentFrame::None;
-        self.latest_sn.clear();
-        #[cfg(feature = "stats")]
-        {
-            self.stats.clear();
-        }
-        if self.is_streamed() {
+        self.codec.clear();
+        if let Some(h) = self.header.get() {
             let mut writer = self.buffer.writer();
-            let _ = writer.write_exact(&LENGTH_BYTES[..]);
-        }
-    }
-
-    /// In case the [`SerializationBatch`][SerializationBatch] is for a stream-based protocol, use the first 2 bytes
-    /// to encode the total amount of serialized bytes as 16-bits little endian.
-    #[inline(always)]
-    pub(crate) fn write_len(&mut self) {
-        if self.is_streamed() {
-            let length = self.len();
-            self.buffer.as_mut_slice()[..LENGTH_BYTES.len()].copy_from_slice(&length.to_le_bytes());
+            let _ = writer.write_u8(h.get());
         }
     }
 
     /// Get a `&[u8]` to access the internal memory buffer, usually for transmitting it on the network.
     #[inline(always)]
-    pub(crate) fn as_bytes(&self) -> &[u8] {
+    pub fn as_slice(&self) -> &[u8] {
         self.buffer.as_slice()
     }
+
+    // Split (length, header, payload) internal buffer slice
+    #[inline(always)]
+    #[cfg(feature = "transport_compression")]
+    fn split(&self) -> (&[u8], &[u8]) {
+        zsplit!(self.buffer.as_slice(), self.header)
+    }
+
+    pub fn finalize(
+        &mut self,
+        #[cfg(feature = "transport_compression")] buffer: Option<&mut BBuf>,
+    ) -> ZResult<Finalize> {
+        #[cfg(feature = "transport_compression")]
+        if self.header.is_compression() {
+            let buffer = buffer.ok_or_else(|| zerror!("Support buffer not provided"))?;
+            buffer.clear();
+            return self.compress(buffer);
+        }
+
+        Ok(Finalize::Batch)
+    }
+
+    #[cfg(feature = "transport_compression")]
+    fn compress(&mut self, support: &mut BBuf) -> ZResult<Finalize> {
+        // Write the initial bytes for the batch
+        let mut writer = support.writer();
+        if let Some(h) = self.header.get() {
+            let _ = writer.write_u8(h.get());
+        }
+
+        // Compress the actual content
+        let (_header, payload) = self.split();
+        writer
+            .with_slot(writer.remaining(), |b| {
+                lz4_flex::block::compress_into(payload, b).unwrap_or(0)
+            })
+            .map_err(|_| zerror!("Compression error"))?;
+
+        // Verify wether the resulting compressed data is smaller than the initial input
+        if support.len() < self.buffer.len() {
+            Ok(Finalize::Buffer)
+        } else {
+            // Keep the original uncompressed buffer and unset the compression flag from the header
+            let h = self
+                .buffer
+                .as_mut_slice()
+                .get_mut(BatchHeader::INDEX)
+                .ok_or_else(|| zerror!("Header not present"))?;
+            *h &= !BatchHeader::COMPRESSION;
+            Ok(Finalize::Batch)
+        }
+    }
+}
+
+pub trait Encode<Message> {
+    type Output;
+
+    fn encode(self, x: Message) -> Self::Output;
 }
 
 impl Encode<&TransportMessage> for &mut WBatch {
     type Output = Result<(), DidntWrite>;
 
-    /// Try to serialize a [`TransportMessage`][TransportMessage] on the [`SerializationBatch`][SerializationBatch].
-    ///
-    /// # Arguments
-    /// * `message` - The [`TransportMessage`][TransportMessage] to serialize.
-    ///
-    fn encode(self, message: &TransportMessage) -> Self::Output {
-        // Mark the write operation
+    fn encode(self, x: &TransportMessage) -> Self::Output {
         let mut writer = self.buffer.writer();
-        let mark = writer.mark();
-
-        let codec = Zenoh080::new();
-        codec.write(&mut writer, message).map_err(|e| {
-            // Revert the write operation
-            writer.rewind(mark);
-            e
-        })?;
-
-        // Reset the current frame value
-        self.current_frame = CurrentFrame::None;
-        #[cfg(feature = "stats")]
-        {
-            self.stats.t_msgs += 1;
-        }
-        Ok(())
+        self.codec.write(&mut writer, x)
     }
-}
-
-#[repr(u8)]
-pub(crate) enum WError {
-    NewFrame,
-    DidntWrite,
 }
 
 impl Encode<&NetworkMessage> for &mut WBatch {
-    type Output = Result<(), WError>;
+    type Output = Result<(), BatchError>;
 
-    /// Try to serialize a [`NetworkMessage`][NetworkMessage] on the [`SerializationBatch`][SerializationBatch].
-    ///
-    /// # Arguments
-    /// * `message` - The [`NetworkMessage`][NetworkMessage] to serialize.
-    ///
-    fn encode(self, message: &NetworkMessage) -> Self::Output {
-        // Eventually update the current frame and sn based on the current status
-        if let (CurrentFrame::Reliable, false)
-        | (CurrentFrame::BestEffort, true)
-        | (CurrentFrame::None, _) = (self.current_frame, message.is_reliable())
-        {
-            // We are not serializing on the right frame.
-            return Err(WError::NewFrame);
-        };
-
-        // Mark the write operation
+    fn encode(self, x: &NetworkMessage) -> Self::Output {
         let mut writer = self.buffer.writer();
-        let mark = writer.mark();
-
-        let codec = Zenoh080::new();
-        codec.write(&mut writer, message).map_err(|_| {
-            // Revert the write operation
-            writer.rewind(mark);
-            WError::DidntWrite
-        })
+        self.codec.write(&mut writer, x)
     }
 }
 
-impl Encode<(&NetworkMessage, FrameHeader)> for &mut WBatch {
-    type Output = Result<(), DidntWrite>;
+impl Encode<(&NetworkMessage, &FrameHeader)> for &mut WBatch {
+    type Output = Result<(), BatchError>;
 
-    /// Try to serialize a [`NetworkMessage`][NetworkMessage] on the [`SerializationBatch`][SerializationBatch].
-    ///
-    /// # Arguments
-    /// * `message` - The [`NetworkMessage`][NetworkMessage] to serialize.
-    ///
-    fn encode(self, message: (&NetworkMessage, FrameHeader)) -> Self::Output {
-        let (message, frame) = message;
-
-        // Mark the write operation
+    fn encode(self, x: (&NetworkMessage, &FrameHeader)) -> Self::Output {
         let mut writer = self.buffer.writer();
-        let mark = writer.mark();
+        self.codec.write(&mut writer, x)
+    }
+}
 
-        let codec = Zenoh080::new();
-        // Write the frame header
-        codec.write(&mut writer, &frame).map_err(|e| {
-            // Revert the write operation
-            writer.rewind(mark);
-            e
-        })?;
-        // Write the zenoh message
-        codec.write(&mut writer, message).map_err(|e| {
-            // Revert the write operation
-            writer.rewind(mark);
-            e
-        })?;
-        // Update the frame
-        self.current_frame = match frame.reliability {
-            Reliability::Reliable => {
-                self.latest_sn.reliable = Some(frame.sn);
-                CurrentFrame::Reliable
+impl Encode<(&mut ZBufReader<'_>, &mut FragmentHeader)> for &mut WBatch {
+    type Output = Result<NonZeroUsize, DidntWrite>;
+
+    fn encode(self, x: (&mut ZBufReader<'_>, &mut FragmentHeader)) -> Self::Output {
+        let mut writer = self.buffer.writer();
+        self.codec.write(&mut writer, x)
+    }
+}
+
+// Read batch
+#[derive(Debug)]
+pub struct RBatch {
+    // The buffer to perform deserializationn from
+    buffer: ZSlice,
+    // The batch codec
+    codec: Zenoh080Batch,
+    // It contains 1 byte as additional header, e.g. to signal the batch is compressed
+    #[cfg(feature = "transport_compression")]
+    header: BatchHeader,
+}
+
+impl RBatch {
+    pub fn new<T>(#[allow(unused_variables)] config: BatchConfig, buffer: T) -> Self
+    where
+        T: Into<ZSlice>,
+    {
+        Self {
+            buffer: buffer.into(),
+            codec: Zenoh080Batch::new(),
+            #[cfg(feature = "transport_compression")]
+            header: config.header(),
+        }
+    }
+
+    #[inline(always)]
+    pub const fn is_empty(&self) -> bool {
+        self.buffer.is_empty()
+    }
+
+    // Split (length, header, payload) internal buffer slice
+    #[inline(always)]
+    #[cfg(feature = "transport_compression")]
+    fn split(&self) -> (&[u8], &[u8]) {
+        zsplit!(self.buffer.as_slice(), self.header)
+    }
+
+    pub fn initialize<C, T>(&mut self, #[allow(unused_variables)] buff: C) -> ZResult<()>
+    where
+        C: Fn() -> T + Copy,
+        T: ZSliceBuffer + 'static,
+    {
+        #[cfg(feature = "transport_compression")]
+        if !self.header.is_empty() {
+            let h = *self
+                .buffer
+                .get(BatchHeader::INDEX)
+                .ok_or_else(|| zerror!("Batch header not present"))?;
+            let header = BatchHeader::new(h);
+
+            if header.is_compression() {
+                self.decompress(buff)?;
+            } else {
+                self.buffer = self
+                    .buffer
+                    .subslice(BatchHeader::INDEX + 1, self.buffer.len())
+                    .ok_or_else(|| zerror!("Invalid batch length"))?;
             }
-            Reliability::BestEffort => {
-                self.latest_sn.best_effort = Some(frame.sn);
-                CurrentFrame::BestEffort
-            }
-        };
+        }
+
+        Ok(())
+    }
+
+    #[cfg(feature = "transport_compression")]
+    fn decompress<T>(&mut self, mut buff: impl FnMut() -> T) -> ZResult<()>
+    where
+        T: ZSliceBuffer + 'static,
+    {
+        let (_h, p) = self.split();
+
+        let mut into = (buff)();
+        let n = lz4_flex::block::decompress_into(p, into.as_mut_slice())
+            .map_err(|_| zerror!("Decompression error"))?;
+        self.buffer = ZSlice::make(Arc::new(into), 0, n)
+            .map_err(|_| zerror!("Invalid decompression buffer length"))?;
+
         Ok(())
     }
 }
 
-impl Encode<(&mut ZBufReader<'_>, FragmentHeader)> for &mut WBatch {
-    type Output = Result<NonZeroUsize, DidntWrite>;
+pub trait Decode<Message> {
+    type Error;
 
-    /// Try to serialize a [`ZenohMessage`][ZenohMessage] on the [`SerializationBatch`][SerializationBatch].
-    ///
-    /// # Arguments
-    /// * `message` - The [`ZenohMessage`][ZenohMessage] to serialize.
-    ///
-    fn encode(self, message: (&mut ZBufReader<'_>, FragmentHeader)) -> Self::Output {
-        let (reader, mut fragment) = message;
+    fn decode(self) -> Result<Message, Self::Error>;
+}
 
-        let mut writer = self.buffer.writer();
-        let codec = Zenoh080::new();
+impl Decode<TransportMessage> for &mut RBatch {
+    type Error = DidntRead;
 
-        // Mark the buffer for the writing operation
-        let mark = writer.mark();
-
-        // Write the frame header
-        codec.write(&mut writer, &fragment).map_err(|e| {
-            // Revert the write operation
-            writer.rewind(mark);
-            e
-        })?;
-
-        // Check if it is really the final fragment
-        if reader.remaining() <= writer.remaining() {
-            // Revert the buffer
-            writer.rewind(mark);
-            // It is really the finally fragment, reserialize the header
-            fragment.more = false;
-            // Write the frame header
-            codec.write(&mut writer, &fragment).map_err(|e| {
-                // Revert the write operation
-                writer.rewind(mark);
-                e
-            })?;
-        }
-
-        // Write the fragment
-        reader.siphon(&mut writer).map_err(|_| {
-            // Revert the write operation
-            writer.rewind(mark);
-            DidntWrite
-        })
+    fn decode(self) -> Result<TransportMessage, Self::Error> {
+        let mut reader = self.buffer.reader();
+        self.codec.read(&mut reader)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::vec;
+
     use super::*;
+    use rand::Rng;
     use zenoh_buffers::ZBuf;
     use zenoh_protocol::{
         core::{CongestionControl, Encoding, Priority, Reliability, WireExpr},
         network::{ext, Push},
         transport::{
             frame::{self, FrameHeader},
-            KeepAlive, TransportMessage,
+            Fragment, KeepAlive, TransportMessage,
         },
         zenoh::{PushBody, Put},
     };
 
     #[test]
+    fn rw_batch() {
+        let mut rng = rand::thread_rng();
+
+        for _ in 0..1_000 {
+            let msg_ins: [TransportMessage; 2] = [TransportMessage::rand(), {
+                let mut msg_in = Fragment::rand();
+                msg_in.payload = vec![0u8; rng.gen_range(8..1_024)].into();
+                msg_in.into()
+            }];
+            for msg_in in msg_ins {
+                let config = BatchConfig {
+                    mtu: BatchSize::MAX,
+                    #[cfg(feature = "transport_compression")]
+                    is_compression: rng.gen_bool(0.5),
+                };
+                let mut wbatch = WBatch::new(config);
+                wbatch.encode(&msg_in).unwrap();
+                println!("Encoded WBatch: {:?}", wbatch);
+
+                #[cfg(feature = "transport_compression")]
+                let mut buffer = config.is_compression.then_some(BBuf::with_capacity(
+                    lz4_flex::block::get_maximum_output_size(wbatch.as_slice().len()),
+                ));
+
+                let res = wbatch
+                    .finalize(
+                        #[cfg(feature = "transport_compression")]
+                        buffer.as_mut(),
+                    )
+                    .unwrap();
+                let bytes = match res {
+                    Finalize::Batch => wbatch.as_slice(),
+                    #[cfg(feature = "transport_compression")]
+                    Finalize::Buffer => buffer.as_mut().unwrap().as_slice(),
+                };
+                println!("Finalized WBatch: {:02x?}", bytes);
+
+                let mut rbatch = RBatch::new(config, bytes.to_vec().into_boxed_slice());
+                println!("Decoded RBatch: {:?}", rbatch);
+                rbatch
+                    .initialize(|| {
+                        zenoh_buffers::vec::uninit(config.mtu as usize).into_boxed_slice()
+                    })
+                    .unwrap();
+                println!("Initialized RBatch: {:?}", rbatch);
+                let msg_out: TransportMessage = rbatch.decode().unwrap();
+                assert_eq!(msg_in, msg_out);
+            }
+        }
+    }
+
+    #[test]
     fn serialization_batch() {
-        let mut batch = WBatch::new(u16::MAX, true);
+        let config = BatchConfig {
+            mtu: BatchSize::MAX,
+            #[cfg(feature = "transport_compression")]
+            is_compression: false,
+        };
+        let mut batch = WBatch::new(config);
 
         let tmsg: TransportMessage = KeepAlive.into();
         let nmsg: NetworkMessage = Push {
@@ -392,12 +496,12 @@ mod tests {
         };
 
         // Serialize with a frame
-        batch.encode((&nmsg, frame)).unwrap();
+        batch.encode((&nmsg, &frame)).unwrap();
         assert_ne!(batch.len(), 0);
         nmsgs_in.push(nmsg.clone());
 
         frame.reliability = Reliability::BestEffort;
-        batch.encode((&nmsg, frame)).unwrap();
+        batch.encode((&nmsg, &frame)).unwrap();
         assert_ne!(batch.len(), 0);
         nmsgs_in.push(nmsg.clone());
 
@@ -411,7 +515,7 @@ mod tests {
 
         // Serialize with a frame
         frame.sn = 1;
-        batch.encode((&nmsg, frame)).unwrap();
+        batch.encode((&nmsg, &frame)).unwrap();
         assert_ne!(batch.len(), 0);
         nmsgs_in.push(nmsg.clone());
     }

@@ -35,7 +35,7 @@ use zenoh_protocol::zenoh::ext::ValueType;
 use zenoh_protocol::zenoh::reply::ext::ConsolidationType;
 use zenoh_protocol::zenoh::{self, ResponseBody};
 use zenoh_result::ZResult;
-use zenoh_transport::Primitives;
+use zenoh_transport::primitives::Primitives;
 
 pub(crate) struct QueryInner {
     /// The key expression of this Query.

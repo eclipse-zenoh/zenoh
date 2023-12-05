@@ -122,14 +122,14 @@ impl TransportEventHandler for Handler {
     fn new_unicast(
         &self,
         peer: zenoh_transport::TransportPeer,
-        _transport: zenoh_transport::TransportUnicast,
+        _transport: zenoh_transport::unicast::TransportUnicast,
     ) -> ZResult<Arc<dyn zenoh_transport::TransportPeerEventHandler>> {
         self.new_peer(peer)
     }
 
     fn new_multicast(
         &self,
-        _transport: zenoh_transport::TransportMulticast,
+        _transport: zenoh_transport::multicast::TransportMulticast,
     ) -> ZResult<Arc<dyn zenoh_transport::TransportMulticastEventHandler>> {
         Ok(Arc::new(self.clone()))
     }

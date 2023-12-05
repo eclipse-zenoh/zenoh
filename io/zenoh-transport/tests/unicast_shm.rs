@@ -23,7 +23,7 @@ mod tests {
         },
         time::Duration,
     };
-    use zenoh_buffers::SplitBuffer;
+    use zenoh_buffers::buffer::SplitBuffer;
     use zenoh_core::zasync_executor_init;
     use zenoh_link::Link;
     use zenoh_protocol::{
@@ -37,8 +37,8 @@ mod tests {
     use zenoh_result::ZResult;
     use zenoh_shm::{SharedMemoryBuf, SharedMemoryManager};
     use zenoh_transport::{
-        TransportEventHandler, TransportManager, TransportMulticast,
-        TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+        multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
+        TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
     };
 
     const TIMEOUT: Duration = Duration::from_secs(60);

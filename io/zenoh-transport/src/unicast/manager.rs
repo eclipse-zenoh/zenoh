@@ -18,17 +18,20 @@ use crate::unicast::establishment::ext::auth::Auth;
 #[cfg(feature = "transport_multilink")]
 use crate::unicast::establishment::ext::multilink::MultiLink;
 use crate::{
-    lowlatency::transport::TransportUnicastLowlatency,
-    transport_unicast_inner::TransportUnicastTrait,
-    unicast::{TransportConfigUnicast, TransportUnicast},
-    universal::transport::TransportUnicastUniversal,
+    unicast::{
+        link::TransportLinkUnicast, lowlatency::transport::TransportUnicastLowlatency,
+        transport_unicast_inner::TransportUnicastTrait,
+        universal::transport::TransportUnicastUniversal, TransportConfigUnicast, TransportUnicast,
+    },
     TransportManager,
 };
 use async_std::{prelude::FutureExt, sync::Mutex, task};
 use std::{collections::HashMap, sync::Arc, time::Duration};
+#[cfg(feature = "transport_compression")]
+use zenoh_config::CompressionUnicastConf;
 #[cfg(feature = "shared-memory")]
 use zenoh_config::SharedMemoryConf;
-use zenoh_config::{Config, LinkTxConf, QoSConf, TransportUnicastConf};
+use zenoh_config::{Config, LinkTxConf, QoSUnicastConf, TransportUnicastConf};
 use zenoh_core::{zasynclock, zcondfeat};
 use zenoh_crypto::PseudoRng;
 use zenoh_link::*;
@@ -53,8 +56,8 @@ pub struct TransportManagerConfigUnicast {
     pub max_links: usize,
     #[cfg(feature = "shared-memory")]
     pub is_shm: bool,
-    #[cfg(all(feature = "unstable", feature = "transport_compression"))]
-    pub is_compressed: bool,
+    #[cfg(feature = "transport_compression")]
+    pub is_compression: bool,
 }
 
 pub struct TransportManagerStateUnicast {
@@ -96,11 +99,11 @@ pub struct TransportManagerBuilderUnicast {
     pub(super) max_links: usize,
     #[cfg(feature = "shared-memory")]
     pub(super) is_shm: bool,
-    #[cfg(feature = "transport_compression")]
-    pub(super) is_compressed: bool,
     #[cfg(feature = "transport_auth")]
     pub(super) authenticator: Auth,
     pub(super) is_lowlatency: bool,
+    #[cfg(feature = "transport_compression")]
+    pub(super) is_compression: bool,
 }
 
 impl TransportManagerBuilderUnicast {
@@ -157,9 +160,9 @@ impl TransportManagerBuilderUnicast {
         self
     }
 
-    #[cfg(all(feature = "unstable", feature = "transport_compression"))]
-    pub fn compression(mut self, is_compressed: bool) -> Self {
-        self.is_compressed = is_compressed;
+    #[cfg(feature = "transport_compression")]
+    pub fn compression(mut self, is_compression: bool) -> Self {
+        self.is_compression = is_compression;
         self
     }
 
@@ -173,7 +176,7 @@ impl TransportManagerBuilderUnicast {
         ));
         self = self.accept_pending(*config.transport().unicast().accept_pending());
         self = self.max_sessions(*config.transport().unicast().max_sessions());
-        self = self.qos(*config.transport().qos().enabled());
+        self = self.qos(*config.transport().unicast().qos().enabled());
         self = self.lowlatency(*config.transport().unicast().lowlatency());
 
         #[cfg(feature = "transport_multilink")]
@@ -187,6 +190,10 @@ impl TransportManagerBuilderUnicast {
         #[cfg(feature = "transport_auth")]
         {
             self = self.authenticator(Auth::from_config(config).await?);
+        }
+        #[cfg(feature = "transport_compression")]
+        {
+            self = self.compression(*config.transport().unicast().compression().enabled());
         }
 
         Ok(self)
@@ -211,9 +218,9 @@ impl TransportManagerBuilderUnicast {
             max_links: self.max_links,
             #[cfg(feature = "shared-memory")]
             is_shm: self.is_shm,
-            #[cfg(all(feature = "unstable", feature = "transport_compression"))]
-            is_compressed: self.is_compressed,
             is_lowlatency: self.is_lowlatency,
+            #[cfg(feature = "transport_compression")]
+            is_compression: self.is_compression,
         };
 
         let state = TransportManagerStateUnicast {
@@ -238,9 +245,11 @@ impl Default for TransportManagerBuilderUnicast {
     fn default() -> Self {
         let transport = TransportUnicastConf::default();
         let link_tx = LinkTxConf::default();
-        let qos = QoSConf::default();
+        let qos = QoSUnicastConf::default();
         #[cfg(feature = "shared-memory")]
         let shm = SharedMemoryConf::default();
+        #[cfg(feature = "transport_compression")]
+        let compression = CompressionUnicastConf::default();
 
         Self {
             lease: Duration::from_millis(*link_tx.lease()),
@@ -253,11 +262,11 @@ impl Default for TransportManagerBuilderUnicast {
             max_links: *transport.max_links(),
             #[cfg(feature = "shared-memory")]
             is_shm: *shm.enabled(),
-            #[cfg(feature = "transport_compression")]
-            is_compressed: false,
             #[cfg(feature = "transport_auth")]
             authenticator: Auth::default(),
             is_lowlatency: *transport.lowlatency(),
+            #[cfg(feature = "transport_compression")]
+            is_compression: *compression.enabled(),
         }
     }
 }
@@ -402,8 +411,7 @@ impl TransportManager {
     pub(super) async fn init_transport_unicast(
         &self,
         config: TransportConfigUnicast,
-        link: LinkUnicast,
-        direction: LinkUnicastDirection,
+        link: TransportLinkUnicast,
     ) -> Result<TransportUnicast, (Error, Option<u8>)> {
         let mut guard = zasynclock!(self.state.unicast.transports);
 
@@ -426,7 +434,7 @@ impl TransportManager {
 
                 // Add the link to the transport
                 transport
-                    .add_link(link, direction)
+                    .add_link(link)
                     .await
                     .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
 
@@ -462,7 +470,7 @@ impl TransportManager {
                                 .map_err(|e| (e, Some(close::reason::INVALID)))
                                 .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?;
                         // Add the link to the transport
-                        t.add_link(link, direction)
+                        t.add_link(link)
                             .await
                             .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
                         t
@@ -538,7 +546,7 @@ impl TransportManager {
         // Create a new link associated by calling the Link Manager
         let link = manager.new_link(endpoint).await?;
         // Open the link
-        super::establishment::open::open_link(&link, self).await
+        super::establishment::open::open_link(link, self).await
     }
 
     pub async fn get_transport_unicast(&self, peer: &ZenohId) -> Option<TransportUnicast> {
@@ -587,7 +595,7 @@ impl TransportManager {
         }
 
         // A new link is available
-        log::trace!("New link waiting... {}", link);
+        log::trace!("Accepting link... {}", link);
         *guard += 1;
         drop(guard);
 
