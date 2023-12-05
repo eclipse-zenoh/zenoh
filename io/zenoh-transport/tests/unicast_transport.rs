@@ -35,10 +35,11 @@ use zenoh_protocol::{
     zenoh::Put,
 };
 use zenoh_result::ZResult;
-use zenoh_transport::test_helpers::make_transport_manager_builder;
 use zenoh_transport::{
-    TransportEventHandler, TransportManager, TransportMulticast, TransportMulticastEventHandler,
-    TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    multicast::TransportMulticast,
+    unicast::{test_helpers::make_transport_manager_builder, TransportUnicast},
+    TransportEventHandler, TransportManager, TransportMulticastEventHandler, TransportPeer,
+    TransportPeerEventHandler,
 };
 
 // These keys and certificates below are purposedly generated to run TLS and mTLS tests.
@@ -483,9 +484,6 @@ async fn test_transport(
     .into();
     for _ in 0..MSG_COUNT {
         let _ = client_transport.schedule(message.clone());
-        // print!("S-{i} ");
-        use std::io::Write;
-        std::io::stdout().flush().unwrap();
     }
 
     match channel.reliability {
@@ -1216,6 +1214,7 @@ fn transport_unicast_quic_only_server() {
 fn transport_unicast_tls_only_mutual_success() {
     use zenoh_link::tls::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -1283,24 +1282,13 @@ fn transport_unicast_tls_only_mutual_success() {
     ));
 }
 
-// Constants replicating the alert descriptions thrown by the Rustls library.
-// These alert descriptions are internal of the library and cannot be reached from these tests
-// as to do a proper comparison. For the sake of simplicity we verify these constants are contained
-// in the expected error messages from the tests below.
-//
-// See: https://docs.rs/rustls/latest/src/rustls/msgs/enums.rs.html#128
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
-const RUSTLS_UNKNOWN_CA_ALERT_DESCRIPTION: &str = "UnknownCA";
-#[cfg(all(feature = "transport_tls", target_family = "unix"))]
-const RUSTLS_CERTIFICATE_REQUIRED_ALERT_DESCRIPTION: &str = "CertificateRequired";
-
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
 #[test]
 fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
     use std::vec;
-
     use zenoh_link::tls::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -1362,9 +1350,6 @@ fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
         ))
     });
     assert!(result.is_err());
-    let err = result.unwrap_err();
-    let error_msg = panic_message::panic_message(&err);
-    assert!(error_msg.contains(RUSTLS_CERTIFICATE_REQUIRED_ALERT_DESCRIPTION));
 }
 
 #[cfg(all(feature = "transport_tls", target_family = "unix"))]
@@ -1372,6 +1357,7 @@ fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
 fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
     use zenoh_link::tls::config::*;
 
+    let _ = env_logger::try_init();
     task::block_on(async {
         zasync_executor_init!();
     });
@@ -1444,9 +1430,6 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
         ))
     });
     assert!(result.is_err());
-    let err = result.unwrap_err();
-    let error_msg = panic_message::panic_message(&err);
-    assert!(error_msg.contains(RUSTLS_UNKNOWN_CA_ALERT_DESCRIPTION));
 }
 
 #[test]

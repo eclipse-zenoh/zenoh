@@ -17,7 +17,7 @@ pub mod ext;
 pub(crate) mod open;
 
 use super::{TransportPeer, TransportUnicast};
-use crate::{common::seq_num, TransportManager};
+use crate::{common::seq_num, unicast::link::TransportLinkUnicast, TransportManager};
 use async_trait::async_trait;
 use cookie::*;
 use sha3::{
@@ -25,10 +25,10 @@ use sha3::{
     Shake128,
 };
 use std::time::Duration;
-use zenoh_link::{Link, LinkUnicast};
+use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Field, Resolution, ZenohId},
-    transport::{BatchSize, Close, TransportMessage, TransportSn},
+    transport::TransportSn,
 };
 use zenoh_result::ZResult;
 
@@ -42,28 +42,28 @@ pub trait OpenFsm {
     type SendInitSynIn;
     type SendInitSynOut;
     async fn send_init_syn(
-        &self,
+        self,
         input: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error>;
 
     type RecvInitAckIn;
     type RecvInitAckOut;
     async fn recv_init_ack(
-        &self,
+        self,
         input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error>;
 
     type SendOpenSynIn;
     type SendOpenSynOut;
     async fn send_open_syn(
-        &self,
+        self,
         input: Self::SendOpenSynIn,
     ) -> Result<Self::SendOpenSynOut, Self::Error>;
 
     type RecvOpenAckIn;
     type RecvOpenAckOut;
     async fn recv_open_ack(
-        &self,
+        self,
         input: Self::RecvOpenAckIn,
     ) -> Result<Self::RecvOpenAckOut, Self::Error>;
 }
@@ -75,28 +75,28 @@ pub trait AcceptFsm {
     type RecvInitSynIn;
     type RecvInitSynOut;
     async fn recv_init_syn(
-        &self,
+        self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error>;
 
     type SendInitAckIn;
     type SendInitAckOut;
     async fn send_init_ack(
-        &self,
+        self,
         input: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error>;
 
     type RecvOpenSynIn;
     type RecvOpenSynOut;
     async fn recv_open_syn(
-        &self,
+        self,
         input: Self::RecvOpenSynIn,
     ) -> Result<Self::RecvOpenSynOut, Self::Error>;
 
     type SendOpenAckIn;
     type SendOpenAckOut;
     async fn send_open_ack(
-        &self,
+        self,
         input: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error>;
 }
@@ -116,30 +116,13 @@ pub(super) fn compute_sn(zid1: ZenohId, zid2: ZenohId, resolution: Resolution) -
     TransportSn::from_le_bytes(array) & seq_num::get_mask(resolution.get(Field::FrameSN))
 }
 
-pub(super) async fn close_link(link: &LinkUnicast, reason: Option<u8>) {
-    if let Some(reason) = reason {
-        // Build the close message
-        let message: TransportMessage = Close {
-            reason,
-            session: false,
-        }
-        .into();
-        // Send the close message on the link
-        let _ = link.send(&message).await;
-    }
-
-    // Close the link
-    let _ = link.close().await;
-}
-
 pub(super) struct InputFinalize {
     pub(super) transport: TransportUnicast,
     pub(super) other_lease: Duration,
-    pub(super) agreed_batch_size: BatchSize,
 }
 // Finalize the transport, notify the callback and start the link tasks
 pub(super) async fn finalize_transport(
-    link: &LinkUnicast,
+    link: &TransportLinkUnicast,
     manager: &TransportManager,
     input: self::InputFinalize,
 ) -> ZResult<()> {
@@ -148,12 +131,7 @@ pub(super) async fn finalize_transport(
 
     // Start the TX loop
     let keep_alive = manager.config.unicast.lease / manager.config.unicast.keep_alive as u32;
-    transport.start_tx(
-        link,
-        &manager.tx_executor,
-        keep_alive,
-        input.agreed_batch_size,
-    )?;
+    transport.start_tx(link, &manager.tx_executor, keep_alive)?;
 
     // Assign a callback if the transport is new
     // Keep the lock to avoid concurrent new_transport and closing/closed notifications
@@ -185,7 +163,7 @@ pub(super) async fn finalize_transport(
     drop(a_guard);
 
     // Start the RX loop
-    transport.start_rx(link, input.other_lease, input.agreed_batch_size)?;
+    transport.start_rx(link, input.other_lease)?;
 
     Ok(())
 }

@@ -1,5 +1,3 @@
-use crate::transport_unicast_inner::TransportUnicastTrait;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -14,16 +12,16 @@ use crate::transport_unicast_inner::TransportUnicastTrait;
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::TransportUnicastUniversal;
-use crate::common::priority::TransportChannelRx;
+use crate::{
+    common::{
+        batch::{Decode, RBatch},
+        priority::TransportChannelRx,
+    },
+    unicast::{link::TransportLinkUnicast, transport_unicast_inner::TransportUnicastTrait},
+};
 use async_std::task;
 use std::sync::MutexGuard;
-use zenoh_buffers::{
-    reader::{HasReader, Reader},
-    ZSlice,
-};
-use zenoh_codec::{RCodec, Zenoh080};
 use zenoh_core::{zlock, zread};
-use zenoh_link::LinkUnicast;
 use zenoh_protocol::{
     core::{Priority, Reliability},
     network::NetworkMessage,
@@ -62,7 +60,7 @@ impl TransportUnicastUniversal {
         }
     }
 
-    fn handle_close(&self, link: &LinkUnicast, _reason: u8, session: bool) -> ZResult<()> {
+    fn handle_close(&self, link: &TransportLinkUnicast, _reason: u8, session: bool) -> ZResult<()> {
         // Stop now rx and tx tasks before doing the proper cleanup
         let _ = self.stop_rx(link);
         let _ = self.stop_tx(link);
@@ -189,12 +187,14 @@ impl TransportUnicastUniversal {
         Ok(())
     }
 
-    pub(super) fn read_messages(&self, mut zslice: ZSlice, link: &LinkUnicast) -> ZResult<()> {
-        let codec = Zenoh080::new();
-        let mut reader = zslice.reader();
-        while reader.can_read() {
-            let msg: TransportMessage = codec
-                .read(&mut reader)
+    pub(super) fn read_messages(
+        &self,
+        mut batch: RBatch,
+        link: &TransportLinkUnicast,
+    ) -> ZResult<()> {
+        while !batch.is_empty() {
+            let msg: TransportMessage = batch
+                .decode()
                 .map_err(|_| zerror!("{}: decoding error", link))?;
 
             log::trace!("Received: {:?}", msg);

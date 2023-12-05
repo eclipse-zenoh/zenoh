@@ -48,6 +48,7 @@ where
             ext_auth,
             ext_mlink,
             ext_lowlatency,
+            ext_compression,
         } = x;
 
         // Header
@@ -59,7 +60,8 @@ where
             + (ext_shm.is_some() as u8)
             + (ext_auth.is_some() as u8)
             + (ext_mlink.is_some() as u8)
-            + (ext_lowlatency.is_some() as u8);
+            + (ext_lowlatency.is_some() as u8)
+            + (ext_compression.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -104,6 +106,10 @@ where
         if let Some(lowlatency) = ext_lowlatency.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (lowlatency, n_exts != 0))?;
+        }
+        if let Some(compression) = ext_compression.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (compression, n_exts != 0))?;
         }
 
         Ok(())
@@ -163,6 +169,7 @@ where
         let mut ext_auth = None;
         let mut ext_mlink = None;
         let mut ext_lowlatency = None;
+        let mut ext_compression = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -194,6 +201,11 @@ where
                     ext_lowlatency = Some(q);
                     has_ext = ext;
                 }
+                ext::Compression::ID => {
+                    let (q, ext): (ext::Compression, bool) = eodec.read(&mut *reader)?;
+                    ext_compression = Some(q);
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "InitSyn", ext)?;
                 }
@@ -211,6 +223,7 @@ where
             ext_auth,
             ext_mlink,
             ext_lowlatency,
+            ext_compression,
         })
     }
 }
@@ -235,6 +248,7 @@ where
             ext_auth,
             ext_mlink,
             ext_lowlatency,
+            ext_compression,
         } = x;
 
         // Header
@@ -246,7 +260,8 @@ where
             + (ext_shm.is_some() as u8)
             + (ext_auth.is_some() as u8)
             + (ext_mlink.is_some() as u8)
-            + (ext_lowlatency.is_some() as u8);
+            + (ext_lowlatency.is_some() as u8)
+            + (ext_compression.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -294,6 +309,10 @@ where
         if let Some(lowlatency) = ext_lowlatency.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (lowlatency, n_exts != 0))?;
+        }
+        if let Some(compression) = ext_compression.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (compression, n_exts != 0))?;
         }
 
         Ok(())
@@ -356,6 +375,7 @@ where
         let mut ext_auth = None;
         let mut ext_mlink = None;
         let mut ext_lowlatency = None;
+        let mut ext_compression = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {
@@ -387,6 +407,11 @@ where
                     ext_lowlatency = Some(q);
                     has_ext = ext;
                 }
+                ext::Compression::ID => {
+                    let (q, ext): (ext::Compression, bool) = eodec.read(&mut *reader)?;
+                    ext_compression = Some(q);
+                    has_ext = ext;
+                }
                 _ => {
                     has_ext = extension::skip(reader, "InitAck", ext)?;
                 }
@@ -405,6 +430,7 @@ where
             ext_auth,
             ext_mlink,
             ext_lowlatency,
+            ext_compression,
         })
     }
 }

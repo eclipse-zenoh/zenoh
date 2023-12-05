@@ -22,7 +22,7 @@ use crate::key_expr::KeyExprInner;
 use crate::liveliness::{Liveliness, LivelinessTokenState};
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
-use crate::net::transport::Primitives;
+use crate::net::transport::primitives::Primitives;
 use crate::prelude::Locality;
 use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
@@ -1502,10 +1502,23 @@ impl Session {
             &mut RoutingExpr::new(&tables.root_res, key_expr.as_str()),
             0,
         );
+        drop(tables);
         let matching = match destination {
             Locality::Any => !route.is_empty(),
-            Locality::Remote => route.values().any(|dir| !dir.0.is_local()),
-            Locality::SessionLocal => route.values().any(|dir| dir.0.is_local()),
+            Locality::Remote => {
+                if let Some(face) = zread!(self.state).primitives.as_ref() {
+                    route.values().any(|dir| !Arc::ptr_eq(&dir.0, &face.state))
+                } else {
+                    !route.is_empty()
+                }
+            }
+            Locality::SessionLocal => {
+                if let Some(face) = zread!(self.state).primitives.as_ref() {
+                    route.values().any(|dir| Arc::ptr_eq(&dir.0, &face.state))
+                } else {
+                    false
+                }
+            }
         };
         Ok(MatchingStatus { matching })
     }

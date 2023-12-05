@@ -12,14 +12,16 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
+    buffer::{Buffer, SplitBuffer},
     reader::HasReader,
     vec,
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
+    ZSlice,
 };
-use alloc::boxed::Box;
-use core::num::NonZeroUsize;
+use alloc::{boxed::Box, sync::Arc};
+use core::{fmt, num::NonZeroUsize, option};
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct BBuf {
     buffer: Box<[u8]>,
     len: usize,
@@ -40,16 +42,6 @@ impl BBuf {
     }
 
     #[must_use]
-    pub const fn len(&self) -> usize {
-        self.len
-    }
-
-    #[must_use]
-    pub const fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
-    #[must_use]
     pub fn as_slice(&self) -> &[u8] {
         // SAFETY: self.len is ensured by the writer to be smaller than buffer length.
         crate::unsafe_slice!(self.buffer, ..self.len)
@@ -67,6 +59,40 @@ impl BBuf {
     fn as_writable_slice(&mut self) -> &mut [u8] {
         // SAFETY: self.len is ensured by the writer to be smaller than buffer length.
         crate::unsafe_slice_mut!(self.buffer, self.len..)
+    }
+}
+
+impl fmt::Debug for BBuf {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:02x?}", self.as_slice())
+    }
+}
+
+// Buffer
+impl Buffer for BBuf {
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
+impl Buffer for &BBuf {
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
+impl Buffer for &mut BBuf {
+    fn len(&self) -> usize {
+        self.len
+    }
+}
+
+// SplitBuffer
+impl SplitBuffer for BBuf {
+    type Slices<'a> = option::IntoIter<&'a [u8]>;
+
+    fn slices(&self) -> Self::Slices<'_> {
+        Some(self.as_slice()).into_iter()
     }
 }
 
@@ -149,6 +175,19 @@ impl<'a> HasReader for &'a BBuf {
 
     fn reader(self) -> Self::Reader {
         self.as_slice()
+    }
+}
+
+// From impls
+impl From<BBuf> for ZSlice {
+    fn from(value: BBuf) -> Self {
+        ZSlice {
+            buf: Arc::new(value.buffer),
+            start: 0,
+            end: value.len,
+            #[cfg(feature = "shared-memory")]
+            kind: crate::ZSliceKind::Raw,
+        }
     }
 }
 

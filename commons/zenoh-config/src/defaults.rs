@@ -107,6 +107,8 @@ impl Default for TransportUnicastConf {
             max_sessions: 1_000,
             max_links: 1,
             lowlatency: false,
+            qos: QoSUnicastConf::default(),
+            compression: CompressionUnicastConf::default(),
         }
     }
 }
@@ -116,13 +118,36 @@ impl Default for TransportMulticastConf {
         Self {
             join_interval: Some(2500),
             max_sessions: Some(1000),
+            qos: QoSMulticastConf::default(),
+            compression: CompressionMulticastConf::default(),
         }
     }
 }
 
-impl Default for QoSConf {
+impl Default for QoSUnicastConf {
     fn default() -> Self {
         Self { enabled: true }
+    }
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for QoSMulticastConf {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for CompressionUnicastConf {
+    fn default() -> Self {
+        Self { enabled: false }
+    }
+}
+
+#[allow(clippy::derivable_impls)]
+impl Default for CompressionMulticastConf {
+    fn default() -> Self {
+        Self { enabled: false }
     }
 }
 

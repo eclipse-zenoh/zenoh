@@ -14,9 +14,10 @@
 #[cfg(feature = "shared-memory")]
 use crate::ZSliceKind;
 use crate::{
+    buffer::{Buffer, SplitBuffer},
     reader::{BacktrackableReader, DidntRead, DidntSiphon, HasReader, Reader, SiphonableReader},
     writer::{BacktrackableWriter, DidntWrite, HasWriter, Writer},
-    SplitBuffer, ZSlice,
+    ZSlice,
 };
 use alloc::{sync::Arc, vec::Vec};
 use core::{cmp, iter, mem, num::NonZeroUsize, ptr, slice};
@@ -56,24 +57,23 @@ impl ZBuf {
     }
 }
 
-impl<'a> SplitBuffer<'a> for ZBuf {
-    type Slices = iter::Map<slice::Iter<'a, ZSlice>, fn(&'a ZSlice) -> &'a [u8]>;
-
-    fn slices(&'a self) -> Self::Slices {
-        self.slices.as_ref().iter().map(ZSlice::as_slice)
-    }
-
-    #[inline(always)]
-    fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-
+// Buffer
+impl Buffer for ZBuf {
     #[inline(always)]
     fn len(&self) -> usize {
         self.slices
             .as_ref()
             .iter()
             .fold(0, |len, slice| len + slice.len())
+    }
+}
+
+// SplitBuffer
+impl SplitBuffer for ZBuf {
+    type Slices<'a> = iter::Map<slice::Iter<'a, ZSlice>, fn(&'a ZSlice) -> &'a [u8]>;
+
+    fn slices(&self) -> Self::Slices<'_> {
+        self.slices.as_ref().iter().map(ZSlice::as_slice)
     }
 }
 
