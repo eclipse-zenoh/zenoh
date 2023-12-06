@@ -532,7 +532,8 @@ impl TlsServerConfig {
             rustls_pemfile::certs(&mut Cursor::new(&tls_server_certificate))
                 .map(|result| {
                     result
-                        .map_err(|err| zerror!("Error processing server certificate: {err}.")).map(|der| Certificate(der.to_vec()))
+                        .map_err(|err| zerror!("Error processing server certificate: {err}."))
+                        .map(|der| Certificate(der.to_vec()))
                 })
                 .collect::<Result<Vec<Certificate>, ZError>>()?;
 
@@ -540,7 +541,8 @@ impl TlsServerConfig {
             rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_server_private_key))
                 .map(|result| {
                     result
-                        .map_err(|err| zerror!("Error processing server key: {err}.")).map(|key| PrivateKey(key.secret_pkcs1_der().to_vec()))
+                        .map_err(|err| zerror!("Error processing server key: {err}."))
+                        .map(|key| PrivateKey(key.secret_pkcs1_der().to_vec()))
                 })
                 .collect::<Result<Vec<PrivateKey>, ZError>>()?;
 
@@ -548,7 +550,8 @@ impl TlsServerConfig {
             keys = rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_server_private_key))
                 .map(|result| {
                     result
-                        .map_err(|err| zerror!("Error processing server key: {err}.")).map(|key| PrivateKey(key.secret_pkcs8_der().to_vec()))
+                        .map_err(|err| zerror!("Error processing server key: {err}."))
+                        .map(|key| PrivateKey(key.secret_pkcs8_der().to_vec()))
                 })
                 .collect::<Result<Vec<PrivateKey>, ZError>>()?;
         }
@@ -557,7 +560,8 @@ impl TlsServerConfig {
             keys = rustls_pemfile::ec_private_keys(&mut Cursor::new(&tls_server_private_key))
                 .map(|result| {
                     result
-                        .map_err(|err| zerror!("Error processing server key: {err}.")).map(|key| PrivateKey(key.secret_sec1_der().to_vec()))
+                        .map_err(|err| zerror!("Error processing server key: {err}."))
+                        .map(|key| PrivateKey(key.secret_sec1_der().to_vec()))
                 })
                 .collect::<Result<Vec<PrivateKey>, ZError>>()?;
         }
@@ -660,7 +664,8 @@ impl TlsClientConfig {
                 rustls_pemfile::certs(&mut Cursor::new(&tls_client_certificate))
                     .map(|result| {
                         result
-                            .map_err(|err| zerror!("Error processing client certificate: {err}.")).map(|der| Certificate(der.to_vec()))
+                            .map_err(|err| zerror!("Error processing client certificate: {err}."))
+                            .map(|der| Certificate(der.to_vec()))
                     })
                     .collect::<Result<Vec<Certificate>, ZError>>()?;
 
@@ -668,7 +673,8 @@ impl TlsClientConfig {
                 rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_client_private_key))
                     .map(|result| {
                         result
-                            .map_err(|err| zerror!("Error processing client key: {err}.")).map(|key| PrivateKey(key.secret_pkcs1_der().to_vec()))
+                            .map_err(|err| zerror!("Error processing client key: {err}."))
+                            .map(|key| PrivateKey(key.secret_pkcs1_der().to_vec()))
                     })
                     .collect::<Result<Vec<PrivateKey>, ZError>>()?;
 
@@ -677,7 +683,8 @@ impl TlsClientConfig {
                     rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_client_private_key))
                         .map(|result| {
                             result
-                                .map_err(|err| zerror!("Error processing client key: {err}.")).map(|key| PrivateKey(key.secret_pkcs8_der().to_vec()))
+                                .map_err(|err| zerror!("Error processing client key: {err}."))
+                                .map(|key| PrivateKey(key.secret_pkcs8_der().to_vec()))
                         })
                         .collect::<Result<Vec<PrivateKey>, ZError>>()?;
             }
@@ -686,7 +693,8 @@ impl TlsClientConfig {
                 keys = rustls_pemfile::ec_private_keys(&mut Cursor::new(&tls_client_private_key))
                     .map(|result| {
                         result
-                            .map_err(|err| zerror!("Error processing client key: {err}.")).map(|key| PrivateKey(key.secret_sec1_der().to_vec()))
+                            .map_err(|err| zerror!("Error processing client key: {err}."))
+                            .map(|key| PrivateKey(key.secret_sec1_der().to_vec()))
                     })
                     .collect::<Result<Vec<PrivateKey>, ZError>>()?;
             }
@@ -822,17 +830,15 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
 
 fn process_pem(pem: &mut dyn io::BufRead) -> ZResult<Vec<OwnedTrustAnchor>> {
     let certs: Vec<CertificateDer> = rustls_pemfile::certs(pem)
-        .map(|result| {
-            result
-                .map_err(|err| zerror!("Error processing PEM certificates: {err}."))
-        })
+        .map(|result| result.map_err(|err| zerror!("Error processing PEM certificates: {err}.")))
         .collect::<Result<Vec<CertificateDer>, ZError>>()?;
 
     let trust_anchors: Vec<TrustAnchor> = certs
         .into_iter()
         .map(|cert| {
             anchor_from_trusted_cert(&cert)
-                .map_err(|err| zerror!("Error processing trust anchor: {err}.")).map(|trust_anchor| trust_anchor.to_owned())
+                .map_err(|err| zerror!("Error processing trust anchor: {err}."))
+                .map(|trust_anchor| trust_anchor.to_owned())
         })
         .collect::<Result<Vec<TrustAnchor>, ZError>>()?;
 

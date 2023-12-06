@@ -269,7 +269,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             rustls_pemfile::certs(&mut BufReader::new(f.as_slice()))
                 .map(|result| {
                     result
-                        .map_err(|err| zerror!("Invalid QUIC CA certificate file: {}", err)).map(|der| Certificate(der.to_vec()))
+                        .map_err(|err| zerror!("Invalid QUIC CA certificate file: {}", err))
+                        .map(|der| Certificate(der.to_vec()))
                 })
                 .collect::<Result<Vec<rustls::Certificate>, ZError>>()?
         };
@@ -352,7 +353,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let certificates = rustls_pemfile::certs(&mut BufReader::new(f.as_slice()))
             .map(|result| {
                 result
-                    .map_err(|err| zerror!("Invalid QUIC CA certificate file: {}", err)).map(|der| Certificate(der.to_vec()))
+                    .map_err(|err| zerror!("Invalid QUIC CA certificate file: {}", err))
+                    .map(|der| Certificate(der.to_vec()))
             })
             .collect::<Result<Vec<rustls::Certificate>, ZError>>()?;
 
@@ -370,8 +372,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         };
         let items: Vec<Item> = rustls_pemfile::read_all(&mut BufReader::new(f.as_slice()))
             .map(|result| {
-                result
-                    .map_err(|err| zerror!("Invalid QUIC CA private key file: {}", err))
+                result.map_err(|err| zerror!("Invalid QUIC CA private key file: {}", err))
             })
             .collect::<Result<Vec<Item>, ZError>>()?;
 
