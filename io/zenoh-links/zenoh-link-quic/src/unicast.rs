@@ -269,8 +269,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             rustls_pemfile::certs(&mut BufReader::new(f.as_slice()))
                 .map(|result| {
                     result
-                        .map_err(|err| zerror!("Invalid QUIC CA certificate file: {}", err))
-                        .and_then(|der| Ok(Certificate(der.to_vec())))
+                        .map_err(|err| zerror!("Invalid QUIC CA certificate file: {}", err)).map(|der| Certificate(der.to_vec()))
                 })
                 .collect::<Result<Vec<rustls::Certificate>, ZError>>()?
         };
@@ -353,8 +352,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         let certificates = rustls_pemfile::certs(&mut BufReader::new(f.as_slice()))
             .map(|result| {
                 result
-                    .map_err(|err| zerror!("Invalid QUIC CA certificate file: {}", err))
-                    .and_then(|der| Ok(Certificate(der.to_vec())))
+                    .map_err(|err| zerror!("Invalid QUIC CA certificate file: {}", err)).map(|der| Certificate(der.to_vec()))
             })
             .collect::<Result<Vec<rustls::Certificate>, ZError>>()?;
 
@@ -374,7 +372,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .map(|result| {
                 result
                     .map_err(|err| zerror!("Invalid QUIC CA private key file: {}", err))
-                    .and_then(|item| Ok(item))
             })
             .collect::<Result<Vec<Item>, ZError>>()?;
 
@@ -389,7 +386,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             .take(1)
             .next()
             .ok_or_else(|| zerror!("No QUIC CA private key has been provided."))
-            .map(|x| PrivateKey(x))?;
+            .map(PrivateKey)?;
 
         // Server config
         let mut server_crypto = rustls::ServerConfig::builder()
