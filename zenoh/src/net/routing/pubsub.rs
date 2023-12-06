@@ -1734,7 +1734,7 @@ macro_rules! inc_stats {
     ) => {
         paste::paste! {
             if let Some(stats) = $face.stats.as_ref() {
-                use zenoh_buffers::SplitBuffer;
+                use zenoh_buffers::buffer::Buffer;
                 match &$body {
                     PushBody::Put(p) => {
                         stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
