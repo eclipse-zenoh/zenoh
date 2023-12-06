@@ -88,7 +88,7 @@ impl ZRuntime {
 impl Deref for ZRuntime {
     type Target = Handle;
     fn deref(&self) -> &Self::Target {
-        ZRUNTIME_POOL.get(&Self::TX)
+        // ZRUNTIME_POOL.get(&Self::TX)
         // use ZRuntime::*;
         // match self {
         //     Application | Accept | RX => {
@@ -98,7 +98,7 @@ impl Deref for ZRuntime {
         //         ZRUNTIME_POOL.get(&self)
         //     }
         // }
-        // ZRUNTIME_POOL.get(self)
+        ZRUNTIME_POOL.get(self)
     }
 }
 
