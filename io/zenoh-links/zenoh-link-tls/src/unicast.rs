@@ -32,7 +32,6 @@ use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use futures::io::AsyncReadExt;
 use futures::io::AsyncWriteExt;
-use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt;
@@ -42,14 +41,18 @@ use std::net::{IpAddr, Shutdown};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use webpki::TrustAnchor;
+use std::{cell::UnsafeCell, io};
+use webpki::{
+    anchor_from_trusted_cert,
+    types::{CertificateDer, TrustAnchor},
+};
 use zenoh_core::{zasynclock, zread, zwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::core::endpoint::Config;
 use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_result::{bail, zerror, ZError, ZResult};
 use zenoh_sync::Signal;
 
 pub struct LinkUnicastTls {
@@ -525,31 +528,47 @@ impl TlsServerConfig {
         let tls_server_private_key = TlsServerConfig::load_tls_private_key(config).await?;
         let tls_server_certificate = TlsServerConfig::load_tls_certificate(config).await?;
 
+        let certs: Vec<Certificate> =
+            rustls_pemfile::certs(&mut Cursor::new(&tls_server_certificate))
+                .map(|result| {
+                    result
+                        .map_err(|err| zerror!("Error processing server certificate: {err}."))
+                        .and_then(|der| Ok(Certificate(der.to_vec())))
+                })
+                .collect::<Result<Vec<Certificate>, ZError>>()?;
+
         let mut keys: Vec<PrivateKey> =
             rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map_err(|e| zerror!(e))
-                .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
+                .map(|result| {
+                    result
+                        .map_err(|err| zerror!("Error processing server key: {err}."))
+                        .and_then(|key| Ok(PrivateKey(key.secret_pkcs1_der().to_vec())))
+                })
+                .collect::<Result<Vec<PrivateKey>, ZError>>()?;
 
         if keys.is_empty() {
             keys = rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map_err(|e| zerror!(e))
-                .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
+                .map(|result| {
+                    result
+                        .map_err(|err| zerror!("Error processing server key: {err}."))
+                        .and_then(|key| Ok(PrivateKey(key.secret_pkcs8_der().to_vec())))
+                })
+                .collect::<Result<Vec<PrivateKey>, ZError>>()?;
         }
 
         if keys.is_empty() {
             keys = rustls_pemfile::ec_private_keys(&mut Cursor::new(&tls_server_private_key))
-                .map_err(|e| zerror!(e))
-                .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
+                .map(|result| {
+                    result
+                        .map_err(|err| zerror!("Error processing server key: {err}."))
+                        .and_then(|key| Ok(PrivateKey(key.secret_sec1_der().to_vec())))
+                })
+                .collect::<Result<Vec<PrivateKey>, ZError>>()?;
         }
 
         if keys.is_empty() {
-            bail!("No private key found");
+            bail!("No private key found for TLS server.");
         }
-
-        let certs: Vec<Certificate> =
-            rustls_pemfile::certs(&mut Cursor::new(&tls_server_certificate))
-                .map_err(|e| zerror!(e))
-                .map(|mut certs| certs.drain(..).map(Certificate).collect())?;
 
         let sc = if tls_server_client_auth {
             let root_cert_store = load_trust_anchors(config)?.map_or_else(
@@ -643,23 +662,45 @@ impl TlsClientConfig {
 
             let certs: Vec<Certificate> =
                 rustls_pemfile::certs(&mut Cursor::new(&tls_client_certificate))
-                    .map_err(|e| zerror!(e))
-                    .map(|mut certs| certs.drain(..).map(Certificate).collect())?;
+                    .map(|result| {
+                        result
+                            .map_err(|err| zerror!("Error processing client certificate: {err}."))
+                            .and_then(|der| Ok(Certificate(der.to_vec())))
+                    })
+                    .collect::<Result<Vec<Certificate>, ZError>>()?;
 
             let mut keys: Vec<PrivateKey> =
                 rustls_pemfile::rsa_private_keys(&mut Cursor::new(&tls_client_private_key))
-                    .map_err(|e| zerror!(e))
-                    .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
+                    .map(|result| {
+                        result
+                            .map_err(|err| zerror!("Error processing client key: {err}."))
+                            .and_then(|key| Ok(PrivateKey(key.secret_pkcs1_der().to_vec())))
+                    })
+                    .collect::<Result<Vec<PrivateKey>, ZError>>()?;
 
             if keys.is_empty() {
                 keys =
                     rustls_pemfile::pkcs8_private_keys(&mut Cursor::new(&tls_client_private_key))
-                        .map_err(|e| zerror!(e))
-                        .map(|mut keys| keys.drain(..).map(PrivateKey).collect())?;
+                        .map(|result| {
+                            result
+                                .map_err(|err| zerror!("Error processing client key: {err}."))
+                                .and_then(|key| Ok(PrivateKey(key.secret_pkcs8_der().to_vec())))
+                        })
+                        .collect::<Result<Vec<PrivateKey>, ZError>>()?;
             }
 
             if keys.is_empty() {
-                bail!("No private key found");
+                keys = rustls_pemfile::ec_private_keys(&mut Cursor::new(&tls_client_private_key))
+                    .map(|result| {
+                        result
+                            .map_err(|err| zerror!("Error processing client key: {err}."))
+                            .and_then(|key| Ok(PrivateKey(key.secret_sec1_der().to_vec())))
+                    })
+                    .collect::<Result<Vec<PrivateKey>, ZError>>()?;
+            }
+
+            if keys.is_empty() {
+                bail!("No private key found for TLS client.");
             }
 
             let builder = ClientConfig::builder()
@@ -765,57 +806,67 @@ fn load_trust_anchors(config: &Config<'_>) -> ZResult<Option<RootCertStore>> {
     let mut root_cert_store = RootCertStore::empty();
     if let Some(value) = config.get(TLS_ROOT_CA_CERTIFICATE_RAW) {
         let mut pem = BufReader::new(value.as_bytes());
-        let certs = rustls_pemfile::certs(&mut pem)?;
-        let trust_anchors = certs.iter().map(|cert| {
-            let ta = TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
-            OwnedTrustAnchor::from_subject_spki_name_constraints(
-                ta.subject,
-                ta.spki,
-                ta.name_constraints,
-            )
-        });
+        let trust_anchors = process_pem(&mut pem)?;
         root_cert_store.add_trust_anchors(trust_anchors.into_iter());
         return Ok(Some(root_cert_store));
     }
+
     if let Some(b64_certificate) = config.get(TLS_ROOT_CA_CERTIFICATE_BASE64) {
         let certificate_pem = base64_decode(b64_certificate)?;
         let mut pem = BufReader::new(certificate_pem.as_slice());
-        let certs = rustls_pemfile::certs(&mut pem)?;
-        let trust_anchors = certs.iter().map(|cert| {
-            let ta = TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
-            OwnedTrustAnchor::from_subject_spki_name_constraints(
-                ta.subject,
-                ta.spki,
-                ta.name_constraints,
-            )
-        });
+        let trust_anchors = process_pem(&mut pem)?;
         root_cert_store.add_trust_anchors(trust_anchors.into_iter());
         return Ok(Some(root_cert_store));
     }
+
     if let Some(filename) = config.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
         let mut pem = BufReader::new(File::open(filename)?);
-        let certs = rustls_pemfile::certs(&mut pem)?;
-        let trust_anchors = certs.iter().map(|cert| {
-            let ta = TrustAnchor::try_from_cert_der(&cert[..]).unwrap();
-            OwnedTrustAnchor::from_subject_spki_name_constraints(
-                ta.subject,
-                ta.spki,
-                ta.name_constraints,
-            )
-        });
+        let trust_anchors = process_pem(&mut pem)?;
         root_cert_store.add_trust_anchors(trust_anchors.into_iter());
         return Ok(Some(root_cert_store));
     }
     Ok(None)
 }
 
+fn process_pem(pem: &mut dyn io::BufRead) -> ZResult<Vec<OwnedTrustAnchor>> {
+    let certs: Vec<CertificateDer> = rustls_pemfile::certs(pem)
+        .map(|result| {
+            result
+                .map_err(|err| zerror!("Error processing PEM certificates: {err}."))
+                .and_then(|cert| Ok(cert))
+        })
+        .collect::<Result<Vec<CertificateDer>, ZError>>()?;
+
+    let trust_anchors: Vec<TrustAnchor> = certs
+        .into_iter()
+        .map(|cert| {
+            anchor_from_trusted_cert(&cert)
+                .map_err(|err| zerror!("Error processing trust anchor: {err}."))
+                .and_then(|trust_anchor| Ok(trust_anchor.to_owned()))
+        })
+        .collect::<Result<Vec<TrustAnchor>, ZError>>()?;
+
+    let owned_trust_anchors: Vec<OwnedTrustAnchor> = trust_anchors
+        .into_iter()
+        .map(|ta| {
+            OwnedTrustAnchor::from_subject_spki_name_constraints(
+                ta.subject.to_vec(),
+                ta.subject_public_key_info.to_vec(),
+                ta.name_constraints.map(|x| x.to_vec()),
+            )
+        })
+        .collect();
+
+    return Ok(owned_trust_anchors);
+}
+
 fn load_default_webpki_certs() -> RootCertStore {
     let mut root_cert_store = RootCertStore::empty();
     root_cert_store.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
         OwnedTrustAnchor::from_subject_spki_name_constraints(
-            ta.subject,
-            ta.spki,
-            ta.name_constraints,
+            ta.subject.to_vec(),
+            ta.subject_public_key_info.to_vec(),
+            ta.name_constraints.clone().map(|x| x.to_vec()),
         )
     }));
     root_cert_store

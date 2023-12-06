@@ -23,6 +23,8 @@ use async_std::sync::Mutex as AsyncMutex;
 use async_std::task;
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
+use rustls::{Certificate, PrivateKey};
+use rustls_pemfile::Item;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::BufReader;
@@ -35,7 +37,7 @@ use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
-use zenoh_result::{bail, zerror, ZResult};
+use zenoh_result::{bail, zerror, ZError, ZResult};
 use zenoh_sync::Signal;
 
 pub struct LinkUnicastQuic {
@@ -261,14 +263,16 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             rustls_native_certs::load_native_certs()
                 .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
                 .drain(..)
-                .map(|x| rustls::Certificate(x.0))
+                .map(|x| rustls::Certificate(x.to_vec()))
                 .collect::<Vec<rustls::Certificate>>()
         } else {
             rustls_pemfile::certs(&mut BufReader::new(f.as_slice()))
-                .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
-                .drain(..)
-                .map(rustls::Certificate)
-                .collect::<Vec<rustls::Certificate>>()
+                .map(|result| {
+                    result
+                        .map_err(|err| zerror!("Invalid QUIC CA certificate file: {}", err))
+                        .and_then(|der| Ok(Certificate(der.to_vec())))
+                })
+                .collect::<Result<Vec<rustls::Certificate>, ZError>>()?
         };
         for c in certificates.iter() {
             root_cert_store.add(c).map_err(|e| zerror!("{}", e))?;
@@ -347,10 +351,12 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             bail!("No QUIC CA certificate has been provided.");
         };
         let certificates = rustls_pemfile::certs(&mut BufReader::new(f.as_slice()))
-            .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
-            .drain(..)
-            .map(rustls::Certificate)
-            .collect();
+            .map(|result| {
+                result
+                    .map_err(|err| zerror!("Invalid QUIC CA certificate file: {}", err))
+                    .and_then(|der| Ok(Certificate(der.to_vec())))
+            })
+            .collect::<Result<Vec<rustls::Certificate>, ZError>>()?;
 
         // Private keys
         let f = if let Some(value) = epconf.get(TLS_SERVER_PRIVATE_KEY_RAW) {
@@ -364,20 +370,26 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         } else {
             bail!("No QUIC CA private key has been provided.");
         };
-        let private_key = rustls::PrivateKey(
-            rustls_pemfile::read_all(&mut BufReader::new(f.as_slice()))
-                .map_err(|e| zerror!("Invalid QUIC CA private key file: {}", e))?
-                .iter()
-                .filter_map(|x| match x {
-                    rustls_pemfile::Item::RSAKey(k)
-                    | rustls_pemfile::Item::PKCS8Key(k)
-                    | rustls_pemfile::Item::ECKey(k) => Some(k.to_vec()),
-                    _ => None,
-                })
-                .take(1)
-                .next()
-                .ok_or_else(|| zerror!("No QUIC CA private key has been provided."))?,
-        );
+        let items: Vec<Item> = rustls_pemfile::read_all(&mut BufReader::new(f.as_slice()))
+            .map(|result| {
+                result
+                    .map_err(|err| zerror!("Invalid QUIC CA private key file: {}", err))
+                    .and_then(|item| Ok(item))
+            })
+            .collect::<Result<Vec<Item>, ZError>>()?;
+
+        let private_key = items
+            .into_iter()
+            .filter_map(|x| match x {
+                rustls_pemfile::Item::Pkcs1Key(k) => Some(k.secret_pkcs1_der().to_vec()),
+                rustls_pemfile::Item::Pkcs8Key(k) => Some(k.secret_pkcs8_der().to_vec()),
+                rustls_pemfile::Item::Sec1Key(k) => Some(k.secret_sec1_der().to_vec()),
+                _ => None,
+            })
+            .take(1)
+            .next()
+            .ok_or_else(|| zerror!("No QUIC CA private key has been provided."))
+            .map(|x| PrivateKey(x))?;
 
         // Server config
         let mut server_crypto = rustls::ServerConfig::builder()
