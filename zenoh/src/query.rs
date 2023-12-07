@@ -17,7 +17,7 @@
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::prelude::*;
 #[zenoh_macros::unstable]
-use crate::sample::Attachments;
+use crate::sample::Attachment;
 use crate::Session;
 use std::collections::HashMap;
 use std::future::Ready;
@@ -129,7 +129,7 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) handler: Handler,
     pub(crate) value: Option<Value>,
     #[cfg(feature = "unstable")]
-    pub(crate) attachments: Option<Attachments>,
+    pub(crate) attachment: Option<Attachment>,
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
@@ -164,7 +164,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             timeout,
             value,
             #[cfg(feature = "unstable")]
-            attachments,
+            attachment,
             handler: _,
         } = self;
         GetBuilder {
@@ -177,7 +177,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             timeout,
             value,
             #[cfg(feature = "unstable")]
-            attachments,
+            attachment,
             handler: callback,
         }
     }
@@ -247,7 +247,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             timeout,
             value,
             #[cfg(feature = "unstable")]
-            attachments,
+            attachment,
             handler: _,
         } = self;
         GetBuilder {
@@ -260,7 +260,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             timeout,
             value,
             #[cfg(feature = "unstable")]
-            attachments,
+            attachment,
             handler,
         }
     }
@@ -307,18 +307,18 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     }
 
     #[zenoh_macros::unstable]
-    pub fn attachments(&self) -> Option<&Attachments> {
-        self.attachments.as_ref()
+    pub fn attachment(&self) -> Option<&Attachment> {
+        self.attachment.as_ref()
     }
 
     #[zenoh_macros::unstable]
-    pub fn attachments_mut(&mut self) -> &mut Option<Attachments> {
-        &mut self.attachments
+    pub fn attachment_mut(&mut self) -> &mut Option<Attachment> {
+        &mut self.attachment
     }
 
     #[zenoh_macros::unstable]
-    pub fn with_attachments(mut self, attachments: Attachments) -> Self {
-        self.attachments = Some(attachments);
+    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
+        self.attachment = Some(attachment);
         self
     }
 
@@ -338,7 +338,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
             destination,
             timeout,
             value,
-            attachments,
+            attachment,
             handler,
         } = self;
         Self {
@@ -350,7 +350,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
             destination,
             timeout,
             value,
-            attachments,
+            attachment,
             handler,
         }
     }
@@ -400,7 +400,7 @@ where
                 self.timeout,
                 self.value,
                 #[cfg(feature = "unstable")]
-                self.attachments,
+                self.attachment,
                 callback,
             )
             .map(|_| receiver)

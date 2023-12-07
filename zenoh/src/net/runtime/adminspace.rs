@@ -379,7 +379,7 @@ impl Primitives for AdminSpace {
                     zid,
                     primitives,
                     #[cfg(feature = "unstable")]
-                    attachments: query.ext_attachment.map(Into::into),
+                    attachment: query.ext_attachment.map(Into::into),
                 }),
             };
 

@@ -5,19 +5,19 @@ fn pubsub() {
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let _sub = zenoh
-        .declare_subscriber("test/attachments")
+        .declare_subscriber("test/attachment")
         .callback(|sample| {
             println!(
                 "{}",
                 std::str::from_utf8(&sample.payload.contiguous()).unwrap()
             );
-            for (k, v) in &sample.attachments.unwrap() {
+            for (k, v) in &sample.attachment.unwrap() {
                 assert!(k.iter().rev().zip(v.as_slice()).all(|(k, v)| k == v))
             }
         })
         .res()
         .unwrap();
-    let publisher = zenoh.declare_publisher("test/attachments").res().unwrap();
+    let publisher = zenoh.declare_publisher("test/attachment").res().unwrap();
     for i in 0..10 {
         let mut backer = [(
             [0; std::mem::size_of::<usize>()],
@@ -27,8 +27,8 @@ fn pubsub() {
             *backer = ((i * 10 + j).to_le_bytes(), (i * 10 + j).to_be_bytes())
         }
         zenoh
-            .put("test/attachments", "put")
-            .with_attachments(
+            .put("test/attachment", "put")
+            .with_attachment(
                 backer
                     .iter()
                     .map(|b| (b.0.as_slice(), b.1.as_slice()))
@@ -38,7 +38,7 @@ fn pubsub() {
             .unwrap();
         publisher
             .put("publisher")
-            .with_attachments(
+            .with_attachment(
                 backer
                     .iter()
                     .map(|b| (b.0.as_slice(), b.1.as_slice()))
@@ -51,11 +51,11 @@ fn pubsub() {
 #[cfg(feature = "unstable")]
 #[test]
 fn queries() {
-    use zenoh::{prelude::sync::*, sample::Attachments};
+    use zenoh::{prelude::sync::*, sample::Attachment};
 
     let zenoh = zenoh::open(Config::default()).res().unwrap();
     let _sub = zenoh
-        .declare_queryable("test/attachments")
+        .declare_queryable("test/attachment")
         .callback(|query| {
             println!(
                 "{}",
@@ -67,17 +67,17 @@ fn queries() {
                 )
                 .unwrap()
             );
-            let mut attachments = Attachments::new();
-            for (k, v) in query.attachments().unwrap() {
+            let mut attachment = Attachment::new();
+            for (k, v) in query.attachment().unwrap() {
                 assert!(k.iter().rev().zip(v.as_slice()).all(|(k, v)| k == v));
-                attachments.insert(&k, &k);
+                attachment.insert(&k, &k);
             }
             query
                 .reply(Ok(Sample::new(
                     query.key_expr().clone(),
                     query.value().unwrap().clone(),
                 )
-                .with_attachments(attachments)))
+                .with_attachment(attachment)))
                 .res()
                 .unwrap();
         })
@@ -92,9 +92,9 @@ fn queries() {
             *backer = ((i * 10 + j).to_le_bytes(), (i * 10 + j).to_be_bytes())
         }
         let get = zenoh
-            .get("test/attachments")
+            .get("test/attachment")
             .with_value("query")
-            .with_attachments(
+            .with_attachment(
                 backer
                     .iter()
                     .map(|b| (b.0.as_slice(), b.1.as_slice()))
@@ -104,7 +104,7 @@ fn queries() {
             .unwrap();
         while let Ok(reply) = get.recv() {
             let response = reply.sample.as_ref().unwrap();
-            for (k, v) in response.attachments().unwrap() {
+            for (k, v) in response.attachment().unwrap() {
                 assert_eq!(k, v)
             }
         }

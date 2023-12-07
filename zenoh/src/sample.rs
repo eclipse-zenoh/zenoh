@@ -98,7 +98,7 @@ impl From<Option<DataInfo>> for SourceInfo {
     }
 }
 
-mod attachments {
+mod attachment {
     #[zenoh_macros::unstable]
     use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZBufReader, ZSlice};
     #[zenoh_macros::unstable]
@@ -108,29 +108,29 @@ mod attachments {
 
     #[zenoh_macros::unstable]
     #[derive(Clone)]
-    pub struct Attachments {
+    pub struct Attachment {
         pub(crate) inner: ZBuf,
     }
     #[zenoh_macros::unstable]
-    impl Default for Attachments {
+    impl Default for Attachment {
         fn default() -> Self {
             Self::new()
         }
     }
     #[zenoh_macros::unstable]
-    impl<const ID: u8> From<Attachments> for AttachmentType<ID> {
-        fn from(this: Attachments) -> Self {
+    impl<const ID: u8> From<Attachment> for AttachmentType<ID> {
+        fn from(this: Attachment) -> Self {
             AttachmentType { buffer: this.inner }
         }
     }
     #[zenoh_macros::unstable]
-    impl<const ID: u8> From<AttachmentType<ID>> for Attachments {
+    impl<const ID: u8> From<AttachmentType<ID>> for Attachment {
         fn from(this: AttachmentType<ID>) -> Self {
-            Attachments { inner: this.buffer }
+            Attachment { inner: this.buffer }
         }
     }
     #[zenoh_macros::unstable]
-    impl Attachments {
+    impl Attachment {
         pub fn new() -> Self {
             Self {
                 inner: vec![0u8].into(),
@@ -142,7 +142,7 @@ mod attachments {
         pub fn len(&self) -> usize {
             Zenoh080.read(&mut self.inner.reader()).unwrap_or(0)
         }
-        pub fn iter(&self) -> AttachmentsIterator {
+        pub fn iter(&self) -> AttachmentIterator {
             self.into_iter()
         }
         fn _get(&self, key: &[u8]) -> Option<ZSlice> {
@@ -181,19 +181,19 @@ mod attachments {
         }
     }
     #[zenoh_macros::unstable]
-    pub struct AttachmentsIterator<'a> {
+    pub struct AttachmentIterator<'a> {
         reader: ZBufReader<'a>,
         remaining: usize,
     }
     #[zenoh_macros::unstable]
-    impl<'a> core::iter::IntoIterator for &'a Attachments {
+    impl<'a> core::iter::IntoIterator for &'a Attachment {
         type Item = (ZSlice, ZSlice);
-        type IntoIter = AttachmentsIterator<'a>;
+        type IntoIter = AttachmentIterator<'a>;
         fn into_iter(self) -> Self::IntoIter {
             let mut reader = self.inner.reader();
             match Zenoh080.read(&mut reader) {
-                Ok(remaining) => AttachmentsIterator { reader, remaining },
-                Err(_) => AttachmentsIterator {
+                Ok(remaining) => AttachmentIterator { reader, remaining },
+                Err(_) => AttachmentIterator {
                     reader,
                     remaining: 0,
                 },
@@ -201,7 +201,7 @@ mod attachments {
         }
     }
     #[zenoh_macros::unstable]
-    impl core::fmt::Debug for Attachments {
+    impl core::fmt::Debug for Attachment {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(f, "{{")?;
             for (key, value) in self {
@@ -231,7 +231,7 @@ mod attachments {
         }
     }
     #[zenoh_macros::unstable]
-    impl<'a> core::iter::Iterator for AttachmentsIterator<'a> {
+    impl<'a> core::iter::Iterator for AttachmentIterator<'a> {
         type Item = (ZSlice, ZSlice);
         fn next(&mut self) -> Option<Self::Item> {
             if self.remaining == 0 {
@@ -252,9 +252,9 @@ mod attachments {
         }
     }
     #[zenoh_macros::unstable]
-    impl core::iter::ExactSizeIterator for AttachmentsIterator<'_> {}
+    impl core::iter::ExactSizeIterator for AttachmentIterator<'_> {}
     #[zenoh_macros::unstable]
-    impl<'a> core::iter::FromIterator<(&'a [u8], &'a [u8])> for Attachments {
+    impl<'a> core::iter::FromIterator<(&'a [u8], &'a [u8])> for Attachment {
         fn from_iter<T: IntoIterator<Item = (&'a [u8], &'a [u8])>>(iter: T) -> Self {
             let codec = Zenoh080;
             let mut buffer: Vec<u8> = Vec::new();
@@ -283,7 +283,7 @@ mod attachments {
     }
 }
 #[zenoh_macros::unstable]
-pub use attachments::{Attachments, AttachmentsIterator};
+pub use attachment::{Attachment, AttachmentIterator};
 
 /// A zenoh sample.
 #[non_exhaustive]
@@ -316,7 +316,7 @@ pub struct Sample {
     /// </div>
     ///
     /// A map of key-value pairs, where each key and value are byte-slices.
-    pub attachments: Option<Attachments>,
+    pub attachment: Option<Attachment>,
 }
 
 impl Sample {
@@ -335,7 +335,7 @@ impl Sample {
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
             #[cfg(feature = "unstable")]
-            attachments: None,
+            attachment: None,
         }
     }
     /// Creates a new Sample.
@@ -357,7 +357,7 @@ impl Sample {
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
             #[cfg(feature = "unstable")]
-            attachments: None,
+            attachment: None,
         })
     }
 
@@ -381,7 +381,7 @@ impl Sample {
                 #[cfg(feature = "unstable")]
                 source_info: data_info.into(),
                 #[cfg(feature = "unstable")]
-                attachments: None,
+                attachment: None,
             }
         } else {
             Sample {
@@ -392,7 +392,7 @@ impl Sample {
                 #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
                 #[cfg(feature = "unstable")]
-                attachments: None,
+                attachment: None,
             }
         }
     }
@@ -433,19 +433,19 @@ impl Sample {
     }
 
     #[zenoh_macros::unstable]
-    pub fn attachments(&self) -> Option<&Attachments> {
-        self.attachments.as_ref()
+    pub fn attachment(&self) -> Option<&Attachment> {
+        self.attachment.as_ref()
     }
 
     #[zenoh_macros::unstable]
-    pub fn attachments_mut(&mut self) -> &mut Option<Attachments> {
-        &mut self.attachments
+    pub fn attachment_mut(&mut self) -> &mut Option<Attachment> {
+        &mut self.attachment
     }
 
     #[allow(clippy::result_large_err)]
     #[zenoh_macros::unstable]
-    pub fn with_attachments(mut self, attachments: Attachments) -> Self {
-        self.attachments = Some(attachments);
+    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
+        self.attachment = Some(attachment);
         self
     }
 }

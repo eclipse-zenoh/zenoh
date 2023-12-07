@@ -104,13 +104,21 @@ impl ZBuf {
         if slice.is_empty() {
             return;
         }
+        let old_at = at;
         let mut slice_index = usize::MAX;
         for (i, slice) in self.slices.as_ref().iter().enumerate() {
             if at < slice.len() {
                 slice_index = i;
                 break;
             }
-            at -= slice.len();
+            if let Some(new_at) = at.checked_sub(slice.len()) {
+                at = new_at
+            } else {
+                panic!(
+                    "Out of bounds insert attempted: at={old_at}, len={}",
+                    self.len()
+                )
+            }
         }
         if at != 0 {
             let split = &self.slices.as_ref()[slice_index];
@@ -120,10 +128,10 @@ impl ZBuf {
             );
             self.slices.drain(slice_index..(slice_index + 1));
             self.slices.insert(slice_index, l);
-            self.slices.insert(slice_index + 1, slice.to_owned().into());
+            self.slices.insert(slice_index + 1, Vec::from(slice).into());
             self.slices.insert(slice_index + 2, r);
         } else {
-            self.slices.insert(slice_index, slice.to_owned().into())
+            self.slices.insert(slice_index, Vec::from(slice).into())
         }
     }
 }

@@ -29,7 +29,7 @@ use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
 #[cfg(feature = "unstable")]
-use crate::sample::Attachments;
+use crate::sample::Attachment;
 use crate::sample::DataInfo;
 use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
@@ -724,7 +724,7 @@ impl Session {
             value: value.into(),
             kind: SampleKind::Put,
             #[cfg(feature = "unstable")]
-            attachments: None,
+            attachment: None,
         }
     }
 
@@ -757,7 +757,7 @@ impl Session {
             value: Value::empty(),
             kind: SampleKind::Delete,
             #[cfg(feature = "unstable")]
-            attachments: None,
+            attachment: None,
         }
     }
     /// Query data from the matching queryables in the system.
@@ -801,7 +801,7 @@ impl Session {
             timeout: Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout())),
             value: None,
             #[cfg(feature = "unstable")]
-            attachments: None,
+            attachment: None,
             handler: DefaultHandler,
         }
     }
@@ -1614,7 +1614,7 @@ impl Session {
         key_expr: &WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
-        #[cfg(feature = "unstable")] attachments: Option<Attachments>,
+        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
     ) {
         let mut callbacks = SingleOrVec::default();
         let state = zread!(self.state);
@@ -1719,7 +1719,7 @@ impl Session {
             let mut sample = Sample::with_info(key_expr, payload.clone(), info.clone());
             #[cfg(feature = "unstable")]
             {
-                sample.attachments = attachments.clone();
+                sample.attachment = attachment.clone();
             }
             cb(sample);
         }
@@ -1728,7 +1728,7 @@ impl Session {
             let mut sample = Sample::with_info(key_expr, payload, info);
             #[cfg(feature = "unstable")]
             {
-                sample.attachments = attachments;
+                sample.attachment = attachment;
             }
             cb(sample);
         }
@@ -1767,7 +1767,7 @@ impl Session {
         destination: Locality,
         timeout: Duration,
         value: Option<Value>,
-        #[cfg(feature = "unstable")] attachments: Option<Attachments>,
+        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
@@ -1839,8 +1839,8 @@ impl Session {
             let mut ext_attachment = None;
             #[cfg(feature = "unstable")]
             {
-                if let Some(attachments) = attachments.clone() {
-                    ext_attachment = Some(attachments.into());
+                if let Some(attachment) = attachment.clone() {
+                    ext_attachment = Some(attachment.into());
                 }
             }
             primitives.send_request(Request {
@@ -1882,7 +1882,7 @@ impl Session {
                     payload: v.payload.clone(),
                 }),
                 #[cfg(feature = "unstable")]
-                attachments,
+                attachment,
             );
         }
         Ok(())
@@ -1898,7 +1898,7 @@ impl Session {
         _target: TargetType,
         _consolidation: ConsolidationType,
         body: Option<QueryBodyType>,
-        #[cfg(feature = "unstable")] attachments: Option<Attachments>,
+        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
     ) {
         let (primitives, key_expr, callbacks) = {
             let state = zread!(self.state);
@@ -1960,7 +1960,7 @@ impl Session {
                     primitives
                 },
                 #[cfg(feature = "unstable")]
-                attachments,
+                attachment,
             }),
         };
         for callback in callbacks.iter() {
@@ -2392,7 +2392,7 @@ impl Primitives for Session {
                             Sample::with_info(key_expr.into_owned(), m.payload, Some(info));
                         #[cfg(feature = "unstable")]
                         {
-                            sample.attachments = m.ext_attachment.map(Into::into);
+                            sample.attachment = m.ext_attachment.map(Into::into);
                         }
                         let new_reply = Reply {
                             sample: Ok(sample),

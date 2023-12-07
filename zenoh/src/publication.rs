@@ -20,7 +20,7 @@ use crate::handlers::DefaultHandler;
 use crate::net::transport::primitives::Primitives;
 use crate::prelude::*;
 #[zenoh_macros::unstable]
-use crate::sample::Attachments;
+use crate::sample::Attachment;
 use crate::sample::DataInfo;
 use crate::Encoding;
 use crate::SessionRef;
@@ -81,7 +81,7 @@ pub struct PutBuilder<'a, 'b> {
     pub(crate) value: Value,
     pub(crate) kind: SampleKind,
     #[cfg(feature = "unstable")]
-    pub(crate) attachments: Option<Attachments>,
+    pub(crate) attachment: Option<Attachment>,
 }
 
 impl PutBuilder<'_, '_> {
@@ -123,18 +123,18 @@ impl PutBuilder<'_, '_> {
     }
 
     #[zenoh_macros::unstable]
-    pub fn attachments(&self) -> Option<&Attachments> {
-        self.attachments.as_ref()
+    pub fn attachment(&self) -> Option<&Attachment> {
+        self.attachment.as_ref()
     }
 
     #[zenoh_macros::unstable]
-    pub fn attachments_mut(&mut self) -> &mut Option<Attachments> {
-        &mut self.attachments
+    pub fn attachment_mut(&mut self) -> &mut Option<Attachment> {
+        &mut self.attachment
     }
 
     #[zenoh_macros::unstable]
-    pub fn with_attachments(mut self, attachments: Attachments) -> Self {
-        self.attachments = Some(attachments);
+    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
+        self.attachment = Some(attachment);
         self
     }
 }
@@ -151,7 +151,7 @@ impl SyncResolve for PutBuilder<'_, '_> {
             value,
             kind,
             #[cfg(feature = "unstable")]
-            attachments,
+            attachment,
         } = self;
         let key_expr = publisher.key_expr?;
         log::trace!("write({:?}, [...])", &key_expr);
@@ -178,8 +178,8 @@ impl SyncResolve for PutBuilder<'_, '_> {
                         let mut ext_attachment = None;
                         #[cfg(feature = "unstable")]
                         {
-                            if let Some(attachments) = attachments.clone() {
-                                ext_attachment = Some(attachments.into());
+                            if let Some(attachment) = attachment.clone() {
+                                ext_attachment = Some(attachment.into());
                             }
                         }
                         PushBody::Put(Put {
@@ -198,8 +198,8 @@ impl SyncResolve for PutBuilder<'_, '_> {
                         let mut ext_attachment = None;
                         #[cfg(feature = "unstable")]
                         {
-                            if let Some(attachments) = attachments.clone() {
-                                ext_attachment = Some(attachments.into());
+                            if let Some(attachment) = attachment.clone() {
+                                ext_attachment = Some(attachment.into());
                             }
                         }
                         PushBody::Del(Del {
@@ -226,7 +226,7 @@ impl SyncResolve for PutBuilder<'_, '_> {
                 Some(data_info),
                 value.payload,
                 #[cfg(feature = "unstable")]
-                attachments,
+                attachment,
             );
         }
         Ok(())
@@ -384,7 +384,7 @@ impl<'a> Publisher<'a> {
             value,
             kind,
             #[cfg(feature = "unstable")]
-            attachments: None,
+            attachment: None,
         }
     }
 
@@ -670,23 +670,23 @@ pub struct Publication<'a> {
     value: Value,
     kind: SampleKind,
     #[cfg(feature = "unstable")]
-    pub(crate) attachments: Option<Attachments>,
+    pub(crate) attachment: Option<Attachment>,
 }
 
 impl<'a> Publication<'a> {
     #[zenoh_macros::unstable]
-    pub fn attachments(&self) -> Option<&Attachments> {
-        self.attachments.as_ref()
+    pub fn attachment(&self) -> Option<&Attachment> {
+        self.attachment.as_ref()
     }
 
     #[zenoh_macros::unstable]
-    pub fn attachments_mut(&mut self) -> &mut Option<Attachments> {
-        &mut self.attachments
+    pub fn attachment_mut(&mut self) -> &mut Option<Attachment> {
+        &mut self.attachment
     }
 
     #[zenoh_macros::unstable]
-    pub fn with_attachments(mut self, attachments: Attachments) -> Self {
-        self.attachments = Some(attachments);
+    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
+        self.attachment = Some(attachment);
         self
     }
 }
@@ -702,7 +702,7 @@ impl SyncResolve for Publication<'_> {
             value,
             kind,
             #[cfg(feature = "unstable")]
-            attachments,
+            attachment,
         } = self;
         log::trace!("write({:?}, [...])", publisher.key_expr);
         let primitives = zread!(publisher.session.state)
@@ -717,8 +717,8 @@ impl SyncResolve for Publication<'_> {
             let mut ext_attachment = None;
             #[cfg(feature = "unstable")]
             {
-                if let Some(attachments) = attachments.clone() {
-                    ext_attachment = Some(attachments.into());
+                if let Some(attachment) = attachment.clone() {
+                    ext_attachment = Some(attachment.into());
                 }
             }
             primitives.send_push(Push {
@@ -755,7 +755,7 @@ impl SyncResolve for Publication<'_> {
                 Some(data_info),
                 value.payload,
                 #[cfg(feature = "unstable")]
-                attachments,
+                attachment,
             );
         }
         Ok(())

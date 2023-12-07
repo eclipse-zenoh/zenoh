@@ -19,7 +19,7 @@ use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::query::ReplyKeyExpr;
 #[zenoh_macros::unstable]
-use crate::sample::Attachments;
+use crate::sample::Attachment;
 use crate::sample::DataInfo;
 use crate::SessionRef;
 use crate::Undeclarable;
@@ -49,7 +49,7 @@ pub(crate) struct QueryInner {
     pub(crate) zid: ZenohId,
     pub(crate) primitives: Arc<dyn Primitives>,
     #[cfg(feature = "unstable")]
-    pub(crate) attachments: Option<Attachments>,
+    pub(crate) attachment: Option<Attachment>,
 }
 
 impl Drop for QueryInner {
@@ -97,8 +97,8 @@ impl Query {
     }
 
     #[zenoh_macros::unstable]
-    pub fn attachments(&self) -> Option<&Attachments> {
-        self.inner.attachments.as_ref()
+    pub fn attachment(&self) -> Option<&Attachment> {
+        self.inner.attachment.as_ref()
     }
 
     /// Sends a reply to this Query.
@@ -162,33 +162,30 @@ pub struct ReplyBuilder<'a> {
 
 impl<'a> ReplyBuilder<'a> {
     #[zenoh_macros::unstable]
-    pub fn attachments(&self) -> Option<&Attachments> {
+    pub fn attachment(&self) -> Option<&Attachment> {
         match &self.result {
-            Ok(sample) => sample.attachments.as_ref(),
+            Ok(sample) => sample.attachment.as_ref(),
             Err(_) => None,
         }
     }
 
     #[zenoh_macros::unstable]
-    pub fn attachments_mut(&mut self) -> Option<&mut Option<Attachments>> {
+    pub fn attachment_mut(&mut self) -> Option<&mut Option<Attachment>> {
         match &mut self.result {
-            Ok(sample) => Some(&mut sample.attachments),
+            Ok(sample) => Some(&mut sample.attachment),
             Err(_) => None,
         }
     }
 
     #[allow(clippy::result_large_err)]
     #[zenoh_macros::unstable]
-    pub fn with_attachments(
-        mut self,
-        attachments: Attachments,
-    ) -> Result<Self, (Self, Attachments)> {
+    pub fn with_attachment(mut self, attachment: Attachment) -> Result<Self, (Self, Attachment)> {
         match &mut self.result {
             Ok(sample) => {
-                sample.attachments = Some(attachments);
+                sample.attachment = Some(attachment);
                 Ok(self)
             }
-            Err(_) => Err((self, attachments)),
+            Err(_) => Err((self, attachment)),
         }
     }
 }
@@ -214,7 +211,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                     #[cfg(feature = "unstable")]
                     source_info,
                     #[cfg(feature = "unstable")]
-                    attachments,
+                    attachment,
                 } = sample;
                 #[allow(unused_mut)]
                 let mut data_info = DataInfo {
@@ -230,8 +227,8 @@ impl SyncResolve for ReplyBuilder<'_> {
                 {
                     data_info.source_id = source_info.source_id;
                     data_info.source_sn = source_info.source_sn;
-                    if let Some(attachments) = attachments {
-                        ext_attachment = Some(attachments.into());
+                    if let Some(attachment) = attachment {
+                        ext_attachment = Some(attachment.into());
                     }
                 }
                 self.query.inner.primitives.send_response(Response {
