@@ -31,7 +31,7 @@ shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
 async-std = { workspace = true, features = ["attributes"] }
-clap = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 env_logger = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
