@@ -477,7 +477,7 @@ async fn tx_task(
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(batch.stats.t_msgs);
-                    stats.inc_tx_bytes(bytes.len());
+                    stats.inc_tx_bytes(batch.len() as usize);
                 }
                 // Reinsert the batch into the queue
                 pipeline.refill(batch, priority);
@@ -595,7 +595,7 @@ async fn rx_task(
         match action {
             Action::Read((batch, locator)) => {
                 #[cfg(feature = "stats")]
-                transport.stats.inc_rx_bytes(zslice.len());
+                transport.stats.inc_rx_bytes(batch.len());
 
                 // Deserialize all the messages from the current ZBuf
                 transport.read_messages(

@@ -11,13 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::{App, Arg};
+use clap::Parser;
 use std::convert::TryInto;
-#[cfg(not(feature = "shared-memory"))]
-use std::process::exit;
 use zenoh::config::Config;
 use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
+use zenoh_examples::CommonArgs;
 
 fn main() {
     // initiate logging
@@ -56,80 +55,36 @@ fn main() {
     }
 }
 
-fn parse_args() -> (Config, usize, Priority, bool, usize) {
-    let args = App::new("zenoh throughput pub example")
-        .arg(
-            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
-                .possible_values(["peer", "client"]),
-        )
-        .arg(Arg::from_usage(
-            "-p, --priority=[PRIO]...  'Priority for sending data.'",
-        ))
-        .arg(Arg::from_usage(
-            "-e, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
-        ))
-        .arg(Arg::from_usage(
-            "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
-        ))
-        .arg(Arg::from_usage(
-            "-c, --config=[FILE]      'A configuration file.'",
-        ))
-        .arg(Arg::from_usage("-t, --print   'Print the statistics.'"))
-        .arg(
-            Arg::from_usage(
-                "-n, --number=[number] 'Number of messages in each throughput measurements.'",
-            )
-            .default_value("100000"),
-        )
-        .arg(Arg::from_usage(
-            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
-        ))
-        .arg(Arg::from_usage("--enable-shm 'Enable SHM transport.'"))
-        .arg(Arg::from_usage(
-            "<PAYLOAD_SIZE>          'Sets the size of the payload to publish'",
-        ))
-        .get_matches();
+#[derive(Parser, Clone, PartialEq, Eq, Hash, Debug)]
+struct Args {
+    #[arg(short, long)]
+    /// Priority for sending data
+    priority: Option<u8>,
+    #[arg(short = 't', long)]
+    /// Print the statistics
+    print: bool,
+    #[arg(short, long, default_value = "100000")]
+    /// Number of messages in each throughput measurements
+    number: usize,
+    /// Sets the size of the payload to publish
+    payload_size: usize,
+    #[command(flatten)]
+    common: CommonArgs,
+}
 
-    let mut config = if let Some(conf_file) = args.value_of("config") {
-        Config::from_file(conf_file).unwrap()
-    } else {
-        Config::default()
-    };
+fn parse_args() -> (Config, usize, Priority, bool, usize) {
+    let args = Args::parse();
 
     let mut prio = Priority::default();
-    if let Some(p) = args.value_of("priority") {
-        prio = p.parse::<u8>().unwrap().try_into().unwrap();
-    }
-    if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
-        config.set_mode(Some(mode)).unwrap();
-    }
-    if let Some(values) = args.values_of("connect") {
-        config.connect.endpoints = values.map(|v| v.parse().unwrap()).collect();
-    }
-    if let Some(values) = args.values_of("listen") {
-        config.listen.endpoints = values.map(|v| v.parse().unwrap()).collect();
+    if let Some(p) = args.priority {
+        prio = p.try_into().unwrap();
     }
 
-    if args.is_present("no-multicast-scouting") {
-        config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    }
-    if args.is_present("enable-shm") {
-        #[cfg(feature = "shared-memory")]
-        config.transport.shared_memory.set_enabled(true).unwrap();
-        #[cfg(not(feature = "shared-memory"))]
-        {
-            println!("enable-shm argument: SHM cannot be enabled, because Zenoh is compiled without shared-memory feature!");
-            exit(-1);
-        }
-    }
-
-    let number: usize = args.value_of("number").unwrap().parse().unwrap();
-
-    let size = args
-        .value_of("PAYLOAD_SIZE")
-        .unwrap()
-        .parse::<usize>()
-        .unwrap();
-
-    (config, size, prio, args.is_present("print"), number)
+    (
+        args.common.into(),
+        args.payload_size,
+        prio,
+        args.print,
+        args.number,
+    )
 }
