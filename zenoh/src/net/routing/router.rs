@@ -34,7 +34,7 @@ use std::sync::{Mutex, RwLock};
 use uhlc::HLC;
 use zenoh_config::Config;
 use zenoh_link::Link;
-use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, ZenohId};
+use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_transport::{
     TransportMulticast, TransportPeer, TransportPeerEventHandler, TransportUnicast,
@@ -60,28 +60,10 @@ impl Router {
     }
 
     #[allow(clippy::too_many_arguments)]
-    pub fn init_link_state(
-        &mut self,
-        runtime: Runtime,
-        router_full_linkstate: bool,
-        peer_full_linkstate: bool,
-        router_peers_failover_brokering: bool,
-        gossip: bool,
-        gossip_multihop: bool,
-        autoconnect: WhatAmIMatcher,
-    ) {
+    pub fn init_link_state(&mut self, runtime: Runtime) {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
-        ctrl_lock.init(
-            &mut tables,
-            runtime,
-            router_full_linkstate,
-            peer_full_linkstate,
-            router_peers_failover_brokering,
-            gossip,
-            gossip_multihop,
-            autoconnect,
-        )
+        ctrl_lock.init(&mut tables, runtime)
     }
 
     pub(crate) fn new_primitives(

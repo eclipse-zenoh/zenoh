@@ -27,7 +27,7 @@ use super::dispatcher::{
 use crate::runtime::Runtime;
 use std::{any::Any, sync::Arc};
 use zenoh_buffers::ZBuf;
-use zenoh_config::{unwrap_or_default, Config, WhatAmI, WhatAmIMatcher};
+use zenoh_config::{unwrap_or_default, Config, WhatAmI};
 use zenoh_protocol::{
     core::WireExpr,
     network::{
@@ -53,17 +53,7 @@ pub(crate) trait HatBaseTrait {
     fn as_any(&self) -> &dyn Any;
 
     #[allow(clippy::too_many_arguments)]
-    fn init(
-        &self,
-        tables: &mut Tables,
-        runtime: Runtime,
-        router_full_linkstate: bool,
-        peer_full_linkstate: bool,
-        router_peers_failover_brokering: bool,
-        gossip: bool,
-        gossip_multihop: bool,
-        autoconnect: WhatAmIMatcher,
-    );
+    fn init(&self, tables: &mut Tables, runtime: Runtime);
 
     fn new_tables(&self, router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync>;
 

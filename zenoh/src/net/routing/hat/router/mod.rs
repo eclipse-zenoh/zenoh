@@ -46,7 +46,7 @@ use std::{
     hash::Hasher,
     sync::Arc,
 };
-use zenoh_config::{WhatAmI, WhatAmIMatcher, ZenohId};
+use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
     common::ZExtBody,
     network::{declare::queryable::ext::QueryableInfo, oam::id::OAM_LINKSTATE, Oam},
@@ -271,17 +271,24 @@ impl HatTables {
 pub(crate) struct HatCode {}
 
 impl HatBaseTrait for HatCode {
-    fn init(
-        &self,
-        tables: &mut Tables,
-        runtime: Runtime,
-        router_full_linkstate: bool,
-        peer_full_linkstate: bool,
-        router_peers_failover_brokering: bool,
-        gossip: bool,
-        gossip_multihop: bool,
-        autoconnect: WhatAmIMatcher,
-    ) {
+    fn init(&self, tables: &mut Tables, runtime: Runtime) {
+        let config = runtime.config.lock();
+        let whatami = tables.whatami;
+        let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
+        let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
+        let autoconnect = if gossip {
+            *unwrap_or_default!(config.scouting().gossip().autoconnect().get(whatami))
+        } else {
+            WhatAmIMatcher::empty()
+        };
+
+        let router_full_linkstate = whatami == WhatAmI::Router;
+        let peer_full_linkstate = whatami != WhatAmI::Client
+            && unwrap_or_default!(config.routing().peer().mode()) == *"linkstate";
+        let router_peers_failover_brokering =
+            unwrap_or_default!(config.routing().router().peers_failover_brokering());
+        drop(config);
+
         if router_full_linkstate | gossip {
             hat_mut!(tables).routers_net = Some(Network::new(
                 "[Routers network]".to_string(),
