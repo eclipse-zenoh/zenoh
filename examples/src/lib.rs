@@ -4,9 +4,8 @@
 //!
 use zenoh::config::Config;
 
-#[derive(clap::ValueEnum, Default, Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[derive(clap::ValueEnum, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Wai {
-    #[default]
     Peer,
     Client,
     Router,
@@ -21,7 +20,7 @@ pub struct CommonArgs {
     #[arg(short, long)]
     /// A configuration file.
     config: Option<String>,
-    #[arg(short, long, default_value_t)]
+    #[arg(short, long, default_value = "peer")]
     /// The Zenoh session mode.
     mode: Wai,
     #[arg(short = 'e', long)]

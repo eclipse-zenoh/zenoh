@@ -13,22 +13,38 @@
 //
 use clap::Parser;
 use std::convert::TryInto;
-use zenoh::config::Config;
 use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
+use zenoh::sample::Attachment;
 use zenoh_examples::CommonArgs;
 
 fn main() {
     // initiate logging
     env_logger::init();
-    let (config, size, prio, print, number) = parse_args();
+    let args = Args::parse();
 
-    let data: Value = (0usize..size)
+    let mut prio = Priority::default();
+    if let Some(p) = args.priority {
+        prio = p.try_into().unwrap();
+    }
+
+    let mut payload_size = args.payload_size;
+    if args.attachments_number != 0 {
+        let mut att_size = 2 * args.attachments_number
+            + 1
+            + (core::mem::size_of::<usize>() * 8
+                - args.attachments_number.leading_zeros() as usize)
+                / 7;
+        att_size += 2 + (core::mem::size_of::<usize>() * 8 - att_size.leading_zeros() as usize) / 7;
+        payload_size -= dbg!(att_size);
+    }
+
+    let data: Value = (0usize..dbg!(payload_size))
         .map(|i| (i % 10) as u8)
         .collect::<Vec<u8>>()
         .into();
 
-    let session = zenoh::open(config).res().unwrap();
+    let session = zenoh::open(args.common).res().unwrap();
 
     let publisher = session
         .declare_publisher("test/thr")
@@ -40,10 +56,28 @@ fn main() {
     let mut count: usize = 0;
     let mut start = std::time::Instant::now();
     loop {
-        publisher.put(data.clone()).res().unwrap();
+        let attachments = (args.attachments_number != 0).then(|| {
+            if args.attach_with_insert {
+                let mut attachments = Attachment::new();
+                for _ in 0..args.attachments_number {
+                    attachments.insert(b"", b"");
+                }
+                attachments
+            } else {
+                std::iter::repeat((b"".as_slice(), b"".as_slice()))
+                    .take(args.attachments_number)
+                    .collect()
+            }
+        });
 
-        if print {
-            if count < number {
+        let mut put = publisher.put(data.clone());
+        if let Some(att) = attachments {
+            put = put.with_attachment(att)
+        }
+        put.res().unwrap();
+
+        if args.print {
+            if count < args.number {
                 count += 1;
             } else {
                 let thpt = count as f64 / start.elapsed().as_secs_f64();
@@ -57,34 +91,25 @@ fn main() {
 
 #[derive(Parser, Clone, PartialEq, Eq, Hash, Debug)]
 struct Args {
-    #[arg(short, long)]
     /// Priority for sending data
+    #[arg(short, long)]
     priority: Option<u8>,
-    #[arg(short = 't', long)]
     /// Print the statistics
+    #[arg(short = 't', long)]
     print: bool,
-    #[arg(short, long, default_value = "100000")]
     /// Number of messages in each throughput measurements
+    #[arg(short, long, default_value = "100000")]
     number: usize,
+    /// The number of attachments in the message.
+    ///
+    /// The attachments will be sized such that the attachments replace the payload.
+    #[arg(long, default_value = "0")]
+    attachments_number: usize,
+    /// Attach through insert rather than FromIterator
+    #[arg(long)]
+    attach_with_insert: bool,
     /// Sets the size of the payload to publish
     payload_size: usize,
     #[command(flatten)]
     common: CommonArgs,
-}
-
-fn parse_args() -> (Config, usize, Priority, bool, usize) {
-    let args = Args::parse();
-
-    let mut prio = Priority::default();
-    if let Some(p) = args.priority {
-        prio = p.try_into().unwrap();
-    }
-
-    (
-        args.common.into(),
-        args.payload_size,
-        prio,
-        args.print,
-        args.number,
-    )
 }
