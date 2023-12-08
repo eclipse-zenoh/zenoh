@@ -1502,10 +1502,23 @@ impl Session {
             &mut RoutingExpr::new(&tables.root_res, key_expr.as_str()),
             0,
         );
+        drop(tables);
         let matching = match destination {
             Locality::Any => !route.is_empty(),
-            Locality::Remote => route.values().any(|dir| !dir.0.is_local()),
-            Locality::SessionLocal => route.values().any(|dir| dir.0.is_local()),
+            Locality::Remote => {
+                if let Some(face) = zread!(self.state).primitives.as_ref() {
+                    route.values().any(|dir| !Arc::ptr_eq(&dir.0, &face.state))
+                } else {
+                    !route.is_empty()
+                }
+            }
+            Locality::SessionLocal => {
+                if let Some(face) = zread!(self.state).primitives.as_ref() {
+                    route.values().any(|dir| Arc::ptr_eq(&dir.0, &face.state))
+                } else {
+                    false
+                }
+            }
         };
         Ok(MatchingStatus { matching })
     }

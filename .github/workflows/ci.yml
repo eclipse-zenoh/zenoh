@@ -54,11 +54,11 @@ jobs:
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
-      - name: Clippy unstable
+      - name: Clippy unstable and stats
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets --features unstable -- -D warnings
+          args: --all-targets --features unstable --features stats -- -D warnings
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 

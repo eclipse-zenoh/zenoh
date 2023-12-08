@@ -42,7 +42,7 @@ transport_unixpipe = ["zenoh/transport_unixpipe"]
 
 [dependencies]
 async-std = { workspace = true, features = ["attributes"] }
-clap = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 env_logger = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }

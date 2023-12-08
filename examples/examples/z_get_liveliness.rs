@@ -11,11 +11,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::{App, Arg};
+use clap::Parser;
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
+use zenoh_examples::CommonArgs;
 
 #[async_std::main]
 async fn main() {
@@ -43,55 +44,20 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Config, String, Duration) {
-    let args = App::new("zenoh liveliness query example")
-        .arg(
-            Arg::from_usage("-m, --mode=[MODE]  'The zenoh session mode (peer by default).")
-                .possible_values(["peer", "client"]),
-        )
-        .arg(Arg::from_usage(
-            "-e, --connect=[ENDPOINT]...   'Endpoints to connect to.'",
-        ))
-        .arg(Arg::from_usage(
-            "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
-        ))
-        .arg(
-            Arg::from_usage("-k, --key_expr=[KEYEXPR] 'The key expression matching liveliness tokens to query.'")
-                .default_value("group1/**"),
-        )
-        .arg(
-            Arg::from_usage("-o, --timeout=[TIME] 'The query timeout in milliseconds'")
-                .default_value("10000"),
-        )
-        .arg(Arg::from_usage(
-            "-c, --config=[FILE]      'A configuration file.'",
-        ))
-        .arg(Arg::from_usage(
-            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
-        ))
-        .get_matches();
+#[derive(Parser, Clone, Debug)]
+struct Args {
+    #[arg(short, long, default_value = "group1/**")]
+    /// The key expression matching liveliness tokens to query.
+    key_expr: KeyExpr<'static>,
+    #[arg(short = 'o', long, default_value = "10000")]
+    /// The query timeout in milliseconds.
+    timeout: u64,
+    #[command(flatten)]
+    common: CommonArgs,
+}
 
-    let mut config = if let Some(conf_file) = args.value_of("config") {
-        Config::from_file(conf_file).unwrap()
-    } else {
-        Config::default()
-    };
-    if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
-        config.set_mode(Some(mode)).unwrap();
-    }
-    if let Some(values) = args.values_of("connect") {
-        config.connect.endpoints = values.map(|v| v.parse().unwrap()).collect();
-    }
-    if let Some(values) = args.values_of("listen") {
-        config.listen.endpoints = values.map(|v| v.parse().unwrap()).collect();
-    }
-    if args.is_present("no-multicast-scouting") {
-        config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    }
-
-    let key_expr = args.value_of("key_expr").unwrap().to_string();
-
-    let timeout = Duration::from_millis(args.value_of("timeout").unwrap().parse::<u64>().unwrap());
-
-    (config, key_expr, timeout)
+fn parse_args() -> (Config, KeyExpr<'static>, Duration) {
+    let args = Args::parse();
+    let timeout = Duration::from_millis(args.timeout);
+    (args.common.into(), args.key_expr, timeout)
 }

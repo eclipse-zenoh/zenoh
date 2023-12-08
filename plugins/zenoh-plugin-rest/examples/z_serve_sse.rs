@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::{App, Arg};
+use clap::{arg, Command};
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
@@ -85,50 +85,45 @@ async fn main() {
 }
 
 fn parse_args() -> Config {
-    let args = App::new("zenoh ssl server example")
+    let args = Command::new("zenoh ssl server example")
         .arg(
-            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
-                .possible_values(["peer", "client"]),
+            arg!(-m --mode [MODE] "The zenoh session mode (peer by default).")
+                .value_parser(["peer", "client"]),
         )
-        .arg(Arg::from_usage(
-            "-e, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
-        ))
-        .arg(Arg::from_usage(
-            "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
-        ))
-        .arg(Arg::from_usage(
-            "-c, --config=[FILE]      'A configuration file.'",
-        ))
-        .arg(Arg::from_usage(
-            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
-        ))
+        .arg(arg!(-e --connect [ENDPOINT]...  "Endpoints to connect to."))
+        .arg(arg!(-l --listen [ENDPOINT]...  "Endpoints to listen on."))
+        .arg(arg!(-c --config [FILE] "A configuration file."))
+        .arg(
+            arg!(--no-multicast-scouting "Disable the multicast-based scouting mechanism."
+            ),
+        )
         .get_matches();
 
-    let mut config = if let Some(conf_file) = args.value_of("config") {
+    let mut config = if let Some(conf_file) = args.get_one::<&String>("config") {
         Config::from_file(conf_file).unwrap()
     } else {
         Config::default()
     };
-    match args.value_of("mode").map(|m| m.parse()) {
+    match args.get_one::<&String>("mode").map(|m| m.parse()) {
         Some(Ok(mode)) => {
             config.set_mode(Some(mode)).unwrap();
         }
         Some(Err(e)) => panic!("Invalid mode: {}", e),
         None => {}
     };
-    if let Some(values) = args.values_of("connect") {
+    if let Some(values) = args.get_many::<&String>("connect") {
         config
             .connect
             .endpoints
-            .extend(values.map(|v| v.parse().unwrap()))
+            .extend(values.into_iter().map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listen") {
+    if let Some(values) = args.get_many::<&String>("listen") {
         config
             .listen
             .endpoints
-            .extend(values.map(|v| v.parse().unwrap()))
+            .extend(values.into_iter().map(|v| v.parse().unwrap()))
     }
-    if args.is_present("no-multicast-scouting") {
+    if args.get_flag("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 

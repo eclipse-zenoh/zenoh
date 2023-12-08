@@ -196,7 +196,7 @@ async fn tx_task(
                     #[cfg(feature = "stats")]
                     {
                         stats.inc_tx_t_msgs(batch.stats.t_msgs);
-                        stats.inc_tx_bytes(bytes.len());
+                        stats.inc_tx_bytes(batch.len() as usize);
                     }
 
                     // Reinsert the batch into the queue

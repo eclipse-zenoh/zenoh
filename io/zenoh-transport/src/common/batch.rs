@@ -182,6 +182,10 @@ impl WBatch {
     pub fn clear(&mut self) {
         self.buffer.clear();
         self.codec.clear();
+        #[cfg(feature = "stats")]
+        {
+            self.stats.clear();
+        }
         if let Some(h) = self.header.get() {
             let mut writer = self.buffer.writer();
             let _ = writer.write_u8(h.get());
@@ -312,6 +316,10 @@ impl RBatch {
             #[cfg(feature = "transport_compression")]
             header: config.header(),
         }
+    }
+
+    pub fn len(&self) -> usize {
+        self.buffer.len()
     }
 
     #[inline(always)]
