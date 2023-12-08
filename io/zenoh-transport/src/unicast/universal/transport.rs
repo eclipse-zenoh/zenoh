@@ -218,28 +218,12 @@ impl TransportUnicastUniversal {
         }
     }
 
-    pub(crate) fn stop_tx(&self, link: &TransportLinkUnicast) -> ZResult<()> {
-        let mut guard = zwrite!(self.links);
-        match zlinkgetmut!(guard, link) {
-            Some(l) => {
-                l.stop_tx();
-                Ok(())
-            }
-            None => {
-                bail!(
-                    "Can not stop Link TX {} with peer: {}",
-                    link,
-                    self.config.zid
-                )
-            }
-        }
-    }
-
-    pub(crate) fn stop_rx(&self, link: &TransportLinkUnicast) -> ZResult<()> {
+    pub(crate) fn stop_rx_tx(&self, link: &TransportLinkUnicast) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, link) {
             Some(l) => {
                 l.stop_rx();
+                l.stop_tx();
                 Ok(())
             }
             None => {

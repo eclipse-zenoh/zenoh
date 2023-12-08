@@ -160,18 +160,19 @@ impl TransportLinkUnicastUniversal {
 
     pub(super) async fn close(mut self) -> ZResult<()> {
         log::trace!("{}: closing", self.link);
-        self.stop_rx();
-        if let Some(handle) = self.handle_rx.take() {
-            // SAFETY: it is safe to unwrap the Arc since we have the ownership of the whole link
-            let handle_rx = Arc::try_unwrap(handle).unwrap();
-            handle_rx.await;
-        }
-
         self.stop_tx();
+        self.stop_rx();
+
         if let Some(handle) = self.handle_tx.take() {
             // SAFETY: it is safe to unwrap the Arc since we have the ownership of the whole link
             let handle_tx = Arc::try_unwrap(handle).unwrap();
             handle_tx.await;
+        }
+
+        if let Some(handle) = self.handle_rx.take() {
+            // SAFETY: it is safe to unwrap the Arc since we have the ownership of the whole link
+            let handle_rx = Arc::try_unwrap(handle).unwrap();
+            handle_rx.await;
         }
 
         self.link.close(None).await

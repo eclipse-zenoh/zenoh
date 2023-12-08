@@ -62,8 +62,7 @@ impl TransportUnicastUniversal {
 
     fn handle_close(&self, link: &TransportLinkUnicast, _reason: u8, session: bool) -> ZResult<()> {
         // Stop now rx and tx tasks before doing the proper cleanup
-        let _ = self.stop_rx(link);
-        let _ = self.stop_tx(link);
+        let _ = self.stop_rx_tx(link);
 
         // Delete and clean up
         let c_transport = self.clone();

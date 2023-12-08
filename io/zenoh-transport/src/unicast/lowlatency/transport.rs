@@ -229,10 +229,12 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
 
         let mut guard = zasyncwrite!(self.link);
         if guard.is_some() {
-            self.stop_keepalive().await;
-            self.stop_rx().await;
+            return Err((
+                zerror!("Lowlatency transport cannot support more than one link!").into(),
+                link.fail(),
+                close::reason::GENERIC,
+            ));
         }
-
         let (link, ack) = link.ack();
         *guard = Some(link);
         drop(guard);
