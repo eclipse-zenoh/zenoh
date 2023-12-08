@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "transport_unixpipe")]
-use super::link::send_with_link;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
@@ -24,20 +22,12 @@ use crate::{
     TransportManager, TransportPeerEventHandler,
 };
 use async_executor::Task;
-#[cfg(feature = "transport_unixpipe")]
-use async_std::sync::RwLockUpgradableReadGuard;
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::sync::{Arc, RwLock as SyncRwLock};
 use std::time::Duration;
-#[cfg(feature = "transport_unixpipe")]
-use zenoh_core::zasyncread_upgradable;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
-#[cfg(feature = "transport_unixpipe")]
-use zenoh_link::unixpipe::UNIXPIPE_LOCATOR_PREFIX;
-use zenoh_link::Link;
-#[cfg(feature = "transport_unixpipe")]
 use zenoh_link::Link;
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::transport::TransportBodyLowLatency;
@@ -47,7 +37,6 @@ use zenoh_protocol::{
     core::{WhatAmI, ZenohId},
     transport::close,
 };
-#[cfg(not(feature = "transport_unixpipe"))]
 use zenoh_result::{zerror, ZResult};
 
 /*************************************/

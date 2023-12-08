@@ -287,7 +287,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         other_initial_sn: TransportSn,
         other_lease: Duration,
     ) -> AddLinkResult {
-        let _add_link_guard = zasynclock!(self.add_link_lock);
+        let add_link_guard = zasynclock!(self.add_link_lock);
 
         // Check if we can add more inbound links
         {
@@ -336,7 +336,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         *guard = links.into_boxed_slice();
 
         drop(guard);
-        drop(_add_link_guard);
+        drop(add_link_guard);
 
         // create a callback to start the link
         let start_link = Box::new(move || {
