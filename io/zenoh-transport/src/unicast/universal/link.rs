@@ -44,49 +44,57 @@ pub(super) struct TransportLinkUnicastUniversal {
     // The transport this link is associated to
     transport: TransportUnicastUniversal,
     // The signals to stop TX/RX tasks
-    handle_tx: Option<Arc<async_executor::Task<()>>>,
+    handle_tx: Option<Arc<JoinHandle<()>>>, //Option<Arc<async_executor::Task<()>>>,
     signal_rx: Signal,
     handle_rx: Option<Arc<JoinHandle<()>>>,
 }
 
 impl TransportLinkUnicastUniversal {
-    pub(super) fn new(transport: TransportUnicastUniversal, link: TransportLinkUnicast) -> Self {
-        Self {
-            link: Arc::new(link),
-            pipeline: None,
-            transport,
-            handle_tx: None,
-            signal_rx: Signal::new(),
-            handle_rx: None,
-        }
+    pub(super) fn new(
+        transport: TransportUnicastUniversal,
+        link: TransportLinkUnicast,
+        priority_tx: &[TransportPriorityTx],
+    ) -> (Self, TransmissionPipelineConsumer) {
+        assert!(!priority_tx.is_empty());
+
+        let config = TransmissionPipelineConf {
+            is_streamed: link.link.is_streamed(),
+            #[cfg(feature = "transport_compression")]
+            is_compression: link.config.is_compression,
+            batch_size: link.config.mtu,
+            queue_size: transport.manager.config.queue_size,
+            backoff: transport.manager.config.queue_backoff,
+        };
+        // The pipeline
+        let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
+
+        (
+            Self {
+                link: Arc::new(link),
+                pipeline: Some(producer),
+                transport,
+                handle_tx: None,
+                signal_rx: Signal::new(),
+                handle_rx: None,
+            },
+            consumer,
+        )
     }
 }
 
 impl TransportLinkUnicastUniversal {
     pub(super) fn start_tx(
         &mut self,
-        executor: &TransportExecutor,
+        consumer: TransmissionPipelineConsumer,
+        _executor: &TransportExecutor,
         keep_alive: Duration,
-        priority_tx: &[TransportPriorityTx],
     ) {
         if self.handle_tx.is_none() {
-            let config = TransmissionPipelineConf {
-                is_streamed: self.link.link.is_streamed(),
-                #[cfg(feature = "transport_compression")]
-                is_compression: self.link.config.is_compression,
-                batch_size: self.link.config.mtu,
-                queue_size: self.transport.manager.config.queue_size,
-                backoff: self.transport.manager.config.queue_backoff,
-            };
-
-            // The pipeline
-            let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
-            self.pipeline = Some(producer);
-
             // Spawn the TX task
-            let tx = self.link.tx();
+            let mut tx = self.link.tx();
             let c_transport = self.transport.clone();
-            let handle = executor.spawn(async move {
+            let handle = async_std::task::spawn(async move {
+                // todo: why the executor doesn't work?
                 let res = tx_task(
                     consumer,
                     &mut tx,
@@ -99,7 +107,9 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link((&tx.inner.link).into()).await });
+                    task::spawn(async move {
+                        c_transport.del_link(tx.inner.link.as_ref().into()).await
+                    });
                 }
             });
             self.handle_tx = Some(Arc::new(handle));
@@ -115,7 +125,7 @@ impl TransportLinkUnicastUniversal {
     pub(super) fn start_rx(&mut self, lease: Duration) {
         if self.handle_rx.is_none() {
             // Spawn the RX task
-            let rx = self.link.rx();
+            let mut rx = self.link.rx();
             let c_transport = self.transport.clone();
             let c_signal = self.signal_rx.clone();
             let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
@@ -135,7 +145,9 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link((&rx.inner.link).into()).await });
+                    task::spawn(async move {
+                        c_transport.del_link(rx.inner.link.as_ref().into()).await
+                    });
                 }
             });
             self.handle_rx = Some(Arc::new(handle));

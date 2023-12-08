@@ -15,10 +15,11 @@
 use crate::unicast::shared_memory_unicast::Challenge;
 use crate::{
     unicast::{
-        establishment::{
-            compute_sn, ext, finalize_transport, AcceptFsm, Cookie, InputFinalize, Zenoh080Cookie,
+        establishment::{compute_sn, ext, AcceptFsm, Cookie, Zenoh080Cookie},
+        link::{
+            EstablishedTransportLinkUnicast, TransportLinkUnicast, TransportLinkUnicastConfig,
+            TransportLinkUnicastDirection,
         },
-        link::{TransportLinkUnicast, TransportLinkUnicastConfig, TransportLinkUnicastDirection},
         TransportConfigUnicast,
     },
     TransportManager,
@@ -710,31 +711,17 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
         #[cfg(feature = "transport_compression")]
         is_compression: state.link.ext_compression.is_compression(),
     };
-    let a_link = TransportLinkUnicast::new(link.link, a_config);
+    let a_link = link.reconfigure(a_config);
     let s_link = format!("{:?}", a_link);
-    let transport = step!(manager.init_transport_unicast(config, a_link).await);
-
-    // Sync the RX sequence number
-    let _ = step!(transport
-        .get_inner()
-        .map_err(|e| (e, Some(close::reason::INVALID))))
-    .sync(osyn_out.other_initial_sn)
-    .await;
-
-    // Finalize the transport
-    let input = InputFinalize {
-        transport: transport.clone(),
-        other_lease: osyn_out.other_lease,
-    };
-    step!(finalize_transport(&link, manager, input)
-        .await
-        .map_err(|e| (e, Some(close::reason::INVALID))));
-
-    // Send the open_ack on the link
-    step!(link
-        .send(&oack_out.open_ack.into())
-        .await
-        .map_err(|e| (e, Some(close::reason::GENERIC))));
+    let a_link = EstablishedTransportLinkUnicast::new(a_link, Some(oack_out.open_ack.into()));
+    let _transport = manager
+        .init_transport_unicast(
+            config,
+            a_link,
+            osyn_out.other_initial_sn,
+            osyn_out.other_lease,
+        )
+        .await?;
 
     log::debug!(
         "New transport link accepted from {} to {}: {}.",

@@ -104,10 +104,10 @@ impl PartialEq<LinkUnicast> for Link {
     fn eq(&self, other: &LinkUnicast) -> bool {
         self.src == *other.get_src() && self.dst == *other.get_dst()
     }
-  }
-  
-  impl PartialEq<LinkMulticast> for Link {
+}
+
+impl PartialEq<LinkMulticast> for Link {
     fn eq(&self, other: &LinkMulticast) -> bool {
         self.src == *other.get_src() && self.dst == *other.get_dst()
     }
-  }
+}

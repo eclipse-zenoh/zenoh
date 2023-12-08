@@ -481,6 +481,7 @@ async fn test_transport(
         .into(),
     }
     .into();
+
     for _ in 0..MSG_COUNT {
         let _ = client_transport.schedule(message.clone());
     }

@@ -13,20 +13,22 @@
 //
 #[cfg(feature = "shared-memory")]
 use super::shared_memory_unicast::SharedMemoryUnicast;
+use super::{link::EstablishedTransportLinkUnicast, transport_unicast_inner::InitTransportResult};
 #[cfg(feature = "transport_auth")]
 use crate::unicast::establishment::ext::auth::Auth;
 #[cfg(feature = "transport_multilink")]
 use crate::unicast::establishment::ext::multilink::MultiLink;
 use crate::{
     unicast::{
-        link::TransportLinkUnicast, lowlatency::transport::TransportUnicastLowlatency,
-        transport_unicast_inner::TransportUnicastTrait,
-        universal::transport::TransportUnicastUniversal, TransportConfigUnicast, TransportUnicast,
+        lowlatency::transport::TransportUnicastLowlatency,
+        transport_unicast_inner::{InitTransportError, TransportUnicastTrait},
+        universal::transport::TransportUnicastUniversal,
+        TransportConfigUnicast, TransportUnicast,
     },
     TransportManager, TransportPeer,
 };
 use async_std::{prelude::FutureExt, sync::Mutex, task};
-use std::{borrow::BorrowMut, collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 #[cfg(feature = "transport_compression")]
 use zenoh_config::CompressionUnicastConf;
 #[cfg(feature = "shared-memory")]
@@ -39,7 +41,7 @@ use zenoh_protocol::{
     core::{endpoint, ZenohId},
     transport::{close, TransportSn},
 };
-use zenoh_result::{bail, zerror, Error, ZResult};
+use zenoh_result::{bail, zerror, ZResult};
 
 /*************************************/
 /*         TRANSPORT CONFIG          */
@@ -411,11 +413,11 @@ impl TransportManager {
     async fn init_existing_transport_unicast(
         &self,
         config: TransportConfigUnicast,
-        link: TransportLinkUnicast,
+        link: EstablishedTransportLinkUnicast,
         other_initial_sn: TransportSn,
         other_lease: Duration,
-        transport: &Arc<dyn TransportUnicastTrait>,
-    ) -> Result<TransportUnicast, (Error, Option<u8>)> {
+        transport: Arc<dyn TransportUnicastTrait>,
+    ) -> InitTransportResult {
         let existing_config = transport.get_config();
         // Verify that fundamental parameters are correct.
         // Ignore the non fundamental parameters like initial SN.
@@ -427,105 +429,50 @@ impl TransportManager {
                 existing_config
             );
             log::trace!("{}", e);
-            return Err((e.into(), Some(close::reason::INVALID)));
+            return Err(InitTransportError::Link((
+                e.into(),
+                link.fail(),
+                close::reason::INVALID,
+            )));
         }
-
-        let c_link = (&link.link).into();
 
         // Add the link to the transport
-        transport
-            .add_link(link)
+        let (start_tx_rx, ack) = transport
+            .add_link(link, other_initial_sn, other_lease)
             .await
-            .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
+            .map_err(InitTransportError::Link)?;
 
-        // Sync the RX sequence number
-        transport
-            .sync(other_initial_sn)
+        // complete establish procedure
+        let c_link = ack.link();
+        let c_t = transport.clone();
+        ack.ack()
             .await
-            .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
+            .map_err(|e| InitTransportError::Transport((e, c_t, close::reason::GENERIC)))?;
 
-        // Start the TX loop
-        let keep_alive = self.config.unicast.lease / self.config.unicast.keep_alive as u32;
-        transport
-            .start_tx(&c_link, &self.tx_executor, keep_alive)
-            .map_err(|e| (e, Some(close::reason::INVALID)))?;
+        // notify transport's callback interface that there is a new link
+        Self::notify_new_link_unicast(&transport, c_link);
 
-        // Notify the transport handler there is a new link on this transport
-        if let Some(callback) = transport.get_callback() {
-            callback.new_link(c_link.clone());
-        }
+        start_tx_rx();
 
-        // Start the RX loop
-        transport
-            .start_rx(&c_link, other_lease)
-            .map_err(|e| (e, Some(close::reason::INVALID)))?;
-
-        Ok(TransportUnicast(Arc::downgrade(transport)))
+        Ok(transport)
     }
 
-    pub(super) async fn init_new_transport_unicast(
-        &self,
-        config: TransportConfigUnicast,
-        link: TransportLinkUnicast,
-        other_initial_sn: TransportSn,
-        other_lease: Duration,
-        transports: &mut HashMap<ZenohId, Arc<dyn TransportUnicastTrait>>,
-    ) -> Result<TransportUnicast, (Error, Option<u8>)> {
-        // Verify that we haven't reached the transport number limit
-        if transports.len() >= self.config.unicast.max_sessions {
-            let e = zerror!(
-                "Max transports reached ({}). Denying new transport with peer: {}",
-                self.config.unicast.max_sessions,
-                config.zid
-            );
-            log::trace!("{}", e);
-            return Err((e.into(), Some(close::reason::INVALID)));
+    fn notify_new_link_unicast(transport: &Arc<dyn TransportUnicastTrait>, link: Link) {
+        if let Some(callback) = &transport.get_callback() {
+            callback.new_link(link);
         }
+    }
 
-        let c_link: Link = (&link.link).into();
-
-        // Create the transport
-        let is_multilink = zcondfeat!("transport_multilink", config.multilink.is_some(), false);
-
-        // select and create transport implementation depending on the cfg and enabled features
-        let a_t = {
-            if config.is_lowlatency {
-                log::debug!("Will use LowLatency transport!");
-                TransportUnicastLowlatency::make(self.clone(), config.clone(), link)
-                    .map_err(|e| (e, Some(close::reason::INVALID)))
-                    .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?
-            } else {
-                log::debug!("Will use Universal transport!");
-                let t: Arc<dyn TransportUnicastTrait> =
-                    TransportUnicastUniversal::make(self.clone(), config.clone())
-                        .map_err(|e| (e, Some(close::reason::INVALID)))
-                        .map(|v| Arc::new(v) as Arc<dyn TransportUnicastTrait>)?;
-                // Add the link to the transport
-                t.add_link(link)
-                    .await
-                    .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
-                t
-            }
-        };
-
-        let transport = TransportUnicast(Arc::downgrade(&a_t));
-
-        // Sync the RX sequence number
-        a_t.sync(other_initial_sn)
-            .await
-            .map_err(|e| (e, Some(close::reason::MAX_LINKS)))?;
-
-        // Start the TX loop
-        let keep_alive = self.config.unicast.lease / self.config.unicast.keep_alive as u32;
-        a_t.start_tx(&c_link, &self.tx_executor, keep_alive)
-            .map_err(|e| (e, Some(close::reason::INVALID)))?;
-
+    fn notify_new_transport_unicast(
+        &self,
+        transport: &Arc<dyn TransportUnicastTrait>,
+    ) -> ZResult<()> {
         // Assign a callback to the new transport
         let peer = TransportPeer {
-            zid: a_t.get_zid(),
-            whatami: a_t.get_whatami(),
-            links: vec![c_link.clone()],
-            is_qos: a_t.is_qos(),
+            zid: transport.get_zid(),
+            whatami: transport.get_whatami(),
+            links: transport.get_links(),
+            is_qos: transport.get_config().is_qos,
             #[cfg(feature = "shared-memory")]
             is_shm: transport.is_shm(),
         };
@@ -536,21 +483,100 @@ impl TransportManager {
         let callback = self
             .config
             .handler
-            .new_unicast(peer, transport.clone())
-            .map_err(|e| (e, Some(close::reason::INVALID)))?;
+            .new_unicast(peer, TransportUnicast(Arc::downgrade(transport)))?;
 
         // Set the callback on the transport
-        a_t.set_callback(callback.clone());
+        transport.set_callback(callback);
 
-        // Notify the transport handler there is a new link on this transport
-        callback.new_link(c_link.clone());
+        Ok(())
+    }
 
-        // Start the RX loop
-        a_t.start_rx(&c_link, other_lease)
-            .map_err(|e| (e, Some(close::reason::INVALID)))?;
+    pub(super) async fn init_new_transport_unicast(
+        &self,
+        config: TransportConfigUnicast,
+        link: EstablishedTransportLinkUnicast,
+        other_initial_sn: TransportSn,
+        other_lease: Duration,
+        transports: &mut HashMap<ZenohId, Arc<dyn TransportUnicastTrait>>,
+    ) -> InitTransportResult {
+        macro_rules! link_error {
+            ($s:expr, $reason:expr) => {
+                match $s {
+                    Ok(output) => output,
+                    Err(e) => {
+                        return Err(InitTransportError::Link((e, link.fail(), $reason)));
+                    }
+                }
+            };
+        }
+
+        // Verify that we haven't reached the transport number limit
+        if transports.len() >= self.config.unicast.max_sessions {
+            let e = zerror!(
+                "Max transports reached ({}). Denying new transport with peer: {}",
+                self.config.unicast.max_sessions,
+                config.zid
+            );
+            log::trace!("{e}");
+            return Err(InitTransportError::Link((
+                e.into(),
+                link.fail(),
+                close::reason::INVALID,
+            )));
+        }
+
+        // Create the transport
+        let is_multilink = zcondfeat!("transport_multilink", config.multilink.is_some(), false);
+
+        // select and create transport implementation depending on the cfg and enabled features
+        let t = if config.is_lowlatency {
+            log::debug!("Will use LowLatency transport!");
+            TransportUnicastLowlatency::make(self.clone(), config.clone())
+        } else {
+            log::debug!("Will use Universal transport!");
+            link_error!(
+                TransportUnicastUniversal::make(self.clone(), config.clone()),
+                close::reason::INVALID
+            )
+        };
+
+        // Add the link to the transport
+        let (start_tx_rx, ack) = match t.add_link(link, other_initial_sn, other_lease).await {
+            Ok(val) => val,
+            Err(e) => {
+                let _ = t.close(e.2).await;
+                return Err(InitTransportError::Link(e));
+            }
+        };
+
+        macro_rules! transport_error {
+            ($s:expr, $reason:expr) => {
+                match $s {
+                    Ok(output) => output,
+                    Err(e) => {
+                        return Err(InitTransportError::Transport((e, t.clone(), $reason)));
+                    }
+                }
+            };
+        }
+
+        // complete establish procedure
+        let c_link = ack.link();
+        transport_error!(ack.ack().await, close::reason::GENERIC);
+
+        // notify manager's interface that there is a new transport
+        transport_error!(
+            self.notify_new_transport_unicast(&t),
+            close::reason::GENERIC
+        );
+
+        // notify transport's callback interface that there is a new link
+        Self::notify_new_link_unicast(&t, c_link);
+
+        start_tx_rx();
 
         // Add the transport transport to the list of active transports
-        transports.insert(config.zid, a_t);
+        transports.insert(config.zid, t.clone());
 
         zcondfeat!(
             "shared-memory",
@@ -583,39 +609,57 @@ impl TransportManager {
             }
         );
 
-        Ok(transport)
+        Ok(t)
     }
 
     pub(super) async fn init_transport_unicast(
         &self,
         config: TransportConfigUnicast,
-        link: TransportLinkUnicast,
+        link: EstablishedTransportLinkUnicast,
         other_initial_sn: TransportSn,
         other_lease: Duration,
-    ) -> Result<TransportUnicast, (Error, Option<u8>)> {
-        let mut guard = zasynclock!(self.state.unicast.transports);
-
+    ) -> ZResult<TransportUnicast> {
         // First verify if the transport already exists
-        match guard.get(&config.zid) {
-            Some(transport) => {
-                self.init_existing_transport_unicast(
-                    config,
-                    link,
-                    other_initial_sn,
-                    other_lease,
-                    transport,
-                )
-                .await
+        let init_result = {
+            let mut guard = zasynclock!(self.state.unicast.transports);
+            match guard.get(&config.zid) {
+                Some(transport) => {
+                    let transport = transport.clone();
+                    drop(guard);
+                    self.init_existing_transport_unicast(
+                        config,
+                        link,
+                        other_initial_sn,
+                        other_lease,
+                        transport,
+                    )
+                    .await
+                }
+                None => {
+                    let transport = self
+                        .init_new_transport_unicast(
+                            config,
+                            link,
+                            other_initial_sn,
+                            other_lease,
+                            &mut guard,
+                        )
+                        .await;
+                    drop(guard);
+                    transport
+                }
             }
-            None => {
-                self.init_new_transport_unicast(
-                    config,
-                    link,
-                    other_initial_sn,
-                    other_lease,
-                    &mut guard,
-                )
-                .await
+        };
+
+        match init_result {
+            Ok(transport) => Ok(TransportUnicast(Arc::downgrade(&transport))),
+            Err(InitTransportError::Link((e, link, reason))) => {
+                let _ = link.close(Some(reason)).await;
+                Err(e)
+            }
+            Err(InitTransportError::Transport((e, transport, reason))) => {
+                let _ = transport.close(reason).await;
+                Err(e)
             }
         }
     }
@@ -710,7 +754,6 @@ impl TransportManager {
                 .await
             {
                 log::debug!("{}", e);
-                let _ = link.close().await;
             }
             let mut guard = zasynclock!(c_manager.state.unicast.incoming);
             *guard -= 1;

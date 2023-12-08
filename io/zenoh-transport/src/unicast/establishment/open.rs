@@ -15,8 +15,11 @@
 use crate::unicast::shared_memory_unicast::Challenge;
 use crate::{
     unicast::{
-        establishment::{compute_sn, ext, finalize_transport, InputFinalize, OpenFsm},
-        link::{TransportLinkUnicast, TransportLinkUnicastConfig, TransportLinkUnicastDirection},
+        establishment::{compute_sn, ext, OpenFsm},
+        link::{
+            EstablishedTransportLinkUnicast, TransportLinkUnicast, TransportLinkUnicastConfig,
+            TransportLinkUnicastDirection,
+        },
         TransportConfigUnicast, TransportUnicast,
     },
     TransportManager,
@@ -621,29 +624,17 @@ pub(crate) async fn open_link(
         #[cfg(feature = "transport_compression")]
         is_compression: state.link.ext_compression.is_compression(),
     };
-    let o_link = TransportLinkUnicast::new(link.link, o_config);
+    let o_link = link.reconfigure(o_config);
     let s_link = format!("{:?}", o_link);
-    let transport = step!(
-        manager
-            .init_transport_unicast(
-                config,
-                o_link,
-                oack_out.other_initial_sn,
-                oack_out.other_lease
-            )
-            .await
-    );
-
-    let output = InputFinalize {
-        transport,
-        other_lease: oack_out.other_lease,
-    };
-    let transport = output.transport.clone();
-    let res = finalize_transport(&link, manager, output).await;
-    if let Err(e) = res {
-        let _ = transport.close().await;
-        return Err(e);
-    }
+    let o_link = EstablishedTransportLinkUnicast::new(o_link, None);
+    let transport = manager
+        .init_transport_unicast(
+            config,
+            o_link,
+            oack_out.other_initial_sn,
+            oack_out.other_lease,
+        )
+        .await?;
 
     log::debug!(
         "New transport link opened from {} to {}: {}.",

@@ -78,8 +78,9 @@ impl TransportUnicastLowlatency {
 
     pub(super) async fn send_async(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
         let guard = zasyncwrite!(self.link);
+        let link = guard.as_ref().ok_or_else(|| zerror!("No link"))?;
         send_with_link(
-            &guard,
+            link,
             msg,
             #[cfg(feature = "stats")]
             &self.stats,
@@ -133,7 +134,7 @@ impl TransportUnicastLowlatency {
         let c_transport = self.clone();
         let handle = task::spawn(async move {
             let guard = zasyncread!(c_transport.link);
-            let link = guard.rx();
+            let link = guard.as_ref().unwrap().rx();
             drop(guard);
             let rx_buffer_size = c_transport.manager.config.link_rx_buffer_size;
 
@@ -174,7 +175,7 @@ impl TransportUnicastLowlatency {
 /*              TASKS                */
 /*************************************/
 async fn keepalive_task(
-    link: Arc<RwLock<TransportLinkUnicast>>,
+    link: Arc<RwLock<Option<TransportLinkUnicast>>>,
     keep_alive: Duration,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
@@ -186,8 +187,9 @@ async fn keepalive_task(
         };
 
         let guard = zasyncwrite!(link);
+        let link = guard.as_ref().ok_or_else(|| zerror!("No link"))?;
         let _ = send_with_link(
-            &guard,
+            link,
             keepailve,
             #[cfg(feature = "stats")]
             &stats,
@@ -261,7 +263,8 @@ async fn rx_task_dgram(
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
 
         // Async read from the underlying link
-        let bytes = link.inner
+        let bytes = link
+            .inner
             .link
             .read(&mut buffer)
             .timeout(lease)

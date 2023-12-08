@@ -40,12 +40,20 @@ pub(crate) struct TransportLinkUnicastConfig {
 
 #[derive(PartialEq, Eq)]
 pub(crate) struct TransportLinkUnicast {
-    pub(crate) link: LinkUnicast,
+    pub(crate) link: Arc<LinkUnicast>,
     pub(crate) config: TransportLinkUnicastConfig,
 }
 
 impl TransportLinkUnicast {
-    pub(crate) fn new(link: LinkUnicast, mut config: TransportLinkUnicastConfig) -> Self {
+    pub(crate) fn new(link: LinkUnicast, config: TransportLinkUnicastConfig) -> Self {
+        Self::init(Arc::new(link), config)
+    }
+
+    pub(crate) fn reconfigure(self, new_config: TransportLinkUnicastConfig) -> Self {
+        Self::init(self.link, new_config)
+    }
+
+    fn init(link: Arc<LinkUnicast>, mut config: TransportLinkUnicastConfig) -> Self {
         config.mtu = link.get_mtu().min(config.mtu);
         Self { link, config }
     }
@@ -60,7 +68,10 @@ impl TransportLinkUnicast {
 
     pub(crate) fn tx(&self) -> TransportLinkUnicastTx {
         TransportLinkUnicastTx {
-            inner: self.clone(),
+            inner: Self {
+                link: self.link.clone(),
+                config: self.config,
+            },
             #[cfg(feature = "transport_compression")]
             buffer: self.config.is_compression.then_some(BBuf::with_capacity(
                 lz4_flex::block::get_maximum_output_size(self.config.mtu as usize),
@@ -70,7 +81,10 @@ impl TransportLinkUnicast {
 
     pub(crate) fn rx(&self) -> TransportLinkUnicastRx {
         TransportLinkUnicastRx {
-            inner: self.clone(),
+            inner: Self {
+                link: self.link.clone(),
+                config: self.config,
+            },
         }
     }
 
@@ -116,13 +130,13 @@ impl fmt::Debug for TransportLinkUnicast {
 
 impl From<&TransportLinkUnicast> for Link {
     fn from(link: &TransportLinkUnicast) -> Self {
-        Link::from(&link.link)
+        Link::from(link.link.as_ref())
     }
 }
 
 impl From<TransportLinkUnicast> for Link {
     fn from(link: TransportLinkUnicast) -> Self {
-        Link::from(link.link)
+        Link::from(link.link.as_ref())
     }
 }
 
@@ -271,5 +285,63 @@ impl fmt::Debug for TransportLinkUnicastRx {
             .field("link", &self.inner.link)
             .field("config", &self.inner.config)
             .finish()
+    }
+}
+
+pub(crate) struct EstablishAck {
+    link: TransportLinkUnicastTx,
+    ack: Option<TransportMessage>,
+}
+
+impl EstablishAck {
+    pub(crate) fn new(link: &TransportLinkUnicast, ack: Option<TransportMessage>) -> Self {
+        Self {
+            link: link.tx(),
+            ack,
+        }
+    }
+
+    pub(crate) async fn ack(mut self) -> ZResult<()> {
+        if let Some(msg) = self.ack {
+            return self.link.send(&msg).await.map(|_| {});
+        }
+        Ok(())
+    }
+
+    pub(crate) fn link(&self) -> Link {
+        self.link.inner.link.as_ref().into()
+    }
+}
+
+#[derive(PartialEq, Eq)]
+pub(crate) struct EstablishedTransportLinkUnicast {
+    link: TransportLinkUnicast,
+    ack: Option<TransportMessage>,
+}
+
+impl EstablishedTransportLinkUnicast {
+    pub(crate) fn new(link: TransportLinkUnicast, ack: Option<TransportMessage>) -> Self {
+        Self { link, ack }
+    }
+
+    pub(crate) fn inner_config(&self) -> &TransportLinkUnicastConfig {
+        &self.link.config
+    }
+
+    pub(crate) fn ack(self) -> (TransportLinkUnicast, EstablishAck) {
+        let ack = EstablishAck::new(&self.link, self.ack);
+        (self.link, ack)
+    }
+    pub(crate) fn fail(self) -> TransportLinkUnicast {
+        self.link
+    }
+}
+
+impl fmt::Display for EstablishedTransportLinkUnicast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.ack.as_ref() {
+            Some(ack) => write!(f, "{}({})", self.link, ack),
+            None => write!(f, "{}", self.link),
+        }
     }
 }

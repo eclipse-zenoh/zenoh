@@ -14,18 +14,31 @@
 
 use crate::{
     unicast::{link::TransportLinkUnicast, TransportConfigUnicast},
-    TransportExecutor, TransportPeerEventHandler,
+    TransportPeerEventHandler,
 };
 use async_std::sync::MutexGuard as AsyncMutexGuard;
 use async_trait::async_trait;
-use zenoh_link::Link;
 use std::{fmt::DebugStruct, sync::Arc, time::Duration};
+use zenoh_link::Link;
 use zenoh_protocol::{
     core::{WhatAmI, ZenohId},
     network::NetworkMessage,
     transport::TransportSn,
 };
 use zenoh_result::ZResult;
+
+use super::link::{EstablishAck, EstablishedTransportLinkUnicast};
+
+pub(crate) type LinkError = (zenoh_result::Error, TransportLinkUnicast, u8);
+pub(crate) type TransportError = (zenoh_result::Error, Arc<dyn TransportUnicastTrait>, u8);
+pub(crate) enum InitTransportError {
+    Link(LinkError),
+    Transport(TransportError),
+}
+
+pub(crate) type AddLinkResult<'a> =
+    Result<(Box<dyn FnOnce() + Send + Sync + 'a>, EstablishAck), LinkError>;
+pub(crate) type InitTransportResult = Result<Arc<dyn TransportUnicastTrait>, InitTransportError>;
 
 /*************************************/
 /*      UNICAST TRANSPORT TRAIT      */
@@ -36,6 +49,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*            ACCESSORS              */
     /*************************************/
     fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>);
+
     async fn get_alive(&self) -> AsyncMutexGuard<'_, bool>;
     fn get_zid(&self) -> ZenohId;
     fn get_whatami(&self) -> WhatAmI;
@@ -51,28 +65,17 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    async fn add_link(&self, link: TransportLinkUnicast) -> ZResult<()>;
+    async fn add_link(
+        &self,
+        link: EstablishedTransportLinkUnicast,
+        other_initial_sn: TransportSn,
+        other_lease: Duration,
+    ) -> AddLinkResult;
 
     /*************************************/
     /*                TX                 */
     /*************************************/
     fn schedule(&self, msg: NetworkMessage) -> ZResult<()>;
-    fn start_tx(
-        &self,
-        link: &Link,
-        executor: &TransportExecutor,
-        keep_alive: Duration,
-    ) -> ZResult<()>;
-
-    /*************************************/
-    /*                RX                 */
-    /*************************************/
-    fn start_rx(&self, link: &Link, lease: Duration) -> ZResult<()>;
-
-    /*************************************/
-    /*           INITIATION              */
-    /*************************************/
-    async fn sync(&self, _initial_sn_rx: TransportSn) -> ZResult<()>;
 
     /*************************************/
     /*            TERMINATION            */
