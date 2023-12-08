@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
 use clap::Parser;
 use std::convert::TryInto;
 use zenoh::prelude::sync::*;
@@ -30,11 +31,7 @@ fn main() {
 
     let mut payload_size = args.payload_size;
     if args.attachments_number != 0 {
-        let mut att_size = 2 * args.attachments_number
-            + 1
-            + (core::mem::size_of::<usize>() * 8
-                - args.attachments_number.leading_zeros() as usize)
-                / 7;
+        let mut att_size = 2 * args.attachments_number;
         att_size += 2 + (core::mem::size_of::<usize>() * 8 - att_size.leading_zeros() as usize) / 7;
         payload_size -= dbg!(att_size);
     }

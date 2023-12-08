@@ -100,9 +100,13 @@ impl From<Option<DataInfo>> for SourceInfo {
 
 mod attachment {
     #[zenoh_macros::unstable]
-    use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZBufReader, ZSlice};
+    use zenoh_buffers::{
+        reader::{HasReader, Reader},
+        writer::HasWriter,
+        ZBuf, ZBufReader, ZSlice,
+    };
     #[zenoh_macros::unstable]
-    use zenoh_codec::{LCodec, RCodec, WCodec, Zenoh080};
+    use zenoh_codec::{RCodec, WCodec, Zenoh080};
     #[zenoh_macros::unstable]
     use zenoh_protocol::zenoh::ext::AttachmentType;
 
@@ -133,14 +137,14 @@ mod attachment {
     impl Attachment {
         pub fn new() -> Self {
             Self {
-                inner: vec![0u8].into(),
+                inner: ZBuf::empty(),
             }
         }
         pub fn is_empty(&self) -> bool {
             self.len() == 0
         }
         pub fn len(&self) -> usize {
-            Zenoh080.read(&mut self.inner.reader()).unwrap_or(0)
+            self.iter().count()
         }
         pub fn iter(&self) -> AttachmentIterator {
             self.into_iter()
@@ -154,23 +158,9 @@ mod attachment {
         }
         fn _insert(&mut self, key: &[u8], value: &[u8]) {
             let codec = Zenoh080;
-            let mut len = self.len();
-            let prevlen = codec.w_len(len);
-            len += 1;
-
             let mut writer = self.inner.writer();
             codec.write(&mut writer, key).unwrap(); // Infallible, barring alloc failure
             codec.write(&mut writer, value).unwrap(); // Infallible, barring alloc failure
-
-            let mut buf = [0u8; 10];
-            let buf = {
-                let mut writer = buf.writer();
-                codec.write(&mut writer, len).unwrap(); // Infallible
-                let len = 10 - writer.len();
-                &buf[..len]
-            };
-
-            self.inner.splice(..prevlen, buf);
         }
         pub fn insert<Key: AsRef<[u8]> + ?Sized, Value: AsRef<[u8]> + ?Sized>(
             &mut self,
@@ -183,20 +173,14 @@ mod attachment {
     #[zenoh_macros::unstable]
     pub struct AttachmentIterator<'a> {
         reader: ZBufReader<'a>,
-        remaining: usize,
     }
     #[zenoh_macros::unstable]
     impl<'a> core::iter::IntoIterator for &'a Attachment {
         type Item = (ZSlice, ZSlice);
         type IntoIter = AttachmentIterator<'a>;
         fn into_iter(self) -> Self::IntoIter {
-            let mut reader = self.inner.reader();
-            match Zenoh080.read(&mut reader) {
-                Ok(remaining) => AttachmentIterator { reader, remaining },
-                Err(_) => AttachmentIterator {
-                    reader,
-                    remaining: 0,
-                },
+            AttachmentIterator {
+                reader: self.inner.reader(),
             }
         }
     }
@@ -234,47 +218,26 @@ mod attachment {
     impl<'a> core::iter::Iterator for AttachmentIterator<'a> {
         type Item = (ZSlice, ZSlice);
         fn next(&mut self) -> Option<Self::Item> {
-            if self.remaining == 0 {
-                return None;
-            }
-            let Ok(key) = Zenoh080.read(&mut self.reader) else {
-                self.remaining = 0;
-                return None;
-            };
-            let Ok(value) = Zenoh080.read(&mut self.reader) else {
-                self.remaining = 0;
-                return None;
-            };
+            let key = Zenoh080.read(&mut self.reader).ok()?;
+            let value = Zenoh080.read(&mut self.reader).ok()?;
             Some((key, value))
         }
         fn size_hint(&self) -> (usize, Option<usize>) {
-            (self.remaining, Some(self.remaining))
+            (
+                (self.reader.remaining() != 0) as usize,
+                Some(self.reader.remaining() / 2),
+            )
         }
     }
-    #[zenoh_macros::unstable]
-    impl core::iter::ExactSizeIterator for AttachmentIterator<'_> {}
     #[zenoh_macros::unstable]
     impl<'a> core::iter::FromIterator<(&'a [u8], &'a [u8])> for Attachment {
         fn from_iter<T: IntoIterator<Item = (&'a [u8], &'a [u8])>>(iter: T) -> Self {
             let codec = Zenoh080;
             let mut buffer: Vec<u8> = Vec::new();
-            buffer.push(0);
             let mut writer = buffer.writer();
-            let mut n = 0usize;
             for (key, value) in iter {
                 codec.write(&mut writer, key).unwrap(); // Infallible, barring allocation failures
                 codec.write(&mut writer, value).unwrap(); // Infallible, barring allocation failures
-                n += 1;
-            }
-            if n < 128 {
-                buffer[0] = n as u8
-            } else {
-                let mut buf = [0u8; 10];
-                let mut len = buf.writer();
-                codec.write(&mut len, n).unwrap(); // Infallible
-                let len = 10 - len.len();
-                let buf = &buf[..len];
-                buffer.splice(..1, buf.iter().copied());
             }
             Self {
                 inner: buffer.into(),
