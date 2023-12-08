@@ -319,7 +319,7 @@ fn gossip() -> Result<()> {
     async_std::task::block_on(async {
         zasync_executor_init!();
 
-        let locator = String::from("tcp/127.0.0.1:17449");
+        let locator = String::from("tcp/127.0.0.1:17446");
         let ke = String::from("testKeyExprGossip");
         let msg_size = 8;
 
