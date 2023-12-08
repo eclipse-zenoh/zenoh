@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::{
-    common::seq_num,
+    common::{batch::BatchConfig, seq_num},
     multicast::{
         link::{TransportLinkMulticast, TransportLinkMulticastConfig},
         transport::TransportMulticastInner,
@@ -62,9 +62,12 @@ pub(crate) async fn open_link(
     // Create the transport
     let locator = link.get_dst().to_owned();
     let config = TransportLinkMulticastConfig {
-        mtu: link.get_mtu(),
-        #[cfg(feature = "transport_compression")]
-        is_compression: manager.config.multicast.is_compression,
+        batch: BatchConfig {
+            mtu: link.get_mtu(),
+            #[cfg(feature = "transport_compression")]
+            is_compression: manager.config.multicast.is_compression,
+            ..Default::default()
+        },
     };
     let link = TransportLinkMulticast::new(link, config);
 

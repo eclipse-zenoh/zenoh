@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use std::num::{NonZeroU8, NonZeroUsize};
+use std::num::NonZeroUsize;
 use zenoh_buffers::{
     buffer::Buffer,
     reader::{DidntRead, HasReader},
@@ -26,62 +26,125 @@ use zenoh_protocol::{
     network::NetworkMessage,
     transport::{fragment::FragmentHeader, frame::FrameHeader, BatchSize, TransportMessage},
 };
-use zenoh_result::ZResult;
+use zenoh_result::{zerror, ZResult};
 #[cfg(feature = "transport_compression")]
-use {std::sync::Arc, zenoh_protocol::common::imsg, zenoh_result::zerror};
+use {std::sync::Arc, zenoh_protocol::common::imsg};
+
+const L_LEN: usize = (BatchSize::BITS / 8) as usize;
+const H_LEN: usize = BatchHeader::SIZE;
 
 // Split the inner buffer into (length, header, payload) inmutable slices
-#[cfg(feature = "transport_compression")]
 macro_rules! zsplit {
-    ($slice:expr, $header:expr) => {{
-        match $header.get() {
-            Some(_) => $slice.split_at(BatchHeader::INDEX + 1),
-            None => (&[], $slice),
+    ($slice:expr, $config:expr) => {{
+        match ($config.is_streamed, $config.has_header()) {
+            (true, true) => {
+                let (l, s) = $slice.split_at(L_LEN);
+                let (h, p) = s.split_at(H_LEN);
+                (l, h, p)
+            }
+            (true, false) => {
+                let (l, p) = $slice.split_at(L_LEN);
+                (l, &[], p)
+            }
+            (false, true) => {
+                let (h, p) = $slice.split_at(H_LEN);
+                (&[], h, p)
+            }
+            (false, false) => (&[], &[], $slice),
+        }
+    }};
+}
+
+macro_rules! zsplit_mut {
+    ($slice:expr, $config:expr) => {{
+        match ($config.is_streamed, $config.has_header()) {
+            (true, true) => {
+                let (l, s) = $slice.split_at_mut(L_LEN);
+                let (h, p) = s.split_at_mut(H_LEN);
+                (l, h, p)
+            }
+            (true, false) => {
+                let (l, p) = $slice.split_at_mut(L_LEN);
+                (l, &mut [], p)
+            }
+            (false, true) => {
+                let (h, p) = $slice.split_at_mut(H_LEN);
+                (&mut [], h, p)
+            }
+            (false, false) => (&mut [], &mut [], $slice),
         }
     }};
 }
 
 // Batch config
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct BatchConfig {
     pub mtu: BatchSize,
+    pub is_streamed: bool,
     #[cfg(feature = "transport_compression")]
     pub is_compression: bool,
 }
 
-impl BatchConfig {
-    fn header(&self) -> BatchHeader {
-        #[allow(unused_mut)] // No need for mut when "transport_compression" is disabled
-        let mut h = 0;
-        #[cfg(feature = "transport_compression")]
-        if self.is_compression {
-            h |= BatchHeader::COMPRESSION;
+impl Default for BatchConfig {
+    fn default() -> Self {
+        BatchConfig {
+            mtu: BatchSize::MAX,
+            is_streamed: false,
+            #[cfg(feature = "transport_compression")]
+            is_compression: false,
         }
-        BatchHeader::new(h)
+    }
+}
+
+impl BatchConfig {
+    const fn has_header(&self) -> bool {
+        #[cfg(not(feature = "transport_compression"))]
+        {
+            false
+        }
+        #[cfg(feature = "transport_compression")]
+        {
+            self.is_compression
+        }
+    }
+
+    fn header(&self) -> Option<BatchHeader> {
+        #[cfg(not(feature = "transport_compression"))]
+        {
+            None
+        }
+        #[cfg(feature = "transport_compression")]
+        {
+            self.is_compression
+                .then_some(BatchHeader::new(BatchHeader::COMPRESSION))
+        }
+    }
+
+    pub fn max_buffer_size(&self) -> usize {
+        let mut len = self.mtu as usize;
+        if self.is_streamed {
+            len += BatchSize::BITS as usize / 8;
+        }
+        len
     }
 }
 
 // Batch header
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug)]
-pub struct BatchHeader(Option<NonZeroU8>);
+pub struct BatchHeader(u8);
 
 impl BatchHeader {
+    const SIZE: usize = 1;
     #[cfg(feature = "transport_compression")]
-    const INDEX: usize = 0;
-    #[cfg(feature = "transport_compression")]
-    const COMPRESSION: u8 = 1;
+    const COMPRESSION: u8 = 1; // 1 << 0
 
-    fn new(h: u8) -> Self {
-        Self(NonZeroU8::new(h))
+    #[cfg(feature = "transport_compression")]
+    const fn new(h: u8) -> Self {
+        Self(h)
     }
 
-    #[cfg(feature = "transport_compression")]
-    const fn is_empty(&self) -> bool {
-        self.0.is_none()
-    }
-
-    const fn get(&self) -> Option<NonZeroU8> {
+    const fn as_u8(&self) -> u8 {
         self.0
     }
 
@@ -90,8 +153,7 @@ impl BatchHeader {
     #[cfg(feature = "transport_compression")]
     #[inline(always)]
     pub fn is_compression(&self) -> bool {
-        self.0
-            .is_some_and(|h| imsg::has_flag(h.get(), Self::COMPRESSION))
+        imsg::has_flag(self.as_u8(), Self::COMPRESSION)
     }
 }
 
@@ -113,7 +175,6 @@ impl WBatchStats {
 #[derive(Debug)]
 pub enum Finalize {
     Batch,
-    #[cfg(feature = "transport_compression")]
     Buffer,
 }
 
@@ -143,7 +204,7 @@ pub struct WBatch {
     // The batch codec
     pub codec: Zenoh080Batch,
     // It contains 1 byte as additional header, e.g. to signal the batch is compressed
-    pub header: BatchHeader,
+    pub config: BatchConfig,
     // Statistics related to this batch
     #[cfg(feature = "stats")]
     pub stats: WBatchStats,
@@ -152,9 +213,9 @@ pub struct WBatch {
 impl WBatch {
     pub fn new(config: BatchConfig) -> Self {
         let mut batch = Self {
-            buffer: BBuf::with_capacity(config.mtu as usize),
+            buffer: BBuf::with_capacity(config.max_buffer_size()),
             codec: Zenoh080Batch::new(),
-            header: config.header(),
+            config,
             #[cfg(feature = "stats")]
             stats: WBatchStats::default(),
         };
@@ -174,7 +235,8 @@ impl WBatch {
     /// Get the total number of bytes that have been serialized on the [`WBatch`][WBatch].
     #[inline(always)]
     pub fn len(&self) -> BatchSize {
-        self.buffer.len() as BatchSize
+        let (_l, _h, p) = Self::split(self.buffer.as_slice(), &self.config);
+        p.len() as BatchSize
     }
 
     /// Clear the [`WBatch`][WBatch] memory buffer and related internal state.
@@ -186,10 +248,7 @@ impl WBatch {
         {
             self.stats.clear();
         }
-        if let Some(h) = self.header.get() {
-            let mut writer = self.buffer.writer();
-            let _ = writer.write_u8(h.get());
-        }
+        Self::init(&mut self.buffer, &self.config);
     }
 
     /// Get a `&[u8]` to access the internal memory buffer, usually for transmitting it on the network.
@@ -198,37 +257,70 @@ impl WBatch {
         self.buffer.as_slice()
     }
 
-    // Split (length, header, payload) internal buffer slice
-    #[inline(always)]
-    #[cfg(feature = "transport_compression")]
-    fn split(&self) -> (&[u8], &[u8]) {
-        zsplit!(self.buffer.as_slice(), self.header)
+    fn init(buffer: &mut BBuf, config: &BatchConfig) {
+        let mut writer = buffer.writer();
+        if config.is_streamed {
+            let _ = writer.write_exact(&BatchSize::MIN.to_be_bytes());
+        }
+        if let Some(h) = config.header() {
+            let _ = writer.write_u8(h.as_u8());
+        }
     }
 
-    pub fn finalize(
-        &mut self,
-        #[cfg(feature = "transport_compression")] buffer: Option<&mut BBuf>,
-    ) -> ZResult<Finalize> {
+    // Split (length, header, payload) internal buffer slice
+    #[inline(always)]
+    fn split<'a>(buffer: &'a [u8], config: &BatchConfig) -> (&'a [u8], &'a [u8], &'a [u8]) {
+        zsplit!(buffer, config)
+    }
+
+    // Split (length, header, payload) internal buffer slice
+    #[inline(always)]
+    fn split_mut<'a>(
+        buffer: &'a mut [u8],
+        config: &BatchConfig,
+    ) -> (&'a mut [u8], &'a mut [u8], &'a mut [u8]) {
+        zsplit_mut!(buffer, config)
+    }
+
+    pub fn finalize(&mut self, mut buffer: Option<&mut BBuf>) -> ZResult<Finalize> {
+        #[allow(unused_mut)]
+        let mut res = Finalize::Batch;
+
         #[cfg(feature = "transport_compression")]
-        if self.header.is_compression() {
-            let buffer = buffer.ok_or_else(|| zerror!("Support buffer not provided"))?;
-            buffer.clear();
-            return self.compress(buffer);
+        if let Some(h) = self.config.header() {
+            if h.is_compression() {
+                let buffer = buffer
+                    .as_mut()
+                    .ok_or_else(|| zerror!("Support buffer not provided"))?;
+                res = self.compress(buffer)?;
+            }
         }
 
-        Ok(Finalize::Batch)
+        if self.config.is_streamed {
+            let buff = match res {
+                Finalize::Batch => self.buffer.as_mut_slice(),
+                Finalize::Buffer => buffer
+                    .as_mut()
+                    .ok_or_else(|| zerror!("Support buffer not provided"))?
+                    .as_mut_slice(),
+            };
+            let (length, header, payload) = Self::split_mut(buff, &self.config);
+            let len: BatchSize = (header.len() as BatchSize) + (payload.len() as BatchSize);
+            length.copy_from_slice(&len.to_le_bytes());
+        }
+
+        Ok(res)
     }
 
     #[cfg(feature = "transport_compression")]
     fn compress(&mut self, support: &mut BBuf) -> ZResult<Finalize> {
         // Write the initial bytes for the batch
-        let mut writer = support.writer();
-        if let Some(h) = self.header.get() {
-            let _ = writer.write_u8(h.get());
-        }
+        support.clear();
+        Self::init(support, &self.config);
 
         // Compress the actual content
-        let (_header, payload) = self.split();
+        let (_length, _header, payload) = Self::split(self.buffer.as_slice(), &self.config);
+        let mut writer = support.writer();
         writer
             .with_slot(writer.remaining(), |b| {
                 lz4_flex::block::compress_into(payload, b).unwrap_or(0)
@@ -240,11 +332,8 @@ impl WBatch {
             Ok(Finalize::Buffer)
         } else {
             // Keep the original uncompressed buffer and unset the compression flag from the header
-            let h = self
-                .buffer
-                .as_mut_slice()
-                .get_mut(BatchHeader::INDEX)
-                .ok_or_else(|| zerror!("Header not present"))?;
+            let (_l, h, _p) = Self::split_mut(self.buffer.as_mut_slice(), &self.config);
+            let h = h.first_mut().ok_or_else(|| zerror!("Empty BatchHeader"))?;
             *h &= !BatchHeader::COMPRESSION;
             Ok(Finalize::Batch)
         }
@@ -300,21 +389,19 @@ pub struct RBatch {
     buffer: ZSlice,
     // The batch codec
     codec: Zenoh080Batch,
-    // It contains 1 byte as additional header, e.g. to signal the batch is compressed
-    #[cfg(feature = "transport_compression")]
-    header: BatchHeader,
+    // The batch config
+    config: BatchConfig,
 }
 
 impl RBatch {
-    pub fn new<T>(#[allow(unused_variables)] config: BatchConfig, buffer: T) -> Self
+    pub fn new<T>(config: BatchConfig, buffer: T) -> Self
     where
         T: Into<ZSlice>,
     {
         Self {
             buffer: buffer.into(),
             codec: Zenoh080Batch::new(),
-            #[cfg(feature = "transport_compression")]
-            header: config.header(),
+            config,
         }
     }
 
@@ -329,9 +416,8 @@ impl RBatch {
 
     // Split (length, header, payload) internal buffer slice
     #[inline(always)]
-    #[cfg(feature = "transport_compression")]
-    fn split(&self) -> (&[u8], &[u8]) {
-        zsplit!(self.buffer.as_slice(), self.header)
+    fn split<'a>(buffer: &'a [u8], config: &BatchConfig) -> (&'a [u8], &'a [u8], &'a [u8]) {
+        zsplit!(buffer, config)
     }
 
     pub fn initialize<C, T>(&mut self, #[allow(unused_variables)] buff: C) -> ZResult<()>
@@ -339,41 +425,44 @@ impl RBatch {
         C: Fn() -> T + Copy,
         T: ZSliceBuffer + 'static,
     {
-        #[cfg(feature = "transport_compression")]
-        if !self.header.is_empty() {
-            let h = *self
-                .buffer
-                .get(BatchHeader::INDEX)
-                .ok_or_else(|| zerror!("Batch header not present"))?;
-            let header = BatchHeader::new(h);
+        #[allow(unused_variables)]
+        let (l, h, p) = Self::split(self.buffer.as_slice(), &self.config);
 
-            if header.is_compression() {
-                self.decompress(buff)?;
-            } else {
-                self.buffer = self
-                    .buffer
-                    .subslice(BatchHeader::INDEX + 1, self.buffer.len())
-                    .ok_or_else(|| zerror!("Invalid batch length"))?;
+        #[cfg(feature = "transport_compression")]
+        {
+            if self.config.has_header() {
+                let b = *h
+                    .first()
+                    .ok_or_else(|| zerror!("Batch header not present"))?;
+                let header = BatchHeader::new(b);
+
+                if header.is_compression() {
+                    let zslice = self.decompress(p, buff)?;
+                    self.buffer = zslice;
+                    return Ok(());
+                }
             }
         }
+
+        self.buffer = self
+            .buffer
+            .subslice(l.len() + h.len(), self.buffer.len())
+            .ok_or_else(|| zerror!("Invalid batch length"))?;
 
         Ok(())
     }
 
     #[cfg(feature = "transport_compression")]
-    fn decompress<T>(&mut self, mut buff: impl FnMut() -> T) -> ZResult<()>
+    fn decompress<T>(&self, payload: &[u8], mut buff: impl FnMut() -> T) -> ZResult<ZSlice>
     where
         T: ZSliceBuffer + 'static,
     {
-        let (_h, p) = self.split();
-
         let mut into = (buff)();
-        let n = lz4_flex::block::decompress_into(p, into.as_mut_slice())
+        let n = lz4_flex::block::decompress_into(payload, into.as_mut_slice())
             .map_err(|_| zerror!("Decompression error"))?;
-        self.buffer = ZSlice::make(Arc::new(into), 0, n)
+        let zslice = ZSlice::make(Arc::new(into), 0, n)
             .map_err(|_| zerror!("Invalid decompression buffer length"))?;
-
-        Ok(())
+        Ok(zslice)
     }
 }
 
@@ -422,6 +511,7 @@ mod tests {
             for msg_in in msg_ins {
                 let config = BatchConfig {
                     mtu: BatchSize::MAX,
+                    is_streamed: rng.gen_bool(0.5),
                     #[cfg(feature = "transport_compression")]
                     is_compression: rng.gen_bool(0.5),
                 };
@@ -465,6 +555,7 @@ mod tests {
     fn serialization_batch() {
         let config = BatchConfig {
             mtu: BatchSize::MAX,
+            is_streamed: false,
             #[cfg(feature = "transport_compression")]
             is_compression: false,
         };

@@ -216,7 +216,7 @@ async fn rx_task_stream(
     }
 
     // The pool of buffers
-    let mtu = link.config.mtu as usize;
+    let mtu = link.config.batch.mtu as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -248,7 +248,7 @@ async fn rx_task_dgram(
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     // The pool of buffers
-    let mtu = link.config.mtu as usize;
+    let mtu = link.config.batch.max_buffer_size();
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
