@@ -550,18 +550,6 @@ impl StorageService {
             let mut storage = self.storage.lock().await;
             match storage.get(stripped_key, q.parameters()).await {
                 Ok(stored_data) => {
-                    // if key is not available, return Error
-                    if stored_data.is_empty() {
-                        log::info!("Requested key `{}` not found", q.key_expr());
-                        if let Err(e) = q.reply(Err("Key not found".into())).res().await {
-                            log::warn!(
-                                "Storage {} raised an error replying a query: {}",
-                                self.name,
-                                e
-                            )
-                        }
-                        return;
-                    }
                     for entry in stored_data {
                         let sample = Sample::new(q.key_expr().clone(), entry.value)
                             .with_timestamp(entry.timestamp);
