@@ -16,7 +16,7 @@ use clap::Parser;
 use std::convert::TryInto;
 use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
-use zenoh::sample::Attachment;
+use zenoh::sample::AttachmentBuilder;
 use zenoh_examples::CommonArgs;
 
 fn main() {
@@ -55,11 +55,11 @@ fn main() {
     loop {
         let attachments = (args.attachments_number != 0).then(|| {
             if args.attach_with_insert {
-                let mut attachments = Attachment::new();
+                let mut attachments = AttachmentBuilder::new();
                 for _ in 0..args.attachments_number {
                     attachments.insert(b"", b"");
                 }
-                attachments
+                attachments.into()
             } else {
                 std::iter::repeat((b"".as_slice(), b"".as_slice()))
                     .take(args.attachments_number)

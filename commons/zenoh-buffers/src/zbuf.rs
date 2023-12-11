@@ -459,9 +459,20 @@ impl<'a> HasWriter for &'a mut ZBuf {
     type Writer = ZBufWriter<'a>;
 
     fn writer(self) -> Self::Writer {
+        let mut cache = None;
+        if let Some(ZSlice { buf, end, .. }) = self.slices.last_mut() {
+            // Verify the ZSlice is actually a Vec<u8>
+            if let Some(b) = buf.as_any().downcast_ref::<Vec<u8>>() {
+                // Check for the length
+                if *end == b.len() {
+                    cache = Some(unsafe { Arc::from_raw(Arc::into_raw(buf.clone()).cast()) })
+                }
+            }
+        }
+
         ZBufWriter {
             inner: self,
-            cache: Arc::new(Vec::new()),
+            cache: cache.unwrap_or_else(|| Arc::new(Vec::new())),
         }
     }
 }

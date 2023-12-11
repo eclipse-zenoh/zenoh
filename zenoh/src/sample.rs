@@ -110,6 +110,52 @@ mod attachment {
     #[zenoh_macros::unstable]
     use zenoh_protocol::zenoh::ext::AttachmentType;
 
+    /// A builder for [`Attachment`]
+    #[zenoh_macros::unstable]
+    pub struct AttachmentBuilder {
+        pub(crate) inner: Vec<u8>,
+    }
+    #[zenoh_macros::unstable]
+    impl Default for AttachmentBuilder {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
+    #[zenoh_macros::unstable]
+    impl AttachmentBuilder {
+        pub fn new() -> Self {
+            Self { inner: Vec::new() }
+        }
+        fn _insert(&mut self, key: &[u8], value: &[u8]) {
+            let codec = Zenoh080;
+            let mut writer = self.inner.writer();
+            codec.write(&mut writer, key).unwrap(); // Infallible, barring alloc failure
+            codec.write(&mut writer, value).unwrap(); // Infallible, barring alloc failure
+        }
+        /// Inserts a key-value pair to the attachment.
+        ///
+        /// Note that [`Attachment`] is a list of non-unique key-value pairs: inserting at the same key multiple times leads to both values being transmitted for that key.
+        pub fn insert<Key: AsRef<[u8]> + ?Sized, Value: AsRef<[u8]> + ?Sized>(
+            &mut self,
+            key: &Key,
+            value: &Value,
+        ) {
+            self._insert(key.as_ref(), value.as_ref())
+        }
+        pub fn build(self) -> Attachment {
+            Attachment {
+                inner: self.inner.into(),
+            }
+        }
+    }
+    #[zenoh_macros::unstable]
+    impl From<AttachmentBuilder> for Attachment {
+        fn from(value: AttachmentBuilder) -> Self {
+            Attachment {
+                inner: value.inner.into(),
+            }
+        }
+    }
     #[zenoh_macros::unstable]
     #[derive(Clone)]
     pub struct Attachment {
@@ -162,12 +208,27 @@ mod attachment {
             codec.write(&mut writer, key).unwrap(); // Infallible, barring alloc failure
             codec.write(&mut writer, value).unwrap(); // Infallible, barring alloc failure
         }
+        /// Inserts a key-value pair to the attachment.
+        ///
+        /// Note that [`Attachment`] is a list of non-unique key-value pairs: inserting at the same key multiple times leads to both values being transmitted for that key.
+        ///
+        /// [`Attachment`] is not very efficient at inserting, so if you wish to perform multiple inserts, it's generally better to [`Attachment::extend`] after performing the inserts on an [`AttachmentBuilder`]
         pub fn insert<Key: AsRef<[u8]> + ?Sized, Value: AsRef<[u8]> + ?Sized>(
             &mut self,
             key: &Key,
             value: &Value,
         ) {
             self._insert(key.as_ref(), value.as_ref())
+        }
+        fn _extend(&mut self, with: Self) -> &mut Self {
+            for slice in with.inner.zslices().cloned() {
+                self.inner.push_zslice(slice);
+            }
+            self
+        }
+        pub fn extend(&mut self, with: impl Into<Self>) -> &mut Self {
+            let with = with.into();
+            self._extend(with)
         }
     }
     #[zenoh_macros::unstable]
@@ -230,7 +291,7 @@ mod attachment {
         }
     }
     #[zenoh_macros::unstable]
-    impl<'a> core::iter::FromIterator<(&'a [u8], &'a [u8])> for Attachment {
+    impl<'a> core::iter::FromIterator<(&'a [u8], &'a [u8])> for AttachmentBuilder {
         fn from_iter<T: IntoIterator<Item = (&'a [u8], &'a [u8])>>(iter: T) -> Self {
             let codec = Zenoh080;
             let mut buffer: Vec<u8> = Vec::new();
@@ -239,14 +300,18 @@ mod attachment {
                 codec.write(&mut writer, key).unwrap(); // Infallible, barring allocation failures
                 codec.write(&mut writer, value).unwrap(); // Infallible, barring allocation failures
             }
-            Self {
-                inner: buffer.into(),
-            }
+            Self { inner: buffer }
+        }
+    }
+    #[zenoh_macros::unstable]
+    impl<'a> core::iter::FromIterator<(&'a [u8], &'a [u8])> for Attachment {
+        fn from_iter<T: IntoIterator<Item = (&'a [u8], &'a [u8])>>(iter: T) -> Self {
+            AttachmentBuilder::from_iter(iter).into()
         }
     }
 }
 #[zenoh_macros::unstable]
-pub use attachment::{Attachment, AttachmentIterator};
+pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 
 /// A zenoh sample.
 #[non_exhaustive]
