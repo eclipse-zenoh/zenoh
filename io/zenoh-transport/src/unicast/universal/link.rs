@@ -29,24 +29,36 @@ use crate::{
 use async_std::prelude::FutureExt;
 use async_std::task;
 use async_std::task::JoinHandle;
-use std::{sync::Arc, time::Duration};
+use zenoh_core::zwrite;
+use std::{sync::{Arc, RwLock}, time::Duration, ops::Deref};
 use zenoh_buffers::ZSliceBuffer;
 use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
 
-#[derive(Clone)]
-pub(super) struct TransportLinkUnicastUniversal {
+pub(super) struct TransportLinkUnicastUniversalInner {
     // The underlying link
-    pub(super) link: Arc<TransportLinkUnicast>,
+    pub(super) link: TransportLinkUnicast,
     // The transmission pipeline
-    pub(super) pipeline: Option<TransmissionPipelineProducer>,
+    pub(super) pipeline: TransmissionPipelineProducer,
     // The transport this link is associated to
     transport: TransportUnicastUniversal,
     // The signals to stop TX/RX tasks
-    handle_tx: Option<Arc<JoinHandle<()>>>, //Option<Arc<async_executor::Task<()>>>,
+    handle_tx: RwLock<Option<async_executor::Task<()>>>,
     signal_rx: Signal,
-    handle_rx: Option<Arc<JoinHandle<()>>>,
+    handle_rx: RwLock<Option<JoinHandle<()>>>,
+}
+
+#[derive(Clone)]
+pub(super) struct TransportLinkUnicastUniversal(Arc<TransportLinkUnicastUniversalInner>);
+
+impl Deref for TransportLinkUnicastUniversal {
+    type Target = Arc<TransportLinkUnicastUniversalInner>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 impl TransportLinkUnicastUniversal {
@@ -68,15 +80,17 @@ impl TransportLinkUnicastUniversal {
         // The pipeline
         let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
 
+        let inner = TransportLinkUnicastUniversalInner {
+            link,
+            pipeline: producer,
+            transport,
+            handle_tx: RwLock::new(None),
+            signal_rx: Signal::new(),
+            handle_rx: RwLock::new(None),
+        };
+
         (
-            Self {
-                link: Arc::new(link),
-                pipeline: Some(producer),
-                transport,
-                handle_tx: None,
-                signal_rx: Signal::new(),
-                handle_rx: None,
-            },
+            Self(Arc::new(inner)),
             consumer,
         )
     }
@@ -86,15 +100,15 @@ impl TransportLinkUnicastUniversal {
     pub(super) fn start_tx(
         &mut self,
         consumer: TransmissionPipelineConsumer,
-        _executor: &TransportExecutor,
+        executor: &TransportExecutor,
         keep_alive: Duration,
     ) {
-        if self.handle_tx.is_none() {
+        let mut guard = zwrite!(self.handle_tx);
+        if guard.is_none() {
             // Spawn the TX task
             let mut tx = self.link.tx();
             let c_transport = self.transport.clone();
-            let handle = async_std::task::spawn(async move {
-                // todo: why the executor doesn't work?
+            let handle = executor.spawn(async move {
                 let res = tx_task(
                     consumer,
                     &mut tx,
@@ -112,18 +126,17 @@ impl TransportLinkUnicastUniversal {
                     });
                 }
             });
-            self.handle_tx = Some(Arc::new(handle));
+            *guard = Some(handle);
         }
     }
 
     pub(super) fn stop_tx(&mut self) {
-        if let Some(pl) = self.pipeline.as_ref() {
-            pl.disable();
-        }
+        self.pipeline.disable();
     }
 
     pub(super) fn start_rx(&mut self, lease: Duration) {
-        if self.handle_rx.is_none() {
+        let mut guard = zwrite!(self.handle_rx);
+        if guard.is_none() {
             // Spawn the RX task
             let mut rx = self.link.rx();
             let c_transport = self.transport.clone();
@@ -150,7 +163,7 @@ impl TransportLinkUnicastUniversal {
                     });
                 }
             });
-            self.handle_rx = Some(Arc::new(handle));
+            *guard = Some(handle);
         }
     }
 
@@ -163,16 +176,14 @@ impl TransportLinkUnicastUniversal {
         self.stop_tx();
         self.stop_rx();
 
-        if let Some(handle) = self.handle_tx.take() {
-            // SAFETY: it is safe to unwrap the Arc since we have the ownership of the whole link
-            let handle_tx = Arc::try_unwrap(handle).unwrap();
-            handle_tx.await;
+        let handle_tx = zwrite!(self.handle_tx).take();
+        if let Some(handle) = handle_tx {
+            handle.await;
         }
 
-        if let Some(handle) = self.handle_rx.take() {
-            // SAFETY: it is safe to unwrap the Arc since we have the ownership of the whole link
-            let handle_rx = Arc::try_unwrap(handle).unwrap();
-            handle_rx.await;
+        let handle_rx = zwrite!(self.handle_rx).take();
+        if let Some(handle) = handle_rx {
+            handle.await;
         }
 
         self.link.close(None).await

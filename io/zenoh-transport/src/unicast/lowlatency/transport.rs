@@ -58,7 +58,7 @@ pub(crate) struct TransportUnicastLowlatency {
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportStats>,
 
-    // The flags to stop TX/RX tasks
+    // The handles for TX/RX tasks
     pub(crate) handle_keepalive: Arc<RwLock<Option<Task<()>>>>,
     pub(crate) handle_rx: Arc<RwLock<Option<JoinHandle<()>>>>,
 }

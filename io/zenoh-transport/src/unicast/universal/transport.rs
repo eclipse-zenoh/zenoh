@@ -383,21 +383,19 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     async fn close_link(&self, link: Link, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.config.zid);
 
-        let mut transport_link = zlinkget!(zread!(self.links), link)
+        let transport_link_pipeline = zlinkget!(zread!(self.links), link)
             .ok_or_else(|| zerror!("Cannot close Link {:?}: not found", link))?
             .pipeline
             .clone();
 
-        if let Some(p) = transport_link.take() {
-            // Close message to be sent on the target link
-            let msg: TransportMessage = Close {
-                reason,
-                session: false,
-            }
-            .into();
-
-            p.push_transport_message(msg, Priority::Background);
+        // Close message to be sent on the target link
+        let msg: TransportMessage = Close {
+            reason,
+            session: false,
         }
+        .into();
+
+        transport_link_pipeline.push_transport_message(msg, Priority::Background);
 
         // Remove the link from the channel
         self.del_link(link).await
@@ -408,7 +406,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
 
         let mut pipelines = zread!(self.links)
             .iter()
-            .filter_map(|sl| sl.pipeline.clone())
+            .map(|sl| sl.pipeline.clone())
             .collect::<Vec<_>>();
         for p in pipelines.drain(..) {
             // Close message to be sent on all the links
