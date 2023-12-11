@@ -16,9 +16,7 @@ use crate::stats::TransportStats;
 use crate::{
     common::priority::{TransportPriorityRx, TransportPriorityTx},
     unicast::{
-        link::{
-            EstablishedTransportLinkUnicast, TransportLinkUnicast, TransportLinkUnicastDirection,
-        },
+        link::{LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastDirection},
         transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
         universal::link::TransportLinkUnicastUniversal,
         TransportConfigUnicast,
@@ -267,7 +265,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     /*************************************/
     async fn add_link(
         &self,
-        link: EstablishedTransportLinkUnicast,
+        link: LinkUnicastWithOpenAck,
         other_initial_sn: TransportSn,
         other_lease: Duration,
     ) -> AddLinkResult {
@@ -308,7 +306,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         let _ = self.sync(other_initial_sn).await;
 
         // Wrap the link
-        let (link, ack) = link.ack();
+        let (link, ack) = link.unpack();
         let (mut link, consumer) =
             TransportLinkUnicastUniversal::new(self.clone(), link, &self.priority_tx);
 
@@ -426,10 +424,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     }
 
     fn get_links(&self) -> Vec<Link> {
-        zread!(self.links)
-            .iter()
-            .map(|l| l.link.link())
-            .collect()
+        zread!(self.links).iter().map(|l| l.link.link()).collect()
     }
 
     /*************************************/

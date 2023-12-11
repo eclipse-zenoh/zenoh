@@ -29,9 +29,13 @@ use crate::{
 use async_std::prelude::FutureExt;
 use async_std::task;
 use async_std::task::JoinHandle;
-use zenoh_core::zwrite;
-use std::{sync::{Arc, RwLock}, time::Duration, ops::Deref};
+use std::{
+    ops::Deref,
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 use zenoh_buffers::ZSliceBuffer;
+use zenoh_core::zwrite;
 use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
@@ -89,10 +93,7 @@ impl TransportLinkUnicastUniversal {
             handle_rx: RwLock::new(None),
         };
 
-        (
-            Self(Arc::new(inner)),
-            consumer,
-        )
+        (Self(Arc::new(inner)), consumer)
     }
 }
 
@@ -121,9 +122,7 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move {
-                        c_transport.del_link(tx.inner.link()).await
-                    });
+                    task::spawn(async move { c_transport.del_link(tx.inner.link()).await });
                 }
             });
             *guard = Some(handle);
@@ -158,9 +157,7 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move {
-                        c_transport.del_link(rx.inner.link()).await
-                    });
+                    task::spawn(async move { c_transport.del_link(rx.inner.link()).await });
                 }
             });
             *guard = Some(handle);

@@ -17,7 +17,7 @@ use crate::{
     unicast::{
         establishment::{compute_sn, ext, AcceptFsm, Cookie, Zenoh080Cookie},
         link::{
-            EstablishedTransportLinkUnicast, TransportLinkUnicast, TransportLinkUnicastConfig,
+            LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastConfig,
             TransportLinkUnicastDirection,
         },
         TransportConfigUnicast,
@@ -713,7 +713,7 @@ pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -
     };
     let a_link = link.reconfigure(a_config);
     let s_link = format!("{:?}", a_link);
-    let a_link = EstablishedTransportLinkUnicast::new(a_link, Some(oack_out.open_ack.into()));
+    let a_link = LinkUnicastWithOpenAck::new(a_link, Some(oack_out.open_ack));
     let _transport = manager
         .init_transport_unicast(
             config,

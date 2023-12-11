@@ -18,7 +18,7 @@ use std::sync::Arc;
 use zenoh_buffers::BBuf;
 use zenoh_buffers::{ZSlice, ZSliceBuffer};
 use zenoh_link::{Link, LinkUnicast};
-use zenoh_protocol::transport::{BatchSize, Close, TransportMessage};
+use zenoh_protocol::transport::{BatchSize, Close, OpenAck, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -149,7 +149,6 @@ impl PartialEq<Link> for TransportLinkUnicast {
         &other.src == self.link.get_src() && &other.dst == self.link.get_dst()
     }
 }
-
 
 pub(crate) struct TransportLinkUnicastTx {
     pub(crate) inner: TransportLinkUnicast,
@@ -299,22 +298,22 @@ impl fmt::Debug for TransportLinkUnicastRx {
     }
 }
 
-pub(crate) struct EstablishAck {
+pub(crate) struct MaybeOpenAck {
     link: TransportLinkUnicastTx,
-    ack: Option<TransportMessage>,
+    open_ack: Option<OpenAck>,
 }
 
-impl EstablishAck {
-    pub(crate) fn new(link: &TransportLinkUnicast, ack: Option<TransportMessage>) -> Self {
+impl MaybeOpenAck {
+    pub(crate) fn new(link: &TransportLinkUnicast, open_ack: Option<OpenAck>) -> Self {
         Self {
             link: link.tx(),
-            ack,
+            open_ack,
         }
     }
 
-    pub(crate) async fn ack(mut self) -> ZResult<()> {
-        if let Some(msg) = self.ack {
-            return self.link.send(&msg).await.map(|_| {});
+    pub(crate) async fn send_open_ack(mut self) -> ZResult<()> {
+        if let Some(msg) = self.open_ack {
+            return self.link.send(&msg.into()).await.map(|_| {});
         }
         Ok(())
     }
@@ -325,13 +324,13 @@ impl EstablishAck {
 }
 
 #[derive(PartialEq, Eq)]
-pub(crate) struct EstablishedTransportLinkUnicast {
+pub(crate) struct LinkUnicastWithOpenAck {
     link: TransportLinkUnicast,
-    ack: Option<TransportMessage>,
+    ack: Option<OpenAck>,
 }
 
-impl EstablishedTransportLinkUnicast {
-    pub(crate) fn new(link: TransportLinkUnicast, ack: Option<TransportMessage>) -> Self {
+impl LinkUnicastWithOpenAck {
+    pub(crate) fn new(link: TransportLinkUnicast, ack: Option<OpenAck>) -> Self {
         Self { link, ack }
     }
 
@@ -339,19 +338,20 @@ impl EstablishedTransportLinkUnicast {
         &self.link.config
     }
 
-    pub(crate) fn ack(self) -> (TransportLinkUnicast, EstablishAck) {
-        let ack = EstablishAck::new(&self.link, self.ack);
+    pub(crate) fn unpack(self) -> (TransportLinkUnicast, MaybeOpenAck) {
+        let ack = MaybeOpenAck::new(&self.link, self.ack);
         (self.link, ack)
     }
+
     pub(crate) fn fail(self) -> TransportLinkUnicast {
         self.link
     }
 }
 
-impl fmt::Display for EstablishedTransportLinkUnicast {
+impl fmt::Display for LinkUnicastWithOpenAck {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.ack.as_ref() {
-            Some(ack) => write!(f, "{}({})", self.link, ack),
+            Some(ack) => write!(f, "{}({:?})", self.link, ack),
             None => write!(f, "{}", self.link),
         }
     }

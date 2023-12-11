@@ -15,7 +15,7 @@
 use crate::stats::TransportStats;
 use crate::{
     unicast::{
-        link::{EstablishedTransportLinkUnicast, TransportLinkUnicast},
+        link::{LinkUnicastWithOpenAck, TransportLinkUnicast},
         transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
         TransportConfigUnicast,
     },
@@ -219,7 +219,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     /*************************************/
     async fn add_link(
         &self,
-        link: EstablishedTransportLinkUnicast,
+        link: LinkUnicastWithOpenAck,
         other_initial_sn: TransportSn,
         other_lease: Duration,
     ) -> AddLinkResult {
@@ -235,7 +235,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
                 close::reason::GENERIC,
             ));
         }
-        let (link, ack) = link.ack();
+        let (link, ack) = link.unpack();
         *guard = Some(link);
         drop(guard);
 

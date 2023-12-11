@@ -13,7 +13,7 @@
 //
 #[cfg(feature = "shared-memory")]
 use super::shared_memory_unicast::SharedMemoryUnicast;
-use super::{link::EstablishedTransportLinkUnicast, transport_unicast_inner::InitTransportResult};
+use super::{link::LinkUnicastWithOpenAck, transport_unicast_inner::InitTransportResult};
 #[cfg(feature = "transport_auth")]
 use crate::unicast::establishment::ext::auth::Auth;
 #[cfg(feature = "transport_multilink")]
@@ -413,7 +413,7 @@ impl TransportManager {
     async fn init_existing_transport_unicast(
         &self,
         config: TransportConfigUnicast,
-        link: EstablishedTransportLinkUnicast,
+        link: LinkUnicastWithOpenAck,
         other_initial_sn: TransportSn,
         other_lease: Duration,
         transport: Arc<dyn TransportUnicastTrait>,
@@ -445,7 +445,7 @@ impl TransportManager {
         // complete establish procedure
         let c_link = ack.link();
         let c_t = transport.clone();
-        ack.ack()
+        ack.send_open_ack()
             .await
             .map_err(|e| InitTransportError::Transport((e, c_t, close::reason::GENERIC)))?;
 
@@ -494,7 +494,7 @@ impl TransportManager {
     pub(super) async fn init_new_transport_unicast(
         &self,
         config: TransportConfigUnicast,
-        link: EstablishedTransportLinkUnicast,
+        link: LinkUnicastWithOpenAck,
         other_initial_sn: TransportSn,
         other_lease: Duration,
         transports: &mut HashMap<ZenohId, Arc<dyn TransportUnicastTrait>>,
@@ -562,7 +562,7 @@ impl TransportManager {
 
         // complete establish procedure
         let c_link = ack.link();
-        transport_error!(ack.ack().await, close::reason::GENERIC);
+        transport_error!(ack.send_open_ack().await, close::reason::GENERIC);
 
         // notify manager's interface that there is a new transport
         transport_error!(
@@ -615,7 +615,7 @@ impl TransportManager {
     pub(super) async fn init_transport_unicast(
         &self,
         config: TransportConfigUnicast,
-        link: EstablishedTransportLinkUnicast,
+        link: LinkUnicastWithOpenAck,
         other_initial_sn: TransportSn,
         other_lease: Duration,
     ) -> ZResult<TransportUnicast> {

@@ -27,7 +27,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 
-use super::link::{EstablishAck, EstablishedTransportLinkUnicast};
+use super::link::{LinkUnicastWithOpenAck, MaybeOpenAck};
 
 pub(crate) type LinkError = (zenoh_result::Error, TransportLinkUnicast, u8);
 pub(crate) type TransportError = (zenoh_result::Error, Arc<dyn TransportUnicastTrait>, u8);
@@ -37,7 +37,7 @@ pub(crate) enum InitTransportError {
 }
 
 pub(crate) type AddLinkResult<'a> =
-    Result<(Box<dyn FnOnce() + Send + Sync + 'a>, EstablishAck), LinkError>;
+    Result<(Box<dyn FnOnce() + Send + Sync + 'a>, MaybeOpenAck), LinkError>;
 pub(crate) type InitTransportResult = Result<Arc<dyn TransportUnicastTrait>, InitTransportError>;
 
 /*************************************/
@@ -67,7 +67,7 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     async fn add_link(
         &self,
-        link: EstablishedTransportLinkUnicast,
+        link: LinkUnicastWithOpenAck,
         other_initial_sn: TransportSn,
         other_lease: Duration,
     ) -> AddLinkResult;
