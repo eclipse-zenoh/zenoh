@@ -40,20 +40,20 @@ pub(crate) struct TransportLinkUnicastConfig {
 
 #[derive(PartialEq, Eq)]
 pub(crate) struct TransportLinkUnicast {
-    pub(crate) link: Arc<LinkUnicast>,
+    pub(crate) link: LinkUnicast,
     pub(crate) config: TransportLinkUnicastConfig,
 }
 
 impl TransportLinkUnicast {
     pub(crate) fn new(link: LinkUnicast, config: TransportLinkUnicastConfig) -> Self {
-        Self::init(Arc::new(link), config)
+        Self::init(link, config)
     }
 
     pub(crate) fn reconfigure(self, new_config: TransportLinkUnicastConfig) -> Self {
         Self::init(self.link, new_config)
     }
 
-    fn init(link: Arc<LinkUnicast>, mut config: TransportLinkUnicastConfig) -> Self {
+    fn init(link: LinkUnicast, mut config: TransportLinkUnicastConfig) -> Self {
         config.mtu = link.get_mtu().min(config.mtu);
         Self { link, config }
     }
@@ -64,6 +64,10 @@ impl TransportLinkUnicast {
             #[cfg(feature = "transport_compression")]
             is_compression: self.config.is_compression,
         }
+    }
+
+    pub(crate) fn link(&self) -> Link {
+        (&self.link).into()
     }
 
     pub(crate) fn tx(&self) -> TransportLinkUnicastTx {
@@ -130,15 +134,22 @@ impl fmt::Debug for TransportLinkUnicast {
 
 impl From<&TransportLinkUnicast> for Link {
     fn from(link: &TransportLinkUnicast) -> Self {
-        Link::from(link.link.as_ref())
+        Link::from(&link.link)
     }
 }
 
 impl From<TransportLinkUnicast> for Link {
     fn from(link: TransportLinkUnicast) -> Self {
-        Link::from(link.link.as_ref())
+        Link::from(&link.link)
     }
 }
+
+impl PartialEq<Link> for TransportLinkUnicast {
+    fn eq(&self, other: &Link) -> bool {
+        &other.src == self.link.get_src() && &other.dst == self.link.get_dst()
+    }
+}
+
 
 pub(crate) struct TransportLinkUnicastTx {
     pub(crate) inner: TransportLinkUnicast,
@@ -309,7 +320,7 @@ impl EstablishAck {
     }
 
     pub(crate) fn link(&self) -> Link {
-        self.link.inner.link.as_ref().into()
+        self.link.inner.link()
     }
 }
 

@@ -172,7 +172,7 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     fn get_links(&self) -> Vec<Link> {
         let guard = async_std::task::block_on(async { zasyncread!(self.link) });
         if let Some(val) = guard.as_ref() {
-            return [val.link.as_ref().into()].to_vec();
+            return [val.link()].to_vec();
         }
         vec![]
     }

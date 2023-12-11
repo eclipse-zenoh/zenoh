@@ -42,21 +42,21 @@ use zenoh_result::{bail, zerror, ZResult};
 macro_rules! zlinkget {
     ($guard:expr, $link:expr) => {
         // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-        $guard.iter().find(|tl| $link == *tl.link.link)
+        $guard.iter().find(|tl| tl.link == $link)
     };
 }
 
 macro_rules! zlinkgetmut {
     ($guard:expr, $link:expr) => {
         // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-        $guard.iter_mut().find(|tl| &tl.link.link == &$link.link)
+        $guard.iter_mut().find(|tl| tl.link == $link)
     };
 }
 
 macro_rules! zlinkindex {
     ($guard:expr, $link:expr) => {
         // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-        $guard.iter().position(|tl| $link == tl.link.link.as_ref())
+        $guard.iter().position(|tl| tl.link == $link)
     };
 }
 
@@ -184,7 +184,7 @@ impl TransportUnicastUniversal {
         let target = {
             let mut guard = zwrite!(self.links);
 
-            if let Some(index) = zlinkindex!(guard, &link) {
+            if let Some(index) = zlinkindex!(guard, link) {
                 let is_last = guard.len() == 1;
                 if is_last {
                     // Close the whole transport
@@ -220,7 +220,7 @@ impl TransportUnicastUniversal {
 
     pub(crate) fn stop_rx_tx(&self, link: &TransportLinkUnicast) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
-        match zlinkgetmut!(guard, link) {
+        match zlinkgetmut!(guard, *link) {
             Some(l) => {
                 l.stop_rx();
                 l.stop_tx();
@@ -428,7 +428,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
     fn get_links(&self) -> Vec<Link> {
         zread!(self.links)
             .iter()
-            .map(|l| (l.link.link.as_ref()).into())
+            .map(|l| l.link.link())
             .collect()
     }
 

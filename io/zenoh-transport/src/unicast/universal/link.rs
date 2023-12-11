@@ -122,7 +122,7 @@ impl TransportLinkUnicastUniversal {
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
                     task::spawn(async move {
-                        c_transport.del_link(tx.inner.link.as_ref().into()).await
+                        c_transport.del_link(tx.inner.link()).await
                     });
                 }
             });
@@ -159,7 +159,7 @@ impl TransportLinkUnicastUniversal {
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
                     task::spawn(async move {
-                        c_transport.del_link(rx.inner.link.as_ref().into()).await
+                        c_transport.del_link(rx.inner.link()).await
                     });
                 }
             });
