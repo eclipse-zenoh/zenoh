@@ -17,7 +17,7 @@ use crate::net::routing::dispatcher::tables::NodeId;
 use crate::net::runtime::Runtime;
 use async_std::task;
 use petgraph::graph::NodeIndex;
-use petgraph::visit::{IntoNodeReferences, VisitMap, Visitable};
+use petgraph::visit::{VisitMap, Visitable};
 use std::convert::TryInto;
 use vec_map::VecMap;
 use zenoh_buffers::writer::{DidntWrite, HasWriter};
@@ -167,11 +167,6 @@ impl Network {
     //         petgraph::dot::Dot::with_config(&self.graph, &[petgraph::dot::Config::EdgeNoLabel])
     //     )
     // }
-
-    #[inline]
-    pub(super) fn get_node(&self, zid: &ZenohId) -> Option<&Node> {
-        self.graph.node_weights().find(|weight| weight.zid == *zid)
-    }
 
     #[inline]
     pub(super) fn get_idx(&self, zid: &ZenohId) -> Option<NodeIndex> {
@@ -984,24 +979,4 @@ impl Network {
 
         new_childs
     }
-
-    #[inline]
-    pub(super) fn get_links(&self, node: ZenohId) -> &[ZenohId] {
-        self.get_node(&node)
-            .map(|node| &node.links[..])
-            .unwrap_or_default()
-    }
-}
-
-#[inline]
-pub(super) fn shared_nodes(net1: &Network, net2: &Network) -> Vec<ZenohId> {
-    net1.graph
-        .node_references()
-        .filter_map(|(_, node1)| {
-            net2.graph
-                .node_references()
-                .any(|(_, node2)| node1.zid == node2.zid)
-                .then_some(node1.zid)
-        })
-        .collect()
 }

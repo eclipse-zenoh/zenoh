@@ -226,7 +226,11 @@ impl HatTables {
             && self
                 .peers_net
                 .as_ref()
-                .map(|net| HatTables::failover_brokering_to(net.get_links(peer1), peer2))
+                .map(|net| {
+                    let links = net.get_links(peer1);
+                    log::debug!("failover_brokering {} {} ({:?})", peer1, peer2, links);
+                    HatTables::failover_brokering_to(links, peer2)
+                })
                 .unwrap_or(false)
     }
 
