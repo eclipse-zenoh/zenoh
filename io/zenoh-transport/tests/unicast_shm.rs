@@ -14,6 +14,7 @@
 #[cfg(feature = "shared-memory")]
 mod tests {
     use async_std::{prelude::FutureExt, task};
+    use rand::{Rng, SeedableRng};
     use std::{
         any::Any,
         convert::TryFrom,
@@ -25,6 +26,7 @@ mod tests {
     };
     use zenoh_buffers::buffer::SplitBuffer;
     use zenoh_core::zasync_executor_init;
+    use zenoh_crypto::PseudoRng;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
@@ -34,7 +36,7 @@ mod tests {
         },
         zenoh::{PushBody, Put},
     };
-    use zenoh_result::ZResult;
+    use zenoh_result::{zerror, ZResult};
     use zenoh_shm::{SharedMemoryBuf, SharedMemoryManager};
     use zenoh_transport::{
         multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
@@ -150,8 +152,6 @@ mod tests {
     }
 
     async fn run(endpoint: &EndPoint, lowlatency_transport: bool) {
-        static UNIQUE_ID: AtomicUsize = AtomicUsize::new(0);
-
         println!("Transport SHM [0a]: {endpoint:?}");
 
         // Define client and router IDs
@@ -159,15 +159,21 @@ mod tests {
         let peer_shm02 = ZenohId::try_from([2]).unwrap();
         let peer_net01 = ZenohId::try_from([3]).unwrap();
 
-        // Create the SharedMemoryManager
-        let mut shm01 = SharedMemoryManager::make(
-            format!(
-                "peer_shm01_{}_{}",
-                endpoint.protocol(),
-                UNIQUE_ID.fetch_add(1, Ordering::Relaxed)
-            ),
-            2 * MSG_SIZE,
-        )
+        let mut tries = 100;
+        let mut prng = PseudoRng::from_entropy();
+        let mut shm01 = loop {
+            // Create the SharedMemoryManager
+            if let Ok(shm01) = SharedMemoryManager::make(
+                format!("peer_shm01_{}_{}", endpoint.protocol(), prng.gen::<usize>()),
+                2 * MSG_SIZE,
+            ) {
+                break Ok(shm01);
+            }
+            tries -= 1;
+            if tries == 0 {
+                break Err(zerror!("Unable to create SharedMemoryManager!"));
+            }
+        }
         .unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
