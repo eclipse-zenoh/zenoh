@@ -60,9 +60,35 @@ pub struct RuntimeState {
     pub(crate) stop_source: std::sync::RwLock<Option<StopSource>>,
 }
 
-#[derive(Clone)]
+static CURRENT_ID: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+// #[derive(Clone)]
 pub struct Runtime {
-    state: Arc<RuntimeState>,
+    pub state: Arc<RuntimeState>,
+    pub id: u8,
+    pub parent: u8
+}
+
+impl Clone for Runtime {
+    fn clone(&self) -> Self {
+        // print stack trace
+        let mut stack = backtrace::Backtrace::new();
+        stack.resolve();
+        let r = Runtime {
+            state: self.state.clone(),
+            parent: self.id,
+            id: CURRENT_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+        };
+        log::warn!(
+            "Runtime::clone() - Arc count: {}, id: {}, parent: {}",
+            Arc::strong_count(&r.state),
+            r.id,
+            r.parent
+        );
+        println!("Runtime::clone() - Arc count: {}, id: {}, parent: {}", Arc::strong_count(&r.state), r.id, r.parent);
+        println!("{:?}", stack);
+        r
+    }
 }
 
 impl std::ops::Deref for Runtime {
@@ -70,6 +96,29 @@ impl std::ops::Deref for Runtime {
 
     fn deref(&self) -> &RuntimeState {
         self.state.deref()
+    }
+}
+
+impl Drop for Runtime {
+    fn drop(&mut self) {
+        // print stack trace
+        let mut stack = backtrace::Backtrace::new();
+        stack.resolve();
+        println!("{:?}", stack);
+
+        // trace state's Arc counter
+        log::error!(
+            "Runtime::drop() - Arc count: {}, id: {}, parent: {}",
+            Arc::strong_count(&self.state),
+            self.id,
+            self.parent
+        );
+    }
+}
+
+impl Drop for RuntimeState {
+    fn drop(&mut self) {
+        log::debug!("RuntimeState::drop()");
     }
 }
 
@@ -147,10 +196,13 @@ impl Runtime {
                 hlc,
                 stop_source: std::sync::RwLock::new(Some(StopSource::new())),
             }),
+            id: 255,
+            parent: 255
         };
+        // LEAK 0
         *handler.runtime.write().unwrap() = Some(runtime.clone());
         get_mut_unchecked(&mut runtime.router.clone()).init_link_state(
-            runtime.clone(),
+            runtime.clone(), // LEAK 1
             router_link_state,
             peer_link_state,
             router_peers_failover_brokering,
@@ -173,6 +225,20 @@ impl Runtime {
                 }
             }
         });
+
+        // runtime.spawn({
+        //     let runtime2 = runtime.clone();
+        //    async move {
+        //         log::debug!("SPAWN MIND FUNCKER STARTED");
+        //         loop {
+        //             async_std::task::sleep(Duration::from_millis(1)).await;
+        //             log::debug!(
+        //                 "RUNTIME2 MIND FUNCK COUNT {}",
+        //                 Arc::strong_count(&runtime2.state)
+        //             );
+        //         }
+        //     }
+        // });
 
         Ok(runtime)
     }
@@ -206,12 +272,27 @@ impl Runtime {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        self.stop_source
-            .read()
-            .unwrap()
-            .as_ref()
-            .map(|source| async_std::task::spawn(future.timeout_at(source.token())))
+        self.stop_source.read().unwrap().as_ref().map(|source| {
+            async_std::task::spawn({
+                let q = future.timeout_at(source.token());
+                wrap_future_to_log(q)
+            })
+        })
     }
+}
+
+async fn wrap_future_to_log<F, T>(future: F) -> Result<T, TimedOutError>
+where
+    F: Future<Output = Result<T, TimedOutError>> + Send + 'static,
+    T: Send + 'static,
+{
+    log::debug!("wrap_future_to_log() - STARTED");
+    let result = future.await;
+    log::debug!(
+        "wrap_future_to_log() - ENDED with result: {}",
+        result.is_err()
+    );
+    result
 }
 
 struct RuntimeTransportEventHandler {

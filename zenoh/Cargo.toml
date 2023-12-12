@@ -105,6 +105,8 @@ zenoh-sync = { workspace = true }
 zenoh-transport = { workspace = true }
 zenoh-util = { workspace = true }
 
+backtrace = { workspace = true}
+
 [build-dependencies]
 rustc_version = { workspace = true }
 

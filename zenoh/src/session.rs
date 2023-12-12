@@ -349,12 +349,12 @@ impl Session {
                 alive: true,
             };
 
-            runtime.new_handler(Arc::new(admin::Handler::new(session.clone())));
+            // runtime.new_handler(Arc::new(admin::Handler::new(session.clone())));
 
-            let primitives = Some(router.new_primitives(Arc::new(session.clone())));
-            zwrite!(state).primitives = primitives;
+            // let primitives = Some(router.new_primitives(Arc::new(session.clone())));
+            // zwrite!(state).primitives = primitives;
 
-            admin::init(&session);
+            // admin::init(&session);
 
             session
         })
@@ -420,6 +420,7 @@ impl Session {
     /// # })
     /// ```
     pub fn leak(s: Self) -> &'static mut Self {
+        trace!("Session::leak()");
         Box::leak(Box::new(s))
     }
 
@@ -449,12 +450,13 @@ impl Session {
     /// ```
     pub fn close(self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
-            trace!("close()");
+            trace!("start_close()");
             self.runtime.close().await?;
 
-            let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
-            primitives.send_close();
+            // let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
+            // primitives.send_close();
 
+            trace!("end_close()");
             Ok(())
         })
     }
@@ -824,6 +826,7 @@ impl Session {
 
 impl Session {
     pub(crate) fn clone(&self) -> Self {
+        trace!("Session::clone() : runtime count = {}, state count = {}", Arc::strong_count(&self.runtime.state), Arc::strong_count(&self.state));
         Session {
             runtime: self.runtime.clone(),
             state: self.state.clone(),
@@ -836,6 +839,7 @@ impl Session {
     pub(super) fn new(config: Config) -> impl Resolve<ZResult<Session>> + Send {
         ResolveFuture::new(async move {
             log::debug!("Config: {:?}", &config);
+            log::debug!("Features: {}", crate::FEATURES);
             let aggregated_subscribers = config.aggregation().subscribers().clone();
             let aggregated_publishers = config.aggregation().publishers().clone();
             match Runtime::init(config).await {
@@ -2456,9 +2460,17 @@ impl Primitives for Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
+        trace!("Drop Session");
         if self.alive {
             let _ = self.clone().close().res_sync();
         }
+        trace!("Drop Session end: runtime count = {}, state couint = {}", Arc::strong_count(&self.runtime.state), Arc::strong_count(&self.state));
+    }
+}
+
+impl Drop for SessionState {
+    fn drop(&mut self) {
+        trace!("Drop SessionState");
     }
 }
 

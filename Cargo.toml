@@ -187,6 +187,8 @@ zenoh-link = { version = "0.11.0-dev", path = "io/zenoh-link" }
 zenoh-link-commons = { version = "0.11.0-dev", path = "io/zenoh-link-commons" }
 zenoh = { version = "0.11.0-dev", path = "zenoh", default-features = false }
 
+backtrace = { version = "0.3.62"}
+
 [profile.dev]
 debug = true
 opt-level = 0

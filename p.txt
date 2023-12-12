@@ -1,0 +1,245 @@
+    Blocking waiting for file lock on build directory
+   Compiling zenoh v0.11.0-dev (/home/milyin/ZS2/zenoh/zenoh)
+   Compiling zenoh-ext v0.11.0-dev (/home/milyin/ZS2/zenoh/zenoh-ext)
+   Compiling zenoh-examples v0.11.0-dev (/home/milyin/ZS2/zenoh/examples)
+warning: unused import: `std::convert::TryFrom`
+  --> examples/examples/z_get.rs:18:5
+   |
+18 | use std::convert::TryFrom;
+   |     ^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` on by default
+
+warning: unused variable: `selector`
+  --> examples/examples/z_get.rs:27:18
+   |
+27 |     let (config, selector, value, target, timeout) = parse_args();
+   |                  ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_selector`
+   |
+   = note: `#[warn(unused_variables)]` on by default
+
+warning: unused variable: `value`
+  --> examples/examples/z_get.rs:27:28
+   |
+27 |     let (config, selector, value, target, timeout) = parse_args();
+   |                            ^^^^^ help: if this is intentional, prefix it with an underscore: `_value`
+
+warning: unused variable: `target`
+  --> examples/examples/z_get.rs:27:35
+   |
+27 |     let (config, selector, value, target, timeout) = parse_args();
+   |                                   ^^^^^^ help: if this is intentional, prefix it with an underscore: `_target`
+
+warning: unused variable: `timeout`
+  --> examples/examples/z_get.rs:27:43
+   |
+27 |     let (config, selector, value, target, timeout) = parse_args();
+   |                                           ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_timeout`
+
+warning: `zenoh-examples` (example "z_get") generated 5 warnings (run `cargo fix --example "z_get"` to apply 5 suggestions)
+    Finished dev [unoptimized + debuginfo] target(s) in 1m 41s
+     Running `target/debug/examples/z_get --mode peer`
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on()
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on()
+[2023-12-08T17:31:38Z TRACE polling::epoll] add: epoll_fd=6, fd=8, ev=Event { key: 18446744073709551615, readable: false, writable: false }
+[2023-12-08T17:31:38Z TRACE polling::epoll] add: epoll_fd=6, fd=7, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:38Z TRACE polling::epoll] new: epoll_fd=6, event_fd=7, timer_fd=Some(8)
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on: waiting on I/O
+[2023-12-08T17:31:38Z TRACE async_io::reactor] process_timers: 0 ready wakers
+[2023-12-08T17:31:38Z TRACE polling] Poller::wait(_, None)
+[2023-12-08T17:31:38Z TRACE polling::epoll] wait: epoll_fd=6, timeout=None
+[2023-12-08T17:31:38Z TRACE polling::epoll] modify: epoll_fd=6, fd=8, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on: completed
+[2023-12-08T17:31:38Z TRACE async_io::driver] main_loop: sleeping for 50 us
+[2023-12-08T17:31:38Z TRACE async_io::driver] main_loop: notified
+[2023-12-08T17:31:38Z TRACE async_io::driver] main_loop: sleeping for 50 us
+[2023-12-08T17:31:38Z TRACE async_std::task::builder] block_on
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on()
+[2023-12-08T17:31:38Z TRACE async_io::driver] main_loop: sleeping for 75 us
+[2023-12-08T17:31:38Z TRACE async_io::driver] main_loop: sleeping for 100 us
+[2023-12-08T17:31:38Z TRACE async_io::driver] main_loop: sleeping for 250 us
+[2023-12-08T17:31:38Z DEBUG zenoh::session] Config: Config { id: 9659454f8f2935721d6e5a2b9d76ae97, metadata: Null, mode: Some(Peer), connect: ConnectConfig { endpoints: [] }, listen: ListenConfig { endpoints: [] }, scouting: ScoutingConf { timeout: None, delay: None, multicast: ScoutingMulticastConf { enabled: None, address: None, interface: None, autoconnect: None, listen: None }, gossip: GossipConf { enabled: None, multihop: None, autoconnect: None } }, timestamping: TimestampingConf { enabled: None, drop_future_timestamp: None }, queries_default_timeout: None, routing: RoutingConf { router: RouterRoutingConf { peers_failover_brokering: None }, peer: PeerRoutingConf { mode: None } }, aggregation: AggregationConf { subscribers: [], publishers: [] }, transport: TransportConf { unicast: TransportUnicastConf { accept_timeout: 10000, accept_pending: 100, max_sessions: 1000, max_links: 1, lowlatency: false, qos: QoSUnicastConf { enabled: true }, compression: CompressionUnicastConf { enabled: false } }, multicast: TransportMulticastConf { join_interval: Some(2500), max_sessions: Some(1000), qos: QoSMulticastConf { enabled: false }, compression: CompressionMulticastConf { enabled: false } }, link: TransportLinkConf { protocols: None, tx: LinkTxConf { sequence_number_resolution: U32, lease: 10000, keep_alive: 4, batch_size: 65535, queue: QueueConf { size: QueueSizeConf { control: 1, real_time: 1, interactive_high: 1, interactive_low: 1, data_high: 2, data: 4, data_low: 2, background: 1 }, backoff: 100 }, threads: 1 }, rx: LinkRxConf { buffer_size: 65535, max_message_size: 1073741824 }, tls: TLSConf { root_ca_certificate: None, server_private_key: None, server_certificate: None, client_auth: None, client_private_key: None, client_certificate: None, server_name_verification: None, root_ca_certificate_base64: None, server_private_key_base64: None, server_certificate_base64: None, client_private_key_base64: None, client_certificate_base64: None }, unixpipe: UnixPipeConf { file_access_mask: None } }, shared_memory: SharedMemoryConf { enabled: false }, auth: AuthConf { usrpwd: UsrPwdConf { user: None, password: None, dictionary_file: None }, pubkey: PubKeyConf { public_key_pem: None, private_key_pem: None, public_key_file: None, private_key_file: None, key_size: None, known_keys_file: None } } }, adminspace: AdminSpaceConf { permissions: PermissionsConf { read: true, write: false } }, plugins_search_dirs: [], plugins: Object {} }
+[2023-12-08T17:31:38Z TRACE async_io::driver] main_loop: sleeping for 500 us
+[2023-12-08T17:31:38Z DEBUG zenoh::net::runtime] Zenoh Rust API v0.11.0-dev-38-gdb235af1-modified
+[2023-12-08T17:31:38Z INFO  zenoh::net::runtime] Using PID: 9659454f8f2935721d6e5a2b9d76ae97
+[2023-12-08T17:31:38Z TRACE async_io::driver] main_loop: sleeping for 750 us
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on()
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:38Z TRACE async_io::driver] main_loop: sleeping for 1000 us
+[2023-12-08T17:31:38Z TRACE async_std::task::builder] block_on
+[2023-12-08T17:31:38Z TRACE async_io::driver] main_loop: sleeping for 2500 us
+[2023-12-08T17:31:38Z TRACE async_std::task::builder] block_on
+[2023-12-08T17:31:38Z TRACE async_io::driver] main_loop: sleeping for 5000 us
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on()
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on()
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:38Z TRACE async_io::driver] main_loop: sleeping for 10000 us
+[2023-12-08T17:31:38Z TRACE async_std::task::builder] spawn
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:38Z TRACE async_std::task::builder] block_on
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on()
+[2023-12-08T17:31:38Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:43Z DEBUG zenoh::net::runtime] Runtime::clone() - Arc count: 1
+[2023-12-08T17:31:43Z DEBUG zenoh::net::runtime] Runtime::clone() - Arc count: 2
+[2023-12-08T17:31:43Z DEBUG zenoh::net::runtime] Runtime::clone() - Arc count: 3
+[2023-12-08T17:31:43Z DEBUG zenoh::net::routing::network] [Routers network] Add node (self) 9659454f8f2935721d6e5a2b9d76ae97
+[2023-12-08T17:31:43Z DEBUG zenoh::net::routing::network] [Peers network] Add node (self) 9659454f8f2935721d6e5a2b9d76ae97
+[2023-12-08T17:31:43Z DEBUG zenoh::net::runtime] Runtime::clone() - Arc count: 4
+[2023-12-08T17:31:43Z TRACE async_std::task::builder] spawn
+[2023-12-08T17:31:43Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:43Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:43Z DEBUG zenoh::net::runtime] Runtime::clone() - Arc count: 5
+[2023-12-08T17:31:43Z DEBUG zenoh::net::runtime] Runtime::clone() - Arc count: 6
+[2023-12-08T17:31:43Z DEBUG zenoh::net::runtime] Runtime::clone() - Arc count: 7
+[2023-12-08T17:31:43Z DEBUG zenoh::net::runtime] Runtime::clone() - Arc count: 8
+[2023-12-08T17:31:43Z DEBUG zenoh::net::routing::router] New Face{0, 9659454f8f2935721d6e5a2b9d76ae97}
+[2023-12-08T17:31:43Z DEBUG zenoh::net::runtime] Runtime::clone() - Arc count: 9
+[2023-12-08T17:31:43Z TRACE zenoh::session] queryable(@/session/9659454f8f2935721d6e5a2b9d76ae97/**)
+[2023-12-08T17:31:43Z DEBUG zenoh::net::runtime] Runtime::drop() - Arc count: 10
+[2023-12-08T17:31:43Z TRACE polling::epoll] add: epoll_fd=6, fd=9, ev=Event { key: 0, readable: false, writable: false }
+[2023-12-08T17:31:43Z TRACE async_std::task::builder] spawn
+[2023-12-08T17:31:43Z DEBUG zenoh::net::runtime::orchestrator] Listener added: tcp/[::]:40723
+[2023-12-08T17:31:43Z TRACE async_std::task::builder] block_on
+[2023-12-08T17:31:43Z TRACE zenoh_link_tcp::unicast] Ready to accept TCP connections on: [::]:40723
+[2023-12-08T17:31:43Z TRACE polling::epoll] modify: epoll_fd=6, fd=9, ev=Event { key: 0, readable: true, writable: false }
+[2023-12-08T17:31:43Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:43Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:44Z TRACE async_std::task::builder] block_on
+[2023-12-08T17:31:44Z INFO  zenoh::net::runtime::orchestrator] Zenoh can be reached at: tcp/[fd9b:c799:1717:5797:98f2:6bff:feba:f620]:40723
+[2023-12-08T17:31:44Z INFO  zenoh::net::runtime::orchestrator] Zenoh can be reached at: tcp/[fe80::98f2:6bff:feba:f620]:40723
+[2023-12-08T17:31:44Z INFO  zenoh::net::runtime::orchestrator] Zenoh can be reached at: tcp/192.168.64.3:40723
+[2023-12-08T17:31:44Z DEBUG zenoh::net::runtime::orchestrator] UDP port bound to 224.0.0.224:7446
+[2023-12-08T17:31:44Z DEBUG zenoh::net::runtime::orchestrator] Joined multicast group 224.0.0.224 on interface 192.168.64.3
+[2023-12-08T17:31:44Z INFO  zenoh::net::runtime::orchestrator] zenohd listening scout messages on 224.0.0.224:7446
+[2023-12-08T17:31:44Z TRACE polling::epoll] add: epoll_fd=6, fd=10, ev=Event { key: 1, readable: false, writable: false }
+[2023-12-08T17:31:44Z DEBUG zenoh::net::runtime::orchestrator] UDP port bound to 192.168.64.3:41184
+[2023-12-08T17:31:44Z TRACE polling::epoll] add: epoll_fd=6, fd=11, ev=Event { key: 2, readable: false, writable: false }
+[2023-12-08T17:31:44Z DEBUG zenoh::net::runtime] Runtime::clone() - Arc count: 9
+[2023-12-08T17:31:44Z TRACE async_std::task::builder] spawn
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:44Z TRACE polling] Poller::notify()
+[2023-12-08T17:31:44Z TRACE polling::epoll] notify: epoll_fd=6, event_fd=7
+[2023-12-08T17:31:44Z TRACE polling::epoll] new events: epoll_fd=6, res=1
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=7, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE async_io::reactor] process_timers: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE async_io::reactor] react: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: stops hogging the reactor
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: waiting on I/O
+[2023-12-08T17:31:44Z TRACE async_io::reactor] process_timers: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE polling] Poller::wait(_, Some(199.716414ms))
+[2023-12-08T17:31:44Z TRACE polling::epoll] wait: epoll_fd=6, timeout=Some(199.716414ms)
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=8, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:44Z DEBUG zenoh::net::runtime::orchestrator] Waiting for UDP datagram...
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=10, ev=Event { key: 1, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE zenoh::net::runtime::orchestrator] Send Scout(Scout { version: 8, what: WhatAmIMatcher(131), zid: None }) to 224.0.0.224:7446 on interface 192.168.64.3
+[2023-12-08T17:31:44Z TRACE polling::epoll] new events: epoll_fd=6, res=1
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=7, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE async_io::reactor] react: 1 ready wakers
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: sleeping for 50 us
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: notified
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: waiting on I/O
+[2023-12-08T17:31:44Z TRACE async_io::reactor] process_timers: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE polling] Poller::wait(_, Some(198.194565ms))
+[2023-12-08T17:31:44Z TRACE polling::epoll] wait: epoll_fd=6, timeout=Some(198.194565ms)
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=8, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE polling] Poller::notify()
+[2023-12-08T17:31:44Z TRACE polling::epoll] notify: epoll_fd=6, event_fd=7
+[2023-12-08T17:31:44Z TRACE polling::epoll] new events: epoll_fd=6, res=1
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=7, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE async_io::reactor] process_timers: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE async_io::reactor] react: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: sleeping for 50 us
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: waiting on I/O
+[2023-12-08T17:31:44Z TRACE async_io::reactor] process_timers: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE polling] Poller::wait(_, Some(197.800019ms))
+[2023-12-08T17:31:44Z TRACE polling::epoll] wait: epoll_fd=6, timeout=Some(197.800019ms)
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=8, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=11, ev=Event { key: 2, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE zenoh::net::runtime::orchestrator] Ignore UDP datagram from own socket
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=10, ev=Event { key: 1, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=11, ev=Event { key: 2, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:44Z TRACE polling::epoll] new events: epoll_fd=6, res=1
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=7, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE async_io::reactor] process_timers: 1 ready wakers
+[2023-12-08T17:31:44Z TRACE async_io::reactor] react: 1 ready wakers
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: sleeping for 50 us
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: waiting on I/O
+[2023-12-08T17:31:44Z TRACE async_io::reactor] process_timers: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE polling] Poller::wait(_, Some(801.171548ms))
+[2023-12-08T17:31:44Z TRACE polling::epoll] wait: epoll_fd=6, timeout=Some(801.171548ms)
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=8, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE polling] Poller::notify()
+[2023-12-08T17:31:44Z TRACE polling::epoll] notify: epoll_fd=6, event_fd=7
+[2023-12-08T17:31:44Z TRACE polling::epoll] new events: epoll_fd=6, res=1
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=7, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE async_io::reactor] process_timers: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE async_io::reactor] react: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: sleeping for 50 us
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: waiting on I/O
+[2023-12-08T17:31:44Z TRACE async_io::reactor] process_timers: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: sleeping for 75 us
+[2023-12-08T17:31:44Z TRACE polling] Poller::wait(_, Some(499.664913ms))
+[2023-12-08T17:31:44Z TRACE polling::epoll] wait: epoll_fd=6, timeout=Some(499.664913ms)
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=8, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: sleeping for 100 us
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: sleeping for 250 us
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: sleeping for 500 us
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: sleeping for 750 us
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: sleeping for 1000 us
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: sleeping for 2500 us
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: sleeping for 5000 us
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: sleeping for 10000 us
+[2023-12-08T17:31:44Z TRACE polling::epoll] new events: epoll_fd=6, res=1
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=7, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE async_io::reactor] process_timers: 1 ready wakers
+[2023-12-08T17:31:44Z TRACE async_io::reactor] react: 1 ready wakers
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: notified
+[2023-12-08T17:31:44Z DEBUG zenoh::net::runtime] Runtime::drop() - Arc count: 10
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: completed
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: waiting on I/O
+[2023-12-08T17:31:44Z TRACE async_io::reactor] process_timers: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE polling] Poller::wait(_, Some(294.265942ms))
+[2023-12-08T17:31:44Z TRACE polling::epoll] wait: epoll_fd=6, timeout=Some(294.265942ms)
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=8, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:44Z DEBUG zenoh::net::runtime] Runtime::clone() - Arc count: 9
+[2023-12-08T17:31:44Z TRACE async_std::task::builder] block_on
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on()
+[2023-12-08T17:31:44Z TRACE zenoh::session] start_close()
+[2023-12-08T17:31:44Z TRACE zenoh::net::runtime] Runtime::close())
+[2023-12-08T17:31:44Z TRACE zenoh_transport::unicast::manager] TransportManagerUnicast::clear())
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:44Z TRACE polling] Poller::notify()
+[2023-12-08T17:31:44Z TRACE polling::epoll] notify: epoll_fd=6, event_fd=7
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:44Z TRACE polling::epoll] new events: epoll_fd=6, res=1
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=7, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE async_io::reactor] process_timers: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE async_io::reactor] react: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: sleeping for 50 us
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: notified
+[2023-12-08T17:31:44Z TRACE async_io::driver] main_loop: waiting on I/O
+[2023-12-08T17:31:44Z TRACE async_io::reactor] process_timers: 0 ready wakers
+[2023-12-08T17:31:44Z TRACE polling] Poller::wait(_, Some(286.010149ms))
+[2023-12-08T17:31:44Z TRACE polling::epoll] wait: epoll_fd=6, timeout=Some(286.010149ms)
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=8, ev=Event { key: 18446744073709551615, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE polling::epoll] modify: epoll_fd=6, fd=9, ev=Event { key: 0, readable: true, writable: false }
+[2023-12-08T17:31:44Z TRACE polling::epoll] remove: epoll_fd=6, fd=9
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:44Z DEBUG zenoh::net::routing::router] Close Face{0, 9659454f8f2935721d6e5a2b9d76ae97}
+[2023-12-08T17:31:44Z TRACE zenoh::session] end_close()
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: completed
+[2023-12-08T17:31:44Z DEBUG zenoh::net::runtime] Runtime::drop() - Arc count: 10
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:44Z DEBUG zenoh::net::runtime] Runtime::drop() - Arc count: 9
+[2023-12-08T17:31:44Z TRACE polling::epoll] remove: epoll_fd=6, fd=10
+[2023-12-08T17:31:44Z TRACE polling::epoll] remove: epoll_fd=6, fd=11
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: sleep until notification
+[2023-12-08T17:31:44Z DEBUG zenoh::net::runtime] Runtime::drop() - Arc count: 8
+[2023-12-08T17:31:44Z TRACE async_io::driver] block_on: completed
+[2023-12-08T17:31:44Z DEBUG zenoh::net::runtime] Runtime::drop() - Arc count: 7

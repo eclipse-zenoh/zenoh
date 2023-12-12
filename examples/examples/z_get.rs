@@ -12,10 +12,13 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
+use log::trace;
+use zenoh::prelude::r#async::AsyncResolve;
+use zenoh::query::QueryTarget;
+use zenoh::selector::Selector;
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
-use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
 #[async_std::main]
@@ -25,29 +28,34 @@ async fn main() {
 
     let (config, selector, value, target, timeout) = parse_args();
 
-    println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
+    drop(session);
+    trace!("Done");
 
-    println!("Sending Query '{selector}'...");
-    let replies = match value {
-        Some(value) => session.get(&selector).with_value(value),
-        None => session.get(&selector),
-    }
-    .target(target)
-    .timeout(timeout)
-    .res()
-    .await
-    .unwrap();
-    while let Ok(reply) = replies.recv_async().await {
-        match reply.sample {
-            Ok(sample) => println!(
-                ">> Received ('{}': '{}')",
-                sample.key_expr.as_str(),
-                sample.value,
-            ),
-            Err(err) => println!(">> Received (ERROR: '{}')", String::try_from(&err).unwrap()),
-        }
-    }
+    async_std::task::sleep(Duration::from_secs(10)).await;
+    trace!("Sleep done");
+
+
+    // println!("Sending Query '{selector}'...");
+    // let replies = match value {
+    //     Some(value) => session.get(&selector).with_value(value),
+    //     None => session.get(&selector),
+    // }
+    // .target(target)
+    // .timeout(timeout)
+    // .res()
+    // .await
+    // .unwrap();
+    // while let Ok(reply) = replies.recv_async().await {
+    //     match reply.sample {
+    //         Ok(sample) => println!(
+    //             ">> Received ('{}': '{}')",
+    //             sample.key_expr.as_str(),
+    //             sample.value,
+    //         ),
+    //         Err(err) => println!(">> Received (ERROR: '{}')", String::try_from(&err).unwrap()),
+    //     }
+    // }
 }
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]

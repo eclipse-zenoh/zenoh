@@ -1,0 +1,1854 @@
+Runtime::clone() - Arc count: 2, id: 0, parent: 255
+   0: <zenoh::net::runtime::Runtime as core::clone::Clone>::clone
+             at zenoh/src/net/runtime/mod.rs:75:25
+   1: zenoh::net::runtime::Runtime::init::{{closure}}
+             at zenoh/src/net/runtime/mod.rs:202:50
+   2: zenoh::session::Session::new::{{closure}}
+             at zenoh/src/session.rs:845:41
+   3: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+   4: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+   5: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+   6: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+   7: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+   8: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+   9: futures_lite::future::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:89:27
+  10: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  11: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  12: futures_lite::future::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:79:5
+  13: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:173:25
+  14: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  15: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  16: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  17: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  18: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  19: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  20: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  21: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  22: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  23: <zenoh_core::ResolveFuture<F,To> as zenoh_core::SyncResolve>::res_sync
+             at commons/zenoh-core/src/lib.rs:166:9
+  24: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::SyncResolve>::res_sync
+             at zenoh/src/lib.rs:305:9
+  25: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::AsyncResolve>::res_async
+             at zenoh/src/lib.rs:317:28
+  26: zenoh_core::AsyncResolve::res
+             at commons/zenoh-core/src/lib.rs:46:9
+  27: z_get::main::main::{{closure}}
+             at examples/examples/z_get.rs:31:19
+  28: z_get::main::{{closure}}
+             at examples/examples/z_get.rs:24:1
+  29: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+  30: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  31: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  32: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  33: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  34: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  35: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:526:33
+  36: async_executor::Executor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:243:32
+  37: async_executor::LocalExecutor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:447:34
+  38: async_io::driver::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-io-1.13.0/src/driver.rs:146:33
+  39: async_global_executor::reactor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:3:18
+  40: async_global_executor::reactor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:12:5
+  41: async_global_executor::executor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:36
+  42: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  43: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  44: async_global_executor::executor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:5
+  45: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:171:25
+  46: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  47: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  48: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  49: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  50: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  51: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  52: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  53: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  54: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  55: z_get::main
+             at examples/examples/z_get.rs:24:1
+  56: core::ops::function::FnOnce::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  57: std::sys_common::backtrace::__rust_begin_short_backtrace
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys_common/backtrace.rs:135:18
+  58: std::rt::lang_start::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:166:18
+  59: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:284:13
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:48
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:20
+  60: std::rt::lang_start
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:165:17
+  61: main
+  62: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  63: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:392:3
+  64: _start
+
+Runtime::clone() - Arc count: 3, id: 1, parent: 255
+   0: <zenoh::net::runtime::Runtime as core::clone::Clone>::clone
+             at zenoh/src/net/runtime/mod.rs:75:25
+   1: zenoh::net::runtime::Runtime::init::{{closure}}
+             at zenoh/src/net/runtime/mod.rs:204:13
+   2: zenoh::session::Session::new::{{closure}}
+             at zenoh/src/session.rs:845:41
+   3: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+   4: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+   5: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+   6: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+   7: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+   8: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+   9: futures_lite::future::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:89:27
+  10: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  11: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  12: futures_lite::future::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:79:5
+  13: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:173:25
+  14: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  15: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  16: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  17: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  18: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  19: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  20: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  21: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  22: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  23: <zenoh_core::ResolveFuture<F,To> as zenoh_core::SyncResolve>::res_sync
+             at commons/zenoh-core/src/lib.rs:166:9
+  24: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::SyncResolve>::res_sync
+             at zenoh/src/lib.rs:305:9
+  25: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::AsyncResolve>::res_async
+             at zenoh/src/lib.rs:317:28
+  26: zenoh_core::AsyncResolve::res
+             at commons/zenoh-core/src/lib.rs:46:9
+  27: z_get::main::main::{{closure}}
+             at examples/examples/z_get.rs:31:19
+  28: z_get::main::{{closure}}
+             at examples/examples/z_get.rs:24:1
+  29: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+  30: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  31: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  32: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  33: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  34: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  35: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:526:33
+  36: async_executor::Executor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:243:32
+  37: async_executor::LocalExecutor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:447:34
+  38: async_io::driver::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-io-1.13.0/src/driver.rs:146:33
+  39: async_global_executor::reactor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:3:18
+  40: async_global_executor::reactor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:12:5
+  41: async_global_executor::executor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:36
+  42: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  43: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  44: async_global_executor::executor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:5
+  45: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:171:25
+  46: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  47: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  48: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  49: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  50: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  51: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  52: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  53: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  54: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  55: z_get::main
+             at examples/examples/z_get.rs:24:1
+  56: core::ops::function::FnOnce::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  57: std::sys_common::backtrace::__rust_begin_short_backtrace
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys_common/backtrace.rs:135:18
+  58: std::rt::lang_start::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:166:18
+  59: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:284:13
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:48
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:20
+  60: std::rt::lang_start
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:165:17
+  61: main
+  62: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  63: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:392:3
+  64: _start
+
+Runtime::clone() - Arc count: 4, id: 2, parent: 1
+   0: <zenoh::net::runtime::Runtime as core::clone::Clone>::clone
+             at zenoh/src/net/runtime/mod.rs:75:25
+   1: zenoh::net::routing::router::Router::init_link_state
+             at zenoh/src/net/routing/router.rs:532:17
+   2: zenoh::net::runtime::Runtime::init::{{closure}}
+             at zenoh/src/net/runtime/mod.rs:203:9
+   3: zenoh::session::Session::new::{{closure}}
+             at zenoh/src/session.rs:845:41
+   4: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+   5: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+   6: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+   7: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+   8: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+   9: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  10: futures_lite::future::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:89:27
+  11: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  12: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  13: futures_lite::future::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:79:5
+  14: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:173:25
+  15: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  16: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  17: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  18: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  19: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  20: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  21: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  22: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  23: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  24: <zenoh_core::ResolveFuture<F,To> as zenoh_core::SyncResolve>::res_sync
+             at commons/zenoh-core/src/lib.rs:166:9
+  25: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::SyncResolve>::res_sync
+             at zenoh/src/lib.rs:305:9
+  26: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::AsyncResolve>::res_async
+             at zenoh/src/lib.rs:317:28
+  27: zenoh_core::AsyncResolve::res
+             at commons/zenoh-core/src/lib.rs:46:9
+  28: z_get::main::main::{{closure}}
+             at examples/examples/z_get.rs:31:19
+  29: z_get::main::{{closure}}
+             at examples/examples/z_get.rs:24:1
+  30: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+  31: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  32: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  33: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  34: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  35: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  36: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:526:33
+  37: async_executor::Executor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:243:32
+  38: async_executor::LocalExecutor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:447:34
+  39: async_io::driver::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-io-1.13.0/src/driver.rs:146:33
+  40: async_global_executor::reactor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:3:18
+  41: async_global_executor::reactor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:12:5
+  42: async_global_executor::executor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:36
+  43: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  44: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  45: async_global_executor::executor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:5
+  46: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:171:25
+  47: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  48: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  49: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  50: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  51: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  52: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  53: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  54: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  55: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  56: z_get::main
+             at examples/examples/z_get.rs:24:1
+  57: core::ops::function::FnOnce::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  58: std::sys_common::backtrace::__rust_begin_short_backtrace
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys_common/backtrace.rs:135:18
+  59: std::rt::lang_start::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:166:18
+  60: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:284:13
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:48
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:20
+  61: std::rt::lang_start
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:165:17
+  62: main
+  63: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  64: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:392:3
+  65: _start
+
+Runtime::clone() - Arc count: 5, id: 3, parent: 255
+   0: <zenoh::net::runtime::Runtime as core::clone::Clone>::clone
+             at zenoh/src/net/runtime/mod.rs:75:25
+   1: zenoh::net::runtime::Runtime::init::{{closure}}
+             at zenoh/src/net/runtime/mod.rs:215:28
+   2: zenoh::session::Session::new::{{closure}}
+             at zenoh/src/session.rs:845:41
+   3: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+   4: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+   5: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+   6: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+   7: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+   8: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+   9: futures_lite::future::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:89:27
+  10: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  11: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  12: futures_lite::future::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:79:5
+  13: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:173:25
+  14: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  15: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  16: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  17: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  18: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  19: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  20: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  21: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  22: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  23: <zenoh_core::ResolveFuture<F,To> as zenoh_core::SyncResolve>::res_sync
+             at commons/zenoh-core/src/lib.rs:166:9
+  24: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::SyncResolve>::res_sync
+             at zenoh/src/lib.rs:305:9
+  25: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::AsyncResolve>::res_async
+             at zenoh/src/lib.rs:317:28
+  26: zenoh_core::AsyncResolve::res
+             at commons/zenoh-core/src/lib.rs:46:9
+  27: z_get::main::main::{{closure}}
+             at examples/examples/z_get.rs:31:19
+  28: z_get::main::{{closure}}
+             at examples/examples/z_get.rs:24:1
+  29: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+  30: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  31: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  32: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  33: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  34: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  35: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:526:33
+  36: async_executor::Executor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:243:32
+  37: async_executor::LocalExecutor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:447:34
+  38: async_io::driver::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-io-1.13.0/src/driver.rs:146:33
+  39: async_global_executor::reactor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:3:18
+  40: async_global_executor::reactor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:12:5
+  41: async_global_executor::executor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:36
+  42: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  43: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  44: async_global_executor::executor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:5
+  45: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:171:25
+  46: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  47: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  48: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  49: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  50: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  51: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  52: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  53: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  54: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  55: z_get::main
+             at examples/examples/z_get.rs:24:1
+  56: core::ops::function::FnOnce::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  57: std::sys_common::backtrace::__rust_begin_short_backtrace
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys_common/backtrace.rs:135:18
+  58: std::rt::lang_start::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:166:18
+  59: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:284:13
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:48
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:20
+  60: std::rt::lang_start
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:165:17
+  61: main
+  62: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  63: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:392:3
+  64: _start
+
+Runtime::clone() - Arc count: 6, id: 4, parent: 255
+   0: <zenoh::net::runtime::Runtime as core::clone::Clone>::clone
+             at zenoh/src/net/runtime/mod.rs:75:25
+   1: zenoh::session::Session::new::{{closure}}
+             at zenoh/src/session.rs:848:25
+   2: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+   3: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+   4: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+   5: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+   6: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+   7: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+   8: futures_lite::future::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:89:27
+   9: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  10: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  11: futures_lite::future::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:79:5
+  12: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:173:25
+  13: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  14: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  15: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  16: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  17: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  18: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  19: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  20: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  21: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  22: <zenoh_core::ResolveFuture<F,To> as zenoh_core::SyncResolve>::res_sync
+             at commons/zenoh-core/src/lib.rs:166:9
+  23: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::SyncResolve>::res_sync
+             at zenoh/src/lib.rs:305:9
+  24: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::AsyncResolve>::res_async
+             at zenoh/src/lib.rs:317:28
+  25: zenoh_core::AsyncResolve::res
+             at commons/zenoh-core/src/lib.rs:46:9
+  26: z_get::main::main::{{closure}}
+             at examples/examples/z_get.rs:31:19
+  27: z_get::main::{{closure}}
+             at examples/examples/z_get.rs:24:1
+  28: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+  29: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  30: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  31: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  32: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  33: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  34: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:526:33
+  35: async_executor::Executor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:243:32
+  36: async_executor::LocalExecutor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:447:34
+  37: async_io::driver::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-io-1.13.0/src/driver.rs:146:33
+  38: async_global_executor::reactor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:3:18
+  39: async_global_executor::reactor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:12:5
+  40: async_global_executor::executor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:36
+  41: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  42: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  43: async_global_executor::executor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:5
+  44: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:171:25
+  45: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  46: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  47: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  48: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  49: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  50: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  51: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  52: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  53: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  54: z_get::main
+             at examples/examples/z_get.rs:24:1
+  55: core::ops::function::FnOnce::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  56: std::sys_common::backtrace::__rust_begin_short_backtrace
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys_common/backtrace.rs:135:18
+  57: std::rt::lang_start::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:166:18
+  58: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:284:13
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:48
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:20
+  59: std::rt::lang_start
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:165:17
+  60: main
+  61: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  62: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:392:3
+  63: _start
+
+Runtime::clone() - Arc count: 7, id: 5, parent: 4
+   0: <zenoh::net::runtime::Runtime as core::clone::Clone>::clone
+             at zenoh/src/net/runtime/mod.rs:75:25
+   1: zenoh::session::Session::init::{{closure}}
+             at zenoh/src/session.rs:346:26
+   2: <zenoh_core::ResolveClosure<C,To> as zenoh_core::SyncResolve>::res_sync
+             at commons/zenoh-core/src/lib.rs:119:9
+   3: <zenoh_core::ResolveClosure<C,To> as zenoh_core::AsyncResolve>::res_async
+             at commons/zenoh-core/src/lib.rs:109:28
+   4: zenoh::session::Session::new::{{closure}}
+             at zenoh/src/session.rs:847:35
+   5: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+   6: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+   7: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+   8: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+   9: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  10: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  11: futures_lite::future::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:89:27
+  12: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  13: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  14: futures_lite::future::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:79:5
+  15: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:173:25
+  16: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  17: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  18: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  19: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  20: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  21: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  22: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  23: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  24: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  25: <zenoh_core::ResolveFuture<F,To> as zenoh_core::SyncResolve>::res_sync
+             at commons/zenoh-core/src/lib.rs:166:9
+  26: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::SyncResolve>::res_sync
+             at zenoh/src/lib.rs:305:9
+  27: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::AsyncResolve>::res_async
+             at zenoh/src/lib.rs:317:28
+  28: zenoh_core::AsyncResolve::res
+             at commons/zenoh-core/src/lib.rs:46:9
+  29: z_get::main::main::{{closure}}
+             at examples/examples/z_get.rs:31:19
+  30: z_get::main::{{closure}}
+             at examples/examples/z_get.rs:24:1
+  31: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+  32: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  33: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  34: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  35: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  36: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  37: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:526:33
+  38: async_executor::Executor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:243:32
+  39: async_executor::LocalExecutor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:447:34
+  40: async_io::driver::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-io-1.13.0/src/driver.rs:146:33
+  41: async_global_executor::reactor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:3:18
+  42: async_global_executor::reactor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:12:5
+  43: async_global_executor::executor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:36
+  44: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  45: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  46: async_global_executor::executor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:5
+  47: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:171:25
+  48: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  49: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  50: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  51: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  52: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  53: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  54: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  55: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  56: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  57: z_get::main
+             at examples/examples/z_get.rs:24:1
+  58: core::ops::function::FnOnce::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  59: std::sys_common::backtrace::__rust_begin_short_backtrace
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys_common/backtrace.rs:135:18
+  60: std::rt::lang_start::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:166:18
+  61: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:284:13
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:48
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:20
+  62: std::rt::lang_start
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:165:17
+  63: main
+  64: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  65: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:392:3
+  66: _start
+
+   0: <zenoh::net::runtime::Runtime as core::ops::drop::Drop>::drop
+             at zenoh/src/net/runtime/mod.rs:105:25
+   1: core::ptr::drop_in_place<zenoh::net::runtime::Runtime>
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ptr/mod.rs:497:1
+   2: zenoh::session::Session::init::{{closure}}
+             at zenoh/src/session.rs:360:9
+   3: <zenoh_core::ResolveClosure<C,To> as zenoh_core::SyncResolve>::res_sync
+             at commons/zenoh-core/src/lib.rs:119:9
+   4: <zenoh_core::ResolveClosure<C,To> as zenoh_core::AsyncResolve>::res_async
+             at commons/zenoh-core/src/lib.rs:109:28
+   5: zenoh::session::Session::new::{{closure}}
+             at zenoh/src/session.rs:847:35
+   6: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+   7: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+   8: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+   9: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  10: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  11: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  12: futures_lite::future::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:89:27
+  13: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  14: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  15: futures_lite::future::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:79:5
+  16: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:173:25
+  17: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  18: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  19: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  20: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  21: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  22: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  23: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  24: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  25: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  26: <zenoh_core::ResolveFuture<F,To> as zenoh_core::SyncResolve>::res_sync
+             at commons/zenoh-core/src/lib.rs:166:9
+  27: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::SyncResolve>::res_sync
+             at zenoh/src/lib.rs:305:9
+  28: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::AsyncResolve>::res_async
+             at zenoh/src/lib.rs:317:28
+  29: zenoh_core::AsyncResolve::res
+             at commons/zenoh-core/src/lib.rs:46:9
+  30: z_get::main::main::{{closure}}
+             at examples/examples/z_get.rs:31:19
+  31: z_get::main::{{closure}}
+             at examples/examples/z_get.rs:24:1
+  32: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+  33: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  34: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  35: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  36: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  37: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  38: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:526:33
+  39: async_executor::Executor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:243:32
+  40: async_executor::LocalExecutor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:447:34
+  41: async_io::driver::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-io-1.13.0/src/driver.rs:146:33
+  42: async_global_executor::reactor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:3:18
+  43: async_global_executor::reactor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:12:5
+  44: async_global_executor::executor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:36
+  45: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  46: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  47: async_global_executor::executor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:5
+  48: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:171:25
+  49: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  50: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  51: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  52: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  53: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  54: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  55: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  56: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  57: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  58: z_get::main
+             at examples/examples/z_get.rs:24:1
+  59: core::ops::function::FnOnce::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  60: std::sys_common::backtrace::__rust_begin_short_backtrace
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys_common/backtrace.rs:135:18
+  61: std::rt::lang_start::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:166:18
+  62: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:284:13
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:48
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:20
+  63: std::rt::lang_start
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:165:17
+  64: main
+  65: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  66: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:392:3
+  67: _start
+
+Runtime::clone() - Arc count: 7, id: 6, parent: 255
+   0: <zenoh::net::runtime::Runtime as core::clone::Clone>::clone
+             at zenoh/src/net/runtime/mod.rs:75:25
+   1: zenoh::net::runtime::orchestrator::<impl zenoh::net::runtime::Runtime>::start_scout::{{closure}}
+             at zenoh/src/net/runtime/orchestrator.rs:215:28
+   2: zenoh::net::runtime::orchestrator::<impl zenoh::net::runtime::Runtime>::start_peer::{{closure}}
+             at zenoh/src/net/runtime/orchestrator.rs:150:65
+   3: zenoh::net::runtime::orchestrator::<impl zenoh::net::runtime::Runtime>::start::{{closure}}
+             at zenoh/src/net/runtime/orchestrator.rs:52:48
+   4: zenoh::session::Session::new::{{closure}}
+             at zenoh/src/session.rs:854:43
+   5: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+   6: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+   7: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+   8: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+   9: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  10: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  11: futures_lite::future::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:89:27
+  12: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  13: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  14: futures_lite::future::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:79:5
+  15: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:173:25
+  16: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  17: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  18: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  19: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  20: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  21: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  22: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  23: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  24: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  25: <zenoh_core::ResolveFuture<F,To> as zenoh_core::SyncResolve>::res_sync
+             at commons/zenoh-core/src/lib.rs:166:9
+  26: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::SyncResolve>::res_sync
+             at zenoh/src/lib.rs:305:9
+  27: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::AsyncResolve>::res_async
+             at zenoh/src/lib.rs:317:28
+  28: zenoh_core::AsyncResolve::res
+             at commons/zenoh-core/src/lib.rs:46:9
+  29: z_get::main::main::{{closure}}
+             at examples/examples/z_get.rs:31:19
+  30: z_get::main::{{closure}}
+             at examples/examples/z_get.rs:24:1
+  31: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+  32: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  33: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  34: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  35: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  36: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  37: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:526:33
+  38: async_executor::Executor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:243:32
+  39: async_executor::LocalExecutor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:447:34
+  40: async_io::driver::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-io-1.13.0/src/driver.rs:146:33
+  41: async_global_executor::reactor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:3:18
+  42: async_global_executor::reactor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:12:5
+  43: async_global_executor::executor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:36
+  44: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  45: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  46: async_global_executor::executor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:5
+  47: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:171:25
+  48: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  49: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  50: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  51: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  52: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  53: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  54: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  55: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  56: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  57: z_get::main
+             at examples/examples/z_get.rs:24:1
+  58: core::ops::function::FnOnce::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  59: std::sys_common::backtrace::__rust_begin_short_backtrace
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys_common/backtrace.rs:135:18
+  60: std::rt::lang_start::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:166:18
+  61: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:284:13
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:48
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:20
+  62: std::rt::lang_start
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:165:17
+  63: main
+  64: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  65: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:392:3
+  66: _start
+
+   0: <zenoh::net::runtime::Runtime as core::ops::drop::Drop>::drop
+             at zenoh/src/net/runtime/mod.rs:105:25
+   1: core::ptr::drop_in_place<zenoh::net::runtime::Runtime>
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ptr/mod.rs:497:1
+   2: zenoh::session::Session::new::{{closure}}
+             at zenoh/src/session.rs:862:17
+   3: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+   4: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+   5: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+   6: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+   7: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+   8: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+   9: futures_lite::future::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:89:27
+  10: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  11: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  12: futures_lite::future::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:79:5
+  13: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:173:25
+  14: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  15: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  16: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  17: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  18: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  19: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  20: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  21: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  22: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  23: <zenoh_core::ResolveFuture<F,To> as zenoh_core::SyncResolve>::res_sync
+             at commons/zenoh-core/src/lib.rs:166:9
+  24: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::SyncResolve>::res_sync
+             at zenoh/src/lib.rs:305:9
+  25: <zenoh::OpenBuilder<TryIntoConfig> as zenoh_core::AsyncResolve>::res_async
+             at zenoh/src/lib.rs:317:28
+  26: zenoh_core::AsyncResolve::res
+             at commons/zenoh-core/src/lib.rs:46:9
+  27: z_get::main::main::{{closure}}
+             at examples/examples/z_get.rs:31:19
+  28: z_get::main::{{closure}}
+             at examples/examples/z_get.rs:24:1
+  29: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+  30: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  31: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  32: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  33: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  34: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  35: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:526:33
+  36: async_executor::Executor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:243:32
+  37: async_executor::LocalExecutor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:447:34
+  38: async_io::driver::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-io-1.13.0/src/driver.rs:146:33
+  39: async_global_executor::reactor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:3:18
+  40: async_global_executor::reactor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:12:5
+  41: async_global_executor::executor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:36
+  42: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  43: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  44: async_global_executor::executor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:5
+  45: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:171:25
+  46: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  47: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  48: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  49: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  50: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  51: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  52: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  53: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  54: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  55: z_get::main
+             at examples/examples/z_get.rs:24:1
+  56: core::ops::function::FnOnce::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  57: std::sys_common::backtrace::__rust_begin_short_backtrace
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys_common/backtrace.rs:135:18
+  58: std::rt::lang_start::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:166:18
+  59: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:284:13
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:48
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:20
+  60: std::rt::lang_start
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:165:17
+  61: main
+  62: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  63: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:392:3
+  64: _start
+
+Runtime::clone() - Arc count: 7, id: 7, parent: 5
+   0: <zenoh::net::runtime::Runtime as core::clone::Clone>::clone
+             at zenoh/src/net/runtime/mod.rs:75:25
+   1: zenoh::session::Session::clone
+             at zenoh/src/session.rs:831:22
+   2: <zenoh::session::Session as core::ops::drop::Drop>::drop
+             at zenoh/src/session.rs:2465:21
+   3: core::ptr::drop_in_place<zenoh::session::Session>
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ptr/mod.rs:497:1
+   4: core::mem::drop
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/mem/mod.rs:987:24
+   5: z_get::main::main::{{closure}}
+             at examples/examples/z_get.rs:32:5
+   6: z_get::main::{{closure}}
+             at examples/examples/z_get.rs:24:1
+   7: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+   8: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+   9: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  10: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  11: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  12: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  13: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:526:33
+  14: async_executor::Executor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:243:32
+  15: async_executor::LocalExecutor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:447:34
+  16: async_io::driver::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-io-1.13.0/src/driver.rs:146:33
+  17: async_global_executor::reactor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:3:18
+  18: async_global_executor::reactor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:12:5
+  19: async_global_executor::executor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:36
+  20: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  21: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  22: async_global_executor::executor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:5
+  23: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:171:25
+  24: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  25: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  26: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  27: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  28: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  29: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  30: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  31: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  32: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  33: z_get::main
+             at examples/examples/z_get.rs:24:1
+  34: core::ops::function::FnOnce::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  35: std::sys_common::backtrace::__rust_begin_short_backtrace
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys_common/backtrace.rs:135:18
+  36: std::rt::lang_start::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:166:18
+  37: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:284:13
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:48
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:20
+  38: std::rt::lang_start
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:165:17
+  39: main
+  40: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  41: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:392:3
+  42: _start
+
+   0: <zenoh::net::runtime::Runtime as core::ops::drop::Drop>::drop
+             at zenoh/src/net/runtime/mod.rs:105:25
+   1: core::ptr::drop_in_place<zenoh::net::runtime::Runtime>
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ptr/mod.rs:497:1
+   2: core::ptr::drop_in_place<zenoh::net::runtime::orchestrator::<impl zenoh::net::runtime::Runtime>::start_scout::{{closure}}::{{closure}}>
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ptr/mod.rs:224:25
+   3: core::ptr::drop_in_place<stop_token::future::TimeoutAt<zenoh::net::runtime::orchestrator::<impl zenoh::net::runtime::Runtime>::start_scout::{{closure}}::{{closure}}>>
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ptr/mod.rs:497:1
+   4: zenoh::net::runtime::wrap_future_to_log::{{closure}}
+             at zenoh/src/net/runtime/mod.rs:289:25
+   5: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+   6: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+   7: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+   8: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+   9: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  10: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  11: async_executor::Executor::spawn::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:145:20
+  12: <core::pin::Pin<P> as core::future::future::Future>::poll
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/future/future.rs:125:9
+  13: async_task::raw::RawTask<F,T,S,M>::run
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-task-4.4.0/src/raw.rs:563:17
+  14: async_task::runnable::Runnable<M>::run
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-task-4.4.0/src/runnable.rs:782:18
+  15: async_executor::Executor::run::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:236:21
+  16: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:529:33
+  17: async_executor::Executor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:243:32
+  18: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:529:33
+  19: async_io::driver::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-io-1.13.0/src/driver.rs:146:33
+  20: async_global_executor::reactor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:3:18
+  21: async_global_executor::reactor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:12:5
+  22: async_global_executor::threading::thread_main_loop::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/threading.rs:95:17
+  23: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  24: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  25: async_global_executor::threading::thread_main_loop::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/threading.rs:89:13
+  26: std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+  27: __rust_try
+  28: std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+  29: std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+  30: async_global_executor::threading::thread_main_loop
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/threading.rs:88:12
+  31: core::ops::function::FnOnce::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  32: std::sys_common::backtrace::__rust_begin_short_backtrace
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys_common/backtrace.rs:135:18
+  33: std::thread::Builder::spawn_unchecked_::{{closure}}::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/mod.rs:529:17
+  34: <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/panic/unwind_safe.rs:271:9
+  35: std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+  36: __rust_try
+  37: std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+  38: std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::thread::Builder::spawn_unchecked_::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/mod.rs:528:30
+  39: core::ops::function::FnOnce::call_once{{vtable.shim}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  40: <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/alloc/src/boxed.rs:1993:9
+      <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/alloc/src/boxed.rs:1993:9
+      std::sys::unix::thread::Thread::new::thread_start
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys/unix/thread.rs:108:17
+  41: start_thread
+             at ./nptl/pthread_create.c:442:8
+  42: thread_start
+             at ./misc/../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+
+   0: <zenoh::net::runtime::Runtime as core::ops::drop::Drop>::drop
+             at zenoh/src/net/runtime/mod.rs:105:25
+   1: core::ptr::drop_in_place<zenoh::net::runtime::Runtime>
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ptr/mod.rs:497:1
+   2: core::ptr::drop_in_place<zenoh::net::runtime::Runtime::init::{{closure}}::{{closure}}>
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ptr/mod.rs:225:13
+   3: core::ptr::drop_in_place<stop_token::future::TimeoutAt<zenoh::net::runtime::Runtime::init::{{closure}}::{{closure}}>>
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ptr/mod.rs:497:1
+   4: zenoh::net::runtime::wrap_future_to_log::{{closure}}
+             at zenoh/src/net/runtime/mod.rs:289:25
+   5: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+   6: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+   7: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+   8: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+   9: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  10: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  11: async_executor::Executor::spawn::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:145:20
+  12: async_task::raw::RawTask<F,T,S,M>::run
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-task-4.4.0/src/raw.rs:563:17
+  13: async_task::runnable::Runnable<M>::run
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-task-4.4.0/src/runnable.rs:782:18
+  14: async_executor::Executor::run::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:236:21
+  15: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:529:33
+  16: async_executor::Executor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:243:32
+  17: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:529:33
+  18: async_io::driver::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-io-1.13.0/src/driver.rs:146:33
+  19: async_global_executor::reactor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:3:18
+  20: async_global_executor::reactor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:12:5
+  21: async_global_executor::threading::thread_main_loop::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/threading.rs:95:17
+  22: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  23: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  24: async_global_executor::threading::thread_main_loop::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/threading.rs:89:13
+  25: std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+  26: __rust_try
+  27: std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+  28: std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+  29: async_global_executor::threading::thread_main_loop
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/threading.rs:88:12
+  30: core::ops::function::FnOnce::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  31: std::sys_common::backtrace::__rust_begin_short_backtrace
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys_common/backtrace.rs:135:18
+  32: std::thread::Builder::spawn_unchecked_::{{closure}}::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/mod.rs:529:17
+  33: <core::panic::unwind_safe::AssertUnwindSafe<F> as core::ops::function::FnOnce<()>>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/panic/unwind_safe.rs:271:9
+  34: std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+  35: __rust_try
+  36: std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+  37: std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::thread::Builder::spawn_unchecked_::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/mod.rs:528:30
+  38: core::ops::function::FnOnce::call_once{{vtable.shim}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  39: <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/alloc/src/boxed.rs:1993:9
+      <alloc::boxed::Box<F,A> as core::ops::function::FnOnce<Args>>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/alloc/src/boxed.rs:1993:9
+      std::sys::unix::thread::Thread::new::thread_start
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys/unix/thread.rs:108:17
+  40: start_thread
+             at ./nptl/pthread_create.c:442:8
+  41: thread_start
+             at ./misc/../sysdeps/unix/sysv/linux/aarch64/clone.S:79
+
+   0: <zenoh::net::runtime::Runtime as core::ops::drop::Drop>::drop
+             at zenoh/src/net/runtime/mod.rs:105:25
+   1: core::ptr::drop_in_place<zenoh::net::runtime::Runtime>
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ptr/mod.rs:497:1
+   2: core::ptr::drop_in_place<zenoh::session::Session>
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ptr/mod.rs:497:1
+   3: zenoh::session::Session::close::{{closure}}
+             at zenoh/src/session.rs:461:9
+   4: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+   5: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+   6: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+   7: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+   8: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+   9: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  10: futures_lite::future::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:89:27
+  11: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  12: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  13: futures_lite::future::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:79:5
+  14: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:173:25
+  15: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  16: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  17: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  18: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  19: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  20: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  21: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  22: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  23: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  24: <zenoh_core::ResolveFuture<F,To> as zenoh_core::SyncResolve>::res_sync
+             at commons/zenoh-core/src/lib.rs:166:9
+  25: <zenoh::session::Session as core::ops::drop::Drop>::drop
+             at zenoh/src/session.rs:2465:21
+  26: core::ptr::drop_in_place<zenoh::session::Session>
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ptr/mod.rs:497:1
+  27: core::mem::drop
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/mem/mod.rs:987:24
+  28: z_get::main::main::{{closure}}
+             at examples/examples/z_get.rs:32:5
+  29: z_get::main::{{closure}}
+             at examples/examples/z_get.rs:24:1
+  30: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+  31: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  32: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  33: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  34: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  35: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  36: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:526:33
+  37: async_executor::Executor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:243:32
+  38: async_executor::LocalExecutor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:447:34
+  39: async_io::driver::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-io-1.13.0/src/driver.rs:146:33
+  40: async_global_executor::reactor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:3:18
+  41: async_global_executor::reactor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:12:5
+  42: async_global_executor::executor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:36
+  43: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  44: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  45: async_global_executor::executor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:5
+  46: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:171:25
+  47: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  48: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  49: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  50: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  51: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  52: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  53: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  54: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  55: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  56: z_get::main
+             at examples/examples/z_get.rs:24:1
+  57: core::ops::function::FnOnce::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  58: std::sys_common::backtrace::__rust_begin_short_backtrace
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys_common/backtrace.rs:135:18
+  59: std::rt::lang_start::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:166:18
+  60: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:284:13
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:48
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:20
+  61: std::rt::lang_start
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:165:17
+  62: main
+  63: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  64: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:392:3
+  65: _start
+
+   0: <zenoh::net::runtime::Runtime as core::ops::drop::Drop>::drop
+             at zenoh/src/net/runtime/mod.rs:105:25
+   1: core::ptr::drop_in_place<zenoh::net::runtime::Runtime>
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ptr/mod.rs:497:1
+   2: core::ptr::drop_in_place<zenoh::session::Session>
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ptr/mod.rs:497:1
+   3: core::mem::drop
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/mem/mod.rs:987:24
+   4: z_get::main::main::{{closure}}
+             at examples/examples/z_get.rs:32:5
+   5: z_get::main::{{closure}}
+             at examples/examples/z_get.rs:24:1
+   6: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:199:17
+   7: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+   8: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+   9: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  10: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  11: <async_std::task::builder::SupportTaskLocals<F> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:197:13
+  12: <futures_lite::future::Or<F1,F2> as core::future::future::Future>::poll
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/futures-lite-1.13.0/src/future.rs:526:33
+  13: async_executor::Executor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:243:32
+  14: async_executor::LocalExecutor::run::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-executor-1.5.1/src/lib.rs:447:34
+  15: async_io::driver::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-io-1.13.0/src/driver.rs:146:33
+  16: async_global_executor::reactor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:3:18
+  17: async_global_executor::reactor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/reactor.rs:12:5
+  18: async_global_executor::executor::block_on::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:36
+  19: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  20: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  21: async_global_executor::executor::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-global-executor-2.3.1/src/executor.rs:26:5
+  22: async_std::task::builder::Builder::blocking::{{closure}}::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:171:25
+  23: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:60:13
+  24: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  25: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  26: async_std::task::task_locals_wrapper::TaskLocalsWrapper::set_current
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/task_locals_wrapper.rs:55:9
+  27: async_std::task::builder::Builder::blocking::{{closure}}
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:168:17
+  28: std::thread::local::LocalKey<T>::try_with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:270:16
+  29: std::thread::local::LocalKey<T>::with
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/thread/local.rs:246:9
+  30: async_std::task::builder::Builder::blocking
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/builder.rs:161:9
+  31: async_std::task::block_on::block_on
+             at /home/milyin/.cargo/registry/src/index.crates.io-6f17d22bba15001f/async-std-1.12.0/src/task/block_on.rs:33:5
+  32: z_get::main
+             at examples/examples/z_get.rs:24:1
+  33: core::ops::function::FnOnce::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:250:5
+  34: std::sys_common::backtrace::__rust_begin_short_backtrace
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/sys_common/backtrace.rs:135:18
+  35: std::rt::lang_start::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:166:18
+  36: core::ops::function::impls::<impl core::ops::function::FnOnce<A> for &F>::call_once
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/core/src/ops/function.rs:284:13
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal::{{closure}}
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:48
+      std::panicking::try::do_call
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:500:40
+      std::panicking::try
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panicking.rs:464:19
+      std::panic::catch_unwind
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/panic.rs:142:14
+      std::rt::lang_start_internal
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:148:20
+  37: std::rt::lang_start
+             at /rustc/5680fa18feaa87f3ff04063800aec256c3d4b4be/library/std/src/rt.rs:165:17
+  38: main
+  39: __libc_start_call_main
+             at ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+  40: __libc_start_main_impl
+             at ./csu/../csu/libc-start.c:392:3
+  41: _start
+

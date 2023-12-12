@@ -529,7 +529,7 @@ impl Router {
             tables.routers_net = Some(Network::new(
                 "[Routers network]".to_string(),
                 tables.zid,
-                runtime.clone(),
+                runtime.clone(), // LEAK 3
                 router_full_linkstate,
                 router_peers_failover_brokering,
                 gossip,
