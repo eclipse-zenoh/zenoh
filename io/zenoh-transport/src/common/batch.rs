@@ -488,6 +488,7 @@ mod tests {
     use super::*;
     use rand::Rng;
     use zenoh_buffers::ZBuf;
+    use zenoh_core::zcondfeat;
     use zenoh_protocol::{
         core::{CongestionControl, Encoding, Priority, Reliability, WireExpr},
         network::{ext, Push},
@@ -519,20 +520,17 @@ mod tests {
                 wbatch.encode(&msg_in).unwrap();
                 println!("Encoded WBatch: {:?}", wbatch);
 
-                #[cfg(feature = "transport_compression")]
-                let mut buffer = config.is_compression.then_some(BBuf::with_capacity(
-                    lz4_flex::block::get_maximum_output_size(wbatch.as_slice().len()),
-                ));
+                let mut buffer = zcondfeat!(
+                    "transport_compression",
+                    config.is_compression.then_some(BBuf::with_capacity(
+                        lz4_flex::block::get_maximum_output_size(wbatch.as_slice().len()),
+                    )),
+                    None
+                );
 
-                let res = wbatch
-                    .finalize(
-                        #[cfg(feature = "transport_compression")]
-                        buffer.as_mut(),
-                    )
-                    .unwrap();
+                let res = wbatch.finalize(buffer.as_mut()).unwrap();
                 let bytes = match res {
                     Finalize::Batch => wbatch.as_slice(),
-                    #[cfg(feature = "transport_compression")]
                     Finalize::Buffer => buffer.as_mut().unwrap().as_slice(),
                 };
                 println!("Finalized WBatch: {:02x?}", bytes);
