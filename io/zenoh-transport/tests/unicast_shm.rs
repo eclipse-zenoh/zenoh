@@ -160,9 +160,15 @@ mod tests {
         let peer_net01 = ZenohId::try_from([3]).unwrap();
 
         // Create the SharedMemoryManager
-        let mut shm01 =
-            SharedMemoryManager::make(format!("peer_shm01_{}_{}", endpoint.protocol(), UNIQUE_ID.fetch_add(1, Ordering::Relaxed)), 2 * MSG_SIZE)
-                .unwrap();
+        let mut shm01 = SharedMemoryManager::make(
+            format!(
+                "peer_shm01_{}_{}",
+                endpoint.protocol(),
+                UNIQUE_ID.fetch_add(1, Ordering::Relaxed)
+            ),
+            2 * MSG_SIZE,
+        )
+        .unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(true));
