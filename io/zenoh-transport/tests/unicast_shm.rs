@@ -150,6 +150,8 @@ mod tests {
     }
 
     async fn run(endpoint: &EndPoint, lowlatency_transport: bool) {
+        static UNIQUE_ID: AtomicUsize = AtomicUsize::new(0);
+
         println!("Transport SHM [0a]: {endpoint:?}");
 
         // Define client and router IDs
@@ -159,7 +161,7 @@ mod tests {
 
         // Create the SharedMemoryManager
         let mut shm01 =
-            SharedMemoryManager::make(format!("peer_shm01_{}", endpoint.protocol()), 2 * MSG_SIZE)
+            SharedMemoryManager::make(format!("peer_shm01_{}_{}", endpoint.protocol(), UNIQUE_ID.fetch_add(1, Ordering::Relaxed)), 2 * MSG_SIZE)
                 .unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
