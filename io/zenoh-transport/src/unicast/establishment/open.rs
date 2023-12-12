@@ -14,6 +14,7 @@
 #[cfg(feature = "shared-memory")]
 use crate::unicast::shared_memory_unicast::Challenge;
 use crate::{
+    common::batch::BatchConfig,
     unicast::{
         establishment::{compute_sn, ext, OpenFsm},
         link::{
@@ -514,11 +515,15 @@ pub(crate) async fn open_link(
     link: LinkUnicast,
     manager: &TransportManager,
 ) -> ZResult<TransportUnicast> {
+    let is_streamed = link.is_streamed();
     let config = TransportLinkUnicastConfig {
         direction: TransportLinkUnicastDirection::Outbound,
-        mtu: link.get_mtu(),
-        #[cfg(feature = "transport_compression")]
-        is_compression: false, // Perform the exchange Init/Open exchange with no compression
+        batch: BatchConfig {
+            mtu: link.get_mtu(),
+            is_streamed,
+            #[cfg(feature = "transport_compression")]
+            is_compression: false, // Perform the exchange Init/Open exchange with no compression
+        },
     };
     let mut link = TransportLinkUnicast::new(link, config);
     let mut fsm = OpenLink {
@@ -540,7 +545,7 @@ pub(crate) async fn open_link(
                 .config
                 .batch_size
                 .min(batch_size::UNICAST)
-                .min(link.config.mtu),
+                .min(link.config.batch.mtu),
             resolution: manager.config.resolution,
             ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos),
             #[cfg(feature = "transport_multilink")]
@@ -619,10 +624,13 @@ pub(crate) async fn open_link(
     };
 
     let o_config = TransportLinkUnicastConfig {
-        mtu: state.transport.batch_size,
         direction: TransportLinkUnicastDirection::Outbound,
-        #[cfg(feature = "transport_compression")]
-        is_compression: state.link.ext_compression.is_compression(),
+        batch: BatchConfig {
+            mtu: state.transport.batch_size,
+            is_streamed,
+            #[cfg(feature = "transport_compression")]
+            is_compression: state.link.ext_compression.is_compression(),
+        },
     };
     let o_link = link.reconfigure(o_config);
     let s_link = format!("{:?}", o_link);

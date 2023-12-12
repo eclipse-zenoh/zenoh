@@ -44,7 +44,7 @@ struct Args {
     #[arg(short, long, default_value = "demo/example/zenoh-rs-pub")]
     /// The key expression to write to.
     key: KeyExpr<'static>,
-    #[arg(short, long, default_value = "Put from Rust")]
+    #[arg(short, long, default_value = "Pub from Rust!")]
     /// The value to write.
     value: String,
     #[command(flatten)]

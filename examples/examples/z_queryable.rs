@@ -89,7 +89,7 @@ struct Args {
     #[arg(short, long, default_value = "demo/example/zenoh-rs-queryable")]
     /// The key expression matching queries to reply to.
     key: KeyExpr<'static>,
-    #[arg(short, long, default_value = "Queryable from Rust")]
+    #[arg(short, long, default_value = "Queryable from Rust!")]
     /// The value to reply to queries.
     value: String,
     #[arg(long)]

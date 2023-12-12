@@ -34,10 +34,8 @@ use std::{
     sync::Arc,
     time::{Duration, Instant},
 };
-#[cfg(feature = "transport_compression")]
-use zenoh_buffers::BBuf;
-use zenoh_buffers::{ZSlice, ZSliceBuffer};
-use zenoh_core::zlock;
+use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
+use zenoh_core::{zcondfeat, zlock};
 use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{Bits, Priority, Resolution, WhatAmI, ZenohId},
@@ -51,11 +49,7 @@ use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
 /****************************/
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct TransportLinkMulticastConfig {
-    // MTU
-    pub(crate) mtu: BatchSize,
-    // Compression is active on the link
-    #[cfg(feature = "transport_compression")]
-    pub(crate) is_compression: bool,
+    pub(crate) batch: BatchConfig,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -66,25 +60,26 @@ pub(crate) struct TransportLinkMulticast {
 
 impl TransportLinkMulticast {
     pub(crate) fn new(link: LinkMulticast, mut config: TransportLinkMulticastConfig) -> Self {
-        config.mtu = link.get_mtu().min(config.mtu);
+        config.batch.mtu = link.get_mtu().min(config.batch.mtu);
+        config.batch.is_streamed = false;
         Self { link, config }
-    }
-
-    const fn batch_config(&self) -> BatchConfig {
-        BatchConfig {
-            mtu: self.config.mtu,
-            #[cfg(feature = "transport_compression")]
-            is_compression: self.config.is_compression,
-        }
     }
 
     pub(crate) fn tx(&self) -> TransportLinkMulticastTx {
         TransportLinkMulticastTx {
             inner: self.clone(),
-            #[cfg(feature = "transport_compression")]
-            buffer: self.config.is_compression.then_some(BBuf::with_capacity(
-                lz4_flex::block::get_maximum_output_size(self.config.mtu as usize),
-            )),
+            buffer: zcondfeat!(
+                "transport_compression",
+                self.config
+                    .batch
+                    .is_compression
+                    .then_some(BBuf::with_capacity(
+                        lz4_flex::block::get_maximum_output_size(
+                            self.config.batch.max_buffer_size()
+                        ),
+                    )),
+                None
+            ),
         }
     }
 
@@ -148,7 +143,6 @@ impl From<TransportLinkMulticast> for Link {
 
 pub(crate) struct TransportLinkMulticastTx {
     pub(crate) inner: TransportLinkMulticast,
-    #[cfg(feature = "transport_compression")]
     pub(crate) buffer: Option<BBuf>,
 }
 
@@ -157,15 +151,11 @@ impl TransportLinkMulticastTx {
         const ERR: &str = "Write error on link: ";
 
         let res = batch
-            .finalize(
-                #[cfg(feature = "transport_compression")]
-                self.buffer.as_mut(),
-            )
+            .finalize(self.buffer.as_mut())
             .map_err(|_| zerror!("{ERR}{self}"))?;
 
         let bytes = match res {
             Finalize::Batch => batch.as_slice(),
-            #[cfg(feature = "transport_compression")]
             Finalize::Buffer => self
                 .buffer
                 .as_ref()
@@ -183,7 +173,7 @@ impl TransportLinkMulticastTx {
         const ERR: &str = "Write error on link: ";
 
         // Create the batch for serializing the message
-        let mut batch = WBatch::new(self.inner.batch_config());
+        let mut batch = WBatch::new(self.inner.config.batch);
         batch.encode(msg).map_err(|_| zerror!("{ERR}{self}"))?;
         let len = batch.len() as usize;
         self.send_batch(&mut batch).await?;
@@ -225,7 +215,7 @@ impl TransportLinkMulticastRx {
         let mut into = (buff)();
         let (n, locator) = self.inner.link.read(into.as_mut_slice()).await?;
         let buffer = ZSlice::make(Arc::new(into), 0, n).map_err(|_| zerror!("Error"))?;
-        let mut batch = RBatch::new(self.inner.batch_config(), buffer);
+        let mut batch = RBatch::new(self.inner.config.batch, buffer);
         batch.initialize(buff).map_err(|_| zerror!("{ERR}{self}"))?;
         Ok((batch, locator.into_owned()))
     }
@@ -330,10 +320,7 @@ impl TransportLinkMulticastUniversal {
 
         if self.handle_tx.is_none() {
             let tpc = TransmissionPipelineConf {
-                is_streamed: false,
-                #[cfg(feature = "transport_compression")]
-                is_compression: self.link.config.is_compression,
-                batch_size: config.batch_size,
+                batch: self.link.config.batch,
                 queue_size: self.transport.manager.config.queue_size,
                 backoff: self.transport.manager.config.queue_backoff,
             };
@@ -582,7 +569,7 @@ async fn rx_task(
     }
 
     // The pool of buffers
-    let mtu = link.inner.config.mtu as usize;
+    let mtu = link.inner.config.batch.max_buffer_size();
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
