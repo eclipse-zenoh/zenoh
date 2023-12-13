@@ -21,7 +21,7 @@ pub struct CommonArgs {
     #[arg(short, long)]
     /// A configuration file.
     config: Option<String>,
-    #[arg(short, long, default_value_t)]
+    #[arg(short, long, default_value = "peer")]
     /// The Zenoh session mode.
     mode: Wai,
     #[arg(short = 'e', long)]
