@@ -16,7 +16,9 @@ use crate::config;
 use advisory_lock::{AdvisoryFileLock, FileLockMode};
 use async_trait::async_trait;
 use filepath::FilePath;
-use std::fs::File;
+use nix::libc;
+use std::fs::{File, OpenOptions};
+use std::os::unix::fs::OpenOptionsExt;
 use tokio::fs::remove_file;
 use tokio::io::unix::AsyncFd;
 use tokio::task::JoinHandle;
@@ -170,7 +172,6 @@ impl PipeR {
             .write(true)
             .custom_flags(libc::O_NONBLOCK)
             .open(path)?;
-
         #[cfg(not(target_os = "macos"))]
         read.try_lock(FileLockMode::Exclusive)?;
         Ok(read)
@@ -297,21 +298,36 @@ impl UnicastPipeListener {
         // create request channel
         let mut request_channel = PipeR::new(&path_uplink, access_mode).await?;
 
+        // // create listening task
+        // let listening_task_handle = tokio::task::spawn_blocking(move || {
+        //     ZRuntime::Accept.block_on(async move {
+        //         loop {
+        //             let _ = handle_incoming_connections(
+        //                 &endpoint,
+        //                 &manager,
+        //                 &mut request_channel,
+        //                 &path_downlink,
+        //                 &path_uplink,
+        //                 access_mode,
+        //             )
+        //             .await;
+        //         }
+        //     })
+        // });
+
         // create listening task
-        let listening_task_handle = tokio::task::spawn_blocking(move || {
-            ZRuntime::Accept.block_on(async move {
-                loop {
-                    let _ = handle_incoming_connections(
-                        &endpoint,
-                        &manager,
-                        &mut request_channel,
-                        &path_downlink,
-                        &path_uplink,
-                        access_mode,
-                    )
-                    .await;
-                }
-            })
+        let listening_task_handle = tokio::task::spawn(async move {
+            loop {
+                let _ = handle_incoming_connections(
+                    &endpoint,
+                    &manager,
+                    &mut request_channel,
+                    &path_downlink,
+                    &path_uplink,
+                    access_mode,
+                )
+                .await;
+            }
         });
 
         Ok(Self {
