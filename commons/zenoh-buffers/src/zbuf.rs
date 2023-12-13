@@ -20,7 +20,7 @@ use crate::{
     ZSlice,
 };
 use alloc::{sync::Arc, vec::Vec};
-use core::{cmp, iter, mem, num::NonZeroUsize, ptr, slice};
+use core::{cmp, iter, mem, num::NonZeroUsize, ops::RangeBounds, ptr};
 use zenoh_collections::SingleOrVec;
 
 fn get_mut_unchecked<T>(arc: &mut Arc<T>) -> &mut T {
@@ -55,6 +55,85 @@ impl ZBuf {
             self.slices.push(zslice);
         }
     }
+
+    pub fn splice<Range: RangeBounds<usize>>(&mut self, erased: Range, replacement: &[u8]) {
+        let start = match erased.start_bound() {
+            core::ops::Bound::Included(n) => *n,
+            core::ops::Bound::Excluded(n) => n + 1,
+            core::ops::Bound::Unbounded => 0,
+        };
+        let end = match erased.end_bound() {
+            core::ops::Bound::Included(n) => n + 1,
+            core::ops::Bound::Excluded(n) => *n,
+            core::ops::Bound::Unbounded => self.len(),
+        };
+        if start != end {
+            self.remove(start, end);
+        }
+        self.insert(start, replacement);
+    }
+    fn remove(&mut self, mut start: usize, mut end: usize) {
+        assert!(start <= end);
+        assert!(end <= self.len());
+        let mut start_slice_idx = 0;
+        let mut start_idx_in_start_slice = 0;
+        let mut end_slice_idx = 0;
+        let mut end_idx_in_end_slice = 0;
+        for (i, slice) in self.slices.as_mut().iter_mut().enumerate() {
+            if slice.len() > start {
+                start_slice_idx = i;
+                start_idx_in_start_slice = start;
+            }
+            if slice.len() >= end {
+                end_slice_idx = i;
+                end_idx_in_end_slice = end;
+                break;
+            }
+            start -= slice.len();
+            end -= slice.len();
+        }
+        let start_slice = &mut self.slices.as_mut()[start_slice_idx];
+        start_slice.end = start_slice.start + start_idx_in_start_slice;
+        let drain_start = start_slice_idx + (start_slice.start < start_slice.end) as usize;
+        let end_slice = &mut self.slices.as_mut()[end_slice_idx];
+        end_slice.start += end_idx_in_end_slice;
+        let drain_end = end_slice_idx + (end_slice.start >= end_slice.end) as usize;
+        self.slices.drain(drain_start..drain_end);
+    }
+    fn insert(&mut self, mut at: usize, slice: &[u8]) {
+        if slice.is_empty() {
+            return;
+        }
+        let old_at = at;
+        let mut slice_index = usize::MAX;
+        for (i, slice) in self.slices.as_ref().iter().enumerate() {
+            if at < slice.len() {
+                slice_index = i;
+                break;
+            }
+            if let Some(new_at) = at.checked_sub(slice.len()) {
+                at = new_at
+            } else {
+                panic!(
+                    "Out of bounds insert attempted: at={old_at}, len={}",
+                    self.len()
+                )
+            }
+        }
+        if at != 0 {
+            let split = &self.slices.as_ref()[slice_index];
+            let (l, r) = (
+                split.subslice(0, at).unwrap(),
+                split.subslice(at, split.len()).unwrap(),
+            );
+            self.slices.drain(slice_index..(slice_index + 1));
+            self.slices.insert(slice_index, l);
+            self.slices.insert(slice_index + 1, Vec::from(slice).into());
+            self.slices.insert(slice_index + 2, r);
+        } else {
+            self.slices.insert(slice_index, Vec::from(slice).into())
+        }
+    }
 }
 
 // Buffer
@@ -70,7 +149,7 @@ impl Buffer for ZBuf {
 
 // SplitBuffer
 impl SplitBuffer for ZBuf {
-    type Slices<'a> = iter::Map<slice::Iter<'a, ZSlice>, fn(&'a ZSlice) -> &'a [u8]>;
+    type Slices<'a> = iter::Map<core::slice::Iter<'a, ZSlice>, fn(&'a ZSlice) -> &'a [u8]>;
 
     fn slices(&self) -> Self::Slices<'_> {
         self.slices.as_ref().iter().map(ZSlice::as_slice)
@@ -380,9 +459,20 @@ impl<'a> HasWriter for &'a mut ZBuf {
     type Writer = ZBufWriter<'a>;
 
     fn writer(self) -> Self::Writer {
+        let mut cache = None;
+        if let Some(ZSlice { buf, end, .. }) = self.slices.last_mut() {
+            // Verify the ZSlice is actually a Vec<u8>
+            if let Some(b) = buf.as_any().downcast_ref::<Vec<u8>>() {
+                // Check for the length
+                if *end == b.len() {
+                    cache = Some(unsafe { Arc::from_raw(Arc::into_raw(buf.clone()).cast()) })
+                }
+            }
+        }
+
         ZBufWriter {
             inner: self,
-            cache: Arc::new(Vec::new()),
+            cache: cache.unwrap_or_else(|| Arc::new(Vec::new())),
         }
     }
 }
@@ -433,7 +523,7 @@ impl Writer for ZBufWriter<'_> {
     }
 
     fn write_u8(&mut self, byte: u8) -> Result<(), DidntWrite> {
-        self.write_exact(slice::from_ref(&byte))
+        self.write_exact(core::slice::from_ref(&byte))
     }
 
     fn remaining(&self) -> usize {

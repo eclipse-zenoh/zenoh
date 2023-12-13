@@ -257,7 +257,8 @@ pub mod ext {
         }
     }
 
-    ///  7 6 5 4 3 2 1 0
+    /// ```text
+    /// 7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
     /// %   num elems   %
     /// +-------+-+-+---+
@@ -266,6 +267,7 @@ pub mod ext {
     /// ~ val: <u8;z32> ~
     /// +---------------+
     ///       ...         -- N times (key, value) tuples
+    /// ```
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct AttachmentType<const ID: u8> {
         pub buffer: ZBuf,
