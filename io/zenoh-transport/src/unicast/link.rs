@@ -39,27 +39,6 @@ pub(crate) struct TransportLinkUnicast {
     pub(crate) config: TransportLinkUnicastConfig,
 }
 
-/*
-    pub(crate) fn new(link: LinkUnicast, mut config: TransportLinkUnicastConfig) -> Self {
-        config.batch.mtu = link.get_mtu().min(config.batch.mtu);
-        Self { link, config }
-    }
-
-    pub(crate) fn tx(&self) -> TransportLinkUnicastTx {
-        TransportLinkUnicastTx {
-            inner: self.clone(),
-            buffer: zcondfeat!(
-                "transport_compression",
-                self.config
-                    .batch
-                    .is_compression
-                    .then_some(BBuf::with_capacity(
-                        lz4_flex::block::get_maximum_output_size(self.config.batch.mtu as usize),
-                    )),
-                None
-            ),
-*/
-
 impl TransportLinkUnicast {
     pub(crate) fn new(link: LinkUnicast, config: TransportLinkUnicastConfig) -> Self {
         Self::init(link, config)
@@ -96,10 +75,7 @@ impl TransportLinkUnicast {
 
     pub(crate) fn rx(&self) -> TransportLinkUnicastRx {
         TransportLinkUnicastRx {
-            inner: Self {
-                link: self.link.clone(),
-                config: self.config,
-            },
+            inner: self.clone(),
         }
     }
 

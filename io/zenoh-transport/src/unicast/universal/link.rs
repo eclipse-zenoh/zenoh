@@ -30,7 +30,6 @@ use async_std::prelude::FutureExt;
 use async_std::task;
 use async_std::task::JoinHandle;
 use std::{
-    ops::Deref,
     sync::{Arc, RwLock},
     time::Duration,
 };
@@ -40,29 +39,23 @@ use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
 
-pub(super) struct TransportLinkUnicastUniversalInner {
-    // The underlying link
-    pub(super) link: TransportLinkUnicast,
-    // The transmission pipeline
-    pub(super) pipeline: TransmissionPipelineProducer,
-    // The transport this link is associated to
-    transport: TransportUnicastUniversal,
-    // The signals to stop TX/RX tasks
+pub(super) struct TaskHandler {
+    // The handlers to stop TX/RX tasks
     handle_tx: RwLock<Option<async_executor::Task<()>>>,
     signal_rx: Signal,
     handle_rx: RwLock<Option<JoinHandle<()>>>,
 }
 
 #[derive(Clone)]
-pub(super) struct TransportLinkUnicastUniversal(Arc<TransportLinkUnicastUniversalInner>);
-
-impl Deref for TransportLinkUnicastUniversal {
-    type Target = Arc<TransportLinkUnicastUniversalInner>;
-
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+pub(super) struct TransportLinkUnicastUniversal {
+    // The underlying link
+    pub(super) link: TransportLinkUnicast,
+    // The transmission pipeline
+    pub(super) pipeline: TransmissionPipelineProducer,
+    // The transport this link is associated to
+    transport: TransportUnicastUniversal,
+    // The task handling substruct
+    tasks: Arc<TaskHandler>,
 }
 
 impl TransportLinkUnicastUniversal {
@@ -87,16 +80,20 @@ impl TransportLinkUnicastUniversal {
         // The pipeline
         let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
 
-        let inner = TransportLinkUnicastUniversalInner {
-            link,
-            pipeline: producer,
-            transport,
+        let tasks = Arc::new(TaskHandler {
             handle_tx: RwLock::new(None),
             signal_rx: Signal::new(),
             handle_rx: RwLock::new(None),
+        });
+
+        let result = Self {
+            link,
+            pipeline: producer,
+            transport,
+            tasks,
         };
 
-        (Self(Arc::new(inner)), consumer)
+        (result, consumer)
     }
 }
 
@@ -107,7 +104,7 @@ impl TransportLinkUnicastUniversal {
         executor: &TransportExecutor,
         keep_alive: Duration,
     ) {
-        let mut guard = zwrite!(self.handle_tx);
+        let mut guard = zwrite!(self.tasks.handle_tx);
         if guard.is_none() {
             // Spawn the TX task
             let mut tx = self.link.tx();
@@ -137,12 +134,12 @@ impl TransportLinkUnicastUniversal {
     }
 
     pub(super) fn start_rx(&mut self, lease: Duration) {
-        let mut guard = zwrite!(self.handle_rx);
+        let mut guard = zwrite!(self.tasks.handle_rx);
         if guard.is_none() {
             // Spawn the RX task
             let mut rx = self.link.rx();
             let c_transport = self.transport.clone();
-            let c_signal = self.signal_rx.clone();
+            let c_signal = self.tasks.signal_rx.clone();
             let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
 
             let handle = task::spawn(async move {
@@ -168,7 +165,7 @@ impl TransportLinkUnicastUniversal {
     }
 
     pub(super) fn stop_rx(&mut self) {
-        self.signal_rx.trigger();
+        self.tasks.signal_rx.trigger();
     }
 
     pub(super) async fn close(mut self) -> ZResult<()> {
@@ -176,12 +173,12 @@ impl TransportLinkUnicastUniversal {
         self.stop_tx();
         self.stop_rx();
 
-        let handle_tx = zwrite!(self.handle_tx).take();
+        let handle_tx = zwrite!(self.tasks.handle_tx).take();
         if let Some(handle) = handle_tx {
             handle.await;
         }
 
-        let handle_rx = zwrite!(self.handle_rx).take();
+        let handle_rx = zwrite!(self.tasks.handle_rx).take();
         if let Some(handle) = handle_rx {
             handle.await;
         }

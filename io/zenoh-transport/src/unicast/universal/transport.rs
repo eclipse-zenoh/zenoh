@@ -73,9 +73,10 @@ pub(crate) struct TransportUnicastUniversal {
     pub(super) priority_rx: Arc<[TransportPriorityRx]>,
     // The links associated to the channel
     pub(super) links: Arc<RwLock<Box<[TransportLinkUnicastUniversal]>>>,
-    add_link_lock: Arc<AsyncMutex<()>>,
     // The callback
     pub(super) callback: Arc<RwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
+    // Lock used to ensure no race in add_link method
+    add_link_lock: Arc<AsyncMutex<()>>,
     // Mutex for notification
     pub(super) alive: Arc<AsyncMutex<bool>>,
     // Transport statistics
