@@ -481,6 +481,18 @@ impl Decode<TransportMessage> for &mut RBatch {
     }
 }
 
+impl Decode<(TransportMessage, BatchSize)> for &mut RBatch {
+    type Error = DidntRead;
+
+    fn decode(self) -> Result<(TransportMessage, BatchSize), Self::Error> {
+        let len = self.buffer.len() as BatchSize;
+        let mut reader = self.buffer.reader();
+        let msg = self.codec.read(&mut reader)?;
+        let end = self.buffer.len() as BatchSize;
+        Ok((msg, len - end))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::vec;
