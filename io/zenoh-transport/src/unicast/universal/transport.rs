@@ -309,7 +309,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         // Wrap the link
         let (link, ack) = link.unpack();
         let (mut link, consumer) =
-            TransportLinkUnicastUniversal::new(self.clone(), link, &self.priority_tx);
+            TransportLinkUnicastUniversal::new(self, link, &self.priority_tx);
 
         // Add the link to the channel
         let mut guard = zwrite!(self.links);
@@ -322,14 +322,20 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         drop(add_link_guard);
 
         // create a callback to start the link
+        let transport = self.clone();
         let start_link = Box::new(move || {
             // Start the TX loop
             let keep_alive =
                 self.manager.config.unicast.lease / self.manager.config.unicast.keep_alive as u32;
-            link.start_tx(consumer, &self.manager.tx_executor, keep_alive);
+            link.start_tx(
+                transport.clone(),
+                consumer,
+                &self.manager.tx_executor,
+                keep_alive,
+            );
 
             // Start the RX loop
-            link.start_rx(other_lease);
+            link.start_rx(transport, other_lease);
         });
 
         Ok((start_link, ack))

@@ -122,13 +122,6 @@ impl TransportUnicast {
     }
 
     #[inline(always)]
-    pub async fn close_link(&self, link: Link) -> ZResult<()> {
-        let transport = self.get_inner()?;
-        transport.close_link(link, close::reason::GENERIC).await?;
-        Ok(())
-    }
-
-    #[inline(always)]
     pub async fn close(&self) -> ZResult<()> {
         // Return Ok if the transport has already been closed
         match self.get_inner() {

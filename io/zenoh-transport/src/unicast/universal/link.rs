@@ -39,7 +39,7 @@ use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
 
-pub(super) struct TaskHandler {
+pub(super) struct Tasks {
     // The handlers to stop TX/RX tasks
     handle_tx: RwLock<Option<async_executor::Task<()>>>,
     signal_rx: Signal,
@@ -52,15 +52,13 @@ pub(super) struct TransportLinkUnicastUniversal {
     pub(super) link: TransportLinkUnicast,
     // The transmission pipeline
     pub(super) pipeline: TransmissionPipelineProducer,
-    // The transport this link is associated to
-    transport: TransportUnicastUniversal,
     // The task handling substruct
-    tasks: Arc<TaskHandler>,
+    tasks: Arc<Tasks>,
 }
 
 impl TransportLinkUnicastUniversal {
     pub(super) fn new(
-        transport: TransportUnicastUniversal,
+        transport: &TransportUnicastUniversal,
         link: TransportLinkUnicast,
         priority_tx: &[TransportPriorityTx],
     ) -> (Self, TransmissionPipelineConsumer) {
@@ -80,7 +78,7 @@ impl TransportLinkUnicastUniversal {
         // The pipeline
         let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
 
-        let tasks = Arc::new(TaskHandler {
+        let tasks = Arc::new(Tasks {
             handle_tx: RwLock::new(None),
             signal_rx: Signal::new(),
             handle_rx: RwLock::new(None),
@@ -89,7 +87,6 @@ impl TransportLinkUnicastUniversal {
         let result = Self {
             link,
             pipeline: producer,
-            transport,
             tasks,
         };
 
@@ -100,6 +97,7 @@ impl TransportLinkUnicastUniversal {
 impl TransportLinkUnicastUniversal {
     pub(super) fn start_tx(
         &mut self,
+        transport: TransportUnicastUniversal,
         consumer: TransmissionPipelineConsumer,
         executor: &TransportExecutor,
         keep_alive: Duration,
@@ -108,21 +106,20 @@ impl TransportLinkUnicastUniversal {
         if guard.is_none() {
             // Spawn the TX task
             let mut tx = self.link.tx();
-            let c_transport = self.transport.clone();
             let handle = executor.spawn(async move {
                 let res = tx_task(
                     consumer,
                     &mut tx,
                     keep_alive,
                     #[cfg(feature = "stats")]
-                    c_transport.stats.clone(),
+                    transport.stats.clone(),
                 )
                 .await;
                 if let Err(e) = res {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link(tx.inner.link()).await });
+                    task::spawn(async move { transport.del_link(tx.inner.link()).await });
                 }
             });
             *guard = Some(handle);
@@ -133,23 +130,21 @@ impl TransportLinkUnicastUniversal {
         self.pipeline.disable();
     }
 
-    pub(super) fn start_rx(&mut self, lease: Duration) {
+    pub(super) fn start_rx(&mut self, transport: TransportUnicastUniversal, lease: Duration) {
         let mut guard = zwrite!(self.tasks.handle_rx);
         if guard.is_none() {
             // Spawn the RX task
             let mut rx = self.link.rx();
-            let c_transport = self.transport.clone();
             let c_signal = self.tasks.signal_rx.clone();
-            let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
 
             let handle = task::spawn(async move {
                 // Start the consume task
                 let res = rx_task(
                     &mut rx,
-                    c_transport.clone(),
+                    transport.clone(),
                     lease,
                     c_signal.clone(),
-                    c_rx_buffer_size,
+                    transport.manager.config.link_rx_buffer_size,
                 )
                 .await;
                 c_signal.trigger();
@@ -157,7 +152,7 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link((&rx.link).into()).await });
+                    task::spawn(async move { transport.del_link((&rx.link).into()).await });
                 }
             });
             *guard = Some(handle);
