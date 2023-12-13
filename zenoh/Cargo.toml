@@ -63,7 +63,7 @@ default = [
 ]
 
 [dependencies]
-tokio = { workspace = true, features = ["rt"] }
+tokio = { workspace = true, features = ["rt", "macros"] }
 tokio-util = { workspace = true }
 async-global-executor = { workspace = true, features = ["tokio"] }
 async-std = { workspace = true, features = ["attributes"] }

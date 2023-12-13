@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
 use futures::future::try_join_all;
 use futures::FutureExt as _;
 use std::str::FromStr;
@@ -117,7 +116,7 @@ impl Task {
                             query?.reply(Ok(sample.clone())).res_async().await?;
                         },
 
-                        _ = async_std::task::sleep(Duration::from_millis(100)).fuse() => {
+                        _ = tokio::time::sleep(Duration::from_millis(100)).fuse() => {
                             if remaining_checkpoints.load(Ordering::Relaxed) == 0 {
                                 break;
                             }
@@ -129,7 +128,7 @@ impl Task {
 
             // Make the zenoh session sleep for a while.
             Self::Sleep(dur) => {
-                async_std::task::sleep(*dur).await;
+                tokio::time::sleep(*dur).await;
             }
 
             // Mark one checkpoint is finished.
@@ -142,7 +141,7 @@ impl Task {
             // Wait until all checkpoints are done
             Self::Wait => {
                 while remaining_checkpoints.load(Ordering::Relaxed) > 0 {
-                    async_std::task::sleep(Duration::from_millis(100)).await;
+                    tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             }
         }
@@ -251,7 +250,7 @@ impl Recipe {
                 };
 
                 // Warmup before the session starts
-                async_std::task::sleep(node.warmup).await;
+                tokio::time::sleep(node.warmup).await;
                 println!("Node: {} starting...", &node.name);
 
                 // In case of client can't connect to some peers/routers
@@ -259,7 +258,7 @@ impl Recipe {
                     if let Ok(session) = zenoh::open(config.clone()).res_async().await {
                         break session.into_arc();
                     } else {
-                        async_std::task::sleep(Duration::from_secs(1)).await;
+                        tokio::time::sleep(Duration::from_secs(1)).await;
                     }
                 };
 
@@ -269,7 +268,7 @@ impl Recipe {
                     let session = session.clone();
                     let remaining_checkpoints = remaining_checkpoints.clone();
 
-                    async_std::task::spawn(async move {
+                    tokio::task::spawn(async move {
                         // Tasks in seq_tasks would execute serially
                         for t in seq_tasks {
                             t.run(session.clone(), remaining_checkpoints.clone())
@@ -280,7 +279,7 @@ impl Recipe {
                 });
 
                 // All tasks of the node run together
-                try_join_all(node_tasks.into_iter().map(async_std::task::spawn))
+                try_join_all(node_tasks.into_iter().map(tokio::task::spawn))
                     .await
                     .map_err(|e| zerror!("The recipe {} failed due to {}", receipe_name, &e))?;
 
@@ -297,306 +296,187 @@ impl Recipe {
         });
 
         // All tasks of the recipe run together
-        try_join_all(futures.into_iter().map(async_std::task::spawn))
-            .timeout(TIMEOUT)
-            .await
-            .map_err(|e| format!("The recipe: {} failed due to {}", &self, e))??;
+        tokio::time::timeout(
+            TIMEOUT,
+            try_join_all(futures.into_iter().map(tokio::task::spawn)),
+        )
+        .await
+        .map_err(|e| format!("The recipe: {} failed due to {}", &self, e))??;
         Ok(())
     }
 }
 
 // Two peers connecting to a common node (either in router or peer mode) can discover each other.
 // And the message transmission should work even if the common node disappears after a while.
-#[test]
-fn gossip() -> Result<()> {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gossip() -> Result<()> {
     env_logger::try_init().unwrap_or_default();
-    async_std::task::block_on(async {
+    let locator = String::from("tcp/127.0.0.1:17448");
+    let ke = String::from("testKeyExprGossip");
+    let msg_size = 8;
 
-        let locator = String::from("tcp/127.0.0.1:17446");
-        let ke = String::from("testKeyExprGossip");
-        let msg_size = 8;
-
-        let peer1 = Node {
-            name: format!("Pub & Queryable {}", WhatAmI::Peer),
-            connect: vec![locator.clone()],
-            mode: WhatAmI::Peer,
-            con_task: ConcurrentTask::from([
-                SequentialTask::from([
-                    Task::Sleep(Duration::from_millis(2000)),
-                    Task::Pub(ke.clone(), msg_size),
-                ]),
-                SequentialTask::from([
-                    Task::Sleep(Duration::from_millis(2000)),
-                    Task::Queryable(ke.clone(), msg_size),
-                ]),
+    let peer1 = Node {
+        name: format!("Pub & Queryable {}", WhatAmI::Peer),
+        connect: vec![locator.clone()],
+        mode: WhatAmI::Peer,
+        con_task: ConcurrentTask::from([
+            SequentialTask::from([
+                Task::Sleep(Duration::from_millis(2000)),
+                Task::Pub(ke.clone(), msg_size),
             ]),
-            ..Default::default()
-        };
-        let peer2 = Node {
-            name: format!("Sub & Get {}", WhatAmI::Peer),
-            mode: WhatAmI::Peer,
-            connect: vec![locator.clone()],
-            con_task: ConcurrentTask::from([
-                SequentialTask::from([
-                    Task::Sleep(Duration::from_millis(2000)),
-                    Task::Sub(ke.clone(), msg_size),
-                    Task::Checkpoint,
-                ]),
-                SequentialTask::from([
-                    Task::Sleep(Duration::from_millis(2000)),
-                    Task::Get(ke, msg_size),
-                    Task::Checkpoint,
-                ]),
+            SequentialTask::from([
+                Task::Sleep(Duration::from_millis(2000)),
+                Task::Queryable(ke.clone(), msg_size),
             ]),
-            ..Default::default()
-        };
+        ]),
+        ..Default::default()
+    };
+    let peer2 = Node {
+        name: format!("Sub & Get {}", WhatAmI::Peer),
+        mode: WhatAmI::Peer,
+        connect: vec![locator.clone()],
+        con_task: ConcurrentTask::from([
+            SequentialTask::from([
+                Task::Sleep(Duration::from_millis(2000)),
+                Task::Sub(ke.clone(), msg_size),
+                Task::Checkpoint,
+            ]),
+            SequentialTask::from([
+                Task::Sleep(Duration::from_millis(2000)),
+                Task::Get(ke, msg_size),
+                Task::Checkpoint,
+            ]),
+        ]),
+        ..Default::default()
+    };
 
-        for mode in [WhatAmI::Peer, WhatAmI::Router] {
-            Recipe::new([
-                Node {
-                    name: format!("Router {}", mode),
-                    mode: WhatAmI::Peer,
-                    listen: vec![locator.clone()],
-                    con_task: ConcurrentTask::from([SequentialTask::from([Task::Sleep(
-                        Duration::from_millis(1000),
-                    )])]),
-                    ..Default::default()
-                },
-                peer1.clone(),
-                peer2.clone(),
-            ])
-            .run()
-            .await?;
-        }
+    for mode in [WhatAmI::Peer, WhatAmI::Router] {
+        Recipe::new([
+            Node {
+                name: format!("Router {}", mode),
+                mode: WhatAmI::Peer,
+                listen: vec![locator.clone()],
+                con_task: ConcurrentTask::from([SequentialTask::from([Task::Sleep(
+                    Duration::from_millis(1000),
+                )])]),
+                ..Default::default()
+            },
+            peer1.clone(),
+            peer2.clone(),
+        ])
+        .run()
+        .await?;
+    }
 
-        println!("Gossip test passed.");
-        Result::Ok(())
-    })?;
-    Ok(())
+    println!("Gossip test passed.");
+    Result::Ok(())
 }
 
 // Simulate two peers connecting to a router but not directly reachable to each other can exchange messages via the brokering by the router.
-#[test]
-fn static_failover_brokering() -> Result<()> {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn static_failover_brokering() -> Result<()> {
     env_logger::try_init().unwrap_or_default();
-    async_std::task::block_on(async {
-        zasync_executor_init!();
+    let locator = String::from("tcp/127.0.0.1:17449");
+    let ke = String::from("testKeyExprStaticFailoverBrokering");
+    let msg_size = 8;
 
-        let locator = String::from("tcp/127.0.0.1:17449");
-        let ke = String::from("testKeyExprStaticFailoverBrokering");
-        let msg_size = 8;
+    let disable_autoconnect_config = || {
+        let mut config = Config::default();
+        config
+            .scouting
+            .gossip
+            .set_autoconnect(Some(ModeDependentValue::Unique(
+                WhatAmIMatcher::from_str("").unwrap(),
+            )))
+            .unwrap();
+        Some(config)
+    };
 
-        let disable_autoconnect_config = || {
-            let mut config = Config::default();
-            config
-                .scouting
-                .gossip
-                .set_autoconnect(Some(ModeDependentValue::Unique(
-                    WhatAmIMatcher::from_str("").unwrap(),
-                )))
-                .unwrap();
-            Some(config)
-        };
-
-        let recipe = Recipe::new([
-            Node {
-                name: format!("Router {}", WhatAmI::Router),
-                mode: WhatAmI::Router,
-                listen: vec![locator.clone()],
-                con_task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
-                ..Default::default()
-            },
-            Node {
-                name: format!("Pub & Queryable {}", WhatAmI::Peer),
-                mode: WhatAmI::Peer,
-                connect: vec![locator.clone()],
-                config: disable_autoconnect_config(),
-                con_task: ConcurrentTask::from([
-                    SequentialTask::from([Task::Pub(ke.clone(), msg_size)]),
-                    SequentialTask::from([Task::Queryable(ke.clone(), msg_size)]),
-                ]),
-                ..Default::default()
-            },
-            Node {
-                name: format!("Sub & Get {}", WhatAmI::Peer),
-                mode: WhatAmI::Peer,
-                connect: vec![locator.clone()],
-                config: disable_autoconnect_config(),
-                con_task: ConcurrentTask::from([
-                    SequentialTask::from([Task::Sub(ke.clone(), msg_size), Task::Checkpoint]),
-                    SequentialTask::from([Task::Get(ke.clone(), msg_size), Task::Checkpoint]),
-                ]),
-                ..Default::default()
-            },
-        ]);
-        recipe.run().await?;
-        println!("Static failover brokering test passed.");
-        Result::Ok(())
-    })?;
-    Ok(())
+    let recipe = Recipe::new([
+        Node {
+            name: format!("Router {}", WhatAmI::Router),
+            mode: WhatAmI::Router,
+            listen: vec![locator.clone()],
+            con_task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
+            ..Default::default()
+        },
+        Node {
+            name: format!("Pub & Queryable {}", WhatAmI::Peer),
+            mode: WhatAmI::Peer,
+            connect: vec![locator.clone()],
+            config: disable_autoconnect_config(),
+            con_task: ConcurrentTask::from([
+                SequentialTask::from([Task::Pub(ke.clone(), msg_size)]),
+                SequentialTask::from([Task::Queryable(ke.clone(), msg_size)]),
+            ]),
+            ..Default::default()
+        },
+        Node {
+            name: format!("Sub & Get {}", WhatAmI::Peer),
+            mode: WhatAmI::Peer,
+            connect: vec![locator.clone()],
+            config: disable_autoconnect_config(),
+            con_task: ConcurrentTask::from([
+                SequentialTask::from([Task::Sub(ke.clone(), msg_size), Task::Checkpoint]),
+                SequentialTask::from([Task::Get(ke.clone(), msg_size), Task::Checkpoint]),
+            ]),
+            ..Default::default()
+        },
+    ]);
+    recipe.run().await?;
+    println!("Static failover brokering test passed.");
+    Result::Ok(())
 }
 
 // All test cases varying in
 // 1. Message size
 // 2. Mode: peer or client
 // 3. Spawning order
-#[test]
-fn three_node_combination() -> Result<()> {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn three_node_combination() -> Result<()> {
     env_logger::try_init().unwrap_or_default();
-    async_std::task::block_on(async {
+    let modes = [WhatAmI::Peer, WhatAmI::Client];
+    let delay_in_secs = [
+        (0, 1, 2),
+        (0, 2, 1),
+        (1, 2, 0),
+        (1, 0, 2),
+        (2, 0, 1),
+        (2, 1, 0),
+    ];
 
-        let modes = [WhatAmI::Peer, WhatAmI::Client];
-        let delay_in_secs = [
-            (0, 1, 2),
-            (0, 2, 1),
-            (1, 2, 0),
-            (1, 0, 2),
-            (2, 0, 1),
-            (2, 1, 0),
-        ];
+    let mut idx = 0;
+    // Ports going to be used: 17451 to 17498
+    let base_port = 17450;
 
-        let mut idx = 0;
-        // Ports going to be used: 17451 to 17498
-        let base_port = 17450;
-
-        let recipe_list = modes
-            .map(|n1| modes.map(|n2| (n1, n2)))
-            .concat()
-            .into_iter()
-            .flat_map(|(n1, n2)| MSG_SIZE.map(|s| (n1, n2, s)))
-            .flat_map(|(n1, n2, s)| delay_in_secs.map(|d| (n1, n2, s, d)))
-            .map(
-                |(node1_mode, node2_mode, msg_size, (delay1, delay2, delay3))| {
-                    idx += 1;
-                    let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
-
-                    let ke_pubsub = format!("three_node_combination_keyexpr_pubsub_{idx}");
-                    let ke_getqueryable =
-                        format!("three_node_combination_keyexpr_getqueryable_{idx}");
-
-                    let router_node = Node {
-                        name: format!("Router {}", WhatAmI::Router),
-                        mode: WhatAmI::Router,
-                        listen: vec![locator.clone()],
-                        con_task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
-                        warmup: Duration::from_secs(delay1),
-                        ..Default::default()
-                    };
-
-                    let (pub_node, queryable_node) =
-                        {
-                            let base = Node {
-                                mode: node1_mode,
-                                connect: vec![locator.clone()],
-                                warmup: Duration::from_secs(delay2),
-                                ..Default::default()
-                            };
-
-                            let mut pub_node = base.clone();
-                            pub_node.name = format!("Pub {node1_mode}");
-                            pub_node.con_task =
-                                ConcurrentTask::from([SequentialTask::from([Task::Pub(
-                                    ke_pubsub.clone(),
-                                    msg_size,
-                                )])]);
-
-                            let mut queryable_node = base;
-                            queryable_node.name = format!("Queryable {node1_mode}");
-                            queryable_node.con_task = ConcurrentTask::from([SequentialTask::from(
-                                [Task::Queryable(ke_getqueryable.clone(), msg_size)],
-                            )]);
-
-                            (pub_node, queryable_node)
-                        };
-
-                    let (sub_node, get_node) = {
-                        let base = Node {
-                            mode: node2_mode,
-                            connect: vec![locator],
-                            warmup: Duration::from_secs(delay3),
-                            ..Default::default()
-                        };
-
-                        let mut sub_node = base.clone();
-                        sub_node.name = format!("Sub {node2_mode}");
-                        sub_node.con_task = ConcurrentTask::from([SequentialTask::from([
-                            Task::Sub(ke_pubsub, msg_size),
-                            Task::Checkpoint,
-                        ])]);
-
-                        let mut get_node = base;
-                        get_node.name = format!("Get {node2_mode}");
-                        get_node.con_task = ConcurrentTask::from([SequentialTask::from([
-                            Task::Get(ke_getqueryable, msg_size),
-                            Task::Checkpoint,
-                        ])]);
-
-                        (sub_node, get_node)
-                    };
-
-                    (
-                        Recipe::new([router_node.clone(), pub_node, sub_node]),
-                        Recipe::new([router_node, queryable_node, get_node]),
-                    )
-                },
-            );
-
-        for (pubsub, getqueryable) in recipe_list {
-            pubsub.run().await?;
-            getqueryable.run().await?;
-        }
-
-        println!("Three-node combination test passed.");
-        Result::Ok(())
-    })?;
-    Ok(())
-}
-
-// All test cases varying in
-// 1. Message size
-// 2. Mode
-#[test]
-fn two_node_combination() -> Result<()> {
-    async_std::task::block_on(async {
-
-        #[derive(Clone, Copy)]
-        struct IsFirstListen(bool);
-
-        let modes = [
-            (WhatAmI::Client, WhatAmI::Peer, IsFirstListen(false)),
-            (WhatAmI::Peer, WhatAmI::Client, IsFirstListen(true)),
-            (WhatAmI::Peer, WhatAmI::Peer, IsFirstListen(true)),
-            (WhatAmI::Peer, WhatAmI::Peer, IsFirstListen(false)),
-        ];
-
-        let mut idx = 0;
-        // Ports going to be used: 17500 to 17508
-        let base_port = 17500;
-        let recipe_list = modes
-            .into_iter()
-            .flat_map(|(n1, n2, who)| MSG_SIZE.map(|s| (n1, n2, who, s)))
-            .map(|(node1_mode, node2_mode, who, msg_size)| {
+    let recipe_list = modes
+        .map(|n1| modes.map(|n2| (n1, n2)))
+        .concat()
+        .into_iter()
+        .flat_map(|(n1, n2)| MSG_SIZE.map(|s| (n1, n2, s)))
+        .flat_map(|(n1, n2, s)| delay_in_secs.map(|d| (n1, n2, s, d)))
+        .map(
+            |(node1_mode, node2_mode, msg_size, (delay1, delay2, delay3))| {
                 idx += 1;
-                let ke_pubsub = format!("two_node_combination_keyexpr_pubsub_{idx}");
-                let ke_getqueryable = format!("two_node_combination_keyexpr_getqueryable_{idx}");
+                let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
 
-                let (node1_listen_connect, node2_listen_connect) = {
-                    let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
-                    let listen = vec![locator];
-                    let connect = vec![];
+                let ke_pubsub = format!("three_node_combination_keyexpr_pubsub_{idx}");
+                let ke_getqueryable = format!("three_node_combination_keyexpr_getqueryable_{idx}");
 
-                    if let IsFirstListen(true) = who {
-                        ((listen.clone(), connect.clone()), (connect, listen))
-                    } else {
-                        ((connect.clone(), listen.clone()), (listen, connect))
-                    }
+                let router_node = Node {
+                    name: format!("Router {}", WhatAmI::Router),
+                    mode: WhatAmI::Router,
+                    listen: vec![locator.clone()],
+                    con_task: ConcurrentTask::from([SequentialTask::from([Task::Wait])]),
+                    warmup: Duration::from_secs(delay1),
+                    ..Default::default()
                 };
 
                 let (pub_node, queryable_node) = {
                     let base = Node {
                         mode: node1_mode,
-                        listen: node1_listen_connect.0,
-                        connect: node1_listen_connect.1,
+                        connect: vec![locator.clone()],
+                        warmup: Duration::from_secs(delay2),
                         ..Default::default()
                     };
 
@@ -621,8 +501,8 @@ fn two_node_combination() -> Result<()> {
                 let (sub_node, get_node) = {
                     let base = Node {
                         mode: node2_mode,
-                        listen: node2_listen_connect.0,
-                        connect: node2_listen_connect.1,
+                        connect: vec![locator],
+                        warmup: Duration::from_secs(delay3),
                         ..Default::default()
                     };
 
@@ -644,18 +524,123 @@ fn two_node_combination() -> Result<()> {
                 };
 
                 (
-                    Recipe::new([pub_node, sub_node]),
-                    Recipe::new([queryable_node, get_node]),
+                    Recipe::new([router_node.clone(), pub_node, sub_node]),
+                    Recipe::new([router_node, queryable_node, get_node]),
                 )
-            });
+            },
+        );
 
-        for (pubsub, getqueryable) in recipe_list {
-            pubsub.run().await?;
-            getqueryable.run().await?;
-        }
+    for (pubsub, getqueryable) in recipe_list {
+        pubsub.run().await?;
+        getqueryable.run().await?;
+    }
 
-        println!("Two-node combination test passed.");
-        Result::Ok(())
-    })?;
-    Ok(())
+    println!("Three-node combination test passed.");
+    Result::Ok(())
+}
+
+// All test cases varying in
+// 1. Message size
+// 2. Mode
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn two_node_combination() -> Result<()> {
+    env_logger::try_init().unwrap_or_default();
+
+    #[derive(Clone, Copy)]
+    struct IsFirstListen(bool);
+
+    let modes = [
+        (WhatAmI::Client, WhatAmI::Peer, IsFirstListen(false)),
+        (WhatAmI::Peer, WhatAmI::Client, IsFirstListen(true)),
+        (WhatAmI::Peer, WhatAmI::Peer, IsFirstListen(true)),
+        (WhatAmI::Peer, WhatAmI::Peer, IsFirstListen(false)),
+    ];
+
+    let mut idx = 0;
+    // Ports going to be used: 17500 to 17508
+    let base_port = 17500;
+    let recipe_list = modes
+        .into_iter()
+        .flat_map(|(n1, n2, who)| MSG_SIZE.map(|s| (n1, n2, who, s)))
+        .map(|(node1_mode, node2_mode, who, msg_size)| {
+            idx += 1;
+            let ke_pubsub = format!("two_node_combination_keyexpr_pubsub_{idx}");
+            let ke_getqueryable = format!("two_node_combination_keyexpr_getqueryable_{idx}");
+
+            let (node1_listen_connect, node2_listen_connect) = {
+                let locator = format!("tcp/127.0.0.1:{}", base_port + idx);
+                let listen = vec![locator];
+                let connect = vec![];
+
+                if let IsFirstListen(true) = who {
+                    ((listen.clone(), connect.clone()), (connect, listen))
+                } else {
+                    ((connect.clone(), listen.clone()), (listen, connect))
+                }
+            };
+
+            let (pub_node, queryable_node) = {
+                let base = Node {
+                    mode: node1_mode,
+                    listen: node1_listen_connect.0,
+                    connect: node1_listen_connect.1,
+                    ..Default::default()
+                };
+
+                let mut pub_node = base.clone();
+                pub_node.name = format!("Pub {node1_mode}");
+                pub_node.con_task = ConcurrentTask::from([SequentialTask::from([Task::Pub(
+                    ke_pubsub.clone(),
+                    msg_size,
+                )])]);
+
+                let mut queryable_node = base;
+                queryable_node.name = format!("Queryable {node1_mode}");
+                queryable_node.con_task =
+                    ConcurrentTask::from([SequentialTask::from([Task::Queryable(
+                        ke_getqueryable.clone(),
+                        msg_size,
+                    )])]);
+
+                (pub_node, queryable_node)
+            };
+
+            let (sub_node, get_node) = {
+                let base = Node {
+                    mode: node2_mode,
+                    listen: node2_listen_connect.0,
+                    connect: node2_listen_connect.1,
+                    ..Default::default()
+                };
+
+                let mut sub_node = base.clone();
+                sub_node.name = format!("Sub {node2_mode}");
+                sub_node.con_task = ConcurrentTask::from([SequentialTask::from([
+                    Task::Sub(ke_pubsub, msg_size),
+                    Task::Checkpoint,
+                ])]);
+
+                let mut get_node = base;
+                get_node.name = format!("Get {node2_mode}");
+                get_node.con_task = ConcurrentTask::from([SequentialTask::from([
+                    Task::Get(ke_getqueryable, msg_size),
+                    Task::Checkpoint,
+                ])]);
+
+                (sub_node, get_node)
+            };
+
+            (
+                Recipe::new([pub_node, sub_node]),
+                Recipe::new([queryable_node, get_node]),
+            )
+        });
+
+    for (pubsub, getqueryable) in recipe_list {
+        pubsub.run().await?;
+        getqueryable.run().await?;
+    }
+
+    println!("Two-node combination test passed.");
+    Result::Ok(())
 }
