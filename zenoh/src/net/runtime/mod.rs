@@ -31,7 +31,7 @@ use async_std::task::JoinHandle;
 use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
@@ -70,6 +70,21 @@ impl std::ops::Deref for Runtime {
 
     fn deref(&self) -> &RuntimeState {
         self.state.deref()
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct WeakRuntime(Weak<RuntimeState>);
+
+impl WeakRuntime {
+    pub fn upgrade(&self) -> Option<Runtime> {
+        self.0.upgrade().map(|state| Runtime { state })
+    }
+}
+
+impl From<Runtime> for WeakRuntime {
+    fn from(value: Runtime) -> Self {
+        WeakRuntime(Arc::downgrade(&value.state))
     }
 }
 
