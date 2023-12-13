@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::{App, Arg};
+use clap::{arg, Command};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh::config::Config;
@@ -50,59 +50,59 @@ async fn main() {
 }
 
 fn parse_args() -> (Config, String, Option<String>, usize, u64) {
-    let args = App::new("zenoh-ext group view size example")
+    let args = Command::new("zenoh-ext group view size example")
         .arg(
-            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
-                .possible_values(["peer", "client"]),
+            arg!(-m --mode [MODE] "The zenoh session mode (peer by default).")
+                .value_parser(["peer", "client"]),
         )
-        .arg(Arg::from_usage(
-            "-e, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
+        .arg(arg!(
+            -e --connect [ENDPOINT]...  "Endpoints to connect to."
         ))
-        .arg(Arg::from_usage(
-            "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
+        .arg(arg!(
+            -l --listen [ENDPOINT]...   "Endpoints to listen on."
         ))
-        .arg(Arg::from_usage(
-            "-c, --config=[FILE]      'A configuration file.'",
+        .arg(arg!(
+            -c --config [FILE]      "A configuration file."
         ))
-        .arg(Arg::from_usage(
-            "-g, --group=[STRING] 'The group name'",
+        .arg(arg!(
+            -g --group [STRING] "The group name"
         ).default_value("zgroup"))
-        .arg(Arg::from_usage(
-            "-i, --id=[STRING] 'The group member id (default is the zenoh ID)'",
+        .arg(arg!(
+            -i --id [STRING] "The group member id (default is the zenoh ID)"
         ))
-        .arg(Arg::from_usage(
-            "-s, --size=[INT] 'The expected group size. The example will wait for the group to reach this size'",
+        .arg(arg!(
+            -s --size [INT] "The expected group size. The example will wait for the group to reach this size"
         ).default_value("3"))
-        .arg(Arg::from_usage(
-            "-t, --timeout=[SEC] 'The duration (in seconds) this example will wait for the group to reach the expected size.'",
+        .arg(arg!(
+            -t --timeout [SEC] "The duration (in seconds) this example will wait for the group to reach the expected size."
         ).default_value("15"))
         .get_matches();
 
-    let mut config = if let Some(conf_file) = args.value_of("config") {
+    let mut config = if let Some(conf_file) = args.get_one::<&String>("config") {
         Config::from_file(conf_file).unwrap()
     } else {
         Config::default()
     };
-    if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
+    if let Some(Ok(mode)) = args.get_one::<&String>("mode").map(|mode| mode.parse()) {
         config.set_mode(Some(mode)).unwrap();
     }
-    if let Some(values) = args.values_of("connect") {
+    if let Some(values) = args.get_many::<&String>("connect") {
         config
             .connect
             .endpoints
             .extend(values.map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listen") {
+    if let Some(values) = args.get_many::<&String>("listen") {
         config
             .listen
             .endpoints
             .extend(values.map(|v| v.parse().unwrap()))
     }
 
-    let group = args.value_of("group").unwrap().to_string();
-    let id = args.value_of("id").map(String::from);
-    let size: usize = args.value_of("size").unwrap().parse().unwrap();
-    let timeout: u64 = args.value_of("timeout").unwrap().parse().unwrap();
+    let group = args.get_one::<&String>("group").unwrap().to_string();
+    let id = args.get_one::<&String>("id").map(|v| (*v).to_owned());
+    let size: usize = args.get_one::<&String>("size").unwrap().parse().unwrap();
+    let timeout: u64 = args.get_one::<&String>("timeout").unwrap().parse().unwrap();
 
     (config, group, id, size, timeout)
 }
