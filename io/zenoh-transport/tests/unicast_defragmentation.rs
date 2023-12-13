@@ -13,7 +13,7 @@
 //
 use async_std::{prelude::FutureExt, task};
 use std::{convert::TryFrom, sync::Arc, time::Duration};
-use zenoh_core::zasync_executor_init;
+use zenoh_core::timeout;
 use zenoh_protocol::{
     core::{
         Channel, CongestionControl, Encoding, EndPoint, Priority, Reliability, WhatAmI, ZenohId,
@@ -34,12 +34,6 @@ const SLEEP: Duration = Duration::from_secs(1);
 
 const MSG_SIZE: usize = 131_072;
 const MSG_DEFRAG_BUF: usize = 128_000;
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
     // Define client and router IDs
@@ -140,7 +134,6 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 fn transport_unicast_defragmentation_tcp_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locators
@@ -178,7 +171,6 @@ fn transport_unicast_defragmentation_tcp_only() {
 fn transport_unicast_defragmentation_ws_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locators
@@ -216,7 +208,6 @@ fn transport_unicast_defragmentation_ws_only() {
 fn transport_unicast_defragmentation_unixpipe_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locators

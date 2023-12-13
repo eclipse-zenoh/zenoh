@@ -19,7 +19,7 @@ use std::io::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use zenoh_core::zasync_executor_init;
+use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
@@ -46,11 +46,6 @@ const TIMEOUT: Duration = Duration::from_secs(300);
 const SLEEP: Duration = Duration::from_millis(100);
 const USLEEP: Duration = Duration::from_millis(1);
 
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 #[cfg(test)]
 #[derive(Default)]
 struct SHRouterIntermittent;
@@ -422,7 +417,6 @@ async fn lowlatency_transport_intermittent(endpoint: &EndPoint) {
 fn transport_tcp_intermittent() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12000).parse().unwrap();
@@ -434,7 +428,6 @@ fn transport_tcp_intermittent() {
 fn transport_tcp_intermittent_for_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12100).parse().unwrap();
@@ -447,7 +440,6 @@ fn transport_tcp_intermittent_for_lowlatency_transport() {
 fn transport_ws_intermittent() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12010).parse().unwrap();
@@ -460,7 +452,6 @@ fn transport_ws_intermittent() {
 fn transport_ws_intermittent_for_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12110).parse().unwrap();
@@ -473,7 +464,6 @@ fn transport_ws_intermittent_for_lowlatency_transport() {
 fn transport_unixpipe_intermittent() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     let endpoint: EndPoint = "unixpipe/transport_unixpipe_intermittent".parse().unwrap();
@@ -486,7 +476,6 @@ fn transport_unixpipe_intermittent() {
 fn transport_unixpipe_intermittent_for_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     let endpoint: EndPoint = "unixpipe/transport_unixpipe_intermittent_for_lowlatency_transport"

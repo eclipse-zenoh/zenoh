@@ -13,7 +13,7 @@
 //
 use async_std::prelude::FutureExt;
 use std::{any::Any, sync::Arc, time::Duration};
-use zenoh_core::{zasync_executor_init, zasyncwrite};
+use zenoh_core::{ztimeout, zasyncwrite};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{EndPoint, WhatAmI, ZenohId},
@@ -28,15 +28,10 @@ use zenoh_transport::{
     unicast::TransportUnicast, DummyTransportPeerEventHandler, TransportEventHandler,
     TransportPeer, TransportPeerEventHandler,
 };
+use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_millis(100);
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 #[cfg(test)]
 struct SHRouterAuthenticator;
@@ -646,7 +641,6 @@ async fn run_with_lowlatency_transport(endpoint: &EndPoint) {
 fn authenticator_tcp() {
     let _ = env_logger::try_init();
     tokio::runtime::Handle::current().block_on(async {
-        zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8000).parse().unwrap();
@@ -658,7 +652,6 @@ fn authenticator_tcp() {
 fn authenticator_tcp_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     tokio::runtime::Handle::current().block_on(async {
-        zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8100).parse().unwrap();
@@ -670,7 +663,6 @@ fn authenticator_tcp_with_lowlatency_transport() {
 fn authenticator_udp() {
     let _ = env_logger::try_init();
     tokio::runtime::Handle::current().block_on(async {
-        zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8010).parse().unwrap();
@@ -682,7 +674,6 @@ fn authenticator_udp() {
 fn authenticator_udp_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     tokio::runtime::Handle::current().block_on(async {
-        zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8110).parse().unwrap();
@@ -695,7 +686,6 @@ fn authenticator_udp_with_lowlatency_transport() {
 fn authenticator_unixpipe() {
     let _ = env_logger::try_init();
     tokio::runtime::Handle::current().block_on(async {
-        zasync_executor_init!();
     });
 
     let endpoint: EndPoint = "unixpipe/authenticator_unixpipe_test".parse().unwrap();
@@ -708,7 +698,6 @@ fn authenticator_unixpipe() {
 fn authenticator_unixpipe_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     tokio::runtime::Handle::current().block_on(async {
-        zasync_executor_init!();
     });
 
     let endpoint: EndPoint = "unixpipe/authenticator_unixpipe_with_lowlatency_transport"
@@ -723,7 +712,6 @@ fn authenticator_unixpipe_with_lowlatency_transport() {
 fn authenticator_ws() {
     let _ = env_logger::try_init();
     tokio::runtime::Handle::current().block_on(async {
-        zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8020).parse().unwrap();
@@ -736,7 +724,6 @@ fn authenticator_ws() {
 fn authenticator_ws_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     tokio::runtime::Handle::current().block_on(async {
-        zasync_executor_init!();
     });
 
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8120).parse().unwrap();
@@ -748,7 +735,6 @@ fn authenticator_ws_with_lowlatency_transport() {
 fn authenticator_unix() {
     let _ = env_logger::try_init();
     tokio::runtime::Handle::current().block_on(async {
-        zasync_executor_init!();
     });
 
     let f1 = "zenoh-test-unix-socket-10.sock";
@@ -766,7 +752,6 @@ fn authenticator_tls() {
 
     let _ = env_logger::try_init();
     tokio::runtime::Handle::current().block_on(async {
-        zasync_executor_init!();
     });
 
     // NOTE: this an auto-generated pair of certificate and key.
@@ -869,7 +854,6 @@ fn authenticator_quic() {
 
     let _ = env_logger::try_init();
     tokio::runtime::Handle::current().block_on(async {
-        zasync_executor_init!();
     });
 
     // NOTE: this an auto-generated pair of certificate and key.

@@ -17,19 +17,12 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
-use zenoh_core::zasync_executor_init;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
 const MSG_COUNT: usize = 1_000;
 const MSG_SIZE: [usize; 2] = [1_024, 100_000];
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 async fn open_session_unicast(endpoints: &[&str]) -> (Session, Session) {
     // Open the sessions
@@ -189,7 +182,6 @@ async fn test_session_qryrep(peer01: &Session, peer02: &Session, reliability: Re
 #[test]
 fn zenoh_session_unicast() {
     task::block_on(async {
-        zasync_executor_init!();
         let _ = env_logger::try_init();
 
         let (peer01, peer02) = open_session_unicast(&["tcp/127.0.0.1:17447"]).await;
@@ -202,7 +194,6 @@ fn zenoh_session_unicast() {
 #[test]
 fn zenoh_session_multicast() {
     task::block_on(async {
-        zasync_executor_init!();
         let _ = env_logger::try_init();
 
         let (peer01, peer02) =

@@ -23,7 +23,6 @@ use async_std::task;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
 use zenoh::{prelude::Config, time::Timestamp};
-use zenoh_core::zasync_executor_init;
 use zenoh_plugin_trait::Plugin;
 
 async fn put_data(session: &zenoh::Session, key_expr: &str, value: &str, _timestamp: Timestamp) {
@@ -59,7 +58,6 @@ async fn get_data(session: &zenoh::Session, key_expr: &str) -> Vec<Sample> {
 
 async fn test_updates_in_order() {
     task::block_on(async {
-        zasync_executor_init!();
     });
     let mut config = Config::default();
     config

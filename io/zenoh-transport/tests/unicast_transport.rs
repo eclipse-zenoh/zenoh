@@ -22,7 +22,7 @@ use std::{
     },
     time::Duration,
 };
-use zenoh_core::zasync_executor_init;
+use zenoh_core::timeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{
@@ -225,11 +225,6 @@ const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
 const MSG_SIZE_LOWLATENCY: [usize; 2] = [1_024, 65000];
 const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
 
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 // Transport Handler for the router
 struct SHRouter {
@@ -603,7 +598,6 @@ async fn run_with_lowlatency_transport(
 fn transport_unicast_tcp_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locators
@@ -636,7 +630,6 @@ fn transport_unicast_tcp_only() {
 fn transport_unicast_tcp_only_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locators
@@ -666,7 +659,6 @@ fn transport_unicast_tcp_only_with_lowlatency_transport() {
 fn transport_unicast_udp_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locator
@@ -699,7 +691,6 @@ fn transport_unicast_udp_only() {
 fn transport_unicast_udp_only_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locator
@@ -729,7 +720,6 @@ fn transport_unicast_udp_only_with_lowlatency_transport() {
 fn transport_unicast_unix_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     let f1 = "zenoh-test-unix-socket-5.sock";
@@ -763,7 +753,6 @@ fn transport_unicast_unix_only() {
 fn transport_unicast_unix_only_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     let f1 = "zenoh-test-unix-socket-5-lowlatency.sock";
@@ -797,7 +786,6 @@ fn transport_unicast_unix_only_with_lowlatency_transport() {
 fn transport_unicast_ws_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locators
@@ -838,7 +826,6 @@ fn transport_unicast_ws_only() {
 fn transport_unicast_ws_only_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locators
@@ -876,7 +863,6 @@ fn transport_unicast_ws_only_with_lowlatency_transport() {
 fn transport_unicast_unixpipe_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locator
@@ -909,7 +895,6 @@ fn transport_unicast_unixpipe_only() {
 fn transport_unicast_unixpipe_only_with_lowlatency_transport() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locator
@@ -943,7 +928,6 @@ fn transport_unicast_unixpipe_only_with_lowlatency_transport() {
 fn transport_unicast_tcp_udp() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locator
@@ -982,7 +966,6 @@ fn transport_unicast_tcp_udp() {
 fn transport_unicast_tcp_unix() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     let f1 = "zenoh-test-unix-socket-6.sock";
@@ -1024,7 +1007,6 @@ fn transport_unicast_tcp_unix() {
 fn transport_unicast_udp_unix() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     let f1 = "zenoh-test-unix-socket-7.sock";
@@ -1067,7 +1049,6 @@ fn transport_unicast_udp_unix() {
 fn transport_unicast_tcp_udp_unix() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     let f1 = "zenoh-test-unix-socket-8.sock";
@@ -1109,7 +1090,6 @@ fn transport_unicast_tls_only_server() {
 
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locator
@@ -1163,7 +1143,6 @@ fn transport_unicast_quic_only_server() {
 
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locator
@@ -1217,7 +1196,6 @@ fn transport_unicast_tls_only_mutual_success() {
 
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     let client_auth = "true";
@@ -1291,7 +1269,6 @@ fn transport_unicast_tls_only_mutual_no_client_certs_failure() {
 
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locator
@@ -1360,7 +1337,6 @@ fn transport_unicast_tls_only_mutual_wrong_client_certs_failure() {
 
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     let client_auth = "true";

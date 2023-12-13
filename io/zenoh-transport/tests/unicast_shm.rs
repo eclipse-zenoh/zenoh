@@ -24,9 +24,8 @@ mod tests {
         },
         time::Duration,
     };
-    use zenoh_buffers::buffer::SplitBuffer;
-    use zenoh_core::zasync_executor_init;
-    use zenoh_crypto::PseudoRng;
+    use zenoh_buffers::SplitBuffer;
+    use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
@@ -49,12 +48,6 @@ mod tests {
 
     const MSG_COUNT: usize = 1_000;
     const MSG_SIZE: usize = 1_024;
-
-    macro_rules! ztimeout {
-        ($f:expr) => {
-            $f.timeout(TIMEOUT).await.unwrap()
-        };
-    }
 
     // Transport Handler for the router
     struct SHPeer {
@@ -390,7 +383,6 @@ mod tests {
     fn transport_tcp_shm() {
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14000).parse().unwrap();
@@ -402,7 +394,6 @@ mod tests {
     fn transport_tcp_shm_with_lowlatency_transport() {
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 14001).parse().unwrap();
@@ -414,7 +405,6 @@ mod tests {
     fn transport_ws_shm() {
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14010).parse().unwrap();
@@ -426,7 +416,6 @@ mod tests {
     fn transport_ws_shm_with_lowlatency_transport() {
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 14011).parse().unwrap();
@@ -438,7 +427,6 @@ mod tests {
     fn transport_unixpipe_shm() {
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         let endpoint: EndPoint = "unixpipe/transport_unixpipe_shm".parse().unwrap();
@@ -450,7 +438,6 @@ mod tests {
     fn transport_unixpipe_shm_with_lowlatency_transport() {
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         let endpoint: EndPoint = "unixpipe/transport_unixpipe_shm_with_lowlatency_transport"

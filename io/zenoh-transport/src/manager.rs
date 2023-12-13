@@ -215,8 +215,7 @@ impl TransportManagerBuilder {
         self = self.tx_threads(*link.tx().threads());
         self = self.protocols(link.protocols().clone());
 
-        let (c, errors) = zenoh_link::LinkConfigurator::default()
-            .configurations(config);
+        let (c, errors) = zenoh_link::LinkConfigurator::default().configurations(config);
         if !errors.is_empty() {
             use std::fmt::Write;
             let mut formatter = String::from("Some protocols reported configuration errors:\r\n");
@@ -226,14 +225,8 @@ impl TransportManagerBuilder {
             bail!("{}", formatter);
         }
         self = self.endpoints(c);
-        self = self.unicast(
-            TransportManagerBuilderUnicast::default()
-                .from_config(config)?
-        );
-        self = self.multicast(
-            TransportManagerBuilderMulticast::default()
-                .from_config(config)?
-        );
+        self = self.unicast(TransportManagerBuilderUnicast::default().from_config(config)?);
+        self = self.multicast(TransportManagerBuilderMulticast::default().from_config(config)?);
 
         Ok(self)
     }

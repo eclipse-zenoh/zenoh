@@ -609,8 +609,11 @@ impl Network {
             for (_, idx, _) in &link_states {
                 let node = &self.graph[*idx];
                 if let Some(whatami) = node.whatami {
-                    if self.runtime.manager().get_transport_unicast(&node.zid)
-                    .is_none()
+                    if self
+                        .runtime
+                        .manager()
+                        .get_transport_unicast(&node.zid)
+                        .is_none()
                         && self.autoconnect.matches(whatami)
                     {
                         if let Some(locators) = &node.locators {

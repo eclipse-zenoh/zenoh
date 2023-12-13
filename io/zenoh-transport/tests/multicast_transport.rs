@@ -25,7 +25,6 @@ mod tests {
         },
         time::Duration,
     };
-    use zenoh_core::zasync_executor_init;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{
@@ -45,6 +44,7 @@ mod tests {
         multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
         TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
     };
+    use zenoh_core::ztimeout;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
@@ -53,11 +53,6 @@ mod tests {
     const MSG_COUNT: usize = 1_000;
     const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
 
-    macro_rules! ztimeout {
-        ($f:expr) => {
-            $f.timeout(TIMEOUT).await.unwrap()
-        };
-    }
 
     // Transport Handler for the peer02
     struct SHPeer {
@@ -337,7 +332,6 @@ mod tests {
         env_logger::init();
 
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         // Define the locator

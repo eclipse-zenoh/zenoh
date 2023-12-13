@@ -173,9 +173,7 @@ impl StageIn {
         // Attempt the serialization on the current batch
         let e = match batch.encode(&*msg) {
             Ok(_) => zretok!(batch),
-            Err(e) => {
-                e
-            }
+            Err(e) => e,
         };
 
         // Lock the channel. We are the only one that will be writing on it.
@@ -660,9 +658,7 @@ impl TransmissionPipelineConsumer {
                             bo = b;
                         }
                     }
-                    Pull::None => {
-
-                    }
+                    Pull::None => {}
                 }
             }
 

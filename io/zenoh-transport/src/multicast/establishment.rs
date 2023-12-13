@@ -87,7 +87,11 @@ pub(crate) async fn open_link(
     if manager.state.multicast.transports.get(&locator).is_some() {
         bail!("A Multicast transport on {} already exist!", locator);
     }
-    manager.state.multicast.transports.insert(locator.clone(), ti.clone());
+    manager
+        .state
+        .multicast
+        .transports
+        .insert(locator.clone(), ti.clone());
 
     // Notify the transport event handler
     let transport: TransportMulticast = (&ti).into();

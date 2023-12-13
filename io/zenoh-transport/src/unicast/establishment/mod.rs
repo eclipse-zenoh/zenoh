@@ -144,11 +144,7 @@ pub(super) async fn finalize_transport(
 
     // Start the TX loop
     let keep_alive = manager.config.unicast.lease / manager.config.unicast.keep_alive as u32;
-    transport.start_tx(
-        link,
-        keep_alive,
-        input.agreed_batch_size,
-    )?;
+    transport.start_tx(link, keep_alive, input.agreed_batch_size)?;
 
     // Assign a callback if the transport is new
     // Keep the lock to avoid concurrent new_transport and closing/closed notifications

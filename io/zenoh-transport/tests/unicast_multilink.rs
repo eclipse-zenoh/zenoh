@@ -15,7 +15,7 @@
 mod tests {
     use async_std::{prelude::FutureExt, task};
     use std::{convert::TryFrom, sync::Arc, time::Duration};
-    use zenoh_core::zasync_executor_init;
+    use zenoh_core::ztimeout;
     use zenoh_link::EndPoint;
     use zenoh_protocol::core::{WhatAmI, ZenohId};
     use zenoh_result::ZResult;
@@ -27,12 +27,6 @@ mod tests {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_millis(100);
-
-    macro_rules! ztimeout {
-        ($f:expr) => {
-            $f.timeout(TIMEOUT).await.unwrap()
-        };
-    }
 
     #[cfg(test)]
     #[derive(Default)]
@@ -486,7 +480,6 @@ mod tests {
     fn multilink_tcp_only() {
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 18000).parse().unwrap();
@@ -498,7 +491,6 @@ mod tests {
     fn multilink_udp_only() {
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 18010).parse().unwrap();
@@ -511,7 +503,6 @@ mod tests {
     fn multilink_ws_only() {
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 18020).parse().unwrap();
@@ -524,7 +515,6 @@ mod tests {
     fn multilink_unixpipe_only() {
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         let endpoint: EndPoint = "unixpipe/multilink_unixpipe_only".parse().unwrap();
@@ -537,7 +527,6 @@ mod tests {
     fn multilink_unix_only() {
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         let f1 = "zenoh-test-unix-socket-9.sock";
@@ -555,7 +544,6 @@ mod tests {
 
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         // NOTE: this an auto-generated pair of certificate and key.
@@ -656,7 +644,6 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         use zenoh_link::quic::config::*;
 
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         // NOTE: this an auto-generated pair of certificate and key.

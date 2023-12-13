@@ -438,12 +438,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
         }
     }
 
-    fn start_tx(
-        &self,
-        link: &LinkUnicast,
-        keep_alive: Duration,
-        batch_size: u16,
-    ) -> ZResult<()> {
+    fn start_tx(&self, link: &LinkUnicast, keep_alive: Duration, batch_size: u16) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, link) {
             Some(l) => {

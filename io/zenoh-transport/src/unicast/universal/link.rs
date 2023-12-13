@@ -25,8 +25,8 @@ use zenoh_buffers::ZSlice;
 use zenoh_link::{LinkUnicast, LinkUnicastDirection};
 use zenoh_protocol::transport::{BatchSize, KeepAlive, TransportMessage};
 use zenoh_result::{bail, zerror, ZResult};
-use zenoh_sync::{RecyclingObjectPool, Signal};
 use zenoh_runtime::ZRuntime;
+use zenoh_sync::{RecyclingObjectPool, Signal};
 
 #[cfg(all(feature = "unstable", feature = "transport_compression"))]
 const HEADER_BYTES_SIZE: usize = 2;
@@ -136,7 +136,8 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.del_link(&c_link).await });
+                    zenoh_runtime::ZRuntime::Net
+                        .spawn(async move { c_transport.del_link(&c_link).await });
                 }
             });
             *guard = Some(handle);
@@ -169,7 +170,8 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.del_link(&c_link).await });
+                    zenoh_runtime::ZRuntime::Net
+                        .spawn(async move { c_transport.del_link(&c_link).await });
                 }
             });
             *guard = Some(handle);

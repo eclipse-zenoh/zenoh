@@ -20,7 +20,7 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use std::time::Duration;
-    use zenoh_core::zasync_executor_init;
+    use zenoh_core::timeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
@@ -41,12 +41,6 @@ mod tests {
 
     const MSG_COUNT: usize = 16;
     const MSG_SIZE: usize = 1_024;
-
-    macro_rules! ztimeout {
-        ($f:expr) => {
-            $f.timeout(TIMEOUT).await.unwrap()
-        };
-    }
 
     // Transport Handler for the router
     struct SHPeer {
@@ -309,7 +303,6 @@ mod tests {
     fn transport_tcp_simultaneous() {
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         let endpoint01: Vec<EndPoint> = vec![
@@ -336,7 +329,6 @@ mod tests {
     fn transport_unixpipe_simultaneous() {
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         let endpoint01: Vec<EndPoint> = vec![
@@ -363,7 +355,6 @@ mod tests {
     fn transport_ws_simultaneous() {
         let _ = env_logger::try_init();
         task::block_on(async {
-            zasync_executor_init!();
         });
 
         let endpoint01: Vec<EndPoint> = vec![

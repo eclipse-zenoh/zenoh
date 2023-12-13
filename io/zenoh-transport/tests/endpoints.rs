@@ -13,7 +13,7 @@
 //
 use async_std::{prelude::FutureExt, task};
 use std::{any::Any, convert::TryFrom, sync::Arc, time::Duration};
-use zenoh_core::zasync_executor_init;
+use zenoh_core::ztimeout;
 use zenoh_link::{EndPoint, Link};
 use zenoh_protocol::{
     core::{WhatAmI, ZenohId},
@@ -29,12 +29,6 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_millis(100);
 
 const RUNS: usize = 10;
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 // Transport Handler
 #[derive(Default)]
@@ -108,7 +102,6 @@ async fn run(endpoints: &[EndPoint]) {
 fn endpoint_tcp() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locators
@@ -125,7 +118,6 @@ fn endpoint_tcp() {
 fn endpoint_udp() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locators
@@ -142,7 +134,6 @@ fn endpoint_udp() {
 fn endpoint_unix() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Remove the files if they still exists
@@ -167,7 +158,6 @@ fn endpoint_unix() {
 fn endpoint_ws() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locators
@@ -184,7 +174,6 @@ fn endpoint_ws() {
 fn endpoint_unixpipe() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locators
@@ -202,7 +191,6 @@ fn endpoint_unixpipe() {
 fn endpoint_tcp_udp() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locators
@@ -225,7 +213,6 @@ fn endpoint_tcp_udp() {
 fn endpoint_tcp_udp_unix() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Remove the file if it still exists
@@ -253,7 +240,6 @@ fn endpoint_tcp_udp_unix() {
 fn endpoint_tcp_unix() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Remove the file if it still exists
@@ -279,7 +265,6 @@ fn endpoint_tcp_unix() {
 fn endpoint_udp_unix() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Remove the file if it still exists
@@ -302,7 +287,6 @@ fn endpoint_tls() {
 
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // NOTE: this an auto-generated pair of certificate and key.
@@ -384,7 +368,6 @@ fn endpoint_quic() {
 
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // NOTE: this an auto-generated pair of certificate and key.

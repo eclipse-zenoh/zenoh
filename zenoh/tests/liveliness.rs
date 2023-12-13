@@ -15,22 +15,16 @@ use async_std::prelude::FutureExt;
 use async_std::task;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
-use zenoh_core::zasync_executor_init;
+use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 #[cfg(feature = "unstable")]
 #[test]
 fn zenoh_liveliness() {
     task::block_on(async {
-        zasync_executor_init!();
 
         let mut c1 = config::peer();
         c1.listen

@@ -13,7 +13,7 @@
 //
 use async_std::{prelude::FutureExt, task};
 use std::{any::Any, convert::TryFrom, iter::FromIterator, sync::Arc, time::Duration};
-use zenoh_core::zasync_executor_init;
+use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{EndPoint, ZenohId},
@@ -27,12 +27,6 @@ use zenoh_transport::{
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 // Transport Handler for the router
 struct SHRouter;
@@ -126,7 +120,6 @@ async fn run(endpoints: &[EndPoint]) {
 fn transport_whitelist_tcp() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locators
@@ -144,7 +137,6 @@ fn transport_whitelist_tcp() {
 fn transport_whitelist_unixpipe() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
 
     // Define the locators

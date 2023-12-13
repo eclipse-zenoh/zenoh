@@ -19,7 +19,7 @@ use std::fmt::Write as _;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use zenoh_core::zasync_executor_init;
+use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::network::NetworkBody;
 use zenoh_protocol::{
@@ -56,12 +56,6 @@ const PRIORITY_ALL: [Priority; 8] = [
     Priority::DataLow,
     Priority::Background,
 ];
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 // Transport Handler for the router
 struct SHRouter {
@@ -342,7 +336,6 @@ async fn run(endpoints: &[EndPoint]) {
 fn priorities_tcp_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 10000).parse().unwrap()];
@@ -356,7 +349,6 @@ fn priorities_tcp_only() {
 fn conduits_unixpipe_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
     // Define the locators
     let endpoints: Vec<EndPoint> = vec!["unixpipe/conduits_unixpipe_only"
@@ -372,7 +364,6 @@ fn conduits_unixpipe_only() {
 fn priorities_ws_only() {
     let _ = env_logger::try_init();
     task::block_on(async {
-        zasync_executor_init!();
     });
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![format!("ws/127.0.0.1:{}", 10010).parse().unwrap()];

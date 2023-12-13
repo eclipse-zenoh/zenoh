@@ -21,19 +21,13 @@ use std::time::Duration;
 use zenoh::config::{Config, ModeDependentValue};
 use zenoh::prelude::r#async::*;
 use zenoh::{value::Value, Result};
-use zenoh_core::zasync_executor_init;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};
 use zenoh_result::{bail, zerror};
+use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(360);
 const MSG_COUNT: usize = 50;
 const MSG_SIZE: [usize; 2] = [1_024, 131_072];
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await?
-    };
-}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Task {
@@ -317,7 +311,6 @@ impl Recipe {
 fn gossip() -> Result<()> {
     env_logger::try_init().unwrap_or_default();
     async_std::task::block_on(async {
-        zasync_executor_init!();
 
         let locator = String::from("tcp/127.0.0.1:17446");
         let ke = String::from("testKeyExprGossip");
@@ -451,7 +444,6 @@ fn static_failover_brokering() -> Result<()> {
 fn three_node_combination() -> Result<()> {
     env_logger::try_init().unwrap_or_default();
     async_std::task::block_on(async {
-        zasync_executor_init!();
 
         let modes = [WhatAmI::Peer, WhatAmI::Client];
         let delay_in_secs = [
@@ -566,7 +558,6 @@ fn three_node_combination() -> Result<()> {
 #[test]
 fn two_node_combination() -> Result<()> {
     async_std::task::block_on(async {
-        zasync_executor_init!();
 
         #[derive(Clone, Copy)]
         struct IsFirstListen(bool);

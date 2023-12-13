@@ -16,15 +16,9 @@ use async_std::task;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
-use zenoh_core::zasync_executor_init;
+use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(10);
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 async fn open_session(listen: &[&str], connect: &[&str]) -> Session {
     let mut config = config::peer();
@@ -49,7 +43,6 @@ async fn close_session(session: Session) {
 #[test]
 fn zenoh_events() {
     task::block_on(async {
-        zasync_executor_init!();
 
         let session = open_session(&["tcp/127.0.0.1:18447"], &[]).await;
         let zid = session.zid();
