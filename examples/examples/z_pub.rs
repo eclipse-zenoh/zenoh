@@ -23,7 +23,7 @@ async fn main() {
     // Initiate logging
     env_logger::init();
 
-    let (config, key_expr, value) = parse_args();
+    let (config, key_expr, value, attachment) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
@@ -35,7 +35,16 @@ async fn main() {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] {value}");
         println!("Putting Data ('{}': '{}')...", &key_expr, buf);
-        publisher.put(buf).res().await.unwrap();
+        let mut put = publisher.put(buf);
+        if let Some(attachment) = &attachment {
+            put = put.with_attachment(
+                attachment
+                    .split('&')
+                    .map(|pair| pair.as_bytes().split_at(pair.find('=').unwrap_or(0)))
+                    .collect(),
+            )
+        }
+        put.res().await.unwrap();
     }
 }
 
@@ -47,11 +56,16 @@ struct Args {
     #[arg(short, long, default_value = "Pub from Rust!")]
     /// The value to write.
     value: String,
+    #[arg(short, long)]
+    /// The attachments to add to each put.
+    ///
+    /// The key-value pairs are &-separated, and = serves as the separator between key and value.
+    attach: Option<String>,
     #[command(flatten)]
     common: CommonArgs,
 }
 
-fn parse_args() -> (Config, KeyExpr<'static>, String) {
+fn parse_args() -> (Config, KeyExpr<'static>, String, Option<String>) {
     let args = Args::parse();
-    (args.common.into(), args.key, args.value)
+    (args.common.into(), args.key, args.value, args.attach)
 }

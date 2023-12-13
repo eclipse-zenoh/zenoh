@@ -161,22 +161,6 @@ pub struct ReplyBuilder<'a> {
 }
 
 impl<'a> ReplyBuilder<'a> {
-    #[zenoh_macros::unstable]
-    pub fn attachment(&self) -> Option<&Attachment> {
-        match &self.result {
-            Ok(sample) => sample.attachment.as_ref(),
-            Err(_) => None,
-        }
-    }
-
-    #[zenoh_macros::unstable]
-    pub fn attachment_mut(&mut self) -> Option<&mut Option<Attachment>> {
-        match &mut self.result {
-            Ok(sample) => Some(&mut sample.attachment),
-            Err(_) => None,
-        }
-    }
-
     #[allow(clippy::result_large_err)]
     #[zenoh_macros::unstable]
     pub fn with_attachment(mut self, attachment: Attachment) -> Result<Self, (Self, Attachment)> {

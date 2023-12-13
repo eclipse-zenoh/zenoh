@@ -307,16 +307,6 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     }
 
     #[zenoh_macros::unstable]
-    pub fn attachment(&self) -> Option<&Attachment> {
-        self.attachment.as_ref()
-    }
-
-    #[zenoh_macros::unstable]
-    pub fn attachment_mut(&mut self) -> &mut Option<Attachment> {
-        &mut self.attachment
-    }
-
-    #[zenoh_macros::unstable]
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
         self
