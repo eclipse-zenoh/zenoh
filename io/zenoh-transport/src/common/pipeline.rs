@@ -482,10 +482,7 @@ impl StageOut {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TransmissionPipelineConf {
-    pub(crate) is_streamed: bool,
-    #[cfg(feature = "transport_compression")]
-    pub(crate) is_compression: bool,
-    pub(crate) batch_size: BatchSize,
+    pub(crate) batch: BatchConfig,
     pub(crate) queue_size: [usize; Priority::NUM],
     pub(crate) backoff: Duration,
 }
@@ -493,10 +490,12 @@ pub(crate) struct TransmissionPipelineConf {
 impl Default for TransmissionPipelineConf {
     fn default() -> Self {
         Self {
-            is_streamed: false,
-            #[cfg(feature = "transport_compression")]
-            is_compression: false,
-            batch_size: BatchSize::MAX,
+            batch: BatchConfig {
+                mtu: BatchSize::MAX,
+                is_streamed: false,
+                #[cfg(feature = "transport_compression")]
+                is_compression: false,
+            },
             queue_size: [1; Priority::NUM],
             backoff: Duration::from_micros(1),
         }
@@ -533,12 +532,7 @@ impl TransmissionPipeline {
             let (mut s_ref_w, s_ref_r) = RingBuffer::<WBatch, RBLEN>::init();
             // Fill the refill ring buffer with batches
             for _ in 0..*num {
-                let bc = BatchConfig {
-                    mtu: config.batch_size,
-                    #[cfg(feature = "transport_compression")]
-                    is_compression: config.is_compression,
-                };
-                let batch = WBatch::new(bc);
+                let batch = WBatch::new(config.batch);
                 assert!(s_ref_w.push(batch).is_none());
             }
             // Create the channel for notifying that new batches are in the refill ring buffer
@@ -736,10 +730,12 @@ mod tests {
     const TIMEOUT: Duration = Duration::from_secs(60);
 
     const CONFIG: TransmissionPipelineConf = TransmissionPipelineConf {
-        is_streamed: true,
-        #[cfg(feature = "transport_compression")]
-        is_compression: true,
-        batch_size: BatchSize::MAX,
+        batch: BatchConfig {
+            mtu: BatchSize::MAX,
+            is_streamed: true,
+            #[cfg(feature = "transport_compression")]
+            is_compression: true,
+        },
         queue_size: [1; Priority::NUM],
         backoff: Duration::from_micros(1),
     };
@@ -875,7 +871,7 @@ mod tests {
             // Make sure to put only one message per batch: set the payload size
             // to half of the batch in such a way the serialized zenoh message
             // will be larger then half of the batch size (header + payload).
-            let payload_size = (CONFIG.batch_size / 2) as usize;
+            let payload_size = (CONFIG.batch.mtu / 2) as usize;
 
             // Send reliable messages
             let key = "test".into();

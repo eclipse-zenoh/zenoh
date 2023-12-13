@@ -16,7 +16,7 @@ use super::transport::TransportUnicastUniversal;
 use crate::common::stats::TransportStats;
 use crate::{
     common::{
-        batch::RBatch,
+        batch::{BatchConfig, RBatch},
         pipeline::{
             TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
             TransmissionPipelineProducer,
@@ -71,10 +71,12 @@ impl TransportLinkUnicastUniversal {
     ) {
         if self.handle_tx.is_none() {
             let config = TransmissionPipelineConf {
-                is_streamed: self.link.link.is_streamed(),
-                #[cfg(feature = "transport_compression")]
-                is_compression: self.link.config.is_compression,
-                batch_size: self.link.config.mtu,
+                batch: BatchConfig {
+                    mtu: self.link.config.batch.mtu,
+                    is_streamed: self.link.link.is_streamed(),
+                    #[cfg(feature = "transport_compression")]
+                    is_compression: self.link.config.batch.is_compression,
+                },
                 queue_size: self.transport.manager.config.queue_size,
                 backoff: self.transport.manager.config.queue_backoff,
             };
@@ -257,7 +259,7 @@ async fn rx_task(
     }
 
     // The pool of buffers
-    let mtu = link.inner.config.mtu as usize;
+    let mtu = link.inner.config.batch.max_buffer_size();
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
