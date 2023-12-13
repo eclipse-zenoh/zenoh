@@ -16,7 +16,7 @@ use crate::stats::TransportStats;
 use crate::{
     common::priority::{TransportPriorityRx, TransportPriorityTx},
     unicast::{
-        link::{LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastDirection},
+        link::{LinkUnicastWithOpenAck, TransportLinkUnicastDirection},
         transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
         universal::link::TransportLinkUnicastUniversal,
         TransportConfigUnicast,
@@ -217,7 +217,7 @@ impl TransportUnicastUniversal {
         }
     }
 
-    pub(crate) fn stop_rx_tx(&self, link: &TransportLinkUnicast) -> ZResult<()> {
+    pub(crate) fn stop_rx_tx(&self, link: &Link) -> ZResult<()> {
         let mut guard = zwrite!(self.links);
         match zlinkgetmut!(guard, *link) {
             Some(l) => {

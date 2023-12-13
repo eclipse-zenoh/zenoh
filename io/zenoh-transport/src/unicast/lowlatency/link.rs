@@ -208,18 +208,18 @@ async fn rx_task_stream(
     async fn read(link: &TransportLinkUnicastRx, buffer: &mut [u8]) -> ZResult<usize> {
         // 16 bits for reading the batch length
         let mut length = [0_u8, 0_u8, 0_u8, 0_u8];
-        link.inner.link.read_exact(&mut length).await?;
+        link.link.read_exact(&mut length).await?;
         let n = u32::from_le_bytes(length) as usize;
         let len = buffer.len();
         let b = buffer.get_mut(0..n).ok_or_else(|| {
             zerror!("Batch len is invalid. Received {n} but negotiated max len is {len}.")
         })?;
-        link.inner.link.read_exact(b).await?;
+        link.link.read_exact(b).await?;
         Ok(n)
     }
 
     // The pool of buffers
-    let mtu = link.inner.config.batch.mtu as usize;
+    let mtu = link.batch.mtu as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -240,7 +240,7 @@ async fn rx_task_stream(
 
         // Deserialize all the messages from the current ZBuf
         let zslice = ZSlice::make(Arc::new(buffer), 0, bytes).unwrap();
-        transport.read_messages(zslice, &link.inner.link).await?;
+        transport.read_messages(zslice, &link.link).await?;
     }
 }
 
@@ -251,7 +251,7 @@ async fn rx_task_dgram(
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     // The pool of buffers
-    let mtu = link.inner.config.batch.max_buffer_size();
+    let mtu = link.batch.max_buffer_size();
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -264,7 +264,6 @@ async fn rx_task_dgram(
 
         // Async read from the underlying link
         let bytes = link
-            .inner
             .link
             .read(&mut buffer)
             .timeout(lease)
@@ -276,7 +275,7 @@ async fn rx_task_dgram(
 
         // Deserialize all the messages from the current ZBuf
         let zslice = ZSlice::make(Arc::new(buffer), 0, bytes).unwrap();
-        transport.read_messages(zslice, &link.inner.link).await?;
+        transport.read_messages(zslice, &link.link).await?;
     }
 }
 
@@ -286,7 +285,7 @@ async fn rx_task(
     lease: Duration,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
-    if link.inner.link.is_streamed() {
+    if link.link.is_streamed() {
         rx_task_stream(link, transport, lease, rx_buffer_size).await
     } else {
         rx_task_dgram(link, transport, lease, rx_buffer_size).await

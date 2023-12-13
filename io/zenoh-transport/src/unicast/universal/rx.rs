@@ -17,11 +17,12 @@ use crate::{
         batch::{Decode, RBatch},
         priority::TransportChannelRx,
     },
-    unicast::{link::TransportLinkUnicast, transport_unicast_inner::TransportUnicastTrait},
+    unicast::transport_unicast_inner::TransportUnicastTrait,
 };
 use async_std::task;
 use std::sync::MutexGuard;
 use zenoh_core::{zlock, zread};
+use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Priority, Reliability},
     network::NetworkMessage,
@@ -60,13 +61,13 @@ impl TransportUnicastUniversal {
         }
     }
 
-    fn handle_close(&self, link: &TransportLinkUnicast, _reason: u8, session: bool) -> ZResult<()> {
+    fn handle_close(&self, link: &Link, _reason: u8, session: bool) -> ZResult<()> {
         // Stop now rx and tx tasks before doing the proper cleanup
         let _ = self.stop_rx_tx(link);
 
         // Delete and clean up
         let c_transport = self.clone();
-        let c_link = link.into();
+        let c_link = link.clone();
         // Spawn a task to avoid a deadlock waiting for this same task
         // to finish in the link close() joining the rx handle
         task::spawn(async move {
@@ -186,11 +187,7 @@ impl TransportUnicastUniversal {
         Ok(())
     }
 
-    pub(super) fn read_messages(
-        &self,
-        mut batch: RBatch,
-        link: &TransportLinkUnicast,
-    ) -> ZResult<()> {
+    pub(super) fn read_messages(&self, mut batch: RBatch, link: &Link) -> ZResult<()> {
         while !batch.is_empty() {
             let msg: TransportMessage = batch
                 .decode()

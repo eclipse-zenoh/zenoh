@@ -75,7 +75,8 @@ impl TransportLinkUnicast {
 
     pub(crate) fn rx(&self) -> TransportLinkUnicastRx {
         TransportLinkUnicastRx {
-            inner: self.clone(),
+            link: self.link.clone(),
+            batch: self.config.batch,
         }
     }
 
@@ -198,7 +199,8 @@ impl fmt::Debug for TransportLinkUnicastTx {
 }
 
 pub(crate) struct TransportLinkUnicastRx {
-    pub(crate) inner: TransportLinkUnicast,
+    pub(crate) link: LinkUnicast,
+    pub(crate) batch: BatchConfig,
 }
 
 impl TransportLinkUnicastRx {
@@ -210,10 +212,10 @@ impl TransportLinkUnicastRx {
         const ERR: &str = "Read error from link: ";
 
         let mut into = (buff)();
-        let end = if self.inner.link.is_streamed() {
+        let end = if self.link.is_streamed() {
             // Read and decode the message length
             let mut len = BatchSize::MIN.to_le_bytes();
-            self.inner.link.read_exact(&mut len).await?;
+            self.link.read_exact(&mut len).await?;
             let l = BatchSize::from_le_bytes(len) as usize;
 
             // Read the bytes
@@ -221,18 +223,18 @@ impl TransportLinkUnicastRx {
                 .as_mut_slice()
                 .get_mut(len.len()..len.len() + l)
                 .ok_or_else(|| zerror!("{ERR}{self}. Invalid batch length or buffer size."))?;
-            self.inner.link.read_exact(slice).await?;
+            self.link.read_exact(slice).await?;
             len.len() + l
         } else {
             // Read the bytes
-            self.inner.link.read(into.as_mut_slice()).await?
+            self.link.read(into.as_mut_slice()).await?
         };
 
         // log::trace!("RBytes: {:02x?}", &into.as_slice()[0..end]);
 
         let buffer = ZSlice::make(Arc::new(into), 0, end)
             .map_err(|_| zerror!("{ERR}{self}. ZSlice index(es) out of bounds"))?;
-        let mut batch = RBatch::new(self.inner.config.batch, buffer);
+        let mut batch = RBatch::new(self.batch, buffer);
         batch
             .initialize(buff)
             .map_err(|e| zerror!("{ERR}{self}. {e}."))?;
@@ -243,7 +245,7 @@ impl TransportLinkUnicastRx {
     }
 
     pub async fn recv(&mut self) -> ZResult<TransportMessage> {
-        let mtu = self.inner.config.batch.mtu as usize;
+        let mtu = self.batch.mtu as usize;
         let mut batch = self
             .recv_batch(|| zenoh_buffers::vec::uninit(mtu).into_boxed_slice())
             .await?;
@@ -256,15 +258,15 @@ impl TransportLinkUnicastRx {
 
 impl fmt::Display for TransportLinkUnicastRx {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.inner)
+        write!(f, "{}:{:?}", self.link, self.batch)
     }
 }
 
 impl fmt::Debug for TransportLinkUnicastRx {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TransportLinkUnicastRx")
-            .field("link", &self.inner.link)
-            .field("config", &self.inner.config)
+            .field("link", &self.link)
+            .field("config", &self.batch)
             .finish()
     }
 }

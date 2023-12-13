@@ -157,7 +157,7 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link(rx.inner.link()).await });
+                    task::spawn(async move { c_transport.del_link((&rx.link).into()).await });
                 }
             });
             *guard = Some(handle);
@@ -278,13 +278,14 @@ async fn rx_task(
     }
 
     // The pool of buffers
-    let mtu = link.inner.config.batch.max_buffer_size();
+    let mtu = link.batch.max_buffer_size();
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
     }
 
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
+    let l = (&link.link).into();
     while !signal.is_triggered() {
         // Async read from the underlying link
         let action = read(link, &pool)
@@ -298,7 +299,7 @@ async fn rx_task(
                 {
                     transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
                 }
-                transport.read_messages(batch, &link.inner)?;
+                transport.read_messages(batch, &l)?;
             }
             Action::Stop => break,
         }
