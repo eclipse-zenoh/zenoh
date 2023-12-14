@@ -163,7 +163,7 @@ impl Runtime {
                 stop_source: std::sync::RwLock::new(Some(StopSource::new())),
             }),
         };
-        *handler.runtime.write().unwrap() = Some(runtime.clone());
+        *handler.runtime.write().unwrap() = Some(runtime.clone().into());
         get_mut_unchecked(&mut runtime.router.clone()).init_link_state(
             runtime.clone(),
             router_link_state,
@@ -230,7 +230,7 @@ impl Runtime {
 }
 
 struct RuntimeTransportEventHandler {
-    runtime: std::sync::RwLock<Option<Runtime>>,
+    runtime: std::sync::RwLock<Option<WeakRuntime>>,
 }
 
 impl TransportEventHandler for RuntimeTransportEventHandler {
@@ -239,46 +239,52 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         peer: TransportPeer,
         transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        match zread!(self.runtime).as_ref() {
-            Some(runtime) => {
-                let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> =
-                    zread!(runtime.transport_handlers)
-                        .iter()
-                        .filter_map(|handler| {
-                            handler.new_unicast(peer.clone(), transport.clone()).ok()
-                        })
-                        .collect();
-                Ok(Arc::new(RuntimeSession {
-                    runtime: runtime.clone(),
-                    endpoint: std::sync::RwLock::new(None),
-                    main_handler: runtime.router.new_transport_unicast(transport).unwrap(),
-                    slave_handlers,
-                }))
+        let runtime = if let Some(runtime) = zread!(self.runtime).as_ref() {
+            if let Some(runtime) = runtime.upgrade() {
+                runtime
+            } else {
+                bail!("Runtime is gone!")
             }
-            None => bail!("Runtime not yet ready!"),
-        }
+        } else {
+            bail!("Runtime not yet ready!")
+        };
+        let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> =
+            zread!(runtime.transport_handlers)
+                .iter()
+                .filter_map(|handler| handler.new_unicast(peer.clone(), transport.clone()).ok())
+                .collect();
+        Ok(Arc::new(RuntimeSession {
+            runtime: runtime.clone(),
+            endpoint: std::sync::RwLock::new(None),
+            main_handler: runtime.router.new_transport_unicast(transport).unwrap(),
+            slave_handlers,
+        }))
     }
 
     fn new_multicast(
         &self,
         transport: TransportMulticast,
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        match zread!(self.runtime).as_ref() {
-            Some(runtime) => {
-                let slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>> =
-                    zread!(runtime.transport_handlers)
-                        .iter()
-                        .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
-                        .collect();
-                runtime.router.new_transport_multicast(transport.clone())?;
-                Ok(Arc::new(RuntimeMuticastGroup {
-                    runtime: runtime.clone(),
-                    transport,
-                    slave_handlers,
-                }))
+        let runtime = if let Some(runtime) = zread!(self.runtime).as_ref() {
+            if let Some(runtime) = runtime.upgrade() {
+                runtime
+            } else {
+                bail!("Runtime is gone!")
             }
-            None => bail!("Runtime not yet ready!"),
-        }
+        } else {
+            bail!("Runtime not yet ready!")
+        };
+        let slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>> =
+            zread!(runtime.transport_handlers)
+                .iter()
+                .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
+                .collect();
+        runtime.router.new_transport_multicast(transport.clone())?;
+        Ok(Arc::new(RuntimeMuticastGroup {
+            runtime: runtime.clone(),
+            transport,
+            slave_handlers,
+        }))
     }
 }
 
