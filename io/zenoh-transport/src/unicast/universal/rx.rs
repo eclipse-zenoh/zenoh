@@ -197,7 +197,7 @@ impl TransportUnicastUniversal {
                 .decode()
                 .map_err(|_| zerror!("{}: decoding error", link))?;
 
-            // log::trace!("Received: {:?}", msg);
+            log::trace!("Received: {:?}", msg);
 
             #[cfg(feature = "stats")]
             {
