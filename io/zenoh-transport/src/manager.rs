@@ -105,12 +105,6 @@ pub struct TransportManagerConfig {
     pub protocols: Vec<String>,
 }
 
-impl Drop for TransportManagerConfig {
-    fn drop(&mut self) {
-        panic!("TransportManagerConfig DROPPED!");
-    }
-}
-
 pub struct TransportManagerState {
     pub unicast: TransportManagerStateUnicast,
     pub multicast: TransportManagerStateMulticast,
@@ -328,22 +322,33 @@ pub(crate) struct TransportExecutor {
     sender: async_std::channel::Sender<()>,
 }
 
+// log::warn!("TransportExecutor thread {} stopped", i);
+// exec.run(async move || {recv.recv().await})
 impl TransportExecutor {
     fn new(num_threads: usize) -> Self {
         let (sender, receiver) = async_std::channel::bounded(1);
         let executor = Arc::new(async_executor::Executor::new());
         for i in 0..num_threads {
+            log::warn!("Starting TransportExecutor thread {}", i);
             let exec = executor.clone();
             let recv = receiver.clone();
             std::thread::Builder::new()
                 .name(format!("zenoh-tx-{}", i))
-                .spawn(move || async_std::task::block_on(exec.run(recv.recv())))
+                .spawn(move || {
+                    async_std::task::block_on(exec.run(async move {
+                        let r = recv.recv().await;
+                        log::warn!("TransportExecutor thread {} stopped", i);
+                        r
+                    }));
+                    log::warn!("TransportExecutor thread {} finally stopped", i);
+                })
                 .unwrap();
         }
         Self { executor, sender }
     }
 
     async fn stop(&self) {
+        log::error!("Stopping TransportExecutor");
         let _ = self.sender.send(()).await;
     }
 

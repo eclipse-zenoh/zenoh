@@ -13,28 +13,23 @@
 //
 use clap::Parser;
 use log::trace;
-use zenoh::prelude::r#async::AsyncResolve;
-use zenoh::query::QueryTarget;
-use zenoh::selector::Selector;
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::config::Config;
+use zenoh::prelude::sync::SyncResolve;
+use zenoh::query::QueryTarget;
+use zenoh::selector::Selector;
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
-async fn main() {
+fn main() {
     // initiate logging
     env_logger::init();
 
     let (config, selector, value, target, timeout) = parse_args();
 
-    let session = zenoh::open(config).res().await.unwrap();
+    let session = zenoh::open(config).res().unwrap();
     drop(session);
     trace!("Done");
-
-    async_std::task::sleep(Duration::from_secs(10)).await;
-    trace!("Sleep done");
-
 
     // println!("Sending Query '{selector}'...");
     // let replies = match value {
