@@ -18,6 +18,7 @@ use crate::{
         priority::TransportChannelRx,
     },
     unicast::transport_unicast_inner::TransportUnicastTrait,
+    TransportPeerEventHandler,
 };
 use async_std::task;
 use std::sync::MutexGuard;
@@ -36,29 +37,17 @@ use zenoh_result::{bail, zerror, ZResult};
 impl TransportUnicastUniversal {
     fn trigger_callback(
         &self,
+        callback: &dyn TransportPeerEventHandler,
         #[allow(unused_mut)] // shared-memory feature requires mut
         mut msg: NetworkMessage,
     ) -> ZResult<()> {
-        let callback = zread!(self.callback).clone();
-        if let Some(callback) = callback.as_ref() {
-            #[cfg(feature = "shared-memory")]
-            {
-                if self.config.is_shm {
-                    crate::shm::map_zmsg_to_shmbuf(
-                        &mut msg,
-                        &self.manager.state.unicast.shm.reader,
-                    )?;
-                }
+        #[cfg(feature = "shared-memory")]
+        {
+            if self.config.is_shm {
+                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.state.unicast.shm.reader)?;
             }
-            callback.handle_message(msg)
-        } else {
-            log::debug!(
-                "Transport: {}. No callback available, dropping message: {}",
-                self.config.zid,
-                msg
-            );
-            Ok(())
         }
+        callback.handle_message(msg)
     }
 
     fn handle_close(&self, link: &Link, _reason: u8, session: bool) -> ZResult<()> {
@@ -109,8 +98,17 @@ impl TransportUnicastUniversal {
 
         self.verify_sn(sn, &mut guard)?;
 
-        for msg in payload.drain(..) {
-            self.trigger_callback(msg)?;
+        let callback = zread!(self.callback).clone();
+        if let Some(callback) = callback.as_ref() {
+            for msg in payload.drain(..) {
+                self.trigger_callback(callback.as_ref(), msg)?;
+            }
+        } else {
+            log::debug!(
+                "Transport: {}. No callback available, dropping messages: {:?}",
+                self.config.zid,
+                payload
+            );
         }
         Ok(())
     }
@@ -153,7 +151,17 @@ impl TransportUnicastUniversal {
                 .defrag
                 .defragment()
                 .ok_or_else(|| zerror!("Transport: {}. Defragmentation error.", self.config.zid))?;
-            return self.trigger_callback(msg);
+
+            let callback = zread!(self.callback).clone();
+            if let Some(callback) = callback.as_ref() {
+                return self.trigger_callback(callback.as_ref(), msg);
+            } else {
+                log::debug!(
+                    "Transport: {}. No callback available, dropping messages: {:?}",
+                    self.config.zid,
+                    msg
+                );
+            }
         }
 
         Ok(())
@@ -164,7 +172,7 @@ impl TransportUnicastUniversal {
         sn: TransportSn,
         guard: &mut MutexGuard<'_, TransportChannelRx>,
     ) -> ZResult<()> {
-        let precedes = guard.sn.precedes(sn)?;
+        let precedes = guard.sn.roll(sn)?;
         if !precedes {
             log::debug!(
                 "Transport: {}. Frame with invalid SN dropped: {}. Expected: {}.",
@@ -179,10 +187,6 @@ impl TransportUnicastUniversal {
             // Keep reading
             return Ok(());
         }
-
-        // Set will always return OK because we have already checked
-        // with precedes() that the sn has the right resolution
-        let _ = guard.sn.set(sn);
 
         Ok(())
     }
