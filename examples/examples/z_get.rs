@@ -28,26 +28,26 @@ async fn main() {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Sending Query '{selector}'...");
-    let replies = match value {
-        Some(value) => session.get(&selector).with_value(value),
-        None => session.get(&selector),
-    }
-    .target(target)
-    .timeout(timeout)
-    .res()
-    .await
-    .unwrap();
-    while let Ok(reply) = replies.recv_async().await {
-        match reply.sample {
-            Ok(sample) => println!(
-                ">> Received ('{}': '{}')",
-                sample.key_expr.as_str(),
-                sample.value,
-            ),
-            Err(err) => println!(">> Received (ERROR: '{}')", String::try_from(&err).unwrap()),
-        }
-    }
+    // println!("Sending Query '{selector}'...");
+    // let replies = match value {
+    //     Some(value) => session.get(&selector).with_value(value),
+    //     None => session.get(&selector),
+    // }
+    // .target(target)
+    // .timeout(timeout)
+    // .res()
+    // .await
+    // .unwrap();
+    // while let Ok(reply) = replies.recv_async().await {
+    //     match reply.sample {
+    //         Ok(sample) => println!(
+    //             ">> Received ('{}': '{}')",
+    //             sample.key_expr.as_str(),
+    //             sample.value,
+    //         ),
+    //         Err(err) => println!(">> Received (ERROR: '{}')", String::try_from(&err).unwrap()),
+    //     }
+    // }
 }
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug)]

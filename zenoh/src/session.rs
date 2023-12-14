@@ -349,8 +349,10 @@ impl Session {
                 alive: true,
             };
 
+            log::error!("Session::init()");
+            // LEAK 6
             runtime.new_handler(Arc::new(admin::Handler::new(session.clone())));
-
+            // LEAK 7
             let primitives = Some(router.new_primitives(Arc::new(session.clone())));
             zwrite!(state).primitives = primitives;
 

@@ -57,7 +57,7 @@ pub(crate) fn init(session: &Session) {
             true,
             Locality::SessionLocal,
             Arc::new({
-                let session = session.clone();
+                let session = session.clone(); // LEAK 8
                 move |q| super::admin::on_admin_query(&session, q)
             }),
         );

@@ -60,9 +60,38 @@ pub struct RuntimeState {
     pub(crate) stop_source: std::sync::RwLock<Option<StopSource>>,
 }
 
-#[derive(Clone)]
+static CURRENT_ID: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
 pub struct Runtime {
     state: Arc<RuntimeState>,
+    pub id: u8,
+    pub parent: u8,
+}
+
+impl Clone for Runtime {
+    fn clone(&self) -> Self {
+        let r = Runtime {
+            state: self.state.clone(),
+            parent: self.id,
+            id: CURRENT_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
+        };
+        log::warn!(
+            "Runtime::clone() - Arc count: {}, id: {}, parent: {}",
+            Arc::strong_count(&r.state),
+            r.id,
+            r.parent
+        );
+        // print stack trace
+        let capture = std::backtrace::Backtrace::capture();
+        println!(
+            "Runtime::clone() - Arc count: {}, id: {}, parent: {}",
+            Arc::strong_count(&r.state),
+            r.id,
+            r.parent
+        );
+        println!("{}", capture);
+        r
+    }
 }
 
 impl std::ops::Deref for Runtime {
@@ -74,17 +103,55 @@ impl std::ops::Deref for Runtime {
 }
 
 #[derive(Clone)]
-pub(crate) struct WeakRuntime(Weak<RuntimeState>);
+pub(crate) struct WeakRuntime {
+    state: Weak<RuntimeState>,
+    id: u8,
+    parent: u8,
+}
 
 impl WeakRuntime {
     pub fn upgrade(&self) -> Option<Runtime> {
-        self.0.upgrade().map(|state| Runtime { state })
+        self.state.upgrade().map(|state| Runtime {
+            state,
+            id: self.id,
+            parent: self.parent,
+        })
     }
 }
 
 impl From<Runtime> for WeakRuntime {
     fn from(value: Runtime) -> Self {
-        WeakRuntime(Arc::downgrade(&value.state))
+        WeakRuntime {
+            state: Arc::downgrade(&value.state),
+            id: value.id,
+            parent: value.parent,
+        }
+    }
+}
+
+impl Drop for Runtime {
+    fn drop(&mut self) {
+        let capture = std::backtrace::Backtrace::capture();
+        println!(
+            "Runtime::clone() - Arc count: {}, id: {}, parent: {}",
+            Arc::strong_count(&self.state),
+            self.id,
+            self.parent
+        );
+        println!("{}", capture);
+        // trace state's Arc counter
+        log::error!(
+            "Runtime::drop() - Arc count: {}, id: {}, parent: {}",
+            Arc::strong_count(&self.state),
+            self.id,
+            self.parent
+        );
+    }
+}
+
+impl Drop for RuntimeState {
+    fn drop(&mut self) {
+        log::error!("RuntimeState::drop()");
     }
 }
 
@@ -162,6 +229,8 @@ impl Runtime {
                 hlc,
                 stop_source: std::sync::RwLock::new(Some(StopSource::new())),
             }),
+            id: 255,
+            parent: 255,
         };
         *handler.runtime.write().unwrap() = Some(runtime.clone().into());
         get_mut_unchecked(&mut runtime.router.clone()).init_link_state(
