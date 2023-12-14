@@ -16,21 +16,17 @@ pub(super) mod cookie;
 pub mod ext;
 pub(crate) mod open;
 
-use super::{TransportPeer, TransportUnicast};
-use crate::{common::seq_num, unicast::link::TransportLinkUnicast, TransportManager};
+use crate::common::seq_num;
 use async_trait::async_trait;
 use cookie::*;
 use sha3::{
     digest::{ExtendableOutput, Update, XofReader},
     Shake128,
 };
-use std::time::Duration;
-use zenoh_link::Link;
 use zenoh_protocol::{
     core::{Field, Resolution, ZenohId},
     transport::TransportSn,
 };
-use zenoh_result::ZResult;
 
 /*************************************/
 /*             TRAITS                */
@@ -114,56 +110,4 @@ pub(super) fn compute_sn(zid1: ZenohId, zid2: ZenohId, resolution: Resolution) -
     let mut array = (0 as TransportSn).to_le_bytes();
     hasher.finalize_xof().read(&mut array);
     TransportSn::from_le_bytes(array) & seq_num::get_mask(resolution.get(Field::FrameSN))
-}
-
-pub(super) struct InputFinalize {
-    pub(super) transport: TransportUnicast,
-    pub(super) other_lease: Duration,
-}
-// Finalize the transport, notify the callback and start the link tasks
-pub(super) async fn finalize_transport(
-    link: &TransportLinkUnicast,
-    manager: &TransportManager,
-    input: self::InputFinalize,
-) -> ZResult<()> {
-    // Retrive the transport's transport
-    let transport = input.transport.get_inner()?;
-
-    // Start the TX loop
-    let keep_alive = manager.config.unicast.lease / manager.config.unicast.keep_alive as u32;
-    transport.start_tx(link, &manager.tx_executor, keep_alive)?;
-
-    // Assign a callback if the transport is new
-    // Keep the lock to avoid concurrent new_transport and closing/closed notifications
-    let a_guard = transport.get_alive().await;
-    if transport.get_callback().is_none() {
-        let peer = TransportPeer {
-            zid: transport.get_zid(),
-            whatami: transport.get_whatami(),
-            links: vec![Link::from(link)],
-            is_qos: transport.is_qos(),
-            #[cfg(feature = "shared-memory")]
-            is_shm: transport.is_shm(),
-        };
-        // Notify the transport handler that there is a new transport and get back a callback
-        // NOTE: the read loop of the link the open message was sent on remains blocked
-        //       until new_unicast() returns. The read_loop in the various links
-        //       waits for any eventual transport to associate to.
-        let callback = manager
-            .config
-            .handler
-            .new_unicast(peer, input.transport.clone())?;
-        // Set the callback on the transport
-        transport.set_callback(callback);
-    }
-    if let Some(callback) = transport.get_callback() {
-        // Notify the transport handler there is a new link on this transport
-        callback.new_link(Link::from(link));
-    }
-    drop(a_guard);
-
-    // Start the RX loop
-    transport.start_rx(link, input.other_lease)?;
-
-    Ok(())
 }

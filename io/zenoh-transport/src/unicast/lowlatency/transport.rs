@@ -11,31 +11,23 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-#[cfg(feature = "transport_unixpipe")]
-use super::link::send_with_link;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
 use crate::{
     unicast::{
-        link::TransportLinkUnicast, transport_unicast_inner::TransportUnicastTrait,
+        link::{LinkUnicastWithOpenAck, TransportLinkUnicast},
+        transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
         TransportConfigUnicast,
     },
-    TransportExecutor, TransportManager, TransportPeerEventHandler,
+    TransportManager, TransportPeerEventHandler,
 };
 use async_executor::Task;
-#[cfg(feature = "transport_unixpipe")]
-use async_std::sync::RwLockUpgradableReadGuard;
 use async_std::sync::{Mutex as AsyncMutex, MutexGuard as AsyncMutexGuard, RwLock};
 use async_std::task::JoinHandle;
 use async_trait::async_trait;
 use std::sync::{Arc, RwLock as SyncRwLock};
 use std::time::Duration;
-#[cfg(feature = "transport_unixpipe")]
-use zenoh_core::zasyncread_upgradable;
 use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zread, zwrite};
-#[cfg(feature = "transport_unixpipe")]
-use zenoh_link::unixpipe::UNIXPIPE_LOCATOR_PREFIX;
-#[cfg(feature = "transport_unixpipe")]
 use zenoh_link::Link;
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_protocol::transport::TransportBodyLowLatency;
@@ -45,8 +37,6 @@ use zenoh_protocol::{
     core::{WhatAmI, ZenohId},
     transport::close,
 };
-#[cfg(not(feature = "transport_unixpipe"))]
-use zenoh_result::bail;
 use zenoh_result::{zerror, ZResult};
 
 /*************************************/
@@ -59,7 +49,7 @@ pub(crate) struct TransportUnicastLowlatency {
     // Transport config
     pub(super) config: TransportConfigUnicast,
     // The link associated to the transport
-    pub(super) link: Arc<RwLock<TransportLinkUnicast>>,
+    pub(super) link: Arc<RwLock<Option<TransportLinkUnicast>>>,
     // The callback
     pub(super) callback: Arc<SyncRwLock<Option<Arc<dyn TransportPeerEventHandler>>>>,
     // Mutex for notification
@@ -68,7 +58,7 @@ pub(crate) struct TransportUnicastLowlatency {
     #[cfg(feature = "stats")]
     pub(super) stats: Arc<TransportStats>,
 
-    // The flags to stop TX/RX tasks
+    // The handles for TX/RX tasks
     pub(crate) handle_keepalive: Arc<RwLock<Option<Task<()>>>>,
     pub(crate) handle_rx: Arc<RwLock<Option<JoinHandle<()>>>>,
 }
@@ -77,23 +67,20 @@ impl TransportUnicastLowlatency {
     pub fn make(
         manager: TransportManager,
         config: TransportConfigUnicast,
-        link: TransportLinkUnicast,
-    ) -> ZResult<TransportUnicastLowlatency> {
+    ) -> Arc<dyn TransportUnicastTrait> {
         #[cfg(feature = "stats")]
         let stats = Arc::new(TransportStats::new(Some(manager.get_stats().clone())));
-        let t = TransportUnicastLowlatency {
+        Arc::new(TransportUnicastLowlatency {
             manager,
             config,
-            link: Arc::new(RwLock::new(link)),
+            link: Arc::new(RwLock::new(None)),
             callback: Arc::new(SyncRwLock::new(None)),
             alive: Arc::new(AsyncMutex::new(false)),
             #[cfg(feature = "stats")]
             stats,
             handle_keepalive: Arc::new(RwLock::new(None)),
             handle_rx: Arc::new(RwLock::new(None)),
-        };
-
-        Ok(t)
+        }) as Arc<dyn TransportUnicastTrait>
     }
 
     /*************************************/
@@ -142,14 +129,28 @@ impl TransportUnicastLowlatency {
         // Close and drop the link
         self.stop_keepalive().await;
         self.stop_rx().await;
-        let _ = zasyncwrite!(self.link)
-            .close(Some(close::reason::GENERIC))
-            .await;
+        if let Some(val) = zasyncwrite!(self.link).as_ref() {
+            let _ = val.close(Some(close::reason::GENERIC)).await;
+        }
 
         // Notify the callback that we have closed the transport
         if let Some(cb) = callback.as_ref() {
             cb.closed();
         }
+
+        Ok(())
+    }
+
+    async fn sync(&self, _initial_sn_rx: TransportSn) -> ZResult<()> {
+        // Mark the transport as alive
+        let mut a_guard = zasynclock!(self.alive);
+        if *a_guard {
+            let e = zerror!("Transport already synched with peer: {}", self.config.zid);
+            log::trace!("{}", e);
+            return Err(e.into());
+        }
+
+        *a_guard = true;
 
         Ok(())
     }
@@ -161,17 +162,19 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
     /*            ACCESSORS              */
     /*************************************/
     fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>) {
-        let mut guard = zwrite!(self.callback);
-        *guard = Some(callback);
+        *zwrite!(self.callback) = Some(callback);
     }
 
     async fn get_alive(&self) -> AsyncMutexGuard<'_, bool> {
         zasynclock!(self.alive)
     }
 
-    fn get_links(&self) -> Vec<TransportLinkUnicast> {
+    fn get_links(&self) -> Vec<Link> {
         let guard = async_std::task::block_on(async { zasyncread!(self.link) });
-        [guard.clone()].to_vec()
+        if let Some(val) = guard.as_ref() {
+            return [val.link()].to_vec();
+        }
+        vec![]
     }
 
     fn get_zid(&self) -> ZenohId {
@@ -211,111 +214,49 @@ impl TransportUnicastTrait for TransportUnicastLowlatency {
         self.internal_schedule(msg)
     }
 
-    fn start_tx(
-        &self,
-        _link: &TransportLinkUnicast,
-        executor: &TransportExecutor,
-        keep_alive: Duration,
-    ) -> ZResult<()> {
-        self.start_keepalive(executor, keep_alive);
-        Ok(())
-    }
-
-    fn start_rx(&self, _link: &TransportLinkUnicast, lease: Duration) -> ZResult<()> {
-        self.internal_start_rx(lease);
-        Ok(())
-    }
-
     /*************************************/
     /*               LINK                */
     /*************************************/
-    async fn add_link(&self, link: TransportLinkUnicast) -> ZResult<()> {
+    async fn add_link(
+        &self,
+        link: LinkUnicastWithOpenAck,
+        other_initial_sn: TransportSn,
+        other_lease: Duration,
+    ) -> AddLinkResult {
         log::trace!("Adding link: {}", link);
 
-        #[cfg(not(feature = "transport_unixpipe"))]
-        bail!(
-            "Can not add Link {} with peer {}: link already exists and only unique link is supported!",
-            link,
-            self.config.zid,
-        );
+        let _ = self.sync(other_initial_sn).await;
 
-        #[cfg(feature = "transport_unixpipe")]
-        {
-            let guard = zasyncread_upgradable!(self.link);
-
-            let existing_unixpipe =
-                guard.link.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
-            let new_unixpipe = link.link.get_dst().protocol().as_str() == UNIXPIPE_LOCATOR_PREFIX;
-            match (existing_unixpipe, new_unixpipe) {
-                (false, true) => {
-                    // LowLatency transport suports only a single link, but code here also handles upgrade from non-unixpipe link to unixpipe link!
-                    log::trace!(
-                        "Upgrading {} LowLatency transport's link from {} to {}",
-                        self.config.zid,
-                        guard,
-                        link
-                    );
-
-                    // Prepare and send close message on old link
-                    {
-                        let close = TransportMessageLowLatency {
-                            body: TransportBodyLowLatency::Close(Close {
-                                reason: 0,
-                                session: false,
-                            }),
-                        };
-                        let _ = send_with_link(
-                            &guard,
-                            close,
-                            #[cfg(feature = "stats")]
-                            &self.stats,
-                        )
-                        .await;
-                    };
-                    // Notify the callback
-                    if let Some(callback) = zread!(self.callback).as_ref() {
-                        callback.del_link(Link::from(guard.clone()));
-                    }
-
-                    // Set the new link
-                    let mut write_guard = RwLockUpgradableReadGuard::upgrade(guard).await;
-                    *write_guard = link;
-
-                    Ok(())
-                }
-                _ => {
-                    let e = zerror!(
-                    "Can not add Link {} with peer {}: link already exists and only unique link is supported!",
-                    link,
-                    self.config.zid,
-                );
-                    Err(e.into())
-                }
-            }
+        let mut guard = zasyncwrite!(self.link);
+        if guard.is_some() {
+            return Err((
+                zerror!("Lowlatency transport cannot support more than one link!").into(),
+                link.fail(),
+                close::reason::GENERIC,
+            ));
         }
-    }
+        let (link, ack) = link.unpack();
+        *guard = Some(link);
+        drop(guard);
 
-    /*************************************/
-    /*           INITIATION              */
-    /*************************************/
-    async fn sync(&self, _initial_sn_rx: TransportSn) -> ZResult<()> {
-        // Mark the transport as alive
-        let mut a_guard = zasynclock!(self.alive);
-        if *a_guard {
-            let e = zerror!("Transport already synched with peer: {}", self.config.zid);
-            log::trace!("{}", e);
-            return Err(e.into());
-        }
+        // create a callback to start the link
+        let start_link = Box::new(move || {
+            // start keepalive task
+            let keep_alive =
+                self.manager.config.unicast.lease / self.manager.config.unicast.keep_alive as u32;
+            self.start_keepalive(&self.manager.tx_executor, keep_alive);
 
-        *a_guard = true;
+            // start RX task
+            self.internal_start_rx(other_lease);
+        });
 
-        Ok(())
+        return Ok((start_link, ack));
     }
 
     /*************************************/
     /*           TERMINATION             */
     /*************************************/
-    async fn close_link(&self, link: &TransportLinkUnicast, reason: u8) -> ZResult<()> {
+    async fn close_link(&self, link: Link, reason: u8) -> ZResult<()> {
         log::trace!("Closing link {} with peer: {}", link, self.config.zid);
         self.finalize(reason).await
     }

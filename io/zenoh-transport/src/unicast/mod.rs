@@ -101,11 +101,7 @@ impl TransportUnicast {
         let tp = TransportPeer {
             zid: transport.get_zid(),
             whatami: transport.get_whatami(),
-            links: transport
-                .get_links()
-                .into_iter()
-                .map(|l| l.into())
-                .collect(),
+            links: transport.get_links(),
             is_qos: transport.is_qos(),
             #[cfg(feature = "shared-memory")]
             is_shm: transport.is_shm(),
@@ -116,29 +112,13 @@ impl TransportUnicast {
     #[inline(always)]
     pub fn get_links(&self) -> ZResult<Vec<Link>> {
         let transport = self.get_inner()?;
-        Ok(transport
-            .get_links()
-            .into_iter()
-            .map(|l| l.into())
-            .collect())
+        Ok(transport.get_links())
     }
 
     #[inline(always)]
     pub fn schedule(&self, message: NetworkMessage) -> ZResult<()> {
         let transport = self.get_inner()?;
         transport.schedule(message)
-    }
-
-    #[inline(always)]
-    pub async fn close_link(&self, link: &Link) -> ZResult<()> {
-        let transport = self.get_inner()?;
-        let link = transport
-            .get_links()
-            .into_iter()
-            .find(|l| l.link.get_src() == &link.src && l.link.get_dst() == &link.dst)
-            .ok_or_else(|| zerror!("Invalid link"))?;
-        transport.close_link(&link, close::reason::GENERIC).await?;
-        Ok(())
     }
 
     #[inline(always)]

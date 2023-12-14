@@ -308,11 +308,10 @@ impl SharedMemoryManager {
         {
             Ok(m) => m,
             Err(ShmemError::LinkExists) => {
-                log::trace!("SharedMemory already exists, opening it");
-                ShmemConf::new()
-                    .flink(path.clone())
-                    .open()
-                    .map_err(|e| ShmError(zerror!("Unable to open SharedMemoryManager: {}", e)))?
+                return Err(ShmError(zerror!(
+                    "Unable to open SharedMemoryManager: SharedMemory already exists"
+                ))
+                .into())
             }
             Err(e) => {
                 return Err(ShmError(zerror!("Unable to open SharedMemoryManager: {}", e)).into())

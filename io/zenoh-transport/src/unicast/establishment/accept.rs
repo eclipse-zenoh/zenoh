@@ -16,10 +16,11 @@ use crate::unicast::shared_memory_unicast::Challenge;
 use crate::{
     common::batch::BatchConfig,
     unicast::{
-        establishment::{
-            compute_sn, ext, finalize_transport, AcceptFsm, Cookie, InputFinalize, Zenoh080Cookie,
+        establishment::{compute_sn, ext, AcceptFsm, Cookie, Zenoh080Cookie},
+        link::{
+            LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastConfig,
+            TransportLinkUnicastDirection,
         },
-        link::{TransportLinkUnicast, TransportLinkUnicastConfig, TransportLinkUnicastDirection},
         TransportConfigUnicast,
     },
     TransportManager,
@@ -585,7 +586,7 @@ impl<'a, 'b: 'a> AcceptFsm for &'a mut AcceptLink<'b> {
     }
 }
 
-pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) -> ZResult<()> {
+pub(crate) async fn accept_link(link: LinkUnicast, manager: &TransportManager) -> ZResult<()> {
     let mtu = link.get_mtu();
     let is_streamed = link.is_streamed();
     let config = TransportLinkUnicastConfig {
@@ -597,7 +598,7 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
             is_compression: false,
         },
     };
-    let mut link = TransportLinkUnicast::new(link.clone(), config);
+    let mut link = TransportLinkUnicast::new(link, config);
     let mut fsm = AcceptLink {
         link: &mut link,
         prng: &manager.prng,
@@ -718,31 +719,17 @@ pub(crate) async fn accept_link(link: &LinkUnicast, manager: &TransportManager) 
             is_compression: state.link.ext_compression.is_compression(),
         },
     };
-    let a_link = TransportLinkUnicast::new(link.link.clone(), a_config);
+    let a_link = link.reconfigure(a_config);
     let s_link = format!("{:?}", a_link);
-    let transport = step!(manager.init_transport_unicast(config, a_link).await);
-
-    // Send the open_ack on the link
-    step!(link
-        .send(&oack_out.open_ack.into())
-        .await
-        .map_err(|e| (e, Some(close::reason::GENERIC))));
-
-    // Sync the RX sequence number
-    let _ = step!(transport
-        .get_inner()
-        .map_err(|e| (e, Some(close::reason::INVALID))))
-    .sync(osyn_out.other_initial_sn)
-    .await;
-
-    // Finalize the transport
-    let input = InputFinalize {
-        transport: transport.clone(),
-        other_lease: osyn_out.other_lease,
-    };
-    step!(finalize_transport(&link, manager, input)
-        .await
-        .map_err(|e| (e, Some(close::reason::INVALID))));
+    let a_link = LinkUnicastWithOpenAck::new(a_link, Some(oack_out.open_ack));
+    let _transport = manager
+        .init_transport_unicast(
+            config,
+            a_link,
+            osyn_out.other_initial_sn,
+            osyn_out.other_lease,
+        )
+        .await?;
 
     log::debug!(
         "New transport link accepted from {} to {}: {}.",

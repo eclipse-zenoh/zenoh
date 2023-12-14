@@ -14,6 +14,7 @@
 use super::transport::TransportUnicastLowlatency;
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
+use crate::unicast::link::TransportLinkUnicastRx;
 use crate::{unicast::link::TransportLinkUnicast, TransportExecutor};
 use async_std::task;
 use async_std::{prelude::FutureExt, sync::RwLock};
@@ -77,8 +78,9 @@ impl TransportUnicastLowlatency {
 
     pub(super) async fn send_async(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
         let guard = zasyncwrite!(self.link);
+        let link = guard.as_ref().ok_or_else(|| zerror!("No link"))?;
         send_with_link(
-            &guard,
+            link,
             msg,
             #[cfg(feature = "stats")]
             &self.stats,
@@ -132,7 +134,7 @@ impl TransportUnicastLowlatency {
         let c_transport = self.clone();
         let handle = task::spawn(async move {
             let guard = zasyncread!(c_transport.link);
-            let link = guard.clone();
+            let link = guard.as_ref().unwrap().rx();
             drop(guard);
             let rx_buffer_size = c_transport.manager.config.link_rx_buffer_size;
 
@@ -173,7 +175,7 @@ impl TransportUnicastLowlatency {
 /*              TASKS                */
 /*************************************/
 async fn keepalive_task(
-    link: Arc<RwLock<TransportLinkUnicast>>,
+    link: Arc<RwLock<Option<TransportLinkUnicast>>>,
     keep_alive: Duration,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
@@ -185,8 +187,9 @@ async fn keepalive_task(
         };
 
         let guard = zasyncwrite!(link);
+        let link = guard.as_ref().ok_or_else(|| zerror!("No link"))?;
         let _ = send_with_link(
-            &guard,
+            link,
             keepailve,
             #[cfg(feature = "stats")]
             &stats,
@@ -197,12 +200,12 @@ async fn keepalive_task(
 }
 
 async fn rx_task_stream(
-    link: TransportLinkUnicast,
+    link: TransportLinkUnicastRx,
     transport: TransportUnicastLowlatency,
     lease: Duration,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
-    async fn read(link: &TransportLinkUnicast, buffer: &mut [u8]) -> ZResult<usize> {
+    async fn read(link: &TransportLinkUnicastRx, buffer: &mut [u8]) -> ZResult<usize> {
         // 16 bits for reading the batch length
         let mut length = [0_u8, 0_u8, 0_u8, 0_u8];
         link.link.read_exact(&mut length).await?;
@@ -216,7 +219,7 @@ async fn rx_task_stream(
     }
 
     // The pool of buffers
-    let mtu = link.config.batch.mtu as usize;
+    let mtu = link.batch.mtu as usize;
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -242,13 +245,13 @@ async fn rx_task_stream(
 }
 
 async fn rx_task_dgram(
-    link: TransportLinkUnicast,
+    link: TransportLinkUnicastRx,
     transport: TransportUnicastLowlatency,
     lease: Duration,
     rx_buffer_size: usize,
 ) -> ZResult<()> {
     // The pool of buffers
-    let mtu = link.config.batch.max_buffer_size();
+    let mtu = link.batch.max_buffer_size();
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
@@ -277,7 +280,7 @@ async fn rx_task_dgram(
 }
 
 async fn rx_task(
-    link: TransportLinkUnicast,
+    link: TransportLinkUnicastRx,
     transport: TransportUnicastLowlatency,
     lease: Duration,
     rx_buffer_size: usize,
