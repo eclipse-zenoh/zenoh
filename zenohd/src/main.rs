@@ -11,8 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task;
-use clap::Parser;
+use clap::{ArgMatches, Command};
 use futures::future;
 use git_version::git_version;
 use std::collections::HashSet;
@@ -30,180 +29,124 @@ lazy_static::lazy_static!(
 
 const DEFAULT_LISTENER: &str = "tcp/[::]:7447";
 
-#[derive(Debug, Parser)]
-#[command(version=GIT_VERSION, long_version=LONG_VERSION.as_str(), about="The zenoh router")]
-struct Args {
-    /// The configuration file. Currently, this file must be a valid JSON5 or YAML file.
-    #[arg(short, long, value_name = "PATH")]
-    config: Option<String>,
-    /// Locators on which this router will listen for incoming sessions. Repeat this option to open several listeners.
-    #[arg(short, long, value_name = "ENDPOINT")]
-    listen: Vec<String>,
-    /// A peer locator this router will try to connect to.
-    /// Repeat this option to connect to several peers.
-    #[arg(short = 'e', long, value_name = "ENDPOINT")]
-    connect: Vec<String>,
-    /// The identifier (as an hexadecimal string, with odd number of chars - e.g.: A0B23...) that zenohd must use. If not set, a random unsigned 128bit integer will be used.
-    /// WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!
-    #[arg(short, long)]
-    id: Option<String>,
-    /// A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library named 'libzenoh_plugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>
-    /// Repeat this option to load several plugins. If loading failed, zenohd will exit.
-    #[arg(short = 'P', long)]
-    plugin: Vec<String>,
-    /// Directory where to search for plugins libraries to load.
-    /// Repeat this option to specify several search directories.
-    #[arg(long, value_name = "PATH")]
-    plugin_search_dir: Vec<String>,
-    /// By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. This option disables this feature.
-    #[arg(long)]
-    no_timestamp: bool,
-    /// By default zenohd replies to multicast scouting messages for being discovered by peers and clients. This option disables this feature.
-    #[arg(long)]
-    no_multicast_scouting: bool,
-    /// Configures HTTP interface for the REST API (enabled by default on port 8000). Accepted values:
-    ///   - a port number
-    ///   - a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)
-    ///   - `none` to disable the REST API
-    #[arg(long, value_name = "SOCKET")]
-    rest_http_port: Option<String>,
-    /// Allows arbitrary configuration changes as column-separated KEY:VALUE pairs, where:
-    ///   - KEY must be a valid config path.
-    ///   - VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
-    /// Examples:
-    /// --cfg='startup/subscribe:["demo/**"]'
-    /// --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'
-    #[arg(long)]
-    cfg: Vec<String>,
-    /// Configure the read and/or write permissions on the admin space. Default is read only.
-    #[arg(long, value_name = "[r|w|rw|none]")]
-    adminspace_permissions: Option<String>,
-}
+#[tokio::main]
+async fn main() {
+    let mut log_builder =
+        env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("z=info"));
+    #[cfg(feature = "stats")]
+    log_builder.format_timestamp_millis().init();
+    #[cfg(not(feature = "stats"))]
+    log_builder.init();
 
-fn load_plugin(
-    plugin_mgr: &mut PluginsManager,
-    name: &str,
-    paths: &Option<Vec<String>>,
-) -> Result<()> {
-    let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
-        log::warn!("Plugin `{}` was already declared", declared.name());
-        declared
-    } else if let Some(paths) = paths {
-        plugin_mgr.declare_dynamic_plugin_by_paths(name, paths)?
-    } else {
-        plugin_mgr.declare_dynamic_plugin_by_name(name, name)?
-    };
+    log::info!("zenohd {}", *LONG_VERSION);
 
-    if let Some(loaded) = declared.loaded_mut() {
-        log::warn!(
-            "Plugin `{}` was already loaded from {}",
-            loaded.name(),
-            loaded.path()
+    let app = Command::new("The zenoh router")
+        .version(GIT_VERSION)
+        .long_version(LONG_VERSION.as_str()).args(
+            &[
+clap::arg!(-c --config [FILE] "The configuration file. Currently, this file must be a valid JSON5 or YAML file."),
+clap::Arg::new("listen").short('l').long("listen").value_name("ENDPOINT").help(r"A locator on which this router will listen for incoming sessions.
+Repeat this option to open several listeners.").takes_value(true).multiple_occurrences(true),
+clap::Arg::new("connect").short('e').long("connect").value_name("ENDPOINT").help(r"A peer locator this router will try to connect to.
+Repeat this option to connect to several peers.").takes_value(true).multiple_occurrences(true),
+clap::Arg::new("id").short('i').long("id").value_name("HEX_STRING").help(r"The identifier (as an hexadecimal string, with odd number of chars - e.g.: A0B23...) that zenohd must use. If not set, a random unsigned 128bit integer will be used.
+WARNING: this identifier must be unique in the system and must be 16 bytes maximum (32 chars)!").multiple_values(false).multiple_occurrences(false),
+clap::Arg::new("plugin").short('P').long("plugin").value_name("PLUGIN").takes_value(true).multiple_occurrences(true).help(r#"A plugin that MUST be loaded. You can give just the name of the plugin, zenohd will search for a library named 'libzenoh_plugin_<name>.so' (exact name depending the OS). Or you can give such a string: "<plugin_name>:<library_path>".
+Repeat this option to load several plugins. If loading failed, zenohd will exit."#),
+clap::Arg::new("plugin-search-dir").long("plugin-search-dir").takes_value(true).multiple_occurrences(true).value_name("DIRECTORY").help(r"A directory where to search for plugins libraries to load.
+Repeat this option to specify several search directories."),
+clap::arg!(--"no-timestamp" r"By default zenohd adds a HLC-generated Timestamp to each routed Data if there isn't already one. This option disables this feature."),
+clap::arg!(--"no-multicast-scouting" r"By default zenohd replies to multicast scouting messages for being discovered by peers and clients. This option disables this feature."),
+clap::arg!(--"rest-http-port" [SOCKET] r"Configures HTTP interface for the REST API (enabled by default). Accepted values:
+- a port number
+- a string with format `<local_ip>:<port_number>` (to bind the HTTP server to a specific interface)
+- `none` to disable the REST API
+").default_value("8000").multiple_values(false).multiple_occurrences(false),
+clap::Arg::new("cfg").long("cfg").takes_value(true).multiple_occurrences(true).value_name("KEY:VALUE").help(
+r#"Allows arbitrary configuration changes as column-separated KEY:VALUE pairs, where:
+- KEY must be a valid config path.
+- VALUE must be a valid JSON5 string that can be deserialized to the expected type for the KEY field.
+Examples:
+--cfg='startup/subscribe:["demo/**"]'
+--cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'"#),
+clap::Arg::new("adminspace-permissions").long("adminspace-permissions").value_name("[r|w|rw|none]").help(r"Configure the read and/or write permissions on the admin space. Default is read only."),
+            ]
         );
-    } else {
-        let _ = declared.load()?;
-    };
-    Ok(())
-}
+    let args = app.get_matches();
+    let config = config_from_args(&args);
+    log::info!("Initial conf: {}", &config);
 
-fn main() {
-    task::block_on(async {
-        let mut log_builder =
-            env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("z=info"));
-        #[cfg(feature = "stats")]
-        log_builder.format_timestamp_millis().init();
-        #[cfg(not(feature = "stats"))]
-        log_builder.init();
-
-        log::info!("zenohd {}", *LONG_VERSION);
-
-        let args = Args::parse();
-        let config = config_from_args(&args);
-        log::info!("Initial conf: {}", &config);
-
-        let mut plugin_mgr = PluginsManager::dynamic(config.libloader(), "zenoh_plugin_");
-        // Static plugins are to be added here, with `.add_static::<PluginType>()`
-        let mut required_plugins = HashSet::new();
-        for plugin_load in config.plugins().load_requests() {
-            let PluginLoad {
-                name,
-                paths,
-                required,
-            } = plugin_load;
-            log::info!(
-                "Loading {req} plugin \"{name}\"",
-                req = if required { "required" } else { "" }
-            );
-            if let Err(e) = load_plugin(&mut plugin_mgr, &name, &paths) {
-                if required {
-                    panic!("Plugin load failure: {}", e)
-                } else {
-                    log::error!("Plugin load failure: {}", e)
-                }
-            }
+    let mut plugins = PluginsManager::dynamic(config.libloader());
+    // Static plugins are to be added here, with `.add_static::<PluginType>()`
+    let mut required_plugins = HashSet::new();
+    for plugin_load in config.plugins().load_requests() {
+        let PluginLoad {
+            name,
+            paths,
+            required,
+        } = plugin_load;
+        log::info!(
+            "Loading {req} plugin \"{name}\"",
+            req = if required { "required" } else { "" }
+        );
+        if let Err(e) = match paths {
+            None => plugins.load_plugin_by_name(name.clone()),
+            Some(paths) => plugins.load_plugin_by_paths(name.clone(), &paths),
+        } {
             if required {
-                required_plugins.insert(name);
+                panic!("Plugin load failure: {}", e)
+            } else {
+                log::error!("Plugin load failure: {}", e)
             }
         }
+        if required {
+            required_plugins.insert(name);
+        }
+    }
 
-        let runtime = match Runtime::new(config).await {
-            Ok(runtime) => runtime,
+    let runtime = match Runtime::new(config).await {
+        Ok(runtime) => runtime,
+        Err(e) => {
+            println!("{e}. Exiting...");
+            std::process::exit(-1);
+        }
+    };
+
+    for (name, path, start_result) in plugins.start_all(&runtime) {
+        let required = required_plugins.contains(name);
+        log::info!(
+            "Starting {req} plugin \"{name}\"",
+            req = if required { "required" } else { "" }
+        );
+        match start_result {
+            Ok(Some(_)) => log::info!("Successfully started plugin {} from {:?}", name, path),
+            Ok(None) => log::warn!("Plugin {} from {:?} wasn't loaded, as an other plugin by the same name is already running", name, path),
             Err(e) => {
-                println!("{e}. Exiting...");
-                std::process::exit(-1);
-            }
-        };
-
-        for plugin in plugin_mgr.loaded_plugins_iter_mut() {
-            let required = required_plugins.contains(plugin.name());
-            log::info!(
-                "Starting {req} plugin \"{name}\"",
-                req = if required { "required" } else { "" },
-                name = plugin.name()
-            );
-            match plugin.start(&runtime) {
-                Ok(_) => {
-                    log::info!(
-                        "Successfully started plugin {} from {:?}",
-                        plugin.name(),
-                        plugin.path()
-                    );
-                }
-                Err(e) => {
-                    let report = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| e.to_string())) {
-                        Ok(s) => s,
-                        Err(_) => panic!("Formatting the error from plugin {} ({:?}) failed, this is likely due to ABI unstability.\r\nMake sure your plugin was built with the same version of cargo as zenohd", plugin.name(), plugin.path()),
-                    };
-                    if required {
-                        panic!(
-                            "Plugin \"{}\" failed to start: {}",
-                            plugin.name(),
-                            if report.is_empty() {
-                                "no details provided"
-                            } else {
-                                report.as_str()
-                            }
-                        );
-                    } else {
-                        log::error!(
-                            "Required plugin \"{}\" failed to start: {}",
-                            plugin.name(),
-                            if report.is_empty() {
-                                "no details provided"
-                            } else {
-                                report.as_str()
-                            }
-                        );
-                    }
+                let report = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| e.to_string())) {
+                    Ok(s) => s,
+                    Err(_) => panic!("Formatting the error from plugin {} ({:?}) failed, this is likely due to ABI unstability.\r\nMake sure your plugin was built with the same version of cargo as zenohd", name, path),
+                };
+                if required {
+                    panic!("Plugin \"{name}\" failed to start: {}", if report.is_empty() {"no details provided"} else {report.as_str()});
+                }else {
+                    log::error!("Required plugin \"{name}\" failed to start: {}", if report.is_empty() {"no details provided"} else {report.as_str()});
                 }
             }
         }
-        log::info!("Finished loading plugins");
+    }
+    log::info!("Finished loading plugins");
 
-        AdminSpace::start(&runtime, plugin_mgr, LONG_VERSION.clone()).await;
+    {
+        let mut config_guard = runtime.config.lock();
+        for (name, (_, plugin)) in plugins.running_plugins() {
+            let hook = plugin.config_checker();
+            config_guard.add_plugin_validator(name, hook)
+        }
+    }
 
-        future::pending::<()>().await;
-    });
+    AdminSpace::start(&runtime, plugins, LONG_VERSION.clone()).await;
+
+    future::pending::<()>().await;
 }
 
 fn config_from_args(args: &Args) -> Config {
