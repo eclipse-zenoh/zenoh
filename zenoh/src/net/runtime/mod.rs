@@ -31,7 +31,7 @@ use async_std::task::JoinHandle;
 use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 use std::time::Duration;
 use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
@@ -66,7 +66,7 @@ static CURRENT_ID: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::ne
 pub struct Runtime {
     pub state: Arc<RuntimeState>,
     pub id: u8,
-    pub parent: u8
+    pub parent: u8,
 }
 
 impl Clone for Runtime {
@@ -77,7 +77,7 @@ impl Clone for Runtime {
         let r = Runtime {
             state: self.state.clone(),
             parent: self.id,
-            id: CURRENT_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+            id: CURRENT_ID.fetch_add(1, std::sync::atomic::Ordering::SeqCst),
         };
         log::warn!(
             "Runtime::clone() - Arc count: {}, id: {}, parent: {}",
@@ -85,7 +85,12 @@ impl Clone for Runtime {
             r.id,
             r.parent
         );
-        println!("Runtime::clone() - Arc count: {}, id: {}, parent: {}", Arc::strong_count(&r.state), r.id, r.parent);
+        println!(
+            "Runtime::clone() - Arc count: {}, id: {}, parent: {}",
+            Arc::strong_count(&r.state),
+            r.id,
+            r.parent
+        );
         println!("{:?}", stack);
         r
     }
@@ -96,6 +101,21 @@ impl std::ops::Deref for Runtime {
 
     fn deref(&self) -> &RuntimeState {
         self.state.deref()
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct WeakRuntime(Weak<RuntimeState>);
+
+impl WeakRuntime {
+    pub fn upgrade(&self) -> Option<Runtime> {
+        self.0.upgrade().map(|state| Runtime { state })
+    }
+}
+
+impl From<Runtime> for WeakRuntime {
+    fn from(value: Runtime) -> Self {
+        WeakRuntime(Arc::downgrade(&value.state))
     }
 }
 
@@ -197,7 +217,7 @@ impl Runtime {
                 stop_source: std::sync::RwLock::new(Some(StopSource::new())),
             }),
             id: 255,
-            parent: 255
+            parent: 255,
         };
         // LEAK 0
         *handler.runtime.write().unwrap() = Some(runtime.clone());
