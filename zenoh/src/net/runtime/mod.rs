@@ -105,17 +105,29 @@ impl std::ops::Deref for Runtime {
 }
 
 #[derive(Clone)]
-pub(crate) struct WeakRuntime(Weak<RuntimeState>);
+pub(crate) struct WeakRuntime {
+    state: Weak<RuntimeState>,
+    id: u8,
+    parent: u8,
+}
 
 impl WeakRuntime {
     pub fn upgrade(&self) -> Option<Runtime> {
-        self.0.upgrade().map(|state| Runtime { state })
+        self.state.upgrade().map(|state| Runtime {
+            state,
+            id: self.id,
+            parent: self.parent,
+        })
     }
 }
 
 impl From<Runtime> for WeakRuntime {
     fn from(value: Runtime) -> Self {
-        WeakRuntime(Arc::downgrade(&value.state))
+        WeakRuntime {
+            state: Arc::downgrade(&value.state),
+            id: value.id,
+            parent: value.parent,
+        }
     }
 }
 
