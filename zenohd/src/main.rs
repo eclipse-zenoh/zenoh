@@ -75,8 +75,8 @@ struct Args {
     #[arg(long)]
     cfg: Vec<String>,
     /// Configure the read and/or write permissions on the admin space. Default is read only.
-    #[arg(long, default_value = "r", value_name = "[r|w|rw|none]")]
-    adminspace_permissions: String,
+    #[arg(long, value_name = "[r|w|rw|none]")]
+    adminspace_permissions: Option<String>,
 }
 
 fn main() {
@@ -271,40 +271,42 @@ fn config_from_args(args: &Args) -> Config {
         }
         (false, false) => {}
     };
-    match args.adminspace_permissions.as_str() {
-        "r" => config
-            .adminspace
-            .set_permissions(PermissionsConf {
-                read: true,
-                write: false,
-            })
-            .unwrap(),
-        "w" => config
-            .adminspace
-            .set_permissions(PermissionsConf {
-                read: false,
-                write: true,
-            })
-            .unwrap(),
-        "rw" => config
-            .adminspace
-            .set_permissions(PermissionsConf {
-                read: true,
-                write: true,
-            })
-            .unwrap(),
-        "none" => config
-            .adminspace
-            .set_permissions(PermissionsConf {
-                read: false,
-                write: false,
-            })
-            .unwrap(),
-        s => panic!(
-            r#"Invalid option: --adminspace-permissions={} - Accepted values: "r", "w", "rw" or "none""#,
-            s
-        ),
-    };
+    if let Some(adminspace_permissions) = &args.adminspace_permissions {
+        match adminspace_permissions.as_str() {
+            "r" => config
+                .adminspace
+                .set_permissions(PermissionsConf {
+                    read: true,
+                    write: false,
+                })
+                .unwrap(),
+            "w" => config
+                .adminspace
+                .set_permissions(PermissionsConf {
+                    read: false,
+                    write: true,
+                })
+                .unwrap(),
+            "rw" => config
+                .adminspace
+                .set_permissions(PermissionsConf {
+                    read: true,
+                    write: true,
+                })
+                .unwrap(),
+            "none" => config
+                .adminspace
+                .set_permissions(PermissionsConf {
+                    read: false,
+                    write: false,
+                })
+                .unwrap(),
+            s => panic!(
+                r#"Invalid option: --adminspace-permissions={} - Accepted values: "r", "w", "rw" or "none""#,
+                s
+            ),
+        };
+    }
     for json in &args.cfg {
         if let Some((key, value)) = json.split_once(':') {
             match json5::Deserializer::from_str(value) {
