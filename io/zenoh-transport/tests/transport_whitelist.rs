@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::{prelude::FutureExt, task};
 use std::{any::Any, convert::TryFrom, iter::FromIterator, sync::Arc, time::Duration};
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
@@ -106,21 +105,19 @@ async fn run(endpoints: &[EndPoint]) {
         println!("Listener endpoint: {e}");
         let _ = ztimeout!(router_manager.add_listener_unicast(e.clone())).unwrap();
 
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
 
         println!("Open endpoint: {e}");
         let _ = ztimeout!(router_manager.open_transport_unicast(e.clone())).unwrap();
 
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
     }
 }
 
 #[cfg(feature = "transport_tcp")]
-#[test]
-fn transport_whitelist_tcp() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn transport_whitelist_tcp() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-    });
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
@@ -128,16 +125,14 @@ fn transport_whitelist_tcp() {
         format!("tcp/[::1]:{}", 17001).parse().unwrap(),
     ];
     // Run
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn transport_whitelist_unixpipe() {
+async fn transport_whitelist_unixpipe() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-    });
 
     // Define the locators
     let endpoints: Vec<EndPoint> = vec![
@@ -145,5 +140,5 @@ fn transport_whitelist_unixpipe() {
         "unixpipe/transport_whitelist_unixpipe2".parse().unwrap(),
     ];
     // Run
-    task::block_on(run(&endpoints));
+    run(&endpoints).await;
 }

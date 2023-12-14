@@ -13,8 +13,6 @@
 //
 use super::transport::TransportUnicastLowlatency;
 use zenoh_protocol::{network::NetworkMessage, transport::TransportMessageLowLatency};
-#[cfg(feature = "shared-memory")]
-use zenoh_result::bail;
 use zenoh_result::{bail, zerror, ZResult};
 
 impl TransportUnicastLowlatency {

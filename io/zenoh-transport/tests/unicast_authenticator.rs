@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
 use std::{any::Any, sync::Arc, time::Duration};
 use zenoh_core::{ztimeout, zasyncwrite};
 use zenoh_link::Link;
@@ -28,7 +27,6 @@ use zenoh_transport::{
     unicast::TransportUnicast, DummyTransportPeerEventHandler, TransportEventHandler,
     TransportPeer, TransportPeerEventHandler,
 };
-use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_millis(100);
@@ -637,122 +635,93 @@ async fn run_with_lowlatency_transport(endpoint: &EndPoint) {
 }
 
 #[cfg(feature = "transport_tcp")]
-#[test]
-fn authenticator_tcp() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_tcp() {
     let _ = env_logger::try_init();
-    tokio::runtime::Handle::current().block_on(async {
-    });
-
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8000).parse().unwrap();
-    tokio::runtime::Handle::current().block_on(run_with_universal_transport(&endpoint));
+    run_with_universal_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_tcp")]
-#[test]
-fn authenticator_tcp_with_lowlatency_transport() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_tcp_with_lowlatency_transport() {
     let _ = env_logger::try_init();
-    tokio::runtime::Handle::current().block_on(async {
-    });
-
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 8100).parse().unwrap();
-    tokio::runtime::Handle::current().block_on(run_with_lowlatency_transport(&endpoint));
+    run_with_lowlatency_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_udp")]
-#[test]
-fn authenticator_udp() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_udp() {
     let _ = env_logger::try_init();
-    tokio::runtime::Handle::current().block_on(async {
-    });
-
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8010).parse().unwrap();
-    tokio::runtime::Handle::current().block_on(run_with_universal_transport(&endpoint));
+    run_with_universal_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_udp")]
-#[test]
-fn authenticator_udp_with_lowlatency_transport() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_udp_with_lowlatency_transport() {
     let _ = env_logger::try_init();
-    tokio::runtime::Handle::current().block_on(async {
-    });
-
     let endpoint: EndPoint = format!("udp/127.0.0.1:{}", 8110).parse().unwrap();
-    tokio::runtime::Handle::current().block_on(run_with_lowlatency_transport(&endpoint));
+    run_with_lowlatency_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn authenticator_unixpipe() {
+async fn authenticator_unixpipe() {
     let _ = env_logger::try_init();
-    tokio::runtime::Handle::current().block_on(async {
-    });
-
     let endpoint: EndPoint = "unixpipe/authenticator_unixpipe_test".parse().unwrap();
-    tokio::runtime::Handle::current().block_on(run_with_universal_transport(&endpoint));
+    run_with_universal_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn authenticator_unixpipe_with_lowlatency_transport() {
+async fn authenticator_unixpipe_with_lowlatency_transport() {
     let _ = env_logger::try_init();
-    tokio::runtime::Handle::current().block_on(async {
-    });
-
     let endpoint: EndPoint = "unixpipe/authenticator_unixpipe_with_lowlatency_transport"
         .parse()
         .unwrap();
-    tokio::runtime::Handle::current().block_on(run_with_lowlatency_transport(&endpoint));
+    run_with_lowlatency_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_ws")]
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn authenticator_ws() {
+async fn authenticator_ws() {
     let _ = env_logger::try_init();
-    tokio::runtime::Handle::current().block_on(async {
-    });
-
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8020).parse().unwrap();
-    tokio::runtime::Handle::current().block_on(run_with_universal_transport(&endpoint));
+    run_with_universal_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_ws")]
-#[test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 #[ignore]
-fn authenticator_ws_with_lowlatency_transport() {
+async fn authenticator_ws_with_lowlatency_transport() {
     let _ = env_logger::try_init();
-    tokio::runtime::Handle::current().block_on(async {
-    });
-
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 8120).parse().unwrap();
-    tokio::runtime::Handle::current().block_on(run_with_lowlatency_transport(&endpoint));
+    run_with_lowlatency_transport(&endpoint).await;
 }
 
 #[cfg(all(feature = "transport_unixsock-stream", target_family = "unix"))]
-#[test]
-fn authenticator_unix() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_unix() {
     let _ = env_logger::try_init();
-    tokio::runtime::Handle::current().block_on(async {
-    });
-
     let f1 = "zenoh-test-unix-socket-10.sock";
     let _ = std::fs::remove_file(f1);
     let endpoint: EndPoint = format!("unixsock-stream/{f1}").parse().unwrap();
-    tokio::runtime::Handle::current().block_on(run_with_universal_transport(&endpoint));
+    run_with_universal_transport(&endpoint).await;
     let _ = std::fs::remove_file(f1);
     let _ = std::fs::remove_file(format!("{f1}.lock"));
 }
 
 #[cfg(feature = "transport_tls")]
-#[test]
-fn authenticator_tls() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_tls() {
     use zenoh_link::tls::config::*;
 
     let _ = env_logger::try_init();
-    tokio::runtime::Handle::current().block_on(async {
-    });
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -844,17 +813,15 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         )
         .unwrap();
 
-    tokio::runtime::Handle::current().block_on(run_with_universal_transport(&endpoint));
+    run_with_universal_transport(&endpoint).await;
 }
 
 #[cfg(feature = "transport_quic")]
-#[test]
-fn authenticator_quic() {
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn authenticator_quic() {
     use zenoh_link::quic::config::*;
 
     let _ = env_logger::try_init();
-    tokio::runtime::Handle::current().block_on(async {
-    });
 
     // NOTE: this an auto-generated pair of certificate and key.
     //       The target domain is localhost, so it has no real
@@ -946,5 +913,5 @@ R+IdLiXcyIkg0m9N8I17p0ljCSkbrgGMD3bbePRTfg==
         )
         .unwrap();
 
-    tokio::runtime::Handle::current().block_on(run_with_universal_transport(&endpoint));
+    run_with_universal_transport(&endpoint).await;
 }

@@ -11,8 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
-use async_std::task;
 use std::any::Any;
 use std::convert::TryFrom;
 use std::io::Write;
@@ -238,7 +236,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     let c_client02_manager = client02_manager.clone();
     let c_endpoint = endpoint.clone();
     let c_router_id = router_id;
-    let c2_handle = task::spawn(async move {
+    let c2_handle = tokio::task::spawn(async move {
         loop {
             print!("+");
             std::io::stdout().flush().unwrap();
@@ -249,21 +247,21 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
             assert_eq!(c_client02_manager.get_transports_unicast().await.len(), 1);
             assert_eq!(c_ses2.get_zid().unwrap(), c_router_id);
 
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
 
             print!("-");
             std::io::stdout().flush().unwrap();
 
             ztimeout!(c_ses2.close()).unwrap();
 
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
     let c_client03_manager = client03_manager.clone();
     let c_endpoint = endpoint.clone();
     let c_router_id = router_id;
-    let c3_handle = task::spawn(async move {
+    let c3_handle = tokio::task::spawn(async move {
         loop {
             print!("*");
             std::io::stdout().flush().unwrap();
@@ -274,77 +272,78 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
             assert_eq!(c_client03_manager.get_transports_unicast().await.len(), 1);
             assert_eq!(c_ses3.get_zid().unwrap(), c_router_id);
 
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
 
             print!("");
             std::io::stdout().flush().unwrap();
 
             ztimeout!(c_ses3.close()).unwrap();
 
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
     /* [4] */
     println!("Transport Intermittent [4a1]");
     let c_router_manager = router_manager.clone();
-    ztimeout!(task::spawn_blocking(move || task::block_on(async {
-        // Create the message to send
-        let message: NetworkMessage = Push {
-            wire_expr: "test".into(),
-            ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
-            ext_tstamp: None,
-            ext_nodeid: NodeIdType::default(),
-            payload: Put {
-                payload: vec![0u8; MSG_SIZE].into(),
-                timestamp: None,
-                encoding: Encoding::default(),
-                ext_sinfo: None,
-                #[cfg(feature = "shared-memory")]
-                ext_shm: None,
-                ext_attachment: None,
-                ext_unknown: vec![],
+    let _ = ztimeout!(tokio::task::spawn_blocking(move || {
+        tokio::runtime::Handle::current().block_on(async {
+            // Create the message to send
+            let message: NetworkMessage = Push {
+                wire_expr: "test".into(),
+                ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+                ext_tstamp: None,
+                ext_nodeid: NodeIdType::default(),
+                payload: Put {
+                    payload: vec![0u8; MSG_SIZE].into(),
+                    timestamp: None,
+                    encoding: Encoding::default(),
+                    ext_sinfo: None,
+                    #[cfg(feature = "shared-memory")]
+                    ext_shm: None,
+                    ext_unknown: vec![],
+                }
+                .into(),
             }
-            .into(),
-        }
-        .into();
+            .into();
 
-        let mut ticks: Vec<usize> = (0..=MSG_COUNT).step_by(MSG_COUNT / 10).collect();
-        ticks.remove(0);
+            let mut ticks: Vec<usize> = (0..=MSG_COUNT).step_by(MSG_COUNT / 10).collect();
+            ticks.remove(0);
 
-        let mut count = 0;
-        while count < MSG_COUNT {
-            if count == ticks[0] {
-                println!("\nScheduled {count}");
-                ticks.remove(0);
-            }
-            let transports = c_router_manager.get_transports_unicast().await;
-            if !transports.is_empty() {
-                for s in transports.iter() {
-                    if let Ok(ll) = s.get_links() {
-                        if ll.is_empty() {
-                            print!("#");
-                        } else {
-                            assert_eq!(ll.len(), 1);
+            let mut count = 0;
+            while count < MSG_COUNT {
+                if count == ticks[0] {
+                    println!("\nScheduled {count}");
+                    ticks.remove(0);
+                }
+                let transports = c_router_manager.get_transports_unicast().await;
+                if !transports.is_empty() {
+                    for s in transports.iter() {
+                        if let Ok(ll) = s.get_links() {
+                            if ll.is_empty() {
+                                print!("#");
+                            } else {
+                                assert_eq!(ll.len(), 1);
+                            }
+                        }
+                        let res = s.schedule(message.clone());
+                        if res.is_err() {
+                            print!("X");
+                            std::io::stdout().flush().unwrap();
                         }
                     }
-                    let res = s.schedule(message.clone());
-                    if res.is_err() {
-                        print!("X");
-                        std::io::stdout().flush().unwrap();
-                    }
+                    count += 1;
+                } else {
+                    print!("O");
+                    tokio::time::sleep(USLEEP).await;
                 }
-                count += 1;
-            } else {
-                print!("O");
-                task::sleep(USLEEP).await;
             }
-        }
-    })));
+        })
+    }));
 
     // Stop the tasks
-    ztimeout!(c2_handle.cancel());
-    ztimeout!(c3_handle.cancel());
+    c2_handle.abort();
+    c3_handle.abort();
 
     // Check that client01 received all the messages
     println!("Transport Intermittent [4b1]");
@@ -355,7 +354,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
                 break;
             }
             println!("Transport Intermittent [4b2]: Received {c}/{MSG_COUNT}");
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
@@ -383,7 +382,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
             if transports.is_empty() {
                 break;
             }
-            task::sleep(SLEEP).await;
+            tokio::time::sleep(SLEEP).await;
         }
     });
 
@@ -393,7 +392,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     ztimeout!(router_manager.del_listener(endpoint)).unwrap();
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    tokio::time::sleep(SLEEP).await;
 
     ztimeout!(router_manager.close());
     ztimeout!(client01_manager.close());
@@ -401,7 +400,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     ztimeout!(client03_manager.close());
 
     // Wait a little bit
-    task::sleep(SLEEP).await;
+    tokio::time::sleep(SLEEP).await;
 }
 
 async fn universal_transport_intermittent(endpoint: &EndPoint) {
@@ -413,73 +412,55 @@ async fn lowlatency_transport_intermittent(endpoint: &EndPoint) {
 }
 
 #[cfg(feature = "transport_tcp")]
-#[test]
-fn transport_tcp_intermittent() {
+#[tokio::test]
+async fn transport_tcp_intermittent() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-    });
-
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12000).parse().unwrap();
-    task::block_on(universal_transport_intermittent(&endpoint));
+    universal_transport_intermittent(&endpoint).await;
 }
 
 #[cfg(feature = "transport_tcp")]
-#[test]
-fn transport_tcp_intermittent_for_lowlatency_transport() {
+#[tokio::test]
+async fn transport_tcp_intermittent_for_lowlatency_transport() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-    });
-
     let endpoint: EndPoint = format!("tcp/127.0.0.1:{}", 12100).parse().unwrap();
-    task::block_on(lowlatency_transport_intermittent(&endpoint));
+    lowlatency_transport_intermittent(&endpoint).await;
 }
 
 #[cfg(feature = "transport_ws")]
-#[test]
+#[tokio::test]
 #[ignore]
-fn transport_ws_intermittent() {
+async fn transport_ws_intermittent() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-    });
-
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12010).parse().unwrap();
-    task::block_on(universal_transport_intermittent(&endpoint));
+    universal_transport_intermittent(&endpoint).await;
 }
 
 #[cfg(feature = "transport_ws")]
-#[test]
+#[tokio::test]
 #[ignore]
-fn transport_ws_intermittent_for_lowlatency_transport() {
+async fn transport_ws_intermittent_for_lowlatency_transport() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-    });
-
     let endpoint: EndPoint = format!("ws/127.0.0.1:{}", 12110).parse().unwrap();
-    task::block_on(lowlatency_transport_intermittent(&endpoint));
+    lowlatency_transport_intermittent(&endpoint).await;
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[test]
+#[tokio::test]
 #[ignore]
-fn transport_unixpipe_intermittent() {
+async fn transport_unixpipe_intermittent() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-    });
-
     let endpoint: EndPoint = "unixpipe/transport_unixpipe_intermittent".parse().unwrap();
-    task::block_on(universal_transport_intermittent(&endpoint));
+    universal_transport_intermittent(&endpoint).await;
 }
 
 #[cfg(feature = "transport_unixpipe")]
-#[test]
+#[tokio::test]
 #[ignore]
-fn transport_unixpipe_intermittent_for_lowlatency_transport() {
+async fn transport_unixpipe_intermittent_for_lowlatency_transport() {
     let _ = env_logger::try_init();
-    task::block_on(async {
-    });
-
     let endpoint: EndPoint = "unixpipe/transport_unixpipe_intermittent_for_lowlatency_transport"
         .parse()
         .unwrap();
-    task::block_on(lowlatency_transport_intermittent(&endpoint));
+    lowlatency_transport_intermittent(&endpoint).await;
 }
