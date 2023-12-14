@@ -14,17 +14,31 @@
 
 use crate::{
     unicast::{link::TransportLinkUnicast, TransportConfigUnicast},
-    TransportExecutor, TransportPeerEventHandler,
+    TransportPeerEventHandler,
 };
 use async_std::sync::MutexGuard as AsyncMutexGuard;
 use async_trait::async_trait;
 use std::{fmt::DebugStruct, sync::Arc, time::Duration};
+use zenoh_link::Link;
 use zenoh_protocol::{
     core::{WhatAmI, ZenohId},
     network::NetworkMessage,
     transport::TransportSn,
 };
 use zenoh_result::ZResult;
+
+use super::link::{LinkUnicastWithOpenAck, MaybeOpenAck};
+
+pub(crate) type LinkError = (zenoh_result::Error, TransportLinkUnicast, u8);
+pub(crate) type TransportError = (zenoh_result::Error, Arc<dyn TransportUnicastTrait>, u8);
+pub(crate) enum InitTransportError {
+    Link(LinkError),
+    Transport(TransportError),
+}
+
+pub(crate) type AddLinkResult<'a> =
+    Result<(Box<dyn FnOnce() + Send + Sync + 'a>, MaybeOpenAck), LinkError>;
+pub(crate) type InitTransportResult = Result<Arc<dyn TransportUnicastTrait>, InitTransportError>;
 
 /*************************************/
 /*      UNICAST TRANSPORT TRAIT      */
@@ -35,11 +49,12 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*            ACCESSORS              */
     /*************************************/
     fn set_callback(&self, callback: Arc<dyn TransportPeerEventHandler>);
+
     async fn get_alive(&self) -> AsyncMutexGuard<'_, bool>;
     fn get_zid(&self) -> ZenohId;
     fn get_whatami(&self) -> WhatAmI;
     fn get_callback(&self) -> Option<Arc<dyn TransportPeerEventHandler>>;
-    fn get_links(&self) -> Vec<TransportLinkUnicast>;
+    fn get_links(&self) -> Vec<Link>;
     #[cfg(feature = "shared-memory")]
     fn is_shm(&self) -> bool;
     fn is_qos(&self) -> bool;
@@ -50,33 +65,22 @@ pub(crate) trait TransportUnicastTrait: Send + Sync {
     /*************************************/
     /*               LINK                */
     /*************************************/
-    async fn add_link(&self, link: TransportLinkUnicast) -> ZResult<()>;
+    async fn add_link(
+        &self,
+        link: LinkUnicastWithOpenAck,
+        other_initial_sn: TransportSn,
+        other_lease: Duration,
+    ) -> AddLinkResult;
 
     /*************************************/
     /*                TX                 */
     /*************************************/
     fn schedule(&self, msg: NetworkMessage) -> ZResult<()>;
-    fn start_tx(
-        &self,
-        link: &TransportLinkUnicast,
-        executor: &TransportExecutor,
-        keep_alive: Duration,
-    ) -> ZResult<()>;
-
-    /*************************************/
-    /*                RX                 */
-    /*************************************/
-    fn start_rx(&self, link: &TransportLinkUnicast, lease: Duration) -> ZResult<()>;
-
-    /*************************************/
-    /*           INITIATION              */
-    /*************************************/
-    async fn sync(&self, _initial_sn_rx: TransportSn) -> ZResult<()>;
 
     /*************************************/
     /*            TERMINATION            */
     /*************************************/
-    async fn close_link(&self, link: &TransportLinkUnicast, reason: u8) -> ZResult<()>;
+    async fn close_link(&self, link: Link, reason: u8) -> ZResult<()>;
     async fn close(&self, reason: u8) -> ZResult<()>;
 
     fn add_debug_fields<'a, 'b: 'a, 'c>(
