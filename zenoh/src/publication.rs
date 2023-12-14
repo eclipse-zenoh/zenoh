@@ -19,6 +19,8 @@ use crate::handlers::Callback;
 use crate::handlers::DefaultHandler;
 use crate::net::transport::primitives::Primitives;
 use crate::prelude::*;
+#[zenoh_macros::unstable]
+use crate::sample::Attachment;
 use crate::sample::DataInfo;
 use crate::Encoding;
 use crate::SessionRef;
@@ -78,6 +80,8 @@ pub struct PutBuilder<'a, 'b> {
     pub(crate) publisher: PublisherBuilder<'a, 'b>,
     pub(crate) value: Value,
     pub(crate) kind: SampleKind,
+    #[cfg(feature = "unstable")]
+    pub(crate) attachment: Option<Attachment>,
 }
 
 impl PutBuilder<'_, '_> {
@@ -117,6 +121,12 @@ impl PutBuilder<'_, '_> {
         self.kind = kind;
         self
     }
+
+    #[zenoh_macros::unstable]
+    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
+        self.attachment = Some(attachment);
+        self
+    }
 }
 
 impl Resolvable for PutBuilder<'_, '_> {
@@ -130,6 +140,8 @@ impl SyncResolve for PutBuilder<'_, '_> {
             publisher,
             value,
             kind,
+            #[cfg(feature = "unstable")]
+            attachment,
         } = self;
         let key_expr = publisher.key_expr?;
         log::trace!("write({:?}, [...])", &key_expr);
@@ -151,20 +163,42 @@ impl SyncResolve for PutBuilder<'_, '_> {
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
                 payload: match kind {
-                    SampleKind::Put => PushBody::Put(Put {
-                        timestamp,
-                        encoding: value.encoding.clone(),
-                        ext_sinfo: None,
-                        #[cfg(feature = "shared-memory")]
-                        ext_shm: None,
-                        ext_unknown: vec![],
-                        payload: value.payload.clone(),
-                    }),
-                    SampleKind::Delete => PushBody::Del(Del {
-                        timestamp,
-                        ext_sinfo: None,
-                        ext_unknown: vec![],
-                    }),
+                    SampleKind::Put => {
+                        #[allow(unused_mut)]
+                        let mut ext_attachment = None;
+                        #[cfg(feature = "unstable")]
+                        {
+                            if let Some(attachment) = attachment.clone() {
+                                ext_attachment = Some(attachment.into());
+                            }
+                        }
+                        PushBody::Put(Put {
+                            timestamp,
+                            encoding: value.encoding.clone(),
+                            ext_sinfo: None,
+                            #[cfg(feature = "shared-memory")]
+                            ext_shm: None,
+                            ext_attachment,
+                            ext_unknown: vec![],
+                            payload: value.payload.clone(),
+                        })
+                    }
+                    SampleKind::Delete => {
+                        #[allow(unused_mut)]
+                        let mut ext_attachment = None;
+                        #[cfg(feature = "unstable")]
+                        {
+                            if let Some(attachment) = attachment.clone() {
+                                ext_attachment = Some(attachment.into());
+                            }
+                        }
+                        PushBody::Del(Del {
+                            timestamp,
+                            ext_sinfo: None,
+                            ext_attachment,
+                            ext_unknown: vec![],
+                        })
+                    }
                 },
             });
         }
@@ -181,6 +215,8 @@ impl SyncResolve for PutBuilder<'_, '_> {
                 &key_expr.to_wire(&publisher.session),
                 Some(data_info),
                 value.payload,
+                #[cfg(feature = "unstable")]
+                attachment,
             );
         }
         Ok(())
@@ -337,6 +373,8 @@ impl<'a> Publisher<'a> {
             publisher: self,
             value,
             kind,
+            #[cfg(feature = "unstable")]
+            attachment: None,
         }
     }
 
@@ -621,6 +659,16 @@ pub struct Publication<'a> {
     publisher: &'a Publisher<'a>,
     value: Value,
     kind: SampleKind,
+    #[cfg(feature = "unstable")]
+    pub(crate) attachment: Option<Attachment>,
+}
+
+impl<'a> Publication<'a> {
+    #[zenoh_macros::unstable]
+    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
+        self.attachment = Some(attachment);
+        self
+    }
 }
 
 impl Resolvable for Publication<'_> {
@@ -633,6 +681,8 @@ impl SyncResolve for Publication<'_> {
             publisher,
             value,
             kind,
+            #[cfg(feature = "unstable")]
+            attachment,
         } = self;
         log::trace!("write({:?}, [...])", publisher.key_expr);
         let primitives = zread!(publisher.session.state)
@@ -643,6 +693,14 @@ impl SyncResolve for Publication<'_> {
         let timestamp = publisher.session.runtime.new_timestamp();
 
         if publisher.destination != Locality::SessionLocal {
+            #[allow(unused_mut)]
+            let mut ext_attachment = None;
+            #[cfg(feature = "unstable")]
+            {
+                if let Some(attachment) = attachment.clone() {
+                    ext_attachment = Some(attachment.into());
+                }
+            }
             primitives.send_push(Push {
                 wire_expr: publisher.key_expr.to_wire(&publisher.session).to_owned(),
                 ext_qos: ext::QoSType::new(
@@ -658,6 +716,7 @@ impl SyncResolve for Publication<'_> {
                     ext_sinfo: None,
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
+                    ext_attachment,
                     ext_unknown: vec![],
                     payload: value.payload.clone(),
                 }),
@@ -675,6 +734,8 @@ impl SyncResolve for Publication<'_> {
                 &publisher.key_expr.to_wire(&publisher.session),
                 Some(data_info),
                 value.payload,
+                #[cfg(feature = "unstable")]
+                attachment,
             );
         }
         Ok(())

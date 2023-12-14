@@ -307,6 +307,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
+                ext_attachment: None,
                 ext_unknown: vec![],
             }
             .into(),

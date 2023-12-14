@@ -74,7 +74,7 @@ use core::time::Duration;
 ///    - 0b11: Reserved
 ///
 /// (#) ZID length. It indicates how many bytes are used for the ZenohID bytes.
-///     A ZenohID is minimum 1 byte and maximum 16 bytes. Therefore, the actual lenght is computed as:
+///     A ZenohID is minimum 1 byte and maximum 16 bytes. Therefore, the actual length is computed as:
 ///         real_zid_len := 1 + zid_len
 ///
 /// (+) Sequence Number/ID resolution. It indicates the resolution and consequently the wire overhead

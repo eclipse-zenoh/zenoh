@@ -65,7 +65,6 @@ impl PartialEq for Chunk {
 /// Informations about a [`SharedMemoryBuf`].
 ///
 /// This that can be serialized and can be used to retrieve the [`SharedMemoryBuf`] in a remote process.
-#[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SharedMemoryBufInfo {
     /// The index of the beginning of the buffer in the shm segment.

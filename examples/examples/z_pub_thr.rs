@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
 use clap::Parser;
 use std::convert::TryInto;
-use zenoh::config::Config;
 use zenoh::prelude::sync::*;
 use zenoh::publication::CongestionControl;
 use zenoh_examples::CommonArgs;
@@ -21,14 +21,21 @@ use zenoh_examples::CommonArgs;
 fn main() {
     // initiate logging
     env_logger::init();
-    let (config, size, prio, print, number) = parse_args();
+    let args = Args::parse();
 
-    let data: Value = (0usize..size)
+    let mut prio = Priority::default();
+    if let Some(p) = args.priority {
+        prio = p.try_into().unwrap();
+    }
+
+    let payload_size = args.payload_size;
+
+    let data: Value = (0..payload_size)
         .map(|i| (i % 10) as u8)
         .collect::<Vec<u8>>()
         .into();
 
-    let session = zenoh::open(config).res().unwrap();
+    let session = zenoh::open(args.common).res().unwrap();
 
     let publisher = session
         .declare_publisher("test/thr")
@@ -42,8 +49,8 @@ fn main() {
     loop {
         publisher.put(data.clone()).res().unwrap();
 
-        if print {
-            if count < number {
+        if args.print {
+            if count < args.number {
                 count += 1;
             } else {
                 let thpt = count as f64 / start.elapsed().as_secs_f64();
@@ -57,34 +64,17 @@ fn main() {
 
 #[derive(Parser, Clone, PartialEq, Eq, Hash, Debug)]
 struct Args {
-    #[arg(short, long)]
     /// Priority for sending data
+    #[arg(short, long)]
     priority: Option<u8>,
-    #[arg(short = 't', long)]
     /// Print the statistics
+    #[arg(short = 't', long)]
     print: bool,
-    #[arg(short, long, default_value = "100000")]
     /// Number of messages in each throughput measurements
+    #[arg(short, long, default_value = "100000")]
     number: usize,
     /// Sets the size of the payload to publish
     payload_size: usize,
     #[command(flatten)]
     common: CommonArgs,
-}
-
-fn parse_args() -> (Config, usize, Priority, bool, usize) {
-    let args = Args::parse();
-
-    let mut prio = Priority::default();
-    if let Some(p) = args.priority {
-        prio = p.try_into().unwrap();
-    }
-
-    (
-        args.common.into(),
-        args.payload_size,
-        prio,
-        args.print,
-        args.number,
-    )
 }

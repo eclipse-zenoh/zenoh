@@ -280,6 +280,7 @@ mod tests {
                     encoding: Encoding::default(),
                     ext_sinfo: None,
                     ext_shm: None,
+                    ext_attachment: None,
                     ext_unknown: vec![],
                 }
                 .into(),
@@ -327,6 +328,7 @@ mod tests {
                     encoding: Encoding::default(),
                     ext_sinfo: None,
                     ext_shm: None,
+                    ext_attachment: None,
                     ext_unknown: vec![],
                 }
                 .into(),

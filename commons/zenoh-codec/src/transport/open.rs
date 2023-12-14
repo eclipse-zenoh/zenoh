@@ -36,8 +36,8 @@ where
 
     fn write(self, writer: &mut W, x: &OpenSyn) -> Self::Output {
         let OpenSyn {
-            initial_sn,
             lease,
+            initial_sn,
             cookie,
             ext_qos,
             ext_shm,
@@ -208,8 +208,8 @@ where
 
     fn write(self, writer: &mut W, x: &OpenAck) -> Self::Output {
         let OpenAck {
-            initial_sn,
             lease,
+            initial_sn,
             ext_qos,
             ext_shm,
             ext_auth,
