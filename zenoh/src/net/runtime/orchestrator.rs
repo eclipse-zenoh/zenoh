@@ -601,7 +601,10 @@ impl Runtime {
             }
             .boxed()
         }));
-        async_std::prelude::FutureExt::race(send, recvs).await;
+        tokio::select! {
+            _ = send => {},
+            _ = recvs => {},
+        }
     }
 
     #[must_use]
@@ -716,7 +719,10 @@ impl Runtime {
             tokio::time::sleep(timeout).await;
             bail!("timeout")
         };
-        async_std::prelude::FutureExt::race(scout, timeout).await
+        tokio::select! {
+            res = scout => { res },
+            res = timeout => { res }
+        }
     }
 
     async fn connect_all(

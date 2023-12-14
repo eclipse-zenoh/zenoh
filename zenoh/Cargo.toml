@@ -65,8 +65,6 @@ default = [
 [dependencies]
 tokio = { workspace = true, features = ["rt", "macros"] }
 tokio-util = { workspace = true }
-async-global-executor = { workspace = true, features = ["tokio"] }
-async-std = { workspace = true, features = ["attributes"] }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 const_format = { workspace = true }
