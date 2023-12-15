@@ -43,12 +43,14 @@ where
             length,
             shm_manager,
             kind,
+            watchdog_descriptor,
         } = x;
 
         self.write(&mut *writer, offset)?;
         self.write(&mut *writer, length)?;
         self.write(&mut *writer, shm_manager.as_str())?;
         self.write(&mut *writer, kind)?;
+        self.write(&mut *writer, &watchdog_descriptor)?;
         Ok(())
     }
 }
