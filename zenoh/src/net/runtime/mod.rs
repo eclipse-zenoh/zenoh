@@ -42,8 +42,9 @@ use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::{bail, ZResult};
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::{
-    DeMux, TransportEventHandler, TransportManager, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    multicast::TransportMulticast, primitives::DeMux, unicast::TransportUnicast,
+    TransportEventHandler, TransportManager, TransportMulticastEventHandler, TransportPeer,
+    TransportPeerEventHandler,
 };
 
 pub struct RuntimeState {
@@ -83,8 +84,6 @@ impl Runtime {
 
     pub(crate) async fn init(config: Config) -> ZResult<Runtime> {
         log::debug!("Zenoh Rust API {}", GIT_VERSION);
-        // Make sure to have have enough threads spawned in the async futures executor
-        zasync_executor_init!();
 
         let zid = *config.id();
 

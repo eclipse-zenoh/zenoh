@@ -74,39 +74,53 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Query) -> Self::Output {
+        let Query {
+            parameters,
+            ext_sinfo,
+            ext_consolidation,
+            ext_body,
+            ext_attachment,
+            ext_unknown,
+        } = x;
+
         // Header
         let mut header = id::QUERY;
-        if !x.parameters.is_empty() {
+        if !parameters.is_empty() {
             header |= flag::P;
         }
-        let mut n_exts = (x.ext_sinfo.is_some() as u8)
-            + ((x.ext_consolidation != ext::ConsolidationType::default()) as u8)
-            + (x.ext_body.is_some() as u8)
-            + (x.ext_unknown.len() as u8);
+        let mut n_exts = (ext_sinfo.is_some() as u8)
+            + ((ext_consolidation != &ext::ConsolidationType::default()) as u8)
+            + (ext_body.is_some() as u8)
+            + (ext_attachment.is_some() as u8)
+            + (ext_unknown.len() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        if !x.parameters.is_empty() {
-            self.write(&mut *writer, &x.parameters)?;
+        if !parameters.is_empty() {
+            self.write(&mut *writer, parameters)?;
         }
 
         // Extensions
-        if let Some(sinfo) = x.ext_sinfo.as_ref() {
+        if let Some(sinfo) = ext_sinfo.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
         }
-        if x.ext_consolidation != ext::ConsolidationType::default() {
+        if ext_consolidation != &ext::ConsolidationType::default() {
             n_exts -= 1;
-            self.write(&mut *writer, (x.ext_consolidation, n_exts != 0))?;
+            self.write(&mut *writer, (*ext_consolidation, n_exts != 0))?;
         }
-        if let Some(body) = x.ext_body.as_ref() {
+        if let Some(body) = ext_body.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (body, n_exts != 0))?;
         }
-        for u in x.ext_unknown.iter() {
+        if let Some(att) = ext_attachment.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (att, n_exts != 0))?;
+        }
+        for u in ext_unknown.iter() {
             n_exts -= 1;
             self.write(&mut *writer, (u, n_exts != 0))?;
         }
@@ -149,6 +163,7 @@ where
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
         let mut ext_consolidation = ext::ConsolidationType::default();
         let mut ext_body: Option<ext::QueryBodyType> = None;
+        let mut ext_attachment: Option<ext::AttachmentType> = None;
         let mut ext_unknown = Vec::new();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
@@ -171,6 +186,11 @@ where
                     ext_body = Some(s);
                     has_ext = ext;
                 }
+                ext::Attachment::ID => {
+                    let (a, ext): (ext::AttachmentType, bool) = eodec.read(&mut *reader)?;
+                    ext_attachment = Some(a);
+                    has_ext = ext;
+                }
                 _ => {
                     let (u, ext) = extension::read(reader, "Query", ext)?;
                     ext_unknown.push(u);
@@ -184,6 +204,7 @@ where
             ext_sinfo,
             ext_consolidation,
             ext_body,
+            ext_attachment,
             ext_unknown,
         })
     }

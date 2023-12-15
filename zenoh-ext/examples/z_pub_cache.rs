@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::task::sleep;
-use clap::{App, Arg};
+use clap::{arg, Command};
 use std::time::Duration;
 use zenoh::config::{Config, ModeDependentValue};
 use zenoh::prelude::r#async::*;
@@ -46,61 +46,48 @@ async fn main() {
 }
 
 fn parse_args() -> (Config, String, String, usize, Option<String>) {
-    let args = App::new("zenoh-ext pub cache example")
+    let args = Command::new("zenoh-ext pub cache example")
         .arg(
-            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
-                .possible_values(["peer", "client"]),
+            arg!(-m --mode [MODE] "The zenoh session mode (peer by default)")
+                .value_parser(["peer", "client"]),
         )
-        .arg(Arg::from_usage(
-            "-e, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
-        ))
-        .arg(Arg::from_usage(
-            "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
-        ))
+        .arg(arg!(-e --connect [ENDPOINT]...  "Endpoints to connect to."))
+        .arg(arg!(-l --listen [ENDPOINT]...   "Endpoints to listen on."))
         .arg(
-            Arg::from_usage("-k, --key=[KEYEXPR]        'The key expression to publish.'")
+            arg!(-k --key [KEYEXPR]        "The key expression to publish.")
                 .default_value("demo/example/zenoh-rs-pub"),
         )
+        .arg(arg!(-v --value [VALUE]      "The value to publish.").default_value("Pub from Rust!"))
         .arg(
-            Arg::from_usage("-v, --value=[VALUE]      'The value to publish.'")
-                .default_value("Pub from Rust!"),
-        )
-        .arg(
-            Arg::from_usage("-h, --history=[SIZE] 'The number of publications to keep in cache'")
+            arg!(-h --history [SIZE] "The number of publications to keep in cache")
                 .default_value("1"),
         )
-        .arg(Arg::from_usage(
-            "-x, --prefix=[STRING] 'An optional queryable prefix'",
-        ))
-        .arg(Arg::from_usage(
-            "-c, --config=[FILE]      'A configuration file.'",
-        ))
-        .arg(Arg::from_usage(
-            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
-        ))
+        .arg(arg!(-x --prefix [STRING] "An optional queryable prefix"))
+        .arg(arg!(-c --config [FILE]      "A configuration file."))
+        .arg(arg!(--no-multicast-scouting "Disable the multicast-based scouting mechanism."))
         .get_matches();
 
-    let mut config = if let Some(conf_file) = args.value_of("config") {
+    let mut config = if let Some(conf_file) = args.get_one::<&String>("config") {
         Config::from_file(conf_file).unwrap()
     } else {
         Config::default()
     };
-    if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
+    if let Some(Ok(mode)) = args.get_one::<&String>("mode").map(|mode| mode.parse()) {
         config.set_mode(Some(mode)).unwrap();
     }
-    if let Some(values) = args.values_of("connect") {
+    if let Some(values) = args.get_many::<&String>("connect") {
         config
             .connect
             .endpoints
             .extend(values.map(|v| v.parse().unwrap()))
     }
-    if let Some(values) = args.values_of("listen") {
+    if let Some(values) = args.get_many::<&String>("listen") {
         config
             .listen
             .endpoints
             .extend(values.map(|v| v.parse().unwrap()))
     }
-    if args.is_present("no-multicast-scouting") {
+    if args.get_flag("no-multicast-scouting") {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
@@ -110,10 +97,10 @@ fn parse_args() -> (Config, String, String, usize, Option<String>) {
         .set_enabled(Some(ModeDependentValue::Unique(true)))
         .unwrap();
 
-    let key_expr = args.value_of("key").unwrap().to_string();
-    let value = args.value_of("value").unwrap().to_string();
-    let history: usize = args.value_of("history").unwrap().parse().unwrap();
-    let prefix = args.value_of("prefix").map(String::from);
+    let key_expr = args.get_one::<&String>("key").unwrap().to_string();
+    let value = args.get_one::<&String>("value").unwrap().to_string();
+    let history: usize = args.get_one::<&String>("history").unwrap().parse().unwrap();
+    let prefix = args.get_one::<&String>("prefix").map(|s| (*s).to_owned());
 
     (config, key_expr, value, history, prefix)
 }

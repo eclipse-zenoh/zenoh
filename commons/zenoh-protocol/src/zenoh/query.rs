@@ -94,6 +94,7 @@ pub struct Query {
     pub ext_sinfo: Option<ext::SourceInfoType>,
     pub ext_consolidation: Consolidation,
     pub ext_body: Option<ext::QueryBodyType>,
+    pub ext_attachment: Option<ext::AttachmentType>,
     pub ext_unknown: Vec<ZExtUnknown>,
 }
 
@@ -117,6 +118,10 @@ pub mod ext {
     /// Shared Memory extension is automatically defined by ValueType extension if
     /// #[cfg(feature = "shared-memory")] is defined.
     pub type QueryBodyType = crate::zenoh::ext::ValueType<{ ZExtZBuf::<0x03>::id(false) }, 0x04>;
+
+    /// # User attachment
+    pub type Attachment = zextzbuf!(0x5, false);
+    pub type AttachmentType = crate::zenoh::ext::AttachmentType<{ Attachment::ID }>;
 }
 
 impl Query {
@@ -141,10 +146,11 @@ impl Query {
         let ext_sinfo = rng.gen_bool(0.5).then_some(ext::SourceInfoType::rand());
         let ext_consolidation = Consolidation::rand();
         let ext_body = rng.gen_bool(0.5).then_some(ext::QueryBodyType::rand());
+        let ext_attachment = rng.gen_bool(0.5).then_some(ext::AttachmentType::rand());
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
             ext_unknown.push(ZExtUnknown::rand2(
-                iext::mid(ext::QueryBodyType::SID) + 1,
+                iext::mid(ext::Attachment::ID) + 1,
                 false,
             ));
         }
@@ -154,6 +160,7 @@ impl Query {
             ext_sinfo,
             ext_consolidation,
             ext_body,
+            ext_attachment,
             ext_unknown,
         }
     }

@@ -37,8 +37,9 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: (&ext::TargetType, bool)) -> Self::Output {
-        let (rt, more) = x;
-        let v = match rt {
+        let (x, more) = x;
+
+        let v = match x {
             ext::TargetType::BestMatching => 0,
             ext::TargetType::All => 1,
             ext::TargetType::AllComplete => 2,
@@ -78,59 +79,71 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Request) -> Self::Output {
+        let Request {
+            id,
+            wire_expr,
+            ext_qos,
+            ext_tstamp,
+            ext_nodeid,
+            ext_target,
+            ext_budget,
+            ext_timeout,
+            payload,
+        } = x;
+
         // Header
         let mut header = id::REQUEST;
-        let mut n_exts = ((x.ext_qos != ext::QoSType::default()) as u8)
-            + (x.ext_tstamp.is_some() as u8)
-            + ((x.ext_target != ext::TargetType::default()) as u8)
-            + (x.ext_budget.is_some() as u8)
-            + (x.ext_timeout.is_some() as u8)
-            + ((x.ext_nodeid != ext::NodeIdType::default()) as u8);
+        let mut n_exts = ((ext_qos != &ext::QoSType::default()) as u8)
+            + (ext_tstamp.is_some() as u8)
+            + ((ext_target != &ext::TargetType::default()) as u8)
+            + (ext_budget.is_some() as u8)
+            + (ext_timeout.is_some() as u8)
+            + ((ext_nodeid != &ext::NodeIdType::default()) as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
-        if x.wire_expr.mapping != Mapping::default() {
+        if wire_expr.mapping != Mapping::default() {
             header |= flag::M;
         }
-        if x.wire_expr.has_suffix() {
+        if wire_expr.has_suffix() {
             header |= flag::N;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.id)?;
-        self.write(&mut *writer, &x.wire_expr)?;
+        self.write(&mut *writer, id)?;
+        self.write(&mut *writer, wire_expr)?;
 
         // Extensions
-        if x.ext_qos != ext::QoSType::default() {
+        if ext_qos != &ext::QoSType::default() {
             n_exts -= 1;
-            self.write(&mut *writer, (x.ext_qos, n_exts != 0))?;
+            self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
         }
-        if let Some(ts) = x.ext_tstamp.as_ref() {
+        if let Some(ts) = ext_tstamp.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
         }
-        if x.ext_target != ext::TargetType::default() {
+        if ext_target != &ext::TargetType::default() {
             n_exts -= 1;
-            self.write(&mut *writer, (&x.ext_target, n_exts != 0))?;
+            self.write(&mut *writer, (ext_target, n_exts != 0))?;
         }
-        if let Some(l) = x.ext_budget.as_ref() {
+        if let Some(l) = ext_budget.as_ref() {
             n_exts -= 1;
             let e = ext::Budget::new(l.get() as u64);
             self.write(&mut *writer, (&e, n_exts != 0))?;
         }
-        if let Some(to) = x.ext_timeout.as_ref() {
+        if let Some(to) = ext_timeout.as_ref() {
             n_exts -= 1;
             let e = ext::Timeout::new(to.as_millis() as u64);
             self.write(&mut *writer, (&e, n_exts != 0))?;
         }
-        if x.ext_nodeid != ext::NodeIdType::default() {
+        if ext_nodeid != &ext::NodeIdType::default() {
             n_exts -= 1;
-            self.write(&mut *writer, (x.ext_nodeid, n_exts != 0))?;
+            self.write(&mut *writer, (*ext_nodeid, n_exts != 0))?;
         }
 
         // Payload
-        self.write(&mut *writer, &x.payload)?;
+        self.write(&mut *writer, payload)?;
 
         Ok(())
     }

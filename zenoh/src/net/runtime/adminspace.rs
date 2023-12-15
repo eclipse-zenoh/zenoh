@@ -26,7 +26,7 @@ use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::Mutex;
-use zenoh_buffers::SplitBuffer;
+use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::ValidatedMap;
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
@@ -38,7 +38,7 @@ use zenoh_protocol::{
     zenoh::{PushBody, RequestBody},
 };
 use zenoh_result::ZResult;
-use zenoh_transport::{Primitives, TransportUnicast};
+use zenoh_transport::{primitives::Primitives, unicast::TransportUnicast};
 
 pub struct AdminContext {
     runtime: Runtime,
@@ -378,6 +378,8 @@ impl Primitives for AdminSpace {
                     qid: msg.id,
                     zid,
                     primitives,
+                    #[cfg(feature = "unstable")]
+                    attachment: query.ext_attachment.map(Into::into),
                 }),
             };
 

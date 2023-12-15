@@ -19,6 +19,8 @@ use async_std::sync::Mutex;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
+#[cfg(feature = "transport_compression")]
+use zenoh_config::CompressionMulticastConf;
 #[cfg(feature = "shared-memory")]
 use zenoh_config::SharedMemoryConf;
 use zenoh_config::{Config, LinkTxConf};
@@ -36,6 +38,8 @@ pub struct TransportManagerConfigMulticast {
     pub is_qos: bool,
     #[cfg(feature = "shared-memory")]
     pub is_shm: bool,
+    #[cfg(feature = "transport_compression")]
+    pub is_compression: bool,
 }
 
 pub struct TransportManagerBuilderMulticast {
@@ -46,6 +50,8 @@ pub struct TransportManagerBuilderMulticast {
     is_qos: bool,
     #[cfg(feature = "shared-memory")]
     is_shm: bool,
+    #[cfg(feature = "transport_compression")]
+    is_compression: bool,
 }
 
 pub struct TransportManagerStateMulticast {
@@ -95,6 +101,12 @@ impl TransportManagerBuilderMulticast {
         self
     }
 
+    #[cfg(feature = "transport_compression")]
+    pub fn compression(mut self, is_compression: bool) -> Self {
+        self.is_compression = is_compression;
+        self
+    }
+
     pub async fn from_config(
         mut self,
         config: &Config,
@@ -107,9 +119,7 @@ impl TransportManagerBuilderMulticast {
             config.transport().multicast().join_interval().unwrap(),
         ));
         self = self.max_sessions(config.transport().multicast().max_sessions().unwrap());
-        // @TODO: Force QoS deactivation in multicast since it is not supported
-        // self = self.qos(*config.transport().qos().enabled());
-        self = self.qos(false);
+        self = self.qos(*config.transport().multicast().qos().enabled());
         #[cfg(feature = "shared-memory")]
         {
             self = self.shm(*config.transport().shared_memory().enabled());
@@ -127,6 +137,8 @@ impl TransportManagerBuilderMulticast {
             is_qos: self.is_qos,
             #[cfg(feature = "shared-memory")]
             is_shm: self.is_shm,
+            #[cfg(feature = "transport_compression")]
+            is_compression: self.is_compression,
         };
 
         let state = TransportManagerStateMulticast {
@@ -147,6 +159,8 @@ impl Default for TransportManagerBuilderMulticast {
         let link_tx = LinkTxConf::default();
         #[cfg(feature = "shared-memory")]
         let shm = SharedMemoryConf::default();
+        #[cfg(feature = "transport_compression")]
+        let compression = CompressionMulticastConf::default();
 
         let tmb = TransportManagerBuilderMulticast {
             lease: Duration::from_millis(*link_tx.lease()),
@@ -156,6 +170,8 @@ impl Default for TransportManagerBuilderMulticast {
             is_qos: false,
             #[cfg(feature = "shared-memory")]
             is_shm: *shm.enabled(),
+            #[cfg(feature = "transport_compression")]
+            is_compression: *compression.enabled(),
         };
         async_std::task::block_on(tmb.from_config(&Config::default())).unwrap()
     }

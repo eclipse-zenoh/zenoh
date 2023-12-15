@@ -139,13 +139,14 @@
       z_storage -k demo/**
    ```
 
-### z_pub_shm & z_sub_shm
+### z_pub_shm & z_sub
 
    A pub/sub example involving the shared-memory feature.
+   Note that on subscriber side, the same `z_sub` example than for non-shared-memory example is used.
 
    Typical Subscriber usage:
    ```bash
-      z_sub_shm
+      z_sub
    ```
 
    Typical Publisher usage:
@@ -188,16 +189,17 @@
       z_ping 1024
    ```
 
-### z_pub_shm_thr & z_sub_shm_thr
+### z_pub_shm_thr & z_sub_thr
 
    Pub/Sub throughput test involving the shared-memory feature.
    This example allows performing throughput measurements between a publisher performing
    put operations with the shared-memory feature and a subscriber receiving notifications
    of those puts.
+   Note that on subscriber side, the same `z_sub_thr` example than for non-shared-memory example is used.
 
    Typical Subscriber usage:
    ```bash
-      z_sub_shm_thr
+      z_sub_thr
    ```
 
    Typical Publisher usage:

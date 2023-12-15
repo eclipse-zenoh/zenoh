@@ -76,7 +76,7 @@ use zenoh_buffers::ZSlice;
 ///    - 0b11: Reserved
 ///
 /// (#) ZID length. It indicates how many bytes are used for the ZenohID bytes.
-///     A ZenohID is minimum 1 byte and maximum 16 bytes. Therefore, the actual lenght is computed as:
+///     A ZenohID is minimum 1 byte and maximum 16 bytes. Therefore, the actual length is computed as:
 ///         real_zid_len := 1 + zid_len
 ///
 /// (+) Sequence Number/ID resolution. It indicates the resolution and consequently the wire overhead
@@ -118,6 +118,7 @@ pub struct InitSyn {
     pub ext_auth: Option<ext::Auth>,
     pub ext_mlink: Option<ext::MultiLink>,
     pub ext_lowlatency: Option<ext::LowLatency>,
+    pub ext_compression: Option<ext::Compression>,
 }
 
 // Extensions
@@ -146,6 +147,10 @@ pub mod ext {
     /// # LowLatency extension
     /// Used to negotiate the use of lowlatency transport
     pub type LowLatency = zextunit!(0x5, false);
+
+    /// # Compression extension
+    /// Used to negotiate the use of compression on the link
+    pub type Compression = zextunit!(0x6, false);
 }
 
 impl InitSyn {
@@ -166,6 +171,7 @@ impl InitSyn {
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
 
         Self {
             version,
@@ -178,6 +184,7 @@ impl InitSyn {
             ext_auth,
             ext_mlink,
             ext_lowlatency,
+            ext_compression,
         }
     }
 }
@@ -195,6 +202,7 @@ pub struct InitAck {
     pub ext_auth: Option<ext::Auth>,
     pub ext_mlink: Option<ext::MultiLink>,
     pub ext_lowlatency: Option<ext::LowLatency>,
+    pub ext_compression: Option<ext::Compression>,
 }
 
 impl InitAck {
@@ -220,6 +228,7 @@ impl InitAck {
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_lowlatency = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        let ext_compression = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
 
         Self {
             version,
@@ -233,6 +242,7 @@ impl InitAck {
             ext_auth,
             ext_mlink,
             ext_lowlatency,
+            ext_compression,
         }
     }
 }

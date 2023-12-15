@@ -22,12 +22,14 @@ use crate::key_expr::KeyExprInner;
 use crate::liveliness::{Liveliness, LivelinessTokenState};
 use crate::net::routing::face::Face;
 use crate::net::runtime::Runtime;
-use crate::net::transport::Primitives;
+use crate::net::transport::primitives::Primitives;
 use crate::prelude::Locality;
 use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
+#[cfg(feature = "unstable")]
+use crate::sample::Attachment;
 use crate::sample::DataInfo;
 use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
@@ -101,6 +103,8 @@ pub(crate) struct SessionState {
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
     #[cfg(feature = "unstable")]
     pub(crate) tokens: HashMap<Id, Arc<LivelinessTokenState>>,
+    #[cfg(feature = "unstable")]
+    pub(crate) matching_listeners: HashMap<Id, Arc<MatchingListenerState>>,
     pub(crate) queries: HashMap<RequestId, QueryState>,
     pub(crate) aggregated_subscribers: Vec<OwnedKeyExpr>,
     //pub(crate) aggregated_publishers: Vec<OwnedKeyExpr>,
@@ -123,6 +127,8 @@ impl SessionState {
             queryables: HashMap::new(),
             #[cfg(feature = "unstable")]
             tokens: HashMap::new(),
+            #[cfg(feature = "unstable")]
+            matching_listeners: HashMap::new(),
             queries: HashMap::new(),
             aggregated_subscribers,
             //aggregated_publishers,
@@ -717,6 +723,8 @@ impl Session {
             publisher: self.declare_publisher(key_expr),
             value: value.into(),
             kind: SampleKind::Put,
+            #[cfg(feature = "unstable")]
+            attachment: None,
         }
     }
 
@@ -748,6 +756,8 @@ impl Session {
             publisher: self.declare_publisher(key_expr),
             value: Value::empty(),
             kind: SampleKind::Delete,
+            #[cfg(feature = "unstable")]
+            attachment: None,
         }
     }
     /// Query data from the matching queryables in the system.
@@ -790,6 +800,8 @@ impl Session {
             destination: Locality::default(),
             timeout: Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout())),
             value: None,
+            #[cfg(feature = "unstable")]
+            attachment: None,
             handler: DefaultHandler,
         }
     }
@@ -1099,6 +1111,12 @@ impl Session {
                     ext_info: *info,
                 }),
             });
+
+            #[cfg(feature = "unstable")]
+            {
+                let state = zread!(self.state);
+                self.update_status_up(&state, &key_expr)
+            }
         }
 
         Ok(sub_state)
@@ -1157,6 +1175,12 @@ impl Session {
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             });
+
+                            #[cfg(feature = "unstable")]
+                            {
+                                let state = zread!(self.state);
+                                self.update_status_down(&state, &sub_state.key_expr)
+                            }
                         }
                     }
                     None => {
@@ -1178,6 +1202,12 @@ impl Session {
                                     },
                                 }),
                             });
+
+                            #[cfg(feature = "unstable")]
+                            {
+                                let state = zread!(self.state);
+                                self.update_status_down(&state, &sub_state.key_expr)
+                            }
                         }
                     }
                 };
@@ -1423,12 +1453,168 @@ impl Session {
         }
     }
 
+    #[zenoh_macros::unstable]
+    pub(crate) fn declare_matches_listener_inner(
+        &self,
+        publisher: &Publisher,
+        callback: Callback<'static, MatchingStatus>,
+    ) -> ZResult<Arc<MatchingListenerState>> {
+        let mut state = zwrite!(self.state);
+
+        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        log::trace!("matches_listener({:?}) => {id}", publisher.key_expr);
+        let listener_state = Arc::new(MatchingListenerState {
+            id,
+            current: std::sync::Mutex::new(false),
+            destination: publisher.destination,
+            key_expr: publisher.key_expr.clone().into_owned(),
+            callback,
+        });
+        state.matching_listeners.insert(id, listener_state.clone());
+        drop(state);
+        match listener_state.current.lock() {
+            Ok(mut current) => {
+                if self
+                    .matching_status(&publisher.key_expr, listener_state.destination)
+                    .map(|s| s.matching_subscribers())
+                    .unwrap_or(true)
+                {
+                    *current = true;
+                    (listener_state.callback)(MatchingStatus { matching: true });
+                }
+            }
+            Err(e) => log::error!("Error trying to acquire MathginListener lock: {}", e),
+        }
+        Ok(listener_state)
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn matching_status(
+        &self,
+        key_expr: &KeyExpr,
+        destination: Locality,
+    ) -> ZResult<MatchingStatus> {
+        use crate::net::routing::router::RoutingExpr;
+        use zenoh_protocol::core::WhatAmI;
+        let tables = zread!(self.runtime.router.tables.tables);
+        let res = crate::net::routing::resource::Resource::get_resource(
+            &tables.root_res,
+            key_expr.as_str(),
+        );
+
+        let route = crate::net::routing::pubsub::get_data_route(
+            &tables,
+            WhatAmI::Client,
+            0,
+            &res,
+            &mut RoutingExpr::new(&tables.root_res, key_expr.as_str()),
+            0,
+        );
+        drop(tables);
+        let matching = match destination {
+            Locality::Any => !route.is_empty(),
+            Locality::Remote => {
+                if let Some(face) = zread!(self.state).primitives.as_ref() {
+                    route.values().any(|dir| !Arc::ptr_eq(&dir.0, &face.state))
+                } else {
+                    !route.is_empty()
+                }
+            }
+            Locality::SessionLocal => {
+                if let Some(face) = zread!(self.state).primitives.as_ref() {
+                    route.values().any(|dir| Arc::ptr_eq(&dir.0, &face.state))
+                } else {
+                    false
+                }
+            }
+        };
+        Ok(MatchingStatus { matching })
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn update_status_up(&self, state: &SessionState, key_expr: &KeyExpr) {
+        for msub in state.matching_listeners.values() {
+            if key_expr.intersects(&msub.key_expr) {
+                // Cannot hold session lock when calling tables (matching_status())
+                async_std::task::spawn({
+                    let session = self.clone();
+                    let msub = msub.clone();
+                    async move {
+                        match msub.current.lock() {
+                            Ok(mut current) => {
+                                if !*current {
+                                    if let Ok(status) =
+                                        session.matching_status(&msub.key_expr, msub.destination)
+                                    {
+                                        if status.matching_subscribers() {
+                                            *current = true;
+                                            let callback = msub.callback.clone();
+                                            (callback)(status)
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("Error trying to acquire MathginListener lock: {}", e);
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn update_status_down(&self, state: &SessionState, key_expr: &KeyExpr) {
+        for msub in state.matching_listeners.values() {
+            if key_expr.intersects(&msub.key_expr) {
+                // Cannot hold session lock when calling tables (matching_status())
+                async_std::task::spawn({
+                    let session = self.clone();
+                    let msub = msub.clone();
+                    async move {
+                        match msub.current.lock() {
+                            Ok(mut current) => {
+                                if *current {
+                                    if let Ok(status) =
+                                        session.matching_status(&msub.key_expr, msub.destination)
+                                    {
+                                        if !status.matching_subscribers() {
+                                            *current = false;
+                                            let callback = msub.callback.clone();
+                                            (callback)(status)
+                                        }
+                                    }
+                                }
+                            }
+                            Err(e) => {
+                                log::error!("Error trying to acquire MathginListener lock: {}", e);
+                            }
+                        }
+                    }
+                });
+            }
+        }
+    }
+
+    #[zenoh_macros::unstable]
+    pub(crate) fn undeclare_matches_listener_inner(&self, sid: usize) -> ZResult<()> {
+        let mut state = zwrite!(self.state);
+        if let Some(state) = state.matching_listeners.remove(&sid) {
+            trace!("undeclare_matches_listener_inner({:?})", state);
+            Ok(())
+        } else {
+            Err(zerror!("Unable to find MatchingListener").into())
+        }
+    }
+
     pub(crate) fn handle_data(
         &self,
         local: bool,
         key_expr: &WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
+        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
     ) {
         let mut callbacks = SingleOrVec::default();
         let state = zread!(self.state);
@@ -1529,10 +1715,22 @@ impl Session {
         drop(state);
         let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
         for (cb, key_expr) in drain {
-            cb(Sample::with_info(key_expr, payload.clone(), info.clone()));
+            #[allow(unused_mut)]
+            let mut sample = Sample::with_info(key_expr, payload.clone(), info.clone());
+            #[cfg(feature = "unstable")]
+            {
+                sample.attachment = attachment.clone();
+            }
+            cb(sample);
         }
         if let Some((cb, key_expr)) = last {
-            cb(Sample::with_info(key_expr, payload, info));
+            #[allow(unused_mut)]
+            let mut sample = Sample::with_info(key_expr, payload, info);
+            #[cfg(feature = "unstable")]
+            {
+                sample.attachment = attachment;
+            }
+            cb(sample);
         }
     }
 
@@ -1569,6 +1767,7 @@ impl Session {
         destination: Locality,
         timeout: Duration,
         value: Option<Value>,
+        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
@@ -1636,6 +1835,14 @@ impl Session {
 
         drop(state);
         if destination != Locality::SessionLocal {
+            #[allow(unused_mut)]
+            let mut ext_attachment = None;
+            #[cfg(feature = "unstable")]
+            {
+                if let Some(attachment) = attachment.clone() {
+                    ext_attachment = Some(attachment.into());
+                }
+            }
             primitives.send_request(Request {
                 id: qid,
                 wire_expr: wexpr.clone(),
@@ -1655,6 +1862,7 @@ impl Session {
                         encoding: v.encoding.clone(),
                         payload: v.payload.clone(),
                     }),
+                    ext_attachment,
                     ext_unknown: vec![],
                 }),
             });
@@ -1673,6 +1881,8 @@ impl Session {
                     encoding: v.encoding.clone(),
                     payload: v.payload.clone(),
                 }),
+                #[cfg(feature = "unstable")]
+                attachment,
             );
         }
         Ok(())
@@ -1688,6 +1898,7 @@ impl Session {
         _target: TargetType,
         _consolidation: ConsolidationType,
         body: Option<QueryBodyType>,
+        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
     ) {
         let (primitives, key_expr, callbacks) = {
             let state = zread!(self.state);
@@ -1748,6 +1959,8 @@ impl Session {
                 } else {
                     primitives
                 },
+                #[cfg(feature = "unstable")]
+                attachment,
             }),
         };
         for callback in callbacks.iter() {
@@ -1939,12 +2152,21 @@ impl Primitives for Session {
                     let state = zread!(self.state);
                     match state.wireexpr_to_keyexpr(&m.wire_expr, false) {
                         Ok(expr) => {
+                            self.update_status_up(&state, &expr);
+
                             if expr
                                 .as_str()
                                 .starts_with(crate::liveliness::PREFIX_LIVELINESS)
                             {
                                 drop(state);
-                                self.handle_data(false, &m.wire_expr, None, ZBuf::default());
+                                self.handle_data(
+                                    false,
+                                    &m.wire_expr,
+                                    None,
+                                    ZBuf::default(),
+                                    #[cfg(feature = "unstable")]
+                                    None,
+                                );
                             }
                         }
                         Err(err) => {
@@ -1960,6 +2182,8 @@ impl Primitives for Session {
                     let state = zread!(self.state);
                     match state.wireexpr_to_keyexpr(&m.ext_wire_expr.wire_expr, false) {
                         Ok(expr) => {
+                            self.update_status_down(&state, &expr);
+
                             if expr
                                 .as_str()
                                 .starts_with(crate::liveliness::PREFIX_LIVELINESS)
@@ -1974,6 +2198,8 @@ impl Primitives for Session {
                                     &m.ext_wire_expr.wire_expr,
                                     Some(data_info),
                                     ZBuf::default(),
+                                    #[cfg(feature = "unstable")]
+                                    None,
                                 );
                             }
                         }
@@ -2008,7 +2234,14 @@ impl Primitives for Session {
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
-                self.handle_data(false, &msg.wire_expr, Some(info), m.payload)
+                self.handle_data(
+                    false,
+                    &msg.wire_expr,
+                    Some(info),
+                    m.payload,
+                    #[cfg(feature = "unstable")]
+                    m.ext_attachment.map(Into::into),
+                )
             }
             PushBody::Del(m) => {
                 let info = DataInfo {
@@ -2018,7 +2251,14 @@ impl Primitives for Session {
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
-                self.handle_data(false, &msg.wire_expr, Some(info), ZBuf::empty())
+                self.handle_data(
+                    false,
+                    &msg.wire_expr,
+                    Some(info),
+                    ZBuf::empty(),
+                    #[cfg(feature = "unstable")]
+                    m.ext_attachment.map(Into::into),
+                )
             }
         }
     }
@@ -2034,6 +2274,8 @@ impl Primitives for Session {
                 msg.ext_target,
                 m.ext_consolidation,
                 m.ext_body,
+                #[cfg(feature = "unstable")]
+                m.ext_attachment.map(Into::into),
             ),
             RequestBody::Put(_) => (),
             RequestBody::Del(_) => (),
@@ -2145,12 +2387,15 @@ impl Primitives for Session {
                             source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                             source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                         };
+                        #[allow(unused_mut)]
+                        let mut sample =
+                            Sample::with_info(key_expr.into_owned(), m.payload, Some(info));
+                        #[cfg(feature = "unstable")]
+                        {
+                            sample.attachment = m.ext_attachment.map(Into::into);
+                        }
                         let new_reply = Reply {
-                            sample: Ok(Sample::with_info(
-                                key_expr.into_owned(),
-                                m.payload,
-                                Some(info),
-                            )),
+                            sample: Ok(sample),
                             replier_id: ZenohId::rand(), // TODO
                         };
                         let callback =

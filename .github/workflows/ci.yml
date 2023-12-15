@@ -54,11 +54,11 @@ jobs:
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
-      - name: Clippy unstable
+      - name: Clippy unstable and stats
         uses: actions-rs/cargo@v1
         with:
           command: clippy
-          args: --all-targets --features unstable -- -D warnings
+          args: --all-targets --features unstable --features stats -- -D warnings
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
@@ -111,6 +111,13 @@ jobs:
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
+
+      - name: Check for feature leaks
+        if: ${{ matrix.os == 'ubuntu-latest' }}
+        uses: actions-rs/cargo@v1
+        with:
+          command: nextest
+          args: run -p zenohd --no-default-features
 
       - name: Run doctests
         uses: actions-rs/cargo@v1
