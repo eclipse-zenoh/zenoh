@@ -855,7 +855,7 @@ mod tests {
                 });
 
                 let c_ps = *ps;
-                let t_s = task::spawn(async move {
+                let t_s = task::spawn_blocking(move || {
                     schedule(producer, num_msg, c_ps);
                 });
 
@@ -972,7 +972,7 @@ mod tests {
         let size = Arc::new(AtomicUsize::new(0));
 
         let c_size = size.clone();
-        task::spawn(async move {
+        task::spawn_blocking(move || {
             loop {
                 let payload_sizes: [usize; 16] = [
                     8, 16, 32, 64, 128, 256, 512, 1_024, 2_048, 4_096, 8_192, 16_384, 32_768,
