@@ -23,7 +23,9 @@ use crate::{
         priority::TransportPriorityTx,
     },
     multicast::transport::TransportMulticastInner,
+    TransportExecutor,
 };
+use async_executor::Task;
 use async_std::{
     prelude::FutureExt,
     task::{self, JoinHandle},
@@ -269,7 +271,7 @@ pub(super) struct TransportLinkMulticastUniversal {
     // The transport this link is associated to
     transport: TransportMulticastInner,
     // The signals to stop TX/RX tasks
-    handle_tx: Option<Arc<JoinHandle<()>>>,
+    handle_tx: Option<Arc<Task<()>>>,
     signal_rx: Signal,
     handle_rx: Option<Arc<JoinHandle<()>>>,
 }
@@ -295,6 +297,7 @@ impl TransportLinkMulticastUniversal {
         &mut self,
         config: TransportLinkMulticastConfigUniversal,
         priority_tx: Arc<[TransportPriorityTx]>,
+        executor: &TransportExecutor,
     ) {
         let initial_sns: Vec<PrioritySn> = priority_tx
             .iter()
@@ -331,7 +334,7 @@ impl TransportLinkMulticastUniversal {
             // Spawn the TX task
             let c_link = self.link.clone();
             let ctransport = self.transport.clone();
-            let handle = task::spawn(async move {
+            let handle = executor.spawn(async move {
                 let res = tx_task(
                     consumer,
                     c_link.tx(),
