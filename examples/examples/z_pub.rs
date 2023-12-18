@@ -40,7 +40,7 @@ async fn main() {
             put = put.with_attachment(
                 attachment
                     .split('&')
-                    .map(|pair| pair.as_bytes().split_at(pair.find('=').unwrap_or(0)))
+                    .map(|pair| split_once(pair, '='))
                     .collect(),
             )
         }
@@ -63,6 +63,17 @@ struct Args {
     attach: Option<String>,
     #[command(flatten)]
     common: CommonArgs,
+}
+
+fn split_once(s: &str, c: char) -> (&[u8], &[u8]) {
+    let s_bytes = s.as_bytes();
+    match s.find(c) {
+        Some(index) => {
+            let (l, r) = s_bytes.split_at(index);
+            (l, &r[1..])
+        }
+        None => (s_bytes, &[]),
+    }
 }
 
 fn parse_args() -> (Config, KeyExpr<'static>, String, Option<String>) {
