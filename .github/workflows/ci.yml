@@ -31,7 +31,8 @@ jobs:
         os: [ubuntu-latest, macOS-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Clone this repository
+        uses: actions/checkout@v4
 
       - name: Install Rust toolchain
         run: |
@@ -39,35 +40,23 @@ jobs:
           rustup component add rustfmt clippy
 
       - name: Code format check
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
+        run: cargo fmt --check
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Clippy
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets -- -D warnings
+        run: cargo clippy --all-targets -- --deny warnings
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
-      - name: Clippy unstable and stats
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets --features unstable --features stats -- -D warnings
+      - name: Clippy unstable targets
+        run: cargo clippy --all-targets --features unstable -- --deny warnings
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
-      - name: Clippy shared-memory
+      - name: Clippy all features
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets --features shared-memory --features transport_unixpipe -- -D warnings
+        run: cargo clippy --all-targets --all-features -- --deny warnings
 
   test:
     name: Run tests on ${{ matrix.os }}
@@ -78,7 +67,8 @@ jobs:
         os: [ubuntu-latest, macOS-latest, windows-latest]
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Clone this repository
+        uses: actions/checkout@v4
 
       - name: Install latest Rust toolchain
         run: rustup show
@@ -94,36 +84,24 @@ jobs:
         run: cargo install cargo-nextest --locked
 
       - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: nextest
-          args: run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
+        run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
       - name: Run tests with SHM
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        uses: actions-rs/cargo@v1
-        with:
-          command: nextest
-          args: run -F shared-memory -F transport_unixpipe -p zenoh-transport
+        run: cargo nextest run -F shared-memory -F transport_unixpipe -p zenoh-transport
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
       - name: Check for feature leaks
         if: ${{ matrix.os == 'ubuntu-latest' }}
-        uses: actions-rs/cargo@v1
-        with:
-          command: nextest
-          args: run -p zenohd --no-default-features
+        run: cargo nextest run -p zenohd --no-default-features
 
       - name: Run doctests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --doc
+        run: cargo test --doc
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
@@ -136,7 +114,8 @@ jobs:
       fail-fast: false
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Clone this repository
+        uses: actions/checkout@v4
 
       - name: Install nightly Rust toolchain
         # Generic no_std target architecture is x86_64-unknown-none
@@ -145,9 +124,6 @@ jobs:
           rustup target add --toolchain nightly x86_64-unknown-none
 
       - name: Perform no_std checks
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
+        run: cargo check --bin nostd_check --target x86_64-unknown-none --manifest-path ci/nostd-check/Cargo.toml
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
