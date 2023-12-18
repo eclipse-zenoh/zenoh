@@ -121,11 +121,20 @@ impl BatchConfig {
     }
 
     pub fn max_buffer_size(&self) -> usize {
-        let mut len = self.mtu as usize;
-        if self.is_streamed {
-            len += BatchSize::BITS as usize / 8;
-        }
-        len
+        // @TODO: the value depends on wether the link is streamed or not
+        //        In case it is streamed, we need to account also for the
+        //        2 bytes for the batch length. However, by doing so,
+        //        fragmentation breaks with Zenoh-Pico since those 2 bytes
+        //        are not accounted by it. Temporarily disabling this check
+        //        till Zenoh-Pico is fixed.
+        //        See: https://github.com/eclipse-zenoh/zenoh-pico/issues/291
+        //
+        // let mut len = self.mtu as usize;
+        // if self.is_streamed {
+        //     len += BatchSize::BITS as usize / 8;
+        // }
+
+        self.mtu as usize
     }
 }
 
