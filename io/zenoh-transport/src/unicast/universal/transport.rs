@@ -134,6 +134,7 @@ impl TransportUnicastUniversal {
             self.manager.config.zid,
             self.config.zid
         );
+
         // Mark the transport as no longer alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
         let mut a_guard = self.get_alive().await;

@@ -24,6 +24,7 @@ mod tests {
         },
         time::Duration,
     };
+    use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{
@@ -43,7 +44,6 @@ mod tests {
         multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
         TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
     };
-    use zenoh_core::ztimeout;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
@@ -51,7 +51,6 @@ mod tests {
 
     const MSG_COUNT: usize = 1_000;
     const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
-
 
     // Transport Handler for the peer02
     struct SHPeer {
@@ -325,13 +324,10 @@ mod tests {
         }
     }
 
-    #[cfg(all(feature = "transport_compression", feature = "transport_udp"))]
-    #[test]
-    fn transport_multicast_udp_only() {
+    #[cfg(feature = "transport_udp")]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_multicast_udp_only() {
         env_logger::init();
-
-        task::block_on(async {
-        });
 
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
@@ -361,6 +357,6 @@ mod tests {
             },
         ];
         // Run
-        task::block_on(run(&endpoints, &channel, &MSG_SIZE_NOFRAG));
+        run(&endpoints, &channel, &MSG_SIZE_NOFRAG).await;
     }
 }

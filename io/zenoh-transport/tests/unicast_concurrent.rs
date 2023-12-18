@@ -10,12 +10,12 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use tokio::sync::Barrier;
 use std::any::Any;
 use std::convert::TryFrom;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Barrier;
 use zenoh_core::ztimeout;
 use zenoh_link::Link;
 use zenoh_protocol::{
@@ -174,9 +174,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
 
         // Verify that the transport has been correctly open
         assert_eq!(peer01_manager.get_transports_unicast().await.len(), 1);
-        let s02 = peer01_manager
-            .get_transport_unicast(&c_zid02)
-            .unwrap();
+        let s02 = peer01_manager.get_transport_unicast(&c_zid02).unwrap();
         assert_eq!(
             s02.get_links().unwrap().len(),
             c_end01.len() + c_end02.len()
@@ -278,9 +276,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
             peer02_manager.get_transports_unicast().await
         );
         assert_eq!(peer02_manager.get_transports_unicast().await.len(), 1);
-        let s01 = peer02_manager
-            .get_transport_unicast(&c_zid01)
-            .unwrap();
+        let s01 = peer02_manager.get_transport_unicast(&c_zid01).unwrap();
         assert_eq!(
             s01.get_links().unwrap().len(),
             c_end01.len() + c_end02.len()

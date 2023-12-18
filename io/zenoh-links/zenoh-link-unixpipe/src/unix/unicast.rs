@@ -17,21 +17,20 @@ use advisory_lock::{AdvisoryFileLock, FileLockMode};
 use async_trait::async_trait;
 use filepath::FilePath;
 use nix::libc;
-use std::fs::{File, OpenOptions};
-use std::os::unix::fs::OpenOptionsExt;
-use tokio::fs::remove_file;
-use tokio::io::unix::AsyncFd;
-use tokio::task::JoinHandle;
-// use filepath::FilePath;
 use nix::unistd::unlink;
 use rand::Rng;
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt;
+use std::fs::{File, OpenOptions};
 use std::io::ErrorKind;
 use std::io::{Read, Write};
+use std::os::unix::fs::OpenOptionsExt;
 use std::sync::Arc;
+use tokio::fs::remove_file;
+use tokio::io::unix::AsyncFd;
 use tokio::io::Interest;
+use tokio::task::JoinHandle;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_runtime::ZRuntime;
@@ -298,37 +297,37 @@ impl UnicastPipeListener {
         // create request channel
         let mut request_channel = PipeR::new(&path_uplink, access_mode).await?;
 
-        // // create listening task
-        // let listening_task_handle = tokio::task::spawn_blocking(move || {
-        //     ZRuntime::Accept.block_on(async move {
-        //         loop {
-        //             let _ = handle_incoming_connections(
-        //                 &endpoint,
-        //                 &manager,
-        //                 &mut request_channel,
-        //                 &path_downlink,
-        //                 &path_uplink,
-        //                 access_mode,
-        //             )
-        //             .await;
-        //         }
-        //     })
-        // });
-
         // create listening task
-        let listening_task_handle = tokio::task::spawn(async move {
-            loop {
-                let _ = handle_incoming_connections(
-                    &endpoint,
-                    &manager,
-                    &mut request_channel,
-                    &path_downlink,
-                    &path_uplink,
-                    access_mode,
-                )
-                .await;
-            }
+        let listening_task_handle = tokio::task::spawn_blocking(move || {
+            ZRuntime::Accept.block_on(async move {
+                loop {
+                    let _ = handle_incoming_connections(
+                        &endpoint,
+                        &manager,
+                        &mut request_channel,
+                        &path_downlink,
+                        &path_uplink,
+                        access_mode,
+                    )
+                    .await;
+                }
+            })
         });
+
+        // // create listening task
+        // let listening_task_handle = tokio::task::spawn(async move {
+        //     loop {
+        //         let _ = handle_incoming_connections(
+        //             &endpoint,
+        //             &manager,
+        //             &mut request_channel,
+        //             &path_downlink,
+        //             &path_uplink,
+        //             access_mode,
+        //         )
+        //         .await;
+        //     }
+        // });
 
         Ok(Self {
             listening_task_handle,

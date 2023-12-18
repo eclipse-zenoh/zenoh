@@ -447,9 +447,8 @@ impl<'a> AcceptFsm for &'a AuthUsrPwdFsm<'a> {
 }
 
 mod tests {
-    #[test]
-    fn authenticator_usrpwd_config() {
-
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn authenticator_usrpwd_config() {
         async fn inner() {
             use super::AuthUsrPwd;
             use std::{fs::File, io::Write};
@@ -477,33 +476,31 @@ mod tests {
             let mut c = zconfig!();
             writeln!(c, "usr1:pwd1").unwrap();
             drop(c);
-            assert!(AuthUsrPwd::from_config(&config).await.unwrap().is_some());
+            assert!(AuthUsrPwd::from_config(&config).unwrap().is_some());
             // Invalid config
             let mut c = zconfig!();
             writeln!(c, "usr1").unwrap();
             drop(c);
-            assert!(AuthUsrPwd::from_config(&config).await.is_err());
+            assert!(AuthUsrPwd::from_config(&config).is_err());
             // Empty password
             let mut c = zconfig!();
             writeln!(c, "usr1:").unwrap();
             drop(c);
-            assert!(AuthUsrPwd::from_config(&config).await.is_err());
+            assert!(AuthUsrPwd::from_config(&config).is_err());
             // Empty user
             let mut c = zconfig!();
             writeln!(c, ":pwd1").unwrap();
             drop(c);
-            assert!(AuthUsrPwd::from_config(&config).await.is_err());
+            assert!(AuthUsrPwd::from_config(&config).is_err());
             // Empty user and password
             let mut c = zconfig!();
             writeln!(c, ":").unwrap();
             drop(c);
-            assert!(AuthUsrPwd::from_config(&config).await.is_err());
+            assert!(AuthUsrPwd::from_config(&config).is_err());
 
             let _ = std::fs::remove_file(f1);
         }
 
-        async_std::task::block_on(async {
-            inner().await;
-        });
+        inner().await;
     }
 }

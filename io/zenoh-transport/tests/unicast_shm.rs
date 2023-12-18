@@ -211,10 +211,7 @@ mod tests {
 
         // Create the listener on the peer
         println!("Transport SHM [1a]");
-        let _ = ztimeout!(peer_shm01_manager
-            .add_listener(endpoint.clone())
-            )
-        .unwrap();
+        let _ = ztimeout!(peer_shm01_manager.add_listener(endpoint.clone())).unwrap();
 
         // Create a transport with the peer
         println!("Transport SHM [1b]");

@@ -294,7 +294,7 @@ async fn rx_task(
         let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
         // Async read from the underlying link
         tokio::select! {
-            _ = signal.wait() => break,
+            _ = signal.wait() => { break },
             res = timeout(lease, read(&link, &mut buffer)) => {
                 let n = res.map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
 
@@ -337,7 +337,7 @@ async fn rx_task_dgram(
 
         // Async read from the underlying link
         tokio::select! {
-            _ = signal.wait() => break,
+            _ = signal.wait() => { break },
             res = timeout(lease, read(&link, &mut buffer)) => {
                 let n = res.map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
                 if n == 0 {

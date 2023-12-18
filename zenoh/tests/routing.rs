@@ -20,9 +20,9 @@ use std::time::Duration;
 use zenoh::config::{Config, ModeDependentValue};
 use zenoh::prelude::r#async::*;
 use zenoh::{value::Value, Result};
+use zenoh_core::ztimeout;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};
 use zenoh_result::{bail, zerror};
-use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(360);
 const MSG_COUNT: usize = 50;

@@ -289,7 +289,7 @@ mod tests {
         });
 
         println!("[Simultaneous] => Waiting for peer01 and peer02 tasks...");
-        tokio::join!(peer01_task, peer02_task);
+        let _ = tokio::join!(peer01_task, peer02_task);
         println!("[Simultaneous] => Waiting for peer01 and peer02 tasks... DONE\n");
 
         // Wait a little bit

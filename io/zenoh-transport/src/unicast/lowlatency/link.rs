@@ -104,7 +104,10 @@ impl TransportUnicastLowlatency {
     }
 
     pub(super) fn internal_start_rx(&self, lease: Duration, batch_size: u16) {
-        let link = tokio::task::block_in_place(|| self.link.blocking_read().clone());
+        let link = tokio::task::block_in_place(|| {
+            ZRuntime::RX.block_on(async { self.link.read().await.clone() })
+        });
+        // self.link.blocking_read().clone());
         // The pool of buffers
         let pool = {
             let rx_buffer_size = self.manager.config.link_rx_buffer_size;

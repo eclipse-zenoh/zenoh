@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use std::{any::Any, sync::Arc, time::Duration};
-use zenoh_core::{ztimeout, zasyncwrite};
+use zenoh_core::{zasyncwrite, ztimeout};
 use zenoh_link::Link;
 use zenoh_protocol::{
     core::{EndPoint, WhatAmI, ZenohId},

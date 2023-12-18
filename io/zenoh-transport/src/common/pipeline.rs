@@ -59,8 +59,7 @@ impl StageInRefill {
     }
 
     fn wait(&self) -> bool {
-        let res = self.n_ref_r.recv().is_ok();
-        res
+        self.n_ref_r.recv().is_ok()
     }
 }
 
