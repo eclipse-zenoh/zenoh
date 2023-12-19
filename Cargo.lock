@@ -4561,7 +4561,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-global-executor",
  "async-std",
@@ -4609,7 +4609,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-buffers"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "rand 0.8.5",
  "zenoh-collections",
@@ -4617,7 +4617,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-codec"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "criterion",
  "env_logger",
@@ -4633,11 +4633,11 @@ dependencies = [
 
 [[package]]
 name = "zenoh-collections"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 
 [[package]]
 name = "zenoh-config"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "flume",
  "json5",
@@ -4655,7 +4655,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-core"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "lazy_static",
@@ -4664,7 +4664,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-crypto"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "aes 0.8.3",
  "hmac 0.12.1",
@@ -4676,7 +4676,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-examples"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "clap",
@@ -4694,7 +4694,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-ext"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "bincode",
@@ -4714,7 +4714,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-keyexpr"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "criterion",
  "hashbrown 0.14.0",
@@ -4729,7 +4729,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "async-trait",
@@ -4750,7 +4750,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-commons"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "async-trait",
@@ -4766,7 +4766,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-quic"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-rustls",
  "async-std",
@@ -4791,7 +4791,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-serial"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "async-trait",
@@ -4812,7 +4812,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-tcp"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "async-trait",
@@ -4827,7 +4827,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-tls"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-rustls",
  "async-std",
@@ -4851,7 +4851,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-udp"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "async-trait",
@@ -4869,7 +4869,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-unixpipe"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "advisory-lock",
  "async-io",
@@ -4890,7 +4890,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-unixsock_stream"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "async-trait",
@@ -4907,7 +4907,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-link-ws"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "async-trait",
@@ -4926,7 +4926,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-macros"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -4938,7 +4938,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-example"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "clap",
@@ -4955,7 +4955,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-rest"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "anyhow",
  "async-std",
@@ -4982,7 +4982,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-storage-manager"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-global-executor",
  "async-std",
@@ -5015,7 +5015,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-plugin-trait"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "libloading",
  "log",
@@ -5027,7 +5027,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-protocol"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "const_format",
  "hex",
@@ -5043,14 +5043,14 @@ dependencies = [
 
 [[package]]
 name = "zenoh-result"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "anyhow",
 ]
 
 [[package]]
 name = "zenoh-shm"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "bincode",
  "log",
@@ -5062,7 +5062,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-sync"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "event-listener 4.0.0",
@@ -5076,7 +5076,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-transport"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-executor",
  "async-global-executor",
@@ -5109,7 +5109,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh-util"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "async-trait",
@@ -5135,7 +5135,7 @@ dependencies = [
 
 [[package]]
 name = "zenoh_backend_traits"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "async-trait",
@@ -5149,7 +5149,7 @@ dependencies = [
 
 [[package]]
 name = "zenohd"
-version = "0.11.0-dev"
+version = "0.10.1-rc"
 dependencies = [
  "async-std",
  "clap",
