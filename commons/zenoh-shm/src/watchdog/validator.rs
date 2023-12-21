@@ -15,7 +15,7 @@
 use std::{
     collections::BTreeMap,
     sync::{
-        atomic::{AtomicBool, AtomicPtr, AtomicUsize, Ordering},
+        atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
     thread::{self},
@@ -24,11 +24,13 @@ use std::{
 
 use zenoh_result::{bail, zerror, ZResult};
 
+use crate::header::descriptor::OwnedHeaderDescriptor;
+
 use super::descriptor::OwnedDescriptor;
 
 // todo: optimize validation by packing descriptors
 pub struct WatchdogValidator {
-    watched: Arc<Mutex<BTreeMap<OwnedDescriptor, AtomicPtr<AtomicUsize>>>>,
+    watched: Arc<Mutex<BTreeMap<OwnedDescriptor, OwnedHeaderDescriptor>>>,
     running: Arc<AtomicBool>,
 }
 
@@ -44,10 +46,9 @@ impl WatchdogValidator {
     where
         F: Fn(OwnedDescriptor) + Send + 'static,
     {
-        let watched = Arc::new(Mutex::new(BTreeMap::<
-            OwnedDescriptor,
-            AtomicPtr<AtomicUsize>,
-        >::default()));
+        let watched = Arc::new(Mutex::new(
+            BTreeMap::<OwnedDescriptor, OwnedHeaderDescriptor>::default(),
+        ));
         let running = Arc::new(AtomicBool::new(true));
 
         let c_watched = watched.clone();
@@ -55,16 +56,10 @@ impl WatchdogValidator {
         let _ = thread::spawn(move || {
             while c_running.load(Ordering::Relaxed) {
                 let mut guard = c_watched.lock().unwrap();
-                guard.retain(|watchdog, refcount| {
-                    let old_val = unsafe {
-                        (*watchdog.atomic).fetch_and(!watchdog.mask, Ordering::SeqCst)
-                            & watchdog.mask
-                    };
+                guard.retain(|watchdog, header| {
+                    let old_val = watchdog.validate();
                     if old_val == 0 {
-                        {
-                            let rc = refcount.load(Ordering::SeqCst);
-                            unsafe { (*rc).fetch_sub(1, Ordering::SeqCst) };
-                        }
+                        header.header().watchdog_flag.store(false, Ordering::SeqCst);
                         on_dropped(watchdog.clone()); // todo: get rid of .clone()
                         return false;
                     }
@@ -78,9 +73,9 @@ impl WatchdogValidator {
         Self { watched, running }
     }
 
-    pub fn add(&self, watchdog: OwnedDescriptor, refcount: AtomicPtr<AtomicUsize>) -> ZResult<()> {
+    pub fn add(&self, watchdog: OwnedDescriptor, header: OwnedHeaderDescriptor) -> ZResult<()> {
         let mut guard = self.watched.lock().map_err(|e| zerror!("{e}"))?;
-        if guard.insert(watchdog, refcount).is_none() {
+        if guard.insert(watchdog, header).is_none() {
             return Ok(());
         }
         bail!("Watchdog already exists!")

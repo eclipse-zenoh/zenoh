@@ -14,7 +14,7 @@
 
 use std::sync::{atomic::AtomicU64, Arc};
 
-use super::shm::Segment;
+use super::segment::Segment;
 
 pub type SegmentID = u32;
 
@@ -26,10 +26,9 @@ pub struct Descriptor {
 
 impl From<&OwnedDescriptor> for Descriptor {
     fn from(item: &OwnedDescriptor) -> Self {
-        let index = unsafe {
-            item.atomic
-                .offset_from(item.segment.shmem.as_ptr() as *const AtomicU64)
-        } as u32;
+        let (table, id) = item.segment.table_and_id();
+
+        let index = unsafe { item.atomic.offset_from(table) } as u32;
         let bitpos = {
             // todo: can be optimized
             let mut v = item.mask;
@@ -40,9 +39,9 @@ impl From<&OwnedDescriptor> for Descriptor {
             }
             bitpos
         };
-        let index_and_bitpos = (index << 5) | bitpos;
+        let index_and_bitpos = (index << 6) | bitpos;
         Descriptor {
-            id: item.segment.id,
+            id,
             index_and_bitpos,
         }
     }
@@ -50,21 +49,35 @@ impl From<&OwnedDescriptor> for Descriptor {
 
 #[derive(Clone)]
 pub struct OwnedDescriptor {
-    pub segment: Arc<Segment>,
-    pub atomic: *const AtomicU64,
-    pub mask: u64,
+    segment: Arc<Segment>,
+    atomic: *const AtomicU64,
+    mask: u64,
 }
 
+unsafe impl Send for OwnedDescriptor {}
+unsafe impl Sync for OwnedDescriptor {}
+
 impl OwnedDescriptor {
+    pub fn new(segment: Arc<Segment>, atomic: *const AtomicU64, mask: u64) -> Self {
+        Self {
+            segment,
+            atomic,
+            mask,
+        }
+    }
+
     pub fn confirm(&self) {
         unsafe {
             (*self.atomic).fetch_or(self.mask, std::sync::atomic::Ordering::SeqCst);
         };
     }
-}
 
-unsafe impl Send for OwnedDescriptor {}
-unsafe impl Sync for OwnedDescriptor {}
+    pub fn validate(&self) -> u64 {
+        unsafe {
+            (*self.atomic).fetch_and(!self.mask, std::sync::atomic::Ordering::SeqCst) & self.mask
+        }
+    }
+}
 
 impl Ord for OwnedDescriptor {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {

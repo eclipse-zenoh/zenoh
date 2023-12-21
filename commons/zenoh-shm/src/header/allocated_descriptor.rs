@@ -12,8 +12,15 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub mod confirmator;
-pub mod descriptor;
-mod segment;
-pub mod storage;
-mod validator;
+use super::{descriptor::OwnedHeaderDescriptor, storage::GLOBAL_HEADER_STORAGE};
+
+#[derive(Debug)]
+pub struct AllocatedHeaderDescriptor {
+    pub descriptor: OwnedHeaderDescriptor,
+}
+
+impl Drop for AllocatedHeaderDescriptor {
+    fn drop(&mut self) {
+        GLOBAL_HEADER_STORAGE.reclaim_header(self.descriptor.clone());
+    }
+}

@@ -15,19 +15,18 @@ use lazy_static::lazy_static;
 use std::{
     collections::BTreeSet,
     mem::size_of,
-    sync::{
-        atomic::{AtomicPtr, AtomicU64, AtomicUsize},
-        Arc, Mutex,
-    },
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
 use zenoh_result::{zerror, ZResult};
 
+use crate::header::descriptor::OwnedHeaderDescriptor;
+
 use super::{
     confirmator::{ConfirmedDescriptor, GLOBAL_CONFIRMATOR},
     descriptor::OwnedDescriptor,
-    shm::Segment,
+    segment::Segment,
     validator::WatchdogValidator,
 };
 
@@ -46,20 +45,16 @@ pub struct Storage {
 impl Storage {
     pub fn new(initial_watchdog_count: usize, watchdog_interval: Duration) -> ZResult<Self> {
         let segment = Arc::new(Segment::create(initial_watchdog_count)?);
-        let segment_address = segment.shmem.as_ptr() as *mut u64;
+        let segment_address = segment.table();
 
         let mut initially_available = BTreeSet::default();
-        let subsegments = segment.shmem.len() / size_of::<u64>();
-        for subsegment in 0usize..subsegments {
-            let atomic = unsafe { segment_address.add(subsegment) as *mut AtomicU64 };
+        let subsegments = segment.len() / size_of::<u64>();
+        for subsegment in 0..subsegments {
+            let atomic = unsafe { segment_address.add(subsegment) };
 
             for bit in 0..64 {
                 let mask = 1u64 << bit;
-                let descriptor = OwnedDescriptor {
-                    segment: segment.clone(),
-                    atomic,
-                    mask,
-                };
+                let descriptor = OwnedDescriptor::new(segment.clone(), atomic, mask);
                 initially_available.insert(descriptor);
             }
         }
@@ -79,17 +74,14 @@ impl Storage {
         })
     }
 
-    pub fn allocate_watchdog(
-        &self,
-        refcount: AtomicPtr<AtomicUsize>,
-    ) -> ZResult<ConfirmedDescriptor> {
+    pub fn allocate_watchdog(&self, header: OwnedHeaderDescriptor) -> ZResult<ConfirmedDescriptor> {
         let mut guard = self.available.lock().map_err(|e| zerror!("{e}"))?;
         let popped = guard.pop_first();
         drop(guard);
 
         let watchdog = popped.ok_or_else(|| zerror!("no free watchdogs available"))?;
         let confirmed = GLOBAL_CONFIRMATOR.add_owned(watchdog.clone())?;
-        self.validator.add(watchdog, refcount)?;
+        self.validator.add(watchdog, header)?;
 
         Ok(confirmed)
     }

@@ -12,53 +12,50 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::mem::size_of;
+use std::fmt::Display;
 
 use rand::Rng;
 use shared_memory::{Shmem, ShmemConf, ShmemError};
 use zenoh_result::{bail, zerror, ZResult};
 
-use super::descriptor::SegmentID;
-
 const SEGMENT_DEDICATE_TRIES: usize = 100;
 
-pub struct Segment {
+pub struct Segment<ID> {
     pub shmem: Shmem,
-    pub id: SegmentID,
+    pub id: ID,
 }
 
-unsafe impl Send for Segment {}
-unsafe impl Sync for Segment {}
-
-impl Segment {
-    pub fn create(watchdog_count: usize) -> ZResult<Self> {
-        let alloc_size = (watchdog_count + 63) / 64 * size_of::<u64>();
-
+impl<ID> Segment<ID>
+where
+    rand::distributions::Standard: rand::distributions::Distribution<ID>,
+    ID: Clone + Display,
+{
+    pub fn create(alloc_size: usize, file_prefix: &str) -> ZResult<Self> {
         for _ in 0..SEGMENT_DEDICATE_TRIES {
-            let id: SegmentID = rand::thread_rng().gen();
+            let id: ID = rand::thread_rng().gen();
 
             match ShmemConf::new()
                 .size(alloc_size)
-                .flink(Self::filename(id))
+                .os_id(Self::filename(id.clone(), file_prefix))
                 .create()
             {
                 Ok(shmem) => return Ok(Segment { shmem, id }),
                 Err(ShmemError::LinkExists) => {}
-                Err(e) => bail!("Unable to create watchdog shm segment: {}", e),
+                Err(e) => bail!("Unable to create POSIX shm segment: {}", e),
             }
         }
-        bail!("Unable to dedicate watchdog shm segment file!");
+        bail!("Unable to dedicate POSIX shm segment file after {SEGMENT_DEDICATE_TRIES} tries!");
     }
 
-    pub fn open(id: SegmentID) -> ZResult<Self> {
+    pub fn open(id: ID, file_prefix: &str) -> ZResult<Self> {
         let shmem = ShmemConf::new()
-            .flink(Self::filename(id))
+            .os_id(Self::filename(id.clone(), file_prefix))
             .open()
-            .map_err(|e| zerror!("Unable to open watchdog shm segment: {}", e))?;
+            .map_err(|e| zerror!("Unable to open POSIX shm segment: {}", e))?;
         Ok(Self { shmem, id })
     }
 
-    fn filename(id: SegmentID) -> String {
-        format!("watchdog_{id}")
+    fn filename(id: ID, file_prefix: &str) -> String {
+        format!("{file_prefix}_{id}")
     }
 }

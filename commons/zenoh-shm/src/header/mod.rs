@@ -12,8 +12,9 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub mod confirmator;
+pub mod allocated_descriptor;
+pub mod chunk_header;
 pub mod descriptor;
-mod segment;
+pub mod segment;
 pub mod storage;
-mod validator;
+pub mod subscription;

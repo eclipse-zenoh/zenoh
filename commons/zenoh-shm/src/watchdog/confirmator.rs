@@ -14,10 +14,7 @@
 
 use std::{
     collections::BTreeMap,
-    sync::{
-        atomic::{AtomicBool, AtomicU64},
-        Arc, Mutex,
-    },
+    sync::{atomic::AtomicBool, Arc, Mutex},
     thread::{self},
     time::Duration,
 };
@@ -28,7 +25,7 @@ use zenoh_result::{zerror, ZResult};
 
 use super::{
     descriptor::{Descriptor, OwnedDescriptor, SegmentID},
-    shm::Segment,
+    segment::Segment,
 };
 
 lazy_static! {
@@ -141,17 +138,12 @@ impl WatchdogConfirmator {
             std::collections::btree_map::Entry::Occupied(occupied) => occupied.get().clone(),
         };
 
-        let index = (descriptor.index_and_bitpos >> 5) as usize;
+        let index = (descriptor.index_and_bitpos >> 6) as usize;
         let bitpos = descriptor.index_and_bitpos & 0x3f;
 
-        let atomic =
-            unsafe { (segment.shmem.as_ptr() as *const u64).add(index) as *const AtomicU64 };
+        let atomic = unsafe { segment.table().add(index) };
         let mask = 1u64 << bitpos;
 
-        Ok(OwnedDescriptor {
-            segment,
-            atomic,
-            mask,
-        })
+        Ok(OwnedDescriptor::new(segment, atomic, mask))
     }
 }
