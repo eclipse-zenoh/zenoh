@@ -14,7 +14,6 @@
 use lazy_static::lazy_static;
 use std::{
     collections::BTreeSet,
-    mem::size_of,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -45,12 +44,11 @@ pub struct Storage {
 impl Storage {
     pub fn new(initial_watchdog_count: usize, watchdog_interval: Duration) -> ZResult<Self> {
         let segment = Arc::new(Segment::create(initial_watchdog_count)?);
-        let segment_address = segment.table();
 
         let mut initially_available = BTreeSet::default();
-        let subsegments = segment.len() / size_of::<u64>();
+        let subsegments = segment.array.elem_count();
         for subsegment in 0..subsegments {
-            let atomic = unsafe { segment_address.add(subsegment) };
+            let atomic = unsafe { segment.array.elem(subsegment as u32) };
 
             for bit in 0..64 {
                 let mask = 1u64 << bit;

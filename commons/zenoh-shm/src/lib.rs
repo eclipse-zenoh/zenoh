@@ -5,6 +5,7 @@ use header::{
     storage::GLOBAL_HEADER_STORAGE,
     subscription::GLOBAL_HEADER_SUBSCRIPTION,
 };
+use num_traits::float;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -42,7 +43,6 @@ mod posix_shm;
 pub mod watchdog;
 
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
-const ACCOUNTED_OVERHEAD: usize = 4_096;
 const ZENOH_SHM_PREFIX: &str = "zenoh_shm_zid";
 
 fn align_addr_at(addr: usize, align: usize) -> usize {
@@ -340,12 +340,7 @@ impl SharedMemoryManager {
             .ok_or_else(|| ShmError(zerror!("Unable to parse tmp directory: {:?}", temp_dir)))?
             .to_string();
         log::trace!("Creating file at: {}", path);
-        let real_size = size + ACCOUNTED_OVERHEAD;
-        let shmem = match ShmemConf::new()
-            .size(real_size)
-            .flink(path.clone())
-            .create()
-        {
+        let shmem = match ShmemConf::new().size(size).flink(path.clone()).create() {
             Ok(m) => m,
             Err(ShmemError::LinkExists) => {
                 return Err(ShmError(zerror!(
@@ -363,14 +358,14 @@ impl SharedMemoryManager {
         let chunk = Chunk {
             base_addr: base_ptr,
             offset: 0,
-            size: real_size,
+            size,
         };
         free_list.push(chunk);
         let busy_list = vec![];
         let shm = SharedMemoryManager {
             segment_path: path,
             size,
-            available: real_size,
+            available: size,
             own_segment: shmem,
             free_list,
             busy_list,
@@ -396,7 +391,7 @@ impl SharedMemoryManager {
             0,
             Descriptor::from(&watchdog.owned),
             HeaderDescriptor::from(&header),
-            0,
+            header.header().generation.load(Ordering::SeqCst),
         );
         let shmb = SharedMemoryBuf {
             header,

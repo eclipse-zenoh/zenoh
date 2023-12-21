@@ -26,9 +26,6 @@ pub struct Descriptor {
 
 impl From<&OwnedDescriptor> for Descriptor {
     fn from(item: &OwnedDescriptor) -> Self {
-        let (table, id) = item.segment.table_and_id();
-
-        let index = unsafe { item.atomic.offset_from(table) } as u32;
         let bitpos = {
             // todo: can be optimized
             let mut v = item.mask;
@@ -39,9 +36,10 @@ impl From<&OwnedDescriptor> for Descriptor {
             }
             bitpos
         };
+        let index = unsafe { item.segment.array.index(item.atomic) };
         let index_and_bitpos = (index << 6) | bitpos;
         Descriptor {
-            id,
+            id: item.segment.array.id(),
             index_and_bitpos,
         }
     }

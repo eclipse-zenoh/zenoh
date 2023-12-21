@@ -20,7 +20,8 @@ use std::{
 use zenoh_result::{zerror, ZResult};
 
 use super::{
-    allocated_descriptor::AllocatedHeaderDescriptor, descriptor::OwnedHeaderDescriptor,
+    allocated_descriptor::AllocatedHeaderDescriptor,
+    descriptor::{HeaderIndex, OwnedHeaderDescriptor},
     segment::HeaderSegment,
 };
 
@@ -37,11 +38,17 @@ impl Storage {
         let initial_header_count = 32768usize;
         let initial_segment = Arc::new(HeaderSegment::create(initial_header_count)?);
         let mut initially_available = LinkedList::<OwnedHeaderDescriptor>::default();
-        let table = initial_segment.table_and_id().0;
 
         for index in 0..initial_header_count {
-            let header = unsafe { table.add(index) };
+            let header = unsafe { initial_segment.array.elem(index as HeaderIndex) };
             let descriptor = OwnedHeaderDescriptor::new(initial_segment.clone(), header);
+
+            // init generation (this is not really necessary, but we do)
+            descriptor
+                .header()
+                .generation
+                .store(0, std::sync::atomic::Ordering::SeqCst);
+
             initially_available.push_back(descriptor);
         }
 
@@ -57,11 +64,8 @@ impl Storage {
 
         let descriptor = popped.ok_or_else(|| zerror!("no free headers available"))?;
 
-        //initialize header
+        //initialize header fields
         let header = descriptor.header();
-        header
-            .generation
-            .store(0, std::sync::atomic::Ordering::SeqCst);
         header
             .refcount
             .store(1, std::sync::atomic::Ordering::SeqCst);
@@ -73,6 +77,11 @@ impl Storage {
     }
 
     pub(crate) fn reclaim_header(&self, header: OwnedHeaderDescriptor) {
+        // header deallocated - increment it's generation to invalidate any existing references, if any
+        header
+            .header()
+            .generation
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut guard = self.available.lock().unwrap();
         guard.push_front(header);
     }

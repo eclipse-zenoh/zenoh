@@ -138,10 +138,10 @@ impl WatchdogConfirmator {
             std::collections::btree_map::Entry::Occupied(occupied) => occupied.get().clone(),
         };
 
-        let index = (descriptor.index_and_bitpos >> 6) as usize;
+        let index = (descriptor.index_and_bitpos >> 6) as u32;
         let bitpos = descriptor.index_and_bitpos & 0x3f;
 
-        let atomic = unsafe { segment.table().add(index) };
+        let atomic = unsafe { segment.array.elem(index) };
         let mask = 1u64 << bitpos;
 
         Ok(OwnedDescriptor::new(segment, atomic, mask))

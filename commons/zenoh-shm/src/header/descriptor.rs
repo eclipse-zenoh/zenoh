@@ -27,8 +27,8 @@ pub struct HeaderDescriptor {
 
 impl From<&OwnedHeaderDescriptor> for HeaderDescriptor {
     fn from(item: &OwnedHeaderDescriptor) -> Self {
-        let (table, id) = item.segment.table_and_id();
-        let index = unsafe { item.header.offset_from(table) } as HeaderIndex;
+        let id = item.segment.array.id();
+        let index = unsafe { item.segment.array.index(item.header) } as HeaderIndex;
 
         Self { id, index }
     }
@@ -48,6 +48,7 @@ impl OwnedHeaderDescriptor {
         Self { segment, header }
     }
 
+    #[inline(always)]
     pub fn header(&self) -> &ChunkHeaderType {
         unsafe { &(*self.header) }
     }
