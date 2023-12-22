@@ -330,11 +330,10 @@ fn codec_shm_info() {
 
     run!(SharedMemoryBufInfo, {
         let mut rng = rand::thread_rng();
-        let len = rng.gen_range(0..16);
         SharedMemoryBufInfo::new(
             rng.gen(),
             rng.gen(),
-            Alphanumeric.sample_string(&mut rng, len),
+            rng.gen(),
             rng.gen(),
             Descriptor {
                 id: rng.gen(),

@@ -19,7 +19,6 @@ use zenoh_result::ZResult;
 use zenoh_shm::{SharedMemoryBuf, SharedMemoryManager, SharedMemoryReader};
 
 pub(crate) type Challenge = u64;
-const NAME: &str = "zshm";
 
 /*************************************/
 /*          Authenticator            */
@@ -41,7 +40,7 @@ impl SharedMemoryUnicast {
         let nonce = prng.gen::<Challenge>();
         let size = std::mem::size_of::<Challenge>();
 
-        let mut _manager = SharedMemoryManager::make(format!("{NAME}.{nonce}"), size)?;
+        let mut _manager = SharedMemoryManager::make(size)?;
 
         let mut challenge = _manager.alloc(size).map_err(|e| zerror!("{e}"))?;
         let slice = unsafe { challenge.as_mut_slice() };

@@ -116,7 +116,7 @@ mod tests {
             // Create the SharedMemoryManager
             let to_alloc = size * MSG_COUNT / 10;
             println!("[PS][02b] Allocating {to_alloc} bytes in SHM");
-            let mut shm01 = SharedMemoryManager::make(key_expr.clone(), to_alloc).unwrap();
+            let mut shm01 = SharedMemoryManager::make(to_alloc).unwrap();
             let shm_segment_size = shm01.available();
 
             // Put data

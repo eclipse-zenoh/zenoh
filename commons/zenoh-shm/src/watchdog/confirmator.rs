@@ -138,7 +138,7 @@ impl WatchdogConfirmator {
             std::collections::btree_map::Entry::Occupied(occupied) => occupied.get().clone(),
         };
 
-        let index = (descriptor.index_and_bitpos >> 6) as u32;
+        let index = descriptor.index_and_bitpos >> 6;
         let bitpos = descriptor.index_and_bitpos & 0x3f;
 
         let atomic = unsafe { segment.array.elem(index) };

@@ -20,6 +20,7 @@ use zenoh_result::{bail, zerror, ZResult};
 
 const SEGMENT_DEDICATE_TRIES: usize = 100;
 
+/// Segment of shared memory identified by an ID
 pub struct Segment<ID> {
     pub shmem: Shmem,
     pub id: ID,
@@ -30,32 +31,39 @@ where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
     ID: Clone + Display,
 {
-    pub fn create(alloc_size: usize, file_prefix: &str) -> ZResult<Self> {
+    // Automatically generate free id and create a new segment identified by this id
+    pub fn create(alloc_size: usize, id_prefix: &str) -> ZResult<Self> {
         for _ in 0..SEGMENT_DEDICATE_TRIES {
+            // Generate random id
             let id: ID = rand::thread_rng().gen();
 
+            // Try to create a new segment identified by prefix and generated id.
+            // If creation fails because segment already exists for this id,
+            // the creation attempt will be repeated with another id
             match ShmemConf::new()
                 .size(alloc_size)
-                .os_id(Self::filename(id.clone(), file_prefix))
+                .os_id(Self::os_id(id.clone(), id_prefix))
                 .create()
             {
                 Ok(shmem) => return Ok(Segment { shmem, id }),
                 Err(ShmemError::LinkExists) => {}
+                Err(ShmemError::MappingIdExists) => {}
                 Err(e) => bail!("Unable to create POSIX shm segment: {}", e),
             }
         }
         bail!("Unable to dedicate POSIX shm segment file after {SEGMENT_DEDICATE_TRIES} tries!");
     }
 
-    pub fn open(id: ID, file_prefix: &str) -> ZResult<Self> {
+    // Open an existing segment identified by id
+    pub fn open(id: ID, id_prefix: &str) -> ZResult<Self> {
         let shmem = ShmemConf::new()
-            .os_id(Self::filename(id.clone(), file_prefix))
+            .os_id(Self::os_id(id.clone(), id_prefix))
             .open()
             .map_err(|e| zerror!("Unable to open POSIX shm segment: {}", e))?;
         Ok(Self { shmem, id })
     }
 
-    fn filename(id: ID, file_prefix: &str) -> String {
-        format!("{file_prefix}_{id}")
+    fn os_id(id: ID, id_prefix: &str) -> String {
+        format!("{id_prefix}_{id}")
     }
 }

@@ -14,7 +14,6 @@
 #[cfg(feature = "shared-memory")]
 mod tests {
     use async_std::{prelude::FutureExt, task};
-    use rand::{Rng, SeedableRng};
     use std::{
         any::Any,
         convert::TryFrom,
@@ -26,7 +25,6 @@ mod tests {
     };
     use zenoh_buffers::buffer::SplitBuffer;
     use zenoh_core::zasync_executor_init;
-    use zenoh_crypto::PseudoRng;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{CongestionControl, Encoding, EndPoint, Priority, WhatAmI, ZenohId},
@@ -160,13 +158,9 @@ mod tests {
         let peer_net01 = ZenohId::try_from([3]).unwrap();
 
         let mut tries = 100;
-        let mut prng = PseudoRng::from_entropy();
         let mut shm01 = loop {
             // Create the SharedMemoryManager
-            if let Ok(shm01) = SharedMemoryManager::make(
-                format!("peer_shm01_{}_{}", endpoint.protocol(), prng.gen::<usize>()),
-                2 * MSG_SIZE,
-            ) {
+            if let Ok(shm01) = SharedMemoryManager::make(2 * MSG_SIZE) {
                 break Ok(shm01);
             }
             tries -= 1;

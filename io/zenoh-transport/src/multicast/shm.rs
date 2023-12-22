@@ -12,13 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::sync::RwLock;
-use rand::{Rng, SeedableRng};
-use zenoh_crypto::PseudoRng;
 use zenoh_result::ZResult;
 use zenoh_shm::{SharedMemoryManager, SharedMemoryReader};
 
 pub(crate) type Challenge = u64;
-const NAME: &str = "zshm_mcast";
 
 pub(crate) struct SharedMemoryMulticast {
     pub(crate) _manager: SharedMemoryManager,
@@ -29,11 +26,9 @@ unsafe impl Sync for SharedMemoryMulticast {}
 
 impl SharedMemoryMulticast {
     pub fn make() -> ZResult<SharedMemoryMulticast> {
-        let mut prng = PseudoRng::from_entropy();
-        let nonce = prng.gen::<Challenge>();
         let size = std::mem::size_of::<Challenge>();
 
-        let mut _manager = SharedMemoryManager::make(format!("{NAME}.{nonce}"), size)?;
+        let mut _manager = SharedMemoryManager::make(size)?;
 
         let shmauth = SharedMemoryMulticast {
             _manager,

@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use zenoh_result::{bail, ZResult};
+use zenoh_result::ZResult;
 
 use crate::posix_shm::array::ArrayInSHM;
 

@@ -38,8 +38,7 @@ async fn main() -> Result<(), zenoh::Error> {
     let session = zenoh::open(config).res().await.unwrap();
 
     println!("Creating Shared Memory Manager...");
-    let id = session.zid();
-    let mut shm = SharedMemoryManager::make(id.to_string(), N * 1024).unwrap();
+    let mut shm = SharedMemoryManager::make(N * 1024).unwrap();
 
     println!("Allocating Shared Memory Buffer...");
     let publisher = session.declare_publisher(&path).res().await.unwrap();

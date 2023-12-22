@@ -5,7 +5,7 @@ use header::{
     storage::GLOBAL_HEADER_STORAGE,
     subscription::GLOBAL_HEADER_SUBSCRIPTION,
 };
-use num_traits::float;
+use segment::{DataSegment, DataSegmentID};
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -19,7 +19,6 @@ use num_traits::float;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use shared_memory::{Shmem, ShmemConf, ShmemError};
 use std::{
     any::Any,
     cmp,
@@ -40,10 +39,10 @@ use zenoh_result::{zerror, ShmError, ZResult};
 
 pub mod header;
 mod posix_shm;
+mod segment;
 pub mod watchdog;
 
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
-const ZENOH_SHM_PREFIX: &str = "zenoh_shm_zid";
 
 fn align_addr_at(addr: usize, align: usize) -> usize {
     match addr % align {
@@ -87,7 +86,7 @@ pub struct SharedMemoryBufInfo {
     /// The length of the buffer and CHUNK_HEADER_SIZE
     pub length: usize,
     /// The identifier of the shm manager that manages the shm segment this buffer points to.
-    pub shm_manager: String,
+    pub segment_id: DataSegmentID,
     /// The kind of buffer.
     pub kind: u8,
     /// The watchdog descriptor of buffer.
@@ -102,7 +101,7 @@ impl SharedMemoryBufInfo {
     pub fn new(
         offset: usize,
         length: usize,
-        manager: String,
+        segment_id: DataSegmentID,
         kind: u8,
         watchdog_descriptor: Descriptor,
         header_descriptor: HeaderDescriptor,
@@ -111,7 +110,7 @@ impl SharedMemoryBufInfo {
         SharedMemoryBufInfo {
             offset,
             length,
-            shm_manager: manager,
+            segment_id,
             kind,
             watchdog_descriptor,
             header_descriptor,
@@ -156,10 +155,6 @@ impl SharedMemoryBuf {
 
     pub fn set_kind(&mut self, v: u8) {
         self.info.kind = v
-    }
-
-    pub fn owner(&self) -> String {
-        self.info.shm_manager.clone()
     }
 
     pub fn is_generation_valid(&self) -> bool {
@@ -225,7 +220,7 @@ impl Clone for SharedMemoryBuf {
 /*       SHARED MEMORY READER        */
 /*************************************/
 pub struct SharedMemoryReader {
-    segments: HashMap<String, Shmem>,
+    segments: HashMap<DataSegmentID, DataSegment>,
 }
 
 unsafe impl Send for SharedMemoryReader {}
@@ -239,15 +234,15 @@ impl SharedMemoryReader {
     }
 
     pub fn connect_map_to_shm(&mut self, info: &SharedMemoryBufInfo) -> ZResult<()> {
-        match ShmemConf::new().flink(&info.shm_manager).open() {
-            Ok(shm) => {
-                self.segments.insert(info.shm_manager.clone(), shm);
+        match DataSegment::open(info.segment_id) {
+            Ok(segment) => {
+                self.segments.insert(info.segment_id, segment);
                 Ok(())
             }
             Err(e) => {
                 let e = zerror!(
                     "Unable to bind shared memory segment {}: {:?}",
-                    info.shm_manager,
+                    info.segment_id,
                     e
                 );
                 log::trace!("{}", e);
@@ -259,9 +254,9 @@ impl SharedMemoryReader {
     pub fn try_read_shmbuf(&self, info: &SharedMemoryBufInfo) -> ZResult<SharedMemoryBuf> {
         // Try read does not increment the reference count as it is assumed
         // that the sender of this buffer has incremented for us.
-        match self.segments.get(&info.shm_manager) {
-            Some(shm) => {
-                let base_ptr = shm.as_ptr();
+        match self.segments.get(&info.segment_id) {
+            Some(segment) => {
+                let base_ptr = segment.segment.shmem.as_ptr();
                 let buf = unsafe { base_ptr.add(info.offset) };
                 let shmb = SharedMemoryBuf {
                     header: GLOBAL_HEADER_SUBSCRIPTION.link(&info.header_descriptor)?,
@@ -273,7 +268,7 @@ impl SharedMemoryReader {
                 Ok(shmb)
             }
             None => {
-                let e = zerror!("Unable to find shared memory segment: {}", info.shm_manager);
+                let e = zerror!("Unable to find shared memory segment: {}", info.segment_id);
                 log::trace!("{}", e);
                 Err(ShmError(e).into())
             }
@@ -313,10 +308,8 @@ pub struct BusyChunk {
 ///
 /// Allows to access a shared memory segment and reserve some parts of this segment for writting.
 pub struct SharedMemoryManager {
-    segment_path: String,
-    size: usize,
     available: usize,
-    own_segment: Shmem,
+    own_segment: DataSegment,
     free_list: BinaryHeap<Chunk>,
     busy_list: Vec<BusyChunk>,
     alignment: usize,
@@ -331,49 +324,29 @@ impl SharedMemoryManager {
 
     /// Creates a new SharedMemoryManager managing allocations of a region of the
     /// given size.
-    pub fn make(id: String, size: usize) -> ZResult<SharedMemoryManager> {
-        let mut temp_dir = std::env::temp_dir();
-        let file_name: String = format!("{ZENOH_SHM_PREFIX}_{id}");
-        temp_dir.push(file_name);
-        let path: String = temp_dir
-            .to_str()
-            .ok_or_else(|| ShmError(zerror!("Unable to parse tmp directory: {:?}", temp_dir)))?
-            .to_string();
-        log::trace!("Creating file at: {}", path);
-        let shmem = match ShmemConf::new().size(size).flink(path.clone()).create() {
-            Ok(m) => m,
-            Err(ShmemError::LinkExists) => {
-                return Err(ShmError(zerror!(
-                    "Unable to open SharedMemoryManager: SharedMemory already exists"
-                ))
-                .into())
-            }
-            Err(e) => {
-                return Err(ShmError(zerror!("Unable to open SharedMemoryManager: {}", e)).into())
-            }
-        };
-        let base_ptr = shmem.as_ptr();
+    pub fn make(size: usize) -> ZResult<SharedMemoryManager> {
+        let segment = DataSegment::create(size)?;
 
         let mut free_list = BinaryHeap::new();
         let chunk = Chunk {
-            base_addr: base_ptr,
+            base_addr: segment.segment.shmem.as_ptr(),
             offset: 0,
             size,
         };
         free_list.push(chunk);
+
         let busy_list = vec![];
+
         let shm = SharedMemoryManager {
-            segment_path: path,
-            size,
             available: size,
-            own_segment: shmem,
+            own_segment: segment,
             free_list,
             busy_list,
             alignment: mem::align_of::<ChunkHeaderType>(),
         };
         log::trace!(
             "Created SharedMemoryManager for {:?}",
-            shm.own_segment.as_ptr()
+            shm.own_segment.segment.shmem.as_ptr()
         );
         Ok(shm)
     }
@@ -387,7 +360,7 @@ impl SharedMemoryManager {
         let info = SharedMemoryBufInfo::new(
             chunk.offset,
             chunk.size,
-            self.segment_path.clone(),
+            self.own_segment.segment.id,
             0,
             Descriptor::from(&watchdog.owned),
             HeaderDescriptor::from(&header),
@@ -559,8 +532,8 @@ impl SharedMemoryManager {
 impl fmt::Debug for SharedMemoryManager {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SharedMemoryManager")
-            .field("segment_path", &self.segment_path)
-            .field("size", &self.size)
+            .field("id", &self.own_segment.segment.id)
+            .field("size", &self.own_segment.segment.shmem.len())
             .field("available", &self.available)
             .field("free_list.len", &self.free_list.len())
             .field("busy_list.len", &self.busy_list.len())

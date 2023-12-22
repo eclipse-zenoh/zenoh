@@ -56,7 +56,7 @@ where
         let SharedMemoryBufInfo {
             offset,
             length,
-            shm_manager,
+            segment_id,
             kind,
             watchdog_descriptor,
             header_descriptor,
@@ -65,7 +65,7 @@ where
 
         self.write(&mut *writer, offset)?;
         self.write(&mut *writer, length)?;
-        self.write(&mut *writer, shm_manager.as_str())?;
+        self.write(&mut *writer, segment_id)?;
         self.write(&mut *writer, kind)?;
         self.write(&mut *writer, watchdog_descriptor)?;
         self.write(&mut *writer, header_descriptor)?;
@@ -112,18 +112,18 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<SharedMemoryBufInfo, Self::Error> {
-        let offset: usize = self.read(&mut *reader)?;
-        let length: usize = self.read(&mut *reader)?;
-        let shm_manager: String = self.read(&mut *reader)?;
-        let kind: u8 = self.read(&mut *reader)?;
-        let watchdog_descriptor: Descriptor = self.read(&mut *reader)?;
-        let header_descriptor: HeaderDescriptor = self.read(&mut *reader)?;
-        let generatoion: u32 = self.read(&mut *reader)?;
+        let offset = self.read(&mut *reader)?;
+        let length = self.read(&mut *reader)?;
+        let segment_id = self.read(&mut *reader)?;
+        let kind = self.read(&mut *reader)?;
+        let watchdog_descriptor = self.read(&mut *reader)?;
+        let header_descriptor = self.read(&mut *reader)?;
+        let generatoion = self.read(&mut *reader)?;
 
         let shm_info = SharedMemoryBufInfo::new(
             offset,
             length,
-            shm_manager,
+            segment_id,
             kind,
             watchdog_descriptor,
             header_descriptor,

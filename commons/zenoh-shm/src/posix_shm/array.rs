@@ -19,6 +19,7 @@ use zenoh_result::{bail, ZResult};
 
 use super::segment::Segment;
 
+/// An SHM segment that is intended to be an array of elements of some certain type
 pub struct ArrayInSHM<ID, Elem, ElemIndex> {
     inner: Segment<ID>,
     _phantom: PhantomData<(Elem, ElemIndex)>,
