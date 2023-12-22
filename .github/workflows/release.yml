@@ -53,34 +53,28 @@ jobs:
     name: Code checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
       - name: Install Rust toolchain
         run: |
           rustup show
           rustup component add rustfmt clippy
+
       - name: Code format check
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: -- --check
+        run: cargo fmt --check
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Clippy check
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets --features=${{ github.event.inputs.features}} -- -D warnings
+        run: cargo clippy --all-targets --features=${{ github.event.inputs.features}} -- --deny warnings
+
       - name: Clippy unstable check
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets --features unstable -- -D warnings
-      - name: Clippy shared-memory
-        uses: actions-rs/cargo@v1
-        with:
-          command: clippy
-          args: --all-targets --features shared-memory -- -D warnings
+        run: cargo clippy --all-targets  -- --deny warnings
+
+      - name: Clippy all features
+        run: cargo clippy --all-targets --all-features -- --deny warnings
+
       - name: Environment setup
         id: env
         shell: bash
@@ -129,28 +123,25 @@ jobs:
     needs: checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
       - name: Install Rust toolchain
         run: rustup show
+
       - name: Install nextest
         run: cargo install cargo-nextest --locked
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Run tests
-        uses: actions-rs/cargo@v1
-        with:
-          command: nextest
-          args: run --release --features=${{ github.event.inputs.features}} --verbose
+        run: cargo nextest run --release --features=${{ github.event.inputs.features}} --verbose
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
 
       - name: Run doctests
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release --features=${{ github.event.inputs.features}} --doc
+        run: cargo test --release --features=${{ github.event.inputs.features}} --doc
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4
@@ -161,19 +152,21 @@ jobs:
     needs: checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Clone this repository
+        uses: actions/checkout@v4
+
       # Use a similar command than docs.rs build: rustdoc with nightly toolchain
       - name: Install Rust toolchain nightly for docs gen
         run: rustup toolchain install nightly
+
       - name: generate doc
-        uses: actions-rs/cargo@v1
+        # NOTE: force 'unstable' feature for doc generation, as forced for docs.rs build in zenoh/Cargo.toml
+        run: >
+          cargo +nightly rustdoc --manifest-path ./zenoh/Cargo.toml --lib --features unstable -j3
+          -Z rustdoc-map -Z unstable-options -Z rustdoc-scrape-examples
+          --config build.rustdocflags='["-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--disable-per-crate-search", "--extern-html-root-takes-precedence"]'
         env:
           RUSTDOCFLAGS: -Dwarnings
-        with:
-          toolchain: nightly
-          command: rustdoc
-          # NOTE: force 'unstable' feature for doc generation, as forced for docs.rs build in zenoh/Cargo.toml
-          args: --manifest-path ./zenoh/Cargo.toml --lib -Zrustdoc-map --features unstable -Z unstable-options --config build.rustdocflags='["-Z", "unstable-options", "--emit=invocation-specific", "--cap-lints", "warn", "--disable-per-crate-search", "--extern-html-root-takes-precedence"]' -Zunstable-options -Zrustdoc-scrape-examples -j3
 
   builds:
     name: Build for ${{ matrix.job.target }} on ${{ matrix.job.os }}
@@ -184,55 +177,42 @@ jobs:
       fail-fast: false
       matrix:
         job:
-          - { target: x86_64-unknown-linux-gnu, arch: amd64, os: ubuntu-20.04 }
-          - {
-              target: x86_64-unknown-linux-musl,
-              arch: amd64,
-              os: ubuntu-20.04,
-              use-cross: true,
-            }
-          - {
-              target: arm-unknown-linux-gnueabi,
-              arch: armel,
-              os: ubuntu-20.04,
-              use-cross: true,
-            }
+          - { target: x86_64-unknown-linux-gnu, arch: amd64, os: ubuntu-20.04, build-cmd: "cargo" }
+          - { target: x86_64-unknown-linux-musl, arch: amd64, os: ubuntu-20.04, build-cmd: "cross" }
+          - { target: arm-unknown-linux-gnueabi, arch: armel, os: ubuntu-20.04, build-cmd: "cross" }
           - {
               target: arm-unknown-linux-gnueabihf,
               arch: armhf,
               os: ubuntu-20.04,
-              use-cross: true,
+              build-cmd: "cross",
             }
           - {
               target: armv7-unknown-linux-gnueabihf,
               arch: armhf,
               os: ubuntu-20.04,
-              use-cross: true,
+              build-cmd: "cross",
             }
-          - {
-              target: aarch64-unknown-linux-gnu,
-              arch: arm64,
-              os: ubuntu-20.04,
-              use-cross: true,
-            }
+          - { target: aarch64-unknown-linux-gnu, arch: arm64, os: ubuntu-20.04, build-cmd: "cross" }
           - {
               target: aarch64-unknown-linux-musl,
               arch: arm64,
               os: ubuntu-20.04,
-              use-cross: true,
+              build-cmd: "cross",
             }
-          - { target: x86_64-apple-darwin, arch: darwin, os: macos-latest }
-          - { target: aarch64-apple-darwin, arch: darwin, os: macos-latest }
-          - { target: x86_64-pc-windows-msvc, arch: win64, os: windows-2019 }
+          - { target: x86_64-apple-darwin, arch: darwin, os: macos-latest, build-cmd: "cargo" }
+          - { target: aarch64-apple-darwin, arch: darwin, os: macos-latest, build-cmd: "cargo" }
+          - { target: x86_64-pc-windows-msvc, arch: win64, os: windows-2019, build-cmd: "cargo" }
           # - { target: x86_64-pc-windows-gnu         , arch: win64 , os: windows-2019                  }
     steps:
       - name: Checkout source code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 500 # NOTE: get long history for git-version crate to correctly compute a version
+
       - name: Fetch Git tags # NOTE: workaround for https://github.com/actions/checkout/issues/290
         shell: bash
         run: git fetch --tags --force
+
       - name: Install prerequisites
         shell: bash
         run: |
@@ -255,44 +235,33 @@ jobs:
               ;;
           esac
 
+          cargo install cross --git https://github.com/cross-rs/cross
+
       - name: Install Rust toolchain
         run: |
           rustup show
           rustup target add ${{ matrix.job.target }}
 
       - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          use-cross: ${{ matrix.job.use-cross }}
-          command: build
-          args: --release --bins --lib --features=${{ github.event.inputs.features}} --target=${{ matrix.job.target }}
+        run: ${{ matrix.job.build-cmd }} build --release --bins --lib --features=${{ github.event.inputs.features}} --target=${{ matrix.job.target }}
 
       - name: Debian package - zenohd
         if: contains(matrix.job.target, '-linux-gnu')
-        uses: actions-rs/cargo@v1
-        with:
-          command: deb
-          args: --no-build --target=${{ matrix.job.target }} -p zenohd
+        run: cargo deb --no-build --target=${{ matrix.job.target }} -p zenohd
         env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse          
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Debian package - zenoh-plugin-storage-manager
         if: contains(matrix.job.target, '-linux-gnu')
-        uses: actions-rs/cargo@v1
-        with:
-          command: deb
-          args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-storage-manager
+        run: cargo deb --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-storage-manager
         env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse          
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Debian package - zenoh-plugin-rest
         if: contains(matrix.job.target, '-linux-gnu')
-        uses: actions-rs/cargo@v1
-        with:
-          command: deb
-          args: --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-rest
+        run: cargo deb --no-build --target=${{ matrix.job.target }} -p zenoh-plugin-rest
         env:
-          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse          
+          CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
 
       - name: Packaging
         id: package
@@ -337,7 +306,7 @@ jobs:
           esac
 
       - name: "Upload packages"
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v3
         with:
           name: ${{ matrix.job.target }}
           path: |
@@ -351,14 +320,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download result of previous builds
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           path: ARTIFACTS
+
       - name: Publish as github release
         if: ${{ !(github.event.inputs.githubrelease == 'false') }}
         uses: softprops/action-gh-release@v1
         with:
           files: ARTIFACTS/*/*.*
+
       - name: Publish to download.eclipse.org/zenoh
         if: ${{ !(github.event.inputs.eclipse == 'false') }}
         env:
@@ -383,20 +354,26 @@ jobs:
           scp -o "StrictHostKeyChecking=no" -r * ${SSH_TARGET}:${DOWNLOAD_DIR}/
           echo "---- cleanup identity"
           ssh-add -D
-      - uses: actions/checkout@v2
+
+      - name: Checkout this repository
+        uses: actions/checkout@v4
+
       - name: Install Rust toolchain
         if: ${{ !(github.event.inputs.cratesio == 'false') }}
         run: rustup show
+
       - name: Check crates
         if: ${{ !(github.event.inputs.cratesio == 'false') }}
         shell: bash
         run: .github/workflows/crates_check.sh
+
       - name: Publish to crates.io
         if: ${{ !(github.event.inputs.cratesio == 'false') }}
         shell: bash
         run: |
           set +x
           .github/workflows/crates_publish.sh ${{ secrets.CRATES_IO_TOKEN }}
+
       - name: Cancel workflow if fail # thus Docker job be interrupted
         if: failure()
         uses: andymckay/cancel-action@0.2
@@ -407,16 +384,20 @@ jobs:
     needs: [checks, builds, tests, doc]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout this repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 500 # NOTE: get long history for git-version crate to correctly compute a version
+
       - name: Fetch Git tags # NOTE: workaround for https://github.com/actions/checkout/issues/290
         shell: bash
         run: git fetch --tags --force
+
       - name: Download packages from previous job
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@v3
         with:
           path: PACKAGES
+
       - name: Unzip PACKAGES
         run: |
           ls PACKAGES
@@ -427,22 +408,26 @@ jobs:
           unzip PACKAGES/aarch64-unknown-linux-musl/zenoh-${{ needs.checks.outputs.PKG_VERSION }}-aarch64-unknown-linux-musl.zip -d docker/linux/arm64/
           rm docker/linux/arm64/libzenoh_plugin_example.so
           tree docker
+
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
+
       - name: Docker meta - set tags and labels
         id: meta
-        uses: docker/metadata-action@v3
+        uses: docker/metadata-action@v5
         with:
           images: eclipse/zenoh
           labels: |
             org.opencontainers.image.licenses=EPL-2.0 OR Apache-2.0
+
       - name: Login to DockerHub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_COM_USERNAME }}
           password: ${{ secrets.DOCKER_COM_PASSWORD }}
+
       - name: Build and push
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5
         with:
           context: .
           push: true
