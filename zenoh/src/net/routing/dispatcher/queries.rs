@@ -45,7 +45,7 @@ pub(crate) fn compute_query_routes_from(tables: &mut Tables, res: &mut Arc<Resou
     }
 }
 
-pub(crate) fn compute_matches_query_routes_(
+pub(crate) fn compute_matches_query_routes(
     tables: &Tables,
     res: &Arc<Resource>,
 ) -> Vec<(Arc<Resource>, QueryRoutes)> {
@@ -53,17 +53,29 @@ pub(crate) fn compute_matches_query_routes_(
     if res.context.is_some() {
         routes.push((
             res.clone(),
-            tables.hat_code.compute_query_routes_(tables, res),
+            tables.hat_code.compute_query_routes(tables, res),
         ));
         for match_ in &res.context().matches {
             let match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
-                let match_routes = tables.hat_code.compute_query_routes_(tables, &match_);
+                let match_routes = tables.hat_code.compute_query_routes(tables, &match_);
                 routes.push((match_, match_routes));
             }
         }
     }
     routes
+}
+
+pub(crate) fn update_matches_query_routes(tables: &Tables, res: &Arc<Resource>) {
+    if res.context.is_some() {
+        tables.hat_code.update_query_routes(tables, res);
+        for match_ in &res.context().matches {
+            let match_ = match_.upgrade().unwrap();
+            if !Arc::ptr_eq(&match_, res) {
+                tables.hat_code.update_query_routes(tables, &match_);
+            }
+        }
+    }
 }
 
 #[inline]

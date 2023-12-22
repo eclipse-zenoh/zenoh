@@ -297,7 +297,7 @@ fn declare_peer_queryable(
             drop(wtables);
 
             let rtables = zread!(tables.tables);
-            let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+            let matches_query_routes = compute_matches_query_routes(&rtables, &res);
             drop(rtables);
 
             let wtables = zwrite!(tables.tables);
@@ -380,7 +380,7 @@ fn declare_client_queryable(
             drop(wtables);
 
             let rtables = zread!(tables.tables);
-            let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+            let matches_query_routes = compute_matches_query_routes(&rtables, &res);
             drop(rtables);
 
             let wtables = zwrite!(tables.tables);
@@ -558,7 +558,7 @@ fn forget_peer_queryable(
                 drop(wtables);
 
                 let rtables = zread!(tables.tables);
-                let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+                let matches_query_routes = compute_matches_query_routes(&rtables, &res);
                 drop(rtables);
 
                 let wtables = zwrite!(tables.tables);
@@ -637,7 +637,7 @@ fn forget_client_queryable(
                 drop(wtables);
 
                 let rtables = zread!(tables.tables);
-                let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+                let matches_query_routes = compute_matches_query_routes(&rtables, &res);
                 drop(rtables);
 
                 let wtables = zwrite!(tables.tables);
@@ -692,12 +692,7 @@ pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohId) {
     for mut res in qabls {
         unregister_peer_queryable(tables, &mut res, node);
 
-        let matches_query_routes = compute_matches_query_routes_(tables, &res);
-        for (mut res, query_routes) in matches_query_routes {
-            get_mut_unchecked(&mut res)
-                .context_mut()
-                .update_query_routes(query_routes);
-        }
+        update_matches_query_routes(tables, &res);
         Resource::clean(&mut res)
     }
 }
@@ -940,9 +935,12 @@ impl HatQueriesTrait for HatCode {
         result
     }
 
-    fn compute_query_routes_(&self, tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
-        let mut routes = QueryRoutes::default();
-        let mut expr = RoutingExpr::new(res, "");
+    fn compute_query_routes_(
+        &self,
+        tables: &Tables,
+        routes: &mut QueryRoutes,
+        expr: &mut RoutingExpr,
+    ) {
         let indexes = hat!(tables)
             .peers_net
             .as_ref()
@@ -961,62 +959,13 @@ impl HatQueriesTrait for HatCode {
 
         for idx in &indexes {
             let route =
-                self.compute_query_route(tables, &mut expr, idx.index() as NodeId, WhatAmI::Peer);
+                self.compute_query_route(tables, expr, idx.index() as NodeId, WhatAmI::Peer);
             routes.routers[idx.index()] = route.clone();
             routes.peers[idx.index()] = route;
         }
         routes
             .clients
             .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
-        routes.clients[0] = self.compute_query_route(tables, &mut expr, 0, WhatAmI::Peer);
-
-        routes
-    }
-
-    fn compute_query_routes(&self, tables: &mut Tables, res: &mut Arc<Resource>) {
-        if res.context.is_some() {
-            let mut res_mut = res.clone();
-            let res_mut = get_mut_unchecked(&mut res_mut);
-            let mut expr = RoutingExpr::new(res, "");
-
-            let indexes = hat!(tables)
-                .peers_net
-                .as_ref()
-                .unwrap()
-                .graph
-                .node_indices()
-                .collect::<Vec<NodeIndex>>();
-            let max_idx = indexes.iter().max().unwrap();
-
-            res_mut.context_mut().query_routes.routers.clear();
-            res_mut
-                .context_mut()
-                .query_routes
-                .routers
-                .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
-
-            res_mut.context_mut().query_routes.peers.clear();
-            res_mut
-                .context_mut()
-                .query_routes
-                .peers
-                .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
-
-            for idx in &indexes {
-                let route = self.compute_query_route(
-                    tables,
-                    &mut expr,
-                    idx.index() as NodeId,
-                    WhatAmI::Peer,
-                );
-                res_mut.context_mut().query_routes.routers[idx.index()] = route.clone();
-                res_mut.context_mut().query_routes.peers[idx.index()] = route;
-            }
-
-            let clients_query_routes = &mut res_mut.context_mut().query_routes.clients;
-            clients_query_routes.clear();
-            clients_query_routes.resize_with(1, || Arc::new(QueryTargetQablSet::new()));
-            clients_query_routes[0] = self.compute_query_route(tables, &mut expr, 0, WhatAmI::Peer);
-        }
+        routes.clients[0] = self.compute_query_route(tables, expr, 0, WhatAmI::Peer);
     }
 }

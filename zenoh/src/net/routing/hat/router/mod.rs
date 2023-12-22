@@ -478,13 +478,13 @@ impl HatBaseTrait for HatCode {
         for _match in subs_matches.drain(..) {
             matches_data_routes.push((
                 _match.clone(),
-                rtables.hat_code.compute_data_routes_(&rtables, &_match),
+                rtables.hat_code.compute_data_routes(&rtables, &_match),
             ));
         }
         for _match in qabls_matches.drain(..) {
             matches_query_routes.push((
                 _match.clone(),
-                rtables.hat_code.compute_query_routes_(&rtables, &_match),
+                rtables.hat_code.compute_query_routes(&rtables, &_match),
             ));
         }
         drop(rtables);

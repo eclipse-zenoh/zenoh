@@ -25,15 +25,15 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-pub(crate) fn compute_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
-    tables.hat_code.clone().compute_data_routes(tables, res);
+pub(crate) fn update_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
+    tables.hat_code.clone().update_data_routes(tables, res);
     let res = get_mut_unchecked(res);
     for child in res.childs.values_mut() {
-        compute_data_routes_from(tables, child);
+        update_data_routes_from(tables, child);
     }
 }
 
-pub(crate) fn compute_matches_data_routes_<'a>(
+pub(crate) fn compute_matches_data_routes<'a>(
     tables: &'a Tables,
     res: &'a Arc<Resource>,
 ) -> Vec<(Arc<Resource>, DataRoutes)> {
@@ -41,17 +41,29 @@ pub(crate) fn compute_matches_data_routes_<'a>(
     if res.context.is_some() {
         routes.push((
             res.clone(),
-            tables.hat_code.compute_data_routes_(tables, res),
+            tables.hat_code.compute_data_routes(tables, res),
         ));
         for match_ in &res.context().matches {
             let match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
-                let match_routes = tables.hat_code.compute_data_routes_(tables, &match_);
+                let match_routes = tables.hat_code.compute_data_routes(tables, &match_);
                 routes.push((match_, match_routes));
             }
         }
     }
     routes
+}
+
+pub(crate) fn update_matches_data_routes<'a>(tables: &'a mut Tables, res: &'a mut Arc<Resource>) {
+    if res.context.is_some() {
+        tables.hat_code.update_data_routes(tables, res);
+        for match_ in &res.context().matches {
+            let match_ = match_.upgrade().unwrap();
+            if !Arc::ptr_eq(&match_, res) {
+                tables.hat_code.update_data_routes(tables, &match_);
+            }
+        }
+    }
 }
 
 pub(crate) fn disable_matches_data_routes(_tables: &mut Tables, res: &mut Arc<Resource>) {

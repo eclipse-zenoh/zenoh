@@ -200,7 +200,7 @@ impl Router {
 
         // recompute routes
         let mut root_res = tables.root_res.clone();
-        compute_data_routes_from(&mut tables, &mut root_res);
+        update_data_routes_from(&mut tables, &mut root_res);
         Ok(())
     }
 
@@ -234,7 +234,7 @@ impl Router {
 
         // recompute routes
         let mut root_res = tables.root_res.clone();
-        compute_data_routes_from(&mut tables, &mut root_res);
+        update_data_routes_from(&mut tables, &mut root_res);
         Ok(Arc::new(DeMux::new(
             Face {
                 tables: self.tables.clone(),

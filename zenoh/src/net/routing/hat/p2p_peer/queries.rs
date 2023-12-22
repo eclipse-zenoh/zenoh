@@ -178,7 +178,7 @@ fn declare_client_queryable(
             drop(wtables);
 
             let rtables = zread!(tables.tables);
-            let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+            let matches_query_routes = compute_matches_query_routes(&rtables, &res);
             drop(rtables);
 
             let wtables = zwrite!(tables.tables);
@@ -286,7 +286,7 @@ fn forget_client_queryable(
                 drop(wtables);
 
                 let rtables = zread!(tables.tables);
-                let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+                let matches_query_routes = compute_matches_query_routes(&rtables, &res);
                 drop(rtables);
 
                 let wtables = zwrite!(tables.tables);
@@ -437,11 +437,13 @@ impl HatQueriesTrait for HatCode {
         result
     }
 
-    fn compute_query_routes_(&self, tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
-        let mut routes = QueryRoutes::default();
-        let mut expr = RoutingExpr::new(res, "");
-
-        let route = self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer);
+    fn compute_query_routes_(
+        &self,
+        tables: &Tables,
+        routes: &mut QueryRoutes,
+        expr: &mut RoutingExpr,
+    ) {
+        let route = self.compute_query_route(tables, expr, NodeId::default(), WhatAmI::Peer);
 
         routes
             .routers
@@ -453,42 +455,11 @@ impl HatQueriesTrait for HatCode {
             .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
         routes.peers[0] = route;
 
-        let route = self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Client);
+        let route = self.compute_query_route(tables, expr, NodeId::default(), WhatAmI::Client);
 
         routes
             .clients
             .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
         routes.clients[0] = route;
-
-        routes
-    }
-
-    fn compute_query_routes(&self, tables: &mut Tables, res: &mut Arc<Resource>) {
-        if res.context.is_some() {
-            let mut res_mut = res.clone();
-            let res_mut = get_mut_unchecked(&mut res_mut);
-            let mut expr = RoutingExpr::new(res, "");
-
-            let route =
-                self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer);
-
-            let routers_query_routes = &mut res_mut.context_mut().query_routes.routers;
-            routers_query_routes.clear();
-            routers_query_routes.resize_with(1, || Arc::new(QueryTargetQablSet::new()));
-            routers_query_routes[0] = route.clone();
-
-            let peers_query_routes = &mut res_mut.context_mut().query_routes.peers;
-            peers_query_routes.clear();
-            peers_query_routes.resize_with(1, || Arc::new(QueryTargetQablSet::new()));
-            peers_query_routes[0] = route;
-
-            let route =
-                self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Client);
-
-            let clients_query_routes = &mut res_mut.context_mut().query_routes.clients;
-            clients_query_routes.clear();
-            clients_query_routes.resize_with(1, || Arc::new(QueryTargetQablSet::new()));
-            clients_query_routes[0] = route;
-        }
     }
 }

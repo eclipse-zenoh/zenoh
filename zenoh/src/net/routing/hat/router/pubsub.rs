@@ -247,7 +247,7 @@ fn declare_router_subscription(
             drop(wtables);
 
             let rtables = zread!(tables.tables);
-            let matches_data_routes = compute_matches_data_routes_(&rtables, &res);
+            let matches_data_routes = compute_matches_data_routes(&rtables, &res);
             drop(rtables);
 
             let wtables = zwrite!(tables.tables);
@@ -327,7 +327,7 @@ fn declare_peer_subscription(
             drop(wtables);
 
             let rtables = zread!(tables.tables);
-            let matches_data_routes = compute_matches_data_routes_(&rtables, &res);
+            let matches_data_routes = compute_matches_data_routes(&rtables, &res);
             drop(rtables);
 
             let wtables = zwrite!(tables.tables);
@@ -427,7 +427,7 @@ fn declare_client_subscription(
             drop(wtables);
 
             let rtables = zread!(tables.tables);
-            let matches_data_routes = compute_matches_data_routes_(&rtables, &res);
+            let matches_data_routes = compute_matches_data_routes(&rtables, &res);
             drop(rtables);
 
             let wtables = zwrite!(tables.tables);
@@ -663,7 +663,7 @@ fn forget_router_subscription(
                 drop(wtables);
 
                 let rtables = zread!(tables.tables);
-                let matches_data_routes = compute_matches_data_routes_(&rtables, &res);
+                let matches_data_routes = compute_matches_data_routes(&rtables, &res);
                 drop(rtables);
                 let wtables = zwrite!(tables.tables);
                 for (mut res, data_routes) in matches_data_routes {
@@ -730,7 +730,7 @@ fn forget_peer_subscription(
                 drop(wtables);
 
                 let rtables = zread!(tables.tables);
-                let matches_data_routes = compute_matches_data_routes_(&rtables, &res);
+                let matches_data_routes = compute_matches_data_routes(&rtables, &res);
                 drop(rtables);
                 let wtables = zwrite!(tables.tables);
                 for (mut res, data_routes) in matches_data_routes {
@@ -806,7 +806,7 @@ fn forget_client_subscription(
                 drop(wtables);
 
                 let rtables = zread!(tables.tables);
-                let matches_data_routes = compute_matches_data_routes_(&rtables, &res);
+                let matches_data_routes = compute_matches_data_routes(&rtables, &res);
                 drop(rtables);
 
                 let wtables = zwrite!(tables.tables);
@@ -891,12 +891,7 @@ pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: 
             {
                 unregister_router_subscription(tables, &mut res, node);
 
-                let matches_data_routes = compute_matches_data_routes_(tables, &res);
-                for (mut res, data_routes) in matches_data_routes {
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_data_routes(data_routes);
-                }
+                update_matches_data_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
         }
@@ -915,13 +910,7 @@ pub(super) fn pubsub_remove_node(tables: &mut Tables, node: &ZenohId, net_type: 
                     undeclare_router_subscription(tables, None, &mut res, &tables.zid.clone());
                 }
 
-                // compute_matches_data_routes(tables, &mut res);
-                let matches_data_routes = compute_matches_data_routes_(tables, &res);
-                for (mut res, data_routes) in matches_data_routes {
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_data_routes(data_routes);
-                }
+                update_matches_data_routes(tables, &mut res);
                 Resource::clean(&mut res)
             }
         }
@@ -975,7 +964,7 @@ pub(super) fn pubsub_tree_change(
     }
 
     // recompute routes
-    compute_data_routes_from(tables, &mut tables.root_res.clone());
+    update_data_routes_from(tables, &mut tables.root_res.clone());
 }
 
 pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links: &[ZenohId]) {
@@ -1273,10 +1262,12 @@ impl HatPubSubTrait for HatCode {
         Arc::new(pull_caches)
     }
 
-    fn compute_data_routes_(&self, tables: &Tables, res: &Arc<Resource>) -> DataRoutes {
-        let mut routes = DataRoutes::default();
-        let mut expr = RoutingExpr::new(res, "");
-
+    fn compute_data_routes_(
+        &self,
+        tables: &Tables,
+        routes: &mut DataRoutes,
+        expr: &mut RoutingExpr,
+    ) {
         let indexes = hat!(tables)
             .routers_net
             .as_ref()
@@ -1291,12 +1282,11 @@ impl HatPubSubTrait for HatCode {
 
         for idx in &indexes {
             routes.routers[idx.index()] =
-                self.compute_data_route(tables, &mut expr, idx.index() as NodeId, WhatAmI::Router);
+                self.compute_data_route(tables, expr, idx.index() as NodeId, WhatAmI::Router);
         }
 
         routes.peers.resize_with(1, || Arc::new(HashMap::new()));
-        routes.peers[0] =
-            self.compute_data_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer);
+        routes.peers[0] = self.compute_data_route(tables, expr, NodeId::default(), WhatAmI::Peer);
 
         if hat!(tables).full_net(WhatAmI::Peer) {
             let indexes = hat!(tables)
@@ -1312,78 +1302,12 @@ impl HatPubSubTrait for HatCode {
                 .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
             for idx in &indexes {
-                routes.peers[idx.index()] = self.compute_data_route(
-                    tables,
-                    &mut expr,
-                    idx.index() as NodeId,
-                    WhatAmI::Peer,
-                );
+                routes.peers[idx.index()] =
+                    self.compute_data_route(tables, expr, idx.index() as NodeId, WhatAmI::Peer);
             }
         }
         routes.clients.resize_with(1, || Arc::new(HashMap::new()));
         routes.clients[0] =
-            self.compute_data_route(tables, &mut expr, NodeId::default(), WhatAmI::Client);
-
-        // routes.matching_pulls = Some(self.compute_matching_pulls(tables, &mut expr));
-        routes
-    }
-
-    fn compute_data_routes(&self, tables: &mut Tables, res: &mut Arc<Resource>) {
-        if res.context.is_some() {
-            let mut res_mut = res.clone();
-            let res_mut = get_mut_unchecked(&mut res_mut);
-            let mut expr = RoutingExpr::new(res, "");
-
-            let indexes = hat!(tables)
-                .routers_net
-                .as_ref()
-                .unwrap()
-                .graph
-                .node_indices()
-                .collect::<Vec<NodeIndex>>();
-            let max_idx = indexes.iter().max().unwrap();
-            let routers_data_routes = &mut res_mut.context_mut().data_routes.routers;
-            routers_data_routes.clear();
-            routers_data_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
-
-            for idx in &indexes {
-                routers_data_routes[idx.index()] = self.compute_data_route(
-                    tables,
-                    &mut expr,
-                    idx.index() as NodeId,
-                    WhatAmI::Router,
-                );
-            }
-
-            let peers_data_routes = &mut res_mut.context_mut().data_routes.peers;
-            peers_data_routes.clear();
-            peers_data_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
-            peers_data_routes[0] =
-                self.compute_data_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer);
-
-            if hat!(tables).full_net(WhatAmI::Peer) {
-                let indexes = hat!(tables)
-                    .peers_net
-                    .as_ref()
-                    .unwrap()
-                    .graph
-                    .node_indices()
-                    .collect::<Vec<NodeIndex>>();
-                let max_idx = indexes.iter().max().unwrap();
-                let peers_data_routes = &mut res_mut.context_mut().data_routes.peers;
-                peers_data_routes.clear();
-                peers_data_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
-
-                for idx in &indexes {
-                    peers_data_routes[idx.index()] = self.compute_data_route(
-                        tables,
-                        &mut expr,
-                        idx.index() as NodeId,
-                        WhatAmI::Peer,
-                    );
-                }
-            }
-            // res_mut.context_mut().matching_pulls = self.compute_matching_pulls(tables, &mut expr);
-        }
+            self.compute_data_route(tables, expr, NodeId::default(), WhatAmI::Client);
     }
 }

@@ -395,7 +395,7 @@ fn declare_router_queryable(
             drop(wtables);
 
             let rtables = zread!(tables.tables);
-            let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+            let matches_query_routes = compute_matches_query_routes(&rtables, &res);
             drop(rtables);
 
             let wtables = zwrite!(tables.tables);
@@ -474,7 +474,7 @@ fn declare_peer_queryable(
             drop(wtables);
 
             let rtables = zread!(tables.tables);
-            let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+            let matches_query_routes = compute_matches_query_routes(&rtables, &res);
             drop(rtables);
 
             let wtables = zwrite!(tables.tables);
@@ -556,7 +556,7 @@ fn declare_client_queryable(
             drop(wtables);
 
             let rtables = zread!(tables.tables);
-            let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+            let matches_query_routes = compute_matches_query_routes(&rtables, &res);
             drop(rtables);
 
             let wtables = zwrite!(tables.tables);
@@ -793,7 +793,7 @@ fn forget_router_queryable(
                 drop(wtables);
 
                 let rtables = zread!(tables.tables);
-                let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+                let matches_query_routes = compute_matches_query_routes(&rtables, &res);
                 drop(rtables);
 
                 let wtables = zwrite!(tables.tables);
@@ -860,7 +860,7 @@ fn forget_peer_queryable(
                 drop(wtables);
 
                 let rtables = zread!(tables.tables);
-                let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+                let matches_query_routes = compute_matches_query_routes(&rtables, &res);
                 drop(rtables);
 
                 let wtables = zwrite!(tables.tables);
@@ -941,7 +941,7 @@ fn forget_client_queryable(
                 drop(wtables);
 
                 let rtables = zread!(tables.tables);
-                let matches_query_routes = compute_matches_query_routes_(&rtables, &res);
+                let matches_query_routes = compute_matches_query_routes(&rtables, &res);
                 drop(rtables);
 
                 let wtables = zwrite!(tables.tables);
@@ -1027,12 +1027,7 @@ pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohId, net_type:
             for mut res in qabls {
                 unregister_router_queryable(tables, &mut res, node);
 
-                let matches_query_routes = compute_matches_query_routes_(tables, &res);
-                for (mut res, query_routes) in matches_query_routes {
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_query_routes(query_routes);
-                }
+                update_matches_query_routes(tables, &res);
                 Resource::clean(&mut res);
             }
         }
@@ -1057,12 +1052,7 @@ pub(super) fn queries_remove_node(tables: &mut Tables, node: &ZenohId, net_type:
                     register_router_queryable(tables, None, &mut res, &local_info, tables.zid);
                 }
 
-                let matches_query_routes = compute_matches_query_routes_(tables, &res);
-                for (mut res, query_routes) in matches_query_routes {
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_query_routes(query_routes);
-                }
+                update_matches_query_routes(tables, &res);
                 Resource::clean(&mut res)
             }
         }
@@ -1438,10 +1428,12 @@ impl HatQueriesTrait for HatCode {
         result
     }
 
-    fn compute_query_routes_(&self, tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
-        let mut routes = QueryRoutes::default();
-        let mut expr = RoutingExpr::new(res, "");
-
+    fn compute_query_routes_(
+        &self,
+        tables: &Tables,
+        routes: &mut QueryRoutes,
+        expr: &mut RoutingExpr,
+    ) {
         let indexes = hat!(tables)
             .routers_net
             .as_ref()
@@ -1456,14 +1448,13 @@ impl HatQueriesTrait for HatCode {
 
         for idx in &indexes {
             routes.routers[idx.index()] =
-                self.compute_query_route(tables, &mut expr, idx.index() as NodeId, WhatAmI::Router);
+                self.compute_query_route(tables, expr, idx.index() as NodeId, WhatAmI::Router);
         }
 
         routes
             .peers
             .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
-        routes.peers[0] =
-            self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer);
+        routes.peers[0] = self.compute_query_route(tables, expr, NodeId::default(), WhatAmI::Peer);
 
         if hat!(tables).full_net(WhatAmI::Peer) {
             let indexes = hat!(tables)
@@ -1479,81 +1470,14 @@ impl HatQueriesTrait for HatCode {
                 .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
 
             for idx in &indexes {
-                routes.peers[idx.index()] = self.compute_query_route(
-                    tables,
-                    &mut expr,
-                    idx.index() as NodeId,
-                    WhatAmI::Peer,
-                );
+                routes.peers[idx.index()] =
+                    self.compute_query_route(tables, expr, idx.index() as NodeId, WhatAmI::Peer);
             }
         }
         routes
             .clients
             .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
         routes.clients[0] =
-            self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Client);
-
-        routes
-    }
-
-    fn compute_query_routes(&self, tables: &mut Tables, res: &mut Arc<Resource>) {
-        if res.context.is_some() {
-            let mut res_mut = res.clone();
-            let res_mut = get_mut_unchecked(&mut res_mut);
-            let mut expr = RoutingExpr::new(res, "");
-
-            let indexes = hat!(tables)
-                .routers_net
-                .as_ref()
-                .unwrap()
-                .graph
-                .node_indices()
-                .collect::<Vec<NodeIndex>>();
-            let max_idx = indexes.iter().max().unwrap();
-            let routers_query_routes = &mut res_mut.context_mut().query_routes.routers;
-            routers_query_routes.clear();
-            routers_query_routes
-                .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
-
-            for idx in &indexes {
-                routers_query_routes[idx.index()] = self.compute_query_route(
-                    tables,
-                    &mut expr,
-                    idx.index() as NodeId,
-                    WhatAmI::Router,
-                );
-            }
-
-            let peers_query_routes = &mut res_mut.context_mut().query_routes.peers;
-            peers_query_routes.clear();
-            peers_query_routes
-                .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
-            peers_query_routes[0] =
-                self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer);
-
-            if hat!(tables).full_net(WhatAmI::Peer) {
-                let indexes = hat!(tables)
-                    .peers_net
-                    .as_ref()
-                    .unwrap()
-                    .graph
-                    .node_indices()
-                    .collect::<Vec<NodeIndex>>();
-                let max_idx = indexes.iter().max().unwrap();
-                let peers_query_routes = &mut res_mut.context_mut().query_routes.peers;
-                peers_query_routes.clear();
-                peers_query_routes
-                    .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
-
-                for idx in &indexes {
-                    peers_query_routes[idx.index()] = self.compute_query_route(
-                        tables,
-                        &mut expr,
-                        idx.index() as NodeId,
-                        WhatAmI::Peer,
-                    );
-                }
-            }
-        }
+            self.compute_query_route(tables, expr, NodeId::default(), WhatAmI::Client);
     }
 }
