@@ -302,9 +302,11 @@ impl HatBaseTrait for HatCode {
         let mut matches_query_routes = vec![];
         let rtables = zread!(tables.tables);
         for _match in subs_matches.drain(..) {
+            let mut expr = RoutingExpr::new(&_match, "");
             matches_data_routes.push((
                 _match.clone(),
-                rtables.hat_code.compute_data_routes(&rtables, &_match),
+                rtables.hat_code.compute_data_routes(&rtables, &mut expr),
+                rtables.hat_code.compute_matching_pulls(&rtables, &mut expr),
             ));
         }
         for _match in qabls_matches.drain(..) {
@@ -316,10 +318,13 @@ impl HatBaseTrait for HatCode {
         drop(rtables);
 
         let mut wtables = zwrite!(tables.tables);
-        for (mut res, data_routes) in matches_data_routes {
+        for (mut res, data_routes, matching_pulls) in matches_data_routes {
             get_mut_unchecked(&mut res)
                 .context_mut()
                 .update_data_routes(data_routes);
+            get_mut_unchecked(&mut res)
+                .context_mut()
+                .update_matching_pulls(matching_pulls);
             Resource::clean(&mut res);
         }
         for (mut res, query_routes) in matches_query_routes {

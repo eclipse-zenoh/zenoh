@@ -251,10 +251,13 @@ fn declare_router_subscription(
             drop(rtables);
 
             let wtables = zwrite!(tables.tables);
-            for (mut res, data_routes) in matches_data_routes {
+            for (mut res, data_routes, matching_pulls) in matches_data_routes {
                 get_mut_unchecked(&mut res)
                     .context_mut()
                     .update_data_routes(data_routes);
+                get_mut_unchecked(&mut res)
+                    .context_mut()
+                    .update_matching_pulls(matching_pulls);
             }
             drop(wtables);
         }
@@ -331,10 +334,13 @@ fn declare_peer_subscription(
             drop(rtables);
 
             let wtables = zwrite!(tables.tables);
-            for (mut res, data_routes) in matches_data_routes {
+            for (mut res, data_routes, matching_pulls) in matches_data_routes {
                 get_mut_unchecked(&mut res)
                     .context_mut()
                     .update_data_routes(data_routes);
+                get_mut_unchecked(&mut res)
+                    .context_mut()
+                    .update_matching_pulls(matching_pulls);
             }
             drop(wtables);
         }
@@ -431,10 +437,13 @@ fn declare_client_subscription(
             drop(rtables);
 
             let wtables = zwrite!(tables.tables);
-            for (mut res, data_routes) in matches_data_routes {
+            for (mut res, data_routes, matching_pulls) in matches_data_routes {
                 get_mut_unchecked(&mut res)
                     .context_mut()
                     .update_data_routes(data_routes);
+                get_mut_unchecked(&mut res)
+                    .context_mut()
+                    .update_matching_pulls(matching_pulls);
             }
             drop(wtables);
         }
@@ -666,10 +675,13 @@ fn forget_router_subscription(
                 let matches_data_routes = compute_matches_data_routes(&rtables, &res);
                 drop(rtables);
                 let wtables = zwrite!(tables.tables);
-                for (mut res, data_routes) in matches_data_routes {
+                for (mut res, data_routes, matching_pulls) in matches_data_routes {
                     get_mut_unchecked(&mut res)
                         .context_mut()
                         .update_data_routes(data_routes);
+                    get_mut_unchecked(&mut res)
+                        .context_mut()
+                        .update_matching_pulls(matching_pulls);
                 }
                 Resource::clean(&mut res);
                 drop(wtables);
@@ -733,10 +745,13 @@ fn forget_peer_subscription(
                 let matches_data_routes = compute_matches_data_routes(&rtables, &res);
                 drop(rtables);
                 let wtables = zwrite!(tables.tables);
-                for (mut res, data_routes) in matches_data_routes {
+                for (mut res, data_routes, matching_pulls) in matches_data_routes {
                     get_mut_unchecked(&mut res)
                         .context_mut()
                         .update_data_routes(data_routes);
+                    get_mut_unchecked(&mut res)
+                        .context_mut()
+                        .update_matching_pulls(matching_pulls);
                 }
                 Resource::clean(&mut res);
                 drop(wtables);
@@ -810,10 +825,13 @@ fn forget_client_subscription(
                 drop(rtables);
 
                 let wtables = zwrite!(tables.tables);
-                for (mut res, data_routes) in matches_data_routes {
+                for (mut res, data_routes, matching_pulls) in matches_data_routes {
                     get_mut_unchecked(&mut res)
                         .context_mut()
                         .update_data_routes(data_routes);
+                    get_mut_unchecked(&mut res)
+                        .context_mut()
+                        .update_matching_pulls(matching_pulls);
                 }
                 Resource::clean(&mut res);
                 drop(wtables);
@@ -1235,12 +1253,16 @@ impl HatPubSubTrait for HatCode {
         Arc::new(route)
     }
 
-    fn compute_matching_pulls(&self, tables: &Tables, expr: &mut RoutingExpr) -> Arc<PullCaches> {
-        let mut pull_caches = vec![];
+    fn compute_matching_pulls_(
+        &self,
+        tables: &Tables,
+        pull_caches: &mut PullCaches,
+        expr: &mut RoutingExpr,
+    ) {
         let ke = if let Ok(ke) = OwnedKeyExpr::try_from(expr.full_expr()) {
             ke
         } else {
-            return Arc::new(pull_caches);
+            return;
         };
         let res = Resource::get_resource(expr.prefix, expr.suffix);
         let matches = res
@@ -1259,7 +1281,6 @@ impl HatPubSubTrait for HatCode {
                 }
             }
         }
-        Arc::new(pull_caches)
     }
 
     fn compute_data_routes_(

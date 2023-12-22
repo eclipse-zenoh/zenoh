@@ -134,7 +134,7 @@ impl Tables {
     }
 
     fn compute_routes(&mut self, res: &mut Arc<Resource>) {
-        self.hat_code.clone().compute_data_routes(self, res);
+        self.hat_code.clone().update_data_routes(self, res);
         self.hat_code.clone().compute_query_routes(self, res);
     }
 

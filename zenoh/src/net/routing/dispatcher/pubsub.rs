@@ -27,6 +27,7 @@ use zenoh_sync::get_mut_unchecked;
 
 pub(crate) fn update_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
     tables.hat_code.clone().update_data_routes(tables, res);
+    tables.hat_code.clone().update_matching_pulls(tables, res);
     let res = get_mut_unchecked(res);
     for child in res.childs.values_mut() {
         update_data_routes_from(tables, child);
@@ -36,18 +37,22 @@ pub(crate) fn update_data_routes_from(tables: &mut Tables, res: &mut Arc<Resourc
 pub(crate) fn compute_matches_data_routes<'a>(
     tables: &'a Tables,
     res: &'a Arc<Resource>,
-) -> Vec<(Arc<Resource>, DataRoutes)> {
+) -> Vec<(Arc<Resource>, DataRoutes, Arc<PullCaches>)> {
     let mut routes = vec![];
     if res.context.is_some() {
+        let mut expr = RoutingExpr::new(res, "");
         routes.push((
             res.clone(),
-            tables.hat_code.compute_data_routes(tables, res),
+            tables.hat_code.compute_data_routes(tables, &mut expr),
+            tables.hat_code.compute_matching_pulls(tables, &mut expr),
         ));
         for match_ in &res.context().matches {
             let match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
-                let match_routes = tables.hat_code.compute_data_routes(tables, &match_);
-                routes.push((match_, match_routes));
+                let mut expr = RoutingExpr::new(&match_, "");
+                let match_routes = tables.hat_code.compute_data_routes(tables, &mut expr);
+                let matching_pulls = tables.hat_code.compute_matching_pulls(tables, &mut expr);
+                routes.push((match_, match_routes, matching_pulls));
             }
         }
     }
@@ -57,10 +62,12 @@ pub(crate) fn compute_matches_data_routes<'a>(
 pub(crate) fn update_matches_data_routes<'a>(tables: &'a mut Tables, res: &'a mut Arc<Resource>) {
     if res.context.is_some() {
         tables.hat_code.update_data_routes(tables, res);
+        tables.hat_code.update_matching_pulls(tables, res);
         for match_ in &res.context().matches {
-            let match_ = match_.upgrade().unwrap();
+            let mut match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
-                tables.hat_code.update_data_routes(tables, &match_);
+                tables.hat_code.update_data_routes(tables, &mut match_);
+                tables.hat_code.update_matching_pulls(tables, &mut match_);
             }
         }
     }
@@ -75,6 +82,9 @@ pub(crate) fn disable_matches_data_routes(_tables: &mut Tables, res: &mut Arc<Re
                 get_mut_unchecked(&mut match_)
                     .context_mut()
                     .disable_data_routes();
+                get_mut_unchecked(&mut match_)
+                    .context_mut()
+                    .disable_matching_pulls();
             }
         }
     }
@@ -144,7 +154,7 @@ fn get_matching_pulls(
 ) -> Arc<PullCaches> {
     res.as_ref()
         .and_then(|res| res.context.as_ref())
-        .map(|ctx| ctx.matching_pulls.clone())
+        .and_then(|ctx| ctx.matching_pulls.clone())
         .unwrap_or_else(|| tables.hat_code.compute_matching_pulls(tables, expr))
 }
 

@@ -112,7 +112,7 @@ impl QueryRoutes {
 
 pub(crate) struct ResourceContext {
     pub(crate) matches: Vec<Weak<Resource>>,
-    pub(crate) matching_pulls: Arc<PullCaches>,
+    pub(crate) matching_pulls: Option<Arc<PullCaches>>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) valid_data_routes: bool,
     pub(crate) data_routes: DataRoutes,
@@ -124,7 +124,7 @@ impl ResourceContext {
     fn new(hat: Box<dyn Any + Send + Sync>) -> ResourceContext {
         ResourceContext {
             matches: Vec::new(),
-            matching_pulls: Arc::new(Vec::new()),
+            matching_pulls: None,
             hat,
             valid_data_routes: false,
             data_routes: DataRoutes::default(),
@@ -135,9 +135,6 @@ impl ResourceContext {
 
     pub(crate) fn update_data_routes(&mut self, data_routes: DataRoutes) {
         self.valid_data_routes = true;
-        // if let Some(matching_pulls) = data_routes.matching_pulls {
-        //     self.matching_pulls = matching_pulls;
-        // }
         self.data_routes = data_routes;
     }
 
@@ -152,6 +149,14 @@ impl ResourceContext {
 
     pub(crate) fn disable_query_routes(&mut self) {
         self.valid_query_routes = false;
+    }
+
+    pub(crate) fn update_matching_pulls(&mut self, pulls: Arc<PullCaches>) {
+        self.matching_pulls = Some(pulls);
+    }
+
+    pub(crate) fn disable_matching_pulls(&mut self) {
+        self.matching_pulls = None;
     }
 }
 

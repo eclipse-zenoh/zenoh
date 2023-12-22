@@ -137,7 +137,33 @@ pub(crate) trait HatPubSubTrait {
         source_type: WhatAmI,
     ) -> Arc<Route>;
 
-    fn compute_matching_pulls(&self, tables: &Tables, expr: &mut RoutingExpr) -> Arc<PullCaches>;
+    fn compute_matching_pulls_(
+        &self,
+        tables: &Tables,
+        pull_caches: &mut PullCaches,
+        expr: &mut RoutingExpr,
+    );
+
+    fn compute_matching_pulls(&self, tables: &Tables, expr: &mut RoutingExpr) -> Arc<PullCaches> {
+        let mut pull_caches = PullCaches::default();
+        self.compute_matching_pulls_(tables, &mut pull_caches, expr);
+        Arc::new(pull_caches)
+    }
+
+    fn update_matching_pulls(&self, tables: &Tables, res: &mut Arc<Resource>) {
+        if res.context.is_some() {
+            let mut res_mut = res.clone();
+            let res_mut = get_mut_unchecked(&mut res_mut);
+            if res_mut.context_mut().matching_pulls.is_none() {
+                res_mut.context_mut().matching_pulls = Some(Arc::new(PullCaches::default()));
+            }
+            self.compute_matching_pulls_(
+                tables,
+                get_mut_unchecked(res_mut.context_mut().matching_pulls.as_mut().unwrap()),
+                &mut RoutingExpr::new(res, ""),
+            );
+        }
+    }
 
     fn compute_data_routes_(
         &self,
@@ -146,13 +172,13 @@ pub(crate) trait HatPubSubTrait {
         expr: &mut RoutingExpr,
     );
 
-    fn compute_data_routes(&self, tables: &Tables, res: &Arc<Resource>) -> DataRoutes {
+    fn compute_data_routes(&self, tables: &Tables, expr: &mut RoutingExpr) -> DataRoutes {
         let mut routes = DataRoutes::default();
-        self.compute_data_routes_(tables, &mut routes, &mut RoutingExpr::new(res, ""));
+        self.compute_data_routes_(tables, &mut routes, expr);
         routes
     }
 
-    fn update_data_routes(&self, tables: &Tables, res: &Arc<Resource>) {
+    fn update_data_routes(&self, tables: &Tables, res: &mut Arc<Resource>) {
         if res.context.is_some() {
             let mut res_mut = res.clone();
             let res_mut = get_mut_unchecked(&mut res_mut);
