@@ -20,6 +20,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
+use zenoh_config::WhatAmI;
 #[cfg(feature = "complete_n")]
 use zenoh_protocol::network::request::ext::TargetType;
 use zenoh_protocol::network::RequestId;
@@ -61,19 +62,52 @@ pub(crate) struct SessionContext {
     pub(crate) last_values: HashMap<String, PushBody>,
 }
 
+#[derive(Default)]
 pub(crate) struct DataRoutes {
-    pub(crate) matching_pulls: Option<Arc<PullCaches>>,
-    pub(crate) routers_data_routes: Vec<Arc<Route>>,
-    pub(crate) peers_data_routes: Vec<Arc<Route>>,
-    pub(crate) peer_data_route: Option<Arc<Route>>,
-    pub(crate) client_data_route: Option<Arc<Route>>,
+    pub(crate) routers: Vec<Arc<Route>>,
+    pub(crate) peers: Vec<Arc<Route>>,
+    pub(crate) clients: Vec<Arc<Route>>,
 }
 
+impl DataRoutes {
+    #[inline]
+    pub(crate) fn get_route(&self, whatami: WhatAmI, context: NodeId) -> Option<Arc<Route>> {
+        match whatami {
+            WhatAmI::Router => (self.routers.len() > context as usize)
+                .then(|| self.routers[context as usize].clone()),
+            WhatAmI::Peer => {
+                (self.peers.len() > context as usize).then(|| self.peers[context as usize].clone())
+            }
+            WhatAmI::Client => (self.clients.len() > context as usize)
+                .then(|| self.clients[context as usize].clone()),
+        }
+    }
+}
+
+#[derive(Default)]
 pub(crate) struct QueryRoutes {
-    pub(crate) routers_query_routes: Vec<Arc<QueryTargetQablSet>>,
-    pub(crate) peers_query_routes: Vec<Arc<QueryTargetQablSet>>,
-    pub(crate) peer_query_route: Option<Arc<QueryTargetQablSet>>,
-    pub(crate) client_query_route: Option<Arc<QueryTargetQablSet>>,
+    pub(crate) routers: Vec<Arc<QueryTargetQablSet>>,
+    pub(crate) peers: Vec<Arc<QueryTargetQablSet>>,
+    pub(crate) clients: Vec<Arc<QueryTargetQablSet>>,
+}
+
+impl QueryRoutes {
+    #[inline]
+    pub(crate) fn get_route(
+        &self,
+        whatami: WhatAmI,
+        context: NodeId,
+    ) -> Option<Arc<QueryTargetQablSet>> {
+        match whatami {
+            WhatAmI::Router => (self.routers.len() > context as usize)
+                .then(|| self.routers[context as usize].clone()),
+            WhatAmI::Peer => {
+                (self.peers.len() > context as usize).then(|| self.peers[context as usize].clone())
+            }
+            WhatAmI::Client => (self.clients.len() > context as usize)
+                .then(|| self.clients[context as usize].clone()),
+        }
+    }
 }
 
 pub(crate) struct ResourceContext {
@@ -81,15 +115,9 @@ pub(crate) struct ResourceContext {
     pub(crate) matching_pulls: Arc<PullCaches>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
     pub(crate) valid_data_routes: bool,
-    pub(crate) routers_data_routes: Vec<Arc<Route>>,
-    pub(crate) peers_data_routes: Vec<Arc<Route>>,
-    pub(crate) peer_data_route: Option<Arc<Route>>,
-    pub(crate) client_data_route: Option<Arc<Route>>,
+    pub(crate) data_routes: DataRoutes,
     pub(crate) valid_query_routes: bool,
-    pub(crate) routers_query_routes: Vec<Arc<QueryTargetQablSet>>,
-    pub(crate) peers_query_routes: Vec<Arc<QueryTargetQablSet>>,
-    pub(crate) peer_query_route: Option<Arc<QueryTargetQablSet>>,
-    pub(crate) client_query_route: Option<Arc<QueryTargetQablSet>>,
+    pub(crate) query_routes: QueryRoutes,
 }
 
 impl ResourceContext {
@@ -99,35 +127,31 @@ impl ResourceContext {
             matching_pulls: Arc::new(Vec::new()),
             hat,
             valid_data_routes: false,
-            routers_data_routes: Vec::new(),
-            peers_data_routes: Vec::new(),
-            peer_data_route: None,
-            client_data_route: None,
+            data_routes: DataRoutes::default(),
             valid_query_routes: false,
-            routers_query_routes: Vec::new(),
-            peers_query_routes: Vec::new(),
-            peer_query_route: None,
-            client_query_route: None,
+            query_routes: QueryRoutes::default(),
         }
     }
 
     pub(crate) fn update_data_routes(&mut self, data_routes: DataRoutes) {
         self.valid_data_routes = true;
-        if let Some(matching_pulls) = data_routes.matching_pulls {
-            self.matching_pulls = matching_pulls;
-        }
-        self.routers_data_routes = data_routes.routers_data_routes;
-        self.peers_data_routes = data_routes.peers_data_routes;
-        self.peer_data_route = data_routes.peer_data_route;
-        self.client_data_route = data_routes.client_data_route;
+        // if let Some(matching_pulls) = data_routes.matching_pulls {
+        //     self.matching_pulls = matching_pulls;
+        // }
+        self.data_routes = data_routes;
+    }
+
+    pub(crate) fn disable_data_routes(&mut self) {
+        self.valid_data_routes = false;
     }
 
     pub(crate) fn update_query_routes(&mut self, query_routes: QueryRoutes) {
         self.valid_query_routes = true;
-        self.routers_query_routes = query_routes.routers_query_routes;
-        self.peers_query_routes = query_routes.peers_query_routes;
-        self.peer_query_route = query_routes.peer_query_route;
-        self.client_query_route = query_routes.client_query_route;
+        self.query_routes = query_routes
+    }
+
+    pub(crate) fn disable_query_routes(&mut self) {
+        self.valid_query_routes = false;
     }
 }
 
@@ -206,13 +230,12 @@ impl Resource {
         }
     }
 
-    #[inline(always)]
-    pub fn routers_data_route(&self, context: NodeId) -> Option<Arc<Route>> {
+    #[inline]
+    pub(crate) fn data_route(&self, whatami: WhatAmI, context: NodeId) -> Option<Arc<Route>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_data_routes {
-                    (ctx.routers_data_routes.len() > context as usize)
-                        .then(|| ctx.routers_data_routes[context as usize].clone())
+                    ctx.data_routes.get_route(whatami, context)
                 } else {
                     None
                 }
@@ -223,12 +246,15 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub fn peers_data_route(&self, context: NodeId) -> Option<Arc<Route>> {
+    pub(crate) fn query_route(
+        &self,
+        whatami: WhatAmI,
+        context: NodeId,
+    ) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
             Some(ctx) => {
-                if ctx.valid_data_routes {
-                    (ctx.peers_data_routes.len() > context as usize)
-                        .then(|| ctx.peers_data_routes[context as usize].clone())
+                if ctx.valid_query_routes {
+                    ctx.query_routes.get_route(whatami, context)
                 } else {
                     None
                 }
@@ -236,98 +262,6 @@ impl Resource {
             None => None,
         }
     }
-
-    #[inline(always)]
-    pub fn peer_data_route(&self) -> Option<Arc<Route>> {
-        match &self.context {
-            Some(ctx) => {
-                if ctx.valid_data_routes {
-                    ctx.peer_data_route.clone()
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
-
-    #[inline(always)]
-    pub fn client_data_route(&self) -> Option<Arc<Route>> {
-        match &self.context {
-            Some(ctx) => {
-                if ctx.valid_data_routes {
-                    ctx.client_data_route.clone()
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
-
-    // #[inline(always)]
-    // pub(crate) fn routers_query_route(
-    //     &self,
-    //     context: NodeId,
-    // ) -> Option<Arc<QueryTargetQablSet>> {
-    //     match &self.context {
-    //         Some(ctx) => {
-    //             if ctx.valid_query_routes {
-    //                 (ctx.routers_query_routes.len() > context as usize)
-    //                     .then(|| ctx.routers_query_routes[context as usize].clone())
-    //             } else {
-    //                 None
-    //             }
-    //         }
-    //         None => None,
-    //     }
-    // }
-
-    // #[inline(always)]
-    // pub(crate) fn peers_query_route(
-    //     &self,
-    //     context: NodeId,
-    // ) -> Option<Arc<QueryTargetQablSet>> {
-    //     match &self.context {
-    //         Some(ctx) => {
-    //             if ctx.valid_query_routes {
-    //                 (ctx.peers_query_routes.len() > context as usize)
-    //                     .then(|| ctx.peers_query_routes[context as usize].clone())
-    //             } else {
-    //                 None
-    //             }
-    //         }
-    //         None => None,
-    //     }
-    // }
-
-    // #[inline(always)]
-    // pub(crate) fn peer_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
-    //     match &self.context {
-    //         Some(ctx) => {
-    //             if ctx.valid_query_routes {
-    //                 ctx.peer_query_route.clone()
-    //             } else {
-    //                 None
-    //             }
-    //         }
-    //         None => None,
-    //     }
-    // }
-
-    // #[inline(always)]
-    // pub(crate) fn client_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
-    //     match &self.context {
-    //         Some(ctx) => {
-    //             if ctx.valid_query_routes {
-    //                 ctx.client_query_route.clone()
-    //             } else {
-    //                 None
-    //             }
-    //         }
-    //         None => None,
-    //     }
-    // }
 
     pub fn root() -> Arc<Resource> {
         Arc::new(Resource {

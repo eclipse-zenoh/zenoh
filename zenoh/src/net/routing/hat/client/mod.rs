@@ -142,11 +142,13 @@ impl HatBaseTrait for HatCode {
                     if !Arc::ptr_eq(&match_, &res) {
                         get_mut_unchecked(&mut match_)
                             .context_mut()
-                            .valid_data_routes = false;
+                            .disable_data_routes();
                         subs_matches.push(match_);
                     }
                 }
-                get_mut_unchecked(&mut res).context_mut().valid_data_routes = false;
+                get_mut_unchecked(&mut res)
+                    .context_mut()
+                    .disable_data_routes();
                 subs_matches.push(res);
             }
         }
@@ -168,11 +170,13 @@ impl HatBaseTrait for HatCode {
                     if !Arc::ptr_eq(&match_, &res) {
                         get_mut_unchecked(&mut match_)
                             .context_mut()
-                            .valid_query_routes = false;
+                            .disable_query_routes();
                         qabls_matches.push(match_);
                     }
                 }
-                get_mut_unchecked(&mut res).context_mut().valid_query_routes = false;
+                get_mut_unchecked(&mut res)
+                    .context_mut()
+                    .disable_query_routes();
                 qabls_matches.push(res);
             }
         }

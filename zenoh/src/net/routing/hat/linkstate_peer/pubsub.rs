@@ -861,13 +861,7 @@ impl HatPubSubTrait for HatCode {
     }
 
     fn compute_data_routes_(&self, tables: &Tables, res: &Arc<Resource>) -> DataRoutes {
-        let mut routes = DataRoutes {
-            matching_pulls: None,
-            routers_data_routes: vec![],
-            peers_data_routes: vec![],
-            peer_data_route: None,
-            client_data_route: None,
-        };
+        let mut routes = DataRoutes::default();
         let mut expr = RoutingExpr::new(res, "");
         let indexes = hat!(tables)
             .peers_net
@@ -878,15 +872,22 @@ impl HatPubSubTrait for HatCode {
             .collect::<Vec<NodeIndex>>();
         let max_idx = indexes.iter().max().unwrap();
         routes
-            .peers_data_routes
+            .routers
+            .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
+        routes
+            .peers
             .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
         for idx in &indexes {
-            routes.peers_data_routes[idx.index()] =
+            let route =
                 self.compute_data_route(tables, &mut expr, idx.index() as NodeId, WhatAmI::Peer);
+            routes.routers[idx.index()] = route.clone();
+            routes.peers[idx.index()] = route;
         }
+        routes.clients.resize_with(1, || Arc::new(HashMap::new()));
+        routes.clients[0] = self.compute_data_route(tables, &mut expr, 0, WhatAmI::Peer);
 
-        routes.matching_pulls = Some(self.compute_matching_pulls(tables, &mut expr));
+        // routes.matching_pulls = Some(self.compute_matching_pulls(tables, &mut expr));
         routes
     }
 
@@ -903,20 +904,38 @@ impl HatPubSubTrait for HatCode {
                 .node_indices()
                 .collect::<Vec<NodeIndex>>();
             let max_idx = indexes.iter().max().unwrap();
-            let peers_data_routes = &mut res_mut.context_mut().peers_data_routes;
-            peers_data_routes.clear();
-            peers_data_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
+
+            res_mut.context_mut().data_routes.routers.clear();
+            res_mut
+                .context_mut()
+                .data_routes
+                .routers
+                .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
+
+            res_mut.context_mut().data_routes.peers.clear();
+            res_mut
+                .context_mut()
+                .data_routes
+                .peers
+                .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
             for idx in &indexes {
-                peers_data_routes[idx.index()] = self.compute_data_route(
+                let route = self.compute_data_route(
                     tables,
                     &mut expr,
                     idx.index() as NodeId,
                     WhatAmI::Peer,
                 );
+                res_mut.context_mut().data_routes.routers[idx.index()] = route.clone();
+                res_mut.context_mut().data_routes.peers[idx.index()] = route;
             }
 
-            res_mut.context_mut().matching_pulls = self.compute_matching_pulls(tables, &mut expr);
+            let clients_data_routes = &mut res_mut.context_mut().data_routes.clients;
+            clients_data_routes.clear();
+            clients_data_routes.resize_with(1, || Arc::new(HashMap::new()));
+            clients_data_routes[0] = self.compute_data_route(tables, &mut expr, 0, WhatAmI::Peer);
+
+            // res_mut.context_mut().matching_pulls = self.compute_matching_pulls(tables, &mut expr);
         }
     }
 }

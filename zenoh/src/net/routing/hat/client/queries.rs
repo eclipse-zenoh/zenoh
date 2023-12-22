@@ -438,15 +438,26 @@ impl HatQueriesTrait for HatCode {
     }
 
     fn compute_query_routes_(&self, tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
-        let mut routes = QueryRoutes {
-            routers_query_routes: vec![],
-            peers_query_routes: vec![],
-            peer_query_route: None,
-            client_query_route: None,
-        };
+        let mut routes = QueryRoutes::default();
         let mut expr = RoutingExpr::new(res, "");
-        routes.client_query_route =
-            Some(self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Client));
+
+        let route = self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Client);
+
+        routes
+            .routers
+            .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
+        routes.routers[0] = route.clone();
+
+        routes
+            .peers
+            .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
+        routes.peers[0] = route.clone();
+
+        routes
+            .clients
+            .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
+        routes.clients[0] = route;
+
         routes
     }
 
@@ -455,12 +466,24 @@ impl HatQueriesTrait for HatCode {
             let mut res_mut = res.clone();
             let res_mut = get_mut_unchecked(&mut res_mut);
             let mut expr = RoutingExpr::new(res, "");
-            res_mut.context_mut().client_query_route = Some(self.compute_query_route(
-                tables,
-                &mut expr,
-                NodeId::default(),
-                WhatAmI::Client,
-            ));
+
+            let route =
+                self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Client);
+
+            let routers_query_routes = &mut res_mut.context_mut().query_routes.routers;
+            routers_query_routes.clear();
+            routers_query_routes.resize_with(1, || Arc::new(QueryTargetQablSet::new()));
+            routers_query_routes[0] = route.clone();
+
+            let peers_query_routes = &mut res_mut.context_mut().query_routes.peers;
+            peers_query_routes.clear();
+            peers_query_routes.resize_with(1, || Arc::new(QueryTargetQablSet::new()));
+            peers_query_routes[0] = route.clone();
+
+            let clients_query_routes = &mut res_mut.context_mut().query_routes.clients;
+            clients_query_routes.clear();
+            clients_query_routes.resize_with(1, || Arc::new(QueryTargetQablSet::new()));
+            clients_query_routes[0] = route;
         }
     }
 }

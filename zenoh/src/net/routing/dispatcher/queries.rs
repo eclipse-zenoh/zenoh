@@ -247,110 +247,37 @@ impl Timed for QueryCleanup {
 
 pub(crate) fn disable_matches_query_routes(_tables: &mut Tables, res: &mut Arc<Resource>) {
     if res.context.is_some() {
-        get_mut_unchecked(res).context_mut().valid_query_routes = false;
+        get_mut_unchecked(res).context_mut().disable_query_routes();
         for match_ in &res.context().matches {
             let mut match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
                 get_mut_unchecked(&mut match_)
                     .context_mut()
-                    .valid_query_routes = false;
+                    .disable_query_routes();
             }
         }
     }
 }
 
-// #[inline]
-// fn get_query_route(
-//     tables: &Tables,
-//     face: &FaceState,
-//     res: &Option<Arc<Resource>>,
-//     expr: &mut RoutingExpr,
-//     routing_context: NodeId,
-// ) -> Arc<QueryTargetQablSet> {
-//     match tables.whatami {
-//         WhatAmI::Router => match face.whatami {
-//             WhatAmI::Router => {
-//                 let routers_net = tables.hat.routers_net.as_ref().unwrap();
-//                 let local_context = routers_net.get_local_context(routing_context, face.link_id);
-//                 res.as_ref()
-//                     .and_then(|res| res.routers_query_route(local_context))
-//                     .unwrap_or_else(|| {
-//                         compute_query_route(tables, expr, local_context, face.whatami)
-//                     })
-//             }
-//             WhatAmI::Peer => {
-//                 if tables.hat.full_net(WhatAmI::Peer) {
-//                     let peers_net = tables.hat.peers_net.as_ref().unwrap();
-//                     let local_context = peers_net.get_local_context(routing_context, face.link_id);
-//                     res.as_ref()
-//                         .and_then(|res| res.peers_query_route(local_context))
-//                         .unwrap_or_else(|| {
-//                             compute_query_route(tables, expr, local_context, face.whatami)
-//                         })
-//                 } else {
-//                     res.as_ref()
-//                         .and_then(|res| res.peer_query_route())
-//                         .unwrap_or_else(|| {
-//                             compute_query_route(
-//                                 tables,
-//                                 expr,
-//                                 NodeId::default(),
-//                                 face.whatami,
-//                             )
-//                         })
-//                 }
-//             }
-//             _ => res
-//                 .as_ref()
-//                 .and_then(|res| res.routers_query_route(NodeId::default()))
-//                 .unwrap_or_else(|| {
-//                     compute_query_route(tables, expr, NodeId::default(), face.whatami)
-//                 }),
-//         },
-//         WhatAmI::Peer => {
-//             if tables.hat.full_net(WhatAmI::Peer) {
-//                 match face.whatami {
-//                     WhatAmI::Router | WhatAmI::Peer => {
-//                         let peers_net = tables.hat.peers_net.as_ref().unwrap();
-//                         let local_context =
-//                             peers_net.get_local_context(routing_context, face.link_id);
-//                         res.as_ref()
-//                             .and_then(|res| res.peers_query_route(local_context))
-//                             .unwrap_or_else(|| {
-//                                 compute_query_route(tables, expr, local_context, face.whatami)
-//                             })
-//                     }
-//                     _ => res
-//                         .as_ref()
-//                         .and_then(|res| res.peers_query_route(NodeId::default()))
-//                         .unwrap_or_else(|| {
-//                             compute_query_route(
-//                                 tables,
-//                                 expr,
-//                                 NodeId::default(),
-//                                 face.whatami,
-//                             )
-//                         }),
-//                 }
-//             } else {
-//                 res.as_ref()
-//                     .and_then(|res| match face.whatami {
-//                         WhatAmI::Client => res.client_query_route(),
-//                         _ => res.peer_query_route(),
-//                     })
-//                     .unwrap_or_else(|| {
-//                         compute_query_route(tables, expr, NodeId::default(), face.whatami)
-//                     })
-//             }
-//         }
-//         _ => res
-//             .as_ref()
-//             .and_then(|res| res.client_query_route())
-//             .unwrap_or_else(|| {
-//                 compute_query_route(tables, expr, NodeId::default(), face.whatami)
-//             }),
-//     }
-// }
+#[inline]
+fn get_query_route(
+    tables: &Tables,
+    face: &FaceState,
+    res: &Option<Arc<Resource>>,
+    expr: &mut RoutingExpr,
+    routing_context: NodeId,
+) -> Arc<QueryTargetQablSet> {
+    let local_context = tables
+        .hat_code
+        .map_routing_context(tables, face, routing_context);
+    res.as_ref()
+        .and_then(|res| res.query_route(face.whatami, local_context))
+        .unwrap_or_else(|| {
+            tables
+                .hat_code
+                .compute_query_route(tables, expr, local_context, face.whatami)
+        })
+}
 
 #[cfg(feature = "stats")]
 macro_rules! inc_req_stats {
@@ -450,13 +377,9 @@ pub fn route_query(
             }
 
             if rtables.hat_code.ingress_filter(&rtables, face, &mut expr) {
-                // let res = Resource::get_resource(&prefix, expr.suffix);
-                let route = rtables.hat_code.compute_query_route(
-                    &rtables,
-                    &mut expr,
-                    routing_context,
-                    face.whatami,
-                );
+                let res = Resource::get_resource(&prefix, expr.suffix);
+
+                let route = get_query_route(&rtables, face, &res, &mut expr, routing_context);
 
                 let query = Arc::new(Query {
                     src_face: face.clone(),

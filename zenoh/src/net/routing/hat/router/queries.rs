@@ -1439,12 +1439,7 @@ impl HatQueriesTrait for HatCode {
     }
 
     fn compute_query_routes_(&self, tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
-        let mut routes = QueryRoutes {
-            routers_query_routes: vec![],
-            peers_query_routes: vec![],
-            peer_query_route: None,
-            client_query_route: None,
-        };
+        let mut routes = QueryRoutes::default();
         let mut expr = RoutingExpr::new(res, "");
 
         let indexes = hat!(tables)
@@ -1456,16 +1451,19 @@ impl HatQueriesTrait for HatCode {
             .collect::<Vec<NodeIndex>>();
         let max_idx = indexes.iter().max().unwrap();
         routes
-            .routers_query_routes
+            .routers
             .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
 
         for idx in &indexes {
-            routes.routers_query_routes[idx.index()] =
+            routes.routers[idx.index()] =
                 self.compute_query_route(tables, &mut expr, idx.index() as NodeId, WhatAmI::Router);
         }
 
-        routes.peer_query_route =
-            Some(self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer));
+        routes
+            .peers
+            .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
+        routes.peers[0] =
+            self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer);
 
         if hat!(tables).full_net(WhatAmI::Peer) {
             let indexes = hat!(tables)
@@ -1477,11 +1475,11 @@ impl HatQueriesTrait for HatCode {
                 .collect::<Vec<NodeIndex>>();
             let max_idx = indexes.iter().max().unwrap();
             routes
-                .peers_query_routes
+                .peers
                 .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
 
             for idx in &indexes {
-                routes.peers_query_routes[idx.index()] = self.compute_query_route(
+                routes.peers[idx.index()] = self.compute_query_route(
                     tables,
                     &mut expr,
                     idx.index() as NodeId,
@@ -1489,6 +1487,12 @@ impl HatQueriesTrait for HatCode {
                 );
             }
         }
+        routes
+            .clients
+            .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
+        routes.clients[0] =
+            self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Client);
+
         routes
     }
 
@@ -1506,7 +1510,7 @@ impl HatQueriesTrait for HatCode {
                 .node_indices()
                 .collect::<Vec<NodeIndex>>();
             let max_idx = indexes.iter().max().unwrap();
-            let routers_query_routes = &mut res_mut.context_mut().routers_query_routes;
+            let routers_query_routes = &mut res_mut.context_mut().query_routes.routers;
             routers_query_routes.clear();
             routers_query_routes
                 .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
@@ -1520,8 +1524,12 @@ impl HatQueriesTrait for HatCode {
                 );
             }
 
-            res_mut.context_mut().peer_query_route =
-                Some(self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer));
+            let peers_query_routes = &mut res_mut.context_mut().query_routes.peers;
+            peers_query_routes.clear();
+            peers_query_routes
+                .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
+            peers_query_routes[0] =
+                self.compute_query_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer);
 
             if hat!(tables).full_net(WhatAmI::Peer) {
                 let indexes = hat!(tables)
@@ -1532,7 +1540,7 @@ impl HatQueriesTrait for HatCode {
                     .node_indices()
                     .collect::<Vec<NodeIndex>>();
                 let max_idx = indexes.iter().max().unwrap();
-                let peers_query_routes = &mut res_mut.context_mut().peers_query_routes;
+                let peers_query_routes = &mut res_mut.context_mut().query_routes.peers;
                 peers_query_routes.clear();
                 peers_query_routes
                     .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));

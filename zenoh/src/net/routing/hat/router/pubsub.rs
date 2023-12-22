@@ -1274,13 +1274,7 @@ impl HatPubSubTrait for HatCode {
     }
 
     fn compute_data_routes_(&self, tables: &Tables, res: &Arc<Resource>) -> DataRoutes {
-        let mut routes = DataRoutes {
-            matching_pulls: None,
-            routers_data_routes: vec![],
-            peers_data_routes: vec![],
-            peer_data_route: None,
-            client_data_route: None,
-        };
+        let mut routes = DataRoutes::default();
         let mut expr = RoutingExpr::new(res, "");
 
         let indexes = hat!(tables)
@@ -1292,16 +1286,17 @@ impl HatPubSubTrait for HatCode {
             .collect::<Vec<NodeIndex>>();
         let max_idx = indexes.iter().max().unwrap();
         routes
-            .routers_data_routes
+            .routers
             .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
         for idx in &indexes {
-            routes.routers_data_routes[idx.index()] =
+            routes.routers[idx.index()] =
                 self.compute_data_route(tables, &mut expr, idx.index() as NodeId, WhatAmI::Router);
         }
 
-        routes.peer_data_route =
-            Some(self.compute_data_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer));
+        routes.peers.resize_with(1, || Arc::new(HashMap::new()));
+        routes.peers[0] =
+            self.compute_data_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer);
 
         if hat!(tables).full_net(WhatAmI::Peer) {
             let indexes = hat!(tables)
@@ -1313,11 +1308,11 @@ impl HatPubSubTrait for HatCode {
                 .collect::<Vec<NodeIndex>>();
             let max_idx = indexes.iter().max().unwrap();
             routes
-                .peers_data_routes
+                .peers
                 .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
             for idx in &indexes {
-                routes.peers_data_routes[idx.index()] = self.compute_data_route(
+                routes.peers[idx.index()] = self.compute_data_route(
                     tables,
                     &mut expr,
                     idx.index() as NodeId,
@@ -1325,7 +1320,11 @@ impl HatPubSubTrait for HatCode {
                 );
             }
         }
-        routes.matching_pulls = Some(self.compute_matching_pulls(tables, &mut expr));
+        routes.clients.resize_with(1, || Arc::new(HashMap::new()));
+        routes.clients[0] =
+            self.compute_data_route(tables, &mut expr, NodeId::default(), WhatAmI::Client);
+
+        // routes.matching_pulls = Some(self.compute_matching_pulls(tables, &mut expr));
         routes
     }
 
@@ -1343,7 +1342,7 @@ impl HatPubSubTrait for HatCode {
                 .node_indices()
                 .collect::<Vec<NodeIndex>>();
             let max_idx = indexes.iter().max().unwrap();
-            let routers_data_routes = &mut res_mut.context_mut().routers_data_routes;
+            let routers_data_routes = &mut res_mut.context_mut().data_routes.routers;
             routers_data_routes.clear();
             routers_data_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
@@ -1356,8 +1355,11 @@ impl HatPubSubTrait for HatCode {
                 );
             }
 
-            res_mut.context_mut().peer_data_route =
-                Some(self.compute_data_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer));
+            let peers_data_routes = &mut res_mut.context_mut().data_routes.peers;
+            peers_data_routes.clear();
+            peers_data_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
+            peers_data_routes[0] =
+                self.compute_data_route(tables, &mut expr, NodeId::default(), WhatAmI::Peer);
 
             if hat!(tables).full_net(WhatAmI::Peer) {
                 let indexes = hat!(tables)
@@ -1368,7 +1370,7 @@ impl HatPubSubTrait for HatCode {
                     .node_indices()
                     .collect::<Vec<NodeIndex>>();
                 let max_idx = indexes.iter().max().unwrap();
-                let peers_data_routes = &mut res_mut.context_mut().peers_data_routes;
+                let peers_data_routes = &mut res_mut.context_mut().data_routes.peers;
                 peers_data_routes.clear();
                 peers_data_routes.resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
 
@@ -1381,7 +1383,7 @@ impl HatPubSubTrait for HatCode {
                     );
                 }
             }
-            res_mut.context_mut().matching_pulls = self.compute_matching_pulls(tables, &mut expr);
+            // res_mut.context_mut().matching_pulls = self.compute_matching_pulls(tables, &mut expr);
         }
     }
 }
