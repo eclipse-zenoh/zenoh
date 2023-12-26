@@ -120,8 +120,8 @@ fn parse_args() -> (Config, String, Option<String>) {
         config.scouting.multicast.set_enabled(Some(false)).unwrap();
     }
 
-    let key_expr = args.get_one::<&String>("key").unwrap().to_string();
-    let query = args.get_one::<&String>("query").map(ToString::to_string);
+    let key_expr = args.get_one::<String>("key").unwrap().to_string();
+    let query = args.get_one::<String>("query").map(ToString::to_string);
 
     (config, key_expr, query)
 }
