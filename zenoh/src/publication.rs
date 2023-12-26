@@ -1300,6 +1300,7 @@ impl Drop for MatchingListenerInner<'_> {
     }
 }
 
+#[cfg(test)]
 mod tests {
     #[test]
     fn priority_from() {
@@ -1323,5 +1324,28 @@ mod tests {
             let t: TPrio = p.into();
             assert_eq!(p as u8, t as u8);
         }
+    }
+
+    #[test]
+    fn sample_kind_integrity_in_publication() {
+        use crate::{open, prelude::sync::*};
+        use zenoh_protocol::core::SampleKind;
+
+        const KEY_EXPR: &str = "test/sample_kind_integrity/publication";
+        const VALUE: &str = "zenoh";
+
+        fn sample_kind_integrity_in_publication_with(kind: SampleKind) {
+            let session = open(Config::default()).res().unwrap();
+            let sub = session.declare_subscriber(KEY_EXPR).res().unwrap();
+            let pub_ = session.declare_publisher(KEY_EXPR).res().unwrap();
+            pub_.write(kind, VALUE).res().unwrap();
+            let sample = sub.recv().unwrap();
+
+            assert_eq!(sample.kind, kind);
+            assert_eq!(sample.value.to_string(), VALUE);
+        }
+
+        sample_kind_integrity_in_publication_with(SampleKind::Put);
+        sample_kind_integrity_in_publication_with(SampleKind::Delete);
     }
 }
