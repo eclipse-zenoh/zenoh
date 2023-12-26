@@ -94,7 +94,7 @@ fn parse_args() -> Config {
         .arg(arg!(-l --listen [ENDPOINT]...  "Endpoints to listen on."))
         .arg(arg!(-c --config [FILE] "A configuration file."))
         .arg(
-            arg!(--no-multicast-scouting "Disable the multicast-based scouting mechanism."
+            arg!(--"no-multicast-scouting" "Disable the multicast-based scouting mechanism."
             ),
         )
         .get_matches();

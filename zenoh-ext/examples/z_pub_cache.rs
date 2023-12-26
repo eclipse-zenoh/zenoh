@@ -64,7 +64,7 @@ fn parse_args() -> (Config, String, String, usize, Option<String>) {
         )
         .arg(arg!(-x --prefix [STRING] "An optional queryable prefix"))
         .arg(arg!(-c --config [FILE]      "A configuration file."))
-        .arg(arg!(--no-multicast-scouting "Disable the multicast-based scouting mechanism."))
+        .arg(arg!(--"no-multicast-scouting" "Disable the multicast-based scouting mechanism."))
         .get_matches();
 
     let mut config = if let Some(conf_file) = args.get_one::<&String>("config") {
