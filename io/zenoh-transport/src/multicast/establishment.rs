@@ -84,14 +84,12 @@ pub(crate) async fn open_link(
     ti.start_tx()?;
 
     // Store the active transport
-    if manager.state.multicast.transports.get(&locator).is_some() {
+    let mut w_guard = zasynclock!(manager.state.multicast.transports);
+    if w_guard.get(&locator).is_some() {
         bail!("A Multicast transport on {} already exist!", locator);
     }
-    manager
-        .state
-        .multicast
-        .transports
-        .insert(locator.clone(), ti.clone());
+    w_guard.insert(locator.clone(), ti.clone());
+    drop(w_guard);
 
     // Notify the transport event handler
     let transport: TransportMulticast = (&ti).into();
@@ -99,14 +97,14 @@ pub(crate) async fn open_link(
     let callback = match manager.config.handler.new_multicast(transport.clone()) {
         Ok(c) => c,
         Err(e) => {
-            manager.state.multicast.transports.remove(&locator);
+            zasynclock!(manager.state.multicast.transports).remove(&locator);
             let _ = ti.stop_tx();
             return Err(e);
         }
     };
     ti.set_callback(callback);
     if let Err(e) = ti.start_rx() {
-        manager.state.multicast.transports.remove(&locator);
+        zasynclock!(manager.state.multicast.transports).remove(&locator);
         let _ = ti.stop_rx();
         return Err(e);
     }

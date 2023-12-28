@@ -30,7 +30,7 @@ use std::sync::Arc;
 use tokio::fs::remove_file;
 use tokio::io::unix::AsyncFd;
 use tokio::io::Interest;
-use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_runtime::ZRuntime;
@@ -171,6 +171,7 @@ impl PipeR {
             .write(true)
             .custom_flags(libc::O_NONBLOCK)
             .open(path)?;
+
         #[cfg(not(target_os = "macos"))]
         read.try_lock(FileLockMode::Exclusive)?;
         Ok(read)
@@ -282,8 +283,8 @@ async fn handle_incoming_connections(
 }
 
 struct UnicastPipeListener {
-    listening_task_handle: JoinHandle<()>,
     uplink_locator: Locator,
+    token: CancellationToken,
 }
 impl UnicastPipeListener {
     async fn listen(endpoint: EndPoint, manager: Arc<NewLinkChannelSender>) -> ZResult<Self> {
@@ -297,19 +298,35 @@ impl UnicastPipeListener {
         // create request channel
         let mut request_channel = PipeR::new(&path_uplink, access_mode).await?;
 
+        let token = CancellationToken::new();
+        let c_token = token.clone();
         // create listening task
-        let listening_task_handle = tokio::task::spawn_blocking(move || {
+        tokio::task::spawn_blocking(move || {
             ZRuntime::Accept.block_on(async move {
                 loop {
-                    let _ = handle_incoming_connections(
-                        &endpoint,
-                        &manager,
-                        &mut request_channel,
-                        &path_downlink,
-                        &path_uplink,
-                        access_mode,
-                    )
-                    .await;
+                    tokio::select! {
+                        _ = handle_incoming_connections(
+                            &endpoint,
+                            &manager,
+                            &mut request_channel,
+                            &path_downlink,
+                            &path_uplink,
+                            access_mode,
+                        ) => {}
+
+                        _ = c_token.cancelled() => {
+                            break
+                        }
+                    }
+                    // let _ = handle_incoming_connections(
+                    //     &endpoint,
+                    //     &manager,
+                    //     &mut request_channel,
+                    //     &path_downlink,
+                    //     &path_uplink,
+                    //     access_mode,
+                    // )
+                    // .await;
                 }
             })
         });
@@ -330,13 +347,13 @@ impl UnicastPipeListener {
         // });
 
         Ok(Self {
-            listening_task_handle,
             uplink_locator: local,
+            token,
         })
     }
 
     fn stop_listening(self) {
-        self.listening_task_handle.abort();
+        self.token.cancel();
     }
 }
 
@@ -591,22 +608,20 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastPipe {
 
     fn get_listeners(&self) -> Vec<EndPoint> {
         tokio::task::block_in_place(|| {
-            ZRuntime::Net
-                .block_on(async { zasyncread!(self.listeners) })
-                .keys()
-                .cloned()
-                .collect()
+            ZRuntime::Net.block_on(async { zasyncread!(self.listeners) })
         })
+        .keys()
+        .cloned()
+        .collect()
     }
 
     fn get_locators(&self) -> Vec<Locator> {
         tokio::task::block_in_place(|| {
-            ZRuntime::Net
-                .block_on(async { zasyncread!(self.listeners) })
-                .values()
-                .map(|v| v.uplink_locator.clone())
-                .collect()
+            ZRuntime::Net.block_on(async { zasyncread!(self.listeners) })
         })
+        .values()
+        .map(|v| v.uplink_locator.clone())
+        .collect()
     }
 }
 

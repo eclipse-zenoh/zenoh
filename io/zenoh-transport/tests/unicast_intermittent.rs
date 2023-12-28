@@ -286,60 +286,60 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     /* [4] */
     println!("Transport Intermittent [4a1]");
     let c_router_manager = router_manager.clone();
-    let _ = ztimeout!(tokio::task::spawn_blocking(move || {
-        tokio::runtime::Handle::current().block_on(async {
-            // Create the message to send
-            let message: NetworkMessage = Push {
-                wire_expr: "test".into(),
-                ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
-                ext_tstamp: None,
-                ext_nodeid: NodeIdType::default(),
-                payload: Put {
-                    payload: vec![0u8; MSG_SIZE].into(),
-                    timestamp: None,
-                    encoding: Encoding::default(),
-                    ext_sinfo: None,
-                    #[cfg(feature = "shared-memory")]
-                    ext_shm: None,
-                    ext_unknown: vec![],
-                }
-                .into(),
+    let rt = tokio::runtime::Handle::current();
+    let _ = ztimeout!(tokio::task::spawn_blocking(move || rt.block_on(async {
+        // Create the message to send
+        let message: NetworkMessage = Push {
+            wire_expr: "test".into(),
+            ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+            ext_tstamp: None,
+            ext_nodeid: NodeIdType::default(),
+            payload: Put {
+                payload: vec![0u8; MSG_SIZE].into(),
+                timestamp: None,
+                encoding: Encoding::default(),
+                ext_sinfo: None,
+                #[cfg(feature = "shared-memory")]
+                ext_shm: None,
+                ext_attachment: None,
+                ext_unknown: vec![],
             }
-            .into();
+            .into(),
+        }
+        .into();
 
-            let mut ticks: Vec<usize> = (0..=MSG_COUNT).step_by(MSG_COUNT / 10).collect();
-            ticks.remove(0);
+        let mut ticks: Vec<usize> = (0..=MSG_COUNT).step_by(MSG_COUNT / 10).collect();
+        ticks.remove(0);
 
-            let mut count = 0;
-            while count < MSG_COUNT {
-                if count == ticks[0] {
-                    println!("\nScheduled {count}");
-                    ticks.remove(0);
-                }
-                let transports = c_router_manager.get_transports_unicast().await;
-                if !transports.is_empty() {
-                    for s in transports.iter() {
-                        if let Ok(ll) = s.get_links() {
-                            if ll.is_empty() {
-                                print!("#");
-                            } else {
-                                assert_eq!(ll.len(), 1);
-                            }
-                        }
-                        let res = s.schedule(message.clone());
-                        if res.is_err() {
-                            print!("X");
-                            std::io::stdout().flush().unwrap();
+        let mut count = 0;
+        while count < MSG_COUNT {
+            if count == ticks[0] {
+                println!("\nScheduled {count}");
+                ticks.remove(0);
+            }
+            let transports = c_router_manager.get_transports_unicast().await;
+            if !transports.is_empty() {
+                for s in transports.iter() {
+                    if let Ok(ll) = s.get_links() {
+                        if ll.is_empty() {
+                            print!("#");
+                        } else {
+                            assert_eq!(ll.len(), 1);
                         }
                     }
-                    count += 1;
-                } else {
-                    print!("O");
-                    tokio::time::sleep(USLEEP).await;
+                    let res = s.schedule(message.clone());
+                    if res.is_err() {
+                        print!("X");
+                        std::io::stdout().flush().unwrap();
+                    }
                 }
+                count += 1;
+            } else {
+                print!("O");
+                tokio::time::sleep(USLEEP).await;
             }
-        })
-    }));
+        }
+    })));
 
     // Stop the tasks
     c2_handle.abort();

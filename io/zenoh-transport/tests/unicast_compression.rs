@@ -13,7 +13,6 @@
 //
 #[cfg(feature = "transport_compression")]
 mod tests {
-    use async_std::{prelude::FutureExt, task};
     use std::fmt::Write as _;
     use std::{
         any::Any,
@@ -24,7 +23,7 @@ mod tests {
         },
         time::Duration,
     };
-    use zenoh_core::zasync_executor_init;
+    use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{
@@ -52,12 +51,6 @@ mod tests {
     const MSG_SIZE_ALL: [usize; 2] = [1_024, 131_072];
     const MSG_SIZE_LOWLATENCY: [usize; 2] = [1_024, 65000];
     const MSG_SIZE_NOFRAG: [usize; 1] = [1_024];
-
-    macro_rules! ztimeout {
-        ($f:expr) => {
-            $f.timeout(TIMEOUT).await.unwrap()
-        };
-    }
 
     // Transport Handler for the router
     struct SHRouter {
@@ -252,7 +245,7 @@ mod tests {
 
         ztimeout!(async {
             while !router_manager.get_transports_unicast().await.is_empty() {
-                task::sleep(SLEEP).await;
+                tokio::time::sleep(SLEEP).await;
             }
         });
 
@@ -264,18 +257,18 @@ mod tests {
 
         ztimeout!(async {
             while !router_manager.get_listeners().is_empty() {
-                task::sleep(SLEEP).await;
+                tokio::time::sleep(SLEEP).await;
             }
         });
 
         // Wait a little bit
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
 
         ztimeout!(router_manager.close());
         ztimeout!(client_manager.close());
 
         // Wait a little bit
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
     }
 
     async fn test_transport(
@@ -319,21 +312,21 @@ mod tests {
             Reliability::Reliable => {
                 ztimeout!(async {
                     while router_handler.get_count() != MSG_COUNT {
-                        task::sleep(SLEEP_COUNT).await;
+                        tokio::time::sleep(SLEEP_COUNT).await;
                     }
                 });
             }
             Reliability::BestEffort => {
                 ztimeout!(async {
                     while router_handler.get_count() == 0 {
-                        task::sleep(SLEEP_COUNT).await;
+                        tokio::time::sleep(SLEEP_COUNT).await;
                     }
                 });
             }
         };
 
         // Wait a little bit
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
     }
 
     async fn run_single(
@@ -427,12 +420,9 @@ mod tests {
     }
 
     #[cfg(feature = "transport_tcp")]
-    #[test]
-    fn transport_unicast_compression_tcp_only() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_unicast_compression_tcp_only() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
 
         // Define the locators
         let endpoints: Vec<EndPoint> = vec![
@@ -451,21 +441,18 @@ mod tests {
             },
         ];
         // Run
-        task::block_on(run_with_universal_transport(
+        run_with_universal_transport(
             &endpoints,
             &endpoints,
             &channel,
             &MSG_SIZE_ALL,
-        ));
+        ).await;
     }
 
     #[cfg(feature = "transport_tcp")]
-    #[test]
-    fn transport_unicast_compression_tcp_only_with_lowlatency_transport() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_unicast_compression_tcp_only_with_lowlatency_transport() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
 
         // Define the locators
         let endpoints: Vec<EndPoint> = vec![format!("tcp/127.0.0.1:{}", 19100).parse().unwrap()];
@@ -481,21 +468,18 @@ mod tests {
             },
         ];
         // Run
-        task::block_on(run_with_lowlatency_transport(
+        run_with_lowlatency_transport(
             &endpoints,
             &endpoints,
             &channel,
             &MSG_SIZE_LOWLATENCY,
-        ));
+        ).await;
     }
 
     #[cfg(feature = "transport_udp")]
-    #[test]
-    fn transport_unicast_compression_udp_only() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_unicast_compression_udp_only() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
 
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![
@@ -514,21 +498,18 @@ mod tests {
             },
         ];
         // Run
-        task::block_on(run_with_universal_transport(
+        run_with_universal_transport(
             &endpoints,
             &endpoints,
             &channel,
             &MSG_SIZE_NOFRAG,
-        ));
+        ).await;
     }
 
     #[cfg(feature = "transport_udp")]
-    #[test]
-    fn transport_unicast_compression_udp_only_with_lowlatency_transport() {
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn transport_unicast_compression_udp_only_with_lowlatency_transport() {
         let _ = env_logger::try_init();
-        task::block_on(async {
-            zasync_executor_init!();
-        });
 
         // Define the locator
         let endpoints: Vec<EndPoint> = vec![format!("udp/127.0.0.1:{}", 19110).parse().unwrap()];
@@ -544,11 +525,11 @@ mod tests {
             },
         ];
         // Run
-        task::block_on(run_with_lowlatency_transport(
+        run_with_lowlatency_transport(
             &endpoints,
             &endpoints,
             &channel,
             &MSG_SIZE_NOFRAG,
-        ));
+        ).await;
     }
 }

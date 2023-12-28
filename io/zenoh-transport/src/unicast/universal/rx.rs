@@ -12,7 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::TransportUnicastUniversal;
-use crate::common::priority::TransportChannelRx;
+use crate::{
+    common::{
+        batch::{Decode, RBatch},
+        priority::TransportChannelRx,
+    },
+    unicast::transport_unicast_inner::TransportUnicastTrait,
+    TransportPeerEventHandler,
+};
 use std::sync::MutexGuard;
 use zenoh_buffers::{
     reader::{HasReader, Reader},
@@ -48,9 +55,6 @@ impl TransportUnicastUniversal {
     }
 
     fn handle_close(&self, link: &Link, _reason: u8, session: bool) -> ZResult<()> {
-        // Stop now rx and tx tasks before doing the proper cleanup
-        let _ = self.stop_rx_tx(link);
-
         // Delete and clean up
         let c_transport = self.clone();
         let c_link = link.clone();

@@ -257,7 +257,7 @@ impl TransportMulticastInner {
                     sn_resolution: self.manager.config.resolution.get(Field::FrameSN),
                     batch_size,
                 };
-                l.start_tx(config, self.priority_tx.clone(), &self.manager.tx_executor);
+                l.start_tx(config, self.priority_tx.clone());
                 Ok(())
             }
             None => {

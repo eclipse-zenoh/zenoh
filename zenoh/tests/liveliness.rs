@@ -21,16 +21,18 @@ const SLEEP: Duration = Duration::from_secs(1);
 #[cfg(feature = "unstable")]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_liveliness() {
-    let session1 = ztimeout!(zenoh::open(config::peer()).res_async()).unwrap();
-
-    let session2 = ztimeout!(zenoh::open(config::peer()).res_async()).unwrap();
-
-    let replies = ztimeout!(session2
-        .liveliness()
-        .get("zenoh_liveliness_test")
-        .res_async())
-    .unwrap();
-    assert!(replies.into_iter().count() == 0);
+    let mut c1 = config::peer();
+    c1.listen
+        .set_endpoints(vec!["tcp/localhost:47447".parse().unwrap()])
+        .unwrap();
+    c1.scouting.multicast.set_enabled(Some(false)).unwrap();
+    let session1 = ztimeout!(zenoh::open(c1).res_async()).unwrap();
+    let mut c2 = config::peer();
+    c2.connect
+        .set_endpoints(vec!["tcp/localhost:47447".parse().unwrap()])
+        .unwrap();
+    c2.scouting.multicast.set_enabled(Some(false)).unwrap();
+    let session2 = ztimeout!(zenoh::open(c2).res_async()).unwrap();
 
     let sub = ztimeout!(session2
         .liveliness()

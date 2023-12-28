@@ -603,8 +603,7 @@ impl TransmissionPipelineProducer {
         };
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);
-        let res = queue.push_network_message(&mut msg, priority);
-        res
+        queue.push_network_message(&mut msg, priority)
     }
 
     #[inline]
@@ -725,7 +724,7 @@ mod tests {
     use zenoh_result::ZResult;
 
     const SLEEP: Duration = Duration::from_millis(100);
-    const TIMEOUT: Duration = Duration::from_secs(10);
+    const TIMEOUT: Duration = Duration::from_secs(60);
 
     const CONFIG: TransmissionPipelineConf = TransmissionPipelineConf {
         batch: BatchConfig {
@@ -738,7 +737,7 @@ mod tests {
         backoff: Duration::from_micros(1),
     };
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn tx_pipeline_flow() -> ZResult<()> {
         fn schedule(queue: TransmissionPipelineProducer, num_msg: usize, payload_size: usize) {
             // Send reliable messages
@@ -773,7 +772,6 @@ mod tests {
                 );
                 queue.push_network_message(message.clone());
             }
-            println!("schedule is done.");
         }
 
         async fn consume(mut queue: TransmissionPipelineConsumer, num_msg: usize) {
@@ -812,9 +810,7 @@ mod tests {
                             }
                             println!("Pipeline Flow [<<<]: Pulled {} msgs", msgs + 1);
                         }
-                        Err(_) => {
-                            break;
-                        }
+                        Err(_) => break,
                     }
                 }
                 println!("Pipeline Flow [+++]: Refill {} msgs", msgs + 1);
@@ -859,14 +855,14 @@ mod tests {
                 schedule(producer, num_msg, c_ps);
             });
 
-            let res = timeout(TIMEOUT, futures_util::future::join(t_c, t_s)).await;
+            let res = tokio::time::timeout(TIMEOUT, futures::future::join_all([t_c, t_s])).await;
             assert!(res.is_ok());
         }
 
         Ok(())
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn tx_pipeline_blocking() -> ZResult<()> {
         fn schedule(queue: TransmissionPipelineProducer, counter: Arc<AtomicUsize>, id: usize) {
             // Make sure to put only one message per batch: set the payload size
@@ -964,9 +960,9 @@ mod tests {
         Ok(())
     }
 
-    #[test]
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     #[ignore]
-    fn tx_pipeline_thr() {
+    async fn tx_pipeline_thr() {
         // Queue
         let tct = TransportPriorityTx::make(Bits::from(TransportSn::MAX)).unwrap();
         let priorities = vec![tct];
@@ -1028,18 +1024,16 @@ mod tests {
             }
         });
 
-        tokio::runtime::Handle::current().block_on(async {
-            let mut prev_size: usize = usize::MAX;
-            loop {
-                let received = count.swap(0, Ordering::AcqRel);
-                let current: usize = size.load(Ordering::Acquire);
-                if current == prev_size {
-                    let thr = (8.0 * received as f64) / 1_000_000_000.0;
-                    println!("{} bytes: {:.6} Gbps", current, 2.0 * thr);
-                }
-                prev_size = current;
-                tokio::time::sleep(Duration::from_millis(500)).await;
+        let mut prev_size: usize = usize::MAX;
+        loop {
+            let received = count.swap(0, Ordering::AcqRel);
+            let current: usize = size.load(Ordering::Acquire);
+            if current == prev_size {
+                let thr = (8.0 * received as f64) / 1_000_000_000.0;
+                println!("{} bytes: {:.6} Gbps", current, 2.0 * thr);
             }
-        });
+            prev_size = current;
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
     }
 }

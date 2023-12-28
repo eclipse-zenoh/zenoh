@@ -39,6 +39,7 @@ zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-runtime = { workspace = true }
 tokio = { workspace = true, features = ["sync", "fs", "io-util", "macros"] }
+tokio-util = { workspace = true }
 dashmap = { workspace = true }
 
 [target.'cfg(unix)'.dependencies]

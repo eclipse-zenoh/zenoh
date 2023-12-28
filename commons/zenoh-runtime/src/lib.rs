@@ -1,5 +1,6 @@
 use lazy_static::lazy_static;
 use std::collections::HashMap;
+use std::future::Future;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -81,6 +82,10 @@ impl ZRuntime {
         };
 
         Ok(rt)
+    }
+
+    pub fn block_in_place<F, R>(&self, f: F) -> R where F: Future<Output = R> {
+        tokio::task::block_in_place(move || self.block_on(f))
     }
 }
 

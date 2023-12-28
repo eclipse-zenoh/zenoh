@@ -119,7 +119,7 @@ async fn test_session_pubsub(peer01: &Session, peer02: &Session, reliability: Re
         });
 
         // Wait for the messages to arrive
-        task::sleep(SLEEP).await;
+        tokio::time::sleep(SLEEP).await;
 
         println!("[PS][03b] Unsubscribing on peer01 session");
         ztimeout!(sub.undeclare().res_async()).unwrap();

@@ -311,7 +311,8 @@ impl Recipe {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn gossip() -> Result<()> {
     env_logger::try_init().unwrap_or_default();
-    let locator = String::from("tcp/127.0.0.1:17448");
+
+    let locator = String::from("tcp/127.0.0.1:17446");
     let ke = String::from("testKeyExprGossip");
     let msg_size = 8;
 

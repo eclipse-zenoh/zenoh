@@ -27,14 +27,10 @@ use crate::{
     },
     TransportManager, TransportPeer,
 };
-use async_std::{
-    prelude::FutureExt,
-    sync::{Mutex, MutexGuard},
-    task,
-};
-use dashmap::DashMap;
-use std::{sync::Arc, time::Duration};
-use tokio::sync::Mutex;
+use std::{collections::HashMap, sync::Arc, time::Duration};
+use tokio::sync::{Mutex, MutexGuard};
+#[cfg(feature = "transport_compression")]
+use zenoh_config::CompressionUnicastConf;
 #[cfg(feature = "shared-memory")]
 use zenoh_config::SharedMemoryConf;
 use zenoh_config::{Config, LinkTxConf, QoSUnicastConf, TransportUnicastConf};
@@ -70,9 +66,9 @@ pub struct TransportManagerStateUnicast {
     // Incoming uninitialized transports
     pub(super) incoming: Arc<Mutex<usize>>,
     // Established listeners
-    pub(super) protocols: Arc<DashMap<String, LinkManagerUnicast>>,
+    pub(super) protocols: Arc<Mutex<HashMap<String, LinkManagerUnicast>>>,
     // Established transports
-    pub(super) transports: Arc<DashMap<ZenohId, Arc<dyn TransportUnicastTrait>>>,
+    pub(super) transports: Arc<Mutex<HashMap<ZenohId, Arc<dyn TransportUnicastTrait>>>>,
     // Multilink
     #[cfg(feature = "transport_multilink")]
     pub(super) multilink: Arc<MultiLink>,
@@ -231,8 +227,8 @@ impl TransportManagerBuilderUnicast {
 
         let state = TransportManagerStateUnicast {
             incoming: Arc::new(Mutex::new(0)),
-            protocols: Arc::new(DashMap::new()),
-            transports: Arc::new(DashMap::new()),
+            protocols: Arc::new(Mutex::new(HashMap::new())),
+            transports: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(feature = "transport_multilink")]
             multilink: Arc::new(MultiLink::make(prng)?),
             #[cfg(feature = "shared-memory")]
@@ -293,33 +289,24 @@ impl TransportManager {
     pub async fn close_unicast(&self) {
         log::trace!("TransportManagerUnicast::clear())");
 
-        // To prevent higher-ranked lifetime error at close function in zenoh/src/session.rs
-        let pl_vec: Vec<_> = self
-            .state
-            .unicast
-            .protocols
-            .iter()
-            .map(|pair| pair.value().to_owned())
-            .collect();
-        for pl in pl_vec {
-            for ep in pl.get_listeners() {
-                let _ = pl.del_listener(&ep).await;
+        let mut pl_guard = zasynclock!(self.state.unicast.protocols)
+            .drain()
+            .map(|(_, v)| v)
+            .collect::<Vec<Arc<dyn LinkManagerUnicastTrait>>>();
+
+        for pl in pl_guard.drain(..) {
+            for ep in pl.get_listeners().iter() {
+                let _ = pl.del_listener(ep).await;
             }
         }
-        self.state.unicast.protocols.clear();
 
-        // To prevent higher-ranked lifetime error at close function in zenoh/src/session.rs
-        let tu_vec: Vec<_> = self
-            .state
-            .unicast
-            .transports
-            .iter()
-            .map(|pair| pair.value().to_owned())
-            .collect();
-        for tu in tu_vec {
+        let mut tu_guard = zasynclock!(self.state.unicast.transports)
+            .drain()
+            .map(|(_, v)| v)
+            .collect::<Vec<Arc<dyn TransportUnicastTrait>>>();
+        for tu in tu_guard.drain(..) {
             let _ = tu.close(close::reason::GENERIC).await;
         }
-        self.state.unicast.transports.clear();
     }
 
     /*************************************/
@@ -334,21 +321,19 @@ impl TransportManager {
             );
         }
 
-        if let Some(lm) = self.state.unicast.protocols.get(protocol) {
+        let mut w_guard = zasynclock!(self.state.unicast.protocols);
+        if let Some(lm) = w_guard.get(protocol) {
             Ok(lm.clone())
         } else {
             let lm =
                 LinkManagerBuilderUnicast::make(self.new_unicast_link_sender.clone(), protocol)?;
-            self.state
-                .unicast
-                .protocols
-                .insert(protocol.into(), lm.clone());
+            w_guard.insert(protocol.to_string(), lm.clone());
             Ok(lm)
         }
     }
 
-    fn get_link_manager_unicast(&self, protocol: &str) -> ZResult<LinkManagerUnicast> {
-        match self.state.unicast.protocols.get(protocol) {
+    async fn get_link_manager_unicast(&self, protocol: &str) -> ZResult<LinkManagerUnicast> {
+        match zasynclock!(self.state.unicast.protocols).get(protocol) {
             Some(manager) => Ok(manager.clone()),
             None => bail!(
                 "Can not get the link manager for protocol ({}) because it has not been found",
@@ -357,8 +342,8 @@ impl TransportManager {
         }
     }
 
-    fn del_link_manager_unicast(&self, protocol: &str) -> ZResult<()> {
-        match self.state.unicast.protocols.remove(protocol) {
+    async fn del_link_manager_unicast(&self, protocol: &str) -> ZResult<()> {
+        match zasynclock!(self.state.unicast.protocols).remove(protocol) {
             Some(_) => Ok(()),
             None => bail!(
                 "Can not delete the link manager for protocol ({}) because it has not been found.",
@@ -395,25 +380,28 @@ impl TransportManager {
     }
 
     pub async fn del_listener_unicast(&self, endpoint: &EndPoint) -> ZResult<()> {
-        let lm = self.get_link_manager_unicast(endpoint.protocol().as_str())?;
+        let lm = self
+            .get_link_manager_unicast(endpoint.protocol().as_str())
+            .await?;
         lm.del_listener(endpoint).await?;
         if lm.get_listeners().is_empty() {
-            self.del_link_manager_unicast(endpoint.protocol().as_str())?;
+            self.del_link_manager_unicast(endpoint.protocol().as_str())
+                .await?;
         }
         Ok(())
     }
 
-    pub fn get_listeners_unicast(&self) -> Vec<EndPoint> {
+    pub async fn get_listeners_unicast(&self) -> Vec<EndPoint> {
         let mut vec: Vec<EndPoint> = vec![];
-        for p in self.state.unicast.protocols.iter() {
+        for p in zasynclock!(self.state.unicast.protocols).values() {
             vec.extend_from_slice(&p.get_listeners());
         }
         vec
     }
 
-    pub fn get_locators_unicast(&self) -> Vec<Locator> {
+    pub async fn get_locators_unicast(&self) -> Vec<Locator> {
         let mut vec: Vec<Locator> = vec![];
-        for p in self.state.unicast.protocols.iter() {
+        for p in zasynclock!(self.state.unicast.protocols).values() {
             vec.extend_from_slice(&p.get_locators());
         }
         vec
@@ -792,18 +780,16 @@ impl TransportManager {
                 TransportUnicast(weak)
             })
             .collect()
-        // zasynclock!(self.state.unicast.transports)
-        //     .values()
-        //     .map(|t| {
-        //         // todo: I cannot find a way to make transport.into() work for TransportUnicastTrait
-        //         let weak = Arc::downgrade(t);
-        //         TransportUnicast(weak)
-        //     })
-        //     .collect()
     }
 
     pub(super) async fn del_transport_unicast(&self, peer: &ZenohId) -> ZResult<()> {
-        let _ = self.state.unicast.transports.remove(peer);
+        zasynclock!(self.state.unicast.transports)
+            .remove(peer)
+            .ok_or_else(|| {
+                let e = zerror!("Can not delete the transport of peer: {}", peer);
+                log::trace!("{}", e);
+                e
+            })?;
         Ok(())
     }
 
@@ -827,10 +813,10 @@ impl TransportManager {
 
         // Spawn a task to accept the link
         let c_manager = self.clone();
-        zenoh_runtime::ZRuntime::Net.spawn(async move {
+        zenoh_runtime::ZRuntime::Accept.spawn(async move {
             if let Err(e) = tokio::time::timeout(
                 c_manager.config.unicast.accept_timeout,
-                super::establishment::accept::accept_link(&link, &c_manager),
+                super::establishment::accept::accept_link(link, &c_manager),
             )
             .await
             {

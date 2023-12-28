@@ -205,7 +205,7 @@ mod tests {
                         "[Simultaneous 01e] => Transports: {:?}",
                         peer01_manager.get_transports_unicast().await
                     );
-                    tp02 = peer01_manager.get_transport_unicast(&peer_id02);
+                    tp02 = peer01_manager.get_transport_unicast(&peer_id02).await;
                 }
 
                 tp02.unwrap()
@@ -261,7 +261,7 @@ mod tests {
                         "[Simultaneous 02e] => Transports: {:?}",
                         peer02_manager.get_transports_unicast().await
                     );
-                    tp01 = peer02_manager.get_transport_unicast(&peer_id01);
+                    tp01 = peer02_manager.get_transport_unicast(&peer_id01).await;
                 }
                 tp01.unwrap()
             });

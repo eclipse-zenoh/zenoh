@@ -398,22 +398,22 @@ impl TransportManager {
             .is_multicast(&endpoint.to_locator())
             .await?
         {
-            self.del_listener_multicast(endpoint)
+            self.del_listener_multicast(endpoint).await
         } else {
             self.del_listener_unicast(endpoint).await
         }
     }
 
     pub fn get_listeners(&self) -> Vec<EndPoint> {
-        let mut lsu = self.get_listeners_unicast();
-        let mut lsm = self.get_listeners_multicast();
+        let mut lsu = zenoh_runtime::ZRuntime::TX.block_in_place(self.get_listeners_unicast());
+        let mut lsm = zenoh_runtime::ZRuntime::TX.block_in_place(self.get_listeners_multicast());
         lsu.append(&mut lsm);
         lsu
     }
 
     pub fn get_locators(&self) -> Vec<Locator> {
-        let mut lsu = self.get_locators_unicast();
-        let mut lsm = self.get_locators_multicast();
+        let mut lsu = zenoh_runtime::ZRuntime::TX.block_in_place(self.get_locators_unicast());
+        let mut lsm = zenoh_runtime::ZRuntime::TX.block_in_place(self.get_locators_multicast());
         lsu.append(&mut lsm);
         lsu
     }

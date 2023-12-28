@@ -13,57 +13,24 @@
 //
 use super::transport::TransportUnicastUniversal;
 #[cfg(feature = "stats")]
-use crate::common::stats::TransportStats;
-use tokio::task::JoinHandle;
-use tokio::time::timeout;
-
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-use std::convert::TryInto;
-use std::sync::Arc;
+use {crate::common::stats::TransportStats, std::sync::Arc};
+use crate::{
+    common::{
+        batch::{BatchConfig, RBatch},
+        pipeline::{
+            TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
+            TransmissionPipelineProducer,
+        },
+        priority::TransportPriorityTx,
+    },
+    unicast::link::{TransportLinkUnicast, TransportLinkUnicastRx, TransportLinkUnicastTx},
+};
 use std::time::Duration;
-use zenoh_buffers::ZSlice;
-use zenoh_link::{LinkUnicast, LinkUnicastDirection};
-use zenoh_protocol::transport::{BatchSize, KeepAlive, TransportMessage};
-use zenoh_result::{bail, zerror, ZResult};
-use zenoh_runtime::ZRuntime;
-use zenoh_sync::{RecyclingObjectPool, Signal};
-
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const HEADER_BYTES_SIZE: usize = 2;
-
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const COMPRESSION_BYTE_INDEX_STREAMED: usize = 2;
-
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const COMPRESSION_BYTE_INDEX: usize = 0;
-
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const COMPRESSION_ENABLED: u8 = 1_u8;
-
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const COMPRESSION_DISABLED: u8 = 0_u8;
-
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const BATCH_PAYLOAD_START_INDEX: usize = 1;
-
-#[cfg(all(feature = "unstable", feature = "transport_compression"))]
-const MAX_BATCH_SIZE: usize = u16::MAX as usize;
-
-#[derive(Clone)]
-pub(super) struct TransportLinkUnicast {
-    // Inbound / outbound
-    pub(super) direction: LinkUnicastDirection,
-    // The underlying link
-    pub(super) link: LinkUnicast,
-    // The transmission pipeline
-    pub(super) pipeline: Option<TransmissionPipelineProducer>,
-    // The transport this link is associated to
-    transport: TransportUnicastUniversal,
-    // The signals to stop TX/RX tasks
-    handle_tx: Option<Arc<tokio::task::JoinHandle<()>>>,
-    signal_rx: Signal,
-    handle_rx: RwLock<Option<JoinHandle<()>>>,
-}
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use zenoh_buffers::ZSliceBuffer;
+use zenoh_protocol::transport::{KeepAlive, TransportMessage};
+use zenoh_result::{zerror, ZResult};
+use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
 
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicastUniversal {
@@ -72,7 +39,8 @@ pub(super) struct TransportLinkUnicastUniversal {
     // The transmission pipeline
     pub(super) pipeline: TransmissionPipelineProducer,
     // The task handling substruct
-    tasks: Arc<Tasks>,
+    tracker: TaskTracker,
+    token: CancellationToken,
 }
 
 impl TransportLinkUnicastUniversal {
@@ -97,111 +65,83 @@ impl TransportLinkUnicastUniversal {
         // The pipeline
         let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
 
-        let tasks = Arc::new(Tasks {
-            handle_tx: RwLock::new(None),
-            signal_rx: Signal::new(),
-            handle_rx: RwLock::new(None),
-        });
-
         let result = Self {
             link,
             pipeline: producer,
-            tasks,
+            tracker: TaskTracker::new(),
+            token: CancellationToken::new(),
         };
 
         (result, consumer)
     }
-}
 
-impl TransportLinkUnicastUniversal {
+    // TODO: Not yet guaranteed is called at most once
     pub(super) fn start_tx(
         &mut self,
+        transport: TransportUnicastUniversal,
+        consumer: TransmissionPipelineConsumer,
         keep_alive: Duration,
     ) {
-        let mut guard = zwrite!(self.tasks.handle_tx);
-        if guard.is_none() {
-            // Spawn the TX task
-            let c_link = self.link.clone();
-            let c_transport = self.transport.clone();
-            let handle = ZRuntime::TX.spawn(async move {
-                let res = tx_task(
-                    consumer,
-                    &mut tx,
-                    keep_alive,
-                    #[cfg(feature = "stats")]
-                    transport.stats.clone(),
-                )
-                .await;
-                if let Err(e) = res {
-                    log::debug!("{}", e);
-                    // Spawn a task to avoid a deadlock waiting for this same task
-                    // to finish in the close() joining its handle
-                    zenoh_runtime::ZRuntime::Net
-                        .spawn(async move { c_transport.del_link(&c_link).await });
-                }
-            });
-            *guard = Some(handle);
-        }
+        // Spawn the TX task
+        let mut tx = self.link.tx();
+        let token = self.token.child_token();
+        let task = async move {
+            let res = tx_task(
+                consumer,
+                &mut tx,
+                keep_alive,
+                token,
+                #[cfg(feature = "stats")]
+                transport.stats.clone(),
+            )
+            .await;
+
+            // TODO: improve this callback
+            if let Err(e) = res {
+                log::debug!("{}", e);
+                // Spawn a task to avoid a deadlock waiting for this same task
+                // to finish in the close() joining its handle
+                zenoh_runtime::ZRuntime::TX
+                    .spawn(async move { transport.del_link(tx.inner.link()).await });
+            }
+        };
+        self.tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
     }
 
-    pub(super) fn stop_tx(&mut self) {
-        self.pipeline.disable();
-    }
-
+    // TODO: Not yet guaranteed is called at most once
     pub(super) fn start_rx(&mut self, transport: TransportUnicastUniversal, lease: Duration) {
-        let mut guard = zwrite!(self.tasks.handle_rx);
-        if guard.is_none() {
-            // Spawn the RX task
-            let mut rx = self.link.rx();
-            let c_signal = self.tasks.signal_rx.clone();
+        let mut rx = self.link.rx();
+        let token = self.token.child_token();
+        let task = async move {
+            // Start the consume task
+            let res = rx_task(
+                &mut rx,
+                transport.clone(),
+                lease,
+                transport.manager.config.link_rx_buffer_size,
+                token,
+            )
+            .await;
 
-            let handle = zenoh_runtime::ZRuntime::RX.spawn(async move {
-                // Start the consume task
-                let res = rx_task(
-                    &mut rx,
-                    transport.clone(),
-                    lease,
-                    c_signal.clone(),
-                    transport.manager.config.link_rx_buffer_size,
-                )
-                .await;
-                c_signal.trigger();
-                if let Err(e) = res {
-                    log::debug!("{}", e);
-                    // Spawn a task to avoid a deadlock waiting for this same task
-                    // to finish in the close() joining its handle
-                    zenoh_runtime::ZRuntime::Net
-                        .spawn(async move { c_transport.del_link(&c_link).await });
-                }
-            });
-            *guard = Some(handle);
-        }
+            // TODO: improve this callback
+            if let Err(e) = res {
+                log::debug!("{}", e);
+                // Spawn a task to avoid a deadlock waiting for this same task
+                // to finish in the close() joining its handle
+                zenoh_runtime::ZRuntime::RX
+                    .spawn(async move { transport.del_link((&rx.link).into()).await });
+            }
+        };
+        self.tracker.spawn_on(task, &zenoh_runtime::ZRuntime::RX);
     }
 
-    pub(super) fn stop_rx(&mut self) {
-        self.tasks.signal_rx.trigger();
-    }
-
-    pub(super) async fn close(mut self) -> ZResult<()> {
+    pub(super) async fn close(self) -> ZResult<()> {
         log::trace!("{}: closing", self.link);
-        self.stop_rx();
-        if let Some(handle) = self.handle_rx.take() {
-            // SAFETY: it is safe to unwrap the Arc since we have the ownership of the whole link
-            let handle_rx = Arc::try_unwrap(handle).unwrap();
-            handle_rx.await?;
-        }
 
-        self.stop_tx();
-        if let Some(handle) = self.handle_tx.take() {
-            // SAFETY: it is safe to unwrap the Arc since we have the ownership of the whole link
-            let handle_tx = Arc::try_unwrap(handle).unwrap();
-            handle_tx.await?;
-        }
-
-        let handle_rx = zwrite!(self.tasks.handle_rx).take();
-        if let Some(handle) = handle_rx {
-            handle.await;
-        }
+        self.tracker.close();
+        self.token.cancel();
+        self.pipeline.disable();
+        self.tracker.wait().await;
 
         self.link.close(None).await
     }
@@ -214,12 +154,14 @@ async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
     link: &mut TransportLinkUnicastTx,
     keep_alive: Duration,
+    token: CancellationToken,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
+    let mut interval = tokio::time::interval(keep_alive);
     loop {
-        match timeout(keep_alive, pipeline.pull()).await {
-            Ok(res) => match res {
-                Some((mut batch, priority)) => {
+        tokio::select! {
+            res = pipeline.pull() => {
+                if let Some((mut batch, priority)) = res {
                     link.send_batch(&mut batch).await?;
 
                     #[cfg(feature = "stats")]
@@ -230,27 +172,32 @@ async fn tx_task(
 
                     // Reinsert the batch into the queue
                     pipeline.refill(batch, priority);
+                } else {
+                    break
                 }
-                None => break,
-            },
-            Err(_) => {
+            }
+
+            _ = interval.tick() => {
                 let message: TransportMessage = KeepAlive.into();
 
                 #[allow(unused_variables)] // Used when stats feature is enabled
                 let n = link.send(&message).await?;
+
                 #[cfg(feature = "stats")]
                 {
                     stats.inc_tx_t_msgs(1);
                     stats.inc_tx_bytes(n);
                 }
             }
+
+            _ = token.cancelled() => { break }
         }
     }
 
     // Drain the transmission pipeline and write remaining bytes on the wire
     let mut batches = pipeline.drain();
-    for (b, _) in batches.drain(..) {
-        timeout(keep_alive, link.write_all(b.as_bytes()))
+    for (mut b, _) in batches.drain(..) {
+        tokio::time::timeout(keep_alive, link.send_batch(&mut b))
             .await
             .map_err(|_| zerror!("{}: flush failed after {} ms", link, keep_alive.as_millis()))??;
 
@@ -268,16 +215,22 @@ async fn rx_task(
     link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
     lease: Duration,
-    signal: Signal,
     rx_buffer_size: usize,
+    token: CancellationToken,
 ) -> ZResult<()> {
-    async fn read(link: &LinkUnicast, buffer: &mut [u8]) -> ZResult<usize> {
-        // 16 bits for reading the batch length
-        let mut length = [0_u8, 0_u8];
-        link.read_exact(&mut length).await?;
-        let n = BatchSize::from_le_bytes(length) as usize;
-        link.read_exact(&mut buffer[0..n]).await?;
-        Ok(n)
+    async fn read<T, F>(
+        link: &mut TransportLinkUnicastRx,
+        pool: &RecyclingObjectPool<T, F>,
+    ) -> ZResult<RBatch>
+    where
+        T: ZSliceBuffer + 'static,
+        F: Fn() -> T,
+        RecyclingObject<T>: ZSliceBuffer,
+    {
+        let batch = link
+            .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
+            .await?;
+        Ok(batch)
     }
 
     // The pool of buffers
@@ -288,22 +241,20 @@ async fn rx_task(
     }
 
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
+    let l = (&link.link).into();
 
     loop {
-        // Retrieve one buffer
-        let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
-        // Async read from the underlying link
         tokio::select! {
-            _ = signal.wait() => { break },
-            res = timeout(lease, read(&link, &mut buffer)) => {
-                let n = res.map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
-
+            batch = tokio::time::timeout(lease, read(link, &pool)) => {
+                let batch = batch.map_err(|_| zerror!("{}: expired after {} milliseconds", link, lease.as_millis()))??;
                 #[cfg(feature = "stats")]
                 {
                     transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
                 }
                 transport.read_messages(batch, &l)?;
             }
+
+            _ = token.cancelled() => { break }
         }
     }
 

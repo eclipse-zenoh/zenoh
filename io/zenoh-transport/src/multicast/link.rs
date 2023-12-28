@@ -18,13 +18,27 @@ use crate::common::pipeline::{
 };
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
-use std::convert::TryInto;
-use std::sync::Arc;
-use std::time::{Duration, Instant};
+use crate::{
+    common::{
+        batch::{BatchConfig, Encode, Finalize, RBatch, WBatch},
+        pipeline::{
+            TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
+            TransmissionPipelineProducer,
+        },
+        priority::TransportPriorityTx,
+    },
+    multicast::transport::TransportMulticastInner,
+};
 use tokio::task::JoinHandle;
-use zenoh_buffers::ZSlice;
-use zenoh_core::zlock;
-use zenoh_link::{LinkMulticast, Locator};
+use std::{
+    convert::TryInto,
+    fmt,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
+use zenoh_core::{zcondfeat, zlock};
+use zenoh_link::{Link, LinkMulticast, Locator};
 use zenoh_protocol::{
     core::{Bits, Priority, Resolution, WhatAmI, ZenohId},
     transport::{BatchSize, Close, Join, PrioritySn, TransportMessage, TransportSn},
@@ -257,7 +271,7 @@ pub(super) struct TransportLinkMulticastUniversal {
     // The transport this link is associated to
     transport: TransportMulticastInner,
     // The signals to stop TX/RX tasks
-    handle_tx: Option<Arc<Task<()>>>,
+    handle_tx: Option<Arc<JoinHandle<()>>>,
     signal_rx: Signal,
     handle_rx: Option<Arc<JoinHandle<()>>>,
 }
@@ -283,7 +297,6 @@ impl TransportLinkMulticastUniversal {
         &mut self,
         config: TransportLinkMulticastConfigUniversal,
         priority_tx: Arc<[TransportPriorityTx]>,
-        executor: &TransportExecutor,
     ) {
         let initial_sns: Vec<PrioritySn> = priority_tx
             .iter()
@@ -425,31 +438,29 @@ async fn tx_task(
         tokio::select! {
             res = pipeline.pull() => {
                 match res {
-                    Some((batch, priority)) => {
+                    Some((mut batch, priority)) => {
                         // Send the buffer on the link
-                        let bytes = batch.as_bytes();
-                        link.write_all(bytes).await?;
+                        link.send_batch(&mut batch).await?;
                         // Keep track of next SNs
-                        if let Some(sn) = batch.latest_sn.reliable {
+                        if let Some(sn) = batch.codec.latest_sn.reliable {
                             last_sns[priority].reliable = sn;
                         }
-                        if let Some(sn) = batch.latest_sn.best_effort {
+                        if let Some(sn) = batch.codec.latest_sn.best_effort {
                             last_sns[priority].best_effort = sn;
                         }
                         #[cfg(feature = "stats")]
                         {
                             stats.inc_tx_t_msgs(batch.stats.t_msgs);
-                            stats.inc_tx_bytes(bytes.len());
+                            stats.inc_tx_bytes(batch.len() as usize);
                         }
                         // Reinsert the batch into the queue
                         pipeline.refill(batch, priority);
-
                     }
                     None => {
                         // Drain the transmission pipeline and write remaining bytes on the wire
                         let mut batches = pipeline.drain();
-                        for (b, _) in batches.drain(..) {
-                            tokio::time::timeout(config.join_interval, link.write_all(b.as_bytes()))
+                        for (mut b, _) in batches.drain(..) {
+                            tokio::time::timeout(config.join_interval, link.send_batch(&mut b))
                                 .await
                                 .map_err(|_| {
                                     zerror!(
@@ -523,9 +534,19 @@ async fn rx_task(
     rx_buffer_size: usize,
     batch_size: BatchSize,
 ) -> ZResult<()> {
-    async fn read(link: &LinkMulticast, buffer: &mut [u8]) -> ZResult<(usize, Locator)> {
-        let (n, loc) = link.read(buffer).await?;
-        Ok((n, loc.into_owned()))
+    async fn read<T, F>(
+        link: &mut TransportLinkMulticastRx,
+        pool: &RecyclingObjectPool<T, F>,
+    ) -> ZResult<(RBatch, Locator)>
+    where
+        T: ZSliceBuffer + 'static,
+        F: Fn() -> T,
+        RecyclingObject<T>: ZSliceBuffer,
+    {
+        let (rbatch, locator) = link
+            .recv_batch(|| pool.try_take().unwrap_or_else(|| pool.alloc()))
+            .await?;
+        Ok((rbatch, locator))
     }
 
     // The pool of buffers
@@ -536,19 +557,11 @@ async fn rx_task(
     }
 
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
-
     loop {
-        // Retrieve one buffer
-        let mut buffer = pool.try_take().unwrap_or_else(|| pool.alloc());
-
         tokio::select! {
             _ = signal.wait() => break,
-            res = read(&link, &mut buffer) => {
-                let (n, loc) = res?;
-                if n == 0 {
-                    // Reading 0 bytes means error
-                    bail!("{}: zero bytes reading", link);
-                }
+            res = read(&mut link, &pool) => {
+                let (batch, locator) = res?;
 
                 #[cfg(feature = "stats")]
                 transport.stats.inc_rx_bytes(batch.len());

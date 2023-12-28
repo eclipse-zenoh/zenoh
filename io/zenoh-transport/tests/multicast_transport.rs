@@ -324,7 +324,7 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "transport_udp")]
+    #[cfg(all(feature = "transport_compression", feature = "transport_udp"))]
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn transport_multicast_udp_only() {
         env_logger::init();

@@ -671,7 +671,7 @@ impl Runtime {
     pub async fn connect_peer(&self, zid: &ZenohId, locators: &[Locator]) {
         let manager = self.manager();
         if zid != &manager.zid() {
-            let has_unicast = manager.get_transport_unicast(zid).is_some();
+            let has_unicast = manager.get_transport_unicast(zid).await.is_some();
             let has_multicast = {
                 let mut hm = manager.get_transport_multicast(zid).await.is_some();
                 for t in manager.get_transports_multicast().await {

@@ -13,10 +13,16 @@
 //
 #[cfg(feature = "stats")]
 use crate::stats::TransportStats;
-use crate::transport_unicast_inner::TransportUnicastTrait;
-use crate::unicast::universal::link::TransportLinkUnicast;
-use crate::TransportConfigUnicast;
-use crate::{TransportManager, TransportPeerEventHandler};
+use crate::{
+    common::priority::{TransportPriorityRx, TransportPriorityTx},
+    unicast::{
+        link::{LinkUnicastWithOpenAck, TransportLinkUnicastDirection},
+        transport_unicast_inner::{AddLinkResult, TransportUnicastTrait},
+        universal::link::TransportLinkUnicastUniversal,
+        TransportConfigUnicast,
+    },
+    TransportManager, TransportPeerEventHandler,
+};
 use async_trait::async_trait;
 use std::fmt::DebugStruct;
 use std::sync::{Arc, RwLock};
@@ -38,12 +44,12 @@ macro_rules! zlinkget {
     };
 }
 
-macro_rules! zlinkgetmut {
-    ($guard:expr, $link:expr) => {
-        // Compare LinkUnicast link to not compare TransportLinkUnicast direction
-        $guard.iter_mut().find(|tl| tl.link == $link)
-    };
-}
+// macro_rules! zlinkgetmut {
+//     ($guard:expr, $link:expr) => {
+//         // Compare LinkUnicast link to not compare TransportLinkUnicast direction
+//         $guard.iter_mut().find(|tl| tl.link == $link)
+//     };
+// }
 
 macro_rules! zlinkindex {
     ($guard:expr, $link:expr) => {
@@ -212,24 +218,6 @@ impl TransportUnicastUniversal {
         }
     }
 
-    pub(crate) fn stop_rx_tx(&self, link: &Link) -> ZResult<()> {
-        let mut guard = zwrite!(self.links);
-        match zlinkgetmut!(guard, *link) {
-            Some(l) => {
-                l.stop_rx();
-                l.stop_tx();
-                Ok(())
-            }
-            None => {
-                bail!(
-                    "Can not stop Link RX {} with peer: {}",
-                    link,
-                    self.config.zid
-                )
-            }
-        }
-    }
-
     async fn sync(&self, initial_sn_rx: TransportSn) -> ZResult<()> {
         // Mark the transport as alive and keep the lock
         // to avoid concurrent new_transport and closing/closed notifications
@@ -322,12 +310,7 @@ impl TransportUnicastTrait for TransportUnicastUniversal {
             // Start the TX loop
             let keep_alive =
                 self.manager.config.unicast.lease / self.manager.config.unicast.keep_alive as u32;
-            link.start_tx(
-                transport.clone(),
-                consumer,
-                &self.manager.tx_executor,
-                keep_alive,
-            );
+            link.start_tx(transport.clone(), consumer, keep_alive);
 
             // Start the RX loop
             link.start_rx(transport, other_lease);

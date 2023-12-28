@@ -1492,7 +1492,7 @@ impl Session {
         for msub in state.matching_listeners.values() {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
-                async_std::task::spawn({
+                zenoh_runtime::ZRuntime::RX.spawn({
                     let session = self.clone();
                     let msub = msub.clone();
                     async move {
@@ -1525,7 +1525,7 @@ impl Session {
         for msub in state.matching_listeners.values() {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
-                async_std::task::spawn({
+                zenoh_runtime::ZRuntime::RX.spawn({
                     let session = self.clone();
                     let msub = msub.clone();
                     async move {
