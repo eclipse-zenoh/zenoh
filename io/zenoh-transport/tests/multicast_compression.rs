@@ -24,6 +24,7 @@ mod tests {
         },
         time::Duration,
     };
+    use zenoh_core::ztimeout;
     use zenoh_link::Link;
     use zenoh_protocol::{
         core::{
@@ -45,7 +46,6 @@ mod tests {
         TransportEventHandler, TransportManager, TransportMulticastEventHandler, TransportPeer,
         TransportPeerEventHandler,
     };
-    use zenoh_core::ztimeout;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);

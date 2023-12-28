@@ -18,15 +18,15 @@ use crate::unicast::link::TransportLinkUnicast;
 use crate::unicast::link::TransportLinkUnicastRx;
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
 use zenoh_buffers::{writer::HasWriter, ZSlice};
 use zenoh_codec::*;
 use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_protocol::transport::TransportMessageLowLatency;
+use zenoh_protocol::transport::{KeepAlive, TransportBodyLowLatency};
 use zenoh_result::{zerror, ZResult};
 use zenoh_runtime::ZRuntime;
-use tokio::sync::RwLock;
-use zenoh_protocol::transport::{KeepAlive, TransportBodyLowLatency};
 
 pub(crate) async fn send_with_link(
     link: &TransportLinkUnicast,
@@ -138,7 +138,6 @@ impl TransportUnicastLowlatency {
     }
 
     pub(super) fn internal_start_rx(&self, lease: Duration) {
-
         // TODO: Tidy the complex dependencies
         let rx_buffer_size = self.manager.config.link_rx_buffer_size;
         let token = self.token.child_token();

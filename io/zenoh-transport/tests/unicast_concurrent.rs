@@ -174,7 +174,10 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
 
         // Verify that the transport has been correctly open
         assert_eq!(peer01_manager.get_transports_unicast().await.len(), 1);
-        let s02 = peer01_manager.get_transport_unicast(&c_zid02).await.unwrap();
+        let s02 = peer01_manager
+            .get_transport_unicast(&c_zid02)
+            .await
+            .unwrap();
         assert_eq!(
             s02.get_links().unwrap().len(),
             c_end01.len() + c_end02.len()
@@ -276,7 +279,10 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
             peer02_manager.get_transports_unicast().await
         );
         assert_eq!(peer02_manager.get_transports_unicast().await.len(), 1);
-        let s01 = peer02_manager.get_transport_unicast(&c_zid01).await.unwrap();
+        let s01 = peer02_manager
+            .get_transport_unicast(&c_zid01)
+            .await
+            .unwrap();
         assert_eq!(
             s01.get_links().unwrap().len(),
             c_end01.len() + c_end02.len()

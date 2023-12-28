@@ -12,8 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::transport::TransportUnicastUniversal;
-#[cfg(feature = "stats")]
-use {crate::common::stats::TransportStats, std::sync::Arc};
 use crate::{
     common::{
         batch::{BatchConfig, RBatch},
@@ -31,6 +29,8 @@ use zenoh_buffers::ZSliceBuffer;
 use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool};
+#[cfg(feature = "stats")]
+use {crate::common::stats::TransportStats, std::sync::Arc};
 
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicastUniversal {

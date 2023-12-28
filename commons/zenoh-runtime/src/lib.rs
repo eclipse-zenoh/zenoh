@@ -84,7 +84,10 @@ impl ZRuntime {
         Ok(rt)
     }
 
-    pub fn block_in_place<F, R>(&self, f: F) -> R where F: Future<Output = R> {
+    pub fn block_in_place<F, R>(&self, f: F) -> R
+    where
+        F: Future<Output = R>,
+    {
         tokio::task::block_in_place(move || self.block_on(f))
     }
 }

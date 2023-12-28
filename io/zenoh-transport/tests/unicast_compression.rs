@@ -441,12 +441,7 @@ mod tests {
             },
         ];
         // Run
-        run_with_universal_transport(
-            &endpoints,
-            &endpoints,
-            &channel,
-            &MSG_SIZE_ALL,
-        ).await;
+        run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_ALL).await;
     }
 
     #[cfg(feature = "transport_tcp")]
@@ -468,12 +463,7 @@ mod tests {
             },
         ];
         // Run
-        run_with_lowlatency_transport(
-            &endpoints,
-            &endpoints,
-            &channel,
-            &MSG_SIZE_LOWLATENCY,
-        ).await;
+        run_with_lowlatency_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_LOWLATENCY).await;
     }
 
     #[cfg(feature = "transport_udp")]
@@ -498,12 +488,7 @@ mod tests {
             },
         ];
         // Run
-        run_with_universal_transport(
-            &endpoints,
-            &endpoints,
-            &channel,
-            &MSG_SIZE_NOFRAG,
-        ).await;
+        run_with_universal_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG).await;
     }
 
     #[cfg(feature = "transport_udp")]
@@ -525,11 +510,6 @@ mod tests {
             },
         ];
         // Run
-        run_with_lowlatency_transport(
-            &endpoints,
-            &endpoints,
-            &channel,
-            &MSG_SIZE_NOFRAG,
-        ).await;
+        run_with_lowlatency_transport(&endpoints, &endpoints, &channel, &MSG_SIZE_NOFRAG).await;
     }
 }

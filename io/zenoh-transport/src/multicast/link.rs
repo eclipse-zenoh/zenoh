@@ -29,13 +29,13 @@ use crate::{
     },
     multicast::transport::TransportMulticastInner,
 };
-use tokio::task::JoinHandle;
 use std::{
     convert::TryInto,
     fmt,
     sync::Arc,
     time::{Duration, Instant},
 };
+use tokio::task::JoinHandle;
 use zenoh_buffers::{BBuf, ZSlice, ZSliceBuffer};
 use zenoh_core::{zcondfeat, zlock};
 use zenoh_link::{Link, LinkMulticast, Locator};

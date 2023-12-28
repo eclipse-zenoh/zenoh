@@ -227,7 +227,10 @@ async fn open_transport_unicast(
         let _ = ztimeout!(client_manager.open_transport_unicast(e.clone())).unwrap();
     }
 
-    let client_transport = client_manager.get_transport_unicast(&router_id).await.unwrap();
+    let client_transport = client_manager
+        .get_transport_unicast(&router_id)
+        .await
+        .unwrap();
 
     // Return the handlers
     (
