@@ -64,7 +64,7 @@ fn parse_args() -> (Config, String, String, usize, Option<String>) {
         )
         .arg(arg!(-x --prefix [STRING] "An optional queryable prefix"))
         .arg(arg!(-c --config [FILE]      "A configuration file."))
-        .arg(arg!(--no-multicast-scouting "Disable the multicast-based scouting mechanism."))
+        .arg(arg!(--"no-multicast-scouting" "Disable the multicast-based scouting mechanism."))
         .get_matches();
 
     let mut config = if let Some(conf_file) = args.get_one::<&String>("config") {
@@ -97,10 +97,10 @@ fn parse_args() -> (Config, String, String, usize, Option<String>) {
         .set_enabled(Some(ModeDependentValue::Unique(true)))
         .unwrap();
 
-    let key_expr = args.get_one::<&String>("key").unwrap().to_string();
-    let value = args.get_one::<&String>("value").unwrap().to_string();
-    let history: usize = args.get_one::<&String>("history").unwrap().parse().unwrap();
-    let prefix = args.get_one::<&String>("prefix").map(|s| (*s).to_owned());
+    let key_expr = args.get_one::<String>("key").unwrap().to_string();
+    let value = args.get_one::<String>("value").unwrap().to_string();
+    let history: usize = args.get_one::<String>("history").unwrap().parse().unwrap();
+    let prefix = args.get_one::<String>("prefix").map(|s| (*s).to_owned());
 
     (config, key_expr, value, history, prefix)
 }
