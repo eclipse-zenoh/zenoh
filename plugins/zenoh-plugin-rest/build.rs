@@ -27,13 +27,13 @@ fn main() {
     );
     // Generate config schema
     let schema = schema_for!(Config);
-    std::fs::write(
-        "config_schema.json5",
-        serde_json::to_string_pretty(&schema).unwrap(),
-    )
-    .unwrap();
+
+    let schema_file = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap())
+        .join("config_schema.json5");
+    std::fs::write(&schema_file, serde_json::to_string_pretty(&schema).unwrap()).unwrap();
+
     // Check that the example config matches the schema
-    let schema = std::fs::read_to_string("config_schema.json5").unwrap();
+    let schema = std::fs::read_to_string(schema_file).unwrap();
     let schema: serde_json::Value = serde_json::from_str(&schema).unwrap();
     let schema = jsonschema::JSONSchema::compile(&schema).unwrap();
     let config = std::fs::read_to_string("config.json5").unwrap();
