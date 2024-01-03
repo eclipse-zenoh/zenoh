@@ -58,7 +58,7 @@ jobs:
         if: ${{ matrix.os == 'ubuntu-latest' || matrix.os == 'macOS-latest' }}
         run: cargo clippy --all-targets --all-features -- --deny warnings
 
-      - name: Install nightly Rust toolchain
+      - name: Install generic no_std target
         # Generic no_std target architecture is x86_64-unknown-none
         run: rustup target add x86_64-unknown-none
 
