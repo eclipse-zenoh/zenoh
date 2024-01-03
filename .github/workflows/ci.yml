@@ -134,6 +134,7 @@ jobs:
   # specified manually as a list of workflow job names. Thus we use this extra
   # job to signal whether all CI checks have passed.
   ci:
+    name: CI status checks
     runs-on: ubuntu-latest
     needs: [check, test, nostd]
     if: always()
