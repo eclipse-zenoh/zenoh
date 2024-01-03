@@ -788,7 +788,6 @@ impl<'a, 'b> AsyncResolve for PublisherBuilder<'a, 'b> {
     }
 }
 
-#[inline]
 fn resolve_put(
     publisher: &Publisher<'_>,
     value: Value,
