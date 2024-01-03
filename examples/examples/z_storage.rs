@@ -13,9 +13,9 @@
 //
 #![recursion_limit = "256"]
 
-use async_std::task::sleep;
 use clap::Parser;
 use futures::prelude::*;
+use tokio::io::AsyncReadExt;
 use futures::select;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -23,7 +23,7 @@ use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // initiate logging
     env_logger::init();
@@ -47,7 +47,7 @@ async fn main() {
         .unwrap();
 
     println!("Enter 'q' to quit...");
-    let mut stdin = async_std::io::stdin();
+    let mut stdin = tokio::io::stdin();
     let mut input = [0u8];
     loop {
         select!(
@@ -75,7 +75,7 @@ async fn main() {
             _ = stdin.read_exact(&mut input).fuse() => {
                 match input[0] {
                     b'q' => break,
-                    0 => sleep(Duration::from_secs(1)).await,
+                    0 => tokio::time::sleep(Duration::from_secs(1)).await,
                     _ => (),
                 }
             }

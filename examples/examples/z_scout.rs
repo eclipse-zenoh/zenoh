@@ -11,12 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::prelude::FutureExt;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh::scouting::WhatAmI;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // initiate logging
     env_logger::init();
@@ -27,12 +26,11 @@ async fn main() {
         .await
         .unwrap();
 
-    let _ = async {
+    let _ = tokio::time::timeout(std::time::Duration::from_secs(1), async {
         while let Ok(hello) = receiver.recv_async().await {
             println!("{hello}");
         }
-    }
-    .timeout(std::time::Duration::from_secs(1))
+    })
     .await;
 
     // stop scouting

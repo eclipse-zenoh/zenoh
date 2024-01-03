@@ -36,7 +36,7 @@
 
 ### z_put
 
-   Puts a path/value into Zenoh.  
+   Puts a path/value into Zenoh.
    The path/value will be received by all matching subscribers, for instance the [z_sub](#z_sub)
    and [z_storage](#z_storage) examples.
 
@@ -46,7 +46,7 @@
    ```
    or
    ```bash
-      z_put -k demo/example/test -v 'Hello World'
+      _put -k demo/example/test -v 'Hello World'
    ```
 
 ### z_pub
@@ -65,7 +65,7 @@
 
 ### z_sub
 
-   Declares a key expression and a subscriber.  
+   Declares a key expression and a subscriber.
    The subscriber will be notified of each `put` or `delete` made on any key expression matching the subscriber key expression, and will print this notification.
 
    Typical usage:
@@ -74,12 +74,12 @@
    ```
    or
    ```bash
-      z_sub -k demo/**
+      z_sub -k 'demo/**'
    ```
 
 ### z_pull
 
-   Declares a key expression and a pull subscriber.  
+   Declares a key expression and a pull subscriber.
    On each pull, the pull subscriber will be notified of the last `put` or `delete` made on each key expression matching the subscriber key expression, and will print this notification.
 
 
@@ -89,12 +89,12 @@
    ```
    or
    ```bash
-      z_pull -k demo/**
+      z_pull -k 'demo/**'
    ```
 
 ### z_get
 
-   Sends a query message for a selector.  
+   Sends a query message for a selector.
    The queryables with a matching path or selector (for instance [z_queryable](#z_queryable) and [z_storage](#z_storage))
    will receive this query and reply with paths/values that will be received by the receiver stream.
 
@@ -104,12 +104,12 @@
    ```
    or
    ```bash
-      z_get -s demo/**
+      z_get -s 'demo/**'
    ```
 
 ### z_queryable
 
-   Declares a queryable function with a path.  
+   Declares a queryable function with a path.
    This queryable function will be triggered by each call to get
    with a selector that matches the path, and will return a value to the querier.
 
@@ -124,7 +124,7 @@
 
 ### z_storage
 
-   Trivial implementation of a storage in memory.  
+   Trivial implementation of a storage in memory.
    This example declares a subscriber and a queryable on the same selector.
    The subscriber callback will store the received paths/values in a hashmap.
    The queryable callback will answer to queries with the paths/values stored in the hashmap
@@ -136,7 +136,7 @@
    ```
    or
    ```bash
-      z_storage -k demo/**
+      z_storage -k 'demo/**'
    ```
 
 ### z_pub_shm & z_sub
@@ -173,8 +173,8 @@
 ### z_ping & z_pong
 
    Pub/Sub roundtrip time test.
-   This example allows performing roundtrip time measurements. The z_ping example 
-   performs a put operation on a first key expression, waits for a reply from the pong 
+   This example allows performing roundtrip time measurements. The z_ping example
+   performs a put operation on a first key expression, waits for a reply from the pong
    example on a second key expression and measures the time between the two.
    The pong application waits for samples on the first key expression and replies by
    writing back the received data on the second key expression.
@@ -220,7 +220,7 @@
    ```
    or
    ```bash
-      z_liveliness -k group1/member1
+      z_liveliness -k 'group1/member1'
    ```
 
 ### z_get_liveliness
@@ -234,7 +234,7 @@
    ```
    or
    ```bash
-      z_get_liveliness -k group1/**
+      z_get_liveliness -k 'group1/**'
    ```
 
 ### z_sub_liveliness
@@ -252,5 +252,5 @@
    ```
    or
    ```bash
-      z_sub_liveliness -k group1/**
+      z_sub_liveliness -k 'group1/**'
    ```

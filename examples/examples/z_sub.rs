@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use clap::{App, Arg};
+use clap::Parser;
 use futures::prelude::*;
 use futures::select;
 use std::time::Duration;

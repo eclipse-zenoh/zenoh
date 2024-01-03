@@ -41,8 +41,7 @@ transport_unixpipe = ["zenoh/transport_unixpipe"]
 # zenoh = { workspace = true }
 
 [dependencies]
-tokio = { workspace = true, features = ["rt", "time", "io-std"] }
-async-std = { workspace = true, features = ["attributes"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "io-std"] }
 clap = { workspace = true, features = ["derive"] }
 env_logger = { workspace = true }
 flume = { workspace = true }
