@@ -1348,4 +1348,32 @@ mod tests {
         sample_kind_integrity_in_publication_with(SampleKind::Put);
         sample_kind_integrity_in_publication_with(SampleKind::Delete);
     }
+
+    #[test]
+    fn sample_kind_integrity_in_put_builder() {
+        use crate::{open, prelude::sync::*};
+        use zenoh_protocol::core::SampleKind;
+
+        const KEY_EXPR: &str = "test/sample_kind_integrity/put_builder";
+        const VALUE: &str = "zenoh";
+
+        fn sample_kind_integrity_in_put_builder_with(kind: SampleKind) {
+            let session = open(Config::default()).res().unwrap();
+            let sub = session.declare_subscriber(KEY_EXPR).res().unwrap();
+
+            match kind {
+                SampleKind::Put => session.put(KEY_EXPR, VALUE).res().unwrap(),
+                SampleKind::Delete => session.delete(KEY_EXPR).res().unwrap(),
+            }
+            let sample = sub.recv().unwrap();
+
+            assert_eq!(sample.kind, kind);
+            if let SampleKind::Put = kind {
+                assert_eq!(sample.value.to_string(), VALUE);
+            }
+        }
+
+        sample_kind_integrity_in_put_builder_with(SampleKind::Put);
+        sample_kind_integrity_in_put_builder_with(SampleKind::Delete);
+    }
 }
