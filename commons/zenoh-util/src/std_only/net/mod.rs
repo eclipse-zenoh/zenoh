@@ -206,6 +206,7 @@ pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
     {
         Ok(pnet_datalink::interfaces()
             .into_iter()
+            .filter(|iface| iface.is_up() && iface.is_running())
             .flat_map(|iface| iface.ips)
             .map(|ipnet| ipnet.ip())
             .collect())
