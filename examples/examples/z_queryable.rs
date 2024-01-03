@@ -13,10 +13,10 @@
 //
 use clap::Parser;
 use futures::prelude::*;
-use tokio::io::AsyncReadExt;
 use futures::select;
 use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;

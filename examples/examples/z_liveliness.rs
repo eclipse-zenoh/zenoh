@@ -13,10 +13,10 @@
 //
 use clap::Parser;
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;
-use tokio::io::AsyncReadExt;
 
 #[tokio::main]
 async fn main() {

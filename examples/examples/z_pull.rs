@@ -11,9 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use tokio::io::AsyncReadExt;
 use clap::Parser;
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh_examples::CommonArgs;

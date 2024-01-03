@@ -64,7 +64,9 @@ impl Auth {
             #[cfg(feature = "auth_pubkey")]
             pubkey: AuthPubKey::from_config(auth.pubkey())?.map(RwLock::new),
             #[cfg(feature = "auth_usrpwd")]
-            usrpwd: AuthUsrPwd::from_config(auth.usrpwd()).await?.map(RwLock::new),
+            usrpwd: AuthUsrPwd::from_config(auth.usrpwd())
+                .await?
+                .map(RwLock::new),
         })
     }
 
