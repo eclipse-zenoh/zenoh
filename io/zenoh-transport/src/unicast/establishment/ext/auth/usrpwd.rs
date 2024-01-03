@@ -63,12 +63,13 @@ impl AuthUsrPwd {
         Ok(())
     }
 
-    pub fn from_config(config: &UsrPwdConf) -> ZResult<Option<Self>> {
+    pub async fn from_config(config: &UsrPwdConf) -> ZResult<Option<Self>> {
         const S: &str = "UsrPwd extension - From config.";
 
         let mut lookup: HashMap<User, Password> = HashMap::new();
         if let Some(dict) = config.dictionary_file() {
-            let content = std::fs::read_to_string(dict)
+            let content = tokio::fs::read_to_string(dict)
+                .await
                 .map_err(|e| zerror!("{S} Invalid user-password dictionary file: {}.", e))?;
 
             // Populate the user-password dictionary
@@ -476,27 +477,27 @@ mod tests {
             let mut c = zconfig!();
             writeln!(c, "usr1:pwd1").unwrap();
             drop(c);
-            assert!(AuthUsrPwd::from_config(&config).unwrap().is_some());
+            assert!(AuthUsrPwd::from_config(&config).await.unwrap().is_some());
             // Invalid config
             let mut c = zconfig!();
             writeln!(c, "usr1").unwrap();
             drop(c);
-            assert!(AuthUsrPwd::from_config(&config).is_err());
+            assert!(AuthUsrPwd::from_config(&config).await.is_err());
             // Empty password
             let mut c = zconfig!();
             writeln!(c, "usr1:").unwrap();
             drop(c);
-            assert!(AuthUsrPwd::from_config(&config).is_err());
+            assert!(AuthUsrPwd::from_config(&config).await.is_err());
             // Empty user
             let mut c = zconfig!();
             writeln!(c, ":pwd1").unwrap();
             drop(c);
-            assert!(AuthUsrPwd::from_config(&config).is_err());
+            assert!(AuthUsrPwd::from_config(&config).await.is_err());
             // Empty user and password
             let mut c = zconfig!();
             writeln!(c, ":").unwrap();
             drop(c);
-            assert!(AuthUsrPwd::from_config(&config).is_err());
+            assert!(AuthUsrPwd::from_config(&config).await.is_err());
 
             let _ = std::fs::remove_file(f1);
         }

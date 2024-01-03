@@ -168,7 +168,7 @@ impl TransportManagerBuilderUnicast {
         self
     }
 
-    pub fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilderUnicast> {
+    pub async fn from_config(mut self, config: &Config) -> ZResult<TransportManagerBuilderUnicast> {
         self = self.lease(Duration::from_millis(
             *config.transport().link().tx().lease(),
         ));
@@ -191,7 +191,7 @@ impl TransportManagerBuilderUnicast {
         }
         #[cfg(feature = "transport_auth")]
         {
-            self = self.authenticator(Auth::from_config(config)?);
+            self = self.authenticator(Auth::from_config(config).await?);
         }
         #[cfg(feature = "transport_compression")]
         {

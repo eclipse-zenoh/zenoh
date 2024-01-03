@@ -225,7 +225,7 @@ impl TransportManagerBuilder {
             bail!("{}", formatter);
         }
         self = self.endpoints(c);
-        self = self.unicast(TransportManagerBuilderUnicast::default().from_config(config)?);
+        self = self.unicast(TransportManagerBuilderUnicast::default().from_config(config).await?);
         self = self.multicast(TransportManagerBuilderMulticast::default().from_config(config)?);
 
         Ok(self)
