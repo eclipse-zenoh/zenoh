@@ -3840,6 +3840,7 @@ dependencies = [
  "pin-project-lite 0.2.13",
  "socket2 0.5.4",
  "tokio-macros",
+ "tracing",
  "windows-sys 0.48.0",
 ]
 
@@ -3881,13 +3882,15 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.7.8"
+version = "0.7.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "806fe8c2c87eccc8b3267cbae29ed3ab2d0bd37fca70ab622e46aaa9375ddb7d"
+checksum = "5419f34732d9eb6ee4c3578b7989078579b7f039cbbb9ca2c4da015749371e15"
 dependencies = [
  "bytes",
  "futures-core",
  "futures-sink",
+ "futures-util",
+ "hashbrown 0.14.0",
  "pin-project-lite 0.2.13",
  "tokio",
  "tracing",
@@ -4564,8 +4567,6 @@ dependencies = [
 name = "zenoh"
 version = "0.11.0-dev"
 dependencies = [
- "async-global-executor",
- "async-std",
  "async-trait",
  "base64 0.21.4",
  "const_format",
@@ -4589,6 +4590,7 @@ dependencies = [
  "socket2 0.5.4",
  "stop-token",
  "tokio",
+ "tokio-util",
  "uhlc",
  "uuid",
  "vec_map",
@@ -4604,6 +4606,7 @@ dependencies = [
  "zenoh-plugin-trait",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-runtime",
  "zenoh-shm",
  "zenoh-sync",
  "zenoh-transport",
@@ -4686,6 +4689,7 @@ dependencies = [
  "lazy_static",
  "tokio",
  "zenoh-result",
+ "zenoh-runtime",
 ]
 
 [[package]]
@@ -4704,7 +4708,6 @@ dependencies = [
 name = "zenoh-examples"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "clap",
  "env_logger",
  "flume",
@@ -4826,11 +4829,11 @@ dependencies = [
 name = "zenoh-link-serial"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "async-trait",
  "futures",
  "log",
  "tokio",
+ "tokio-util",
  "uuid",
  "z-serial",
  "zenoh-collections",
@@ -4839,6 +4842,7 @@ dependencies = [
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-runtime",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -4847,7 +4851,6 @@ dependencies = [
 name = "zenoh-link-tcp"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "async-trait",
  "log",
  "tokio",
@@ -4855,6 +4858,7 @@ dependencies = [
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-runtime",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -4887,16 +4891,18 @@ dependencies = [
 name = "zenoh-link-udp"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "async-trait",
  "log",
  "socket2 0.5.4",
+ "tokio",
+ "tokio-util",
  "zenoh-buffers",
  "zenoh-collections",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-runtime",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -4906,15 +4912,13 @@ name = "zenoh-link-unixpipe"
 version = "0.11.0-dev"
 dependencies = [
  "advisory-lock",
- "async-global-executor",
- "async-io",
- "async-std",
  "async-trait",
  "filepath",
  "log",
  "nix 0.27.1",
  "rand 0.8.5",
  "tokio",
+ "tokio-util",
  "unix-named-pipe",
  "zenoh-buffers",
  "zenoh-config",
@@ -4922,6 +4926,7 @@ dependencies = [
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-runtime",
 ]
 
 [[package]]
@@ -4945,17 +4950,18 @@ dependencies = [
 name = "zenoh-link-ws"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "async-trait",
  "futures-util",
  "log",
  "tokio",
  "tokio-tungstenite",
+ "tokio-util",
  "url",
  "zenoh-core",
  "zenoh-link-commons",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-runtime",
  "zenoh-sync",
  "zenoh-util",
 ]
@@ -5091,6 +5097,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-runtime"
+version = "0.11.0-dev"
+dependencies = [
+ "lazy_static",
+ "tokio",
+ "zenoh-result",
+]
+
+[[package]]
 name = "zenoh-shm"
 version = "0.11.0-dev"
 dependencies = [
@@ -5120,12 +5135,10 @@ dependencies = [
 name = "zenoh-transport"
 version = "0.11.0-dev"
 dependencies = [
- "async-executor",
- "async-global-executor",
- "async-std",
  "async-trait",
  "env_logger",
  "flume",
+ "futures",
  "futures-util",
  "log",
  "lz4_flex",
@@ -5137,6 +5150,7 @@ dependencies = [
  "serde",
  "sha3",
  "tokio",
+ "tokio-util",
  "zenoh-buffers",
  "zenoh-codec",
  "zenoh-collections",
@@ -5146,6 +5160,7 @@ dependencies = [
  "zenoh-link",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-runtime",
  "zenoh-shm",
  "zenoh-sync",
  "zenoh-util",
@@ -5197,7 +5212,6 @@ dependencies = [
 name = "zenohd"
 version = "0.11.0-dev"
 dependencies = [
- "async-std",
  "clap",
  "env_logger",
  "futures",
@@ -5207,6 +5221,7 @@ dependencies = [
  "log",
  "rand 0.8.5",
  "rustc_version 0.4.0",
+ "tokio",
  "zenoh",
  "zenoh_backend_traits",
 ]
