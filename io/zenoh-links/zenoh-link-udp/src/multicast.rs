@@ -290,7 +290,7 @@ impl LinkManagerMulticastUdp {
             }
         };
 
-        // Build the async_std multicast UdpSocket
+        // Build the tokio multicast UdpSocket
         mcast_sock.set_nonblocking(true)?;
         let mcast_sock = UdpSocket::from_std(mcast_sock.into())?;
 
