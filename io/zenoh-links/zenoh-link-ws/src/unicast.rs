@@ -359,11 +359,6 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
 
         // Spawn the accept loop for the listener
         let token = CancellationToken::new();
-        // let active = Arc::new(AtomicBool::new(true));
-        // let signal = Signal::new();
-        //
-        // let c_active = active.clone();
-        // let c_signal = signal.clone();
         let c_token = token.clone();
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
@@ -468,20 +463,10 @@ async fn accept_task(
     token: CancellationToken,
     manager: NewLinkChannelSender,
 ) -> ZResult<()> {
-    // enum Action {
-    //     Accept((TcpStream, SocketAddr)),
-    //     Stop,
-    // }
-
     async fn accept(socket: &TcpListener) -> ZResult<(TcpStream, SocketAddr)> {
         let res = socket.accept().await.map_err(|e| zerror!(e))?;
         Ok(res)
     }
-
-    // async fn stop(signal: Signal) -> ZResult<Action> {
-    //     signal.wait().await;
-    //     Ok(Action::Stop)
-    // }
 
     let src_addr = socket.local_addr().map_err(|e| {
         let e = zerror!("Can not accept TCP (WebSocket) connections: {}", e);
