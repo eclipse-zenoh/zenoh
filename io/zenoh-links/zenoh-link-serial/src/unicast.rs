@@ -12,10 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use async_std::prelude::*;
-use async_std::sync::Mutex as AsyncMutex;
-use async_std::task::JoinHandle;
-use async_std::task::{self};
 use async_trait::async_trait;
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
@@ -23,6 +19,8 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
+use tokio::sync::Mutex as AsyncMutex;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use zenoh_core::{zasynclock, zread, zwrite};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
@@ -30,7 +28,6 @@ use zenoh_link_commons::{
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{zerror, ZResult};
-use zenoh_sync::Signal;
 
 use z_serial::ZSerial;
 
@@ -150,7 +147,7 @@ impl LinkUnicastTrait for LinkUnicastSerial {
                     let e = zerror!("Read error on Serial link {}: {}", self, e);
                     log::error!("{}", e);
                     drop(_guard);
-                    async_std::task::sleep(std::time::Duration::from_millis(1)).await;
+                    tokio::time::sleep(std::time::Duration::from_millis(1)).await;
                     continue;
                 }
             }
@@ -220,24 +217,23 @@ impl fmt::Debug for LinkUnicastSerial {
 /*************************************/
 struct ListenerUnicastSerial {
     endpoint: EndPoint,
-    active: Arc<AtomicBool>,
-    signal: Signal,
-    handle: JoinHandle<ZResult<()>>,
+    token: CancellationToken,
+    tracker: TaskTracker,
 }
 
 impl ListenerUnicastSerial {
-    fn new(
-        endpoint: EndPoint,
-        active: Arc<AtomicBool>,
-        signal: Signal,
-        handle: JoinHandle<ZResult<()>>,
-    ) -> Self {
+    fn new(endpoint: EndPoint, token: CancellationToken, tracker: TaskTracker) -> Self {
         Self {
             endpoint,
-            active,
-            signal,
-            handle,
+            token,
+            tracker,
         }
+    }
+
+    async fn stop(&self) {
+        self.token.cancel();
+        self.tracker.close();
+        self.tracker.wait().await;
     }
 }
 
@@ -314,32 +310,26 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         ));
 
         // Spawn the accept loop for the listener
-        let active = Arc::new(AtomicBool::new(true));
-        let signal = Signal::new();
+        let token = CancellationToken::new();
+        let c_token = token.clone();
         let mut listeners = zwrite!(self.listeners);
 
         let c_path = path.clone();
-        let c_active = active.clone();
-        let c_signal = signal.clone();
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
-        let handle = task::spawn(async move {
+
+        let tracker = TaskTracker::new();
+        let task = async move {
             // Wait for the accept loop to terminate
-            let res = accept_read_task(
-                link,
-                c_active,
-                c_signal,
-                c_manager,
-                c_path.clone(),
-                is_connected,
-            )
-            .await;
+            let res =
+                accept_read_task(link, c_token, c_manager, c_path.clone(), is_connected).await;
             zwrite!(c_listeners).remove(&c_path);
             res
-        });
+        };
+        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
 
         let locator = endpoint.to_locator();
-        let listener = ListenerUnicastSerial::new(endpoint, active, signal, handle);
+        let listener = ListenerUnicastSerial::new(endpoint, token, tracker);
         // Update the list of active listeners on the manager
         listeners.insert(path, listener);
 
@@ -360,9 +350,8 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         })?;
 
         // Send the stop signal
-        listener.active.store(false, Ordering::Release);
-        listener.signal.trigger();
-        listener.handle.await
+        listener.stop().await;
+        Ok(())
     }
 
     fn get_listeners(&self) -> Vec<EndPoint> {
@@ -382,72 +371,56 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
 
 async fn accept_read_task(
     link: Arc<LinkUnicastSerial>,
-    active: Arc<AtomicBool>,
-    signal: Signal,
+    token: CancellationToken,
     manager: NewLinkChannelSender,
     src_path: String,
     is_connected: Arc<AtomicBool>,
 ) -> ZResult<()> {
-    enum Action {
-        Receive(Arc<LinkUnicastSerial>),
-        Stop,
-    }
-
-    async fn stop(signal: Signal) -> ZResult<Action> {
-        signal.wait().await;
-        Ok(Action::Stop)
-    }
-
     async fn receive(
         link: Arc<LinkUnicastSerial>,
-        active: Arc<AtomicBool>,
         src_path: String,
         is_connected: Arc<AtomicBool>,
-    ) -> ZResult<Action> {
-        while active.load(Ordering::Acquire) {
-            if !is_connected.load(Ordering::Acquire) {
-                if !link.is_ready() {
-                    // Waiting to be ready, if not sleep some time.
-                    task::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
-                    continue;
-                }
-
-                log::trace!("Creating serial link from {:?}", src_path);
-
-                is_connected.store(true, Ordering::Release);
-
-                return Ok(Action::Receive(link.clone()));
-            }
+    ) -> ZResult<Arc<LinkUnicastSerial>> {
+        while !is_connected.load(Ordering::Acquire) && !link.is_ready() {
+            // Waiting to be ready, if not sleep some time.
+            tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
         }
-        Ok(Action::Stop)
+
+        log::trace!("Creating serial link from {:?}", src_path);
+        is_connected.store(true, Ordering::Release);
+        Ok(link.clone())
     }
 
     log::trace!("Ready to accept Serial connections on: {:?}", src_path);
 
     loop {
-        match receive(
-            link.clone(),
-            active.clone(),
-            src_path.clone(),
-            is_connected.clone(),
-        )
-        .race(stop(signal.clone()))
-        .await
-        {
-            Ok(action) => match action {
-                Action::Receive(link) => {
-                    // Communicate the new link to the initial transport manager
-                    if let Err(e) = manager.send_async(LinkUnicast(link.clone())).await {
-                        log::error!("{}-{}: {}", file!(), line!(), e)
+        tokio::select! {
+            res = receive(
+                link.clone(),
+                src_path.clone(),
+                is_connected.clone(),
+            ) => {
+                match res {
+                    Ok(link) => {
+                        // Communicate the new link to the initial transport manager
+                        if let Err(e) = manager.send_async(LinkUnicast(link.clone())).await {
+                            log::error!("{}-{}: {}", file!(), line!(), e)
+                        }
+
+                        // Ensure the creation of this link is only once
+                        break;
+                    }
+                    Err(e) =>  {
+                        log::warn!("{}. Hint: Is the serial cable connected?", e);
+                        tokio::time::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
+                        continue;
+
                     }
                 }
-                Action::Stop => break Ok(()),
             },
-            Err(e) => {
-                log::warn!("{}. Hint: Is the serial cable connected?", e);
-                task::sleep(Duration::from_micros(*SERIAL_ACCEPT_THROTTLE_TIME)).await;
-                continue;
-            }
+
+            _ = token.cancelled() => break,
         }
     }
+    Ok(())
 }

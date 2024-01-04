@@ -18,12 +18,12 @@ version = { workspace = true }
 repository = { workspace = true }
 homepage = { workspace = true }
 authors = [
-	"kydos <angelo@icorsaro.net>",
-	"Julien Enoch <julien@enoch.fr>",
-	"Olivier Hécart <olivier.hecart@zettascale.tech>",
-	"Luca Cominardi <luca.cominardi@zettascale.tech>",
-	"Pierre Avital <pierre.avital@zettascale.tech>",
-	"Gabriele Baldoni <gabriele.baldoni@zettascale.tech>"
+  "kydos <angelo@icorsaro.net>",
+  "Julien Enoch <julien@enoch.fr>",
+  "Olivier Hécart <olivier.hecart@zettascale.tech>",
+  "Luca Cominardi <luca.cominardi@zettascale.tech>",
+  "Pierre Avital <pierre.avital@zettascale.tech>",
+  "Gabriele Baldoni <gabriele.baldoni@zettascale.tech>"
 ]
 edition = { workspace = true }
 license = { workspace = true }
@@ -32,11 +32,11 @@ description = "Internal crate for zenoh."
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-std = { workspace = true, features = ["unstable", "tokio1"] }
 async-trait = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
-tokio = { workspace = true, features = ["io-std", "macros", "net", "rt-multi-thread", "time", "io-util"] }
+tokio = { workspace = true, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
+tokio-util = { workspace = true }
 uuid = { workspace = true, default-features = true }
 z-serial = { workspace = true }
 zenoh-collections = { workspace = true }
@@ -47,3 +47,4 @@ zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
+zenoh-runtime = { workspace = true }
