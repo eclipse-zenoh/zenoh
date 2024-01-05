@@ -35,31 +35,64 @@ pub(crate) static PREFIX_LIVELINESS: &str = "@/liveliness";
 pub(crate) struct RoutingContext<Msg> {
     pub(crate) msg: Msg,
     pub(crate) inface: OnceCell<Face>,
+    pub(crate) outface: OnceCell<Face>,
     pub(crate) prefix: OnceCell<Arc<Resource>>,
     pub(crate) full_expr: OnceCell<String>,
 }
 
 impl<Msg> RoutingContext<Msg> {
-    pub(crate) fn with_face(msg: Msg, inface: Face) -> Self {
+    #[allow(dead_code)]
+    pub(crate) fn new(msg: Msg) -> Self {
         Self {
             msg,
-            inface: OnceCell::from(inface),
+            inface: OnceCell::new(),
+            outface: OnceCell::new(),
             prefix: OnceCell::new(),
             full_expr: OnceCell::new(),
         }
     }
 
+    #[allow(dead_code)]
+    pub(crate) fn new_in(msg: Msg, inface: Face) -> Self {
+        Self {
+            msg,
+            inface: OnceCell::from(inface),
+            outface: OnceCell::new(),
+            prefix: OnceCell::new(),
+            full_expr: OnceCell::new(),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn new_out(msg: Msg, outface: Face) -> Self {
+        Self {
+            msg,
+            inface: OnceCell::new(),
+            outface: OnceCell::from(outface),
+            prefix: OnceCell::new(),
+            full_expr: OnceCell::new(),
+        }
+    }
+
+    #[allow(dead_code)]
     pub(crate) fn with_expr(msg: Msg, expr: String) -> Self {
         Self {
             msg,
             inface: OnceCell::new(),
+            outface: OnceCell::new(),
             prefix: OnceCell::new(),
             full_expr: OnceCell::from(expr),
         }
     }
 
+    #[allow(dead_code)]
     pub(crate) fn inface(&self) -> Option<&Face> {
         self.inface.get()
+    }
+
+    #[allow(dead_code)]
+    pub(crate) fn outface(&self) -> Option<&Face> {
+        self.outface.get()
     }
 }
 
@@ -94,6 +127,25 @@ impl RoutingContext<NetworkMessage> {
     pub(crate) fn full_expr(&self) -> Option<&str> {
         if self.full_expr.get().is_some() {
             return Some(self.full_expr.get().as_ref().unwrap());
+        }
+        if let Some(face) = self.outface.get() {
+            if let Some(wire_expr) = self.wire_expr() {
+                let wire_expr = wire_expr.to_owned();
+                if self.prefix.get().is_none() {
+                    if let Some(prefix) = zread!(face.tables.tables)
+                        .get_sent_mapping(&face.state, &wire_expr.scope, wire_expr.mapping)
+                        .cloned()
+                    {
+                        let _ = self.prefix.set(prefix);
+                    }
+                }
+                if let Some(prefix) = self.prefix.get().cloned() {
+                    let _ = self
+                        .full_expr
+                        .set(prefix.expr() + wire_expr.suffix.as_ref());
+                    return Some(self.full_expr.get().as_ref().unwrap());
+                }
+            }
         }
         if let Some(face) = self.inface.get() {
             if let Some(wire_expr) = self.wire_expr() {

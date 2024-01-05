@@ -129,6 +129,20 @@ impl Tables {
     }
 
     #[inline]
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub(crate) fn get_sent_mapping<'a>(
+        &'a self,
+        face: &'a FaceState,
+        expr_id: &ExprId,
+        mapping: Mapping,
+    ) -> Option<&'a Arc<Resource>> {
+        match expr_id {
+            0 => Some(&self.root_res),
+            expr_id => face.get_sent_mapping(expr_id, mapping),
+        }
+    }
+
+    #[inline]
     pub(crate) fn get_face(&self, zid: &ZenohId) -> Option<&Arc<FaceState>> {
         self.faces.values().find(|face| face.zid == *zid)
     }

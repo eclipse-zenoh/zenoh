@@ -117,12 +117,8 @@ impl Router {
             .map(|itor| itor.new_transport_unicast(&transport))
             .unzip();
         let (ingress, egress) = (
-            Box::new(InterceptsChain::from(
-                ingress.into_iter().flatten().collect::<Vec<_>>(),
-            )),
-            Box::new(InterceptsChain::from(
-                egress.into_iter().flatten().collect::<Vec<_>>(),
-            )),
+            InterceptsChain::from(ingress.into_iter().flatten().collect::<Vec<_>>()),
+            InterceptsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
         );
         let newface = tables
             .faces
@@ -162,13 +158,13 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let intercept = Box::new(InterceptsChain::from(
+        let intercept = InterceptsChain::from(
             tables
                 .interceptors
                 .iter()
                 .filter_map(|itor| itor.new_transport_multicast(&transport))
                 .collect::<Vec<EgressIntercept>>(),
-        ));
+        );
         tables.mcast_groups.push(FaceState::new(
             fid,
             ZenohId::from_str("1").unwrap(),
@@ -200,13 +196,13 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let intercept = Box::new(InterceptsChain::from(
+        let intercept = InterceptsChain::from(
             tables
                 .interceptors
                 .iter()
                 .filter_map(|itor| itor.new_peer_multicast(&transport))
                 .collect::<Vec<IngressIntercept>>(),
-        ));
+        );
         let face_state = FaceState::new(
             fid,
             peer.zid,

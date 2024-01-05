@@ -16,7 +16,7 @@ use std::sync::Arc;
 use super::{EPrimitives, Primitives};
 use crate::net::routing::{
     dispatcher::{face::Face, tables::TablesLock},
-    interceptor::EgressIntercept,
+    interceptor::{InterceptTrait, InterceptsChain},
     RoutingContext,
 };
 use zenoh_protocol::network::{
@@ -28,7 +28,7 @@ pub struct Mux {
     pub handler: TransportUnicast,
     pub(crate) fid: usize,
     pub(crate) tables: Arc<TablesLock>,
-    pub(crate) intercept: EgressIntercept,
+    pub(crate) intercept: InterceptsChain,
 }
 
 impl Mux {
@@ -36,7 +36,7 @@ impl Mux {
         handler: TransportUnicast,
         fid: usize,
         tables: Arc<TablesLock>,
-        intercept: EgressIntercept,
+        intercept: InterceptsChain,
     ) -> Mux {
         Mux {
             handler,
@@ -58,7 +58,7 @@ impl Primitives for Mux {
         let face = tables.faces.get(&self.fid).cloned();
         drop(tables);
         if let Some(face) = face {
-            let ctx = RoutingContext::with_face(
+            let ctx = RoutingContext::new_in(
                 msg,
                 Face {
                     tables: self.tables.clone(),
@@ -81,7 +81,7 @@ impl Primitives for Mux {
         let face = tables.faces.get(&self.fid).cloned();
         drop(tables);
         if let Some(face) = face {
-            let ctx = RoutingContext::with_face(
+            let ctx = RoutingContext::new_in(
                 msg,
                 Face {
                     tables: self.tables.clone(),
@@ -104,7 +104,7 @@ impl Primitives for Mux {
         let face = tables.faces.get(&self.fid).cloned();
         drop(tables);
         if let Some(face) = face {
-            let ctx = RoutingContext::with_face(
+            let ctx = RoutingContext::new_in(
                 msg,
                 Face {
                     tables: self.tables.clone(),
@@ -127,7 +127,7 @@ impl Primitives for Mux {
         let face = tables.faces.get(&self.fid).cloned();
         drop(tables);
         if let Some(face) = face {
-            let ctx = RoutingContext::with_face(
+            let ctx = RoutingContext::new_in(
                 msg,
                 Face {
                     tables: self.tables.clone(),
@@ -150,7 +150,7 @@ impl Primitives for Mux {
         let face = tables.faces.get(&self.fid).cloned();
         drop(tables);
         if let Some(face) = face {
-            let ctx = RoutingContext::with_face(
+            let ctx = RoutingContext::new_in(
                 msg,
                 Face {
                     tables: self.tables.clone(),
@@ -177,6 +177,7 @@ impl EPrimitives for Mux {
                 size: None,
             },
             inface: ctx.inface,
+            outface: ctx.outface,
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
@@ -193,6 +194,7 @@ impl EPrimitives for Mux {
                 size: None,
             },
             inface: ctx.inface,
+            outface: ctx.outface,
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
@@ -209,6 +211,7 @@ impl EPrimitives for Mux {
                 size: None,
             },
             inface: ctx.inface,
+            outface: ctx.outface,
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
@@ -225,6 +228,7 @@ impl EPrimitives for Mux {
                 size: None,
             },
             inface: ctx.inface,
+            outface: ctx.outface,
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
@@ -241,6 +245,7 @@ impl EPrimitives for Mux {
                 size: None,
             },
             inface: ctx.inface,
+            outface: ctx.outface,
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
@@ -258,7 +263,7 @@ pub struct McastMux {
     pub handler: TransportMulticast,
     pub(crate) fid: usize,
     pub(crate) tables: Arc<TablesLock>,
-    pub(crate) intercept: EgressIntercept,
+    pub(crate) intercept: InterceptsChain,
 }
 
 impl McastMux {
@@ -266,7 +271,7 @@ impl McastMux {
         handler: TransportMulticast,
         fid: usize,
         tables: Arc<TablesLock>,
-        intercept: EgressIntercept,
+        intercept: InterceptsChain,
     ) -> McastMux {
         McastMux {
             handler,
@@ -285,7 +290,7 @@ impl Primitives for McastMux {
             size: None,
         };
         if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
-            let ctx = RoutingContext::with_face(
+            let ctx = RoutingContext::new_in(
                 msg,
                 Face {
                     tables: self.tables.clone(),
@@ -305,7 +310,7 @@ impl Primitives for McastMux {
             size: None,
         };
         if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
-            let ctx = RoutingContext::with_face(
+            let ctx = RoutingContext::new_in(
                 msg,
                 Face {
                     tables: self.tables.clone(),
@@ -325,7 +330,7 @@ impl Primitives for McastMux {
             size: None,
         };
         if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
-            let ctx = RoutingContext::with_face(
+            let ctx = RoutingContext::new_in(
                 msg,
                 Face {
                     tables: self.tables.clone(),
@@ -345,7 +350,7 @@ impl Primitives for McastMux {
             size: None,
         };
         if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
-            let ctx = RoutingContext::with_face(
+            let ctx = RoutingContext::new_in(
                 msg,
                 Face {
                     tables: self.tables.clone(),
@@ -365,7 +370,7 @@ impl Primitives for McastMux {
             size: None,
         };
         if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
-            let ctx = RoutingContext::with_face(
+            let ctx = RoutingContext::new_in(
                 msg,
                 Face {
                     tables: self.tables.clone(),
@@ -392,6 +397,7 @@ impl EPrimitives for McastMux {
                 size: None,
             },
             inface: ctx.inface,
+            outface: ctx.outface,
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
@@ -408,6 +414,7 @@ impl EPrimitives for McastMux {
                 size: None,
             },
             inface: ctx.inface,
+            outface: ctx.outface,
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
@@ -424,6 +431,7 @@ impl EPrimitives for McastMux {
                 size: None,
             },
             inface: ctx.inface,
+            outface: ctx.outface,
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
@@ -440,6 +448,7 @@ impl EPrimitives for McastMux {
                 size: None,
             },
             inface: ctx.inface,
+            outface: ctx.outface,
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
@@ -456,6 +465,7 @@ impl EPrimitives for McastMux {
                 size: None,
             },
             inface: ctx.inface,
+            outface: ctx.outface,
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };

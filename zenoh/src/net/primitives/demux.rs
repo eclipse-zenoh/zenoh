@@ -12,7 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::Primitives;
-use crate::net::routing::{dispatcher::face::Face, interceptor::IngressIntercept, RoutingContext};
+use crate::net::routing::{
+    dispatcher::face::Face,
+    interceptor::{InterceptTrait, InterceptsChain},
+    RoutingContext,
+};
 use std::any::Any;
 use zenoh_link::Link;
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
@@ -22,14 +26,14 @@ use zenoh_transport::{TransportPeerEventHandler, TransportUnicast};
 pub struct DeMux {
     face: Face,
     pub(crate) transport: Option<TransportUnicast>,
-    pub(crate) intercept: IngressIntercept,
+    pub(crate) intercept: InterceptsChain,
 }
 
 impl DeMux {
     pub(crate) fn new(
         face: Face,
         transport: Option<TransportUnicast>,
-        intercept: IngressIntercept,
+        intercept: InterceptsChain,
     ) -> Self {
         Self {
             face,
@@ -41,14 +45,17 @@ impl DeMux {
 
 impl TransportPeerEventHandler for DeMux {
     #[inline]
-    fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
-        let ctx = RoutingContext::with_face(msg, self.face.clone());
-        let ctx = match self.intercept.intercept(ctx) {
-            Some(ctx) => ctx,
-            None => return Ok(()),
-        };
+    fn handle_message(&self, mut msg: NetworkMessage) -> ZResult<()> {
+        if !self.intercept.intercepts.is_empty() {
+            let ctx = RoutingContext::new_in(msg, self.face.clone());
+            let ctx = match self.intercept.intercept(ctx) {
+                Some(ctx) => ctx,
+                None => return Ok(()),
+            };
+            msg = ctx.msg;
+        }
 
-        match ctx.msg.body {
+        match msg.body {
             NetworkBody::Push(m) => self.face.send_push(m),
             NetworkBody::Declare(m) => self.face.send_declare(m),
             NetworkBody::Request(m) => self.face.send_request(m),

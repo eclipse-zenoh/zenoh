@@ -82,6 +82,19 @@ impl FaceState {
         }
     }
 
+    #[inline]
+    #[allow(clippy::trivially_copy_pass_by_ref)]
+    pub(crate) fn get_sent_mapping(
+        &self,
+        prefixid: &ExprId,
+        mapping: Mapping,
+    ) -> Option<&std::sync::Arc<Resource>> {
+        match mapping {
+            Mapping::Sender => self.local_mappings.get(prefixid),
+            Mapping::Receiver => self.remote_mappings.get(prefixid),
+        }
+    }
+
     pub(crate) fn get_next_local_id(&self) -> ExprId {
         let mut id = 1;
         while self.local_mappings.get(&id).is_some() || self.remote_mappings.get(&id).is_some() {
@@ -159,7 +172,7 @@ impl Primitives for Face {
     #[inline]
     fn send_push(&self, msg: Push) {
         full_reentrant_route_data(
-            &self.tables.tables,
+            &self.tables,
             &self.state,
             &msg.wire_expr,
             msg.ext_qos,

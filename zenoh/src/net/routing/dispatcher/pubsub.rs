@@ -13,7 +13,8 @@
 //
 use super::face::FaceState;
 use super::resource::{DataRoutes, Direction, PullCaches, Resource};
-use super::tables::{NodeId, Route, RoutingExpr, Tables};
+use super::tables::{NodeId, Route, RoutingExpr, Tables, TablesLock};
+use crate::net::routing::dispatcher::face::Face;
 use crate::net::routing::RoutingContext;
 use std::sync::Arc;
 use std::sync::RwLock;
@@ -199,14 +200,14 @@ macro_rules! inc_stats {
 
 #[allow(clippy::too_many_arguments)]
 pub fn full_reentrant_route_data(
-    tables_ref: &RwLock<Tables>,
+    tables_ref: &Arc<TablesLock>,
     face: &FaceState,
     expr: &WireExpr,
     ext_qos: ext::QoSType,
     mut payload: PushBody,
     routing_context: NodeId,
 ) {
-    let tables = zread!(tables_ref);
+    let tables = zread!(tables_ref.tables);
     match tables.get_mapping(face, &expr.scope, expr.mapping).cloned() {
         Some(prefix) => {
             log::trace!(
@@ -249,7 +250,7 @@ pub fn full_reentrant_route_data(
                                 inc_stats!(face, tx, admin, payload)
                             }
 
-                            outface.primitives.send_push(RoutingContext::with_expr(
+                            outface.primitives.send_push(RoutingContext::new_out(
                                 Push {
                                     wire_expr: key_expr.into(),
                                     ext_qos,
@@ -257,7 +258,10 @@ pub fn full_reentrant_route_data(
                                     ext_nodeid: ext::NodeIdType { node_id: *context },
                                     payload,
                                 },
-                                expr.full_expr().to_string(),
+                                Face {
+                                    tables: tables_ref.clone(),
+                                    state: outface.clone(),
+                                },
                             ))
                         }
                     } else {
@@ -287,7 +291,7 @@ pub fn full_reentrant_route_data(
                                     inc_stats!(face, tx, admin, payload)
                                 }
 
-                                outface.primitives.send_push(RoutingContext::with_expr(
+                                outface.primitives.send_push(RoutingContext::new_out(
                                     Push {
                                         wire_expr: key_expr,
                                         ext_qos,
@@ -295,7 +299,10 @@ pub fn full_reentrant_route_data(
                                         ext_nodeid: ext::NodeIdType { node_id: context },
                                         payload: payload.clone(),
                                     },
-                                    expr.full_expr().to_string(),
+                                    Face {
+                                        tables: tables_ref.clone(),
+                                        state: outface.clone(),
+                                    },
                                 ))
                             }
                         } else {
@@ -317,7 +324,7 @@ pub fn full_reentrant_route_data(
                                         inc_stats!(face, tx, admin, payload)
                                     }
 
-                                    outface.primitives.send_push(RoutingContext::with_expr(
+                                    outface.primitives.send_push(RoutingContext::new_out(
                                         Push {
                                             wire_expr: key_expr.into(),
                                             ext_qos,
@@ -325,7 +332,10 @@ pub fn full_reentrant_route_data(
                                             ext_nodeid: ext::NodeIdType { node_id: *context },
                                             payload: payload.clone(),
                                         },
-                                        expr.full_expr().to_string(),
+                                        Face {
+                                            tables: tables_ref.clone(),
+                                            state: outface.clone(),
+                                        },
                                     ))
                                 }
                             }
