@@ -27,18 +27,13 @@ use crate::net::primitives::EPrimitives;
 use crate::net::primitives::McastMux;
 use crate::net::primitives::Mux;
 use crate::net::routing::interceptor::IngressIntercept;
-use std::any::Any;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::{Mutex, RwLock};
 use uhlc::HLC;
 use zenoh_config::Config;
-use zenoh_link::Link;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
-use zenoh_protocol::network::{NetworkBody, NetworkMessage};
-use zenoh_transport::{
-    TransportMulticast, TransportPeer, TransportPeerEventHandler, TransportUnicast,
-};
+use zenoh_transport::{TransportMulticast, TransportPeer, TransportUnicast};
 // use zenoh_collections::Timer;
 use zenoh_result::ZResult;
 
@@ -106,10 +101,7 @@ impl Router {
         Arc::new(face)
     }
 
-    pub fn new_transport_unicast(
-        &self,
-        transport: TransportUnicast,
-    ) -> ZResult<Arc<LinkStateInterceptor>> {
+    pub fn new_transport_unicast(&self, transport: TransportUnicast) -> ZResult<Arc<DeMux>> {
         let ctrl_lock = zlock!(self.tables.ctrl_lock);
         let mut tables = zwrite!(self.tables.tables);
 
@@ -162,12 +154,7 @@ impl Router {
 
         ctrl_lock.new_transport_unicast_face(&mut tables, &self.tables, &mut face, &transport)?;
 
-        Ok(Arc::new(LinkStateInterceptor::new(
-            transport.clone(),
-            self.tables.clone(),
-            face,
-            ingress,
-        )))
+        Ok(Arc::new(DeMux::new(face, Some(transport), ingress)))
     }
 
     pub fn new_transport_multicast(&self, transport: TransportMulticast) -> ZResult<()> {
@@ -240,59 +227,8 @@ impl Router {
                 tables: self.tables.clone(),
                 state: face_state,
             },
+            None,
             intercept,
         )))
-    }
-}
-
-pub struct LinkStateInterceptor {
-    pub(crate) transport: TransportUnicast,
-    pub(crate) tables: Arc<TablesLock>,
-    pub(crate) demux: DeMux,
-}
-
-impl LinkStateInterceptor {
-    fn new(
-        transport: TransportUnicast,
-        tables: Arc<TablesLock>,
-        face: Face,
-        ingress: IngressIntercept,
-    ) -> Self {
-        LinkStateInterceptor {
-            transport,
-            tables,
-            demux: DeMux::new(face, ingress),
-        }
-    }
-}
-
-impl TransportPeerEventHandler for LinkStateInterceptor {
-    fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
-        log::trace!("Recv {:?}", msg);
-        match msg.body {
-            NetworkBody::OAM(oam) => {
-                let ctrl_lock = zlock!(self.tables.ctrl_lock);
-                let mut tables = zwrite!(self.tables.tables);
-                ctrl_lock.handle_oam(&mut tables, &self.tables, oam, &self.transport)
-            }
-            _ => self.demux.handle_message(msg),
-        }
-    }
-
-    fn new_link(&self, _link: Link) {}
-
-    fn del_link(&self, _link: Link) {}
-
-    fn closing(&self) {
-        self.demux.closing();
-        let ctrl_lock = zlock!(self.tables.ctrl_lock);
-        let mut tables = zwrite!(self.tables.tables);
-        let _ = ctrl_lock.closing(&mut tables, &self.tables, &self.transport);
-    }
-
-    fn closed(&self) {}
-
-    fn as_any(&self) -> &dyn Any {
-        self
     }
 }

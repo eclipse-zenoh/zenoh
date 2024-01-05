@@ -373,6 +373,7 @@ impl HatBaseTrait for HatCode {
         Ok(())
     }
 
+    #[inline]
     fn map_routing_context(
         &self,
         tables: &Tables,

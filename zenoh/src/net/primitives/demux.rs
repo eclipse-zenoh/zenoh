@@ -17,20 +17,30 @@ use std::any::Any;
 use zenoh_link::Link;
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::ZResult;
-use zenoh_transport::TransportPeerEventHandler;
+use zenoh_transport::{TransportPeerEventHandler, TransportUnicast};
 
 pub struct DeMux {
     face: Face,
+    pub(crate) transport: Option<TransportUnicast>,
     pub(crate) intercept: IngressIntercept,
 }
 
 impl DeMux {
-    pub(crate) fn new(face: Face, intercept: IngressIntercept) -> Self {
-        Self { face, intercept }
+    pub(crate) fn new(
+        face: Face,
+        transport: Option<TransportUnicast>,
+        intercept: IngressIntercept,
+    ) -> Self {
+        Self {
+            face,
+            transport,
+            intercept,
+        }
     }
 }
 
 impl TransportPeerEventHandler for DeMux {
+    #[inline]
     fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
         let ctx = RoutingContext::with_face(msg, self.face.clone());
         let ctx = match self.intercept.intercept(ctx) {
@@ -39,8 +49,8 @@ impl TransportPeerEventHandler for DeMux {
         };
 
         match ctx.msg.body {
-            NetworkBody::Declare(m) => self.face.send_declare(m),
             NetworkBody::Push(m) => self.face.send_push(m),
+            NetworkBody::Declare(m) => self.face.send_declare(m),
             NetworkBody::Request(m) => self.face.send_request(m),
             NetworkBody::Response(m) => self.face.send_response(m),
             NetworkBody::ResponseFinal(m) => self.face.send_response_final(m),
@@ -65,6 +75,11 @@ impl TransportPeerEventHandler for DeMux {
 
     fn closing(&self) {
         self.face.send_close();
+        if let Some(transport) = self.transport.as_ref() {
+            let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
+            let mut tables = zwrite!(self.face.tables.tables);
+            let _ = ctrl_lock.closing(&mut tables, &self.face.tables, transport);
+        }
     }
 
     fn closed(&self) {}

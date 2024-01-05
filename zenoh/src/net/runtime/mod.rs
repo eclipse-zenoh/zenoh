@@ -22,7 +22,7 @@ pub mod orchestrator;
 
 use super::primitives::DeMux;
 use super::routing;
-use super::routing::router::{LinkStateInterceptor, Router};
+use super::routing::router::Router;
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
 use crate::GIT_VERSION;
 pub use adminspace::AdminSpace;
@@ -236,7 +236,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 pub(super) struct RuntimeSession {
     pub(super) runtime: Runtime,
     pub(super) endpoint: std::sync::RwLock<Option<EndPoint>>,
-    pub(super) main_handler: Arc<LinkStateInterceptor>,
+    pub(super) main_handler: Arc<DeMux>,
     pub(super) slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>>,
 }
 

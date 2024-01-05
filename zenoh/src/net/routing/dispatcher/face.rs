@@ -156,6 +156,7 @@ impl Primitives for Face {
         drop(ctrl_lock);
     }
 
+    #[inline]
     fn send_push(&self, msg: Push) {
         full_reentrant_route_data(
             &self.tables.tables,
