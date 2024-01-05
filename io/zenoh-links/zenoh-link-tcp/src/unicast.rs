@@ -127,11 +127,15 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     }
 
     async fn read_exact(&self, buffer: &mut [u8]) -> ZResult<()> {
-        let _ = self.get_mut_socket().read_exact(buffer).await.map_err(|e| {
-            let e = zerror!("Read error on TCP link {}: {}", self, e);
-            log::trace!("{}", e);
-            e
-        });
+        let _ = self
+            .get_mut_socket()
+            .read_exact(buffer)
+            .await
+            .map_err(|e| {
+                let e = zerror!("Read error on TCP link {}: {}", self, e);
+                log::trace!("{}", e);
+                e
+            })?;
         Ok(())
     }
 
