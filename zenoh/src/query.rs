@@ -16,6 +16,8 @@
 
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::prelude::*;
+#[zenoh_macros::unstable]
+use crate::sample::Attachment;
 use crate::Session;
 use std::collections::HashMap;
 use std::future::Ready;
@@ -126,6 +128,8 @@ pub struct GetBuilder<'a, 'b, Handler> {
     pub(crate) timeout: Duration,
     pub(crate) handler: Handler,
     pub(crate) value: Option<Value>,
+    #[cfg(feature = "unstable")]
+    pub(crate) attachment: Option<Attachment>,
 }
 
 impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
@@ -159,6 +163,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             destination,
             timeout,
             value,
+            #[cfg(feature = "unstable")]
+            attachment,
             handler: _,
         } = self;
         GetBuilder {
@@ -170,6 +176,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             destination,
             timeout,
             value,
+            #[cfg(feature = "unstable")]
+            attachment,
             handler: callback,
         }
     }
@@ -238,6 +246,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             destination,
             timeout,
             value,
+            #[cfg(feature = "unstable")]
+            attachment,
             handler: _,
         } = self;
         GetBuilder {
@@ -249,6 +259,8 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
             destination,
             timeout,
             value,
+            #[cfg(feature = "unstable")]
+            attachment,
             handler,
         }
     }
@@ -294,6 +306,12 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         self
     }
 
+    #[zenoh_macros::unstable]
+    pub fn with_attachment(mut self, attachment: Attachment) -> Self {
+        self.attachment = Some(attachment);
+        self
+    }
+
     /// By default, `get` guarantees that it will only receive replies whose key expressions intersect
     /// with the queried key expression.
     ///
@@ -310,6 +328,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
             destination,
             timeout,
             value,
+            attachment,
             handler,
         } = self;
         Self {
@@ -321,6 +340,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
             destination,
             timeout,
             value,
+            attachment,
             handler,
         }
     }
@@ -369,6 +389,8 @@ where
                 self.destination,
                 self.timeout,
                 self.value,
+                #[cfg(feature = "unstable")]
+                self.attachment,
                 callback,
             )
             .map(|_| receiver)

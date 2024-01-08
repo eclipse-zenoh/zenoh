@@ -35,21 +35,27 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &FrameHeader) -> Self::Output {
+        let FrameHeader {
+            reliability,
+            sn,
+            ext_qos,
+        } = x;
+
         // Header
         let mut header = id::FRAME;
-        if let Reliability::Reliable = x.reliability {
+        if let Reliability::Reliable = reliability {
             header |= flag::R;
         }
-        if x.ext_qos != ext::QoSType::default() {
+        if ext_qos != &ext::QoSType::default() {
             header |= flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.sn)?;
+        self.write(&mut *writer, sn)?;
 
         // Extensions
-        if x.ext_qos != ext::QoSType::default() {
+        if ext_qos != &ext::QoSType::default() {
             self.write(&mut *writer, (x.ext_qos, false))?;
         }
 
@@ -122,16 +128,23 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Frame) -> Self::Output {
+        let Frame {
+            reliability,
+            sn,
+            payload,
+            ext_qos,
+        } = x;
+
         // Header
         let header = FrameHeader {
-            reliability: x.reliability,
-            sn: x.sn,
-            ext_qos: x.ext_qos,
+            reliability: *reliability,
+            sn: *sn,
+            ext_qos: *ext_qos,
         };
         self.write(&mut *writer, &header)?;
 
         // Body
-        for m in x.payload.iter() {
+        for m in payload.iter() {
             self.write(&mut *writer, m)?;
         }
 

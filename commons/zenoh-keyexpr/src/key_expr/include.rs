@@ -47,7 +47,10 @@ impl Includer<&[u8], &[u8]> for LTRIncluder {
                 }
             } else {
                 let (rchunk, rrest) = right.split_once(&DELIMITER);
-                if rchunk.is_empty() || !self.non_double_wild_chunk_includes(lchunk, rchunk) {
+                if rchunk.is_empty()
+                    || rchunk == DOUBLE_WILD
+                    || !self.non_double_wild_chunk_includes(lchunk, rchunk)
+                {
                     return false;
                 }
                 let rempty = rrest.is_empty();

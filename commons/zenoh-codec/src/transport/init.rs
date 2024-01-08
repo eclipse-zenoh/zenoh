@@ -53,7 +53,7 @@ where
 
         // Header
         let mut header = id::INIT;
-        if *resolution != Resolution::default() || *batch_size != batch_size::UNICAST {
+        if resolution != &Resolution::default() || batch_size != &batch_size::UNICAST {
             header |= flag::S;
         }
         let mut n_exts = (ext_qos.is_some() as u8)
@@ -253,7 +253,7 @@ where
 
         // Header
         let mut header = id::INIT | flag::A;
-        if *resolution != Resolution::default() || *batch_size != batch_size::UNICAST {
+        if resolution != &Resolution::default() || batch_size != &batch_size::UNICAST {
             header |= flag::S;
         }
         let mut n_exts = (ext_qos.is_some() as u8)

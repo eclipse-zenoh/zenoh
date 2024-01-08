@@ -752,6 +752,8 @@ where
                 Locality::default(),
                 self.timeout,
                 None,
+                #[cfg(feature = "unstable")]
+                None,
                 callback,
             )
             .map(|_| receiver)

@@ -28,6 +28,8 @@ use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
 use crate::query::*;
 use crate::queryable::*;
+#[cfg(feature = "unstable")]
+use crate::sample::Attachment;
 use crate::sample::DataInfo;
 use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
@@ -721,6 +723,8 @@ impl Session {
             publisher: self.declare_publisher(key_expr),
             value: value.into(),
             kind: SampleKind::Put,
+            #[cfg(feature = "unstable")]
+            attachment: None,
         }
     }
 
@@ -752,6 +756,8 @@ impl Session {
             publisher: self.declare_publisher(key_expr),
             value: Value::empty(),
             kind: SampleKind::Delete,
+            #[cfg(feature = "unstable")]
+            attachment: None,
         }
     }
     /// Query data from the matching queryables in the system.
@@ -797,6 +803,8 @@ impl Session {
             destination: Locality::default(),
             timeout,
             value: None,
+            #[cfg(feature = "unstable")]
+            attachment: None,
             handler: DefaultHandler,
         }
     }
@@ -1506,10 +1514,23 @@ impl Session {
             &mut RoutingExpr::new(&tables.root_res, key_expr.as_str()),
             0,
         );
+        drop(tables);
         let matching = match destination {
             Locality::Any => !route.is_empty(),
-            Locality::Remote => route.values().any(|dir| !dir.0.is_local()),
-            Locality::SessionLocal => route.values().any(|dir| dir.0.is_local()),
+            Locality::Remote => {
+                if let Some(face) = zread!(self.state).primitives.as_ref() {
+                    route.values().any(|dir| !Arc::ptr_eq(&dir.0, &face.state))
+                } else {
+                    !route.is_empty()
+                }
+            }
+            Locality::SessionLocal => {
+                if let Some(face) = zread!(self.state).primitives.as_ref() {
+                    route.values().any(|dir| Arc::ptr_eq(&dir.0, &face.state))
+                } else {
+                    false
+                }
+            }
         };
         Ok(MatchingStatus { matching })
     }
@@ -1597,6 +1618,7 @@ impl Session {
         key_expr: &WireExpr,
         info: Option<DataInfo>,
         payload: ZBuf,
+        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
     ) {
         let mut callbacks = SingleOrVec::default();
         let state = zread!(self.state);
@@ -1697,10 +1719,22 @@ impl Session {
         drop(state);
         let zenoh_collections::single_or_vec::IntoIter { drain, last } = callbacks.into_iter();
         for (cb, key_expr) in drain {
-            cb(Sample::with_info(key_expr, payload.clone(), info.clone()));
+            #[allow(unused_mut)]
+            let mut sample = Sample::with_info(key_expr, payload.clone(), info.clone());
+            #[cfg(feature = "unstable")]
+            {
+                sample.attachment = attachment.clone();
+            }
+            cb(sample);
         }
         if let Some((cb, key_expr)) = last {
-            cb(Sample::with_info(key_expr, payload, info));
+            #[allow(unused_mut)]
+            let mut sample = Sample::with_info(key_expr, payload, info);
+            #[cfg(feature = "unstable")]
+            {
+                sample.attachment = attachment;
+            }
+            cb(sample);
         }
     }
 
@@ -1737,6 +1771,7 @@ impl Session {
         destination: Locality,
         timeout: Duration,
         value: Option<Value>,
+        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
         callback: Callback<'static, Reply>,
     ) -> ZResult<()> {
         log::trace!("get({}, {:?}, {:?})", selector, target, consolidation);
@@ -1804,6 +1839,14 @@ impl Session {
 
         drop(state);
         if destination != Locality::SessionLocal {
+            #[allow(unused_mut)]
+            let mut ext_attachment = None;
+            #[cfg(feature = "unstable")]
+            {
+                if let Some(attachment) = attachment.clone() {
+                    ext_attachment = Some(attachment.into());
+                }
+            }
             primitives.send_request(Request {
                 id: qid,
                 wire_expr: wexpr.clone(),
@@ -1823,6 +1866,7 @@ impl Session {
                         encoding: v.encoding.clone(),
                         payload: v.payload.clone(),
                     }),
+                    ext_attachment,
                     ext_unknown: vec![],
                 }),
             });
@@ -1841,6 +1885,8 @@ impl Session {
                     encoding: v.encoding.clone(),
                     payload: v.payload.clone(),
                 }),
+                #[cfg(feature = "unstable")]
+                attachment,
             );
         }
         Ok(())
@@ -1856,6 +1902,7 @@ impl Session {
         _target: TargetType,
         _consolidation: ConsolidationType,
         body: Option<QueryBodyType>,
+        #[cfg(feature = "unstable")] attachment: Option<Attachment>,
     ) {
         let (primitives, key_expr, callbacks) = {
             let state = zread!(self.state);
@@ -1916,6 +1963,8 @@ impl Session {
                 } else {
                     primitives
                 },
+                #[cfg(feature = "unstable")]
+                attachment,
             }),
         };
         for callback in callbacks.iter() {
@@ -2114,7 +2163,14 @@ impl Primitives for Session {
                                 .starts_with(crate::liveliness::PREFIX_LIVELINESS)
                             {
                                 drop(state);
-                                self.handle_data(false, &m.wire_expr, None, ZBuf::default());
+                                self.handle_data(
+                                    false,
+                                    &m.wire_expr,
+                                    None,
+                                    ZBuf::default(),
+                                    #[cfg(feature = "unstable")]
+                                    None,
+                                );
                             }
                         }
                         Err(err) => {
@@ -2146,6 +2202,8 @@ impl Primitives for Session {
                                     &m.ext_wire_expr.wire_expr,
                                     Some(data_info),
                                     ZBuf::default(),
+                                    #[cfg(feature = "unstable")]
+                                    None,
                                 );
                             }
                         }
@@ -2180,7 +2238,14 @@ impl Primitives for Session {
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
-                self.handle_data(false, &msg.wire_expr, Some(info), m.payload)
+                self.handle_data(
+                    false,
+                    &msg.wire_expr,
+                    Some(info),
+                    m.payload,
+                    #[cfg(feature = "unstable")]
+                    m.ext_attachment.map(Into::into),
+                )
             }
             PushBody::Del(m) => {
                 let info = DataInfo {
@@ -2190,7 +2255,14 @@ impl Primitives for Session {
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
-                self.handle_data(false, &msg.wire_expr, Some(info), ZBuf::empty())
+                self.handle_data(
+                    false,
+                    &msg.wire_expr,
+                    Some(info),
+                    ZBuf::empty(),
+                    #[cfg(feature = "unstable")]
+                    m.ext_attachment.map(Into::into),
+                )
             }
         }
     }
@@ -2206,6 +2278,8 @@ impl Primitives for Session {
                 msg.ext_target,
                 m.ext_consolidation,
                 m.ext_body,
+                #[cfg(feature = "unstable")]
+                m.ext_attachment.map(Into::into),
             ),
             RequestBody::Put(_) => (),
             RequestBody::Del(_) => (),
@@ -2317,12 +2391,15 @@ impl Primitives for Session {
                             source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                             source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                         };
+                        #[allow(unused_mut)]
+                        let mut sample =
+                            Sample::with_info(key_expr.into_owned(), m.payload, Some(info));
+                        #[cfg(feature = "unstable")]
+                        {
+                            sample.attachment = m.ext_attachment.map(Into::into);
+                        }
                         let new_reply = Reply {
-                            sample: Ok(Sample::with_info(
-                                key_expr.into_owned(),
-                                m.payload,
-                                Some(info),
-                            )),
+                            sample: Ok(sample),
                             replier_id: ZenohId::rand(), // TODO
                         };
                         let callback =

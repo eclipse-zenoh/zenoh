@@ -387,13 +387,17 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
         let Some(i) = segments.iter().position(|s| s.spec.id() == id) else {
             return Err(FormatSetError::InvalidId);
         };
-        if let Some((start, end)) = self.values.as_ref()[i] {
+        let values = self.values.as_mut();
+        if let Some((start, end)) = values[i].take() {
             let end = end.get();
             let shift = end - start;
             self.buffer.replace_range(start as usize..end as usize, "");
-            for (start, end) in self.values.as_mut()[(i + 1)..].iter_mut().flatten() {
-                *start -= shift;
-                *end = NonZeroU32::new(end.get() - shift).unwrap()
+            for (s, e) in values.iter_mut().flatten() {
+                if *s < start {
+                    continue;
+                }
+                *s -= shift;
+                *e = NonZeroU32::new(e.get() - shift).unwrap()
             }
         }
         let pattern = segments[i].spec.pattern();
@@ -401,18 +405,18 @@ impl<'s, Storage: IKeFormatStorage<'s>> KeFormatter<'s, Storage> {
         write!(&mut self.buffer, "{value}").unwrap(); // Writing on `&mut String` should be infallible.
         match (|| {
             let end = self.buffer.len();
-            if !(end == start && pattern.as_str() == "**") {
+            if pattern.as_str() != "**" {
                 let Ok(ke) = keyexpr::new(&self.buffer[start..end]) else {
                     return Err(());
                 };
-                if end > u32::MAX as usize || !pattern.includes(ke) {
+                if !pattern.includes(ke) {
                     return Err(());
                 }
             }
-            self.values.as_mut()[i] = Some((start as u32, unsafe {
-                // `end` must be >0 for self.buffer[start..end] to be a keyexpr
-                NonZeroU32::new_unchecked(end as u32)
-            }));
+            values[i] = Some((
+                start as u32,
+                NonZeroU32::new(end.try_into().map_err(|_| ())?).ok_or(())?,
+            ));
             Ok(())
         })() {
             Ok(()) => Ok(self),

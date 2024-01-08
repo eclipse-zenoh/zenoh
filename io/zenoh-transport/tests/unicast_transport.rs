@@ -476,11 +476,13 @@ async fn test_transport(
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
+            ext_attachment: None,
             ext_unknown: vec![],
         }
         .into(),
     }
     .into();
+
     for _ in 0..MSG_COUNT {
         let _ = client_transport.schedule(message.clone());
     }

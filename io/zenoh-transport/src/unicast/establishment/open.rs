@@ -14,9 +14,13 @@
 #[cfg(feature = "shared-memory")]
 use crate::unicast::shared_memory_unicast::Challenge;
 use crate::{
+    common::batch::BatchConfig,
     unicast::{
-        establishment::{compute_sn, ext, finalize_transport, InputFinalize, OpenFsm},
-        link::{TransportLinkUnicast, TransportLinkUnicastConfig, TransportLinkUnicastDirection},
+        establishment::{compute_sn, ext, OpenFsm},
+        link::{
+            LinkUnicastWithOpenAck, TransportLinkUnicast, TransportLinkUnicastConfig,
+            TransportLinkUnicastDirection,
+        },
         TransportConfigUnicast, TransportUnicast,
     },
     TransportManager,
@@ -511,11 +515,15 @@ pub(crate) async fn open_link(
     link: LinkUnicast,
     manager: &TransportManager,
 ) -> ZResult<TransportUnicast> {
+    let is_streamed = link.is_streamed();
     let config = TransportLinkUnicastConfig {
         direction: TransportLinkUnicastDirection::Outbound,
-        mtu: link.get_mtu(),
-        #[cfg(feature = "transport_compression")]
-        is_compression: false, // Perform the exchange Init/Open exchange with no compression
+        batch: BatchConfig {
+            mtu: link.get_mtu(),
+            is_streamed,
+            #[cfg(feature = "transport_compression")]
+            is_compression: false, // Perform the exchange Init/Open exchange with no compression
+        },
     };
     let mut link = TransportLinkUnicast::new(link, config);
     let mut fsm = OpenLink {
@@ -537,7 +545,7 @@ pub(crate) async fn open_link(
                 .config
                 .batch_size
                 .min(batch_size::UNICAST)
-                .min(link.config.mtu),
+                .min(link.config.batch.mtu),
             resolution: manager.config.resolution,
             ext_qos: ext::qos::StateOpen::new(manager.config.unicast.is_qos),
             #[cfg(feature = "transport_multilink")]
@@ -616,32 +624,25 @@ pub(crate) async fn open_link(
     };
 
     let o_config = TransportLinkUnicastConfig {
-        mtu: state.transport.batch_size,
         direction: TransportLinkUnicastDirection::Outbound,
-        #[cfg(feature = "transport_compression")]
-        is_compression: state.link.ext_compression.is_compression(),
+        batch: BatchConfig {
+            mtu: state.transport.batch_size,
+            is_streamed,
+            #[cfg(feature = "transport_compression")]
+            is_compression: state.link.ext_compression.is_compression(),
+        },
     };
-    let o_link = TransportLinkUnicast::new(link.link.clone(), o_config);
+    let o_link = link.reconfigure(o_config);
     let s_link = format!("{:?}", o_link);
-    let transport = step!(manager.init_transport_unicast(config, o_link).await);
-
-    // Sync the RX sequence number
-    let _ = step!(transport
-        .get_inner()
-        .map_err(|e| (e, Some(close::reason::INVALID))))
-    .sync(oack_out.other_initial_sn)
-    .await;
-
-    let output = InputFinalize {
-        transport,
-        other_lease: oack_out.other_lease,
-    };
-    let transport = output.transport.clone();
-    let res = finalize_transport(&link, manager, output).await;
-    if let Err(e) = res {
-        let _ = transport.close().await;
-        return Err(e);
-    }
+    let o_link = LinkUnicastWithOpenAck::new(o_link, None);
+    let transport = manager
+        .init_transport_unicast(
+            config,
+            o_link,
+            oack_out.other_initial_sn,
+            oack_out.other_lease,
+        )
+        .await?;
 
     log::debug!(
         "New transport link opened from {} to {}: {}.",

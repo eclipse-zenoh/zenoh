@@ -16,7 +16,7 @@ use super::transport::TransportUnicastUniversal;
 use crate::common::stats::TransportStats;
 use crate::{
     common::{
-        batch::RBatch,
+        batch::{BatchConfig, RBatch},
         pipeline::{
             TransmissionPipeline, TransmissionPipelineConf, TransmissionPipelineConsumer,
             TransmissionPipelineProducer,
@@ -29,105 +29,122 @@ use crate::{
 use async_std::prelude::FutureExt;
 use async_std::task;
 use async_std::task::JoinHandle;
-use std::{sync::Arc, time::Duration};
+use std::{
+    sync::{Arc, RwLock},
+    time::Duration,
+};
 use zenoh_buffers::ZSliceBuffer;
+use zenoh_core::zwrite;
 use zenoh_protocol::transport::{KeepAlive, TransportMessage};
 use zenoh_result::{zerror, ZResult};
 use zenoh_sync::{RecyclingObject, RecyclingObjectPool, Signal};
+
+pub(super) struct Tasks {
+    // The handlers to stop TX/RX tasks
+    handle_tx: RwLock<Option<async_executor::Task<()>>>,
+    signal_rx: Signal,
+    handle_rx: RwLock<Option<JoinHandle<()>>>,
+}
 
 #[derive(Clone)]
 pub(super) struct TransportLinkUnicastUniversal {
     // The underlying link
     pub(super) link: TransportLinkUnicast,
     // The transmission pipeline
-    pub(super) pipeline: Option<TransmissionPipelineProducer>,
-    // The transport this link is associated to
-    transport: TransportUnicastUniversal,
-    // The signals to stop TX/RX tasks
-    handle_tx: Option<Arc<async_executor::Task<()>>>,
-    signal_rx: Signal,
-    handle_rx: Option<Arc<JoinHandle<()>>>,
+    pub(super) pipeline: TransmissionPipelineProducer,
+    // The task handling substruct
+    tasks: Arc<Tasks>,
 }
 
 impl TransportLinkUnicastUniversal {
-    pub(super) fn new(transport: TransportUnicastUniversal, link: TransportLinkUnicast) -> Self {
-        Self {
-            link,
-            pipeline: None,
-            transport,
-            handle_tx: None,
+    pub(super) fn new(
+        transport: &TransportUnicastUniversal,
+        link: TransportLinkUnicast,
+        priority_tx: &[TransportPriorityTx],
+    ) -> (Self, TransmissionPipelineConsumer) {
+        assert!(!priority_tx.is_empty());
+
+        let config = TransmissionPipelineConf {
+            batch: BatchConfig {
+                mtu: link.config.batch.mtu,
+                is_streamed: link.link.is_streamed(),
+                #[cfg(feature = "transport_compression")]
+                is_compression: link.config.batch.is_compression,
+            },
+            queue_size: transport.manager.config.queue_size,
+            backoff: transport.manager.config.queue_backoff,
+        };
+
+        // The pipeline
+        let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
+
+        let tasks = Arc::new(Tasks {
+            handle_tx: RwLock::new(None),
             signal_rx: Signal::new(),
-            handle_rx: None,
-        }
+            handle_rx: RwLock::new(None),
+        });
+
+        let result = Self {
+            link,
+            pipeline: producer,
+            tasks,
+        };
+
+        (result, consumer)
     }
 }
 
 impl TransportLinkUnicastUniversal {
     pub(super) fn start_tx(
         &mut self,
+        transport: TransportUnicastUniversal,
+        consumer: TransmissionPipelineConsumer,
         executor: &TransportExecutor,
         keep_alive: Duration,
-        priority_tx: &[TransportPriorityTx],
     ) {
-        if self.handle_tx.is_none() {
-            let config = TransmissionPipelineConf {
-                is_streamed: self.link.link.is_streamed(),
-                #[cfg(feature = "transport_compression")]
-                is_compression: self.link.config.is_compression,
-                batch_size: self.link.config.mtu,
-                queue_size: self.transport.manager.config.queue_size,
-                backoff: self.transport.manager.config.queue_backoff,
-            };
-
-            // The pipeline
-            let (producer, consumer) = TransmissionPipeline::make(config, priority_tx);
-            self.pipeline = Some(producer);
-
+        let mut guard = zwrite!(self.tasks.handle_tx);
+        if guard.is_none() {
             // Spawn the TX task
-            let c_link = self.link.clone();
-            let c_transport = self.transport.clone();
+            let mut tx = self.link.tx();
             let handle = executor.spawn(async move {
                 let res = tx_task(
                     consumer,
-                    c_link.tx(),
+                    &mut tx,
                     keep_alive,
                     #[cfg(feature = "stats")]
-                    c_transport.stats.clone(),
+                    transport.stats.clone(),
                 )
                 .await;
                 if let Err(e) = res {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link(&c_link).await });
+                    task::spawn(async move { transport.del_link(tx.inner.link()).await });
                 }
             });
-            self.handle_tx = Some(Arc::new(handle));
+            *guard = Some(handle);
         }
     }
 
     pub(super) fn stop_tx(&mut self) {
-        if let Some(pl) = self.pipeline.as_ref() {
-            pl.disable();
-        }
+        self.pipeline.disable();
     }
 
-    pub(super) fn start_rx(&mut self, lease: Duration) {
-        if self.handle_rx.is_none() {
+    pub(super) fn start_rx(&mut self, transport: TransportUnicastUniversal, lease: Duration) {
+        let mut guard = zwrite!(self.tasks.handle_rx);
+        if guard.is_none() {
             // Spawn the RX task
-            let c_link = self.link.clone();
-            let c_transport = self.transport.clone();
-            let c_signal = self.signal_rx.clone();
-            let c_rx_buffer_size = self.transport.manager.config.link_rx_buffer_size;
+            let mut rx = self.link.rx();
+            let c_signal = self.tasks.signal_rx.clone();
 
             let handle = task::spawn(async move {
                 // Start the consume task
                 let res = rx_task(
-                    c_link.rx(),
-                    c_transport.clone(),
+                    &mut rx,
+                    transport.clone(),
                     lease,
                     c_signal.clone(),
-                    c_rx_buffer_size,
+                    transport.manager.config.link_rx_buffer_size,
                 )
                 .await;
                 c_signal.trigger();
@@ -135,31 +152,30 @@ impl TransportLinkUnicastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    task::spawn(async move { c_transport.del_link(&c_link).await });
+                    task::spawn(async move { transport.del_link((&rx.link).into()).await });
                 }
             });
-            self.handle_rx = Some(Arc::new(handle));
+            *guard = Some(handle);
         }
     }
 
     pub(super) fn stop_rx(&mut self) {
-        self.signal_rx.trigger();
+        self.tasks.signal_rx.trigger();
     }
 
     pub(super) async fn close(mut self) -> ZResult<()> {
         log::trace!("{}: closing", self.link);
+        self.stop_tx();
         self.stop_rx();
-        if let Some(handle) = self.handle_rx.take() {
-            // SAFETY: it is safe to unwrap the Arc since we have the ownership of the whole link
-            let handle_rx = Arc::try_unwrap(handle).unwrap();
-            handle_rx.await;
+
+        let handle_tx = zwrite!(self.tasks.handle_tx).take();
+        if let Some(handle) = handle_tx {
+            handle.await;
         }
 
-        self.stop_tx();
-        if let Some(handle) = self.handle_tx.take() {
-            // SAFETY: it is safe to unwrap the Arc since we have the ownership of the whole link
-            let handle_tx = Arc::try_unwrap(handle).unwrap();
-            handle_tx.await;
+        let handle_rx = zwrite!(self.tasks.handle_rx).take();
+        if let Some(handle) = handle_rx {
+            handle.await;
         }
 
         self.link.close(None).await
@@ -171,7 +187,7 @@ impl TransportLinkUnicastUniversal {
 /*************************************/
 async fn tx_task(
     mut pipeline: TransmissionPipelineConsumer,
-    mut link: TransportLinkUnicastTx,
+    link: &mut TransportLinkUnicastTx,
     keep_alive: Duration,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
@@ -184,7 +200,7 @@ async fn tx_task(
                     #[cfg(feature = "stats")]
                     {
                         stats.inc_tx_t_msgs(batch.stats.t_msgs);
-                        stats.inc_tx_bytes(bytes.len());
+                        stats.inc_tx_bytes(batch.len() as usize);
                     }
 
                     // Reinsert the batch into the queue
@@ -225,7 +241,7 @@ async fn tx_task(
 }
 
 async fn rx_task(
-    mut link: TransportLinkUnicastRx,
+    link: &mut TransportLinkUnicastRx,
     transport: TransportUnicastUniversal,
     lease: Duration,
     signal: Signal,
@@ -257,16 +273,17 @@ async fn rx_task(
     }
 
     // The pool of buffers
-    let mtu = link.inner.config.mtu as usize;
+    let mtu = link.batch.max_buffer_size();
     let mut n = rx_buffer_size / mtu;
     if rx_buffer_size % mtu != 0 {
         n += 1;
     }
 
     let pool = RecyclingObjectPool::new(n, || vec![0_u8; mtu].into_boxed_slice());
+    let l = (&link.link).into();
     while !signal.is_triggered() {
         // Async read from the underlying link
-        let action = read(&mut link, &pool)
+        let action = read(link, &pool)
             .race(stop(signal.clone()))
             .timeout(lease)
             .await
@@ -277,7 +294,7 @@ async fn rx_task(
                 {
                     transport.stats.inc_rx_bytes(2 + n); // Account for the batch len encoding (16 bits)
                 }
-                transport.read_messages(batch, &link.inner)?;
+                transport.read_messages(batch, &l)?;
             }
             Action::Stop => break,
         }
