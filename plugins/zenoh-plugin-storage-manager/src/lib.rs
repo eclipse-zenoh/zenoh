@@ -38,7 +38,6 @@ use zenoh_backend_traits::config::VolumeConfig;
 use zenoh_backend_traits::VolumePlugin;
 use zenoh_core::zlock;
 use zenoh_plugin_trait::Plugin;
-use zenoh_plugin_trait::PluginConditionSetter;
 use zenoh_plugin_trait::PluginControl;
 use zenoh_plugin_trait::PluginReport;
 use zenoh_plugin_trait::PluginStatusRec;
@@ -115,7 +114,6 @@ impl StorageRuntimeInner {
         let plugins_manager = PluginsManager::dynamic(lib_loader.clone(), BACKEND_LIB_PREFIX)
             .declare_static_plugin::<MemoryBackend>();
 
-
         let session = Arc::new(zenoh::init(runtime.clone()).res_sync()?);
 
         // After this moment result should be only Ok. Failure of loading of one voulme or storage should not affect others.
@@ -127,20 +125,24 @@ impl StorageRuntimeInner {
             storages: Default::default(),
             plugins_manager,
         };
-        let _ = new_self.spawn_volume(VolumeConfig {
-            name: MEMORY_BACKEND_NAME.into(),
-            backend: None,
-            paths: None,
-            required: false,
-            rest: Default::default(),
-        });
+        new_self
+            .spawn_volume(VolumeConfig {
+                name: MEMORY_BACKEND_NAME.into(),
+                backend: None,
+                paths: None,
+                required: false,
+                rest: Default::default(),
+            })
+            .map_or_else(|e| log::error!("Cannot spawn memory volume: {}", e), |_| ());
         for volume in volumes {
-            let _ = new_self
-                .spawn_volume(volume);
+            new_self
+                .spawn_volume(volume)
+                .map_or_else(|e| log::error!("Cannot spawn volume: {}", e), |_| ());
         }
         for storage in storages {
-            let _ = new_self
-                .spawn_storage(storage);
+            new_self
+                .spawn_storage(storage)
+                .map_or_else(|e| log::error!("Cannot spawn storage: {}", e), |_| ());
         }
         Ok(new_self)
     }

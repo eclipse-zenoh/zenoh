@@ -18,6 +18,10 @@ version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 
+[features]
+default = ["no_mangle"]
+no_mangle = []
+
 [lib]
 name = "zenoh_backend_example"
 # This crate type will make `cargo` output a dynamic library instead of a rust static library

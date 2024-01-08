@@ -81,7 +81,7 @@ impl FaceState {
         })
     }
 
-    #[cfg(feature = "unstable")]
+    #[allow(dead_code)]
     #[inline]
     pub fn is_local(&self) -> bool {
         self.local

@@ -19,13 +19,14 @@ pub use crate::runtime::Runtime;
 pub use crate::Result as ZResult;
 use zenoh_core::zconfigurable;
 
-use zenoh_plugin_trait::{Plugin, PluginControl, PluginInstance, PluginReport, PluginStatusRec, PluginStructVersion};
+use zenoh_plugin_trait::{
+    Plugin, PluginControl, PluginInstance, PluginReport, PluginStatusRec, PluginStructVersion,
+};
 use zenoh_protocol::core::key_expr::keyexpr;
 
 zconfigurable! {
     pub static ref PLUGIN_PREFIX: String = "zenoh_plugin_".to_string();
 }
-
 /// Zenoh plugins should implement this trait to ensure type-safety, even if the starting arguments and expected plugin types change in a future release.
 pub trait ZenohPlugin: Plugin<StartArgs = StartArgs, Instance = RunningPlugin> {}
 

@@ -31,7 +31,5 @@ pub use plugin::{
 pub use vtable::{Compatibility, PluginLoaderVersion, PluginVTable, PLUGIN_LOADER_VERSION};
 use zenoh_util::concat_enabled_features;
 
-pub const FEATURES: &str = concat_enabled_features!(
-    prefix = "zenoh-plugin-trait",
-    features = ["default"]
-);
+pub const FEATURES: &str =
+    concat_enabled_features!(prefix = "zenoh-plugin-trait", features = ["default"]);
