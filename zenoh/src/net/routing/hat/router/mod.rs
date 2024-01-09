@@ -355,15 +355,13 @@ impl HatBaseTrait for HatCode {
         face: &mut Face,
         transport: &TransportUnicast,
     ) -> ZResult<()> {
-        let link_id = match (tables.whatami, face.state.whatami) {
-            (WhatAmI::Router, WhatAmI::Router) => hat_mut!(tables)
+        let link_id = match face.state.whatami {
+            WhatAmI::Router => hat_mut!(tables)
                 .routers_net
                 .as_mut()
                 .unwrap()
                 .add_link(transport.clone()),
-            (WhatAmI::Router, WhatAmI::Peer)
-            | (WhatAmI::Peer, WhatAmI::Router)
-            | (WhatAmI::Peer, WhatAmI::Peer) => {
+            WhatAmI::Peer => {
                 if let Some(net) = hat_mut!(tables).peers_net.as_mut() {
                     net.add_link(transport.clone())
                 } else {
@@ -384,13 +382,11 @@ impl HatBaseTrait for HatCode {
         pubsub_new_face(tables, &mut face.state);
         queries_new_face(tables, &mut face.state);
 
-        match (tables.whatami, face.state.whatami) {
-            (WhatAmI::Router, WhatAmI::Router) => {
+        match face.state.whatami {
+            WhatAmI::Router => {
                 hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
             }
-            (WhatAmI::Router, WhatAmI::Peer)
-            | (WhatAmI::Peer, WhatAmI::Router)
-            | (WhatAmI::Peer, WhatAmI::Peer) => {
+            WhatAmI::Peer => {
                 if hat_mut!(tables).full_net(WhatAmI::Peer) {
                     hat_mut!(tables).schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
                 }
@@ -528,8 +524,8 @@ impl HatBaseTrait for HatCode {
                     let list: LinkStateList = codec.read(&mut reader).unwrap();
 
                     let whatami = transport.get_whatami()?;
-                    match (tables.whatami, whatami) {
-                        (WhatAmI::Router, WhatAmI::Router) => {
+                    match whatami {
+                        WhatAmI::Router => {
                             for (_, removed_node) in hat_mut!(tables)
                                 .routers_net
                                 .as_mut()
@@ -551,9 +547,7 @@ impl HatBaseTrait for HatCode {
                             hat_mut!(tables)
                                 .schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
                         }
-                        (WhatAmI::Router, WhatAmI::Peer)
-                        | (WhatAmI::Peer, WhatAmI::Router)
-                        | (WhatAmI::Peer, WhatAmI::Peer) => {
+                        WhatAmI::Peer => {
                             if let Some(net) = hat_mut!(tables).peers_net.as_mut() {
                                 let changes = net.link_states(list.link_states, zid);
                                 if hat!(tables).full_net(WhatAmI::Peer) {
@@ -570,12 +564,10 @@ impl HatBaseTrait for HatCode {
                                         );
                                     }
 
-                                    if tables.whatami == WhatAmI::Router {
-                                        hat_mut!(tables).shared_nodes = shared_nodes(
-                                            hat!(tables).routers_net.as_ref().unwrap(),
-                                            hat!(tables).peers_net.as_ref().unwrap(),
-                                        );
-                                    }
+                                    hat_mut!(tables).shared_nodes = shared_nodes(
+                                        hat!(tables).routers_net.as_ref().unwrap(),
+                                        hat!(tables).peers_net.as_ref().unwrap(),
+                                    );
 
                                     hat_mut!(tables)
                                         .schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
@@ -611,26 +603,12 @@ impl HatBaseTrait for HatCode {
         face: &FaceState,
         routing_context: NodeId,
     ) -> NodeId {
-        match tables.whatami {
-            WhatAmI::Router => match face.whatami {
-                WhatAmI::Router => hat!(tables)
-                    .routers_net
-                    .as_ref()
-                    .unwrap()
-                    .get_local_context(routing_context, face_hat!(face).link_id),
-                WhatAmI::Peer => {
-                    if hat!(tables).full_net(WhatAmI::Peer) {
-                        hat!(tables)
-                            .peers_net
-                            .as_ref()
-                            .unwrap()
-                            .get_local_context(routing_context, face_hat!(face).link_id)
-                    } else {
-                        0
-                    }
-                }
-                _ => 0,
-            },
+        match face.whatami {
+            WhatAmI::Router => hat!(tables)
+                .routers_net
+                .as_ref()
+                .unwrap()
+                .get_local_context(routing_context, face_hat!(face).link_id),
             WhatAmI::Peer => {
                 if hat!(tables).full_net(WhatAmI::Peer) {
                     hat!(tables)
@@ -654,8 +632,8 @@ impl HatBaseTrait for HatCode {
     ) -> ZResult<()> {
         match (transport.get_zid(), transport.get_whatami()) {
             (Ok(zid), Ok(whatami)) => {
-                match (tables.whatami, whatami) {
-                    (WhatAmI::Router, WhatAmI::Router) => {
+                match whatami {
+                    WhatAmI::Router => {
                         for (_, removed_node) in hat_mut!(tables)
                             .routers_net
                             .as_mut()
@@ -676,9 +654,7 @@ impl HatBaseTrait for HatCode {
                         hat_mut!(tables)
                             .schedule_compute_trees(tables_ref.clone(), WhatAmI::Router);
                     }
-                    (WhatAmI::Router, WhatAmI::Peer)
-                    | (WhatAmI::Peer, WhatAmI::Router)
-                    | (WhatAmI::Peer, WhatAmI::Peer) => {
+                    WhatAmI::Peer => {
                         if hat!(tables).full_net(WhatAmI::Peer) {
                             for (_, removed_node) in hat_mut!(tables)
                                 .peers_net
@@ -690,12 +666,10 @@ impl HatBaseTrait for HatCode {
                                 queries_remove_node(tables, &removed_node.zid, WhatAmI::Peer);
                             }
 
-                            if tables.whatami == WhatAmI::Router {
-                                hat_mut!(tables).shared_nodes = shared_nodes(
-                                    hat!(tables).routers_net.as_ref().unwrap(),
-                                    hat!(tables).peers_net.as_ref().unwrap(),
-                                );
-                            }
+                            hat_mut!(tables).shared_nodes = shared_nodes(
+                                hat!(tables).routers_net.as_ref().unwrap(),
+                                hat!(tables).peers_net.as_ref().unwrap(),
+                            );
 
                             hat_mut!(tables)
                                 .schedule_compute_trees(tables_ref.clone(), WhatAmI::Peer);
@@ -717,8 +691,7 @@ impl HatBaseTrait for HatCode {
 
     #[inline]
     fn ingress_filter(&self, tables: &Tables, face: &FaceState, expr: &mut RoutingExpr) -> bool {
-        tables.whatami != WhatAmI::Router
-            || face.whatami != WhatAmI::Peer
+        face.whatami != WhatAmI::Peer
             || hat!(tables).peers_net.is_none()
             || tables.zid
                 == *hat!(tables).elect_router(
@@ -742,8 +715,7 @@ impl HatBaseTrait for HatCode {
                 _ => true,
             }
         {
-            let dst_master = tables.whatami != WhatAmI::Router
-                || out_face.whatami != WhatAmI::Peer
+            let dst_master = out_face.whatami != WhatAmI::Peer
                 || hat!(tables).peers_net.is_none()
                 || tables.zid
                     == *hat!(tables).elect_router(
