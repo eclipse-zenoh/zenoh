@@ -14,26 +14,23 @@
 
 //! `zenohd`'s plugin system. For more details, consult the [detailed documentation](https://github.com/eclipse-zenoh/roadmap/blob/main/rfcs/ALL/Plugins/Zenoh%20Plugins.md).
 
-use crate::prelude::Selector;
-pub use crate::runtime::Runtime;
-pub use crate::Result as ZResult;
+use crate::{prelude::Selector, runtime::Runtime};
 use zenoh_core::zconfigurable;
 
 use zenoh_plugin_trait::{
     Plugin, PluginControl, PluginInstance, PluginReport, PluginStatusRec, PluginStructVersion,
 };
 use zenoh_protocol::core::key_expr::keyexpr;
+use zenoh_result::ZResult;
 
 zconfigurable! {
     pub static ref PLUGIN_PREFIX: String = "zenoh_plugin_".to_string();
 }
-/// Zenoh plugins should implement this trait to ensure type-safety, even if the starting arguments and expected plugin types change in a future release.
-pub trait ZenohPlugin: Plugin<StartArgs = StartArgs, Instance = RunningPlugin> {}
-
-/// A zenoh plugin receives a reference to a value of this type when started.
-pub type StartArgs = Runtime;
 /// A zenoh plugin, when started, must return this type.
 pub type RunningPlugin = Box<dyn RunningPluginTrait + 'static>;
+
+/// Zenoh plugins should implement this trait to ensure type-safety, even if the starting arguments and expected plugin types change in a future release.
+pub trait ZenohPlugin: Plugin<StartArgs = Runtime, Instance = RunningPlugin> {}
 
 impl PluginStructVersion for RunningPlugin {
     fn struct_version() -> u64 {
@@ -98,4 +95,4 @@ pub trait RunningPluginTrait: Send + Sync + PluginControl {
 }
 
 /// The zenoh plugins manager. It handles the full lifetime of plugins, from loading to destruction.
-pub type PluginsManager = zenoh_plugin_trait::PluginsManager<StartArgs, RunningPlugin>;
+pub type PluginsManager = zenoh_plugin_trait::PluginsManager<Runtime, RunningPlugin>;
