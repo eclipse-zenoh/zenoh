@@ -28,7 +28,7 @@ pub enum PluginState {
 }
 
 /// The severity level of a plugin report messages
-/// - Normal: the message(s) is just a notification
+/// - Normal: the message(s) are just notifications
 /// - Warning: at least one warning is reported
 /// - Error: at least one error is reported
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize, PartialOrd, Ord)]
@@ -39,7 +39,7 @@ pub enum PluginReportLevel {
     Error,
 }
 
-/// Allow to use `|=` operator to update the severity level of a report
+/// Allow using the `|=` operator to update the severity level of a report
 impl BitOrAssign for PluginReportLevel {
     fn bitor_assign(&mut self, rhs: Self) {
         if *self < rhs {
@@ -49,7 +49,7 @@ impl BitOrAssign for PluginReportLevel {
 }
 
 /// A plugin report contains a severity level and a list of messages
-/// describing the plugin's situation (for Declared state - dynamic library loading errors, for Loaded state - plugin start errors, etc)
+/// describing the plugin's situation (for the Declared state - dynamic library loading errors, for the Loaded state - plugin start errors, etc)
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Default, Deserialize)]
 pub struct PluginReport {
     level: PluginReportLevel,
@@ -57,22 +57,22 @@ pub struct PluginReport {
     messages: Vec<Cow<'static, str>>,
 }
 
-/// Trait allowing to get all information about the plugin
+/// Trait allowing getting all information about the plugin
 pub trait PluginStatus {
-    /// Returns name of the plugin
+    /// Returns the name of the plugin
     fn name(&self) -> &str;
-    /// Returns version of the loaded plugin (usually the version of the plugin's crate)
+    /// Returns the version of the loaded plugin (usually the version of the plugin's crate)
     fn version(&self) -> Option<&str>;
-    /// Returns path of the loaded plugin
+    /// Returns the path of the loaded plugin
     fn path(&self) -> &str;
     /// Returns the plugin's state (Declared, Loaded, Started)
     fn state(&self) -> PluginState;
     /// Returns the plugin's current report: a list of messages and the severity level
-    /// When status is changed, report is cleared
+    /// When the status is changed, the report is cleared
     fn report(&self) -> PluginReport;
 }
 
-/// The structure which contains all information about the plugin status in single cloneable structure
+/// The structure which contains all information about the plugin status in a single cloneable structure
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PluginStatusRec<'a> {
     pub name: Cow<'a, str>,
@@ -102,7 +102,7 @@ impl PluginStatus for PluginStatusRec<'_> {
 }
 
 impl<'a> PluginStatusRec<'a> {
-    /// Construst status fructure from the getter interface
+    /// Construct the status structure from the getter interface
     pub fn new<T: PluginStatus + ?Sized>(plugin: &'a T) -> Self {
         Self {
             name: Cow::Borrowed(plugin.name()),
@@ -112,7 +112,7 @@ impl<'a> PluginStatusRec<'a> {
             report: plugin.report(),
         }
     }
-    /// Convert status structure to owned version
+    /// Convert the status structure to the owned version
     pub fn into_owned(self) -> PluginStatusRec<'static> {
         PluginStatusRec {
             name: Cow::Owned(self.name.into_owned()),
@@ -130,22 +130,26 @@ impl<'a> PluginStatusRec<'a> {
     }
 }
 
+/// This trait allows getting information about the plugin status and the status of its subplugins, if any.
 pub trait PluginControl {
+    /// Returns the current state of the running plugin. By default, the state is `PluginReportLevel::Normal` and the list of messages is empty.
+    /// This can be overridden by the plugin implementation if the plugin is able to report its status: no connection to the database, etc.
     fn report(&self) -> PluginReport {
         PluginReport::default()
     }
-    /// Collect information of sub-plugins matching `_names` keyexpr
+    /// Collects information of sub-plugins matching the `_names` key expression. The information is richer than the one returned by `report()`: it contains external information about the running plugin, such as its name, path on disk, load status, etc.
+    /// Returns an empty list by default.
     fn plugins_status(&self, _names: &keyexpr) -> Vec<PluginStatusRec> {
         Vec::new()
     }
 }
 
 pub trait PluginStructVersion {
-    /// The version of the structure implementing this trait. After any channge in the structure or it's dependencies
-    /// whcich may affect the ABI, this version should be incremented.
+    /// The version of the structure implementing this trait. After any change in the structure or its dependencies
+    /// which may affect the ABI, this version should be incremented.
     fn struct_version() -> u64;
     /// The features enabled during compilation of the structure implementing this trait.
-    /// Different features between the plugin and the host may cuase ABI incompatibility even if the structure version is the same.
+    /// Different features between the plugin and the host may cause ABI incompatibility even if the structure version is the same.
     /// Use `concat_enabled_features!` to generate this string
     fn struct_features() -> &'static str;
 }
