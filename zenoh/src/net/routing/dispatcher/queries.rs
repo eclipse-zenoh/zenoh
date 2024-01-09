@@ -156,47 +156,21 @@ fn compute_final_route(
         TargetType::Complete(n) => {
             let mut route = HashMap::new();
             let mut remaining = *n;
-            if src_face.whatami == WhatAmI::Peer && !tables.full_net(WhatAmI::Peer) {
-                let source_links = tables
-                    .peers_net
-                    .as_ref()
-                    .map(|net| net.get_links(src_face.zid))
-                    .unwrap_or_default();
-                for qabl in qabls.iter() {
-                    if qabl.direction.0.id != src_face.id
-                        && qabl.complete > 0
-                        && (qabl.direction.0.whatami != WhatAmI::Peer
-                            || (tables.router_peers_failover_brokering
-                                && Tables::failover_brokering_to(
-                                    source_links,
-                                    qabl.direction.0.zid,
-                                )))
-                    {
-                        let nb = std::cmp::min(qabl.complete, remaining);
-                        route.entry(qabl.direction.0.id).or_insert_with(|| {
-                            let mut direction = qabl.direction.clone();
-                            let qid = insert_pending_query(&mut direction.0, query.clone());
-                            (direction, qid, TargetType::Complete(nb))
-                        });
-                        remaining -= nb;
-                        if remaining == 0 {
-                            break;
-                        }
-                    }
-                }
-            } else {
-                for qabl in qabls.iter() {
-                    if qabl.direction.0.id != src_face.id && qabl.complete > 0 {
-                        let nb = std::cmp::min(qabl.complete, remaining);
-                        route.entry(qabl.direction.0.id).or_insert_with(|| {
-                            let mut direction = qabl.direction.clone();
-                            let qid = insert_pending_query(&mut direction.0, query.clone());
-                            (direction, qid, TargetType::Complete(nb))
-                        });
-                        remaining -= nb;
-                        if remaining == 0 {
-                            break;
-                        }
+            for qabl in qabls.iter() {
+                if qabl.complete > 0
+                    && tables
+                        .hat_code
+                        .egress_filter(tables, src_face, &qabl.direction.0, expr)
+                {
+                    let nb = std::cmp::min(qabl.complete, remaining);
+                    route.entry(qabl.direction.0.id).or_insert_with(|| {
+                        let mut direction = qabl.direction.clone();
+                        let qid = insert_pending_query(&mut direction.0, query.clone());
+                        (direction, qid, TargetType::Complete(nb))
+                    });
+                    remaining -= nb;
+                    if remaining == 0 {
+                        break;
                     }
                 }
             }
@@ -484,17 +458,20 @@ pub fn route_query(
                             }
 
                             log::trace!("Propagate query {}:{} to {}", face, qid, outface);
-                            outface.primitives.send_request(Request {
-                                id: *qid,
-                                wire_expr: key_expr.into(),
-                                ext_qos: ext::QoSType::request_default(), // TODO
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType { node_id: *context },
-                                ext_target: *t,
-                                ext_budget: None,
-                                ext_timeout: None,
-                                payload: body.clone(),
-                            });
+                            outface.primitives.send_request(RoutingContext::with_expr(
+                                Request {
+                                    id: *qid,
+                                    wire_expr: key_expr.into(),
+                                    ext_qos: ext::QoSType::request_default(), // TODO
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType { node_id: *context },
+                                    ext_target: *t,
+                                    ext_budget: None,
+                                    ext_timeout: None,
+                                    payload: body.clone(),
+                                },
+                                expr.full_expr().to_string(),
+                            ));
                         }
                     }
 
