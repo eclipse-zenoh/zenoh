@@ -38,20 +38,33 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Reply) -> Self::Output {
+        let Reply {
+            timestamp,
+            encoding,
+            ext_sinfo,
+            ext_consolidation,
+            #[cfg(feature = "shared-memory")]
+            ext_shm,
+            ext_attachment,
+            ext_unknown,
+            payload,
+        } = x;
+
         // Header
         let mut header = id::REPLY;
-        if x.timestamp.is_some() {
+        if timestamp.is_some() {
             header |= flag::T;
         }
-        if x.encoding != Encoding::default() {
+        if encoding != &Encoding::default() {
             header |= flag::E;
         }
-        let mut n_exts = (x.ext_sinfo.is_some()) as u8
-            + ((x.ext_consolidation != ext::ConsolidationType::default()) as u8)
-            + (x.ext_unknown.len() as u8);
+        let mut n_exts = (ext_sinfo.is_some()) as u8
+            + ((ext_consolidation != &ext::ConsolidationType::default()) as u8)
+            + (ext_attachment.is_some()) as u8
+            + (ext_unknown.len() as u8);
         #[cfg(feature = "shared-memory")]
         {
-            n_exts += x.ext_shm.is_some() as u8;
+            n_exts += ext_shm.is_some() as u8;
         }
         if n_exts != 0 {
             header |= flag::Z;
@@ -59,28 +72,32 @@ where
         self.write(&mut *writer, header)?;
 
         // Body
-        if let Some(ts) = x.timestamp.as_ref() {
+        if let Some(ts) = timestamp.as_ref() {
             self.write(&mut *writer, ts)?;
         }
-        if x.encoding != Encoding::default() {
-            self.write(&mut *writer, &x.encoding)?;
+        if encoding != &Encoding::default() {
+            self.write(&mut *writer, encoding)?;
         }
 
         // Extensions
-        if let Some(sinfo) = x.ext_sinfo.as_ref() {
+        if let Some(sinfo) = ext_sinfo.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
         }
-        if x.ext_consolidation != ext::ConsolidationType::default() {
+        if ext_consolidation != &ext::ConsolidationType::default() {
             n_exts -= 1;
-            self.write(&mut *writer, (x.ext_consolidation, n_exts != 0))?;
+            self.write(&mut *writer, (*ext_consolidation, n_exts != 0))?;
         }
         #[cfg(feature = "shared-memory")]
-        if let Some(eshm) = x.ext_shm.as_ref() {
+        if let Some(eshm) = ext_shm.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (eshm, n_exts != 0))?;
         }
-        for u in x.ext_unknown.iter() {
+        if let Some(att) = ext_attachment.as_ref() {
+            n_exts -= 1;
+            self.write(&mut *writer, (att, n_exts != 0))?;
+        }
+        for u in ext_unknown.iter() {
             n_exts -= 1;
             self.write(&mut *writer, (u, n_exts != 0))?;
         }
@@ -88,14 +105,14 @@ where
         // Payload
         #[cfg(feature = "shared-memory")]
         {
-            let codec = Zenoh080Sliced::<u32>::new(x.ext_shm.is_some());
-            codec.write(&mut *writer, &x.payload)?;
+            let codec = Zenoh080Sliced::<u32>::new(ext_shm.is_some());
+            codec.write(&mut *writer, payload)?;
         }
 
         #[cfg(not(feature = "shared-memory"))]
         {
             let bodec = Zenoh080Bounded::<u32>::new();
-            bodec.write(&mut *writer, &x.payload)?;
+            bodec.write(&mut *writer, payload)?;
         }
 
         Ok(())
@@ -142,6 +159,7 @@ where
         let mut ext_consolidation = ext::ConsolidationType::default();
         #[cfg(feature = "shared-memory")]
         let mut ext_shm: Option<ext::ShmType> = None;
+        let mut ext_attachment: Option<ext::AttachmentType> = None;
         let mut ext_unknown = Vec::new();
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
@@ -163,6 +181,11 @@ where
                 ext::Shm::ID => {
                     let (s, ext): (ext::ShmType, bool) = eodec.read(&mut *reader)?;
                     ext_shm = Some(s);
+                    has_ext = ext;
+                }
+                ext::Attachment::ID => {
+                    let (a, ext): (ext::AttachmentType, bool) = eodec.read(&mut *reader)?;
+                    ext_attachment = Some(a);
                     has_ext = ext;
                 }
                 _ => {
@@ -195,6 +218,7 @@ where
             ext_consolidation,
             #[cfg(feature = "shared-memory")]
             ext_shm,
+            ext_attachment,
             ext_unknown,
             payload,
         })

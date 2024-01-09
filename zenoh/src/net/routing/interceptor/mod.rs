@@ -20,7 +20,7 @@
 use super::RoutingContext;
 use zenoh_config::Config;
 use zenoh_protocol::network::NetworkMessage;
-use zenoh_transport::{TransportMulticast, TransportUnicast};
+use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 pub(crate) trait InterceptTrait {
     fn intercept(

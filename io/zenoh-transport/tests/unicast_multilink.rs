@@ -20,9 +20,9 @@ mod tests {
     use zenoh_protocol::core::{WhatAmI, ZenohId};
     use zenoh_result::ZResult;
     use zenoh_transport::{
-        DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
-        TransportMulticast, TransportMulticastEventHandler, TransportPeer,
-        TransportPeerEventHandler, TransportUnicast,
+        multicast::TransportMulticast, unicast::TransportUnicast, DummyTransportPeerEventHandler,
+        TransportEventHandler, TransportManager, TransportMulticastEventHandler, TransportPeer,
+        TransportPeerEventHandler,
     };
 
     const TIMEOUT: Duration = Duration::from_secs(60);

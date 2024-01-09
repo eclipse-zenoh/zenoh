@@ -22,7 +22,7 @@ use crate::net::routing::{
 use zenoh_protocol::network::{
     Declare, NetworkBody, NetworkMessage, Push, Request, Response, ResponseFinal,
 };
-use zenoh_transport::{TransportMulticast, TransportUnicast};
+use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 pub struct Mux {
     pub handler: TransportUnicast,

@@ -28,8 +28,6 @@ use zenoh_config::unwrap_or_default;
 use zenoh_config::Config;
 use zenoh_protocol::core::{ExprId, WhatAmI, ZenohId};
 use zenoh_protocol::network::Mapping;
-#[cfg(feature = "stats")]
-use zenoh_transport::stats::TransportStats;
 // use zenoh_collections::Timer;
 use zenoh_sync::get_mut_unchecked;
 

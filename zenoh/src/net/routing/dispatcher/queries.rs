@@ -301,7 +301,7 @@ macro_rules! inc_req_stats {
     ) => {
         paste::paste! {
             if let Some(stats) = $face.stats.as_ref() {
-                use zenoh_buffers::SplitBuffer;
+                use zenoh_buffers::buffer::Buffer;
                 match &$body {
                     RequestBody::Put(p) => {
                         stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
@@ -333,7 +333,7 @@ macro_rules! inc_res_stats {
     ) => {
         paste::paste! {
             if let Some(stats) = $face.stats.as_ref() {
-                use zenoh_buffers::SplitBuffer;
+                use zenoh_buffers::buffer::Buffer;
                 match &$body {
                     ResponseBody::Put(p) => {
                         stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
@@ -417,6 +417,7 @@ pub fn route_query(
                         ext_consolidation: ConsolidationType::default(),
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
+                        ext_attachment: None, // @TODO: expose it in the API
                         ext_unknown: vec![],
                         payload,
                     });

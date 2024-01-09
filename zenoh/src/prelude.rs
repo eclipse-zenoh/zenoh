@@ -25,7 +25,11 @@
 pub use common::*;
 pub(crate) mod common {
     pub use crate::key_expr::{keyexpr, KeyExpr, OwnedKeyExpr};
-    pub use zenoh_buffers::{reader::HasReader, writer::HasWriter, SplitBuffer};
+    pub use zenoh_buffers::{
+        buffer::{Buffer, SplitBuffer},
+        reader::HasReader,
+        writer::HasWriter,
+    };
     pub use zenoh_core::Resolve;
 
     pub(crate) type Id = usize;
@@ -51,6 +55,8 @@ pub(crate) mod common {
     pub use zenoh_protocol::core::SampleKind;
 
     pub use crate::publication::Priority;
+    #[zenoh_macros::unstable]
+    pub use crate::publication::PublisherDeclarations;
     pub use zenoh_protocol::core::{CongestionControl, Reliability, WhatAmI};
 
     /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.

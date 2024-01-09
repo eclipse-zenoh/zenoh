@@ -12,17 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::task::sleep;
-use clap::{App, Arg};
+use clap::Parser;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
+use zenoh_examples::CommonArgs;
 
 #[async_std::main]
 async fn main() {
     // Initiate logging
     env_logger::init();
 
-    let (config, key_expr, value) = parse_args();
+    let (config, key_expr, value, attachment) = parse_args();
 
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
@@ -34,58 +35,48 @@ async fn main() {
         sleep(Duration::from_secs(1)).await;
         let buf = format!("[{idx:4}] {value}");
         println!("Putting Data ('{}': '{}')...", &key_expr, buf);
-        publisher.put(buf).res().await.unwrap();
+        let mut put = publisher.put(buf);
+        if let Some(attachment) = &attachment {
+            put = put.with_attachment(
+                attachment
+                    .split('&')
+                    .map(|pair| split_once(pair, '='))
+                    .collect(),
+            )
+        }
+        put.res().await.unwrap();
     }
 }
 
-fn parse_args() -> (Config, String, String) {
-    let args = App::new("zenoh pub example")
-        .arg(
-            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
-                .possible_values(["peer", "client"]),
-        )
-        .arg(Arg::from_usage(
-            "-e, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
-        ))
-        .arg(Arg::from_usage(
-            "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
-        ))
-        .arg(
-            Arg::from_usage("-k, --key=[KEYEXPR]        'The key expression to publish onto.'")
-                .default_value("demo/example/zenoh-rs-pub"),
-        )
-        .arg(
-            Arg::from_usage("-v, --value=[VALUE]      'The value to publish.'")
-                .default_value("Pub from Rust!"),
-        )
-        .arg(Arg::from_usage(
-            "-c, --config=[FILE]      'A configuration file.'",
-        ))
-        .arg(Arg::from_usage(
-            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
-        ))
-        .get_matches();
+#[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
+struct Args {
+    #[arg(short, long, default_value = "demo/example/zenoh-rs-pub")]
+    /// The key expression to write to.
+    key: KeyExpr<'static>,
+    #[arg(short, long, default_value = "Pub from Rust!")]
+    /// The value to write.
+    value: String,
+    #[arg(short, long)]
+    /// The attachments to add to each put.
+    ///
+    /// The key-value pairs are &-separated, and = serves as the separator between key and value.
+    attach: Option<String>,
+    #[command(flatten)]
+    common: CommonArgs,
+}
 
-    let mut config = if let Some(conf_file) = args.value_of("config") {
-        Config::from_file(conf_file).unwrap()
-    } else {
-        Config::default()
-    };
-    if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
-        config.set_mode(Some(mode)).unwrap();
+fn split_once(s: &str, c: char) -> (&[u8], &[u8]) {
+    let s_bytes = s.as_bytes();
+    match s.find(c) {
+        Some(index) => {
+            let (l, r) = s_bytes.split_at(index);
+            (l, &r[1..])
+        }
+        None => (s_bytes, &[]),
     }
-    if let Some(values) = args.values_of("connect") {
-        config.connect.endpoints = values.map(|v| v.parse().unwrap()).collect();
-    }
-    if let Some(values) = args.values_of("listen") {
-        config.listen.endpoints = values.map(|v| v.parse().unwrap()).collect();
-    }
-    if args.is_present("no-multicast-scouting") {
-        config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    }
+}
 
-    let key_expr = args.value_of("key").unwrap().to_string();
-    let value = args.value_of("value").unwrap().to_string();
-
-    (config, key_expr, value)
+fn parse_args() -> (Config, KeyExpr<'static>, String, Option<String>) {
+    let args = Args::parse();
+    (args.common.into(), args.key, args.value, args.attach)
 }

@@ -65,7 +65,6 @@ impl PartialEq for Chunk {
 /// Informations about a [`SharedMemoryBuf`].
 ///
 /// This that can be serialized and can be used to retrieve the [`SharedMemoryBuf`] in a remote process.
-#[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SharedMemoryBufInfo {
     /// The index of the beginning of the buffer in the shm segment.
@@ -308,11 +307,10 @@ impl SharedMemoryManager {
         {
             Ok(m) => m,
             Err(ShmemError::LinkExists) => {
-                log::trace!("SharedMemory already exists, opening it");
-                ShmemConf::new()
-                    .flink(path.clone())
-                    .open()
-                    .map_err(|e| ShmError(zerror!("Unable to open SharedMemoryManager: {}", e)))?
+                return Err(ShmError(zerror!(
+                    "Unable to open SharedMemoryManager: SharedMemory already exists"
+                ))
+                .into())
             }
             Err(e) => {
                 return Err(ShmError(zerror!("Unable to open SharedMemoryManager: {}", e)).into())

@@ -25,10 +25,17 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &SharedMemoryBufInfo) -> Self::Output {
-        self.write(&mut *writer, x.offset)?;
-        self.write(&mut *writer, x.length)?;
-        self.write(&mut *writer, x.shm_manager.as_str())?;
-        self.write(&mut *writer, x.kind)?;
+        let SharedMemoryBufInfo {
+            offset,
+            length,
+            shm_manager,
+            kind,
+        } = x;
+
+        self.write(&mut *writer, offset)?;
+        self.write(&mut *writer, length)?;
+        self.write(&mut *writer, shm_manager.as_str())?;
+        self.write(&mut *writer, kind)?;
         Ok(())
     }
 }

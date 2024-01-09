@@ -12,13 +12,14 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use async_std::task::sleep;
-use clap::{App, Arg};
+use clap::Parser;
 use futures::prelude::*;
 use futures::select;
-use std::convert::TryFrom;
+use std::sync::atomic::Ordering::Relaxed;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
+use zenoh_examples::CommonArgs;
 
 #[async_std::main]
 async fn main() {
@@ -26,8 +27,8 @@ async fn main() {
     env_logger::init();
 
     let (config, key_expr, value, complete) = parse_args();
+    let send_errors = std::sync::atomic::AtomicBool::new(false);
 
-    let key_expr = KeyExpr::try_from(key_expr).unwrap();
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
@@ -39,7 +40,7 @@ async fn main() {
         .await
         .unwrap();
 
-    println!("Enter 'q' to quit...");
+    println!("Enter 'q' to quit, 'e' to reply an error to next query...");
     let mut stdin = async_std::io::stdin();
     let mut input = [0_u8];
     loop {
@@ -50,8 +51,22 @@ async fn main() {
                     None => println!(">> [Queryable ] Received Query '{}'", query.selector()),
                     Some(value) => println!(">> [Queryable ] Received Query '{}' with value '{}'", query.selector(), value),
                 }
+                let reply = if send_errors.swap(false, Relaxed) {
+                    println!(
+                        ">> [Queryable ] Replying (ERROR: '{}')",
+                        value,
+                    );
+                    Err(value.clone().into())
+                } else {
+                    println!(
+                        ">> [Queryable ] Responding ('{}': '{}')",
+                        key_expr.as_str(),
+                        value,
+                    );
+                    Ok(Sample::new(key_expr.clone(), value.clone()))
+                };
                 query
-                    .reply(Ok(Sample::new(key_expr.clone(), value.clone())))
+                    .reply(reply)
                     .res()
                     .await
                     .unwrap_or_else(|e| println!(">> [Queryable ] Error sending reply: {e}"));
@@ -61,6 +76,7 @@ async fn main() {
                 match input[0] {
                     b'q' => break,
                     0 => sleep(Duration::from_secs(1)).await,
+                    b'e' => send_errors.store(true, Relaxed),
                     _ => (),
                 }
             }
@@ -68,59 +84,22 @@ async fn main() {
     }
 }
 
-fn parse_args() -> (Config, String, String, bool) {
-    let args = App::new("zenoh queryable example")
-        .arg(
-            Arg::from_usage("-m, --mode=[MODE] 'The zenoh session mode (peer by default).")
-                .possible_values(["peer", "client"]),
-        )
-        .arg(Arg::from_usage(
-            "-e, --connect=[ENDPOINT]...  'Endpoints to connect to.'",
-        ))
-        .arg(Arg::from_usage(
-            "-l, --listen=[ENDPOINT]...   'Endpoints to listen on.'",
-        ))
-        .arg(
-            Arg::from_usage(
-                "-k, --key=[KEYEXPR]        'The key expression matching queries to reply to.'",
-            )
-            .default_value("demo/example/zenoh-rs-queryable"),
-        )
-        .arg(
-            Arg::from_usage("-v, --value=[VALUE]      'The value to reply to queries.'")
-                .default_value("Queryable from Rust!"),
-        )
-        .arg(Arg::from_usage(
-            "-c, --config=[FILE]      'A configuration file.'",
-        ))
-        .arg(Arg::from_usage(
-            "--no-multicast-scouting 'Disable the multicast-based scouting mechanism.'",
-        ))
-        .arg(Arg::from_usage(
-            "--complete 'Declare the queryable as complete w.r.t. the key expression.'",
-        ))
-        .get_matches();
+#[derive(clap::Parser, Clone, PartialEq, Eq, Hash, Debug)]
+struct Args {
+    #[arg(short, long, default_value = "demo/example/zenoh-rs-queryable")]
+    /// The key expression matching queries to reply to.
+    key: KeyExpr<'static>,
+    #[arg(short, long, default_value = "Queryable from Rust!")]
+    /// The value to reply to queries.
+    value: String,
+    #[arg(long)]
+    /// Declare the queryable as complete w.r.t. the key expression.
+    complete: bool,
+    #[command(flatten)]
+    common: CommonArgs,
+}
 
-    let mut config = if let Some(conf_file) = args.value_of("config") {
-        Config::from_file(conf_file).unwrap()
-    } else {
-        Config::default()
-    };
-    if let Some(Ok(mode)) = args.value_of("mode").map(|mode| mode.parse()) {
-        config.set_mode(Some(mode)).unwrap();
-    }
-    if let Some(values) = args.values_of("connect") {
-        config.connect.endpoints = values.map(|v| v.parse().unwrap()).collect();
-    }
-    if let Some(values) = args.values_of("listen") {
-        config.listen.endpoints = values.map(|v| v.parse().unwrap()).collect();
-    }
-    if args.is_present("no-multicast-scouting") {
-        config.scouting.multicast.set_enabled(Some(false)).unwrap();
-    }
-    let key_expr = args.value_of("key").unwrap().to_string();
-    let value = args.value_of("value").unwrap().to_string();
-    let complete = args.is_present("complete");
-
-    (config, key_expr, value, complete)
+fn parse_args() -> (Config, KeyExpr<'static>, String, bool) {
+    let args = Args::parse();
+    (args.common.into(), args.key, args.value, args.complete)
 }

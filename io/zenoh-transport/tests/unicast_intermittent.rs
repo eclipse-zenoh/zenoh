@@ -33,10 +33,11 @@ use zenoh_protocol::{
     zenoh::Put,
 };
 use zenoh_result::ZResult;
-use zenoh_transport::test_helpers::make_transport_manager_builder;
 use zenoh_transport::{
-    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager, TransportMulticast,
-    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler, TransportUnicast,
+    multicast::TransportMulticast,
+    unicast::{test_helpers::make_transport_manager_builder, TransportUnicast},
+    DummyTransportPeerEventHandler, TransportEventHandler, TransportManager,
+    TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
 const MSG_SIZE: usize = 8;
@@ -306,6 +307,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
                 ext_sinfo: None,
                 #[cfg(feature = "shared-memory")]
                 ext_shm: None,
+                ext_attachment: None,
                 ext_unknown: vec![],
             }
             .into(),

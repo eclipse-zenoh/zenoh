@@ -93,32 +93,39 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &Declare) -> Self::Output {
+        let Declare {
+            ext_qos,
+            ext_tstamp,
+            ext_nodeid,
+            body,
+        } = x;
+
         // Header
         let mut header = id::DECLARE;
-        let mut n_exts = ((x.ext_qos != declare::ext::QoSType::default()) as u8)
-            + (x.ext_tstamp.is_some() as u8)
-            + ((x.ext_nodeid != declare::ext::NodeIdType::default()) as u8);
+        let mut n_exts = ((ext_qos != &declare::ext::QoSType::default()) as u8)
+            + (ext_tstamp.is_some() as u8)
+            + ((ext_nodeid != &declare::ext::NodeIdType::default()) as u8);
         if n_exts != 0 {
             header |= declare::flag::Z;
         }
         self.write(&mut *writer, header)?;
 
         // Extensions
-        if x.ext_qos != declare::ext::QoSType::default() {
+        if ext_qos != &declare::ext::QoSType::default() {
             n_exts -= 1;
-            self.write(&mut *writer, (x.ext_qos, n_exts != 0))?;
+            self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
         }
-        if let Some(ts) = x.ext_tstamp.as_ref() {
+        if let Some(ts) = ext_tstamp.as_ref() {
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
         }
-        if x.ext_nodeid != declare::ext::NodeIdType::default() {
+        if ext_nodeid != &declare::ext::NodeIdType::default() {
             n_exts -= 1;
-            self.write(&mut *writer, (x.ext_nodeid, n_exts != 0))?;
+            self.write(&mut *writer, (*ext_nodeid, n_exts != 0))?;
         }
 
         // Body
-        self.write(&mut *writer, &x.body)?;
+        self.write(&mut *writer, body)?;
 
         Ok(())
     }
@@ -200,16 +207,18 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &keyexpr::DeclareKeyExpr) -> Self::Output {
+        let keyexpr::DeclareKeyExpr { id, wire_expr } = x;
+
         // Header
         let mut header = declare::id::D_KEYEXPR;
-        if x.wire_expr.has_suffix() {
+        if wire_expr.has_suffix() {
             header |= keyexpr::flag::N;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.id)?;
-        self.write(&mut *writer, &x.wire_expr)?;
+        self.write(&mut *writer, id)?;
+        self.write(&mut *writer, wire_expr)?;
 
         Ok(())
     }
@@ -262,12 +271,14 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &keyexpr::UndeclareKeyExpr) -> Self::Output {
+        let keyexpr::UndeclareKeyExpr { id } = x;
+
         // Header
         let header = declare::id::U_KEYEXPR;
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.id)?;
+        self.write(&mut *writer, id)?;
 
         Ok(())
     }
@@ -321,28 +332,34 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &subscriber::DeclareSubscriber) -> Self::Output {
+        let subscriber::DeclareSubscriber {
+            id,
+            wire_expr,
+            ext_info,
+        } = x;
+
         // Header
         let mut header = declare::id::D_SUBSCRIBER;
-        let mut n_exts = (x.ext_info != subscriber::ext::SubscriberInfo::default()) as u8;
+        let mut n_exts = (ext_info != &subscriber::ext::SubscriberInfo::default()) as u8;
         if n_exts != 0 {
             header |= subscriber::flag::Z;
         }
-        if x.wire_expr.mapping != Mapping::default() {
+        if wire_expr.mapping != Mapping::default() {
             header |= subscriber::flag::M;
         }
-        if x.wire_expr.has_suffix() {
+        if wire_expr.has_suffix() {
             header |= subscriber::flag::N;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.id)?;
-        self.write(&mut *writer, &x.wire_expr)?;
+        self.write(&mut *writer, id)?;
+        self.write(&mut *writer, wire_expr)?;
 
         // Extensions
-        if x.ext_info != subscriber::ext::SubscriberInfo::default() {
+        if ext_info != &subscriber::ext::SubscriberInfo::default() {
             n_exts -= 1;
-            self.write(&mut *writer, (x.ext_info, n_exts != 0))?;
+            self.write(&mut *writer, (*ext_info, n_exts != 0))?;
         }
 
         Ok(())
@@ -420,15 +437,17 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &subscriber::UndeclareSubscriber) -> Self::Output {
+        let subscriber::UndeclareSubscriber { id, ext_wire_expr } = x;
+
         // Header
         let header = declare::id::U_SUBSCRIBER | subscriber::flag::Z;
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.id)?;
+        self.write(&mut *writer, id)?;
 
         // Extension
-        self.write(&mut *writer, (&x.ext_wire_expr, false))?;
+        self.write(&mut *writer, (ext_wire_expr, false))?;
 
         Ok(())
     }
@@ -497,26 +516,32 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &queryable::DeclareQueryable) -> Self::Output {
+        let queryable::DeclareQueryable {
+            id,
+            wire_expr,
+            ext_info,
+        } = x;
+
         // Header
         let mut header = declare::id::D_QUERYABLE;
-        let mut n_exts = (x.ext_info != queryable::ext::QueryableInfo::default()) as u8;
+        let mut n_exts = (ext_info != &queryable::ext::QueryableInfo::default()) as u8;
         if n_exts != 0 {
             header |= subscriber::flag::Z;
         }
-        if x.wire_expr.mapping != Mapping::default() {
+        if wire_expr.mapping != Mapping::default() {
             header |= subscriber::flag::M;
         }
-        if x.wire_expr.has_suffix() {
+        if wire_expr.has_suffix() {
             header |= subscriber::flag::N;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.id)?;
-        self.write(&mut *writer, &x.wire_expr)?;
-        if x.ext_info != queryable::ext::QueryableInfo::default() {
+        self.write(&mut *writer, id)?;
+        self.write(&mut *writer, wire_expr)?;
+        if ext_info != &queryable::ext::QueryableInfo::default() {
             n_exts -= 1;
-            self.write(&mut *writer, (x.ext_info, n_exts != 0))?;
+            self.write(&mut *writer, (*ext_info, n_exts != 0))?;
         }
 
         Ok(())
@@ -594,15 +619,17 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &queryable::UndeclareQueryable) -> Self::Output {
+        let queryable::UndeclareQueryable { id, ext_wire_expr } = x;
+
         // Header
         let header = declare::id::U_QUERYABLE | queryable::flag::Z;
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.id)?;
+        self.write(&mut *writer, id)?;
 
         // Extension
-        self.write(&mut *writer, (&x.ext_wire_expr, false))?;
+        self.write(&mut *writer, (ext_wire_expr, false))?;
 
         Ok(())
     }
@@ -668,19 +695,21 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &token::DeclareToken) -> Self::Output {
+        let token::DeclareToken { id, wire_expr } = x;
+
         // Header
         let mut header = declare::id::D_TOKEN;
-        if x.wire_expr.mapping != Mapping::default() {
+        if wire_expr.mapping != Mapping::default() {
             header |= subscriber::flag::M;
         }
-        if x.wire_expr.has_suffix() {
+        if wire_expr.has_suffix() {
             header |= subscriber::flag::N;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.id)?;
-        self.write(&mut *writer, &x.wire_expr)?;
+        self.write(&mut *writer, id)?;
+        self.write(&mut *writer, wire_expr)?;
 
         Ok(())
     }
@@ -738,15 +767,17 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &token::UndeclareToken) -> Self::Output {
+        let token::UndeclareToken { id, ext_wire_expr } = x;
+
         // Header
         let header = declare::id::U_TOKEN | token::flag::Z;
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.id)?;
+        self.write(&mut *writer, id)?;
 
         // Extension
-        self.write(&mut *writer, (&x.ext_wire_expr, false))?;
+        self.write(&mut *writer, (ext_wire_expr, false))?;
 
         Ok(())
     }
@@ -812,20 +843,26 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &interest::DeclareInterest) -> Self::Output {
+        let interest::DeclareInterest {
+            id,
+            wire_expr,
+            interest,
+        } = x;
+
         // Header
         let mut header = declare::id::D_INTEREST;
-        if x.wire_expr.mapping != Mapping::default() {
+        if wire_expr.mapping != Mapping::default() {
             header |= subscriber::flag::M;
         }
-        if x.wire_expr.has_suffix() {
+        if wire_expr.has_suffix() {
             header |= subscriber::flag::N;
         }
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.id)?;
-        self.write(&mut *writer, &x.wire_expr)?;
-        self.write(&mut *writer, x.interest.as_u8())?;
+        self.write(&mut *writer, id)?;
+        self.write(&mut *writer, wire_expr)?;
+        self.write(&mut *writer, interest.as_u8())?;
 
         Ok(())
     }
@@ -888,12 +925,14 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &interest::FinalInterest) -> Self::Output {
+        let interest::FinalInterest { id } = x;
+
         // Header
         let header = declare::id::F_INTEREST;
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.id)?;
+        self.write(&mut *writer, id)?;
 
         Ok(())
     }
@@ -945,15 +984,17 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &interest::UndeclareInterest) -> Self::Output {
+        let interest::UndeclareInterest { id, ext_wire_expr } = x;
+
         // Header
         let header = declare::id::U_INTEREST | interest::flag::Z;
         self.write(&mut *writer, header)?;
 
         // Body
-        self.write(&mut *writer, x.id)?;
+        self.write(&mut *writer, id)?;
 
         // Extension
-        self.write(&mut *writer, (&x.ext_wire_expr, false))?;
+        self.write(&mut *writer, (ext_wire_expr, false))?;
 
         Ok(())
     }
@@ -1020,6 +1061,7 @@ where
 
     fn write(self, writer: &mut W, x: (&common::ext::WireExprType, bool)) -> Self::Output {
         let (x, more) = x;
+        let common::ext::WireExprType { wire_expr } = x;
 
         let codec = Zenoh080::new();
         let mut value = ZBuf::empty();
@@ -1029,14 +1071,14 @@ where
         if x.wire_expr.has_suffix() {
             flags |= 1;
         }
-        if let Mapping::Receiver = x.wire_expr.mapping {
+        if let Mapping::Receiver = wire_expr.mapping {
             flags |= 1 << 1;
         }
         codec.write(&mut zriter, flags)?;
 
-        codec.write(&mut zriter, x.wire_expr.scope)?;
-        if x.wire_expr.has_suffix() {
-            zriter.write_exact(x.wire_expr.suffix.as_bytes())?;
+        codec.write(&mut zriter, wire_expr.scope)?;
+        if wire_expr.has_suffix() {
+            zriter.write_exact(wire_expr.suffix.as_bytes())?;
         }
 
         let ext = common::ext::WireExprExt { value };

@@ -147,6 +147,22 @@ fn get_data_route(
         })
 }
 
+#[zenoh_macros::unstable]
+#[inline]
+pub(crate) fn get_local_data_route(
+    tables: &Tables,
+    res: &Option<Arc<Resource>>,
+    expr: &mut RoutingExpr,
+) -> Arc<Route> {
+    res.as_ref()
+        .and_then(|res| res.data_route(WhatAmI::Client, 0))
+        .unwrap_or_else(|| {
+            tables
+                .hat_code
+                .compute_data_route(tables, expr, 0, WhatAmI::Client)
+        })
+}
+
 #[inline]
 fn get_matching_pulls(
     tables: &Tables,
@@ -183,7 +199,7 @@ macro_rules! inc_stats {
     ) => {
         paste::paste! {
             if let Some(stats) = $face.stats.as_ref() {
-                use zenoh_buffers::SplitBuffer;
+                use zenoh_buffers::buffer::Buffer;
                 match &$body {
                     PushBody::Put(p) => {
                         stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);

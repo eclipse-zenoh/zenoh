@@ -26,7 +26,7 @@ use zenoh_protocol::common::ZExtBody;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::network::oam::id::OAM_LINKSTATE;
 use zenoh_protocol::network::{oam, NetworkBody, NetworkMessage, Oam};
-use zenoh_transport::TransportUnicast;
+use zenoh_transport::unicast::TransportUnicast;
 
 #[derive(Clone)]
 struct Details {

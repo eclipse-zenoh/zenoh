@@ -49,7 +49,7 @@ use zenoh_protocol::{
 };
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
-use zenoh_transport::TransportUnicast;
+use zenoh_transport::unicast::TransportUnicast;
 
 mod gossip;
 mod pubsub;

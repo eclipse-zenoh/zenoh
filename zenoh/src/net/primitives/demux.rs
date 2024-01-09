@@ -21,7 +21,8 @@ use std::any::Any;
 use zenoh_link::Link;
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_result::ZResult;
-use zenoh_transport::{TransportPeerEventHandler, TransportUnicast};
+use zenoh_transport::unicast::TransportUnicast;
+use zenoh_transport::TransportPeerEventHandler;
 
 pub struct DeMux {
     face: Face,

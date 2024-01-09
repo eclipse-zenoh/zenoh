@@ -17,9 +17,9 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-mod common;
-mod manager;
-mod multicast;
+pub mod common;
+pub mod manager;
+pub mod multicast;
 pub mod unicast;
 
 #[cfg(feature = "stats")]
@@ -28,12 +28,11 @@ pub use common::stats;
 #[cfg(feature = "shared-memory")]
 mod shm;
 
+use crate::{multicast::TransportMulticast, unicast::TransportUnicast};
 pub use manager::*;
-pub use multicast::*;
 use serde::Serialize;
 use std::any::Any;
 use std::sync::Arc;
-pub use unicast::*;
 use zenoh_link::Link;
 use zenoh_protocol::core::{WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;

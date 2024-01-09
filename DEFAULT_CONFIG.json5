@@ -133,9 +133,28 @@
       /// NOTE: Due to the note above, 'lowlatency' is incompatible with 'qos' option, so in order to
       ///       enable 'lowlatency' you need to explicitly disable 'qos'.
       lowlatency: false,
-    },
-    qos: {
-      enabled: true,
+      /// Enables QoS on unicast communications.
+      qos: {
+        enabled: true,
+      },
+      /// Enables compression on unicast communications.
+      /// Compression capabilities are negotiated during session establishment. 
+      /// If both Zenoh nodes support compression, then compression is activated.
+      compression: {
+        enabled: false,
+      },
+    },    
+    multicast: {
+      /// Enables QoS on multicast communication. 
+      /// Default to false for Zenoh-to-Zenoh-Pico out-of-the-box compatibility.
+      qos: {
+        enabled: false,
+      },
+      /// Enables compression on multicast communication. 
+      /// Default to false for Zenoh-to-Zenoh-Pico out-of-the-box compatibility.
+      compression: {
+        enabled: false,
+      },
     },
     link: {
       /// An optional whitelist of protocols to be used for accepting and opening sessions.
@@ -183,6 +202,9 @@
           /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
           /// Higher values lead to a more aggressive batching but it will introduce additional latency.
           backoff: 100,
+          // Number of threads dedicated to transmission
+          // By default, the number of threads is calculated as follows: 1 + ((#cores - 1) / 4)
+          // threads: 4,
         },
       },
       /// Configure the zenoh RX parameters of a link
@@ -219,15 +241,6 @@
         // This could be dangerous because your CA can have signed a server cert for foo.com, that's later being used to host a server at baz.com. If you wan't your
         // ca to verify that the server at baz.com is actually baz.com, let this be true (default).
         server_name_verification: null,
-      },
-
-      /// **Experimental** compression feature.
-      /// Will compress the batches hop to hop (as opposed to end to end).
-      /// The features "transport_compression" and "unstable" need to be enabled to handle
-      /// compression on the integrality of the network.
-      compression: {
-        /// When 'enabled' is true, batches will be sent compressed.
-        enabled: false,
       },
     },
     /// Shared memory configuration

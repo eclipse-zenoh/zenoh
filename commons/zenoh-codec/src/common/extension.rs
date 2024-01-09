@@ -88,7 +88,9 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: (&ZExtUnit<{ ID }>, bool)) -> Self::Output {
-        let (_x, more) = x;
+        let (x, more) = x;
+        let ZExtUnit = x;
+
         let mut header: u8 = ID;
         if more {
             header |= iext::FLAG_Z;
@@ -134,12 +136,14 @@ where
 
     fn write(self, writer: &mut W, x: (&ZExtZ64<{ ID }>, bool)) -> Self::Output {
         let (x, more) = x;
+        let ZExtZ64 { value } = x;
+
         let mut header: u8 = ID;
         if more {
             header |= iext::FLAG_Z;
         }
         self.write(&mut *writer, header)?;
-        self.write(&mut *writer, x.value)?;
+        self.write(&mut *writer, value)?;
         Ok(())
     }
 }
@@ -182,13 +186,15 @@ where
 
     fn write(self, writer: &mut W, x: (&ZExtZBuf<{ ID }>, bool)) -> Self::Output {
         let (x, more) = x;
+        let ZExtZBuf { value } = x;
+
         let mut header: u8 = ID;
         if more {
             header |= iext::FLAG_Z;
         }
         self.write(&mut *writer, header)?;
         let bodec = Zenoh080Bounded::<u32>::new();
-        bodec.write(&mut *writer, &x.value)?;
+        bodec.write(&mut *writer, value)?;
         Ok(())
     }
 }
@@ -231,13 +237,15 @@ where
 
     fn write(self, writer: &mut W, x: (&ZExtZBufHeader<{ ID }>, bool)) -> Self::Output {
         let (x, more) = x;
+        let ZExtZBufHeader { len } = x;
+
         let mut header: u8 = ID;
         if more {
             header |= iext::FLAG_Z;
         }
         self.write(&mut *writer, header)?;
         let bodec = Zenoh080Bounded::<u32>::new();
-        bodec.write(&mut *writer, x.len)?;
+        bodec.write(&mut *writer, *len)?;
         Ok(())
     }
 }
@@ -284,11 +292,13 @@ where
 
     fn write(self, writer: &mut W, x: (&ZExtUnknown, bool)) -> Self::Output {
         let (x, more) = x;
-        let mut header: u8 = x.id;
+        let ZExtUnknown { id, body } = x;
+
+        let mut header: u8 = *id;
         if more {
             header |= iext::FLAG_Z;
         }
-        match &x.body {
+        match body {
             ZExtBody::Unit => self.write(&mut *writer, header)?,
             ZExtBody::Z64(u64) => {
                 self.write(&mut *writer, header)?;

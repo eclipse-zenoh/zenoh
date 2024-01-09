@@ -1451,11 +1451,6 @@ impl HatQueriesTrait for HatCode {
                 self.compute_query_route(tables, expr, idx.index() as NodeId, WhatAmI::Router);
         }
 
-        routes
-            .peers
-            .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
-        routes.peers[0] = self.compute_query_route(tables, expr, NodeId::default(), WhatAmI::Peer);
-
         if hat!(tables).full_net(WhatAmI::Peer) {
             let indexes = hat!(tables)
                 .peers_net
@@ -1473,7 +1468,14 @@ impl HatQueriesTrait for HatCode {
                 routes.peers[idx.index()] =
                     self.compute_query_route(tables, expr, idx.index() as NodeId, WhatAmI::Peer);
             }
+        } else {
+            routes
+                .peers
+                .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
+            routes.peers[0] =
+                self.compute_query_route(tables, expr, NodeId::default(), WhatAmI::Peer);
         }
+
         routes
             .clients
             .resize_with(1, || Arc::new(QueryTargetQablSet::new()));

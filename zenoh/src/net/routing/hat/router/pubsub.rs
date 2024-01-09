@@ -1306,9 +1306,6 @@ impl HatPubSubTrait for HatCode {
                 self.compute_data_route(tables, expr, idx.index() as NodeId, WhatAmI::Router);
         }
 
-        routes.peers.resize_with(1, || Arc::new(HashMap::new()));
-        routes.peers[0] = self.compute_data_route(tables, expr, NodeId::default(), WhatAmI::Peer);
-
         if hat!(tables).full_net(WhatAmI::Peer) {
             let indexes = hat!(tables)
                 .peers_net
@@ -1326,7 +1323,12 @@ impl HatPubSubTrait for HatCode {
                 routes.peers[idx.index()] =
                     self.compute_data_route(tables, expr, idx.index() as NodeId, WhatAmI::Peer);
             }
+        } else {
+            routes.peers.resize_with(1, || Arc::new(HashMap::new()));
+            routes.peers[0] =
+                self.compute_data_route(tables, expr, NodeId::default(), WhatAmI::Peer);
         }
+
         routes.clients.resize_with(1, || Arc::new(HashMap::new()));
         routes.clients[0] =
             self.compute_data_route(tables, expr, NodeId::default(), WhatAmI::Client);

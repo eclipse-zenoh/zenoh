@@ -34,8 +34,8 @@ impl TransportUnicastUniversal {
         if let Some(pl) = guard
             .iter()
             .filter_map(|tl| {
-                if msg.is_reliable() == tl.link.is_reliable() {
-                    tl.pipeline.as_ref()
+                if msg.is_reliable() == tl.link.link.is_reliable() {
+                    Some(&tl.pipeline)
                 } else {
                     None
                 }
@@ -46,7 +46,7 @@ impl TransportUnicastUniversal {
         }
 
         // No best match found, take the first available link
-        if let Some(pl) = guard.iter().filter_map(|tl| tl.pipeline.as_ref()).next() {
+        if let Some(pl) = guard.iter().map(|tl| &tl.pipeline).next() {
             zpush!(guard, pl, msg);
         }
 

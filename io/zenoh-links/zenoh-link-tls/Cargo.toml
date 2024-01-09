@@ -41,3 +41,5 @@ zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-sync = { workspace = true }
 zenoh-util = { workspace = true }
+base64 = { workspace = true }
+secrecy = {workspace = true }
