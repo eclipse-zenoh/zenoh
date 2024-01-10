@@ -24,7 +24,6 @@ use flume::Sender;
 use memory_backend::MemoryBackend;
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::env;
 use std::sync::Arc;
 use std::sync::Mutex;
 use storages_mgt::StorageMessage;
