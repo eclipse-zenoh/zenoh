@@ -28,9 +28,9 @@ description = "Internal crate for zenoh."
 compression = []
 
 [dependencies]
-async-std = { workspace = true }
-zenoh-sync = { workspace = true }
 async-trait = { workspace = true }
+rustls = { workspace = true }
+rustls-webpki = { workspace = true }
 flume = { workspace = true }
 lz4_flex = { workspace = true }
 log = { workspace = true }
