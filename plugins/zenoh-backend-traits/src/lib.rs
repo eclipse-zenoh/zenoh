@@ -145,10 +145,10 @@ use zenoh_plugin_trait::{PluginControl, PluginInstance, PluginStatusRec, PluginS
 use zenoh_util::concat_enabled_features;
 
 pub mod config;
-use config::{StorageConfig, VolumeConfig};
+use config::StorageConfig;
 
 // No features are actually used in this crate, but this dummy list allows to demonstrate how to combine feature lists
-// from multiple crates. See implementation of `CompatibilityVersion::features()` for more `VolumePlugin` and `VolumeConfig` types
+// from multiple crates. See impl `PluginStructVersion` for `VolumeConfig` below.
 const FEATURES: &str =
     concat_enabled_features!(prefix = "zenoh-backend-traits", features = ["default"]);
 

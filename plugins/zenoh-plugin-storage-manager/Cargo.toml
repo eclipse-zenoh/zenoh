@@ -36,12 +36,12 @@ async-std = { workspace = true, features = ["default"] }
 async-trait = { workspace = true }
 clap = { workspace = true }
 crc = { workspace = true }
+const_format = { workspace = true }
 derive-new = { workspace = true }
 env_logger = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
-lazy_static = { workspace = true }
 libloading = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["default"] }
