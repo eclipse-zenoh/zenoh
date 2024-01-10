@@ -20,9 +20,9 @@
 #![recursion_limit = "512"]
 
 use async_std::task;
-use const_format::concatcp;
 use flume::Sender;
 use memory_backend::MemoryBackend;
+use zenoh_plugin_trait::plugin_version;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::env;
@@ -52,28 +52,19 @@ mod memory_backend;
 mod replica;
 mod storages_mgt;
 
-const GIT_VERSION: &str = git_version::git_version!(prefix = "v", cargo_prefix = "v");
-const LONG_VERSION: &str = concatcp!{
-    env!("CARGO_PKG_VERSION"),
-    " ",
-    GIT_VERSION,
-    " built with ",
-    env!("RUSTC_VERSION")
-};
-
 zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
 pub struct StoragesPlugin {}
 impl ZenohPlugin for StoragesPlugin {}
 impl Plugin for StoragesPlugin {
     const DEFAULT_NAME: &'static str = "storage_manager";
-    const PLUGIN_VERSION: &'static str = LONG_VERSION;
+    const PLUGIN_VERSION: &'static str = plugin_version!();
 
     type StartArgs = Runtime;
     type Instance = zenoh::plugins::RunningPlugin;
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
         std::mem::drop(env_logger::try_init());
-        log::debug!("StorageManager plugin {}", LONG_VERSION);
+        log::debug!("StorageManager plugin {}", Self::PLUGIN_VERSION);
         let config =
             { PluginConfig::try_from((name, runtime.config().lock().plugin(name).unwrap())) }?;
         Ok(Box::new(StorageRuntime::from(StorageRuntimeInner::new(
@@ -304,7 +295,7 @@ impl RunningPluginTrait for StorageRuntime {
             {
                 responses.push(zenoh::plugins::Response::new(
                     key.clone(),
-                    GIT_VERSION.into(),
+                    StoragesPlugin::PLUGIN_VERSION.into(),
                 ))
             }
         });

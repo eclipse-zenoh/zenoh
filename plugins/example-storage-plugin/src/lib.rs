@@ -24,7 +24,7 @@ use zenoh_backend_traits::{
     Capability, History, Persistence, Storage, StorageInsertionResult, StoredData, Volume,
     VolumeInstance,
 };
-use zenoh_plugin_trait::Plugin;
+use zenoh_plugin_trait::{Plugin, plugin_version};
 use zenoh_result::ZResult;
 
 zenoh_plugin_trait::declare_plugin!(ExampleBackend);
@@ -38,7 +38,7 @@ impl Plugin for ExampleBackend {
     }
 
     const DEFAULT_NAME: &'static str = "example_backend";
-    const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+    const PLUGIN_VERSION: &'static str = plugin_version!();
 }
 
 pub struct ExampleBackend {}

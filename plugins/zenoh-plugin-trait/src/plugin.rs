@@ -158,15 +158,29 @@ pub trait PluginStartArgs: PluginStructVersion {}
 
 pub trait PluginInstance: PluginStructVersion + PluginControl + Send {}
 
+/// Base plugin trait. The loaded plugin 
 pub trait Plugin: Sized + 'static {
     type StartArgs: PluginStartArgs;
     type Instance: PluginInstance;
     /// Plugins' default name when statically linked.
     const DEFAULT_NAME: &'static str;
-    /// Plugin's version. Used only for information purposes.
+    /// Plugin's version. Used only for information purposes. It's recommended to use [plugin_version!] macro to generate this string.
     const PLUGIN_VERSION: &'static str;
     /// Starts your plugin. Use `Ok` to return your plugin's control structure
     fn start(name: &str, args: &Self::StartArgs) -> ZResult<Self::Instance>;
+}
+
+#[macro_export]
+macro_rules! plugin_version {
+    () => {
+        const_format::concatcp!(
+            env!("CARGO_PKG_VERSION"),
+            " ",
+            git_version::git_version!(prefix = "v", cargo_prefix = "v"),
+            // " built with ",
+            // env!("RUSTC_VERSION") // TODO: sometimes RUSTC_VERSION is not available, to be investigated
+        )
+    }
 }
 
 impl PluginReport {

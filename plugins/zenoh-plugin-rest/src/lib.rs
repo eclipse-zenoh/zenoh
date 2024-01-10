@@ -34,7 +34,7 @@ use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
 use zenoh::Session;
-use zenoh_plugin_trait::{Plugin, PluginControl};
+use zenoh_plugin_trait::{Plugin, PluginControl, plugin_version};
 use zenoh_result::{bail, zerror, ZResult};
 
 mod config;
@@ -218,7 +218,7 @@ impl Plugin for RestPlugin {
     type StartArgs = Runtime;
     type Instance = zenoh::plugins::RunningPlugin;
     const DEFAULT_NAME: &'static str = "rest";
-    const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+    const PLUGIN_VERSION: &'static str = plugin_version!();
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<zenoh::plugins::RunningPlugin> {
         // Try to initiate login.
