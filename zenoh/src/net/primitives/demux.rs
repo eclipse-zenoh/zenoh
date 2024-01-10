@@ -71,15 +71,6 @@ impl TransportPeerEventHandler for DeMux {
             }
         }
 
-        // match ctx.msg.body {
-        //     NetworkBody::Declare(m) => self.face.send_declare(RoutingContext::new(m, ctx.inface)),
-        //     NetworkBody::Push(m) => self.face.send_push(RoutingContext::new(m, ctx.inface)),
-        //     NetworkBody::Request(m) => self.face.send_request(RoutingContext::new(m, ctx.inface)),
-        //     NetworkBody::Response(m) => self.face.send_response(RoutingContext::new(m, ctx.inface)),
-        //     NetworkBody::ResponseFinal(m) => self.face.send_response_final(RoutingContext::new(m, ctx.inface)),
-        //     NetworkBody::OAM(_m) => (),
-        // }
-
         Ok(())
     }
 
