@@ -17,7 +17,6 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use async_std::net::ToSocketAddrs;
 use async_trait::async_trait;
 use config::{
     TLS_ROOT_CA_CERTIFICATE_BASE64, TLS_ROOT_CA_CERTIFICATE_FILE, TLS_SERVER_CERTIFICATE_BASE64,
@@ -167,7 +166,7 @@ pub mod config {
 }
 
 async fn get_quic_addr(address: &Address<'_>) -> ZResult<SocketAddr> {
-    match address.as_str().to_socket_addrs().await?.next() {
+    match tokio::net::lookup_host(address.as_str()).await?.next() {
         Some(addr) => Ok(addr),
         None => bail!("Couldn't resolve QUIC locator address: {}", address),
     }

@@ -17,27 +17,24 @@ use crate::{
     config::*, get_quic_addr, verify::WebPkiVerifierAnyServerName, ALPN_QUIC_HTTP,
     QUIC_ACCEPT_THROTTLE_TIME, QUIC_DEFAULT_MTU, QUIC_LOCATOR_PREFIX,
 };
-use async_std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-use async_std::prelude::FutureExt;
-use async_std::sync::Mutex as AsyncMutex;
-use async_std::task;
 use async_trait::async_trait;
 use rustls::{Certificate, PrivateKey};
 use rustls_pemfile::Item;
 use std::fmt;
 use std::io::BufReader;
 use std::net::IpAddr;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
-use zenoh_core::zasynclock;
+use tokio::sync::Mutex as AsyncMutex;
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use zenoh_core::{zasynclock, zread, zwrite};
 use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     ListenersUnicastIP, NewLinkChannelSender,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, ZError, ZResult};
-use zenoh_sync::Signal;
 
 pub struct LinkUnicastQuic {
     connection: quinn::Connection,
@@ -185,6 +182,35 @@ impl fmt::Debug for LinkUnicastQuic {
     }
 }
 
+/*************************************/
+/*          LISTENER                 */
+/*************************************/
+struct ListenerUnicastQuic {
+    endpoint: EndPoint,
+    token: CancellationToken,
+    tracker: TaskTracker,
+}
+
+impl ListenerUnicastQuic {
+    fn new(
+        endpoint: EndPoint,
+        token: CancellationToken,
+        tracker: TaskTracker,
+    ) -> ListenerUnicastQuic {
+        ListenerUnicastQuic {
+            endpoint,
+            token,
+            tracker,
+        }
+    }
+
+    async fn stop(&self) {
+        self.token.cancel();
+        self.tracker.close();
+        self.tracker.wait().await;
+    }
+}
+
 pub struct LinkManagerUnicastQuic {
     manager: NewLinkChannelSender,
     listeners: ListenersUnicastIP,
@@ -230,7 +256,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         } else if let Some(b64_certificate) = epconf.get(TLS_ROOT_CA_CERTIFICATE_BASE64) {
             base64_decode(b64_certificate)?
         } else if let Some(value) = epconf.get(TLS_ROOT_CA_CERTIFICATE_FILE) {
-            async_std::fs::read(value)
+            tokio::fs::read(value)
                 .await
                 .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
         } else {
@@ -322,7 +348,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         } else if let Some(b64_certificate) = epconf.get(TLS_SERVER_CERTIFICATE_BASE64) {
             base64_decode(b64_certificate)?
         } else if let Some(value) = epconf.get(TLS_SERVER_CERTIFICATE_FILE) {
-            async_std::fs::read(value)
+            tokio::fs::read(value)
                 .await
                 .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
         } else {
@@ -342,17 +368,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
         } else if let Some(b64_key) = epconf.get(TLS_SERVER_PRIVATE_KEY_BASE64) {
             base64_decode(b64_key)?
         } else if let Some(value) = epconf.get(TLS_SERVER_PRIVATE_KEY_FILE) {
-            async_std::fs::read(value)
+            tokio::fs::read(value)
                 .await
                 .map_err(|e| zerror!("Invalid QUIC CA certificate file: {}", e))?
         } else {
             bail!("No QUIC CA private key has been provided.");
         };
         let items: Vec<Item> = rustls_pemfile::read_all(&mut BufReader::new(f.as_slice()))
-            .map(|result| {
-                result.map_err(|err| zerror!("Invalid QUIC CA private key file: {}", err))
-            })
-            .collect::<Result<Vec<Item>, ZError>>()?;
+            .collect::<Result<_, _>>()
+            .map_err(|err| zerror!("Invalid QUIC CA private key file: {}", err))?;
 
         let private_key = items
             .into_iter()
@@ -400,24 +424,29 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
             endpoint.config(),
         )?;
 
-        let active = Arc::new(AtomicBool::new(true));
-        let signal = Signal::new();
+        // Spawn the accept loop for the listener
+        let token = CancellationToken::new();
+        let c_token = token.clone();
+        let mut listeners = zwrite!(self.listeners);
 
-        let c_active = active.clone();
-        let c_signal = signal.clone();
         let c_manager = self.manager.clone();
+        let c_listeners = self.listeners.clone();
+        let c_addr = local_addr;
 
-        let handle =
-            task::spawn(
-                async move { accept_task(quic_endpoint, c_active, c_signal, c_manager).await },
-            );
+        let tracker = TaskTracker::new();
+        let task = async move {
+            // Wait for the accept loop to terminate
+            let res = accept_task(quic_endpoint, c_token, c_manager).await;
+            zwrite!(c_listeners).remove(&c_addr);
+            res
+        };
+        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
 
         // Initialize the QuicAcceptor
         let locator = endpoint.to_locator();
-
-        self.listeners
-            .add_listener(endpoint, local_addr, active, signal, handle)
-            .await?;
+        let listener = ListenerUnicastQuic::new(endpoint, token, tracker);
+        // Update the list of active listeners on the manager
+        listeners.insert(local_addr, listener);
 
         Ok(locator)
     }
@@ -425,7 +454,20 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
     async fn del_listener(&self, endpoint: &EndPoint) -> ZResult<()> {
         let epaddr = endpoint.address();
         let addr = get_quic_addr(&epaddr).await?;
-        self.listeners.del_listener(addr).await
+
+        // Stop the listener
+        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
+            let e = zerror!(
+                "Can not delete the QUIC listener because it has not been found: {}",
+                addr
+            );
+            log::trace!("{}", e);
+            e
+        })?;
+
+        // Send the stop signal
+        listener.stop().await;
+        Ok(())
     }
 
     fn get_listeners(&self) -> Vec<EndPoint> {
@@ -439,16 +481,10 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastQuic {
 
 async fn accept_task(
     endpoint: quinn::Endpoint,
-    active: Arc<AtomicBool>,
-    signal: Signal,
+    token: CancellationToken,
     manager: NewLinkChannelSender,
 ) -> ZResult<()> {
-    enum Action {
-        Accept(quinn::Connection),
-        Stop,
-    }
-
-    async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<Action> {
+    async fn accept(acceptor: quinn::Accept<'_>) -> ZResult<quinn::Connection> {
         let qc = acceptor
             .await
             .ok_or_else(|| zerror!("Can not accept QUIC connections: acceptor closed"))?;
@@ -459,12 +495,7 @@ async fn accept_task(
             e
         })?;
 
-        Ok(Action::Accept(conn))
-    }
-
-    async fn stop(signal: Signal) -> ZResult<Action> {
-        signal.wait().await;
-        Ok(Action::Stop)
+        Ok(conn)
     }
 
     let src_addr = endpoint
@@ -473,51 +504,53 @@ async fn accept_task(
 
     // The accept future
     log::trace!("Ready to accept QUIC connections on: {:?}", src_addr);
-    while active.load(Ordering::Acquire) {
-        // Wait for incoming connections
-        let quic_conn = match accept(endpoint.accept()).race(stop(signal.clone())).await {
-            Ok(action) => match action {
-                Action::Accept(qc) => qc,
-                Action::Stop => break,
-            },
-            Err(e) => {
-                log::warn!("{} Hint: increase the system open file limit.", e);
-                // Throttle the accept loop upon an error
-                // NOTE: This might be due to various factors. However, the most common case is that
-                //       the process has reached the maximum number of open files in the system. On
-                //       Linux systems this limit can be changed by using the "ulimit" command line
-                //       tool. In case of systemd-based systems, this can be changed by using the
-                //       "sysctl" command line tool.
-                task::sleep(Duration::from_micros(*QUIC_ACCEPT_THROTTLE_TIME)).await;
-                continue;
+
+    loop {
+        tokio::select! {
+            _ = token.cancelled() => break,
+
+            res = accept(endpoint.accept()) => {
+                match res {
+                    Ok(quic_conn) => {
+                        // Get the bideractional streams. Note that we don't allow unidirectional streams.
+                        let (send, recv) = match quic_conn.accept_bi().await {
+                            Ok(stream) => stream,
+                            Err(e) => {
+                                log::warn!("QUIC connection has no streams: {:?}", e);
+                                continue;
+                            }
+                        };
+
+                        let dst_addr = quic_conn.remote_address();
+                        log::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
+                        // Create the new link object
+                        let link = Arc::new(LinkUnicastQuic::new(
+                            quic_conn,
+                            src_addr,
+                            Locator::new(QUIC_LOCATOR_PREFIX, dst_addr.to_string(), "")?,
+                            send,
+                            recv,
+                        ));
+
+                        // Communicate the new link to the initial transport manager
+                        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
+                            log::error!("{}-{}: {}", file!(), line!(), e)
+                        }
+
+                    }
+                    Err(e) => {
+                        log::warn!("{} Hint: increase the system open file limit.", e);
+                        // Throttle the accept loop upon an error
+                        // NOTE: This might be due to various factors. However, the most common case is that
+                        //       the process has reached the maximum number of open files in the system. On
+                        //       Linux systems this limit can be changed by using the "ulimit" command line
+                        //       tool. In case of systemd-based systems, this can be changed by using the
+                        //       "sysctl" command line tool.
+                        tokio::time::sleep(Duration::from_micros(*QUIC_ACCEPT_THROTTLE_TIME)).await;
+                    }
+                }
             }
-        };
-
-        // Get the bideractional streams. Note that we don't allow unidirectional streams.
-        let (send, recv) = match quic_conn.accept_bi().await {
-            Ok(stream) => stream,
-            Err(e) => {
-                log::warn!("QUIC connection has no streams: {:?}", e);
-                continue;
-            }
-        };
-
-        let dst_addr = quic_conn.remote_address();
-        log::debug!("Accepted QUIC connection on {:?}: {:?}", src_addr, dst_addr);
-        // Create the new link object
-        let link = Arc::new(LinkUnicastQuic::new(
-            quic_conn,
-            src_addr,
-            Locator::new(QUIC_LOCATOR_PREFIX, dst_addr.to_string(), "")?,
-            send,
-            recv,
-        ));
-
-        // Communicate the new link to the initial transport manager
-        if let Err(e) = manager.send_async(LinkUnicast(link)).await {
-            log::error!("{}-{}: {}", file!(), line!(), e)
         }
     }
-
     Ok(())
 }
