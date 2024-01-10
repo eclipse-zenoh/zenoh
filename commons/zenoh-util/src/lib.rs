@@ -28,7 +28,7 @@ macro_rules! concat_enabled_features {
         {
             use const_format::concatcp;
             concatcp!("" $(,
-                if cfg!(feature = $feature) { concatcp!(" ", concatcp!($prefix, "/", $feature)) } else { "" }
+                if cfg!(feature = $feature) { concatcp!(" ", $prefix, "/", $feature) } else { "" }
             )*)
         }
     };
