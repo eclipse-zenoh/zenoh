@@ -62,7 +62,13 @@ impl TransportPeerEventHandler for DeMux {
             NetworkBody::Request(m) => self.face.send_request(m),
             NetworkBody::Response(m) => self.face.send_response(m),
             NetworkBody::ResponseFinal(m) => self.face.send_response_final(m),
-            NetworkBody::OAM(_m) => (),
+            NetworkBody::OAM(m) => {
+                if let Some(transport) = self.transport.as_ref() {
+                    let ctrl_lock = zlock!(self.face.tables.ctrl_lock);
+                    let mut tables = zwrite!(self.face.tables.tables);
+                    ctrl_lock.handle_oam(&mut tables, &self.face.tables, m, transport)?
+                }
+            }
         }
 
         // match ctx.msg.body {
