@@ -47,7 +47,7 @@ log = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
-zenoh = { workspace = true, features = [ "unstable" ] }
+zenoh = { workspace = true, features = ["unstable"] }
 zenoh-collections = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-keyexpr = { workspace = true }
@@ -73,4 +73,4 @@ maintainer = "zenoh-dev@eclipse.org"
 copyright = "2022 ZettaScale Technology"
 section = "net"
 license-file = ["../../LICENSE", "0"]
-depends = "zenohd (=0.10.1-rc)"
+depends = "zenohd (=0.10.1-rc-1)"

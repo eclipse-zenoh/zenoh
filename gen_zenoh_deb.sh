@@ -21,7 +21,7 @@ if [ -z "$1" -o -z "$2" ]; then
     exit 1
 fi
 
-VERSION=`echo $1`
+VERSION="$1-1"
 ARCH=$2
 
 PACKAGE_NAME="zenoh_${VERSION}_${ARCH}"
