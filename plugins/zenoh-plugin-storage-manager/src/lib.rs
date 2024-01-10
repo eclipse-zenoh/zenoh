@@ -22,7 +22,6 @@
 use async_std::task;
 use flume::Sender;
 use memory_backend::MemoryBackend;
-use zenoh_plugin_trait::plugin_version;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::env;
@@ -39,6 +38,7 @@ use zenoh_backend_traits::config::StorageConfig;
 use zenoh_backend_traits::config::VolumeConfig;
 use zenoh_backend_traits::VolumeInstance;
 use zenoh_core::zlock;
+use zenoh_plugin_trait::plugin_version;
 use zenoh_plugin_trait::Plugin;
 use zenoh_plugin_trait::PluginControl;
 use zenoh_plugin_trait::PluginReport;

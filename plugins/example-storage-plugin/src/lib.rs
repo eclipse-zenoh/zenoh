@@ -24,7 +24,7 @@ use zenoh_backend_traits::{
     Capability, History, Persistence, Storage, StorageInsertionResult, StoredData, Volume,
     VolumeInstance,
 };
-use zenoh_plugin_trait::{Plugin, plugin_version};
+use zenoh_plugin_trait::{plugin_version, Plugin};
 use zenoh_result::ZResult;
 
 zenoh_plugin_trait::declare_plugin!(ExampleBackend);

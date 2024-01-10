@@ -158,7 +158,7 @@ pub trait PluginStartArgs: PluginStructVersion {}
 
 pub trait PluginInstance: PluginStructVersion + PluginControl + Send {}
 
-/// Base plugin trait. The loaded plugin 
+/// Base plugin trait. The loaded plugin
 pub trait Plugin: Sized + 'static {
     type StartArgs: PluginStartArgs;
     type Instance: PluginInstance;
@@ -173,14 +173,8 @@ pub trait Plugin: Sized + 'static {
 #[macro_export]
 macro_rules! plugin_version {
     () => {
-        const_format::concatcp!(
-            env!("CARGO_PKG_VERSION"),
-            " ",
-            git_version::git_version!(prefix = "v", cargo_prefix = "v"),
-            // " built with ",
-            // env!("RUSTC_VERSION") // TODO: sometimes RUSTC_VERSION is not available, to be investigated
-        )
-    }
+        git_version::git_version!(prefix = "v", cargo_prefix = "v")
+    };
 }
 
 impl PluginReport {

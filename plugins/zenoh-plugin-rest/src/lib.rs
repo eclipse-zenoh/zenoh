@@ -34,7 +34,7 @@ use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
 use zenoh::Session;
-use zenoh_plugin_trait::{Plugin, PluginControl, plugin_version};
+use zenoh_plugin_trait::{plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, zerror, ZResult};
 
 mod config;

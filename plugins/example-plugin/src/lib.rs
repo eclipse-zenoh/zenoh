@@ -25,7 +25,7 @@ use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
 use zenoh_core::zlock;
-use zenoh_plugin_trait::{Plugin, PluginControl, plugin_version};
+use zenoh_plugin_trait::{plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, ZResult};
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
