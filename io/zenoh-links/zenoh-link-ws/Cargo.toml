@@ -36,7 +36,7 @@ async-trait = { workspace = true }
 futures-util = { workspace = true, features = ["sink", "std"] }
 log = { workspace = true }
 tokio = { workspace = true, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
-tokio-util = { workspace = true }
+tokio-util = { workspace = true, features = ["rt"] }
 tokio-tungstenite = { workspace = true }
 url = { workspace = true }
 zenoh-core = { workspace = true }

@@ -36,7 +36,7 @@ async-trait = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
 tokio = { workspace = true, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
-tokio-util = { workspace = true }
+tokio-util = { workspace = true, features = ["rt"] }
 uuid = { workspace = true, default-features = true }
 z-serial = { workspace = true }
 zenoh-collections = { workspace = true }

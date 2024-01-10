@@ -26,7 +26,7 @@ description = "Internal crate for zenoh."
 
 [dependencies]
 tokio = { workspace = true, features = ["net", "io-util", "rt", "time"] }
-tokio-util = { workspace = true }
+tokio-util = { workspace = true, features = ["rt"] }
 async-trait = { workspace = true }
 log = { workspace = true }
 socket2 = { workspace = true }

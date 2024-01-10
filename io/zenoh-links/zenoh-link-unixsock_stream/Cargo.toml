@@ -37,7 +37,7 @@ futures = { workspace = true }
 log = { workspace = true }
 nix = { workspace = true }
 tokio = { workspace = true, features = ["io-std", "macros", "net", "rt-multi-thread", "time"] }
-tokio-util = { workspace = true }
+tokio-util = { workspace = true, features = ["rt"] }
 uuid = { workspace = true, features = ["default"] }
 zenoh-core = { workspace = true }
 zenoh-link-commons = { workspace = true }
