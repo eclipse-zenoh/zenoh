@@ -35,7 +35,7 @@ use zenoh_backend_traits::config::ConfigDiff;
 use zenoh_backend_traits::config::PluginConfig;
 use zenoh_backend_traits::config::StorageConfig;
 use zenoh_backend_traits::config::VolumeConfig;
-use zenoh_backend_traits::VolumePlugin;
+use zenoh_backend_traits::VolumeInstance;
 use zenoh_core::zlock;
 use zenoh_plugin_trait::Plugin;
 use zenoh_plugin_trait::PluginControl;
@@ -77,7 +77,7 @@ impl Plugin for StoragesPlugin {
     }
 }
 
-type PluginsManager = zenoh_plugin_trait::PluginsManager<VolumeConfig, VolumePlugin>;
+type PluginsManager = zenoh_plugin_trait::PluginsManager<VolumeConfig, VolumeInstance>;
 
 struct StorageRuntime(Arc<Mutex<StorageRuntimeInner>>);
 struct StorageRuntimeInner {

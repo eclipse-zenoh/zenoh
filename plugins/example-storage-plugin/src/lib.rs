@@ -22,7 +22,7 @@ use zenoh::{prelude::OwnedKeyExpr, sample::Sample, time::Timestamp, value::Value
 use zenoh_backend_traits::{
     config::{StorageConfig, VolumeConfig},
     Capability, History, Persistence, Storage, StorageInsertionResult, StoredData, Volume,
-    VolumePlugin,
+    VolumeInstance,
 };
 use zenoh_plugin_trait::Plugin;
 use zenoh_result::ZResult;
@@ -31,7 +31,7 @@ zenoh_plugin_trait::declare_plugin!(ExampleBackend);
 
 impl Plugin for ExampleBackend {
     type StartArgs = VolumeConfig;
-    type Instance = VolumePlugin;
+    type Instance = VolumeInstance;
     fn start(_name: &str, _args: &Self::StartArgs) -> ZResult<Self::Instance> {
         let volume = ExampleBackend {};
         Ok(Box::new(volume))

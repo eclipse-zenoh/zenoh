@@ -30,12 +30,12 @@ pub struct MemoryBackend {
 
 impl Plugin for MemoryBackend {
     type StartArgs = VolumeConfig;
-    type Instance = VolumePlugin;
+    type Instance = VolumeInstance;
 
     const DEFAULT_NAME: &'static str = MEMORY_BACKEND_NAME;
     const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
-    fn start(_: &str, args: &VolumeConfig) -> ZResult<VolumePlugin> {
+    fn start(_: &str, args: &VolumeConfig) -> ZResult<VolumeInstance> {
         Ok(Box::new(MemoryBackend {
             config: args.clone(),
         }))

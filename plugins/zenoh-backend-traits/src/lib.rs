@@ -183,10 +183,6 @@ pub enum History {
     All,
 }
 
-/// Signature of the `create_volume` operation to be implemented in the library as an entrypoint.
-pub const CREATE_VOLUME_FN_NAME: &[u8] = b"create_volume";
-pub type CreateVolume = fn(VolumeConfig) -> ZResult<Box<dyn Volume>>;
-
 ///
 pub enum StorageInsertionResult {
     Outdated,
@@ -224,9 +220,9 @@ pub trait Volume: Send + Sync {
     fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>;
 }
 
-pub type VolumePlugin = Box<dyn Volume + 'static>;
+pub type VolumeInstance = Box<dyn Volume + 'static>;
 
-impl PluginStructVersion for VolumePlugin {
+impl PluginStructVersion for VolumeInstance {
     fn struct_version() -> u64 {
         1
     }
@@ -235,13 +231,13 @@ impl PluginStructVersion for VolumePlugin {
     }
 }
 
-impl PluginControl for VolumePlugin {
+impl PluginControl for VolumeInstance {
     fn plugins_status(&self, _names: &zenoh::prelude::keyexpr) -> Vec<PluginStatusRec> {
         Vec::new()
     }
 }
 
-impl PluginInstance for VolumePlugin {}
+impl PluginInstance for VolumeInstance {}
 
 /// Trait to be implemented by a Storage.
 #[async_trait]
