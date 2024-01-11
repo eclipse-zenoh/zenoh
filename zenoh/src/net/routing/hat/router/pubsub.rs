@@ -17,7 +17,7 @@ use super::{get_peer, get_router, HatCode, HatContext, HatFace, HatTables};
 use crate::net::routing::dispatcher::face::FaceState;
 use crate::net::routing::dispatcher::pubsub::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
-use crate::net::routing::dispatcher::tables::{PullCaches, Route, RoutingExpr};
+use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
 use crate::net::routing::dispatcher::tables::{Tables, TablesLock};
 use crate::net::routing::hat::HatPubSubTrait;
 use crate::net::routing::router::RoutesIndexes;
@@ -1252,36 +1252,6 @@ impl HatPubSubTrait for HatCode {
             );
         }
         Arc::new(route)
-    }
-
-    fn compute_matching_pulls_(
-        &self,
-        tables: &Tables,
-        pull_caches: &mut PullCaches,
-        expr: &mut RoutingExpr,
-    ) {
-        let ke = if let Ok(ke) = OwnedKeyExpr::try_from(expr.full_expr()) {
-            ke
-        } else {
-            return;
-        };
-        let res = Resource::get_resource(expr.prefix, expr.suffix);
-        let matches = res
-            .as_ref()
-            .and_then(|res| res.context.as_ref())
-            .map(|ctx| Cow::from(&ctx.matches))
-            .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &ke)));
-
-        for mres in matches.iter() {
-            let mres = mres.upgrade().unwrap();
-            for context in mres.session_ctxs.values() {
-                if let Some(subinfo) = &context.subs {
-                    if subinfo.mode == Mode::Pull {
-                        pull_caches.push(context.clone());
-                    }
-                }
-            }
-        }
     }
 
     fn get_data_routes_entries(&self, tables: &Tables) -> RoutesIndexes {

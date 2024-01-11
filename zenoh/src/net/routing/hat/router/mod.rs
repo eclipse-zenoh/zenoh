@@ -39,7 +39,9 @@ use crate::{
         protocol::linkstate::LinkStateList,
         routing::{
             dispatcher::face::Face,
-            router::{compute_data_routes, compute_query_routes, RoutesIndexes},
+            router::{
+                compute_data_routes, compute_matching_pulls, compute_query_routes, RoutesIndexes,
+            },
         },
     },
     runtime::Runtime,
@@ -481,7 +483,7 @@ impl HatBaseTrait for HatCode {
             matches_data_routes.push((
                 _match.clone(),
                 compute_data_routes(&rtables, &mut expr),
-                rtables.hat_code.compute_matching_pulls(&rtables, &mut expr),
+                compute_matching_pulls(&rtables, &mut expr),
             ));
         }
         for _match in qabls_matches.drain(..) {

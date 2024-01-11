@@ -16,10 +16,13 @@ use super::resource::{DataRoutes, Direction, PullCaches, Resource};
 use super::tables::{NodeId, Route, RoutingExpr, Tables, TablesLock};
 use crate::net::routing::dispatcher::face::Face;
 use crate::net::routing::RoutingContext;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::RwLock;
 use zenoh_core::zread;
+use zenoh_protocol::core::key_expr::OwnedKeyExpr;
+use zenoh_protocol::network::declare::Mode;
 use zenoh_protocol::{
     core::{WhatAmI, WireExpr},
     network::{declare::ext, Push},
@@ -87,7 +90,7 @@ pub(crate) fn update_data_routes(tables: &Tables, res: &mut Arc<Resource>) {
 
 pub(crate) fn update_data_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
     update_data_routes(tables, res);
-    tables.hat_code.clone().update_matching_pulls(tables, res);
+    update_matching_pulls(tables, res);
     let res = get_mut_unchecked(res);
     for child in res.childs.values_mut() {
         update_data_routes_from(tables, child);
@@ -104,14 +107,14 @@ pub(crate) fn compute_matches_data_routes<'a>(
         routes.push((
             res.clone(),
             compute_data_routes(tables, &mut expr),
-            tables.hat_code.compute_matching_pulls(tables, &mut expr),
+            compute_matching_pulls(tables, &mut expr),
         ));
         for match_ in &res.context().matches {
             let match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
                 let mut expr = RoutingExpr::new(&match_, "");
                 let match_routes = compute_data_routes(tables, &mut expr);
-                let matching_pulls = tables.hat_code.compute_matching_pulls(tables, &mut expr);
+                let matching_pulls = compute_matching_pulls(tables, &mut expr);
                 routes.push((match_, match_routes, matching_pulls));
             }
         }
@@ -122,12 +125,12 @@ pub(crate) fn compute_matches_data_routes<'a>(
 pub(crate) fn update_matches_data_routes<'a>(tables: &'a mut Tables, res: &'a mut Arc<Resource>) {
     if res.context.is_some() {
         update_data_routes(tables, res);
-        tables.hat_code.update_matching_pulls(tables, res);
+        update_matching_pulls(tables, res);
         for match_ in &res.context().matches {
             let mut match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
                 update_data_routes(tables, &mut match_);
-                tables.hat_code.update_matching_pulls(tables, &mut match_);
+                update_matching_pulls(tables, &mut match_);
             }
         }
     }
@@ -222,6 +225,52 @@ pub(crate) fn get_local_data_route(
         })
 }
 
+fn compute_matching_pulls_(tables: &Tables, pull_caches: &mut PullCaches, expr: &mut RoutingExpr) {
+    let ke = if let Ok(ke) = OwnedKeyExpr::try_from(expr.full_expr()) {
+        ke
+    } else {
+        return;
+    };
+    let res = Resource::get_resource(expr.prefix, expr.suffix);
+    let matches = res
+        .as_ref()
+        .and_then(|res| res.context.as_ref())
+        .map(|ctx| Cow::from(&ctx.matches))
+        .unwrap_or_else(|| Cow::from(Resource::get_matches(tables, &ke)));
+
+    for mres in matches.iter() {
+        let mres = mres.upgrade().unwrap();
+        for context in mres.session_ctxs.values() {
+            if let Some(subinfo) = &context.subs {
+                if subinfo.mode == Mode::Pull {
+                    pull_caches.push(context.clone());
+                }
+            }
+        }
+    }
+}
+
+pub(crate) fn compute_matching_pulls(tables: &Tables, expr: &mut RoutingExpr) -> Arc<PullCaches> {
+    let mut pull_caches = PullCaches::default();
+    compute_matching_pulls_(tables, &mut pull_caches, expr);
+    Arc::new(pull_caches)
+}
+
+pub(crate) fn update_matching_pulls(tables: &Tables, res: &mut Arc<Resource>) {
+    if res.context.is_some() {
+        let mut res_mut = res.clone();
+        let res_mut = get_mut_unchecked(&mut res_mut);
+        if res_mut.context_mut().matching_pulls.is_none() {
+            res_mut.context_mut().matching_pulls = Some(Arc::new(PullCaches::default()));
+        }
+        compute_matching_pulls_(
+            tables,
+            get_mut_unchecked(res_mut.context_mut().matching_pulls.as_mut().unwrap()),
+            &mut RoutingExpr::new(res, ""),
+        );
+    }
+}
+
 #[inline]
 fn get_matching_pulls(
     tables: &Tables,
@@ -231,7 +280,7 @@ fn get_matching_pulls(
     res.as_ref()
         .and_then(|res| res.context.as_ref())
         .and_then(|ctx| ctx.matching_pulls.clone())
-        .unwrap_or_else(|| tables.hat_code.compute_matching_pulls(tables, expr))
+        .unwrap_or_else(|| compute_matching_pulls(tables, expr))
 }
 
 macro_rules! cache_data {
