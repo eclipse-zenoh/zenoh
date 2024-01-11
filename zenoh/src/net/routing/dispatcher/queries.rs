@@ -96,11 +96,11 @@ pub(crate) fn update_query_routes(tables: &Tables, res: &Arc<Resource>) {
     }
 }
 
-pub(crate) fn compute_query_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
-    compute_query_routes(tables, res);
+pub(crate) fn update_query_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
+    update_query_routes(tables, res);
     let res = get_mut_unchecked(res);
     for child in res.childs.values_mut() {
-        compute_query_routes_from(tables, child);
+        update_query_routes_from(tables, child);
     }
 }
 

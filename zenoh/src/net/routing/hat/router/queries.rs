@@ -1179,7 +1179,7 @@ pub(super) fn queries_tree_change(
     }
 
     // recompute routes
-    compute_query_routes_from(tables, &mut tables.root_res.clone());
+    update_query_routes_from(tables, &mut tables.root_res.clone());
 }
 
 #[inline]

@@ -693,7 +693,7 @@ pub fn register_expr(
                 get_mut_unchecked(face)
                     .remote_mappings
                     .insert(expr_id, res.clone());
-                wtables.compute_matches_routes(&mut res);
+                wtables.update_matches_routes(&mut res);
                 drop(wtables);
             }
         },

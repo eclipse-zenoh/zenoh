@@ -145,20 +145,20 @@ impl Tables {
         self.faces.values().find(|face| face.zid == *zid)
     }
 
-    fn compute_routes(&mut self, res: &mut Arc<Resource>) {
+    fn update_routes(&mut self, res: &mut Arc<Resource>) {
         update_data_routes(self, res);
-        compute_query_routes(self, res);
+        update_query_routes(self, res);
     }
 
-    pub(crate) fn compute_matches_routes(&mut self, res: &mut Arc<Resource>) {
+    pub(crate) fn update_matches_routes(&mut self, res: &mut Arc<Resource>) {
         if res.context.is_some() {
-            self.compute_routes(res);
+            self.update_routes(res);
 
             let resclone = res.clone();
             for match_ in &mut get_mut_unchecked(res).context_mut().matches {
                 let match_ = &mut match_.upgrade().unwrap();
                 if !Arc::ptr_eq(match_, &resclone) && match_.context.is_some() {
-                    self.compute_routes(match_);
+                    self.update_routes(match_);
                 }
             }
         }
