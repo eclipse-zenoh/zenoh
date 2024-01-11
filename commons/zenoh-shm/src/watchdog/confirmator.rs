@@ -134,16 +134,16 @@ impl WatchdogConfirmator {
         let c_running = running.clone();
 
         let _ = ThreadBuilder::default()
-            .name("Watchdog Confirmator thread")
+            .name("Watchdog Confirmator")
             //.policy(ThreadSchedulePolicy::Realtime(RealtimeThreadSchedulePolicy::Deadline))
-            //.priority(ThreadPriority::Deadline { runtime: Duration::from_micros(100), deadline: interval, period: interval, flags: DeadlineFlags::default() })
+            //.priority(ThreadPriority::Deadline { runtime: interval, deadline: interval, period: interval, flags: DeadlineFlags::default() })
             //.policy(ThreadSchedulePolicy::Realtime(RealtimeThreadSchedulePolicy::Fifo))
-            .priority(ThreadPriority::Crossplatform(ThreadPriorityValue::try_from(48).unwrap()))
+            //.priority(ThreadPriority::Crossplatform(ThreadPriorityValue::try_from(48).unwrap()))
             .spawn(move |result| {
                     if let Err(e) = result {
-                        let ret = std::io::Error::last_os_error().to_string();
+                        //let ret = std::io::Error::last_os_error().to_string();
                         panic!("Watchdog Confirmator: error setting thread priority: {:?}, will continue operating with default priority...", e);
-                        panic!("");
+                        //panic!("");
                     }
 
                     let mut segments: Vec<(Arc<ConfirmedSegment>, BTreeMap<OwnedDescriptor, i32>)> = vec![];

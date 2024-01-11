@@ -64,17 +64,35 @@ where
         self.inner.shmem.len() / size_of::<Elem>()
     }
 
+    /// # Safety
+    /// Retrieves const element by it's index. This is safe if the index doesn't go out of underlying array.
+    /// Additional assert to check the index validity is added for "test" feature
     pub unsafe fn elem(&self, index: ElemIndex) -> *const Elem {
+        #[cfg(feature = "test")]
+        assert!(self.inner.shmem.len() > index.as_() * size_of::<Elem>());
         (self.inner.shmem.as_ptr() as *const Elem).add(index.as_())
     }
-    
+
     #[cfg(feature = "test")]
+    /// # Safety
+    /// Retrieves mut element by it's index. This is safe if the index doesn't go out of underlying array.
+    /// Additional assert to check the index validity is added for "test" feature
     pub unsafe fn elem_mut(&mut self, index: ElemIndex) -> *mut Elem {
+        #[cfg(feature = "test")]
+        assert!(self.inner.shmem.len() > index.as_() * size_of::<Elem>());
         (self.inner.shmem.as_ptr() as *mut Elem).add(index.as_())
     }
 
+    /// # Safety
+    /// Calculates element's index. This is safe if the element belongs to underlying array.
+    /// Additional assert is added for "test" feature
     pub unsafe fn index(&self, elem: *const Elem) -> ElemIndex {
-        elem.offset_from(self.inner.shmem.as_ptr() as *const Elem)
-            .as_()
+        let index = elem.offset_from(self.inner.shmem.as_ptr() as *const Elem);
+        #[cfg(feature = "test")]
+        {
+            assert!(index >= 0);
+            assert!(self.inner.shmem.len() > index as usize * size_of::<Elem>());
+        }
+        index.as_()
     }
 }

@@ -16,10 +16,13 @@ use std::sync::atomic::Ordering::Relaxed;
 
 use rand::Rng;
 use zenoh_result::ZResult;
-use zenoh_shm::{header::{
-    descriptor::HeaderDescriptor, storage::GLOBAL_HEADER_STORAGE,
-    subscription::GLOBAL_HEADER_SUBSCRIPTION,
-}, test_helpers::execute_concurrent};
+use zenoh_shm::{
+    header::{
+        descriptor::HeaderDescriptor, storage::GLOBAL_HEADER_STORAGE,
+        subscription::GLOBAL_HEADER_SUBSCRIPTION,
+    },
+    test_helpers::execute_concurrent,
+};
 
 fn header_alloc_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
@@ -57,7 +60,8 @@ fn header_link_concurrent() {
     execute_concurrent(100, 10000, header_link_fn());
 }
 
-fn header_link_failure_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
+fn header_link_failure_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static
+{
     |_task_index: usize, _iteration: usize| {
         let allocated_header = GLOBAL_HEADER_STORAGE.allocate_header()?;
         let descr = HeaderDescriptor::from(&allocated_header.descriptor);

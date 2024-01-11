@@ -18,13 +18,13 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc
     },
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 use lazy_static::lazy_static;
 
 use log::{error, warn};
-use thread_priority::{ThreadBuilderExt, ThreadPriority};
+use thread_priority::ThreadBuilder;
 
 use super::descriptor::OwnedDescriptor;
 
@@ -90,9 +90,9 @@ impl WatchdogValidator {
 
         let c_storage = storage.clone();
         let c_running = running.clone();
-        let _ = std::thread::Builder::new()
-            .name("Watchdog Validator thread".to_owned())
-            .spawn_with_priority(ThreadPriority::Min, move |result| {
+        let _ = ThreadBuilder::default()
+            .name("Watchdog Validator".to_owned())
+            .spawn(move |result| {
                 if let Err(e) = result {
                     error!("Watchdog Validator: error setting thread priority: {:?}, will continue operating with default priority...", e);
                     panic!("");
