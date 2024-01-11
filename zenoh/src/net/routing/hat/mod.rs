@@ -17,12 +17,15 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use super::dispatcher::{
-    face::{Face, FaceState},
-    tables::{
-        DataRoutes, NodeId, PullCaches, QueryRoutes, QueryTargetQablSet, Resource, Route,
-        RoutingExpr, Tables, TablesLock,
+use super::{
+    dispatcher::{
+        face::{Face, FaceState},
+        tables::{
+            NodeId, PullCaches, QueryTargetQablSet, Resource, Route, RoutingExpr, Tables,
+            TablesLock,
+        },
     },
+    router::RoutesIndexes,
 };
 use crate::runtime::Runtime;
 use std::{any::Any, sync::Arc};
@@ -165,30 +168,7 @@ pub(crate) trait HatPubSubTrait {
         }
     }
 
-    fn compute_data_routes_(
-        &self,
-        tables: &Tables,
-        routes: &mut DataRoutes,
-        expr: &mut RoutingExpr,
-    );
-
-    fn compute_data_routes(&self, tables: &Tables, expr: &mut RoutingExpr) -> DataRoutes {
-        let mut routes = DataRoutes::default();
-        self.compute_data_routes_(tables, &mut routes, expr);
-        routes
-    }
-
-    fn update_data_routes(&self, tables: &Tables, res: &mut Arc<Resource>) {
-        if res.context.is_some() {
-            let mut res_mut = res.clone();
-            let res_mut = get_mut_unchecked(&mut res_mut);
-            self.compute_data_routes_(
-                tables,
-                &mut res_mut.context_mut().data_routes,
-                &mut RoutingExpr::new(res, ""),
-            );
-        }
-    }
+    fn get_data_routes_entries(&self, tables: &Tables) -> RoutesIndexes;
 }
 
 pub(crate) trait HatQueriesTrait {
@@ -215,30 +195,7 @@ pub(crate) trait HatQueriesTrait {
         source_type: WhatAmI,
     ) -> Arc<QueryTargetQablSet>;
 
-    fn compute_query_routes_(
-        &self,
-        tables: &Tables,
-        routes: &mut QueryRoutes,
-        expr: &mut RoutingExpr,
-    );
-
-    fn compute_query_routes(&self, tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
-        let mut routes = QueryRoutes::default();
-        self.compute_query_routes_(tables, &mut routes, &mut RoutingExpr::new(res, ""));
-        routes
-    }
-
-    fn update_query_routes(&self, tables: &Tables, res: &Arc<Resource>) {
-        if res.context.is_some() {
-            let mut res_mut = res.clone();
-            let res_mut = get_mut_unchecked(&mut res_mut);
-            self.compute_query_routes_(
-                tables,
-                &mut res_mut.context_mut().query_routes,
-                &mut RoutingExpr::new(res, ""),
-            );
-        }
-    }
+    fn get_query_routes_entries(&self, tables: &Tables) -> RoutesIndexes;
 
     fn compute_local_replies(
         &self,

@@ -20,6 +20,7 @@ use super::tables::{RoutingExpr, Tables, TablesLock};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
+use zenoh_config::WhatAmI;
 use zenoh_protocol::{
     core::{Encoding, WireExpr},
     network::{
@@ -37,8 +38,66 @@ pub(crate) struct Query {
     src_qid: RequestId,
 }
 
+fn compute_query_routes_(tables: &Tables, routes: &mut QueryRoutes, expr: &mut RoutingExpr) {
+    let indexes = tables.hat_code.get_data_routes_entries(tables);
+
+    let max_idx = indexes.routers.iter().max().unwrap();
+    routes.routers.resize_with((*max_idx as usize) + 1, || {
+        Arc::new(QueryTargetQablSet::new())
+    });
+
+    for idx in indexes.routers {
+        routes.routers[idx as usize] =
+            tables
+                .hat_code
+                .compute_query_route(tables, expr, idx, WhatAmI::Router);
+    }
+
+    let max_idx = indexes.peers.iter().max().unwrap();
+    routes.peers.resize_with((*max_idx as usize) + 1, || {
+        Arc::new(QueryTargetQablSet::new())
+    });
+
+    for idx in indexes.peers {
+        routes.peers[idx as usize] =
+            tables
+                .hat_code
+                .compute_query_route(tables, expr, idx, WhatAmI::Peer);
+    }
+
+    let max_idx = indexes.clients.iter().max().unwrap();
+    routes.clients.resize_with((*max_idx as usize) + 1, || {
+        Arc::new(QueryTargetQablSet::new())
+    });
+
+    for idx in indexes.clients {
+        routes.clients[idx as usize] =
+            tables
+                .hat_code
+                .compute_query_route(tables, expr, idx, WhatAmI::Client);
+    }
+}
+
+pub(crate) fn compute_query_routes(tables: &Tables, res: &Arc<Resource>) -> QueryRoutes {
+    let mut routes = QueryRoutes::default();
+    compute_query_routes_(tables, &mut routes, &mut RoutingExpr::new(res, ""));
+    routes
+}
+
+pub(crate) fn update_query_routes(tables: &Tables, res: &Arc<Resource>) {
+    if res.context.is_some() {
+        let mut res_mut = res.clone();
+        let res_mut = get_mut_unchecked(&mut res_mut);
+        compute_query_routes_(
+            tables,
+            &mut res_mut.context_mut().query_routes,
+            &mut RoutingExpr::new(res, ""),
+        );
+    }
+}
+
 pub(crate) fn compute_query_routes_from(tables: &mut Tables, res: &mut Arc<Resource>) {
-    tables.hat_code.clone().compute_query_routes(tables, res);
+    compute_query_routes(tables, res);
     let res = get_mut_unchecked(res);
     for child in res.childs.values_mut() {
         compute_query_routes_from(tables, child);
@@ -51,14 +110,11 @@ pub(crate) fn compute_matches_query_routes(
 ) -> Vec<(Arc<Resource>, QueryRoutes)> {
     let mut routes = vec![];
     if res.context.is_some() {
-        routes.push((
-            res.clone(),
-            tables.hat_code.compute_query_routes(tables, res),
-        ));
+        routes.push((res.clone(), compute_query_routes(tables, res)));
         for match_ in &res.context().matches {
             let match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
-                let match_routes = tables.hat_code.compute_query_routes(tables, &match_);
+                let match_routes = compute_query_routes(tables, &match_);
                 routes.push((match_, match_routes));
             }
         }
@@ -68,11 +124,11 @@ pub(crate) fn compute_matches_query_routes(
 
 pub(crate) fn update_matches_query_routes(tables: &Tables, res: &Arc<Resource>) {
     if res.context.is_some() {
-        tables.hat_code.update_query_routes(tables, res);
+        update_query_routes(tables, res);
         for match_ in &res.context().matches {
             let match_ = match_.upgrade().unwrap();
             if !Arc::ptr_eq(&match_, res) {
-                tables.hat_code.update_query_routes(tables, &match_);
+                update_query_routes(tables, &match_);
             }
         }
     }

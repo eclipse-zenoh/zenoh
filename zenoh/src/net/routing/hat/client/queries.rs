@@ -11,16 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{face_hat, face_hat_mut};
+use super::{face_hat, face_hat_mut, get_routes_entries};
 use super::{HatCode, HatFace};
 use crate::net::routing::dispatcher::face::FaceState;
 use crate::net::routing::dispatcher::queries::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
-use crate::net::routing::dispatcher::tables::{
-    QueryRoutes, QueryTargetQabl, QueryTargetQablSet, RoutingExpr,
-};
+use crate::net::routing::dispatcher::tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr};
 use crate::net::routing::dispatcher::tables::{Tables, TablesLock};
 use crate::net::routing::hat::HatQueriesTrait;
+use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
 use std::borrow::Cow;
@@ -437,27 +436,7 @@ impl HatQueriesTrait for HatCode {
         result
     }
 
-    fn compute_query_routes_(
-        &self,
-        tables: &Tables,
-        routes: &mut QueryRoutes,
-        expr: &mut RoutingExpr,
-    ) {
-        let route = self.compute_query_route(tables, expr, NodeId::default(), WhatAmI::Client);
-
-        routes
-            .routers
-            .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
-        routes.routers[0] = route.clone();
-
-        routes
-            .peers
-            .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
-        routes.peers[0] = route.clone();
-
-        routes
-            .clients
-            .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
-        routes.clients[0] = route;
+    fn get_query_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {
+        get_routes_entries()
     }
 }

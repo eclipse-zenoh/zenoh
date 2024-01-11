@@ -35,7 +35,12 @@ use super::{
 };
 use crate::{
     net::{
-        codec::Zenoh080Routing, protocol::linkstate::LinkStateList, routing::dispatcher::face::Face,
+        codec::Zenoh080Routing,
+        protocol::linkstate::LinkStateList,
+        routing::{
+            dispatcher::face::Face,
+            router::{compute_data_routes, compute_query_routes, RoutesIndexes},
+        },
     },
     runtime::Runtime,
 };
@@ -475,15 +480,12 @@ impl HatBaseTrait for HatCode {
             let mut expr = RoutingExpr::new(&_match, "");
             matches_data_routes.push((
                 _match.clone(),
-                rtables.hat_code.compute_data_routes(&rtables, &mut expr),
+                compute_data_routes(&rtables, &mut expr),
                 rtables.hat_code.compute_matching_pulls(&rtables, &mut expr),
             ));
         }
         for _match in qabls_matches.drain(..) {
-            matches_query_routes.push((
-                _match.clone(),
-                rtables.hat_code.compute_query_routes(&rtables, &_match),
-            ));
+            matches_query_routes.push((_match.clone(), compute_query_routes(&rtables, &_match)));
         }
         drop(rtables);
 
@@ -827,3 +829,32 @@ fn get_peer(tables: &Tables, face: &Arc<FaceState>, nodeid: NodeId) -> Option<Ze
 }
 
 impl HatTrait for HatCode {}
+
+#[inline]
+fn get_routes_entries(tables: &Tables) -> RoutesIndexes {
+    let routers_indexes = hat!(tables)
+        .routers_net
+        .as_ref()
+        .unwrap()
+        .graph
+        .node_indices()
+        .map(|i| i.index() as NodeId)
+        .collect::<Vec<NodeId>>();
+    let peers_indexes = if hat!(tables).full_net(WhatAmI::Peer) {
+        hat!(tables)
+            .peers_net
+            .as_ref()
+            .unwrap()
+            .graph
+            .node_indices()
+            .map(|i| i.index() as NodeId)
+            .collect::<Vec<NodeId>>()
+    } else {
+        vec![0]
+    };
+    RoutesIndexes {
+        routers: routers_indexes,
+        peers: peers_indexes,
+        clients: vec![0],
+    }
+}

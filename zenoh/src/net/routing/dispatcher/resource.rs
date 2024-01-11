@@ -63,6 +63,13 @@ pub(crate) struct SessionContext {
 }
 
 #[derive(Default)]
+pub(crate) struct RoutesIndexes {
+    pub(crate) routers: Vec<NodeId>,
+    pub(crate) peers: Vec<NodeId>,
+    pub(crate) clients: Vec<NodeId>,
+}
+
+#[derive(Default)]
 pub(crate) struct DataRoutes {
     pub(crate) routers: Vec<Arc<Route>>,
     pub(crate) peers: Vec<Arc<Route>>,

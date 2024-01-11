@@ -12,16 +12,15 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::network::Network;
-use super::{face_hat, face_hat_mut, hat, hat_mut, res_hat, res_hat_mut};
+use super::{face_hat, face_hat_mut, get_routes_entries, hat, hat_mut, res_hat, res_hat_mut};
 use super::{get_peer, get_router, HatCode, HatContext, HatFace, HatTables};
 use crate::net::routing::dispatcher::face::FaceState;
 use crate::net::routing::dispatcher::queries::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
-use crate::net::routing::dispatcher::tables::{
-    QueryRoutes, QueryTargetQabl, QueryTargetQablSet, RoutingExpr,
-};
+use crate::net::routing::dispatcher::tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr};
 use crate::net::routing::dispatcher::tables::{Tables, TablesLock};
 use crate::net::routing::hat::HatQueriesTrait;
+use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
 use petgraph::graph::NodeIndex;
@@ -1428,58 +1427,7 @@ impl HatQueriesTrait for HatCode {
         result
     }
 
-    fn compute_query_routes_(
-        &self,
-        tables: &Tables,
-        routes: &mut QueryRoutes,
-        expr: &mut RoutingExpr,
-    ) {
-        let indexes = hat!(tables)
-            .routers_net
-            .as_ref()
-            .unwrap()
-            .graph
-            .node_indices()
-            .collect::<Vec<NodeIndex>>();
-        let max_idx = indexes.iter().max().unwrap();
-        routes
-            .routers
-            .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
-
-        for idx in &indexes {
-            routes.routers[idx.index()] =
-                self.compute_query_route(tables, expr, idx.index() as NodeId, WhatAmI::Router);
-        }
-
-        if hat!(tables).full_net(WhatAmI::Peer) {
-            let indexes = hat!(tables)
-                .peers_net
-                .as_ref()
-                .unwrap()
-                .graph
-                .node_indices()
-                .collect::<Vec<NodeIndex>>();
-            let max_idx = indexes.iter().max().unwrap();
-            routes
-                .peers
-                .resize_with(max_idx.index() + 1, || Arc::new(QueryTargetQablSet::new()));
-
-            for idx in &indexes {
-                routes.peers[idx.index()] =
-                    self.compute_query_route(tables, expr, idx.index() as NodeId, WhatAmI::Peer);
-            }
-        } else {
-            routes
-                .peers
-                .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
-            routes.peers[0] =
-                self.compute_query_route(tables, expr, NodeId::default(), WhatAmI::Peer);
-        }
-
-        routes
-            .clients
-            .resize_with(1, || Arc::new(QueryTargetQablSet::new()));
-        routes.clients[0] =
-            self.compute_query_route(tables, expr, NodeId::default(), WhatAmI::Client);
+    fn get_query_routes_entries(&self, tables: &Tables) -> RoutesIndexes {
+        get_routes_entries(tables)
     }
 }

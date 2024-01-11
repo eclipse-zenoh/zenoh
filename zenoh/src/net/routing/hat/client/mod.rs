@@ -17,7 +17,13 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-use crate::{net::routing::dispatcher::face::Face, runtime::Runtime};
+use crate::{
+    net::routing::{
+        dispatcher::face::Face,
+        router::{compute_data_routes, compute_query_routes, RoutesIndexes},
+    },
+    runtime::Runtime,
+};
 
 use self::{
     pubsub::{pubsub_new_face, undeclare_client_subscription},
@@ -189,15 +195,12 @@ impl HatBaseTrait for HatCode {
             let mut expr = RoutingExpr::new(&_match, "");
             matches_data_routes.push((
                 _match.clone(),
-                rtables.hat_code.compute_data_routes(&rtables, &mut expr),
+                compute_data_routes(&rtables, &mut expr),
                 rtables.hat_code.compute_matching_pulls(&rtables, &mut expr),
             ));
         }
         for _match in qabls_matches.drain(..) {
-            matches_query_routes.push((
-                _match.clone(),
-                rtables.hat_code.compute_query_routes(&rtables, &_match),
-            ));
+            matches_query_routes.push((_match.clone(), compute_query_routes(&rtables, &_match)));
         }
         drop(rtables);
 
@@ -302,3 +305,12 @@ impl HatFace {
 }
 
 impl HatTrait for HatCode {}
+
+#[inline]
+fn get_routes_entries() -> RoutesIndexes {
+    RoutesIndexes {
+        routers: vec![0],
+        peers: vec![0],
+        clients: vec![0],
+    }
+}

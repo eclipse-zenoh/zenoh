@@ -12,14 +12,15 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::network::Network;
-use super::{face_hat, face_hat_mut, hat, hat_mut, res_hat, res_hat_mut};
+use super::{face_hat, face_hat_mut, get_routes_entries, hat, hat_mut, res_hat, res_hat_mut};
 use super::{get_peer, HatCode, HatContext, HatFace, HatTables};
 use crate::net::routing::dispatcher::face::FaceState;
 use crate::net::routing::dispatcher::pubsub::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
-use crate::net::routing::dispatcher::tables::{DataRoutes, PullCaches, Route, RoutingExpr};
+use crate::net::routing::dispatcher::tables::{PullCaches, Route, RoutingExpr};
 use crate::net::routing::dispatcher::tables::{Tables, TablesLock};
 use crate::net::routing::hat::HatPubSubTrait;
+use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
@@ -869,42 +870,7 @@ impl HatPubSubTrait for HatCode {
         }
     }
 
-    fn compute_data_routes_(
-        &self,
-        tables: &Tables,
-        routes: &mut DataRoutes,
-        expr: &mut RoutingExpr,
-    ) {
-        let indexes = hat!(tables)
-            .peers_net
-            .as_ref()
-            .unwrap()
-            .graph
-            .node_indices()
-            .collect::<Vec<NodeIndex>>();
-        let max_idx = indexes.iter().max().unwrap();
-
-        routes.routers.clear();
-
-        routes
-            .routers
-            .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
-
-        routes.peers.clear();
-
-        routes
-            .peers
-            .resize_with(max_idx.index() + 1, || Arc::new(HashMap::new()));
-
-        for idx in &indexes {
-            let route = self.compute_data_route(tables, expr, idx.index() as NodeId, WhatAmI::Peer);
-            routes.routers[idx.index()] = route.clone();
-            routes.peers[idx.index()] = route;
-        }
-
-        let clients_data_routes = &mut routes.clients;
-        clients_data_routes.clear();
-        clients_data_routes.resize_with(1, || Arc::new(HashMap::new()));
-        clients_data_routes[0] = self.compute_data_route(tables, expr, 0, WhatAmI::Peer);
+    fn get_data_routes_entries(&self, tables: &Tables) -> RoutesIndexes {
+        get_routes_entries(tables)
     }
 }

@@ -146,8 +146,8 @@ impl Tables {
     }
 
     fn compute_routes(&mut self, res: &mut Arc<Resource>) {
-        self.hat_code.clone().update_data_routes(self, res);
-        self.hat_code.clone().compute_query_routes(self, res);
+        update_data_routes(self, res);
+        compute_query_routes(self, res);
     }
 
     pub(crate) fn compute_matches_routes(&mut self, res: &mut Arc<Resource>) {

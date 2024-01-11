@@ -11,14 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{face_hat, face_hat_mut};
+use super::{face_hat, face_hat_mut, get_routes_entries};
 use super::{HatCode, HatFace};
 use crate::net::routing::dispatcher::face::FaceState;
 use crate::net::routing::dispatcher::pubsub::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
-use crate::net::routing::dispatcher::tables::{DataRoutes, PullCaches, Route, RoutingExpr};
+use crate::net::routing::dispatcher::tables::{PullCaches, Route, RoutingExpr};
 use crate::net::routing::dispatcher::tables::{Tables, TablesLock};
 use crate::net::routing::hat::HatPubSubTrait;
+use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -450,23 +451,7 @@ impl HatPubSubTrait for HatCode {
         }
     }
 
-    fn compute_data_routes_(
-        &self,
-        tables: &Tables,
-        routes: &mut DataRoutes,
-        expr: &mut RoutingExpr,
-    ) {
-        let route = self.compute_data_route(tables, expr, NodeId::default(), WhatAmI::Peer);
-
-        routes.routers.resize_with(1, || Arc::new(HashMap::new()));
-        routes.routers[0] = route.clone();
-
-        routes.peers.resize_with(1, || Arc::new(HashMap::new()));
-        routes.peers[0] = route;
-
-        let route = self.compute_data_route(tables, expr, NodeId::default(), WhatAmI::Client);
-
-        routes.clients.resize_with(1, || Arc::new(HashMap::new()));
-        routes.clients[0] = route;
+    fn get_data_routes_entries(&self, _tables: &Tables) -> RoutesIndexes {
+        get_routes_entries()
     }
 }
