@@ -30,17 +30,50 @@ use std::{
     },
 };
 use watchdog::{
+    allocated_watchdog::AllocatedWatchdog,
     confirmator::{ConfirmedDescriptor, GLOBAL_CONFIRMATOR},
     descriptor::Descriptor,
     storage::GLOBAL_STORAGE,
+    validator::GLOBAL_VALIDATOR,
 };
 use zenoh_buffers::ZSliceBuffer;
-use zenoh_result::{zerror, ShmError, ZResult};
+use zenoh_result::{bail, zerror, ShmError, ZResult};
+
+#[macro_export]
+macro_rules! tested_module {
+    ($module:ident) => {
+        #[cfg(feature = "test")]
+        pub mod $module;
+        #[cfg(not(feature = "test"))]
+        mod $module;
+    };
+}
+
+#[macro_export]
+macro_rules! tested_crate_module {
+    ($module:ident) => {
+        #[cfg(feature = "test")]
+        pub mod $module;
+        #[cfg(not(feature = "test"))]
+        pub(crate) mod $module;
+    };
+}
+
+#[macro_export]
+macro_rules! test_helpers_module {
+    () => {
+        #[cfg(feature = "test")]
+        pub mod test_helpers;
+    };
+}
 
 pub mod header;
-mod posix_shm;
-mod segment;
 pub mod watchdog;
+
+tested_module!(posix_shm);
+tested_module!(segment);
+
+test_helpers_module!();
 
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
 
@@ -265,7 +298,11 @@ impl SharedMemoryReader {
                     info: info.clone(),
                     watchdog: Arc::new(GLOBAL_CONFIRMATOR.add(&info.watchdog_descriptor)?),
                 };
-                Ok(shmb)
+                // Validate buffer's generation
+                match shmb.is_generation_valid() {
+                    true => Ok(shmb),
+                    false => bail!(""),
+                }
             }
             None => {
                 let e = zerror!("Unable to find shared memory segment: {}", info.segment_id);
@@ -302,6 +339,7 @@ impl fmt::Debug for SharedMemoryReader {
 pub struct BusyChunk {
     chunk: Chunk,
     header: AllocatedHeaderDescriptor,
+    _watchdog: AllocatedWatchdog,
 }
 
 /// A shared memory segment manager.
@@ -352,17 +390,35 @@ impl SharedMemoryManager {
     }
 
     fn free_chunk_map_to_shmbuf(&self, chunk: &Chunk) -> ZResult<(SharedMemoryBuf, BusyChunk)> {
+        // allocate shared header
         let allocated_header = GLOBAL_HEADER_STORAGE.allocate_header()?;
         let header = allocated_header.descriptor.clone();
 
-        let watchdog = GLOBAL_STORAGE.allocate_watchdog(header.clone())?;
+        // allocate watchdog
+        let allocated_watchdog = GLOBAL_STORAGE.allocate_watchdog()?;
+        let descriptor = Descriptor::from(&allocated_watchdog.descriptor);
+
+        // add watchdog to confirmator
+        let confirmed_watchdog = GLOBAL_CONFIRMATOR.add(&descriptor)?;
+
+        // add watchdog to validator
+        let c_header = header.clone();
+        GLOBAL_VALIDATOR.add(
+            allocated_watchdog.descriptor.clone(),
+            Box::new(move || {
+                c_header
+                    .header()
+                    .watchdog_invalidated
+                    .store(true, Ordering::SeqCst);
+            }),
+        );
 
         let info = SharedMemoryBufInfo::new(
             chunk.offset,
             chunk.size,
             self.own_segment.segment.id,
             0,
-            Descriptor::from(&watchdog.owned),
+            descriptor,
             HeaderDescriptor::from(&header),
             header.header().generation.load(Ordering::SeqCst),
         );
@@ -371,12 +427,13 @@ impl SharedMemoryManager {
             buf: AtomicPtr::<u8>::new(chunk.base_addr),
             len: chunk.size,
             info,
-            watchdog: Arc::new(watchdog),
+            watchdog: Arc::new(confirmed_watchdog),
         };
 
         let busy_chunk = BusyChunk {
             chunk: *chunk,
             header: allocated_header,
+            _watchdog: allocated_watchdog,
         };
 
         Ok((shmb, busy_chunk))
@@ -412,7 +469,9 @@ impl SharedMemoryManager {
                         match self.free_chunk_map_to_shmbuf(&chunk) {
                             Ok(val) => Ok(val),
                             Err(_) => {
-                                // no free watchdogs, try to free some by collecting the garbage
+                                // no free watchdogs or headers, try to free some by collecting the garbage
+                                println!("No free watchdogs or headers, trying to reclaim...");
+                                log::trace!("No free watchdogs or headers, trying to reclaim...");
                                 self.garbage_collect();
                                 self.free_chunk_map_to_shmbuf(&chunk)
                             }
@@ -453,13 +512,11 @@ impl SharedMemoryManager {
     }
 
     fn is_free_chunk(chunk: &BusyChunk) -> bool {
-        let rc = chunk
-            .header
-            .descriptor
-            .header()
-            .refcount
-            .load(Ordering::SeqCst);
-        rc == 0
+        let header = chunk.header.descriptor.header();
+        if header.refcount.load(Ordering::SeqCst) != 0 {
+            return header.watchdog_invalidated.load(Ordering::SeqCst);
+        }
+        true
     }
 
     fn try_merge_adjacent_chunks(a: &Chunk, b: &Chunk) -> Option<Chunk> {

@@ -28,7 +28,7 @@ pub struct HeaderDescriptor {
 impl From<&OwnedHeaderDescriptor> for HeaderDescriptor {
     fn from(item: &OwnedHeaderDescriptor) -> Self {
         let id = item.segment.array.id();
-        let index = unsafe { item.segment.array.index(item.header) } as HeaderIndex;
+        let index = unsafe { item.segment.array.index(item.header) };
 
         Self { id, index }
     }
@@ -44,7 +44,7 @@ unsafe impl Send for OwnedHeaderDescriptor {}
 unsafe impl Sync for OwnedHeaderDescriptor {}
 
 impl OwnedHeaderDescriptor {
-    pub fn new(segment: Arc<HeaderSegment>, header: *const ChunkHeaderType) -> Self {
+    pub(crate) fn new(segment: Arc<HeaderSegment>, header: *const ChunkHeaderType) -> Self {
         Self { segment, header }
     }
 

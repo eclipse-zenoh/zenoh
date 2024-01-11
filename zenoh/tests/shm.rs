@@ -122,7 +122,7 @@ mod tests {
             // Put data
             println!("[PS][03b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");
 
-            for _ in 0..msg_count {
+            for c in 0..msg_count {
                 // Create the message to send
                 let sbuf = ztimeout!(async {
                     loop {
@@ -132,12 +132,14 @@ mod tests {
                         }
                     }
                 });
+                println!("{c} created");
 
                 ztimeout!(peer02
                     .put(&key_expr, sbuf)
                     .congestion_control(CongestionControl::Block)
                     .res_async())
                 .unwrap();
+                println!("{c} putted");
             }
 
             // wat for all messages received

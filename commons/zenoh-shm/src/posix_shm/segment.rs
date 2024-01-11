@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 
 use rand::Rng;
 use shared_memory::{Shmem, ShmemConf, ShmemError};
@@ -24,6 +24,18 @@ const SEGMENT_DEDICATE_TRIES: usize = 100;
 pub struct Segment<ID> {
     pub shmem: Shmem,
     pub id: ID,
+}
+
+impl<ID> Debug for Segment<ID>
+where
+    ID: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Segment")
+            .field("shmem", &self.shmem.as_ptr())
+            .field("id", &self.id)
+            .finish()
+    }
 }
 
 impl<ID> Segment<ID>

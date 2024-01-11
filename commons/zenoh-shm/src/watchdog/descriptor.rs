@@ -12,7 +12,10 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::{atomic::AtomicU64, Arc};
+use std::{
+    hash::Hash,
+    sync::{atomic::AtomicU64, Arc},
+};
 
 use super::segment::Segment;
 
@@ -45,18 +48,25 @@ impl From<&OwnedDescriptor> for Descriptor {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct OwnedDescriptor {
     segment: Arc<Segment>,
-    atomic: *const AtomicU64,
-    mask: u64,
+    pub atomic: *const AtomicU64,
+    pub mask: u64,
 }
 
 unsafe impl Send for OwnedDescriptor {}
 unsafe impl Sync for OwnedDescriptor {}
 
+impl Hash for OwnedDescriptor {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.atomic.hash(state);
+        self.mask.hash(state);
+    }
+}
+
 impl OwnedDescriptor {
-    pub fn new(segment: Arc<Segment>, atomic: *const AtomicU64, mask: u64) -> Self {
+    pub(crate) fn new(segment: Arc<Segment>, atomic: *const AtomicU64, mask: u64) -> Self {
         Self {
             segment,
             atomic,
@@ -70,10 +80,15 @@ impl OwnedDescriptor {
         };
     }
 
-    pub fn validate(&self) -> u64 {
+    pub(crate) fn validate(&self) -> u64 {
         unsafe {
             (*self.atomic).fetch_and(!self.mask, std::sync::atomic::Ordering::SeqCst) & self.mask
         }
+    }
+
+    #[cfg(feature = "test")]
+    pub fn test_validate(&self) -> u64 {
+        self.validate()
     }
 }
 

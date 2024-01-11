@@ -15,34 +15,25 @@ use lazy_static::lazy_static;
 use std::{
     collections::BTreeSet,
     sync::{Arc, Mutex},
-    time::Duration,
 };
 
 use zenoh_result::{zerror, ZResult};
 
-use crate::header::descriptor::OwnedHeaderDescriptor;
-
-use super::{
-    confirmator::{ConfirmedDescriptor, GLOBAL_CONFIRMATOR},
-    descriptor::OwnedDescriptor,
-    segment::Segment,
-    validator::WatchdogValidator,
-};
+use super::{allocated_watchdog::AllocatedWatchdog, descriptor::OwnedDescriptor, segment::Segment};
 
 lazy_static! {
-    pub static ref GLOBAL_STORAGE: Storage = Storage::new(512, Duration::from_millis(100)).unwrap();
+    pub static ref GLOBAL_STORAGE: Storage = Storage::new(65536).unwrap();
 }
 
 pub struct Storage {
     available: Arc<Mutex<BTreeSet<OwnedDescriptor>>>,
-    validator: WatchdogValidator,
 }
 
 // todo: expand and shrink Storage when needed
 // OR
 // support multiple descrptor assignment (allow multiple buffers to be assigned to the same watchdog)
 impl Storage {
-    pub fn new(initial_watchdog_count: usize, watchdog_interval: Duration) -> ZResult<Self> {
+    pub fn new(initial_watchdog_count: usize) -> ZResult<Self> {
         let segment = Arc::new(Segment::create(initial_watchdog_count)?);
 
         let mut initially_available = BTreeSet::default();
@@ -53,34 +44,33 @@ impl Storage {
             for bit in 0..64 {
                 let mask = 1u64 << bit;
                 let descriptor = OwnedDescriptor::new(segment.clone(), atomic, mask);
-                initially_available.insert(descriptor);
+                let _new_insert = initially_available.insert(descriptor);
+                #[cfg(feature = "test")]
+                assert!(_new_insert);
             }
         }
 
-        let available = Arc::new(Mutex::new(initially_available));
-
-        let c_available = available.clone();
-        let validator = WatchdogValidator::new(watchdog_interval, move |descriptor| {
-            if let Ok(mut guard) = c_available.lock() {
-                let _ = guard.insert(descriptor);
-            }
-        });
-
         Ok(Self {
-            available,
-            validator,
+            available: Arc::new(Mutex::new(initially_available)),
         })
     }
 
-    pub fn allocate_watchdog(&self, header: OwnedHeaderDescriptor) -> ZResult<ConfirmedDescriptor> {
+    pub fn allocate_watchdog(&self) -> ZResult<AllocatedWatchdog> {
         let mut guard = self.available.lock().map_err(|e| zerror!("{e}"))?;
         let popped = guard.pop_first();
         drop(guard);
 
-        let watchdog = popped.ok_or_else(|| zerror!("no free watchdogs available"))?;
-        let confirmed = GLOBAL_CONFIRMATOR.add_owned(watchdog.clone())?;
-        self.validator.add(watchdog, header)?;
+        let allocated =
+            AllocatedWatchdog::new(popped.ok_or_else(|| zerror!("no free watchdogs available"))?);
 
-        Ok(confirmed)
+        Ok(allocated)
+    }
+
+    pub(crate) fn free_watchdog(&self, descriptor: OwnedDescriptor) {
+        if let Ok(mut guard) = self.available.lock() {
+            let _new_insert = guard.insert(descriptor);
+            #[cfg(feature = "test")]
+            assert!(_new_insert);
+        }
     }
 }

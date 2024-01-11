@@ -20,6 +20,7 @@ use zenoh_result::{bail, ZResult};
 use super::segment::Segment;
 
 /// An SHM segment that is intended to be an array of elements of some certain type
+#[derive(Debug)]
 pub struct ArrayInSHM<ID, Elem, ElemIndex> {
     inner: Segment<ID>,
     _phantom: PhantomData<(Elem, ElemIndex)>,
@@ -65,6 +66,11 @@ where
 
     pub unsafe fn elem(&self, index: ElemIndex) -> *const Elem {
         (self.inner.shmem.as_ptr() as *const Elem).add(index.as_())
+    }
+    
+    #[cfg(feature = "test")]
+    pub unsafe fn elem_mut(&mut self, index: ElemIndex) -> *mut Elem {
+        (self.inner.shmem.as_ptr() as *mut Elem).add(index.as_())
     }
 
     pub unsafe fn index(&self, elem: *const Elem) -> ElemIndex {

@@ -70,14 +70,14 @@ impl Storage {
             .refcount
             .store(1, std::sync::atomic::Ordering::SeqCst);
         header
-            .watchdog_flag
-            .store(true, std::sync::atomic::Ordering::SeqCst);
+            .watchdog_invalidated
+            .store(false, std::sync::atomic::Ordering::SeqCst);
 
         Ok(AllocatedHeaderDescriptor { descriptor })
     }
 
-    pub(crate) fn reclaim_header(&self, header: OwnedHeaderDescriptor) {
-        // header deallocated - increment it's generation to invalidate any existing references, if any
+    pub fn reclaim_header(&self, header: OwnedHeaderDescriptor) {
+        // header deallocated - increment it's generation to invalidate any existing references
         header
             .header()
             .generation

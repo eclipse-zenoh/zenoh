@@ -22,6 +22,7 @@ use super::descriptor::SegmentID;
 
 const WATCHDOG_SEGMENT_PREFIX: &str = "watchdog";
 
+#[derive(Debug)]
 pub struct Segment {
     pub array: ArrayInSHM<SegmentID, AtomicU64, u32>,
 }

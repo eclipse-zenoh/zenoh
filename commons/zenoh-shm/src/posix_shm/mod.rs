@@ -12,5 +12,5 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub mod array;
-pub mod segment;
+tested_crate_module!(array);
+tested_crate_module!(segment);
