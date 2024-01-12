@@ -63,6 +63,8 @@ pub trait PluginStatus {
     fn name(&self) -> &str;
     /// Returns the version of the loaded plugin (usually the version of the plugin's crate)
     fn version(&self) -> Option<&str>;
+    /// Returns the long version of the loaded plugin (usually the version of the plugin's crate + git commit hash)
+    fn long_version(&self) -> Option<&str>;
     /// Returns the path of the loaded plugin
     fn path(&self) -> &str;
     /// Returns the plugin's state (Declared, Loaded, Started)
@@ -78,6 +80,7 @@ pub struct PluginStatusRec<'a> {
     pub name: Cow<'a, str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub version: Option<Cow<'a, str>>,
+    pub long_version: Option<Cow<'a, str>>,
     pub path: Cow<'a, str>,
     pub state: PluginState,
     pub report: PluginReport,
@@ -89,6 +92,9 @@ impl PluginStatus for PluginStatusRec<'_> {
     }
     fn version(&self) -> Option<&str> {
         self.version.as_deref()
+    }
+    fn long_version(&self) -> Option<&str> {
+        self.long_version.as_deref()
     }
     fn path(&self) -> &str {
         &self.path
@@ -107,6 +113,7 @@ impl<'a> PluginStatusRec<'a> {
         Self {
             name: Cow::Borrowed(plugin.name()),
             version: plugin.version().map(Cow::Borrowed),
+            long_version: plugin.long_version().map(Cow::Borrowed),
             path: Cow::Borrowed(plugin.path()),
             state: plugin.state(),
             report: plugin.report(),
@@ -117,6 +124,7 @@ impl<'a> PluginStatusRec<'a> {
         PluginStatusRec {
             name: Cow::Owned(self.name.into_owned()),
             version: self.version.map(|v| Cow::Owned(v.into_owned())),
+            long_version: self.long_version.map(|v| Cow::Owned(v.into_owned())),
             path: Cow::Owned(self.path.into_owned()),
             state: self.state,
             report: self.report,
@@ -166,12 +174,21 @@ pub trait Plugin: Sized + 'static {
     const DEFAULT_NAME: &'static str;
     /// Plugin's version. Used only for information purposes. It's recommended to use [plugin_version!] macro to generate this string.
     const PLUGIN_VERSION: &'static str;
+    /// Plugin's long version (with git commit hash). Used only for information purposes. It's recommended to use [plugin_long_version!] macro to generate this string.
+    const PLUGIN_LONG_VERSION: &'static str;
     /// Starts your plugin. Use `Ok` to return your plugin's control structure
     fn start(name: &str, args: &Self::StartArgs) -> ZResult<Self::Instance>;
 }
 
 #[macro_export]
 macro_rules! plugin_version {
+    () => {
+        env!("CARGO_PKG_VERSION")
+    };
+}
+
+#[macro_export]
+macro_rules! plugin_long_version {
     () => {
         git_version::git_version!(prefix = "v", cargo_prefix = "v")
     };

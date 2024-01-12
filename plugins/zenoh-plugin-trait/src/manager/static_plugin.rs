@@ -45,6 +45,9 @@ where
     fn version(&self) -> Option<&str> {
         Some(P::PLUGIN_VERSION)
     }
+    fn long_version(&self) -> Option<&str> {
+        Some(P::PLUGIN_LONG_VERSION)
+    }
     fn path(&self) -> &str {
         "<static>"
     }

@@ -37,6 +37,7 @@ use zenoh_backend_traits::config::StorageConfig;
 use zenoh_backend_traits::config::VolumeConfig;
 use zenoh_backend_traits::VolumeInstance;
 use zenoh_core::zlock;
+use zenoh_plugin_trait::plugin_long_version;
 use zenoh_plugin_trait::plugin_version;
 use zenoh_plugin_trait::Plugin;
 use zenoh_plugin_trait::PluginControl;
@@ -57,6 +58,7 @@ impl ZenohPlugin for StoragesPlugin {}
 impl Plugin for StoragesPlugin {
     const DEFAULT_NAME: &'static str = "storage_manager";
     const PLUGIN_VERSION: &'static str = plugin_version!();
+    const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
     type StartArgs = Runtime;
     type Instance = zenoh::plugins::RunningPlugin;

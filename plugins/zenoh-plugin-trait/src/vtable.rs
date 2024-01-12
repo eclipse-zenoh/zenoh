@@ -69,6 +69,7 @@ pub struct Compatibility {
     start_args_version: StructVersion,
     instance_version: StructVersion,
     plugin_version: &'static str,
+    plugin_long_version: &'static str,
 }
 
 impl Compatibility {
@@ -82,12 +83,14 @@ impl Compatibility {
         let start_args_version = StructVersion::new::<StartArgsType>();
         let instance_version = StructVersion::new::<InstanceType>();
         let plugin_version = PluginType::PLUGIN_VERSION;
+        let plugin_long_version = PluginType::PLUGIN_LONG_VERSION;
         Self {
             rust_version,
             vtable_version,
             start_args_version,
             instance_version,
             plugin_version,
+            plugin_long_version,
         }
     }
     pub fn with_empty_plugin_version<
@@ -104,10 +107,14 @@ impl Compatibility {
             start_args_version,
             instance_version,
             plugin_version: "",
+            plugin_long_version: "",
         }
     }
     pub fn plugin_version(&self) -> &'static str {
         self.plugin_version
+    }
+    pub fn plugin_long_version(&self) -> &'static str {
+        self.plugin_long_version
     }
     /// Returns true if rust compiler and structures version are exactly the same and
     /// plugin version is compatible with the requested version range in the configuration file

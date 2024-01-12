@@ -19,7 +19,7 @@ use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::*;
-use zenoh_plugin_trait::Plugin;
+use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin};
 use zenoh_result::ZResult;
 
 use crate::MEMORY_BACKEND_NAME;
@@ -33,7 +33,8 @@ impl Plugin for MemoryBackend {
     type Instance = VolumeInstance;
 
     const DEFAULT_NAME: &'static str = MEMORY_BACKEND_NAME;
-    const PLUGIN_VERSION: &'static str = env!("CARGO_PKG_VERSION");
+    const PLUGIN_VERSION: &'static str = plugin_version!();
+    const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
     fn start(_: &str, args: &VolumeConfig) -> ZResult<VolumeInstance> {
         Ok(Box::new(MemoryBackend {

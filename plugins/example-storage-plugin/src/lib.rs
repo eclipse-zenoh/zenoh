@@ -24,7 +24,7 @@ use zenoh_backend_traits::{
     Capability, History, Persistence, Storage, StorageInsertionResult, StoredData, Volume,
     VolumeInstance,
 };
-use zenoh_plugin_trait::{plugin_version, Plugin};
+use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin};
 use zenoh_result::ZResult;
 
 zenoh_plugin_trait::declare_plugin!(ExampleBackend);
@@ -39,6 +39,7 @@ impl Plugin for ExampleBackend {
 
     const DEFAULT_NAME: &'static str = "example_backend";
     const PLUGIN_VERSION: &'static str = plugin_version!();
+    const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 }
 
 pub struct ExampleBackend {}

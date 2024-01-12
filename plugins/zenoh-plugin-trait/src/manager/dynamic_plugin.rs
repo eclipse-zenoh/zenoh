@@ -49,6 +49,7 @@ struct DynamicPluginStarter<StartArgs, Instance> {
     _lib: Library,
     path: PathBuf,
     plugin_version: &'static str,
+    plugin_long_version: &'static str,
     vtable: PluginVTable<StartArgs, Instance>,
 }
 
@@ -90,6 +91,7 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
             _lib: lib,
             path,
             plugin_version: plugin_compatibility_record.plugin_version(),
+            plugin_long_version: plugin_compatibility_record.plugin_long_version(),
             vtable,
         })
     }
@@ -130,7 +132,9 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatus
     fn version(&self) -> Option<&str> {
         self.starter.as_ref().map(|v| v.plugin_version)
     }
-
+    fn long_version(&self) -> Option<&str> {
+        self.starter.as_ref().map(|v| v.plugin_long_version)
+    }
     fn path(&self) -> &str {
         if let Some(starter) = &self.starter {
             starter.path()

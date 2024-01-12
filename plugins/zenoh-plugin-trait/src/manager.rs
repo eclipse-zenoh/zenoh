@@ -62,6 +62,9 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatus
     fn version(&self) -> Option<&str> {
         self.0.version()
     }
+    fn long_version(&self) -> Option<&str> {
+        self.0.long_version()
+    }
     fn path(&self) -> &str {
         self.0.path()
     }
