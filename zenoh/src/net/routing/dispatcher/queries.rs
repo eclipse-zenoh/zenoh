@@ -39,7 +39,7 @@ pub(crate) struct Query {
 }
 
 fn compute_query_routes_(tables: &Tables, routes: &mut QueryRoutes, expr: &mut RoutingExpr) {
-    let indexes = tables.hat_code.get_data_routes_entries(tables);
+    let indexes = tables.hat_code.get_query_routes_entries(tables);
 
     let max_idx = indexes.routers.iter().max().unwrap();
     routes.routers.resize_with((*max_idx as usize) + 1, || {
