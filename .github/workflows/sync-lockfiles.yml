@@ -10,6 +10,18 @@ defaults:
     shell: bash
 
 jobs:
+  fetch:
+    name: Fetch Zenoh's lockfile
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Zenoh
+        uses: actions/checkout@v4
+
+      - name: Upload lockfile
+        uses: actions/upload-artifact@v3
+        with:
+          path: Cargo.lock
+
   sync:
     name: Sync Cargo lockfile with ${{ matrix.dependant }}
     runs-on: ubuntu-latest
@@ -43,25 +55,27 @@ jobs:
       # NOTE: Not all Zenoh dependants have their Cargo manifest and lockfile
       # at the repository's toplevel. The only exception being zenoh-kotlin and
       # zenoh-java. Thus the need for this ugly workaround.
-      - name: Compute Cargo manifest path of ${{ matrix.dependant }}
-        id: manifest-path
+      - name: Compute Cargo manifest & lockfile paths of ${{ matrix.dependant }}
+        id: get-paths
+        # NOTE: We assume that the lockfile resides in the same directory as the manifest.
         run: |
           if [[ "${{ matrix.dependant }}" =~ zenoh-(java|kotlin) ]]; then
-            echo "value=./zenoh-jni/Cargo.toml" >> $GITHUB_OUTPUT
+            echo "manifest=./zenoh-jni/Cargo.toml" >> $GITHUB_OUTPUT
+            echo "lockfile=./zenoh-jni/Cargo.lock" >> $GITHUB_OUTPUT
           else
-            echo "value=./Cargo.toml" >> $GITHUB_OUTPUT
+            echo "manifest=./Cargo.toml" >> $GITHUB_OUTPUT
+            echo "lockfile=./Cargo.lock" >> $GITHUB_OUTPUT
           fi
 
       - name: Override ${{ matrix.dependant }} lockfile with Zenoh's
-        # NOTE: We assume that the lockfile resides in the same directory as the manifest.
-        run: |
-          MANIFEST_PATH=${{ steps.manifest-path.outputs.value }}
-          curl "https://raw.githubusercontent.com/eclipse-zenoh/zenoh/main/Cargo.lock" --output ${MANIFEST_PATH/toml/lock}
+        uses: actions/download-artifact@v3
+        with:
+          path: ${{ steps.get-paths.outputs.lockfile }}
 
       - name: Rectify lockfile
         # NOTE: Checking the package for errors will rectify the Cargo.lock while preserving
         # the dependency versions fetched from source.
-        run: cargo check --manifest-path ${{ steps.manifest-path.outputs.value }}
+        run: cargo check --manifest-path ${{ steps.get-paths.outputs.manifest }}
 
       - name: Create/Update a pull request if the lockfile changed
         id: cpr
