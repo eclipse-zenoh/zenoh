@@ -56,7 +56,7 @@ jobs:
         # NOTE: We assume that the lockfile resides in the same directory as the manifest.
         run: |
           MANIFEST_PATH=${{ steps.manifest-path.outputs.value }}
-          curl "https://raw.githubusercontent.com/eclipse-zenoh/zenoh/Cargo.lock" --output ${MANIFEST_PATH/toml/lock}
+          curl "https://raw.githubusercontent.com/eclipse-zenoh/zenoh/main/Cargo.lock" --output ${MANIFEST_PATH/toml/lock}
 
       - name: Rectify lockfile
         # NOTE: Checking the package for errors will rectify the Cargo.lock while preserving
