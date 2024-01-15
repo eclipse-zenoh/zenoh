@@ -42,3 +42,5 @@ mod std_only;
 
 #[cfg(feature = "std")]
 pub use std_only::*;
+
+mod stats;
