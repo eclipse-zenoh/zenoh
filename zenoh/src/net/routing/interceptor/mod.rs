@@ -22,58 +22,61 @@ use zenoh_config::Config;
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
-pub(crate) trait InterceptTrait {
+pub(crate) trait InterceptorTrait {
     fn intercept(
         &self,
         ctx: RoutingContext<NetworkMessage>,
     ) -> Option<RoutingContext<NetworkMessage>>;
 }
 
-pub(crate) type Intercept = Box<dyn InterceptTrait + Send + Sync>;
-pub(crate) type IngressIntercept = Intercept;
-pub(crate) type EgressIntercept = Intercept;
+pub(crate) type Interceptor = Box<dyn InterceptorTrait + Send + Sync>;
+pub(crate) type IngressInterceptor = Interceptor;
+pub(crate) type EgressInterceptor = Interceptor;
 
-pub(crate) trait InterceptorTrait {
+pub(crate) trait InterceptorFactoryTrait {
     fn new_transport_unicast(
         &self,
         transport: &TransportUnicast,
-    ) -> (Option<IngressIntercept>, Option<EgressIntercept>);
-    fn new_transport_multicast(&self, transport: &TransportMulticast) -> Option<EgressIntercept>;
-    fn new_peer_multicast(&self, transport: &TransportMulticast) -> Option<IngressIntercept>;
+    ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>);
+    fn new_transport_multicast(&self, transport: &TransportMulticast) -> Option<EgressInterceptor>;
+    fn new_peer_multicast(&self, transport: &TransportMulticast) -> Option<IngressInterceptor>;
 }
 
-pub(crate) type Interceptor = Box<dyn InterceptorTrait + Send + Sync>;
+pub(crate) type InterceptorFactory = Box<dyn InterceptorFactoryTrait + Send + Sync>;
 
-pub(crate) fn interceptors(_config: &Config) -> Vec<Interceptor> {
+pub(crate) fn interceptor_factories(_config: &Config) -> Vec<InterceptorFactory> {
     // Add interceptors here
+    // TODO build the list of intercetors with the correct order from the config
     // vec![Box::new(LoggerInterceptor {})]
     vec![]
 }
 
-pub(crate) struct InterceptsChain {
-    pub(crate) intercepts: Vec<Intercept>,
+pub(crate) struct InterceptorsChain {
+    pub(crate) interceptors: Vec<Interceptor>,
 }
 
-impl InterceptsChain {
+impl InterceptorsChain {
     #[allow(dead_code)]
     pub(crate) fn empty() -> Self {
-        Self { intercepts: vec![] }
+        Self {
+            interceptors: vec![],
+        }
     }
 }
 
-impl From<Vec<Intercept>> for InterceptsChain {
-    fn from(intercepts: Vec<Intercept>) -> Self {
-        InterceptsChain { intercepts }
+impl From<Vec<Interceptor>> for InterceptorsChain {
+    fn from(interceptors: Vec<Interceptor>) -> Self {
+        InterceptorsChain { interceptors }
     }
 }
 
-impl InterceptTrait for InterceptsChain {
+impl InterceptorTrait for InterceptorsChain {
     fn intercept(
         &self,
         mut ctx: RoutingContext<NetworkMessage>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        for intercept in &self.intercepts {
-            match intercept.intercept(ctx) {
+        for interceptor in &self.interceptors {
+            match interceptor.intercept(ctx) {
                 Some(newctx) => ctx = newctx,
                 None => {
                     log::trace!("Msg intercepted!");
@@ -87,7 +90,7 @@ impl InterceptTrait for InterceptsChain {
 
 pub(crate) struct IngressMsgLogger {}
 
-impl InterceptTrait for IngressMsgLogger {
+impl InterceptorTrait for IngressMsgLogger {
     fn intercept(
         &self,
         ctx: RoutingContext<NetworkMessage>,
@@ -105,7 +108,7 @@ impl InterceptTrait for IngressMsgLogger {
 }
 pub(crate) struct EgressMsgLogger {}
 
-impl InterceptTrait for EgressMsgLogger {
+impl InterceptorTrait for EgressMsgLogger {
     fn intercept(
         &self,
         ctx: RoutingContext<NetworkMessage>,
@@ -117,11 +120,11 @@ impl InterceptTrait for EgressMsgLogger {
 
 pub(crate) struct LoggerInterceptor {}
 
-impl InterceptorTrait for LoggerInterceptor {
+impl InterceptorFactoryTrait for LoggerInterceptor {
     fn new_transport_unicast(
         &self,
         transport: &TransportUnicast,
-    ) -> (Option<IngressIntercept>, Option<EgressIntercept>) {
+    ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
         log::debug!("New transport unicast {:?}", transport);
         (
             Some(Box::new(IngressMsgLogger {})),
@@ -129,12 +132,12 @@ impl InterceptorTrait for LoggerInterceptor {
         )
     }
 
-    fn new_transport_multicast(&self, transport: &TransportMulticast) -> Option<EgressIntercept> {
+    fn new_transport_multicast(&self, transport: &TransportMulticast) -> Option<EgressInterceptor> {
         log::debug!("New transport multicast {:?}", transport);
         Some(Box::new(EgressMsgLogger {}))
     }
 
-    fn new_peer_multicast(&self, transport: &TransportMulticast) -> Option<IngressIntercept> {
+    fn new_peer_multicast(&self, transport: &TransportMulticast) -> Option<IngressInterceptor> {
         log::debug!("New peer multicast {:?}", transport);
         Some(Box::new(IngressMsgLogger {}))
     }

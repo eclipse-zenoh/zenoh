@@ -14,7 +14,7 @@
 use super::Primitives;
 use crate::net::routing::{
     dispatcher::face::Face,
-    interceptor::{InterceptTrait, InterceptsChain},
+    interceptor::{InterceptorTrait, InterceptorsChain},
     RoutingContext,
 };
 use std::any::Any;
@@ -27,19 +27,19 @@ use zenoh_transport::TransportPeerEventHandler;
 pub struct DeMux {
     face: Face,
     pub(crate) transport: Option<TransportUnicast>,
-    pub(crate) intercept: InterceptsChain,
+    pub(crate) interceptor: InterceptorsChain,
 }
 
 impl DeMux {
     pub(crate) fn new(
         face: Face,
         transport: Option<TransportUnicast>,
-        intercept: InterceptsChain,
+        interceptor: InterceptorsChain,
     ) -> Self {
         Self {
             face,
             transport,
-            intercept,
+            interceptor,
         }
     }
 }
@@ -47,9 +47,9 @@ impl DeMux {
 impl TransportPeerEventHandler for DeMux {
     #[inline]
     fn handle_message(&self, mut msg: NetworkMessage) -> ZResult<()> {
-        if !self.intercept.intercepts.is_empty() {
+        if !self.interceptor.interceptors.is_empty() {
             let ctx = RoutingContext::new_in(msg, self.face.clone());
-            let ctx = match self.intercept.intercept(ctx) {
+            let ctx = match self.interceptor.intercept(ctx) {
                 Some(ctx) => ctx,
                 None => return Ok(()),
             };

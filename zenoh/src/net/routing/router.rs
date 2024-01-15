@@ -18,15 +18,15 @@ pub use super::dispatcher::resource::*;
 use super::dispatcher::tables::Tables;
 use super::dispatcher::tables::TablesLock;
 use super::hat;
-use super::interceptor::EgressIntercept;
-use super::interceptor::InterceptsChain;
+use super::interceptor::EgressInterceptor;
+use super::interceptor::InterceptorsChain;
 use super::runtime::Runtime;
 use crate::net::primitives::DeMux;
 use crate::net::primitives::DummyPrimitives;
 use crate::net::primitives::EPrimitives;
 use crate::net::primitives::McastMux;
 use crate::net::primitives::Mux;
-use crate::net::routing::interceptor::IngressIntercept;
+use crate::net::routing::interceptor::IngressInterceptor;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::{Mutex, RwLock};
@@ -120,8 +120,8 @@ impl Router {
             .map(|itor| itor.new_transport_unicast(&transport))
             .unzip();
         let (ingress, egress) = (
-            InterceptsChain::from(ingress.into_iter().flatten().collect::<Vec<_>>()),
-            InterceptsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
+            InterceptorsChain::from(ingress.into_iter().flatten().collect::<Vec<_>>()),
+            InterceptorsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
         );
         let newface = tables
             .faces
@@ -162,12 +162,12 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let intercept = InterceptsChain::from(
+        let interceptor = InterceptorsChain::from(
             tables
                 .interceptors
                 .iter()
                 .filter_map(|itor| itor.new_transport_multicast(&transport))
-                .collect::<Vec<EgressIntercept>>(),
+                .collect::<Vec<EgressInterceptor>>(),
         );
         tables.mcast_groups.push(FaceState::new(
             fid,
@@ -180,7 +180,7 @@ impl Router {
                 transport.clone(),
                 fid,
                 self.tables.clone(),
-                intercept,
+                interceptor,
             )),
             Some(transport),
             ctrl_lock.new_face(),
@@ -201,12 +201,12 @@ impl Router {
         let mut tables = zwrite!(self.tables.tables);
         let fid = tables.face_counter;
         tables.face_counter += 1;
-        let intercept = InterceptsChain::from(
+        let interceptor = InterceptorsChain::from(
             tables
                 .interceptors
                 .iter()
                 .filter_map(|itor| itor.new_peer_multicast(&transport))
-                .collect::<Vec<IngressIntercept>>(),
+                .collect::<Vec<IngressInterceptor>>(),
         );
         let face_state = FaceState::new(
             fid,
@@ -230,7 +230,7 @@ impl Router {
                 state: face_state,
             },
             None,
-            intercept,
+            interceptor,
         )))
     }
 }

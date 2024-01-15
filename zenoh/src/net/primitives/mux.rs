@@ -16,7 +16,7 @@ use std::sync::Arc;
 use super::{EPrimitives, Primitives};
 use crate::net::routing::{
     dispatcher::{face::Face, tables::TablesLock},
-    interceptor::{InterceptTrait, InterceptsChain},
+    interceptor::{InterceptorTrait, InterceptorsChain},
     RoutingContext,
 };
 use zenoh_protocol::network::{
@@ -28,7 +28,7 @@ pub struct Mux {
     pub handler: TransportUnicast,
     pub(crate) fid: usize,
     pub(crate) tables: Arc<TablesLock>,
-    pub(crate) intercept: InterceptsChain,
+    pub(crate) interceptor: InterceptorsChain,
 }
 
 impl Mux {
@@ -36,13 +36,13 @@ impl Mux {
         handler: TransportUnicast,
         fid: usize,
         tables: Arc<TablesLock>,
-        intercept: InterceptsChain,
+        interceptor: InterceptorsChain,
     ) -> Mux {
         Mux {
             handler,
             fid,
             tables,
-            intercept,
+            interceptor,
         }
     }
 }
@@ -65,7 +65,7 @@ impl Primitives for Mux {
                     state: face.clone(),
                 },
             );
-            if let Some(ctx) = self.intercept.intercept(ctx) {
+            if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         }
@@ -88,7 +88,7 @@ impl Primitives for Mux {
                     state: face.clone(),
                 },
             );
-            if let Some(ctx) = self.intercept.intercept(ctx) {
+            if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         }
@@ -111,7 +111,7 @@ impl Primitives for Mux {
                     state: face.clone(),
                 },
             );
-            if let Some(ctx) = self.intercept.intercept(ctx) {
+            if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         }
@@ -134,7 +134,7 @@ impl Primitives for Mux {
                     state: face.clone(),
                 },
             );
-            if let Some(ctx) = self.intercept.intercept(ctx) {
+            if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         }
@@ -157,7 +157,7 @@ impl Primitives for Mux {
                     state: face.clone(),
                 },
             );
-            if let Some(ctx) = self.intercept.intercept(ctx) {
+            if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
         }
@@ -181,7 +181,7 @@ impl EPrimitives for Mux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.intercept.intercept(ctx) {
+        if let Some(ctx) = self.interceptor.intercept(ctx) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -198,7 +198,7 @@ impl EPrimitives for Mux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.intercept.intercept(ctx) {
+        if let Some(ctx) = self.interceptor.intercept(ctx) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -215,7 +215,7 @@ impl EPrimitives for Mux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.intercept.intercept(ctx) {
+        if let Some(ctx) = self.interceptor.intercept(ctx) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -232,7 +232,7 @@ impl EPrimitives for Mux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.intercept.intercept(ctx) {
+        if let Some(ctx) = self.interceptor.intercept(ctx) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -249,7 +249,7 @@ impl EPrimitives for Mux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.intercept.intercept(ctx) {
+        if let Some(ctx) = self.interceptor.intercept(ctx) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -263,7 +263,7 @@ pub struct McastMux {
     pub handler: TransportMulticast,
     pub(crate) fid: usize,
     pub(crate) tables: Arc<TablesLock>,
-    pub(crate) intercept: InterceptsChain,
+    pub(crate) intercept: InterceptorsChain,
 }
 
 impl McastMux {
@@ -271,7 +271,7 @@ impl McastMux {
         handler: TransportMulticast,
         fid: usize,
         tables: Arc<TablesLock>,
-        intercept: InterceptsChain,
+        intercept: InterceptorsChain,
     ) -> McastMux {
         McastMux {
             handler,
