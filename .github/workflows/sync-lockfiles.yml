@@ -22,6 +22,7 @@ jobs:
       - name: Upload lockfile
         uses: actions/upload-artifact@v3
         with:
+          name: Cargo.lock
           path: Cargo.lock
 
   sync:
@@ -59,27 +60,25 @@ jobs:
       # NOTE: Not all Zenoh dependants have their Cargo manifest and lockfile
       # at the repository's toplevel. The only exception being zenoh-kotlin and
       # zenoh-java. Thus the need for this ugly workaround.
-      - name: Compute Cargo manifest & lockfile paths of ${{ matrix.dependant }}
-        id: get-paths
-        # NOTE: We assume that the lockfile resides in the same directory as the manifest.
+      - name: Compute crate path of ${{ matrix.dependant }}
+        id: crate-path
         run: |
           if [[ "${{ matrix.dependant }}" =~ zenoh-(java|kotlin) ]]; then
-            echo "manifest=./zenoh-jni/Cargo.toml" >> $GITHUB_OUTPUT
-            echo "lockfile=./zenoh-jni/Cargo.lock" >> $GITHUB_OUTPUT
+            echo "value=zenoh-jni" >> $GITHUB_OUTPUT
           else
-            echo "manifest=./Cargo.toml" >> $GITHUB_OUTPUT
-            echo "lockfile=./Cargo.lock" >> $GITHUB_OUTPUT
+            echo "value=." >> $GITHUB_OUTPUT
           fi
 
       - name: Override ${{ matrix.dependant }} lockfile with Zenoh's
         uses: actions/download-artifact@v3
         with:
-          path: ${{ steps.get-paths.outputs.lockfile }}
+          name: Cargo.lock
+          path: ${{ steps.crate-path.outputs.value }}
 
       - name: Rectify lockfile
         # NOTE: Checking the package for errors will rectify the Cargo.lock while preserving
         # the dependency versions fetched from source.
-        run: cargo check --manifest-path ${{ steps.get-paths.outputs.manifest }}
+        run: cargo check --manifest-path ${{ steps.crate-path.outputs.value }}/Cargo.toml
 
       - name: Create/Update a pull request if the lockfile changed
         id: cpr
