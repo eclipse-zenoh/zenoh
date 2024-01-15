@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout Zenoh
         uses: actions/checkout@v4
+        with:
+          repository: eclipse-zenoh/zenoh
 
       - name: Upload lockfile
         uses: actions/upload-artifact@v3
