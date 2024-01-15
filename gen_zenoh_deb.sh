@@ -21,7 +21,9 @@ if [ -z "$1" -o -z "$2" ]; then
     exit 1
 fi
 
-VERSION=`echo $1`
+# NOTE: cargo-deb v2.0.0 and later will add a "-1" suffix to the version for
+# compliance with Debian's packaging standard.
+VERSION="$1-1"
 ARCH=$2
 
 PACKAGE_NAME="zenoh_${VERSION}_${ARCH}"
