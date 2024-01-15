@@ -129,16 +129,6 @@ impl RunningPluginTrait for RunningPlugin {
         }
         bail!("unknown option {} for {}", path, guard.name)
     }
-
-    // Function called on any query on admin space that matches this plugin's sub-part of the admin space.
-    // Thus the plugin can reply its contribution to the global admin space of this zenohd.
-    fn adminspace_getter<'a>(
-        &'a self,
-        _selector: &'a Selector<'a>,
-        _plugin_status_key: &str,
-    ) -> ZResult<Vec<zenoh::plugins::Response>> {
-        Ok(Vec::new())
-    }
 }
 
 // If the plugin is dropped, set the flag to false to end the loop

@@ -82,16 +82,41 @@ pub trait RunningPluginTrait: Send + Sync + PluginControl {
     /// * `Ok(Some(value))` indicates that the plugin would rather the new configuration be `value`.
     fn config_checker(
         &self,
-        path: &str,
-        current: &serde_json::Map<String, serde_json::Value>,
-        new: &serde_json::Map<String, serde_json::Value>,
-    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>>;
-    /// Used to request your plugin's status for the administration space.
+        _path: &str,
+        _current: &serde_json::Map<String, serde_json::Value>,
+        _new: &serde_json::Map<String, serde_json::Value>,
+    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+        bail!("Runtime configuration change not supported");
+    }
+    /// Used to request plugin's status for the administration space.
+    /// Function called on any query on admin space that matches this plugin's sub-part of the admin space.
+    /// Thus the plugin can reply its contribution to the global admin space of this zenohd.
+    /// Parameters:
+    /// * `selector`: the full selector of the query (usually only key_expr part is used). This selector is
+    /// exactly the same as it was requested by user, for example "@/router/ROUTER_ID/plugins/PLUGIN_NAME/some/plugin/info" or "@/router/*/plugins/*/foo/bar". 
+    /// But the plugin's [adminspace_getter] is called only if the selector matches the [plugin_status_key]
+    /// * `plugin_status_key`: the actual path to plugin's status in the admin space. For example "@/router/ROUTER_ID/plugins/PLUGIN_NAME"
+    /// Returns value:
+    /// * `Ok(Vec<Response>)`: the list of responses to the query. For example if plugins can return information on subleys "foo", "bar", "foo/buzz" and "bar/buzz" 
+    /// and it's requested with the query "@/router/ROUTER_ID/plugins/PLUGIN_NAME/*", it should return only information on "foo" and "bar" subkeys, but not on "foo/buzz" and "bar/buzz"
+    /// as they doesn't match the query.
+    /// * `Err(ZError)`: Problem occured when processing the query. 
+    /// 
+    /// If plugin implements subplugins (as the storage plugin), then it should also reply with information about its subplugins with the same rules.
+    /// 
+    /// TODO: 
+    /// * add example
+    /// * rework the admin space: rework "with_extented_string" function, provide it as utility for plugins
+    /// * reorder paramaters: plugin_status_key should be first as it describes the root of pluginb's admin space
+    /// * Instead of ZResult return just Vec. Check, do we really need ZResult? If yes, make it separate for each status record.
+    /// 
     fn adminspace_getter<'a>(
         &'a self,
-        selector: &'a Selector<'a>,
-        plugin_status_key: &str,
-    ) -> ZResult<Vec<Response>>;
+        _selector: &'a Selector<'a>,
+        _plugin_status_key: &str,
+    ) -> ZResult<Vec<Response>> {
+        Ok(Vec::new())
+    }
 }
 
 /// The zenoh plugins manager. It handles the full lifetime of plugins, from loading to destruction.
