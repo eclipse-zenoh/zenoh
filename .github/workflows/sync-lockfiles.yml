@@ -45,6 +45,7 @@ jobs:
       - name: Checkout ${{ matrix.dependant }}
         uses: actions/checkout@v4
         with:
+          repository: eclipse-zenoh/${{ matrix.dependant }}
           token: ${{ secrets.BOT_TOKEN_WORKFLOW }}
 
       - name: Install Rust toolchain
