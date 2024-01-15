@@ -26,6 +26,7 @@ jobs:
 
   sync:
     name: Sync Cargo lockfile with ${{ matrix.dependant }}
+    needs: fetch
     runs-on: ubuntu-latest
     strategy:
       matrix:
