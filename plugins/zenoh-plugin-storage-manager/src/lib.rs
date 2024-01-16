@@ -289,7 +289,7 @@ impl RunningPluginTrait for StorageRuntime {
     ) -> ZResult<Vec<zenoh::plugins::Response>> {
         let mut responses = Vec::new();
         let mut key = String::from(plugin_status_key);
-        // TODO: to be removed when "__version__" is implemented in admin space
+        // TODO: to be removed when "__version__" is implemented in admoin space
         with_extended_string(&mut key, &["/version"], |key| {
             if keyexpr::new(key.as_str())
                 .unwrap()
