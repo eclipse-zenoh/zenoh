@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use std::{sync::{Arc, atomic::AtomicBool}, thread::JoinHandle};
+
 use zenoh_result::ZResult;
 
 pub const TEST_SEGMENT_PREFIX: &str = "test";
@@ -52,3 +54,51 @@ where
         task.join().expect("Error joining thread!");
     }
 }
+
+pub fn load_fn(
+    working: Arc<AtomicBool>,
+) -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
+    move |_task_index: usize, _iteration: usize| -> ZResult<()> {
+        while working.load(std::sync::atomic::Ordering::SeqCst) {}
+        Ok(())
+    }
+}
+
+pub struct CpuLoad {
+    handle: Option<JoinHandle<()>>,
+    flag: Arc<AtomicBool>
+}
+
+impl Drop for CpuLoad {
+    fn drop(&mut self) {
+        self.flag.store(false, std::sync::atomic::Ordering::SeqCst);
+        let _ = self.handle.take().unwrap().join();
+    }
+}
+
+impl CpuLoad {
+    pub fn exessive() -> Self {
+        Self::new(1000)
+    }
+
+    pub fn optimal_high() -> Self {
+        Self::new(num_cpus::get())
+    }
+
+    pub fn low() -> Self {
+        Self::new(1)
+    }
+
+    fn  new(thread_count: usize) -> Self {
+        let flag = Arc::new(AtomicBool::new(true));
+        
+        let c_flag = flag.clone();
+        let handle = Some(std::thread::spawn(move || {
+            execute_concurrent(thread_count, 1, load_fn(c_flag));
+        }));
+    
+        Self{handle, flag}
+        
+    }
+}
+

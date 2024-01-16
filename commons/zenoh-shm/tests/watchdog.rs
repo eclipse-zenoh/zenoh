@@ -19,13 +19,14 @@ use std::{
 
 use zenoh_result::{bail, ZResult};
 use zenoh_shm::{
-    test_helpers::execute_concurrent,
+    test_helpers::{execute_concurrent, CpuLoad},
     watchdog::{
         confirmator::GLOBAL_CONFIRMATOR, storage::GLOBAL_STORAGE, validator::GLOBAL_VALIDATOR,
     },
 };
 
 const VALIDATION_PERIOD: Duration = Duration::from_millis(100);
+const CONFIRMATION_PERIOD: Duration = Duration::from_millis(50);
 
 fn watchdog_alloc_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
     |_task_index: usize, _iteration: usize| -> ZResult<()> {
@@ -236,4 +237,63 @@ fn watchdog_validated_additional_confirmation() {
 #[test]
 fn watchdog_validated_additional_confirmation_concurrent() {
     execute_concurrent(1000, 10, watchdog_validated_additional_confirmation_fn());
+}
+
+fn watchdog_validated_overloaded_system_fn(
+) -> impl Fn(usize, usize) -> ZResult<()> + Clone + Send + Sync + 'static {
+    |_task_index: usize, _iteration: usize| -> ZResult<()> {
+        let allocated = GLOBAL_STORAGE
+            .allocate_watchdog()
+            .expect("error allocating watchdog!");
+        let confirmed = GLOBAL_CONFIRMATOR
+            .add_owned(&allocated.descriptor)
+            .expect("error adding watchdog to confirmator!");
+
+        let allow_invalid = Arc::new(AtomicBool::new(false));
+        {
+            let c_allow_invalid = allow_invalid.clone();
+            GLOBAL_VALIDATOR.add(
+                allocated.descriptor.clone(),
+                Box::new(move || {
+                    assert!(c_allow_invalid.load(std::sync::atomic::Ordering::SeqCst));
+                    c_allow_invalid.store(false, std::sync::atomic::Ordering::SeqCst);
+                }),
+            );
+        }
+
+        // check that the watchdog stays valid
+        std::thread::sleep(VALIDATION_PERIOD * 10);
+
+        // Worst-case timings:
+        // validation:       |___________|___________|___________|___________|
+        // confirmation:    __|_____|_____|_____|_____|
+        // drop(confirmed):                            ^
+        // It means that the worst-case latency for the watchdog to become invalid is VALIDATION_PERIOD*2
+
+        // check that the watchdog becomes invalid once we stop it's regular confirmation
+        drop(confirmed);
+        allow_invalid.store(true, std::sync::atomic::Ordering::SeqCst);
+        std::thread::sleep(VALIDATION_PERIOD * 2 + VALIDATION_PERIOD / 2);
+        // check that invalidation event happened!
+        assert!(!allow_invalid.load(std::sync::atomic::Ordering::SeqCst));
+        Ok(())
+    }
+}
+
+#[test]
+fn watchdog_validated_low_load() {
+    let _load = CpuLoad::low();
+    execute_concurrent(1000, 10, watchdog_validated_overloaded_system_fn());
+}
+
+#[test]
+fn watchdog_validated_high_load() {
+    let _load = CpuLoad::optimal_high();
+    execute_concurrent(1000, 10, watchdog_validated_overloaded_system_fn());
+}
+
+#[test]
+fn watchdog_validated_overloaded_system() {
+    let _load = CpuLoad::exessive();
+    execute_concurrent(1000, 10, watchdog_validated_overloaded_system_fn());
 }

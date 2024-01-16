@@ -14,16 +14,15 @@
 
 use std::{
     collections::BTreeMap,
-    sync::{atomic::AtomicBool, Arc, RwLock},
+    sync::{Arc, RwLock},
     time::Duration,
 };
 
 use lazy_static::lazy_static;
-use log::warn;
-use thread_priority::*;
 use zenoh_result::{zerror, ZResult};
 
 use super::{
+    periodic_task::PeriodicTask,
     descriptor::{Descriptor, OwnedDescriptor, SegmentID},
     segment::Segment,
 };
@@ -45,10 +44,7 @@ impl Drop for ConfirmedDescriptor {
 }
 
 impl ConfirmedDescriptor {
-    fn new(
-        owned: OwnedDescriptor,
-        confirmed: Arc<ConfirmedSegment>,
-    ) -> Self {
+    fn new(owned: OwnedDescriptor, confirmed: Arc<ConfirmedSegment>) -> Self {
         owned.confirm();
         confirmed.add(owned.clone());
         Self { owned, confirmed }
@@ -75,11 +71,11 @@ impl ConfirmedSegment {
     }
 
     fn add(&self, descriptor: OwnedDescriptor) {
-        self.transactions.push( (Transaction::Add, descriptor));
+        self.transactions.push((Transaction::Add, descriptor));
     }
 
     fn remove(&self, descriptor: OwnedDescriptor) {
-        self.transactions.push( (Transaction::Remove, descriptor));
+        self.transactions.push((Transaction::Remove, descriptor));
     }
 
     fn collect_transactions(&self, watchdogs: &mut BTreeMap<OwnedDescriptor, i32>) {
@@ -88,20 +84,20 @@ impl ConfirmedSegment {
             match watchdogs.entry(descriptor) {
                 std::collections::btree_map::Entry::Vacant(vacant) => {
                     #[cfg(feature = "test")]
-                    assert!( transaction == Transaction::Add );
+                    assert!(transaction == Transaction::Add);
                     vacant.insert(1);
-                },
+                }
                 std::collections::btree_map::Entry::Occupied(mut occupied) => match transaction {
                     Transaction::Add => {
                         *occupied.get_mut() += 1;
-                    },
+                    }
                     Transaction::Remove => {
                         if *occupied.get() == 1 {
                             occupied.remove();
                         } else {
                             *occupied.get_mut() -= 1;
                         }
-                    },
+                    }
                 },
             }
         }
@@ -115,75 +111,38 @@ unsafe impl Sync for ConfirmedSegment {}
 pub struct WatchdogConfirmator {
     confirmed: RwLock<BTreeMap<SegmentID, Arc<ConfirmedSegment>>>,
     segment_transactions: Arc<lockfree::queue::Queue<Arc<ConfirmedSegment>>>,
-    running: Arc<AtomicBool>,
-}
-
-impl Drop for WatchdogConfirmator {
-    fn drop(&mut self) {
-        self.running
-            .store(false, std::sync::atomic::Ordering::Relaxed);
-    }
+    _task: PeriodicTask,
 }
 
 impl WatchdogConfirmator {
     fn new(interval: Duration) -> Self {
         let segment_transactions = Arc::<lockfree::queue::Queue<Arc<ConfirmedSegment>>>::default();
-        let running = Arc::new(AtomicBool::new(true));
-
+        
         let c_segment_transactions = segment_transactions.clone();
-        let c_running = running.clone();
+        let mut segments: Vec<(Arc<ConfirmedSegment>, BTreeMap<OwnedDescriptor, i32>)> = vec![];
+        let task = PeriodicTask::new("Watchdog Confirmator".to_owned(), interval, move || {
+            // add new segments
+            while let Some(new_segment) = c_segment_transactions.as_ref().pop() {
+                segments.push((new_segment, BTreeMap::default()));
+            }
 
-        let _ = ThreadBuilder::default()
-            .name("Watchdog Confirmator")
-            //.policy(ThreadSchedulePolicy::Realtime(RealtimeThreadSchedulePolicy::Deadline))
-            //.priority(ThreadPriority::Deadline { runtime: interval, deadline: interval, period: interval, flags: DeadlineFlags::default() })
-            //.policy(ThreadSchedulePolicy::Realtime(RealtimeThreadSchedulePolicy::Fifo))
-            //.priority(ThreadPriority::Crossplatform(ThreadPriorityValue::try_from(48).unwrap()))
-            .spawn(move |result| {
-                    if let Err(e) = result {
-                        //let ret = std::io::Error::last_os_error().to_string();
-                        panic!("Watchdog Confirmator: error setting thread priority: {:?}, will continue operating with default priority...", e);
-                        //panic!("");
-                    }
+            // collect all existing transactions
+            for (segment, watchdogs) in &mut segments {
+                segment.collect_transactions(watchdogs);
+            }
 
-                    let mut segments: Vec<(Arc<ConfirmedSegment>, BTreeMap<OwnedDescriptor, i32>)> = vec![];
-                    while c_running.load(std::sync::atomic::Ordering::Relaxed) {
-                        let cycle_start = std::time::Instant::now();
-
-                        // add new segments
-                        while let Some(new_segment) = c_segment_transactions.as_ref().pop() {
-                            segments.push((new_segment, BTreeMap::default()));
-                        }
-
-                        // collect all existing transactions
-                        for (segment, watchdogs) in &mut segments {
-                            segment.collect_transactions(watchdogs);
-                        }
-
-                        // confirm all tracked watchdogs
-                        for (_, watchdogs) in &segments {
-                            for watchdog in watchdogs {
-                                watchdog.0.confirm();
-                            }
-                        }
-
-                        // sleep for next iteration
-                        let elapsed = cycle_start.elapsed();
-                        if elapsed < interval {
-                            let sleep_interval = interval - elapsed;
-                            std::thread::sleep(sleep_interval);
-                        } else {
-                            warn!("Watchdog confirmation timer overrun!");
-                            #[cfg(feature = "test")]
-                            panic!("Watchdog confirmation timer overrun!");
-                        }    
-                    }
-                });
+            // confirm all tracked watchdogs
+            for (_, watchdogs) in &segments {
+                for watchdog in watchdogs {
+                    watchdog.0.confirm();
+                }
+            }
+        });
 
         Self {
             confirmed: RwLock::default(),
             segment_transactions,
-            running,
+            _task: task,
         }
     }
 
@@ -215,8 +174,11 @@ impl WatchdogConfirmator {
         }
     }
 
-
-    fn link(&self, descriptor: &Descriptor, segment: &Arc<ConfirmedSegment>) -> ZResult<ConfirmedDescriptor> {
+    fn link(
+        &self,
+        descriptor: &Descriptor,
+        segment: &Arc<ConfirmedSegment>,
+    ) -> ZResult<ConfirmedDescriptor> {
         let index = descriptor.index_and_bitpos >> 6;
         let bitpos = descriptor.index_and_bitpos & 0x3f;
 

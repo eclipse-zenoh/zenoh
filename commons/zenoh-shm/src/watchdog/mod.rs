@@ -14,6 +14,7 @@
 
 pub mod descriptor;
 
+tested_crate_module!(periodic_task);
 tested_crate_module!(storage);
 tested_crate_module!(validator);
 tested_crate_module!(confirmator);
