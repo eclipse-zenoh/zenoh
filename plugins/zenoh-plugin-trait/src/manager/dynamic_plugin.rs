@@ -36,7 +36,7 @@ impl DynamicPluginSource {
                 for path in paths {
                     match unsafe { LibLoader::load_file(path) } {
                         Ok((l, p)) => return Ok((l, p)),
-                        Err(e) => log::warn!("Plugin {} load fail: {}", path, e),
+                        Err(e) => log::debug!("Attempt to load {} failed: {}", path, e),
                     }
                 }
                 bail!("Plugin not found in {:?}", &paths)
