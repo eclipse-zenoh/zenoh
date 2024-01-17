@@ -35,10 +35,29 @@
 // cd zenoh
 // RUST_LOG=info cargo run -- --config plugin_test_config.json5
 // ```
-//
+// 
+// Loading plugin errors are expected due to some mandtatory properties missing in the config file, like for "influxdb" and "influxdb2" volumes.
+// Though there should not be plugin loading errors due to not found files or version incompatibility
 //  
 {
+  "plugins_search_dirs": [
+    "target/debug",
+    "../zenoh-plugin-webserver/target/debug",
+    "../zenoh-plugin-mqtt/target/debug",
+    "../zenoh-plugin-dds/target/debug",
+    "../zenoh-plugin-ros1/target/debug",
+    "../zenoh-plugin-ros2dds/target/debug"
+  ],
+
   "plugins": {
+    // mqtt plugin, see "../zenoh-plugin-mqtt"
+    "mqtt": {},
+    // dds plugin, see "../zenoh-plugin-dds"
+    "dds": {},
+    // ros1 plugin, see "../zenoh-plugin-ros1"
+    "ros1": {},
+    // ros2dds plugin, see "../zenoh-plugin-ros2dds"
+    "ros2dds": {},
     // example plugin, see "plugins/zenog-plugin-example"
     "example": {},
     // rest plugin, see "plugins/zenoh-plugin-rest"
@@ -51,13 +70,20 @@
        backend_search_dirs: [
           "target/debug",
           "../zenoh-backend-influxdb/target/debug",
+          "../zenoh-backend-rocksdb/target/debug",
+          "../zenoh-backend-filesystem/target/debug"
        ],
       "volumes": {
         // example backend, see "plugins/zenoh-backend-example"
         "example": {},
-        // influxdb backend from "../zenoh-backend-influxdb"
+        // influxdb backend from "../zenoh-backend-influxdb/v1"
         "influxdb": {},
+        // influxdb backend from "../zenoh-backend-influxdb/v2"
         "influxdb2": {},
+        // rocksdb backend, see "plugins/zenoh-backend-rocksdb"
+        "rocksdb": {},
+        // filesystem backend, see "plugins/zenoh-backend-filesystem"
+        "fs": {}
       },
       "storages": {
         "memory": {
@@ -70,8 +96,5 @@
         },
        }
     },
-    "dds": {
-      "__path__": ["../zenoh-plugin-dds/target/debug/libzenoh_plugin_dds.so","../zenoh-plugin-dds/target/debug/libzenoh_plugin_dds.dylib"],
-    }
   }
 }
