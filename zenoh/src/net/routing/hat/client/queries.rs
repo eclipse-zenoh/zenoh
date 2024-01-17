@@ -14,22 +14,21 @@
 use super::{face_hat, face_hat_mut, get_routes_entries};
 use super::{HatCode, HatFace};
 use crate::net::routing::dispatcher::face::FaceState;
-use crate::net::routing::dispatcher::queries::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
+use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{QueryTargetQabl, QueryTargetQablSet, RoutingExpr};
-use crate::net::routing::dispatcher::tables::{Tables, TablesLock};
 use crate::net::routing::hat::HatQueriesTrait;
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLockReadGuard};
+use std::sync::Arc;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::core::key_expr::include::{Includer, DEFAULT_INCLUDER};
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, WhatAmI, WireExpr},
+    core::{WhatAmI, WireExpr},
     network::declare::{
         common::ext::WireExprType, ext, queryable::ext::QueryableInfo, Declare, DeclareBody,
         DeclareQueryable, UndeclareQueryable,
@@ -138,58 +137,13 @@ fn register_client_queryable(
 }
 
 fn declare_client_queryable(
-    tables: &TablesLock,
-    rtables: RwLockReadGuard<Tables>,
+    tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &WireExpr,
+    res: &mut Arc<Resource>,
     qabl_info: &QueryableInfo,
 ) {
-    match rtables
-        .get_mapping(face, &expr.scope, expr.mapping)
-        .cloned()
-    {
-        Some(mut prefix) => {
-            let res = Resource::get_resource(&prefix, &expr.suffix);
-            let (mut res, mut wtables) =
-                if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
-                    drop(rtables);
-                    let wtables = zwrite!(tables.tables);
-                    (res.unwrap(), wtables)
-                } else {
-                    let mut fullexpr = prefix.expr();
-                    fullexpr.push_str(expr.suffix.as_ref());
-                    log::debug!("Register client queryable {}", fullexpr);
-                    let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
-                        .unwrap_or_default();
-                    drop(rtables);
-                    let mut wtables = zwrite!(tables.tables);
-                    let mut res =
-                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-                    matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
-                    (res, wtables)
-                };
-
-            register_client_queryable(&mut wtables, face, &mut res, qabl_info);
-            propagate_simple_queryable(&mut wtables, &res, Some(face));
-            disable_matches_query_routes(&mut wtables, &mut res);
-            drop(wtables);
-
-            let rtables = zread!(tables.tables);
-            let matches_query_routes = compute_matches_query_routes(&rtables, &res);
-            drop(rtables);
-
-            let wtables = zwrite!(tables.tables);
-            for (mut res, query_routes) in matches_query_routes {
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_query_routes(query_routes);
-            }
-            drop(wtables);
-        }
-        None => log::error!("Declare queryable for unknown scope {}!", expr.scope),
-    }
+    register_client_queryable(tables, face, res, qabl_info);
+    propagate_simple_queryable(tables, res, Some(face));
 }
 
 #[inline]
@@ -270,37 +224,11 @@ pub(super) fn undeclare_client_queryable(
 }
 
 fn forget_client_queryable(
-    tables: &TablesLock,
-    rtables: RwLockReadGuard<Tables>,
+    tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &WireExpr,
+    res: &mut Arc<Resource>,
 ) {
-    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
-        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-            Some(mut res) => {
-                drop(rtables);
-                let mut wtables = zwrite!(tables.tables);
-                undeclare_client_queryable(&mut wtables, face, &mut res);
-                disable_matches_query_routes(&mut wtables, &mut res);
-                drop(wtables);
-
-                let rtables = zread!(tables.tables);
-                let matches_query_routes = compute_matches_query_routes(&rtables, &res);
-                drop(rtables);
-
-                let wtables = zwrite!(tables.tables);
-                for (mut res, query_routes) in matches_query_routes {
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_query_routes(query_routes);
-                }
-                Resource::clean(&mut res);
-                drop(wtables);
-            }
-            None => log::error!("Undeclare unknown queryable!"),
-        },
-        None => log::error!("Undeclare queryable with unknown scope!"),
-    }
+    undeclare_client_queryable(tables, face, res);
 }
 
 pub(super) fn queries_new_face(tables: &mut Tables, _face: &mut Arc<FaceState>) {
@@ -323,25 +251,23 @@ lazy_static::lazy_static! {
 impl HatQueriesTrait for HatCode {
     fn declare_queryable(
         &self,
-        tables: &TablesLock,
+        tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        expr: &WireExpr,
+        res: &mut Arc<Resource>,
         qabl_info: &QueryableInfo,
         _node_id: NodeId,
     ) {
-        let rtables = zread!(tables.tables);
-        declare_client_queryable(tables, rtables, face, expr, qabl_info);
+        declare_client_queryable(tables, face, res, qabl_info);
     }
 
-    fn forget_queryable(
+    fn undeclare_queryable(
         &self,
-        tables: &TablesLock,
+        tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        expr: &WireExpr,
+        res: &mut Arc<Resource>,
         _node_id: NodeId,
     ) {
-        let rtables = zread!(tables.tables);
-        forget_client_queryable(tables, rtables, face, expr);
+        forget_client_queryable(tables, face, res);
     }
 
     fn compute_query_route(

@@ -14,20 +14,18 @@
 use super::{face_hat, face_hat_mut, get_routes_entries};
 use super::{HatCode, HatFace};
 use crate::net::routing::dispatcher::face::FaceState;
-use crate::net::routing::dispatcher::pubsub::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
+use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
-use crate::net::routing::dispatcher::tables::{Tables, TablesLock};
 use crate::net::routing::hat::HatPubSubTrait;
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use std::sync::{Arc, RwLockReadGuard};
-use zenoh_core::zread;
+use std::sync::Arc;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, Reliability, WhatAmI, WireExpr},
+    core::{Reliability, WhatAmI},
     network::declare::{
         common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
         DeclareSubscriber, Mode, UndeclareSubscriber,
@@ -122,84 +120,35 @@ fn register_client_subscription(
 }
 
 fn declare_client_subscription(
-    tables: &TablesLock,
-    rtables: RwLockReadGuard<Tables>,
+    tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &WireExpr,
+    res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
 ) {
-    log::debug!("Register client subscription");
-    match rtables
-        .get_mapping(face, &expr.scope, expr.mapping)
-        .cloned()
-    {
-        Some(mut prefix) => {
-            let res = Resource::get_resource(&prefix, &expr.suffix);
-            let (mut res, mut wtables) =
-                if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
-                    drop(rtables);
-                    let wtables = zwrite!(tables.tables);
-                    (res.unwrap(), wtables)
-                } else {
-                    let mut fullexpr = prefix.expr();
-                    fullexpr.push_str(expr.suffix.as_ref());
-                    let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
-                        .unwrap_or_default();
-                    drop(rtables);
-                    let mut wtables = zwrite!(tables.tables);
-                    let mut res =
-                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-                    matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
-                    (res, wtables)
-                };
+    register_client_subscription(tables, face, res, sub_info);
+    let mut propa_sub_info = *sub_info;
+    propa_sub_info.mode = Mode::Push;
 
-            register_client_subscription(&mut wtables, face, &mut res, sub_info);
-            let mut propa_sub_info = *sub_info;
-            propa_sub_info.mode = Mode::Push;
-
-            propagate_simple_subscription(&mut wtables, &res, &propa_sub_info, face);
-            // This introduced a buffer overflow on windows
-            // TODO: Let's deactivate this on windows until Fixed
-            #[cfg(not(windows))]
-            for mcast_group in &wtables.mcast_groups {
-                mcast_group
-                    .primitives
-                    .send_declare(RoutingContext::with_expr(
-                        Declare {
-                            ext_qos: ext::QoSType::declare_default(),
-                            ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
-                            body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                id: 0, // TODO
-                                wire_expr: res.expr().into(),
-                                ext_info: *sub_info,
-                            }),
-                        },
-                        res.expr(),
-                    ))
-            }
-
-            disable_matches_data_routes(&mut wtables, &mut res);
-            drop(wtables);
-
-            let rtables = zread!(tables.tables);
-            let matches_data_routes = compute_matches_data_routes(&rtables, &res);
-            drop(rtables);
-
-            let wtables = zwrite!(tables.tables);
-            for (mut res, data_routes, matching_pulls) in matches_data_routes {
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_data_routes(data_routes);
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_matching_pulls(matching_pulls);
-            }
-            drop(wtables);
-        }
-        None => log::error!("Declare subscription for unknown scope {}!", expr.scope),
+    propagate_simple_subscription(tables, res, &propa_sub_info, face);
+    // This introduced a buffer overflow on windows
+    // TODO: Let's deactivate this on windows until Fixed
+    #[cfg(not(windows))]
+    for mcast_group in &tables.mcast_groups {
+        mcast_group
+            .primitives
+            .send_declare(RoutingContext::with_expr(
+                Declare {
+                    ext_qos: ext::QoSType::declare_default(),
+                    ext_tstamp: None,
+                    ext_nodeid: ext::NodeIdType::default(),
+                    body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
+                        id: 0, // TODO
+                        wire_expr: res.expr().into(),
+                        ext_info: *sub_info,
+                    }),
+                },
+                res.expr(),
+            ))
     }
 }
 
@@ -278,40 +227,11 @@ pub(super) fn undeclare_client_subscription(
 }
 
 fn forget_client_subscription(
-    tables: &TablesLock,
-    rtables: RwLockReadGuard<Tables>,
+    tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &WireExpr,
+    res: &mut Arc<Resource>,
 ) {
-    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
-        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-            Some(mut res) => {
-                drop(rtables);
-                let mut wtables = zwrite!(tables.tables);
-                undeclare_client_subscription(&mut wtables, face, &mut res);
-                disable_matches_data_routes(&mut wtables, &mut res);
-                drop(wtables);
-
-                let rtables = zread!(tables.tables);
-                let matches_data_routes = compute_matches_data_routes(&rtables, &res);
-                drop(rtables);
-
-                let wtables = zwrite!(tables.tables);
-                for (mut res, data_routes, matching_pulls) in matches_data_routes {
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_data_routes(data_routes);
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_matching_pulls(matching_pulls);
-                }
-                Resource::clean(&mut res);
-                drop(wtables);
-            }
-            None => log::error!("Undeclare unknown subscription!"),
-        },
-        None => log::error!("Undeclare subscription with unknown scope!"),
-    }
+    undeclare_client_subscription(tables, face, res);
 }
 
 pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
@@ -334,25 +254,23 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
 impl HatPubSubTrait for HatCode {
     fn declare_subscription(
         &self,
-        tables: &TablesLock,
+        tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        expr: &WireExpr,
+        res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
         _node_id: NodeId,
     ) {
-        let rtables = zread!(tables.tables);
-        declare_client_subscription(tables, rtables, face, expr, sub_info);
+        declare_client_subscription(tables, face, res, sub_info);
     }
 
-    fn forget_subscription(
+    fn undeclare_subscription(
         &self,
-        tables: &TablesLock,
+        tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        expr: &WireExpr,
+        res: &mut Arc<Resource>,
         _node_id: NodeId,
     ) {
-        let rtables = zread!(tables.tables);
-        forget_client_subscription(tables, rtables, face, expr);
+        forget_client_subscription(tables, face, res);
     }
 
     fn compute_data_route(

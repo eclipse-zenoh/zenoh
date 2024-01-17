@@ -1,3 +1,4 @@
+use crate::net::routing::hat::HatTrait;
 use crate::net::routing::RoutingContext;
 
 //
@@ -19,8 +20,10 @@ use super::tables::NodeId;
 use super::tables::{RoutingExpr, Tables, TablesLock};
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, MutexGuard, Weak};
 use zenoh_config::WhatAmI;
+use zenoh_protocol::core::key_expr::keyexpr;
+use zenoh_protocol::network::declare::queryable::ext::QueryableInfo;
 use zenoh_protocol::{
     core::{Encoding, WireExpr},
     network::{
@@ -36,6 +39,101 @@ use zenoh_util::Timed;
 pub(crate) struct Query {
     src_face: Arc<FaceState>,
     src_qid: RequestId,
+}
+
+pub(crate) fn declare_queryable(
+    hat_code: &MutexGuard<'_, Box<dyn HatTrait + Send + Sync>>,
+    tables: &TablesLock,
+    face: &mut Arc<FaceState>,
+    expr: &WireExpr,
+    qabl_info: &QueryableInfo,
+    node_id: NodeId,
+) {
+    log::debug!("Register queryable {}", face);
+    let rtables = zread!(tables.tables);
+    match rtables
+        .get_mapping(face, &expr.scope, expr.mapping)
+        .cloned()
+    {
+        Some(mut prefix) => {
+            let res = Resource::get_resource(&prefix, &expr.suffix);
+            let (mut res, mut wtables) =
+                if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
+                    drop(rtables);
+                    let wtables = zwrite!(tables.tables);
+                    (res.unwrap(), wtables)
+                } else {
+                    let mut fullexpr = prefix.expr();
+                    fullexpr.push_str(expr.suffix.as_ref());
+                    let mut matches = keyexpr::new(fullexpr.as_str())
+                        .map(|ke| Resource::get_matches(&rtables, ke))
+                        .unwrap_or_default();
+                    drop(rtables);
+                    let mut wtables = zwrite!(tables.tables);
+                    let mut res =
+                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
+                    matches.push(Arc::downgrade(&res));
+                    Resource::match_resource(&wtables, &mut res, matches);
+                    (res, wtables)
+                };
+
+            hat_code.declare_queryable(&mut wtables, face, &mut res, qabl_info, node_id);
+
+            disable_matches_query_routes(&mut wtables, &mut res);
+            drop(wtables);
+
+            let rtables = zread!(tables.tables);
+            let matches_query_routes = compute_matches_query_routes(&rtables, &res);
+            drop(rtables);
+
+            let wtables = zwrite!(tables.tables);
+            for (mut res, query_routes) in matches_query_routes {
+                get_mut_unchecked(&mut res)
+                    .context_mut()
+                    .update_query_routes(query_routes);
+            }
+            drop(wtables);
+        }
+        None => log::error!("Declare queryable for unknown scope {}!", expr.scope),
+    }
+}
+
+pub(crate) fn undeclare_queryable(
+    hat_code: &MutexGuard<'_, Box<dyn HatTrait + Send + Sync>>,
+    tables: &TablesLock,
+    face: &mut Arc<FaceState>,
+    expr: &WireExpr,
+    node_id: NodeId,
+) {
+    let rtables = zread!(tables.tables);
+    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
+        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
+            Some(mut res) => {
+                drop(rtables);
+                let mut wtables = zwrite!(tables.tables);
+
+                hat_code.undeclare_queryable(&mut wtables, face, &mut res, node_id);
+
+                disable_matches_query_routes(&mut wtables, &mut res);
+                drop(wtables);
+
+                let rtables = zread!(tables.tables);
+                let matches_query_routes = compute_matches_query_routes(&rtables, &res);
+                drop(rtables);
+
+                let wtables = zwrite!(tables.tables);
+                for (mut res, query_routes) in matches_query_routes {
+                    get_mut_unchecked(&mut res)
+                        .context_mut()
+                        .update_query_routes(query_routes);
+                }
+                Resource::clean(&mut res);
+                drop(wtables);
+            }
+            None => log::error!("Undeclare unknown queryable!"),
+        },
+        None => log::error!("Undeclare queryable with unknown scope!"),
+    }
 }
 
 fn compute_query_routes_(tables: &Tables, routes: &mut QueryRoutes, expr: &mut RoutingExpr) {

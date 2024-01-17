@@ -136,7 +136,8 @@ impl Primitives for Face {
                 unregister_expr(&self.tables, &mut self.state.clone(), m.id);
             }
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
-                ctrl_lock.declare_subscription(
+                declare_subscription(
+                    &ctrl_lock,
                     &self.tables,
                     &mut self.state.clone(),
                     &m.wire_expr,
@@ -145,7 +146,8 @@ impl Primitives for Face {
                 );
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
-                ctrl_lock.forget_subscription(
+                undeclare_subscription(
+                    &ctrl_lock,
                     &self.tables,
                     &mut self.state.clone(),
                     &m.ext_wire_expr.wire_expr,
@@ -153,7 +155,8 @@ impl Primitives for Face {
                 );
             }
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
-                ctrl_lock.declare_queryable(
+                declare_queryable(
+                    &ctrl_lock,
                     &self.tables,
                     &mut self.state.clone(),
                     &m.wire_expr,
@@ -162,7 +165,8 @@ impl Primitives for Face {
                 );
             }
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
-                ctrl_lock.forget_queryable(
+                undeclare_queryable(
+                    &ctrl_lock,
                     &self.tables,
                     &mut self.state.clone(),
                     &m.ext_wire_expr.wire_expr,

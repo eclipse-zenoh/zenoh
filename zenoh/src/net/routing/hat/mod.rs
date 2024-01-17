@@ -114,17 +114,17 @@ pub(crate) trait HatBaseTrait {
 pub(crate) trait HatPubSubTrait {
     fn declare_subscription(
         &self,
-        tables: &TablesLock,
+        tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        expr: &WireExpr,
+        res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
         node_id: NodeId,
     );
-    fn forget_subscription(
+    fn undeclare_subscription(
         &self,
-        tables: &TablesLock,
+        tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        expr: &WireExpr,
+        res: &mut Arc<Resource>,
         node_id: NodeId,
     );
 
@@ -142,17 +142,17 @@ pub(crate) trait HatPubSubTrait {
 pub(crate) trait HatQueriesTrait {
     fn declare_queryable(
         &self,
-        tables: &TablesLock,
+        tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        expr: &WireExpr,
+        res: &mut Arc<Resource>,
         qabl_info: &QueryableInfo,
         node_id: NodeId,
     );
-    fn forget_queryable(
+    fn undeclare_queryable(
         &self,
-        tables: &TablesLock,
+        tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        expr: &WireExpr,
+        res: &mut Arc<Resource>,
         node_id: NodeId,
     );
     fn compute_query_route(

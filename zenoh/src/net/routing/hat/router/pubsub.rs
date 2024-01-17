@@ -17,19 +17,18 @@ use super::{get_peer, get_router, HatCode, HatContext, HatFace, HatTables};
 use crate::net::routing::dispatcher::face::FaceState;
 use crate::net::routing::dispatcher::pubsub::*;
 use crate::net::routing::dispatcher::resource::{NodeId, Resource, SessionContext};
+use crate::net::routing::dispatcher::tables::Tables;
 use crate::net::routing::dispatcher::tables::{Route, RoutingExpr};
-use crate::net::routing::dispatcher::tables::{Tables, TablesLock};
 use crate::net::routing::hat::HatPubSubTrait;
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use petgraph::graph::NodeIndex;
 use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, RwLockReadGuard};
-use zenoh_core::zread;
+use std::sync::Arc;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, Reliability, WhatAmI, WireExpr, ZenohId},
+    core::{Reliability, WhatAmI, ZenohId},
     network::declare::{
         common::ext::WireExprType, ext, subscriber::ext::SubscriberInfo, Declare, DeclareBody,
         DeclareSubscriber, Mode, UndeclareSubscriber,
@@ -211,62 +210,13 @@ fn register_router_subscription(
 }
 
 fn declare_router_subscription(
-    tables: &TablesLock,
-    rtables: RwLockReadGuard<Tables>,
+    tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &WireExpr,
+    res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
     router: ZenohId,
 ) {
-    match rtables
-        .get_mapping(face, &expr.scope, expr.mapping)
-        .cloned()
-    {
-        Some(mut prefix) => {
-            let res = Resource::get_resource(&prefix, &expr.suffix);
-            let (mut res, mut wtables) =
-                if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
-                    drop(rtables);
-                    let wtables = zwrite!(tables.tables);
-                    (res.unwrap(), wtables)
-                } else {
-                    let mut fullexpr = prefix.expr();
-                    fullexpr.push_str(expr.suffix.as_ref());
-                    let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
-                        .unwrap_or_default();
-                    drop(rtables);
-                    let mut wtables = zwrite!(tables.tables);
-                    let mut res =
-                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-                    matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
-                    (res, wtables)
-                };
-            register_router_subscription(&mut wtables, face, &mut res, sub_info, router);
-            disable_matches_data_routes(&mut wtables, &mut res);
-            drop(wtables);
-
-            let rtables = zread!(tables.tables);
-            let matches_data_routes = compute_matches_data_routes(&rtables, &res);
-            drop(rtables);
-
-            let wtables = zwrite!(tables.tables);
-            for (mut res, data_routes, matching_pulls) in matches_data_routes {
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_data_routes(data_routes);
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_matching_pulls(matching_pulls);
-            }
-            drop(wtables);
-        }
-        None => log::error!(
-            "Declare router subscription for unknown scope {}!",
-            expr.scope
-        ),
-    }
+    register_router_subscription(tables, face, res, sub_info, router);
 }
 
 fn register_peer_subscription(
@@ -290,66 +240,17 @@ fn register_peer_subscription(
 }
 
 fn declare_peer_subscription(
-    tables: &TablesLock,
-    rtables: RwLockReadGuard<Tables>,
+    tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &WireExpr,
+    res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
     peer: ZenohId,
 ) {
-    match rtables
-        .get_mapping(face, &expr.scope, expr.mapping)
-        .cloned()
-    {
-        Some(mut prefix) => {
-            let res = Resource::get_resource(&prefix, &expr.suffix);
-            let (mut res, mut wtables) =
-                if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
-                    drop(rtables);
-                    let wtables = zwrite!(tables.tables);
-                    (res.unwrap(), wtables)
-                } else {
-                    let mut fullexpr = prefix.expr();
-                    fullexpr.push_str(expr.suffix.as_ref());
-                    let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
-                        .unwrap_or_default();
-                    drop(rtables);
-                    let mut wtables = zwrite!(tables.tables);
-                    let mut res =
-                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-                    matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
-                    (res, wtables)
-                };
-            register_peer_subscription(&mut wtables, face, &mut res, sub_info, peer);
-            let mut propa_sub_info = *sub_info;
-            propa_sub_info.mode = Mode::Push;
-            let zid = wtables.zid;
-            register_router_subscription(&mut wtables, face, &mut res, &propa_sub_info, zid);
-            disable_matches_data_routes(&mut wtables, &mut res);
-            drop(wtables);
-
-            let rtables = zread!(tables.tables);
-            let matches_data_routes = compute_matches_data_routes(&rtables, &res);
-            drop(rtables);
-
-            let wtables = zwrite!(tables.tables);
-            for (mut res, data_routes, matching_pulls) in matches_data_routes {
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_data_routes(data_routes);
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_matching_pulls(matching_pulls);
-            }
-            drop(wtables);
-        }
-        None => log::error!(
-            "Declare router subscription for unknown scope {}!",
-            expr.scope
-        ),
-    }
+    register_peer_subscription(tables, face, res, sub_info, peer);
+    let mut propa_sub_info = *sub_info;
+    propa_sub_info.mode = Mode::Push;
+    let zid = tables.zid;
+    register_router_subscription(tables, face, res, &propa_sub_info, zid);
 }
 
 fn register_client_subscription(
@@ -392,64 +293,16 @@ fn register_client_subscription(
 }
 
 fn declare_client_subscription(
-    tables: &TablesLock,
-    rtables: RwLockReadGuard<Tables>,
+    tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &WireExpr,
+    res: &mut Arc<Resource>,
     sub_info: &SubscriberInfo,
 ) {
-    log::debug!("Register client subscription");
-    match rtables
-        .get_mapping(face, &expr.scope, expr.mapping)
-        .cloned()
-    {
-        Some(mut prefix) => {
-            let res = Resource::get_resource(&prefix, &expr.suffix);
-            let (mut res, mut wtables) =
-                if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
-                    drop(rtables);
-                    let wtables = zwrite!(tables.tables);
-                    (res.unwrap(), wtables)
-                } else {
-                    let mut fullexpr = prefix.expr();
-                    fullexpr.push_str(expr.suffix.as_ref());
-                    let mut matches = keyexpr::new(fullexpr.as_str())
-                        .map(|ke| Resource::get_matches(&rtables, ke))
-                        .unwrap_or_default();
-                    drop(rtables);
-                    let mut wtables = zwrite!(tables.tables);
-                    let mut res =
-                        Resource::make_resource(&mut wtables, &mut prefix, expr.suffix.as_ref());
-                    matches.push(Arc::downgrade(&res));
-                    Resource::match_resource(&wtables, &mut res, matches);
-                    (res, wtables)
-                };
-
-            register_client_subscription(&mut wtables, face, &mut res, sub_info);
-            let mut propa_sub_info = *sub_info;
-            propa_sub_info.mode = Mode::Push;
-            let zid = wtables.zid;
-            register_router_subscription(&mut wtables, face, &mut res, &propa_sub_info, zid);
-            disable_matches_data_routes(&mut wtables, &mut res);
-            drop(wtables);
-
-            let rtables = zread!(tables.tables);
-            let matches_data_routes = compute_matches_data_routes(&rtables, &res);
-            drop(rtables);
-
-            let wtables = zwrite!(tables.tables);
-            for (mut res, data_routes, matching_pulls) in matches_data_routes {
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_data_routes(data_routes);
-                get_mut_unchecked(&mut res)
-                    .context_mut()
-                    .update_matching_pulls(matching_pulls);
-            }
-            drop(wtables);
-        }
-        None => log::error!("Declare subscription for unknown scope {}!", expr.scope),
-    }
+    register_client_subscription(tables, face, res, sub_info);
+    let mut propa_sub_info = *sub_info;
+    propa_sub_info.mode = Mode::Push;
+    let zid = tables.zid;
+    register_router_subscription(tables, face, res, &propa_sub_info, zid);
 }
 
 #[inline]
@@ -657,40 +510,12 @@ fn undeclare_router_subscription(
 }
 
 fn forget_router_subscription(
-    tables: &TablesLock,
-    rtables: RwLockReadGuard<Tables>,
+    tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &WireExpr,
+    res: &mut Arc<Resource>,
     router: &ZenohId,
 ) {
-    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
-        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-            Some(mut res) => {
-                drop(rtables);
-                let mut wtables = zwrite!(tables.tables);
-                undeclare_router_subscription(&mut wtables, Some(face), &mut res, router);
-                disable_matches_data_routes(&mut wtables, &mut res);
-                drop(wtables);
-
-                let rtables = zread!(tables.tables);
-                let matches_data_routes = compute_matches_data_routes(&rtables, &res);
-                drop(rtables);
-                let wtables = zwrite!(tables.tables);
-                for (mut res, data_routes, matching_pulls) in matches_data_routes {
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_data_routes(data_routes);
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_matching_pulls(matching_pulls);
-                }
-                Resource::clean(&mut res);
-                drop(wtables);
-            }
-            None => log::error!("Undeclare unknown router subscription!"),
-        },
-        None => log::error!("Undeclare router subscription with unknown scope!"),
-    }
+    undeclare_router_subscription(tables, Some(face), res, router);
 }
 
 fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohId) {
@@ -721,45 +546,17 @@ fn undeclare_peer_subscription(
 }
 
 fn forget_peer_subscription(
-    tables: &TablesLock,
-    rtables: RwLockReadGuard<Tables>,
+    tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &WireExpr,
+    res: &mut Arc<Resource>,
     peer: &ZenohId,
 ) {
-    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
-        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-            Some(mut res) => {
-                drop(rtables);
-                let mut wtables = zwrite!(tables.tables);
-                undeclare_peer_subscription(&mut wtables, Some(face), &mut res, peer);
-                let client_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
-                let peer_subs = remote_peer_subs(&wtables, &res);
-                let zid = wtables.zid;
-                if !client_subs && !peer_subs {
-                    undeclare_router_subscription(&mut wtables, None, &mut res, &zid);
-                }
-                disable_matches_data_routes(&mut wtables, &mut res);
-                drop(wtables);
-
-                let rtables = zread!(tables.tables);
-                let matches_data_routes = compute_matches_data_routes(&rtables, &res);
-                drop(rtables);
-                let wtables = zwrite!(tables.tables);
-                for (mut res, data_routes, matching_pulls) in matches_data_routes {
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_data_routes(data_routes);
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_matching_pulls(matching_pulls);
-                }
-                Resource::clean(&mut res);
-                drop(wtables);
-            }
-            None => log::error!("Undeclare unknown peer subscription!"),
-        },
-        None => log::error!("Undeclare peer subscription with unknown scope!"),
+    undeclare_peer_subscription(tables, Some(face), res, peer);
+    let client_subs = res.session_ctxs.values().any(|ctx| ctx.subs.is_some());
+    let peer_subs = remote_peer_subs(tables, res);
+    let zid = tables.zid;
+    if !client_subs && !peer_subs {
+        undeclare_router_subscription(tables, None, res, &zid);
     }
 }
 
@@ -807,40 +604,11 @@ pub(super) fn undeclare_client_subscription(
 }
 
 fn forget_client_subscription(
-    tables: &TablesLock,
-    rtables: RwLockReadGuard<Tables>,
+    tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    expr: &WireExpr,
+    res: &mut Arc<Resource>,
 ) {
-    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
-        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-            Some(mut res) => {
-                drop(rtables);
-                let mut wtables = zwrite!(tables.tables);
-                undeclare_client_subscription(&mut wtables, face, &mut res);
-                disable_matches_data_routes(&mut wtables, &mut res);
-                drop(wtables);
-
-                let rtables = zread!(tables.tables);
-                let matches_data_routes = compute_matches_data_routes(&rtables, &res);
-                drop(rtables);
-
-                let wtables = zwrite!(tables.tables);
-                for (mut res, data_routes, matching_pulls) in matches_data_routes {
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_data_routes(data_routes);
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_matching_pulls(matching_pulls);
-                }
-                Resource::clean(&mut res);
-                drop(wtables);
-            }
-            None => log::error!("Undeclare unknown subscription!"),
-        },
-        None => log::error!("Undeclare subscription with unknown scope!"),
-    }
+    undeclare_client_subscription(tables, face, res);
 }
 
 pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
@@ -1103,56 +871,54 @@ fn insert_faces_for_subs(
 impl HatPubSubTrait for HatCode {
     fn declare_subscription(
         &self,
-        tables: &TablesLock,
+        tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        expr: &WireExpr,
+        res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
         node_id: NodeId,
     ) {
-        let rtables = zread!(tables.tables);
         match face.whatami {
             WhatAmI::Router => {
-                if let Some(router) = get_router(&rtables, face, node_id) {
-                    declare_router_subscription(tables, rtables, face, expr, sub_info, router)
+                if let Some(router) = get_router(tables, face, node_id) {
+                    declare_router_subscription(tables, face, res, sub_info, router)
                 }
             }
             WhatAmI::Peer => {
-                if hat!(rtables).full_net(WhatAmI::Peer) {
-                    if let Some(peer) = get_peer(&rtables, face, node_id) {
-                        declare_peer_subscription(tables, rtables, face, expr, sub_info, peer)
+                if hat!(tables).full_net(WhatAmI::Peer) {
+                    if let Some(peer) = get_peer(tables, face, node_id) {
+                        declare_peer_subscription(tables, face, res, sub_info, peer)
                     }
                 } else {
-                    declare_client_subscription(tables, rtables, face, expr, sub_info)
+                    declare_client_subscription(tables, face, res, sub_info)
                 }
             }
-            _ => declare_client_subscription(tables, rtables, face, expr, sub_info),
+            _ => declare_client_subscription(tables, face, res, sub_info),
         }
     }
 
-    fn forget_subscription(
+    fn undeclare_subscription(
         &self,
-        tables: &TablesLock,
+        tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        expr: &WireExpr,
+        res: &mut Arc<Resource>,
         node_id: NodeId,
     ) {
-        let rtables = zread!(tables.tables);
         match face.whatami {
             WhatAmI::Router => {
-                if let Some(router) = get_router(&rtables, face, node_id) {
-                    forget_router_subscription(tables, rtables, face, expr, &router)
+                if let Some(router) = get_router(tables, face, node_id) {
+                    forget_router_subscription(tables, face, res, &router)
                 }
             }
             WhatAmI::Peer => {
-                if hat!(rtables).full_net(WhatAmI::Peer) {
-                    if let Some(peer) = get_peer(&rtables, face, node_id) {
-                        forget_peer_subscription(tables, rtables, face, expr, &peer)
+                if hat!(tables).full_net(WhatAmI::Peer) {
+                    if let Some(peer) = get_peer(tables, face, node_id) {
+                        forget_peer_subscription(tables, face, res, &peer)
                     }
                 } else {
-                    forget_client_subscription(tables, rtables, face, expr)
+                    forget_client_subscription(tables, face, res)
                 }
             }
-            _ => forget_client_subscription(tables, rtables, face, expr),
+            _ => forget_client_subscription(tables, face, res),
         }
     }
 
