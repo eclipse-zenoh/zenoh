@@ -276,17 +276,16 @@ impl<StartArgs, Instance> PluginVTable<StartArgs, Instance> {
     }
 }
 
-/// This macro will add a non-mangled functions which provides plugin version and loads it if feature `no_mangle` is enabled in the destination crate.
+/// This macro will add a non-mangled functions which provides plugin version and loads it into the host.
+/// If plugin library should work also as static, consider calling this macro under feature condition
 #[macro_export]
 macro_rules! declare_plugin {
     ($ty: path) => {
-        #[cfg(feature = "no_mangle")]
         #[no_mangle]
         fn get_plugin_loader_version() -> $crate::PluginLoaderVersion {
             $crate::PLUGIN_LOADER_VERSION
         }
 
-        #[cfg(feature = "no_mangle")]
         #[no_mangle]
         fn get_compatibility() -> $crate::Compatibility {
             $crate::Compatibility::with_plugin_version::<
@@ -296,7 +295,6 @@ macro_rules! declare_plugin {
             >()
         }
 
-        #[cfg(feature = "no_mangle")]
         #[no_mangle]
         fn load_plugin() -> $crate::PluginVTable<
             <$ty as $crate::Plugin>::StartArgs,

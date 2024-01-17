@@ -52,7 +52,9 @@ mod memory_backend;
 mod replica;
 mod storages_mgt;
 
+#[cfg(feature = "no_mangle")]
 zenoh_plugin_trait::declare_plugin!(StoragesPlugin);
+
 pub struct StoragesPlugin {}
 impl ZenohPlugin for StoragesPlugin {}
 impl Plugin for StoragesPlugin {

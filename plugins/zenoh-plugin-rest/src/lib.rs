@@ -189,7 +189,9 @@ fn response(status: StatusCode, content_type: impl TryInto<Mime>, body: &str) ->
     builder.build()
 }
 
+#[cfg(feature = "no_mangle")]
 zenoh_plugin_trait::declare_plugin!(RestPlugin);
+
 pub struct RestPlugin {}
 #[derive(Clone, Copy, Debug)]
 struct StrError {

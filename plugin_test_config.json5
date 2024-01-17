@@ -39,12 +39,8 @@
 //  
 {
   "plugins": {
-    // demonstrate "nof found" error
-    "not_found": {
-    },
     // example plugin, see "plugins/zenog-plugin-example"
-    "example": {
-    },
+    "example": {},
     // rest plugin, see "plugins/zenoh-plugin-rest"
     "rest": {
         "http_port": 8080,
@@ -53,15 +49,15 @@
     // supports different backends implemented as plugins also
     "storage_manager": {
        backend_search_dirs: [
+          "target/debug",
           "../zenoh-backend-influxdb/target/debug",
        ],
       "volumes": {
         // example backend, see "plugins/zenoh-backend-example"
-        "example": {
-        },
+        "example": {},
         // influxdb backend from "../zenoh-backend-influxdb"
-        "influxdb": {
-        },
+        "influxdb": {},
+        "influxdb2": {},
       },
       "storages": {
         "memory": {
