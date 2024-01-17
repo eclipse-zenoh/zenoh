@@ -856,6 +856,7 @@ fn forget_peer_queryable(
                     let local_info = local_router_qabl_info(&wtables, &res);
                     register_router_queryable(&mut wtables, None, &mut res, &local_info, zid);
                 }
+                disable_matches_query_routes(&mut wtables, &mut res);
                 drop(wtables);
 
                 let rtables = zread!(tables.tables);

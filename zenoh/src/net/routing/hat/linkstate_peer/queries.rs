@@ -554,6 +554,7 @@ fn forget_peer_queryable(
                 drop(rtables);
                 let mut wtables = zwrite!(tables.tables);
                 undeclare_peer_queryable(&mut wtables, Some(face), &mut res, peer);
+                disable_matches_query_routes(&mut wtables, &mut res);
                 drop(wtables);
 
                 let rtables = zread!(tables.tables);
