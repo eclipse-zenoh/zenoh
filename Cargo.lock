@@ -4608,6 +4608,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-backend-example"
+version = "0.11.0-dev"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "clap",
+ "const_format",
+ "env_logger",
+ "futures",
+ "git-version",
+ "log",
+ "serde_json",
+ "zenoh",
+ "zenoh-core",
+ "zenoh-plugin-trait",
+ "zenoh-result",
+ "zenoh-util",
+ "zenoh_backend_traits",
+]
+
+[[package]]
 name = "zenoh-buffers"
 version = "0.11.0-dev"
 dependencies = [
@@ -4981,27 +5002,6 @@ dependencies = [
  "zenoh-plugin-trait",
  "zenoh-result",
  "zenoh-util",
-]
-
-[[package]]
-name = "zenoh-plugin-storage-example"
-version = "0.11.0-dev"
-dependencies = [
- "async-std",
- "async-trait",
- "clap",
- "const_format",
- "env_logger",
- "futures",
- "git-version",
- "log",
- "serde_json",
- "zenoh",
- "zenoh-core",
- "zenoh-plugin-trait",
- "zenoh-result",
- "zenoh-util",
- "zenoh_backend_traits",
 ]
 
 [[package]]

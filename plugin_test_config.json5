@@ -1,13 +1,67 @@
+// Config for testing all available plugins
+// 
+// To run it do these steps:
+//
+// - Clone these repositories:
+// ```
+// git clone https://github.com/eclipse-zenoh/zenoh.git
+// git clone https://github.com/eclipse-zenoh/zenoh-backend-influxdb.git
+// git clone https://github.com/eclipse-zenoh/zenoh-backend-rocksdb.git
+// git clone https://github.com/eclipse-zenoh/zenoh-backend-filesystem.git
+// git clone https://github.com/eclipse-zenoh/zenoh-plugin-webserver.git
+// git clone https://github.com/eclipse-zenoh/zenoh-plugin-mqtt.git
+// git clone https://github.com/eclipse-zenoh/zenoh-plugin-dds.git
+// git clone https://github.com/eclipse-zenoh/zenoh-plugin-ros1.git
+// git clone https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds.git
+// ```
+//
+// - Init submodules for zenoh-plugin-ros1
+// ```
+// cd zenoh-plugin-ros1
+// git submodule init
+// git submodule update
+// ```
+//
+// - Build projects
+// ```
+// cd zenoh && cargo build && cd ..
+// cd zenoh-backend-influxdb && cargo build && cd ..
+// ...
+// ```
+//
+// - Run the zenohd server with this config file.
+// Explicit setting RUST_LOG=info is important: without it the logs with default le are printed by zenohd itsellf, but not by plugins.
+// ```
+// cd zenoh
+// RUST_LOG=info cargo run -- --config plugin_test_config.json5
+// ```
+//
+//  
 {
   "plugins": {
+    // demonstrate "nof found" error
+    "not_found": {
+    },
+    // example plugin, see "plugins/zenog-plugin-example"
+    "example": {
+    },
+    // rest plugin, see "plugins/zenoh-plugin-rest"
     "rest": {
         "http_port": 8080,
     },
+    // storage mangaer plugin, see "plugins/zenoh-plugin-storage-manager"
+    // supports different backends implemented as plugins also
     "storage_manager": {
+       backend_search_dirs: [
+          "../zenoh-backend-influxdb/target/debug",
+       ],
       "volumes": {
+        // example backend, see "plugins/zenoh-backend-example"
         "example": {
-          "__path__": ["target/debug/libzenoh_backend_example.so","target/debug/libzenoh_backend_example.dylib"],
-        }
+        },
+        // influxdb backend from "../zenoh-backend-influxdb"
+        "influxdb": {
+        },
       },
       "storages": {
         "memory": {
@@ -19,10 +73,6 @@
           "key_expr": "demo/example/**"
         },
        }
-    },
-    "not_found": {
-    },
-    "example": {
     },
     "dds": {
       "__path__": ["../zenoh-plugin-dds/target/debug/libzenoh_plugin_dds.so","../zenoh-plugin-dds/target/debug/libzenoh_plugin_dds.dylib"],

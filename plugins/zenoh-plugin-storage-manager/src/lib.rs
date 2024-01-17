@@ -124,28 +124,28 @@ impl StorageRuntimeInner {
             plugins_manager,
         };
         new_self
-            .spawn_volume(VolumeConfig {
+            .spawn_volume(&VolumeConfig {
                 name: MEMORY_BACKEND_NAME.into(),
                 backend: None,
                 paths: None,
                 required: false,
                 rest: Default::default(),
             })
-            .map_or_else(|e| log::error!("Cannot spawn memory volume: {}", e), |_| ());
-        for volume in volumes {
+            .map_or_else(|e| log::error!("Cannot spawn static volume '{}': {}", MEMORY_BACKEND_NAME, e), |_| ());
+        for volume in &volumes {
             new_self
                 .spawn_volume(volume)
-                .map_or_else(|e| log::error!("Cannot spawn volume: {}", e), |_| ());
+                .map_or_else(|e| log::error!("Cannot spawn volume '{}': {}", volume.name(), e), |_| ());
         }
-        for storage in storages {
+        for storage in &storages {
             new_self
                 .spawn_storage(storage)
-                .map_or_else(|e| log::error!("Cannot spawn storage: {}", e), |_| ());
+                .map_or_else(|e| log::error!("Cannot spawn storage '{}': {}", storage.name(), e), |_| ());
         }
         Ok(new_self)
     }
     fn update<I: IntoIterator<Item = ConfigDiff>>(&mut self, diffs: I) -> ZResult<()> {
-        for diff in diffs {
+        for ref diff in diffs {
             match diff {
                 ConfigDiff::DeleteVolume(volume) => self.kill_volume(&volume.name)?,
                 ConfigDiff::AddVolume(volume) => {
@@ -159,7 +159,7 @@ impl StorageRuntimeInner {
     }
     fn kill_volume<T: AsRef<str>>(&mut self, name: T) -> ZResult<()> {
         let name = name.as_ref();
-        log::info!("Killing volume {}", name);
+        log::info!("Killing volume '{}'", name);
         if let Some(storages) = self.storages.remove(name) {
             async_std::task::block_on(futures::future::join_all(
                 storages
@@ -169,15 +169,15 @@ impl StorageRuntimeInner {
         }
         self.plugins_manager
             .started_plugin_mut(name)
-            .ok_or(format!("Cannot find volume {} to stop it", name))?
+            .ok_or(format!("Cannot find volume '{}' to stop it", name))?
             .stop();
         Ok(())
     }
-    fn spawn_volume(&mut self, config: VolumeConfig) -> ZResult<()> {
+    fn spawn_volume(&mut self, config: &VolumeConfig) -> ZResult<()> {
         let volume_id = config.name();
         let backend_name = config.backend();
         log::info!(
-            "Spawning volume {} with backend {}",
+            "Spawning volume '{}' with backend '{}'",
             volume_id,
             backend_name
         );
@@ -191,16 +191,16 @@ impl StorageRuntimeInner {
                 .declare_dynamic_plugin_by_name(volume_id, backend_name)?
         };
         let loaded = declared.load()?;
-        loaded.start(&config)?;
+        loaded.start(config)?;
         Ok(())
     }
-    fn kill_storage(&mut self, config: StorageConfig) {
+    fn kill_storage(&mut self, config: &StorageConfig) {
         let volume = &config.volume_id;
-        log::info!("Killing storage {} from volume {}", config.name, volume);
+        log::info!("Killing storage '{}' from volume '{}'", config.name, volume);
         if let Some(storages) = self.storages.get_mut(volume) {
             if let Some(storage) = storages.get_mut(&config.name) {
                 log::debug!(
-                    "Closing storage {} from volume {}",
+                    "Closing storage '{}' from volume '{}'",
                     config.name,
                     config.volume_id
                 );
@@ -209,19 +209,19 @@ impl StorageRuntimeInner {
             }
         }
     }
-    fn spawn_storage(&mut self, storage: StorageConfig) -> ZResult<()> {
+    fn spawn_storage(&mut self, storage: &StorageConfig) -> ZResult<()> {
         let admin_key = self.status_key() + "/storages/" + &storage.name;
         let volume_id = storage.volume_id.clone();
         let backend = self
             .plugins_manager
             .started_plugin(&volume_id)
             .ok_or(format!(
-                "Cannot find volume {} to spawn storage {}",
+                "Cannot find volume '{}' to spawn storage '{}'",
                 volume_id, storage.name
             ))?;
         let storage_name = storage.name.clone();
         log::info!(
-            "Spawning storage {} from volume {} with backend {}",
+            "Spawning storage '{}' from volume '{}' with backend '{}'",
             storage_name,
             volume_id,
             backend.name()
@@ -230,7 +230,7 @@ impl StorageRuntimeInner {
         let out_interceptor = backend.instance().outgoing_data_interceptor();
         let stopper = async_std::task::block_on(create_and_start_storage(
             admin_key,
-            storage,
+            storage.clone(),
             backend.instance(),
             in_interceptor,
             out_interceptor,

@@ -324,6 +324,9 @@ impl VolumeConfig {
     }
 }
 impl StorageConfig {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
     pub fn to_json_value(&self) -> Value {
         let mut result = serde_json::Map::new();
         result.insert("key_expr".into(), Value::String(self.key_expr.to_string()));

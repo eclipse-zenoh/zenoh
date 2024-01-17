@@ -22,11 +22,13 @@ type StartFn<StartArgs, Instance> = fn(&str, &StartArgs) -> ZResult<Instance>;
 
 #[repr(C)]
 pub struct PluginVTable<StartArgs, Instance> {
+    pub plugin_version: &'static str,
+    pub plugin_long_version: &'static str,
     pub start: StartFn<StartArgs, Instance>,
 }
 impl<StartArgs, Instance> PluginStructVersion for PluginVTable<StartArgs, Instance> {
     fn struct_version() -> u64 {
-        1
+        2
     }
     fn struct_features() -> &'static str {
         FEATURES
@@ -64,12 +66,12 @@ impl Display for StructVersion {
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Compatibility {
-    rust_version: RustVersion,
-    vtable_version: StructVersion,
-    start_args_version: StructVersion,
-    instance_version: StructVersion,
-    plugin_version: &'static str,
-    plugin_long_version: &'static str,
+    rust_version: Option<RustVersion>,
+    vtable_version: Option<StructVersion>,
+    start_args_version: Option<StructVersion>,
+    instance_version: Option<StructVersion>,
+    plugin_version: Option<&'static str>,
+    plugin_long_version: Option<&'static str>,
 }
 
 impl Compatibility {
@@ -78,12 +80,14 @@ impl Compatibility {
         InstanceType: PluginInstance,
         PluginType: Plugin<StartArgs = StartArgsType, Instance = InstanceType>,
     >() -> Self {
-        let rust_version = RustVersion::new();
-        let vtable_version = StructVersion::new::<PluginVTable<StartArgsType, InstanceType>>();
-        let start_args_version = StructVersion::new::<StartArgsType>();
-        let instance_version = StructVersion::new::<InstanceType>();
-        let plugin_version = PluginType::PLUGIN_VERSION;
-        let plugin_long_version = PluginType::PLUGIN_LONG_VERSION;
+        let rust_version = Some(RustVersion::new());
+        let vtable_version = Some(StructVersion::new::<
+            PluginVTable<StartArgsType, InstanceType>,
+        >());
+        let start_args_version = Some(StructVersion::new::<StartArgsType>());
+        let instance_version = Some(StructVersion::new::<InstanceType>());
+        let plugin_version = Some(PluginType::PLUGIN_VERSION);
+        let plugin_long_version = Some(PluginType::PLUGIN_LONG_VERSION);
         Self {
             rust_version,
             vtable_version,
@@ -97,47 +101,111 @@ impl Compatibility {
         StartArgsType: PluginStartArgs,
         InstanceType: PluginInstance,
     >() -> Self {
-        let rust_version = RustVersion::new();
-        let vtable_version = StructVersion::new::<PluginVTable<StartArgsType, InstanceType>>();
-        let start_args_version = StructVersion::new::<StartArgsType>();
-        let instance_version = StructVersion::new::<InstanceType>();
+        let rust_version = Some(RustVersion::new());
+        let vtable_version = Some(StructVersion::new::<
+            PluginVTable<StartArgsType, InstanceType>,
+        >());
+        let start_args_version = Some(StructVersion::new::<StartArgsType>());
+        let instance_version = Some(StructVersion::new::<InstanceType>());
         Self {
             rust_version,
             vtable_version,
             start_args_version,
             instance_version,
-            plugin_version: "",
-            plugin_long_version: "",
+            plugin_version: None,
+            plugin_long_version: None,
         }
     }
-    pub fn plugin_version(&self) -> &'static str {
+    pub fn plugin_version(&self) -> Option<&'static str> {
         self.plugin_version
     }
-    pub fn plugin_long_version(&self) -> &'static str {
+    pub fn plugin_long_version(&self) -> Option<&'static str> {
         self.plugin_long_version
     }
-    /// Returns true if rust compiler and structures version are exactly the same and
-    /// plugin version is compatible with the requested version range in the configuration file
-    pub fn are_compatible(&self, other: &Self) -> bool {
-        RustVersion::are_compatible(&self.rust_version, &other.rust_version)
-            && self.vtable_version == other.vtable_version
-            && self.start_args_version == other.start_args_version
-            && self.instance_version == other.instance_version
-        // TODO: check plugin version may be added later
+    /// Compares fields if both are Some, otherwise skips the comparison.
+    /// Returns true if all the comparisons returned true, otherwise false.
+    /// If comparison passed or skipped, the corresponding field in both structs is set to None.
+    /// If comparison failed, the corresponding field in both structs is kept as is.
+    /// This allows not only to check compatibility, but also point to exact reasons of incompatibility.
+    pub fn compare(&mut self, other: &mut Self) -> bool {
+        let mut result = true;
+        Self::compare_field_fn(
+            &mut result,
+            &mut self.rust_version,
+            &mut other.rust_version,
+            RustVersion::are_compatible,
+        );
+        Self::compare_field(
+            &mut result,
+            &mut self.vtable_version,
+            &mut other.vtable_version,
+        );
+        Self::compare_field(
+            &mut result,
+            &mut self.start_args_version,
+            &mut other.start_args_version,
+        );
+        Self::compare_field(
+            &mut result,
+            &mut self.instance_version,
+            &mut other.instance_version,
+        );
+        // TODO: here we can later implement check for plugin version range compatibility
+        Self::compare_field(
+            &mut result,
+            &mut self.plugin_version,
+            &mut other.plugin_version,
+        );
+        Self::compare_field(
+            &mut result,
+            &mut self.plugin_long_version,
+            &mut other.plugin_long_version,
+        );
+        result
+    }
+
+    // Utility function for compare single field
+    fn compare_field_fn<T, F: Fn(&T, &T) -> bool>(
+        result: &mut bool,
+        a: &mut Option<T>,
+        b: &mut Option<T>,
+        compare: F,
+    ) {
+        let compatible = if let (Some(a), Some(b)) = (&a, &b) {
+            compare(a, b)
+        } else {
+            true
+        };
+        if compatible {
+            *a = None;
+            *b = None;
+        } else {
+            *result = false;
+        }
+    }
+    fn compare_field<T: PartialEq>(result: &mut bool, a: &mut Option<T>, b: &mut Option<T>) {
+        Self::compare_field_fn(result, a, b, |a, b| a == b);
     }
 }
 
 impl Display for Compatibility {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}\nVTable:{}StartArgs:{}Instance:{}Plugin:{}",
-            self.rust_version,
-            self.vtable_version,
-            self.start_args_version,
-            self.instance_version,
-            self.plugin_version
-        )
+        if let Some(rust_version) = &self.rust_version {
+            writeln!(f, "Rust version:\n{}", rust_version)?;
+        }
+        if let Some(vtable_version) = &self.vtable_version {
+            writeln!(f, "VTable version:\n{}", vtable_version)?;
+        }
+        if let Some(start_args_version) = &self.start_args_version {
+            writeln!(f, "StartArgs version:\n{}", start_args_version)?;
+        }
+        if let Some(instance_version) = &self.instance_version {
+            writeln!(f, "Instance version:\n{}", instance_version)?;
+        }
+        if let Some(plugin_version) = &self.plugin_version {
+            writeln!(f, "Plugin version: {}", plugin_version)?;
+        }
+        Ok(())
     }
 }
 
@@ -201,6 +269,8 @@ impl Default for RustVersion {
 impl<StartArgs, Instance> PluginVTable<StartArgs, Instance> {
     pub fn new<ConcretePlugin: Plugin<StartArgs = StartArgs, Instance = Instance>>() -> Self {
         Self {
+            plugin_version: ConcretePlugin::PLUGIN_VERSION,
+            plugin_long_version: ConcretePlugin::PLUGIN_LONG_VERSION,
             start: ConcretePlugin::start,
         }
     }

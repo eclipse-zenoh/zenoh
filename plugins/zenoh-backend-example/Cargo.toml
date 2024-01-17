@@ -13,7 +13,7 @@
 #
 [package]
 rust-version = { workspace = true }
-name = "zenoh-plugin-storage-example"
+name = "zenoh-backend-example"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }

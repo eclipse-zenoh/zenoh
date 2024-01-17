@@ -11,7 +11,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::*;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use libloading::Library;
 use zenoh_result::{bail, ZResult};
@@ -48,16 +48,14 @@ impl DynamicPluginSource {
 struct DynamicPluginStarter<StartArgs, Instance> {
     _lib: Library,
     path: PathBuf,
-    plugin_version: &'static str,
-    plugin_long_version: &'static str,
     vtable: PluginVTable<StartArgs, Instance>,
 }
 
 impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
     DynamicPluginStarter<StartArgs, Instance>
 {
-    fn new(lib: Library, path: PathBuf) -> ZResult<Self> {
-        log::debug!("Loading plugin {}", &path.to_str().unwrap(),);
+    fn get_vtable(lib: &Library, path: &Path) -> ZResult<PluginVTable<StartArgs, Instance>> {
+        log::debug!("Loading plugin {}", path.to_str().unwrap(),);
         let get_plugin_loader_version =
             unsafe { lib.get::<fn() -> PluginLoaderVersion>(b"get_plugin_loader_version")? };
         let plugin_loader_version = get_plugin_loader_version();
@@ -70,28 +68,31 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance>
             );
         }
         let get_compatibility = unsafe { lib.get::<fn() -> Compatibility>(b"get_compatibility")? };
-        let plugin_compatibility_record = get_compatibility();
-        let host_compatibility_record =
+        let mut plugin_compatibility_record = get_compatibility();
+        let mut host_compatibility_record =
             Compatibility::with_empty_plugin_version::<StartArgs, Instance>();
         log::debug!(
             "Plugin compativilty record: {:?}",
             &plugin_compatibility_record
         );
-        if !plugin_compatibility_record.are_compatible(&host_compatibility_record) {
+        if !plugin_compatibility_record.compare(&mut host_compatibility_record) {
             bail!(
-                "Plugin compatibility mismatch:\n\nHost:\n{}\nPlugin:\n{}\n",
+                "Plugin compatibility mismatch:\nHost:\n{}Plugin:\n{}",
                 host_compatibility_record,
                 plugin_compatibility_record
             );
         }
         let load_plugin =
             unsafe { lib.get::<fn() -> PluginVTable<StartArgs, Instance>>(b"load_plugin")? };
-        let vtable = load_plugin();
+
+        Ok(load_plugin())
+    }
+    fn new(lib: Library, path: PathBuf) -> ZResult<Self> {
+        let vtable = Self::get_vtable(&lib, &path)
+            .map_err(|e| format!("Error loading {}: {}", path.to_str().unwrap(), e))?;
         Ok(Self {
             _lib: lib,
             path,
-            plugin_version: plugin_compatibility_record.plugin_version(),
-            plugin_long_version: plugin_compatibility_record.plugin_long_version(),
             vtable,
         })
     }
@@ -130,10 +131,10 @@ impl<StartArgs: PluginStartArgs, Instance: PluginInstance> PluginStatus
         self.name.as_str()
     }
     fn version(&self) -> Option<&str> {
-        self.starter.as_ref().map(|v| v.plugin_version)
+        self.starter.as_ref().map(|v| v.vtable.plugin_version)
     }
     fn long_version(&self) -> Option<&str> {
-        self.starter.as_ref().map(|v| v.plugin_long_version)
+        self.starter.as_ref().map(|v| v.vtable.plugin_long_version)
     }
     fn path(&self) -> &str {
         if let Some(starter) = &self.starter {
