@@ -18,7 +18,7 @@ use crate::{prelude::Selector, runtime::Runtime};
 use zenoh_core::zconfigurable;
 
 use zenoh_plugin_trait::{
-    Plugin, PluginControl, PluginInstance, PluginReport, PluginStatusRec, PluginStructVersion,
+    Plugin, PluginControl, PluginInstance, PluginReport, PluginStatusRec, StructVersion,
 };
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_result::ZResult;
@@ -32,7 +32,7 @@ pub type RunningPlugin = Box<dyn RunningPluginTrait + 'static>;
 /// Zenoh plugins should implement this trait to ensure type-safety, even if the starting arguments and expected plugin types change in a future release.
 pub trait ZenohPlugin: Plugin<StartArgs = Runtime, Instance = RunningPlugin> {}
 
-impl PluginStructVersion for RunningPlugin {
+impl StructVersion for RunningPlugin {
     fn struct_version() -> u64 {
         1
     }

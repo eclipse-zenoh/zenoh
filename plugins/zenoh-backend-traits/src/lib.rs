@@ -141,7 +141,7 @@ use zenoh::queryable::ReplyBuilder;
 use zenoh::time::Timestamp;
 use zenoh::value::Value;
 pub use zenoh::Result as ZResult;
-use zenoh_plugin_trait::{PluginControl, PluginInstance, PluginStatusRec, PluginStructVersion};
+use zenoh_plugin_trait::{PluginControl, PluginInstance, PluginStatusRec, StructVersion};
 use zenoh_util::concat_enabled_features;
 
 pub mod config;
@@ -222,7 +222,7 @@ pub trait Volume: Send + Sync {
 
 pub type VolumeInstance = Box<dyn Volume + 'static>;
 
-impl PluginStructVersion for VolumeInstance {
+impl StructVersion for VolumeInstance {
     fn struct_version() -> u64 {
         1
     }

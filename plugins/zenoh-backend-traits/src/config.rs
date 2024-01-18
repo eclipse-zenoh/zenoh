@@ -1,4 +1,3 @@
-use const_format::concatcp;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -12,13 +11,14 @@ use const_format::concatcp;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use const_format::concatcp;
 use derive_more::{AsMut, AsRef};
 use schemars::JsonSchema;
 use serde_json::{Map, Value};
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::{key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult};
-use zenoh_plugin_trait::{PluginStartArgs, PluginStructVersion};
+use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_result::{bail, zerror, Error};
 
 #[derive(JsonSchema, Debug, Clone, AsMut, AsRef)]
@@ -69,7 +69,7 @@ pub struct ReplicaConfig {
     pub delta: Duration,
 }
 
-impl PluginStructVersion for VolumeConfig {
+impl StructVersion for VolumeConfig {
     fn struct_version() -> u64 {
         1
     }

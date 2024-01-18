@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::StructVersion;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, ops::BitOrAssign};
 use zenoh_keyexpr::keyexpr;
@@ -152,19 +153,9 @@ pub trait PluginControl {
     }
 }
 
-pub trait PluginStructVersion {
-    /// The version of the structure implementing this trait. After any change in the structure or its dependencies
-    /// which may affect the ABI, this version should be incremented.
-    fn struct_version() -> u64;
-    /// The features enabled during compilation of the structure implementing this trait.
-    /// Different features between the plugin and the host may cause ABI incompatibility even if the structure version is the same.
-    /// Use `concat_enabled_features!` to generate this string
-    fn struct_features() -> &'static str;
-}
+pub trait PluginStartArgs: StructVersion {}
 
-pub trait PluginStartArgs: PluginStructVersion {}
-
-pub trait PluginInstance: PluginStructVersion + PluginControl + Send {}
+pub trait PluginInstance: StructVersion + PluginControl + Send {}
 
 /// Base plugin trait. The loaded plugin
 pub trait Plugin: Sized + 'static {

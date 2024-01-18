@@ -33,16 +33,18 @@
 //!
 //! Dynamic pluign is a shared library which exports set of C-repr (unmangled) functions which allows to check plugin compatibility and create plugin instance. These functiuons are defined automatically by [`declare_plugin`](crate::declare_plugin) macro.
 //!
+mod compatibility;
 mod manager;
 mod plugin;
 mod vtable;
 
+pub use compatibility::{Compatibility, PluginStructVersion, StructVersion};
 pub use manager::{DeclaredPlugin, LoadedPlugin, PluginsManager, StartedPlugin};
 pub use plugin::{
     Plugin, PluginConditionSetter, PluginControl, PluginInstance, PluginReport, PluginStartArgs,
-    PluginState, PluginStatus, PluginStatusRec, PluginStructVersion,
+    PluginState, PluginStatus, PluginStatusRec,
 };
-pub use vtable::{Compatibility, PluginLoaderVersion, PluginVTable, PLUGIN_LOADER_VERSION};
+pub use vtable::{PluginLoaderVersion, PluginVTable, PLUGIN_LOADER_VERSION};
 use zenoh_util::concat_enabled_features;
 
 pub const FEATURES: &str =
