@@ -37,7 +37,7 @@ pub trait Primitives: Send + Sync {
 pub(crate) trait EPrimitives: Send + Sync {
     fn send_declare(&self, ctx: RoutingContext<Declare>);
 
-    fn send_push(&self, ctx: RoutingContext<Push>);
+    fn send_push(&self, msg: Push);
 
     fn send_request(&self, ctx: RoutingContext<Request>);
 
@@ -68,7 +68,7 @@ impl Primitives for DummyPrimitives {
 impl EPrimitives for DummyPrimitives {
     fn send_declare(&self, _ctx: RoutingContext<Declare>) {}
 
-    fn send_push(&self, _ctx: RoutingContext<Push>) {}
+    fn send_push(&self, _msg: Push) {}
 
     fn send_request(&self, _ctx: RoutingContext<Request>) {}
 

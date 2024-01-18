@@ -14,9 +14,7 @@
 use super::face::FaceState;
 use super::resource::{DataRoutes, Direction, PullCaches, Resource};
 use super::tables::{NodeId, Route, RoutingExpr, Tables, TablesLock};
-use crate::net::routing::dispatcher::face::Face;
 use crate::net::routing::hat::HatTrait;
-use crate::net::routing::RoutingContext;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::RwLock;
@@ -478,19 +476,13 @@ pub fn full_reentrant_route_data(
                                 inc_stats!(face, tx, admin, payload)
                             }
 
-                            outface.primitives.send_push(RoutingContext::new_out(
-                                Push {
-                                    wire_expr: key_expr.into(),
-                                    ext_qos,
-                                    ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType { node_id: *context },
-                                    payload,
-                                },
-                                Face {
-                                    tables: tables_ref.clone(),
-                                    state: outface.clone(),
-                                },
-                            ))
+                            outface.primitives.send_push(Push {
+                                wire_expr: key_expr.into(),
+                                ext_qos,
+                                ext_tstamp: None,
+                                ext_nodeid: ext::NodeIdType { node_id: *context },
+                                payload,
+                            })
                         }
                     } else {
                         if !matching_pulls.is_empty() {
@@ -519,19 +511,13 @@ pub fn full_reentrant_route_data(
                                     inc_stats!(face, tx, admin, payload)
                                 }
 
-                                outface.primitives.send_push(RoutingContext::new_out(
-                                    Push {
-                                        wire_expr: key_expr,
-                                        ext_qos,
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType { node_id: context },
-                                        payload: payload.clone(),
-                                    },
-                                    Face {
-                                        tables: tables_ref.clone(),
-                                        state: outface.clone(),
-                                    },
-                                ))
+                                outface.primitives.send_push(Push {
+                                    wire_expr: key_expr,
+                                    ext_qos,
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType { node_id: context },
+                                    payload: payload.clone(),
+                                })
                             }
                         } else {
                             drop(tables);
@@ -552,19 +538,13 @@ pub fn full_reentrant_route_data(
                                         inc_stats!(face, tx, admin, payload)
                                     }
 
-                                    outface.primitives.send_push(RoutingContext::new_out(
-                                        Push {
-                                            wire_expr: key_expr.into(),
-                                            ext_qos,
-                                            ext_tstamp: None,
-                                            ext_nodeid: ext::NodeIdType { node_id: *context },
-                                            payload: payload.clone(),
-                                        },
-                                        Face {
-                                            tables: tables_ref.clone(),
-                                            state: outface.clone(),
-                                        },
-                                    ))
+                                    outface.primitives.send_push(Push {
+                                        wire_expr: key_expr.into(),
+                                        ext_qos,
+                                        ext_tstamp: None,
+                                        ext_nodeid: ext::NodeIdType { node_id: *context },
+                                        payload: payload.clone(),
+                                    })
                                 }
                             }
                         }
@@ -603,16 +583,13 @@ pub fn pull_data(tables_ref: &RwLock<Tables>, face: &Arc<FaceState>, expr: WireE
                             drop(lock);
                             drop(tables);
                             for (key_expr, payload) in route {
-                                face.primitives.send_push(RoutingContext::with_expr(
-                                    Push {
-                                        wire_expr: key_expr,
-                                        ext_qos: ext::QoSType::push_default(),
-                                        ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::default(),
-                                        payload,
-                                    },
-                                    "".to_string(),
-                                )); // TODO
+                                face.primitives.send_push(Push {
+                                    wire_expr: key_expr,
+                                    ext_qos: ext::QoSType::push_default(),
+                                    ext_tstamp: None,
+                                    ext_nodeid: ext::NodeIdType::default(),
+                                    payload,
+                                });
                             }
                         }
                         None => {

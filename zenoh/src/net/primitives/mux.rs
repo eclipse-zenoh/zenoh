@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -15,10 +13,11 @@ use std::sync::Arc;
 //
 use super::{EPrimitives, Primitives};
 use crate::net::routing::{
-    dispatcher::{face::Face, tables::TablesLock},
+    dispatcher::face::Face,
     interceptor::{InterceptorTrait, InterceptorsChain},
     RoutingContext,
 };
+use std::sync::OnceLock;
 use zenoh_protocol::network::{
     Declare, NetworkBody, NetworkMessage, Push, Request, Response, ResponseFinal,
 };
@@ -26,22 +25,15 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 pub struct Mux {
     pub handler: TransportUnicast,
-    pub(crate) fid: usize,
-    pub(crate) tables: Arc<TablesLock>,
+    pub(crate) face: OnceLock<Face>,
     pub(crate) interceptor: InterceptorsChain,
 }
 
 impl Mux {
-    pub(crate) fn new(
-        handler: TransportUnicast,
-        fid: usize,
-        tables: Arc<TablesLock>,
-        interceptor: InterceptorsChain,
-    ) -> Mux {
+    pub(crate) fn new(handler: TransportUnicast, interceptor: InterceptorsChain) -> Mux {
         Mux {
             handler,
-            fid,
-            tables,
+            face: OnceLock::new(),
             interceptor,
         }
     }
@@ -54,20 +46,15 @@ impl Primitives for Mux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        let tables = zread!(self.tables.tables);
-        let face = tables.faces.get(&self.fid).cloned();
-        drop(tables);
-        if let Some(face) = face {
-            let ctx = RoutingContext::new_in(
-                msg,
-                Face {
-                    tables: self.tables.clone(),
-                    state: face.clone(),
-                },
-            );
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
             if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
+        } else {
+            log::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -77,20 +64,15 @@ impl Primitives for Mux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        let tables = zread!(self.tables.tables);
-        let face = tables.faces.get(&self.fid).cloned();
-        drop(tables);
-        if let Some(face) = face {
-            let ctx = RoutingContext::new_in(
-                msg,
-                Face {
-                    tables: self.tables.clone(),
-                    state: face.clone(),
-                },
-            );
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
             if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
+        } else {
+            log::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -100,20 +82,15 @@ impl Primitives for Mux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        let tables = zread!(self.tables.tables);
-        let face = tables.faces.get(&self.fid).cloned();
-        drop(tables);
-        if let Some(face) = face {
-            let ctx = RoutingContext::new_in(
-                msg,
-                Face {
-                    tables: self.tables.clone(),
-                    state: face.clone(),
-                },
-            );
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
             if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
+        } else {
+            log::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -123,20 +100,15 @@ impl Primitives for Mux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        let tables = zread!(self.tables.tables);
-        let face = tables.faces.get(&self.fid).cloned();
-        drop(tables);
-        if let Some(face) = face {
-            let ctx = RoutingContext::new_in(
-                msg,
-                Face {
-                    tables: self.tables.clone(),
-                    state: face.clone(),
-                },
-            );
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
             if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
+        } else {
+            log::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -146,20 +118,15 @@ impl Primitives for Mux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        let tables = zread!(self.tables.tables);
-        let face = tables.faces.get(&self.fid).cloned();
-        drop(tables);
-        if let Some(face) = face {
-            let ctx = RoutingContext::new_in(
-                msg,
-                Face {
-                    tables: self.tables.clone(),
-                    state: face.clone(),
-                },
-            );
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
             if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
+        } else {
+            log::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -186,20 +153,21 @@ impl EPrimitives for Mux {
         }
     }
 
-    fn send_push(&self, ctx: RoutingContext<Push>) {
-        let ctx = RoutingContext {
-            msg: NetworkMessage {
-                body: NetworkBody::Push(ctx.msg),
-                #[cfg(feature = "stats")]
-                size: None,
-            },
-            inface: ctx.inface,
-            outface: ctx.outface,
-            prefix: ctx.prefix,
-            full_expr: ctx.full_expr,
+    fn send_push(&self, msg: Push) {
+        let msg = NetworkMessage {
+            body: NetworkBody::Push(msg),
+            #[cfg(feature = "stats")]
+            size: None,
         };
-        if let Some(ctx) = self.interceptor.intercept(ctx) {
-            let _ = self.handler.schedule(ctx.msg);
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            if let Some(ctx) = self.interceptor.intercept(ctx) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+        } else {
+            log::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -261,23 +229,16 @@ impl EPrimitives for Mux {
 
 pub struct McastMux {
     pub handler: TransportMulticast,
-    pub(crate) fid: usize,
-    pub(crate) tables: Arc<TablesLock>,
-    pub(crate) intercept: InterceptorsChain,
+    pub(crate) face: OnceLock<Face>,
+    pub(crate) interceptor: InterceptorsChain,
 }
 
 impl McastMux {
-    pub(crate) fn new(
-        handler: TransportMulticast,
-        fid: usize,
-        tables: Arc<TablesLock>,
-        intercept: InterceptorsChain,
-    ) -> McastMux {
+    pub(crate) fn new(handler: TransportMulticast, interceptor: InterceptorsChain) -> McastMux {
         McastMux {
             handler,
-            fid,
-            tables,
-            intercept,
+            face: OnceLock::new(),
+            interceptor,
         }
     }
 }
@@ -289,17 +250,15 @@ impl Primitives for McastMux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
-            let ctx = RoutingContext::new_in(
-                msg,
-                Face {
-                    tables: self.tables.clone(),
-                    state: face.clone(),
-                },
-            );
-            if let Some(ctx) = self.intercept.intercept(ctx) {
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
+        } else {
+            log::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -309,17 +268,15 @@ impl Primitives for McastMux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
-            let ctx = RoutingContext::new_in(
-                msg,
-                Face {
-                    tables: self.tables.clone(),
-                    state: face.clone(),
-                },
-            );
-            if let Some(ctx) = self.intercept.intercept(ctx) {
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
+        } else {
+            log::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -329,17 +286,15 @@ impl Primitives for McastMux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
-            let ctx = RoutingContext::new_in(
-                msg,
-                Face {
-                    tables: self.tables.clone(),
-                    state: face.clone(),
-                },
-            );
-            if let Some(ctx) = self.intercept.intercept(ctx) {
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
+        } else {
+            log::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -349,17 +304,15 @@ impl Primitives for McastMux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
-            let ctx = RoutingContext::new_in(
-                msg,
-                Face {
-                    tables: self.tables.clone(),
-                    state: face.clone(),
-                },
-            );
-            if let Some(ctx) = self.intercept.intercept(ctx) {
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
+        } else {
+            log::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -369,17 +322,15 @@ impl Primitives for McastMux {
             #[cfg(feature = "stats")]
             size: None,
         };
-        if let Some(face) = zread!(self.tables.tables).faces.get(&self.fid).cloned() {
-            let ctx = RoutingContext::new_in(
-                msg,
-                Face {
-                    tables: self.tables.clone(),
-                    state: face.clone(),
-                },
-            );
-            if let Some(ctx) = self.intercept.intercept(ctx) {
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            if let Some(ctx) = self.interceptor.intercept(ctx) {
                 let _ = self.handler.schedule(ctx.msg);
             }
+        } else {
+            log::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -401,25 +352,26 @@ impl EPrimitives for McastMux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.intercept.intercept(ctx) {
+        if let Some(ctx) = self.interceptor.intercept(ctx) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
 
-    fn send_push(&self, ctx: RoutingContext<Push>) {
-        let ctx = RoutingContext {
-            msg: NetworkMessage {
-                body: NetworkBody::Push(ctx.msg),
-                #[cfg(feature = "stats")]
-                size: None,
-            },
-            inface: ctx.inface,
-            outface: ctx.outface,
-            prefix: ctx.prefix,
-            full_expr: ctx.full_expr,
+    fn send_push(&self, msg: Push) {
+        let msg = NetworkMessage {
+            body: NetworkBody::Push(msg),
+            #[cfg(feature = "stats")]
+            size: None,
         };
-        if let Some(ctx) = self.intercept.intercept(ctx) {
-            let _ = self.handler.schedule(ctx.msg);
+        if self.interceptor.interceptors.is_empty() {
+            let _ = self.handler.schedule(msg);
+        } else if let Some(face) = self.face.get() {
+            let ctx = RoutingContext::new_out(msg, face.clone());
+            if let Some(ctx) = self.interceptor.intercept(ctx) {
+                let _ = self.handler.schedule(ctx.msg);
+            }
+        } else {
+            log::error!("Uninitialized multiplexer!");
         }
     }
 
@@ -435,7 +387,7 @@ impl EPrimitives for McastMux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.intercept.intercept(ctx) {
+        if let Some(ctx) = self.interceptor.intercept(ctx) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -452,7 +404,7 @@ impl EPrimitives for McastMux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.intercept.intercept(ctx) {
+        if let Some(ctx) = self.interceptor.intercept(ctx) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }
@@ -469,7 +421,7 @@ impl EPrimitives for McastMux {
             prefix: ctx.prefix,
             full_expr: ctx.full_expr,
         };
-        if let Some(ctx) = self.intercept.intercept(ctx) {
+        if let Some(ctx) = self.interceptor.intercept(ctx) {
             let _ = self.handler.schedule(ctx.msg);
         }
     }

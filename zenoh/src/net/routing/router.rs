@@ -123,6 +123,7 @@ impl Router {
             InterceptorsChain::from(ingress.into_iter().flatten().collect::<Vec<_>>()),
             InterceptorsChain::from(egress.into_iter().flatten().collect::<Vec<_>>()),
         );
+        let mux = Arc::new(Mux::new(transport.clone(), egress));
         let newface = tables
             .faces
             .entry(fid)
@@ -134,12 +135,7 @@ impl Router {
                     false,
                     #[cfg(feature = "stats")]
                     Some(stats),
-                    Arc::new(Mux::new(
-                        transport.clone(),
-                        fid,
-                        self.tables.clone(),
-                        egress,
-                    )),
+                    mux.clone(),
                     None,
                     ctrl_lock.new_face(),
                 )
@@ -151,6 +147,8 @@ impl Router {
             tables: self.tables.clone(),
             state: newface,
         };
+
+        let _ = mux.face.set(face.clone());
 
         ctrl_lock.new_transport_unicast_face(&mut tables, &self.tables, &mut face, &transport)?;
 
@@ -169,22 +167,23 @@ impl Router {
                 .filter_map(|itor| itor.new_transport_multicast(&transport))
                 .collect::<Vec<EgressInterceptor>>(),
         );
-        tables.mcast_groups.push(FaceState::new(
+        let mux = Arc::new(McastMux::new(transport.clone(), interceptor));
+        let face = FaceState::new(
             fid,
             ZenohId::from_str("1").unwrap(),
             WhatAmI::Peer,
             false,
             #[cfg(feature = "stats")]
             None,
-            Arc::new(McastMux::new(
-                transport.clone(),
-                fid,
-                self.tables.clone(),
-                interceptor,
-            )),
+            mux.clone(),
             Some(transport),
             ctrl_lock.new_face(),
-        ));
+        );
+        let _ = mux.face.set(Face {
+            state: face.clone(),
+            tables: self.tables.clone(),
+        });
+        tables.mcast_groups.push(face);
 
         // recompute routes
         let mut root_res = tables.root_res.clone();

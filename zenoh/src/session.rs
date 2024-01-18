@@ -2676,8 +2676,8 @@ impl crate::net::primitives::EPrimitives for Session {
     }
 
     #[inline]
-    fn send_push(&self, ctx: crate::net::routing::RoutingContext<Push>) {
-        (self as &dyn Primitives).send_push(ctx.msg)
+    fn send_push(&self, msg: Push) {
+        (self as &dyn Primitives).send_push(msg)
     }
 
     #[inline]
