@@ -73,7 +73,6 @@ where
         (self.inner.shmem.as_ptr() as *const Elem).add(index.as_())
     }
 
-    #[cfg(feature = "test")]
     /// # Safety
     /// Retrieves mut element by it's index. This is safe if the index doesn't go out of underlying array.
     /// Additional assert to check the index validity is added for "test" feature

@@ -17,7 +17,7 @@ use std::{fmt::Debug, mem::size_of};
 use num_traits::{AsPrimitive, PrimInt, Unsigned};
 use zenoh_shm::{posix_shm::array::ArrayInSHM, test_helpers::TEST_SEGMENT_PREFIX};
 
-type TestElemID = u32;
+type TestSegmentID = u32;
 
 #[derive(Debug)]
 struct TestElem {
@@ -37,8 +37,8 @@ impl TestElem {
 }
 
 fn validate_array<ElemIndex>(
-    array1: &mut ArrayInSHM<TestElemID, TestElem, ElemIndex>,
-    array2: &ArrayInSHM<TestElemID, TestElem, ElemIndex>,
+    array1: &mut ArrayInSHM<TestSegmentID, TestElem, ElemIndex>,
+    array2: &ArrayInSHM<TestSegmentID, TestElem, ElemIndex>,
     expected_elem_count: usize,
 ) where
     ElemIndex: Unsigned + PrimInt + 'static + AsPrimitive<usize>,
@@ -95,7 +95,7 @@ where
         }
     };
 
-    let mut new_arr: ArrayInSHM<TestElemID, TestElem, ElemIndex> =
+    let mut new_arr: ArrayInSHM<TestSegmentID, TestElem, ElemIndex> =
         ArrayInSHM::create(elem_count, TEST_SEGMENT_PREFIX).expect("error creating new array!");
 
     let opened_arr: ArrayInSHM<_, TestElem, ElemIndex> =
@@ -131,7 +131,7 @@ where
 {
     let invalid_elem_count = ElemIndex::max_value().as_() + 2;
 
-    let _ = ArrayInSHM::<TestElemID, TestElem, ElemIndex>::create(
+    let _ = ArrayInSHM::<TestSegmentID, TestElem, ElemIndex>::create(
         invalid_elem_count,
         TEST_SEGMENT_PREFIX,
     )

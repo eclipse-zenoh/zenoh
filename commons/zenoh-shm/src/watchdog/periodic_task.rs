@@ -55,6 +55,8 @@ impl PeriodicTask {
                     warn!("{:?}: error setting realtime FIFO scheduling policy for thread: {:?}, will run with the default one...", std::thread::current().name(), e);
                 }
 
+                //todo: need mlock here!
+
                 while c_running.load(Ordering::Relaxed) {
                     let cycle_start = std::time::Instant::now();
 

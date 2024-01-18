@@ -1,3 +1,4 @@
+use api::{provider::chunk::ChunkDescriptor, common::types::ProtocolID};
 use header::{
     allocated_descriptor::AllocatedHeaderDescriptor,
     chunk_header::ChunkHeaderType,
@@ -67,6 +68,7 @@ macro_rules! test_helpers_module {
     };
 }
 
+pub mod api;
 pub mod header;
 pub mod watchdog;
 
@@ -114,14 +116,10 @@ impl PartialEq for Chunk {
 /// This that can be serialized and can be used to retrieve the [`SharedMemoryBuf`] in a remote process.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SharedMemoryBufInfo {
-    /// The index of the beginning of the buffer in the shm segment.
-    pub offset: usize,
-    /// The length of the buffer and CHUNK_HEADER_SIZE
-    pub length: usize,
-    /// The identifier of the shm manager that manages the shm segment this buffer points to.
-    pub segment_id: DataSegmentID,
-    /// The kind of buffer.
-    pub kind: u8,
+    /// The data chunk descriptor of buffer
+    pub data_descriptor: ChunkDescriptor,
+    /// Protocol identifier for particular SharedMemory implementation
+    pub shm_protocol: ProtocolID,
     /// The watchdog descriptor of buffer.
     pub watchdog_descriptor: Descriptor,
     /// The header descriptor of buffer.
@@ -132,19 +130,15 @@ pub struct SharedMemoryBufInfo {
 
 impl SharedMemoryBufInfo {
     pub fn new(
-        offset: usize,
-        length: usize,
-        segment_id: DataSegmentID,
-        kind: u8,
+        data_descriptor: ChunkDescriptor,
+        shm_protocol: ProtocolID,
         watchdog_descriptor: Descriptor,
         header_descriptor: HeaderDescriptor,
         generation: u32,
     ) -> SharedMemoryBufInfo {
         SharedMemoryBufInfo {
-            offset,
-            length,
-            segment_id,
-            kind,
+            data_descriptor,
+            shm_protocol,
             watchdog_descriptor,
             header_descriptor,
             generation,
@@ -180,14 +174,6 @@ impl SharedMemoryBuf {
 
     pub fn is_empty(&self) -> bool {
         self.len() == 0
-    }
-
-    pub fn get_kind(&self) -> u8 {
-        self.info.kind
-    }
-
-    pub fn set_kind(&mut self, v: u8) {
-        self.info.kind = v
     }
 
     pub fn is_generation_valid(&self) -> bool {
@@ -380,7 +366,7 @@ impl SharedMemoryManager {
             own_segment: segment,
             free_list,
             busy_list,
-            alignment: mem::align_of::<ChunkHeaderType>(),
+            alignment: mem::align_of::<u32>(),
         };
         log::trace!(
             "Created SharedMemoryManager for {:?}",
