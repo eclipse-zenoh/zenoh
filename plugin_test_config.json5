@@ -2,7 +2,7 @@
 // 
 // To run it do these steps:
 //
-// - Clone these repositories:
+// 1. Clone these repositories:
 // ```
 // git clone https://github.com/eclipse-zenoh/zenoh.git
 // git clone https://github.com/eclipse-zenoh/zenoh-backend-influxdb.git
@@ -15,30 +15,60 @@
 // git clone https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds.git
 // ```
 //
-// - Init submodules for zenoh-plugin-ros1
+// 1.1. Init submodules for zenoh-plugin-ros1
 // ```
 // cd zenoh-plugin-ros1
 // git submodule init
 // git submodule update
 // ```
 //
-// - Build projects
+// 2. Build projects
 // ```
 // cd zenoh && cargo build && cd ..
 // cd zenoh-backend-influxdb && cargo build && cd ..
 // ...
 // ```
 //
-// - Run the zenohd server with this config file.
-// Explicit setting RUST_LOG=info is important: without it the logs with default le are printed by zenohd itsellf, but not by plugins.
+// 3. Run the zenohd server with this config file.
+//
+// Explicit setting RUST_LOG=info is important: without it the logs are printed by zenohd itsellf, but not by plugins.
 // ```
 // cd zenoh
 // RUST_LOG=info cargo run -- --config plugin_test_config.json5
 // ```
 // 
-// Loading plugin errors are expected due to some mandtatory properties missing in the config file, like for "influxdb" and "influxdb2" volumes.
-// Though there should not be plugin loading errors due to not found files or version incompatibility
-//  
+// Some errors on plugin initalisation are expected due to some mandtatory properties missing in the config file, like for "influxdb" and "influxdb2" volumes.
+// Though there supposedly should not be plugin loading errors due to not found files or version incompatibility
+//
+//
+// 4. Test access plugin status through admin space
+//
+// The plugins information is available by "@/router/{router_id}/plugins/**". Each plugin provides by this key the json object with its status.
+// Subplugins are also available by this key, e.g. "@/router/{router_id}/plugins/storage_manager/influxdb".
+// ```
+// cargo run --example z_get -- -s "@/router/*/plugins/**"
+// ```
+// result is
+// ```
+//  Received ('@/router/b04a929103101296abec19ea6cddd034/plugins/example': '{"long_version":"v0.11.0-dev-182-g48060b9c","name":"example","path":"/Users/milyin/ZS2/zenoh/target/debug/libzenoh_plugin_example.dylib","report":{"level":"Normal"},"state":"Started","version":"0.11.0-dev"}')
+/// Received ('@/router/b04a929103101296abec19ea6cddd034/plugins/storage_manager': '{"long_version":"v0.11.0-dev-182-g48060b9c","name":"storage_manager","path":"/Users/milyin/ZS2/zenoh/target/debug/libzenoh_plugin_storage_manager.dylib","report":{"level":"Normal"},"state":"Started","version":"0.11.0-dev"}')
+/// Received ('@/router/b04a929103101296abec19ea6cddd034/plugins/storage_manager/memory': '{"long_version":"v0.11.0-dev-182-g48060b9c","name":"storage_manager/memory","path":"<static>","report":{"level":"Normal"},"state":"Started","version":"0.11.0-dev"}')
+// ...
+// ```
+// 
+// There is also plugin information by path "@/router/*/status/plugins/**". Later these paths should be combined
+// ```
+// cargo run --example z_get -- -s "@/router/*/status/plugins/**"
+// ```
+// result is
+// ```
+// >> Received ('@/router/b04a929103101296abec19ea6cddd034/status/plugins/example/__path__': '/Users/milyin/ZS2/zenoh/target/debug/libzenoh_plugin_example.dylib')
+// >> Received ('@/router/b04a929103101296abec19ea6cddd034/status/plugins/storage_manager/__path__': '/Users/milyin/ZS2/zenoh/target/debug/libzenoh_plugin_storage_manager.dylib')
+// >> Received ('@/router/b04a929103101296abec19ea6cddd034/status/plugins/storage_manager/volumes/memory/__path__': '"<static>"')
+// >> Received ('@/router/b04a929103101296abec19ea6cddd034/status/plugins/storage_manager/volumes/memory': '{"__required__":false}')
+// >> Received ('@/router/b04a929103101296abec19ea6cddd034/status/plugins/storage_manager/storages/memory': '{"key_expr":"demo/memory/**","volume":"memory"}')
+// ```
+// 
 {
   "plugins_search_dirs": [
     "target/debug",
