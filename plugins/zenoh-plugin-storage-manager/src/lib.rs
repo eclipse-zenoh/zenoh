@@ -133,16 +133,27 @@ impl StorageRuntimeInner {
                 required: false,
                 rest: Default::default(),
             })
-            .map_or_else(|e| log::error!("Cannot spawn static volume '{}': {}", MEMORY_BACKEND_NAME, e), |_| ());
+            .map_or_else(
+                |e| {
+                    log::error!(
+                        "Cannot spawn static volume '{}': {}",
+                        MEMORY_BACKEND_NAME,
+                        e
+                    )
+                },
+                |_| (),
+            );
         for volume in &volumes {
-            new_self
-                .spawn_volume(volume)
-                .map_or_else(|e| log::error!("Cannot spawn volume '{}': {}", volume.name(), e), |_| ());
+            new_self.spawn_volume(volume).map_or_else(
+                |e| log::error!("Cannot spawn volume '{}': {}", volume.name(), e),
+                |_| (),
+            );
         }
         for storage in &storages {
-            new_self
-                .spawn_storage(storage)
-                .map_or_else(|e| log::error!("Cannot spawn storage '{}': {}", storage.name(), e), |_| ());
+            new_self.spawn_storage(storage).map_or_else(
+                |e| log::error!("Cannot spawn storage '{}': {}", storage.name(), e),
+                |_| (),
+            );
         }
         Ok(new_self)
     }
