@@ -45,8 +45,19 @@ impl<StartArgs, Instance> PluginVTable<StartArgs, Instance> {
     }
 }
 
-/// This macro will add a non-mangled functions which provides plugin version and loads it into the host.
+/// This macro adds non-mangled functions which provides plugin version and loads it into the host.
 /// If plugin library should work also as static, consider calling this macro under feature condition
+///
+/// The funcitons declared by this macro are:
+///
+/// - `get_plugin_loader_version` - returns `PLUGIN_LOADER_VERSION` const of the crate. The [`PluginsManager`](crate::manager::PluginsManager)
+///    will check if this version is compatible with the host.
+/// - `get_compatibility` - returns [`Compatibility`](crate::Compatibility) struct which contains all version information (Rust compiler version, features used, version of plugin's structures).
+///    The layout  of this structure is guaranteed to be stable until the [`PLUGIN_LOADER_VERSION`](crate::PLUGIN_LOADER_VERSION) is changed,
+///    so it's safe to use it in the host after call to `get_plugin_loader_version` returns compatible version.
+///    Then the [`PluginsManager`](crate::manager::PluginsManager) compares the returned [`Compatibility`](crate::Compatibility) with it's own and decides if it can continue loading the plugin.
+/// - `load_plugin` - returns [`PluginVTable`](crate::PluginVTable) which is able to create plugin's instance.
+///
 #[macro_export]
 macro_rules! declare_plugin {
     ($ty: path) => {
