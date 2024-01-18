@@ -22,9 +22,33 @@ pub trait Includer<Left, Right> {
 
 impl<T: for<'a> Includer<&'a [u8], &'a [u8]>> Includer<&keyexpr, &keyexpr> for T {
     fn includes(&self, left: &keyexpr, right: &keyexpr) -> bool {
-        let left = left.as_bytes();
-        let right = right.as_bytes();
-        if left == right || left == b"**" {
+        let mut left = left.as_bytes();
+        let mut right = right.as_bytes();
+        if left == right {
+            return true;
+        }
+
+        if unsafe { *left.get_unchecked(0) == b'@' || *right.get_unchecked(0) == b'@' } {
+            let mut end = left.len().min(right.len());
+            for i in 0..end {
+                if left[i] != right[i] {
+                    return false;
+                }
+                if left[i] == DELIMITER {
+                    end = i;
+                    break;
+                }
+            }
+            if left.len() == end {
+                return false;
+            }
+            if right.len() == end {
+                return left.get(end..) == Some(b"/**");
+            }
+            left = &left[(end + 1)..];
+            right = &right[(end + 1)..];
+        }
+        if left == b"**" {
             return true;
         }
         self.includes(left, right)

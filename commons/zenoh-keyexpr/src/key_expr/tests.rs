@@ -84,6 +84,16 @@ fn intersections() {
     assert!(intersect("x/a$*d$*e", "x/ade"));
     assert!(!intersect("x/c$*", "x/abc$*"));
     assert!(!intersect("x/$*d", "x/$*e"));
+
+    assert!(intersect("@a", "@a"));
+    assert!(!intersect("@a", "@ab"));
+    assert!(!intersect("@a", "@a/b"));
+    assert!(!intersect("@a", "@a/*"));
+    assert!(!intersect("@a", "@a/*/**"));
+    assert!(!intersect("@a", "@a$*/**"));
+    assert!(intersect("@a", "@a/**"));
+    assert!(!intersect("**/xyz$*xyz", "@a/b/xyzdefxyz"));
+    assert!(intersect("@a/**/c/**/e", "@a/b/b/b/c/d/d/d/e"));
 }
 
 fn includes<
@@ -146,6 +156,17 @@ fn inclusions() {
     assert!(!includes("x/c$*", "x/abc$*"));
     assert!(includes("x/$*c$*", "x/abc$*"));
     assert!(!includes("x/$*d", "x/$*e"));
+
+    assert!(includes("@a", "@a"));
+    assert!(!includes("@a", "@ab"));
+    assert!(!includes("@a", "@a/b"));
+    assert!(!includes("@a", "@a/*"));
+    assert!(!includes("@a", "@a/*/**"));
+    assert!(!includes("@a$*/**", "@a"));
+    assert!(!includes("@a", "@a/**"));
+    assert!(includes("@a/**", "@a"));
+    assert!(!includes("**/xyz$*xyz", "@a/b/xyzdefxyz"));
+    assert!(includes("@a/**/c/**/e", "@a/b/b/b/c/d/d/d/e"));
 }
 
 #[test]

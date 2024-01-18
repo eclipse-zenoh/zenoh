@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use crate::DELIMITER;
+
 use super::keyexpr;
 
 mod classical;
@@ -88,13 +90,37 @@ impl<
     > Intersector<&keyexpr, &keyexpr> for T
 {
     fn intersect(&self, left: &keyexpr, right: &keyexpr) -> bool {
-        let left_bytes = left.as_bytes();
-        let right_bytes = right.as_bytes();
+        let mut left_bytes = left.as_bytes();
+        let mut right_bytes = right.as_bytes();
         if left_bytes == right_bytes {
             return true;
         }
-        match left.match_complexity() as u8 | right.match_complexity() as u8 {
-            0 => false,
+        let complexity = left.match_complexity() as u8 | right.match_complexity() as u8;
+        if complexity == 0 {
+            return false;
+        }
+        if unsafe { *left_bytes.get_unchecked(0) == b'@' || *right_bytes.get_unchecked(0) == b'@' }
+        {
+            let mut end = left_bytes.len().min(right_bytes.len());
+            for i in 0..end {
+                if left_bytes[i] != right_bytes[i] {
+                    return false;
+                }
+                if left_bytes[i] == DELIMITER {
+                    end = i;
+                    break;
+                }
+            }
+            if left_bytes.len() == end {
+                return right_bytes.get(end..) == Some(b"/**");
+            }
+            if right_bytes.len() == end {
+                return left_bytes.get(end..) == Some(b"/**");
+            }
+            left_bytes = &left_bytes[(end + 1)..];
+            right_bytes = &right_bytes[(end + 1)..];
+        }
+        match complexity {
             1 => self.intersect(NoSubWilds(left_bytes), NoSubWilds(right_bytes)),
             _ => self.intersect(left_bytes, right_bytes),
         }
