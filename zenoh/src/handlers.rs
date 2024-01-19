@@ -89,7 +89,7 @@ pub fn locked<T>(fnmut: impl FnMut(T)) -> impl Fn(T) {
 
 /// A handler containing 2 callback functions:
 ///  - `callback`: the typical callback function. `context` will be passed as its last argument.
-///  - `drop``: a callback called when this handler is dropped.
+///  - `drop`: a callback called when this handler is dropped.
 ///
 /// It is guaranteed that:
 ///
