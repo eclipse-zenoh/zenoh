@@ -90,39 +90,36 @@ impl<
     > Intersector<&keyexpr, &keyexpr> for T
 {
     fn intersect(&self, left: &keyexpr, right: &keyexpr) -> bool {
-        let mut left_bytes = left.as_bytes();
-        let mut right_bytes = right.as_bytes();
+        let left_bytes = left.as_bytes();
+        let right_bytes = right.as_bytes();
         if left_bytes == right_bytes {
             return true;
         }
-        let complexity = left.match_complexity() as u8 | right.match_complexity() as u8;
-        if complexity == 0 {
-            return false;
-        }
-        if unsafe { *left_bytes.get_unchecked(0) == b'@' || *right_bytes.get_unchecked(0) == b'@' }
-        {
-            let mut end = left_bytes.len().min(right_bytes.len());
-            for i in 0..end {
-                if left_bytes[i] != right_bytes[i] {
-                    return false;
-                }
-                if left_bytes[i] == DELIMITER {
-                    end = i;
-                    break;
-                }
-            }
-            if left_bytes.len() == end {
-                return right_bytes.get(end..) == Some(b"/**");
-            }
-            if right_bytes.len() == end {
-                return left_bytes.get(end..) == Some(b"/**");
-            }
-            left_bytes = &left_bytes[(end + 1)..];
-            right_bytes = &right_bytes[(end + 1)..];
-        }
-        match complexity {
+        match left.match_complexity() as u8 | right.match_complexity() as u8 {
+            0 => false,
             1 => self.intersect(NoSubWilds(left_bytes), NoSubWilds(right_bytes)),
             _ => self.intersect(left_bytes, right_bytes),
         }
+    }
+}
+
+pub(crate) trait MayHaveVerbatim {
+    fn has_verbatim(&self) -> bool;
+    fn has_direct_verbatim(&self) -> bool;
+    unsafe fn has_direct_verbatim_non_empty(&self) -> bool {
+        self.has_direct_verbatim()
+    }
+}
+
+impl MayHaveVerbatim for [u8] {
+    fn has_direct_verbatim(&self) -> bool {
+        matches!(self, [b'@', ..])
+    }
+    fn has_verbatim(&self) -> bool {
+        self.split(|c| *c == DELIMITER)
+            .any(MayHaveVerbatim::has_direct_verbatim)
+    }
+    unsafe fn has_direct_verbatim_non_empty(&self) -> bool {
+        unsafe { *self.get_unchecked(0) == b'@' }
     }
 }

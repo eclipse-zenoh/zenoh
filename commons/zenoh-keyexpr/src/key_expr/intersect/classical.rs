@@ -66,6 +66,9 @@ fn chunk_intersect<const STAR_DSL: bool>(c1: &[u8], c2: &[u8]) -> bool {
     if c1 == c2 {
         return true;
     }
+    if c1.has_direct_verbatim() || c2.has_direct_verbatim() {
+        return false;
+    }
     chunk_it_intersect::<STAR_DSL>(c1, c2)
 }
 
@@ -83,14 +86,20 @@ fn it_intersect<const STAR_DSL: bool>(mut it1: &[u8], mut it2: &[u8]) -> bool {
         let (current2, advanced2) = next(it2);
         match (current1, current2) {
             (b"**", _) => {
-                return advanced1.is_empty()
-                    || it_intersect::<STAR_DSL>(advanced1, it2)
-                    || it_intersect::<STAR_DSL>(it1, advanced2);
+                if advanced1.is_empty() {
+                    return !it2.has_verbatim();
+                }
+                return (!unsafe { current2.has_direct_verbatim_non_empty() }
+                    && it_intersect::<STAR_DSL>(it1, advanced2))
+                    || it_intersect::<STAR_DSL>(advanced1, it2);
             }
             (_, b"**") => {
-                return advanced2.is_empty()
-                    || it_intersect::<STAR_DSL>(it1, advanced2)
-                    || it_intersect::<STAR_DSL>(advanced1, it2);
+                if advanced2.is_empty() {
+                    return !it1.has_verbatim();
+                }
+                return (!unsafe { current1.has_direct_verbatim_non_empty() }
+                    && it_intersect::<STAR_DSL>(advanced1, it2))
+                    || it_intersect::<STAR_DSL>(it1, advanced2);
             }
             (sub1, sub2) if chunk_intersect::<STAR_DSL>(sub1, sub2) => {
                 it1 = advanced1;
@@ -111,7 +120,7 @@ pub fn intersect<const STAR_DSL: bool>(s1: &[u8], s2: &[u8]) -> bool {
 }
 
 use super::restiction::NoSubWilds;
-use super::Intersector;
+use super::{Intersector, MayHaveVerbatim};
 
 pub struct ClassicIntersector;
 impl Intersector<NoSubWilds<&[u8]>, NoSubWilds<&[u8]>> for ClassicIntersector {

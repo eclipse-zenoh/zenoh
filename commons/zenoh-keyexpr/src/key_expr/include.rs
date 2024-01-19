@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use super::{keyexpr, utils::Split, DELIMITER, DOUBLE_WILD, STAR_DSL};
+use super::{intersect::MayHaveVerbatim, keyexpr, utils::Split, DELIMITER, DOUBLE_WILD, STAR_DSL};
 
 pub const DEFAULT_INCLUDER: LTRIncluder = LTRIncluder;
 
@@ -22,33 +22,9 @@ pub trait Includer<Left, Right> {
 
 impl<T: for<'a> Includer<&'a [u8], &'a [u8]>> Includer<&keyexpr, &keyexpr> for T {
     fn includes(&self, left: &keyexpr, right: &keyexpr) -> bool {
-        let mut left = left.as_bytes();
-        let mut right = right.as_bytes();
+        let left = left.as_bytes();
+        let right = right.as_bytes();
         if left == right {
-            return true;
-        }
-
-        if unsafe { *left.get_unchecked(0) == b'@' || *right.get_unchecked(0) == b'@' } {
-            let mut end = left.len().min(right.len());
-            for i in 0..end {
-                if left[i] != right[i] {
-                    return false;
-                }
-                if left[i] == DELIMITER {
-                    end = i;
-                    break;
-                }
-            }
-            if left.len() == end {
-                return false;
-            }
-            if right.len() == end {
-                return left.get(end..) == Some(b"/**");
-            }
-            left = &left[(end + 1)..];
-            right = &right[(end + 1)..];
-        }
-        if left == b"**" {
             return true;
         }
         self.includes(left, right)
@@ -62,8 +38,11 @@ impl Includer<&[u8], &[u8]> for LTRIncluder {
             let (lchunk, lrest) = left.split_once(&DELIMITER);
             let lempty = lrest.is_empty();
             if lchunk == DOUBLE_WILD {
-                if lempty || self.includes(lrest, right) {
+                if (lempty && !right.has_verbatim()) || self.includes(lrest, right) {
                     return true;
+                }
+                if unsafe { right.has_direct_verbatim_non_empty() } {
+                    return false;
                 }
                 right = right.split_once(&DELIMITER).1;
                 if right.is_empty() {
@@ -90,7 +69,13 @@ impl Includer<&[u8], &[u8]> for LTRIncluder {
 
 impl LTRIncluder {
     fn non_double_wild_chunk_includes(&self, lchunk: &[u8], rchunk: &[u8]) -> bool {
-        if lchunk == b"*" || lchunk == rchunk {
+        if lchunk == rchunk {
+            true
+        } else if unsafe {
+            lchunk.has_direct_verbatim_non_empty() || rchunk.has_direct_verbatim_non_empty()
+        } {
+            false
+        } else if lchunk == b"*" {
             true
         } else if lchunk.contains(&b'$') {
             let mut spleft = lchunk.splitter(STAR_DSL);
