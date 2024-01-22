@@ -332,12 +332,6 @@ impl TransportManager {
         // @TODO: this should be moved into the unicast module
         let (new_unicast_link_sender, new_unicast_link_receiver) = flume::unbounded();
 
-        use zenoh_runtime::ZRUNTIME_CONFIG;
-        ZRUNTIME_CONFIG
-            .lock()
-            .expect("Failed to configure ZRUNTIME")
-            .transport_threads = params.config.tx_threads;
-
         let this = TransportManager {
             config: Arc::new(params.config),
             state: Arc::new(params.state),

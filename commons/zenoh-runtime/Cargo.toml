@@ -1,18 +1,19 @@
 [package]
 name = "zenoh-runtime"
-rust-version.workspace = true
-version.workspace = true
-repository.workspace = true
-homepage.workspace = true
-authors.workspace = true
-edition.workspace = true
-license.workspace = true
-categories.workspace = true
-description.workspace = true
+rust-version = { workspace = true }
+version = { workspace = true }
+repository = { workspace = true }
+homepage = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+license = { workspace = true }
+categories = { workspace = true }
+description = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-lazy_static.workspace = true
+lazy_static = { workspace = true }
 zenoh-result = { workspace = true, features = ["std"] }
+zenoh-collections = { workspace = true }
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "rt", "rt-multi-thread", "sync", "time"] }

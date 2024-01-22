@@ -1,11 +1,32 @@
+//
+// Copyright (c) 2024 ZettaScale Technology
+//
+// This program and the accompanying materials are made available under the
+// terms of the Eclipse Public License 2.0 which is available at
+// http://www.eclipse.org/legal/epl-2.0, or the Apache License, Version 2.0
+// which is available at https://www.apache.org/licenses/LICENSE-2.0.
+//
+// SPDX-License-Identifier: EPL-2.0 OR Apache-2.0
+//
+// Contributors:
+//   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
+//
 use lazy_static::lazy_static;
-use std::collections::HashMap;
-use std::future::Future;
-use std::ops::Deref;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::{
+    collections::HashMap,
+    env,
+    future::Future,
+    ops::Deref,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        OnceLock,
+    },
+};
+use zenoh_collections::Properties;
 use tokio::runtime::{Handle, Runtime};
-use zenoh_result::{zerror, ZResult as Result};
+use zenoh_result::ZResult as Result;
+
+const ZENOH_RUNTIME_THREADS_ENV: &str = "ZENOH_RUNTIME_THREADS";
 
 #[derive(Hash, Eq, PartialEq, Clone, Copy, Debug)]
 pub enum ZRuntime {
@@ -21,7 +42,7 @@ impl ZRuntime {
     }
 
     fn init(&self) -> Result<Runtime> {
-        let config = ZRUNTIME_CONFIG.lock().map_err(|e| zerror!("{e}"))?;
+        let config = &ZRUNTIME_CONFIG;
 
         let thread_name = format!("{self:?}");
 
@@ -78,7 +99,7 @@ impl Deref for ZRuntime {
 }
 
 lazy_static! {
-    pub static ref ZRUNTIME_CONFIG: Mutex<ZRuntimeConfig> = Mutex::new(ZRuntimeConfig::default());
+    pub static ref ZRUNTIME_CONFIG: ZRuntimeConfig = ZRuntimeConfig::from_env();
     pub static ref ZRUNTIME_POOL: ZRuntimePool = ZRuntimePool::new();
 }
 
@@ -104,12 +125,39 @@ pub struct ZRuntimeConfig {
     pub transport_threads: usize,
 }
 
+impl ZRuntimeConfig {
+    fn from_env() -> ZRuntimeConfig {
+        let mut c = Self::default();
+
+        if let Ok(s) = env::var(ZENOH_RUNTIME_THREADS_ENV) {
+            let ps = Properties::from(s);
+            if let Some(n) = ps.get("transport") {
+                if let Ok(n) = n.parse::<usize>() {
+                    c.transport_threads = n;
+                }
+            }
+            if let Some(n) = ps.get("reception") {
+                if let Ok(n) = n.parse::<usize>() {
+                    c.reception_threads = n;
+                }
+            }
+            if let Some(n) = ps.get("application") {
+                if let Ok(n) = n.parse::<usize>() {
+                    c.application_threads = n;
+                }
+            }
+        }
+
+        c
+    }
+}
+
 impl Default for ZRuntimeConfig {
     fn default() -> Self {
         Self {
-            application_threads: 4,
-            reception_threads: 2,
-            transport_threads: 2,
+            application_threads: 1,
+            reception_threads: 1,
+            transport_threads: 1,
         }
     }
 }
