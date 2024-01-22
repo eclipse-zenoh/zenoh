@@ -336,7 +336,7 @@ impl TransportManager {
         ZRUNTIME_CONFIG
             .lock()
             .expect("Failed to configure ZRUNTIME")
-            .tx_threads = params.config.tx_threads;
+            .transport_threads = params.config.tx_threads;
 
         let this = TransportManager {
             config: Arc::new(params.config),
@@ -350,7 +350,7 @@ impl TransportManager {
         };
 
         // @TODO: this should be moved into the unicast module
-        zenoh_runtime::ZRuntime::Net.spawn({
+        zenoh_runtime::ZRuntime::Reception.spawn({
             let this = this.clone();
             async move {
                 while let Ok(link) = new_unicast_link_receiver.recv_async().await {
@@ -408,16 +408,19 @@ impl TransportManager {
         }
     }
 
-    pub fn get_listeners(&self) -> Vec<EndPoint> {
-        let mut lsu = zenoh_runtime::ZRuntime::TX.block_in_place(self.get_listeners_unicast());
-        let mut lsm = zenoh_runtime::ZRuntime::TX.block_in_place(self.get_listeners_multicast());
+    pub async fn get_listeners(&self) -> Vec<EndPoint> {
+        let mut lsu = self.get_listeners_unicast().await;
+        let mut lsm = self.get_listeners_multicast().await;
         lsu.append(&mut lsm);
         lsu
     }
 
+    // TODO: Can we make this async as above?
     pub fn get_locators(&self) -> Vec<Locator> {
-        let mut lsu = zenoh_runtime::ZRuntime::TX.block_in_place(self.get_locators_unicast());
-        let mut lsm = zenoh_runtime::ZRuntime::TX.block_in_place(self.get_locators_multicast());
+        let mut lsu =
+            zenoh_runtime::ZRuntime::Application.block_in_place(self.get_locators_unicast());
+        let mut lsm =
+            zenoh_runtime::ZRuntime::Application.block_in_place(self.get_locators_multicast());
         lsu.append(&mut lsm);
         lsu
     }

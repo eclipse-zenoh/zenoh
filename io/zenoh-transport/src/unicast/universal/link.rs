@@ -101,11 +101,12 @@ impl TransportLinkUnicastUniversal {
                 log::debug!("{}", e);
                 // Spawn a task to avoid a deadlock waiting for this same task
                 // to finish in the close() joining its handle
-                zenoh_runtime::ZRuntime::TX
+                zenoh_runtime::ZRuntime::Transport
                     .spawn(async move { transport.del_link(tx.inner.link()).await });
             }
         };
-        self.tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
+        self.tracker
+            .spawn_on(task, &zenoh_runtime::ZRuntime::Transport);
     }
 
     // TODO: Not yet guaranteed is called at most once
@@ -128,11 +129,12 @@ impl TransportLinkUnicastUniversal {
                 log::debug!("{}", e);
                 // Spawn a task to avoid a deadlock waiting for this same task
                 // to finish in the close() joining its handle
-                zenoh_runtime::ZRuntime::RX
+                zenoh_runtime::ZRuntime::Transport
                     .spawn(async move { transport.del_link((&rx.link).into()).await });
             }
         };
-        self.tracker.spawn_on(task, &zenoh_runtime::ZRuntime::RX);
+        self.tracker
+            .spawn_on(task, &zenoh_runtime::ZRuntime::Transport);
     }
 
     pub(super) async fn close(self) -> ZResult<()> {
@@ -157,7 +159,9 @@ async fn tx_task(
     token: CancellationToken,
     #[cfg(feature = "stats")] stats: Arc<TransportStats>,
 ) -> ZResult<()> {
-    let mut interval = tokio::time::interval(keep_alive);
+    // TODO: check this necessity
+    let mut interval =
+        tokio::time::interval_at(tokio::time::Instant::now() + keep_alive, keep_alive);
     loop {
         tokio::select! {
             res = pipeline.pull() => {
@@ -190,7 +194,7 @@ async fn tx_task(
                 }
             }
 
-            _ = token.cancelled() => { break }
+            _ = token.cancelled() => break
         }
     }
 
