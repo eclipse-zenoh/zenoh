@@ -104,6 +104,10 @@ fn intersections() {
     assert!(!intersect("@a/**", "@a/@b"));
     assert!(intersect("@a/**/@b", "@a/@b"));
     assert!(intersect("@a/@b/**", "@a/@b"));
+    assert!(intersect("@a/**/@c/**/@b", "@a/**/@c/@b"));
+    assert!(intersect("@a/**/@c/**/@b", "@a/@c/**/@b"));
+    assert!(intersect("@a/**/@c/@b", "@a/@c/**/@b"));
+    assert!(!intersect("@a/**/@b", "@a/**/@c/**/@b"));
 }
 
 fn includes<

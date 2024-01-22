@@ -38,7 +38,7 @@ impl Includer<&[u8], &[u8]> for LTRIncluder {
             let (lchunk, lrest) = left.split_once(&DELIMITER);
             let lempty = lrest.is_empty();
             if lchunk == DOUBLE_WILD {
-                if (lempty && !right.has_verbatim()) || self.includes(lrest, right) {
+                if (lempty && !right.has_verbatim()) || (!lempty && self.includes(lrest, right)) {
                     return true;
                 }
                 if unsafe { right.has_direct_verbatim_non_empty() } {
