@@ -22,8 +22,8 @@ use std::{
         OnceLock,
     },
 };
-use zenoh_collections::Properties;
 use tokio::runtime::{Handle, Runtime};
+use zenoh_collections::Properties;
 use zenoh_result::ZResult as Result;
 
 const ZENOH_RUNTIME_THREADS_ENV: &str = "ZENOH_RUNTIME_THREADS";
