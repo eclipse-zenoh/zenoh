@@ -14,5 +14,5 @@ description.workspace = true
 
 [dependencies]
 lazy_static.workspace = true
-zenoh-result.workspace = true
+zenoh-result = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "rt", "rt-multi-thread", "sync", "time"] }
