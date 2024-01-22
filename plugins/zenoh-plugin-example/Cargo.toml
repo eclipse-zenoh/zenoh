@@ -34,8 +34,7 @@ name = "zenoh_plugin_example"
 crate-type = ["cdylib"]
 
 [dependencies]
-async-std = { workspace = true, features = ["default"] }
-const_format = { workspace = true }
+tokio = { workspace = true, features = ["rt"] }
 clap = { workspace = true }
 env_logger = { workspace = true }
 futures = { workspace = true }

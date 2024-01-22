@@ -32,8 +32,8 @@ name = "zenoh_plugin_rest"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
 anyhow = { workspace = true, features = ["default"] }
-async-std = { workspace = true, features = ["default"] }
 base64 = { workspace = true }
 clap = { workspace = true }
 const_format = { workspace = true }
@@ -52,6 +52,7 @@ zenoh = { workspace = true, features = ["unstable"] }
 zenoh-plugin-trait = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
+zenoh-runtime = { workspace = true }
 
 [build-dependencies]
 rustc_version = { workspace = true }
