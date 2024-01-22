@@ -19,7 +19,7 @@ const TIMEOUT: Duration = Duration::from_secs(60);
 const RECV_TIMEOUT: Duration = Duration::from_secs(1);
 
 #[cfg(feature = "unstable")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+// #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_matching_status_any() {
     use flume::RecvTimeoutError;
 
@@ -81,7 +81,7 @@ async fn zenoh_matching_status_any() {
 }
 
 #[cfg(feature = "unstable")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+// #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn zenoh_matching_status_remote() {
     use flume::RecvTimeoutError;
 

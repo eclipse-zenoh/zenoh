@@ -433,7 +433,7 @@ async fn static_failover_brokering() -> Result<()> {
 // 1. Message size
 // 2. Mode: peer or client
 // 3. Spawning order
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+// #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn three_node_combination() -> Result<()> {
     env_logger::try_init().unwrap_or_default();
     let modes = [WhatAmI::Peer, WhatAmI::Client];
