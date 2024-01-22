@@ -108,14 +108,14 @@ impl<T> From<T> for RecyclingObject<T> {
     }
 }
 
+// TODO: Check this necessity
 impl<T> Drop for RecyclingObject<T> {
     fn drop(&mut self) {
-        // if let Some(pool) = self.pool.upgrade() {
-        //     if let Some(obj) = self.object.take() {
-        //         dbg!();
-        //         async_std::task::block_on(pool.push(obj));
-        //     }
-        // }
+        if let Some(pool) = self.pool.upgrade() {
+            if let Some(obj) = self.object.take() {
+                zenoh_runtime::ZRuntime::Application.block_in_place(pool.push(obj));
+            }
+        }
     }
 }
 
