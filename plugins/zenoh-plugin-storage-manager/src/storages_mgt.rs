@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::sync::Arc;
+use std::sync::Arc;
 use zenoh::Session;
 use zenoh_backend_traits::config::StorageConfig;
 use zenoh_result::ZResult;
@@ -20,7 +20,7 @@ pub use super::replica::{Replica, StorageService};
 
 pub enum StorageMessage {
     Stop,
-    GetStatus(async_std::channel::Sender<serde_json::Value>),
+    GetStatus(flume::Sender<serde_json::Value>),
 }
 
 pub(crate) async fn start_storage(
@@ -39,7 +39,7 @@ pub(crate) async fn start_storage(
 
     let (tx, rx) = flume::bounded(1);
 
-    async_std::task::spawn(async move {
+    zenoh_runtime::ZRuntime::Application.spawn(async move {
         // If a configuration for replica is present, we initialize a replica, else only a storage service
         // A replica contains a storage service and all metadata required for anti-entropy
         if config.replica_config.is_some() {

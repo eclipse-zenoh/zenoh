@@ -19,7 +19,6 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 #![recursion_limit = "512"]
 
-use async_std::task;
 use flume::Sender;
 use memory_backend::MemoryBackend;
 use std::collections::HashMap;
@@ -170,11 +169,9 @@ impl StorageRuntimeInner {
         }
         Ok(())
     }
-    fn kill_volume<T: AsRef<str>>(&mut self, name: T) -> ZResult<()> {
-        let name = name.as_ref();
-        log::info!("Killing volume '{}'", name);
-        if let Some(storages) = self.storages.remove(name) {
-            async_std::task::block_on(futures::future::join_all(
+    fn kill_volume(&mut self, volume: VolumeConfig) {
+        if let Some(storages) = self.storages.remove(&volume.name) {
+            zenoh_runtime::ZRuntime::Application.block_in_place(futures::future::join_all(
                 storages
                     .into_values()
                     .map(|s| async move { s.send(StorageMessage::Stop) }),
@@ -225,35 +222,52 @@ impl StorageRuntimeInner {
     fn spawn_storage(&mut self, storage: &StorageConfig) -> ZResult<()> {
         let admin_key = self.status_key() + "/storages/" + &storage.name;
         let volume_id = storage.volume_id.clone();
-        let backend = self
-            .plugins_manager
-            .started_plugin(&volume_id)
-            .ok_or(format!(
-                "Cannot find volume '{}' to spawn storage '{}'",
-                volume_id, storage.name
-            ))?;
-        let storage_name = storage.name.clone();
-        log::info!(
-            "Spawning storage '{}' from volume '{}' with backend '{}'",
-            storage_name,
-            volume_id,
-            backend.name()
-        );
-        let in_interceptor = backend.instance().incoming_data_interceptor();
-        let out_interceptor = backend.instance().outgoing_data_interceptor();
-        let stopper = async_std::task::block_on(create_and_start_storage(
-            admin_key,
-            storage.clone(),
-            backend.instance(),
-            in_interceptor,
-            out_interceptor,
-            self.session.clone(),
-        ))?;
-        self.storages
-            .entry(volume_id)
-            .or_default()
-            .insert(storage_name, stopper);
-        Ok(())
+        if let Some(backend) = self.volumes.get_mut(&volume_id) {
+            let storage_name = storage.name.clone();
+            let in_interceptor = backend.backend.incoming_data_interceptor();
+            let out_interceptor = backend.backend.outgoing_data_interceptor();
+            let stopper =
+                zenoh_runtime::ZRuntime::Application.block_in_place(create_and_start_storage(
+                    admin_key,
+                    storage,
+                    &mut backend.backend,
+                    in_interceptor,
+                    out_interceptor,
+                    self.session.clone(),
+                ))?;
+            self.storages
+                .entry(volume_id)
+                .or_default()
+                .insert(storage_name, stopper);
+            Ok(())
+        } else {
+            bail!(
+                "`{}` volume doesn't support the required storage configuration",
+                volume_id
+            )
+        }
+    }
+}
+struct VolumeHandle {
+    backend: Box<dyn Volume>,
+    _lib: Option<Library>,
+    lib_path: String,
+    stopper: Arc<AtomicBool>,
+}
+impl VolumeHandle {
+    fn new(backend: Box<dyn Volume>, lib: Option<Library>, lib_path: String) -> Self {
+        VolumeHandle {
+            backend,
+            _lib: lib,
+            lib_path,
+            stopper: Arc::new(std::sync::atomic::AtomicBool::new(true)),
+        }
+    }
+}
+impl Drop for VolumeHandle {
+    fn drop(&mut self) {
+        self.stopper
+            .store(false, std::sync::atomic::Ordering::Relaxed);
     }
 }
 impl From<StorageRuntimeInner> for StorageRuntime {
@@ -351,11 +365,13 @@ impl RunningPluginTrait for StorageRuntime {
                             .unwrap()
                             .intersects(&selector.key_expr)
                         {
-                            if let Ok(value) = task::block_on(async {
-                                let (tx, rx) = async_std::channel::bounded(1);
-                                let _ = handle.send(StorageMessage::GetStatus(tx));
-                                rx.recv().await
-                            }) {
+                            if let Ok(value) =
+                                zenoh_runtime::ZRuntime::Application.block_in_place(async {
+                                    let (tx, rx) = flume::bounded(1);
+                                    let _ = handle.send(StorageMessage::GetStatus(tx));
+                                    rx.recv_async().await
+                                })
+                            {
                                 responses.push(zenoh::plugins::Response::new(key.clone(), value))
                             }
                         }

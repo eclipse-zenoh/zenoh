@@ -19,7 +19,6 @@
 use std::str::FromStr;
 use std::thread::sleep;
 
-use async_std::task;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
 use zenoh::{prelude::Config, time::Timestamp};
@@ -56,9 +55,8 @@ async fn get_data(session: &zenoh::Session, key_expr: &str) -> Vec<Sample> {
     samples
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_updates_in_order() {
-    task::block_on(async {
-    });
     let mut config = Config::default();
     config
         .insert_json5(
@@ -137,9 +135,4 @@ async fn test_updates_in_order() {
     assert_eq!(data[0].key_expr.as_str(), "operation/test/b");
 
     drop(storage);
-}
-
-#[test]
-fn updates_test() {
-    task::block_on(async { test_updates_in_order().await });
 }

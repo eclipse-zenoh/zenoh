@@ -20,7 +20,6 @@ use std::str::FromStr;
 use std::thread::sleep;
 
 // use std::collections::HashMap;
-use async_std::task;
 use zenoh::prelude::r#async::*;
 use zenoh::query::Reply;
 use zenoh::{prelude::Config, time::Timestamp};
@@ -57,9 +56,8 @@ async fn get_data(session: &zenoh::Session, key_expr: &str) -> Vec<Sample> {
     samples
 }
 
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn test_wild_card_in_order() {
-    task::block_on(async {
-    });
     let mut config = Config::default();
     config
         .insert_json5(
@@ -175,9 +173,3 @@ async fn test_wild_card_in_order() {
 // fn test_wild_card_out_of_order() {
 //     assert_eq!(true, true);
 // }
-
-#[test]
-fn wildcard_test() {
-    task::block_on(async { test_wild_card_in_order().await });
-    // task::block_on(async { test_wild_card_out_of_order() });
-}

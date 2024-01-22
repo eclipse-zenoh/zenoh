@@ -14,10 +14,11 @@
 
 use super::{Digest, EraType, LogEntry, Snapshotter};
 use super::{CONTENTS, ERA, INTERVALS, SUBINTERVALS};
-use async_std::sync::{Arc, RwLock};
 use flume::{Receiver, Sender};
 use std::collections::{HashMap, HashSet};
 use std::str;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use zenoh::key_expr::{KeyExpr, OwnedKeyExpr};
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;

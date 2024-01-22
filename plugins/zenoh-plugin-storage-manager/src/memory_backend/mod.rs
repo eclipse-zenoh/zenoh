@@ -11,10 +11,10 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::sync::RwLock;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
