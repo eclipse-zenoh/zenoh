@@ -99,10 +99,10 @@ fn parse_args() -> (Config, String, Option<String>, usize, u64) {
             .extend(values.map(|v| v.parse().unwrap()))
     }
 
-    let group = args.get_one::<&String>("group").unwrap().to_string();
-    let id = args.get_one::<&String>("id").map(|v| (*v).to_owned());
-    let size: usize = args.get_one::<&String>("size").unwrap().parse().unwrap();
-    let timeout: u64 = args.get_one::<&String>("timeout").unwrap().parse().unwrap();
+    let group = args.get_one::<String>("group").unwrap().to_string();
+    let id = args.get_one::<String>("id").map(|v| (*v).to_owned());
+    let size: usize = args.get_one::<String>("size").unwrap().parse().unwrap();
+    let timeout: u64 = args.get_one::<String>("timeout").unwrap().parse().unwrap();
 
     (config, group, id, size, timeout)
 }

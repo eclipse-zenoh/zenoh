@@ -23,6 +23,7 @@ use std::collections::hash_map::DefaultHasher;
 use crate::keyexpr_tree::*;
 use keyed_set::{KeyExtractor, KeyedSet};
 
+#[cfg_attr(not(feature = "std"), allow(deprecated))]
 pub struct KeyedSetProvider<Hash: Hasher + Default + 'static = DefaultHasher>(
     core::marker::PhantomData<Hash>,
 );

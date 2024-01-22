@@ -136,90 +136,29 @@ impl Resolvable for PutBuilder<'_, '_> {
 impl SyncResolve for PutBuilder<'_, '_> {
     #[inline]
     fn res_sync(self) -> <Self as Resolvable>::To {
-        let PutBuilder {
-            publisher,
-            value,
-            kind,
+        let PublisherBuilder {
+            session,
+            key_expr,
+            congestion_control,
+            priority,
+            destination,
+        } = self.publisher;
+
+        let publisher = Publisher {
+            session,
+            key_expr: key_expr?,
+            congestion_control,
+            priority,
+            destination,
+        };
+
+        resolve_put(
+            &publisher,
+            self.value,
+            self.kind,
             #[cfg(feature = "unstable")]
-            attachment,
-        } = self;
-        let key_expr = publisher.key_expr?;
-        log::trace!("write({:?}, [...])", &key_expr);
-        let primitives = zread!(publisher.session.state)
-            .primitives
-            .as_ref()
-            .unwrap()
-            .clone();
-        let timestamp = publisher.session.runtime.new_timestamp();
-
-        if publisher.destination != Locality::SessionLocal {
-            primitives.send_push(Push {
-                wire_expr: key_expr.to_wire(&publisher.session).to_owned(),
-                ext_qos: ext::QoSType::new(
-                    publisher.priority.into(),
-                    publisher.congestion_control,
-                    false,
-                ),
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::default(),
-                payload: match kind {
-                    SampleKind::Put => {
-                        #[allow(unused_mut)]
-                        let mut ext_attachment = None;
-                        #[cfg(feature = "unstable")]
-                        {
-                            if let Some(attachment) = attachment.clone() {
-                                ext_attachment = Some(attachment.into());
-                            }
-                        }
-                        PushBody::Put(Put {
-                            timestamp,
-                            encoding: value.encoding.clone(),
-                            ext_sinfo: None,
-                            #[cfg(feature = "shared-memory")]
-                            ext_shm: None,
-                            ext_attachment,
-                            ext_unknown: vec![],
-                            payload: value.payload.clone(),
-                        })
-                    }
-                    SampleKind::Delete => {
-                        #[allow(unused_mut)]
-                        let mut ext_attachment = None;
-                        #[cfg(feature = "unstable")]
-                        {
-                            if let Some(attachment) = attachment.clone() {
-                                ext_attachment = Some(attachment.into());
-                            }
-                        }
-                        PushBody::Del(Del {
-                            timestamp,
-                            ext_sinfo: None,
-                            ext_attachment,
-                            ext_unknown: vec![],
-                        })
-                    }
-                },
-            });
-        }
-        if publisher.destination != Locality::Remote {
-            let data_info = DataInfo {
-                kind,
-                encoding: Some(value.encoding),
-                timestamp,
-                ..Default::default()
-            };
-
-            publisher.session.handle_data(
-                true,
-                &key_expr.to_wire(&publisher.session),
-                Some(data_info),
-                value.payload,
-                #[cfg(feature = "unstable")]
-                attachment,
-            );
-        }
-        Ok(())
+            self.attachment,
+        )
     }
 }
 
@@ -677,68 +616,13 @@ impl Resolvable for Publication<'_> {
 
 impl SyncResolve for Publication<'_> {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        let Publication {
-            publisher,
-            value,
-            kind,
+        resolve_put(
+            self.publisher,
+            self.value,
+            self.kind,
             #[cfg(feature = "unstable")]
-            attachment,
-        } = self;
-        log::trace!("write({:?}, [...])", publisher.key_expr);
-        let primitives = zread!(publisher.session.state)
-            .primitives
-            .as_ref()
-            .unwrap()
-            .clone();
-        let timestamp = publisher.session.runtime.new_timestamp();
-
-        if publisher.destination != Locality::SessionLocal {
-            #[allow(unused_mut)]
-            let mut ext_attachment = None;
-            #[cfg(feature = "unstable")]
-            {
-                if let Some(attachment) = attachment.clone() {
-                    ext_attachment = Some(attachment.into());
-                }
-            }
-            primitives.send_push(Push {
-                wire_expr: publisher.key_expr.to_wire(&publisher.session).to_owned(),
-                ext_qos: ext::QoSType::new(
-                    publisher.priority.into(),
-                    publisher.congestion_control,
-                    false,
-                ),
-                ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::default(),
-                payload: PushBody::Put(Put {
-                    timestamp,
-                    encoding: value.encoding.clone(),
-                    ext_sinfo: None,
-                    #[cfg(feature = "shared-memory")]
-                    ext_shm: None,
-                    ext_attachment,
-                    ext_unknown: vec![],
-                    payload: value.payload.clone(),
-                }),
-            });
-        }
-        if publisher.destination != Locality::Remote {
-            let data_info = DataInfo {
-                kind,
-                encoding: Some(value.encoding),
-                timestamp,
-                ..Default::default()
-            };
-            publisher.session.handle_data(
-                true,
-                &publisher.key_expr.to_wire(&publisher.session),
-                Some(data_info),
-                value.payload,
-                #[cfg(feature = "unstable")]
-                attachment,
-            );
-        }
-        Ok(())
+            self.attachment,
+        )
     }
 }
 
@@ -902,6 +786,90 @@ impl<'a, 'b> AsyncResolve for PublisherBuilder<'a, 'b> {
     fn res_async(self) -> Self::Future {
         std::future::ready(self.res_sync())
     }
+}
+
+fn resolve_put(
+    publisher: &Publisher<'_>,
+    value: Value,
+    kind: SampleKind,
+    #[cfg(feature = "unstable")] attachment: Option<Attachment>,
+) -> ZResult<()> {
+    log::trace!("write({:?}, [...])", &publisher.key_expr);
+    let primitives = zread!(publisher.session.state)
+        .primitives
+        .as_ref()
+        .unwrap()
+        .clone();
+    let timestamp = publisher.session.runtime.new_timestamp();
+
+    if publisher.destination != Locality::SessionLocal {
+        primitives.send_push(Push {
+            wire_expr: publisher.key_expr.to_wire(&publisher.session).to_owned(),
+            ext_qos: ext::QoSType::new(
+                publisher.priority.into(),
+                publisher.congestion_control,
+                false,
+            ),
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::default(),
+            payload: match kind {
+                SampleKind::Put => {
+                    #[allow(unused_mut)]
+                    let mut ext_attachment = None;
+                    #[cfg(feature = "unstable")]
+                    {
+                        if let Some(attachment) = attachment.clone() {
+                            ext_attachment = Some(attachment.into());
+                        }
+                    }
+                    PushBody::Put(Put {
+                        timestamp,
+                        encoding: value.encoding.clone(),
+                        ext_sinfo: None,
+                        #[cfg(feature = "shared-memory")]
+                        ext_shm: None,
+                        ext_attachment,
+                        ext_unknown: vec![],
+                        payload: value.payload.clone(),
+                    })
+                }
+                SampleKind::Delete => {
+                    #[allow(unused_mut)]
+                    let mut ext_attachment = None;
+                    #[cfg(feature = "unstable")]
+                    {
+                        if let Some(attachment) = attachment.clone() {
+                            ext_attachment = Some(attachment.into());
+                        }
+                    }
+                    PushBody::Del(Del {
+                        timestamp,
+                        ext_sinfo: None,
+                        ext_attachment,
+                        ext_unknown: vec![],
+                    })
+                }
+            },
+        });
+    }
+    if publisher.destination != Locality::Remote {
+        let data_info = DataInfo {
+            kind,
+            encoding: Some(value.encoding),
+            timestamp,
+            ..Default::default()
+        };
+
+        publisher.session.handle_data(
+            true,
+            &publisher.key_expr.to_wire(&publisher.session),
+            Some(data_info),
+            value.payload,
+            #[cfg(feature = "unstable")]
+            attachment,
+        );
+    }
+    Ok(())
 }
 
 /// The Priority of zenoh messages.
@@ -1331,6 +1299,7 @@ impl Drop for MatchingListenerInner<'_> {
     }
 }
 
+#[cfg(test)]
 mod tests {
     #[test]
     fn priority_from() {
@@ -1354,5 +1323,56 @@ mod tests {
             let t: TPrio = p.into();
             assert_eq!(p as u8, t as u8);
         }
+    }
+
+    #[test]
+    fn sample_kind_integrity_in_publication() {
+        use crate::{open, prelude::sync::*};
+        use zenoh_protocol::core::SampleKind;
+
+        const KEY_EXPR: &str = "test/sample_kind_integrity/publication";
+        const VALUE: &str = "zenoh";
+
+        fn sample_kind_integrity_in_publication_with(kind: SampleKind) {
+            let session = open(Config::default()).res().unwrap();
+            let sub = session.declare_subscriber(KEY_EXPR).res().unwrap();
+            let pub_ = session.declare_publisher(KEY_EXPR).res().unwrap();
+            pub_.write(kind, VALUE).res().unwrap();
+            let sample = sub.recv().unwrap();
+
+            assert_eq!(sample.kind, kind);
+            assert_eq!(sample.value.to_string(), VALUE);
+        }
+
+        sample_kind_integrity_in_publication_with(SampleKind::Put);
+        sample_kind_integrity_in_publication_with(SampleKind::Delete);
+    }
+
+    #[test]
+    fn sample_kind_integrity_in_put_builder() {
+        use crate::{open, prelude::sync::*};
+        use zenoh_protocol::core::SampleKind;
+
+        const KEY_EXPR: &str = "test/sample_kind_integrity/put_builder";
+        const VALUE: &str = "zenoh";
+
+        fn sample_kind_integrity_in_put_builder_with(kind: SampleKind) {
+            let session = open(Config::default()).res().unwrap();
+            let sub = session.declare_subscriber(KEY_EXPR).res().unwrap();
+
+            match kind {
+                SampleKind::Put => session.put(KEY_EXPR, VALUE).res().unwrap(),
+                SampleKind::Delete => session.delete(KEY_EXPR).res().unwrap(),
+            }
+            let sample = sub.recv().unwrap();
+
+            assert_eq!(sample.kind, kind);
+            if let SampleKind::Put = kind {
+                assert_eq!(sample.value.to_string(), VALUE);
+            }
+        }
+
+        sample_kind_integrity_in_put_builder_with(SampleKind::Put);
+        sample_kind_integrity_in_put_builder_with(SampleKind::Delete);
     }
 }
