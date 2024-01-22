@@ -16,12 +16,14 @@ use async_trait::async_trait;
 use std::cell::UnsafeCell;
 use std::collections::HashMap;
 use std::fmt;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, RwLock};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::time::Duration;
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh_core::{zasynclock, zread, zwrite};
+use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
     NewLinkChannelSender,
@@ -239,14 +241,14 @@ impl ListenerUnicastSerial {
 
 pub struct LinkManagerUnicastSerial {
     manager: NewLinkChannelSender,
-    listeners: Arc<RwLock<HashMap<String, ListenerUnicastSerial>>>,
+    listeners: Arc<AsyncRwLock<HashMap<String, ListenerUnicastSerial>>>,
 }
 
 impl LinkManagerUnicastSerial {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: Arc::new(RwLock::new(HashMap::new())),
+            listeners: Arc::new(AsyncRwLock::new(HashMap::new())),
         }
     }
 }
@@ -312,7 +314,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         // Spawn the accept loop for the listener
         let token = CancellationToken::new();
         let c_token = token.clone();
-        let mut listeners = zwrite!(self.listeners);
+        let mut listeners = zasyncwrite!(self.listeners);
 
         let c_path = path.clone();
         let c_manager = self.manager.clone();
@@ -323,7 +325,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
             // Wait for the accept loop to terminate
             let res =
                 accept_read_task(link, c_token, c_manager, c_path.clone(), is_connected).await;
-            zwrite!(c_listeners).remove(&c_path);
+            zasyncwrite!(c_listeners).remove(&c_path);
             res
         };
         tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
@@ -340,7 +342,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         let path = get_unix_path_as_string(endpoint.address());
 
         // Stop the listener
-        let listener = zwrite!(self.listeners).remove(&path).ok_or_else(|| {
+        let listener = zasyncwrite!(self.listeners).remove(&path).ok_or_else(|| {
             let e = zerror!(
                 "Can not delete the Serial listener because it has not been found: {}",
                 path
@@ -354,15 +356,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
         Ok(())
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
-        zread!(self.listeners)
+    async fn get_listeners(&self) -> Vec<EndPoint> {
+        zasyncread!(self.listeners)
             .values()
             .map(|l| l.endpoint.clone())
             .collect()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
-        zread!(self.listeners)
+    async fn get_locators(&self) -> Vec<Locator> {
+        zasyncread!(self.listeners)
             .values()
             .map(|x| x.endpoint.to_locator())
             .collect()

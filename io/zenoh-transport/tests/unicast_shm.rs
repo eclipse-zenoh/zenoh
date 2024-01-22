@@ -361,7 +361,7 @@ mod tests {
 
         // Wait a little bit
         ztimeout!(async {
-            while !peer_shm01_manager.get_listeners().is_empty() {
+            while !peer_shm01_manager.get_listeners().await.is_empty() {
                 tokio::time::sleep(SLEEP).await;
             }
         });

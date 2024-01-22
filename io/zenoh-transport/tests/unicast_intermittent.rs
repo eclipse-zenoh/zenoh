@@ -220,7 +220,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
     // Add a listener to the router
     println!("\nTransport Intermittent [1a1]");
     let _ = ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
-    let locators = router_manager.get_listeners();
+    let locators = router_manager.get_listeners().await;
     println!("Transport Intermittent [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 

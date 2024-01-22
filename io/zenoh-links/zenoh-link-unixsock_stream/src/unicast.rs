@@ -19,13 +19,14 @@ use std::fmt;
 use std::fs::remove_file;
 use std::os::unix::io::RawFd;
 use std::path::PathBuf;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{UnixListener, UnixStream};
+use tokio::sync::RwLock as AsyncRwLock;
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use uuid::Uuid;
-use zenoh_core::{zread, zwrite};
+use zenoh_core::{zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
@@ -196,14 +197,14 @@ impl ListenerUnixSocketStream {
 
 pub struct LinkManagerUnicastUnixSocketStream {
     manager: NewLinkChannelSender,
-    listeners: Arc<RwLock<HashMap<String, ListenerUnixSocketStream>>>,
+    listeners: Arc<AsyncRwLock<HashMap<String, ListenerUnixSocketStream>>>,
 }
 
 impl LinkManagerUnicastUnixSocketStream {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: Arc::new(RwLock::new(HashMap::new())),
+            listeners: Arc::new(AsyncRwLock::new(HashMap::new())),
         }
     }
 }
@@ -378,7 +379,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         // Spawn the accept loop for the listener
         let token = CancellationToken::new();
         let c_token = token.clone();
-        let mut listeners = zwrite!(self.listeners);
+        let mut listeners = zasyncwrite!(self.listeners);
 
         let c_manager = self.manager.clone();
         let c_listeners = self.listeners.clone();
@@ -388,7 +389,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let task = async move {
             // Wait for the accept loop to terminate
             let res = accept_task(socket, c_token, c_manager).await;
-            zwrite!(c_listeners).remove(&c_path);
+            zasyncwrite!(c_listeners).remove(&c_path);
             res
         };
         tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
@@ -404,7 +405,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         let path = get_unix_path_as_string(endpoint.address());
 
         // Stop the listener
-        let listener = zwrite!(self.listeners).remove(&path).ok_or_else(|| {
+        let listener = zasyncwrite!(self.listeners).remove(&path).ok_or_else(|| {
             let e = zerror!(
                 "Can not delete the UnixSocketStream listener because it has not been found: {}",
                 path
@@ -429,15 +430,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
         Ok(())
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
-        zread!(self.listeners)
+    async fn get_listeners(&self) -> Vec<EndPoint> {
+        zasyncread!(self.listeners)
             .values()
             .map(|x| x.endpoint.clone())
             .collect()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
-        zread!(self.listeners)
+    async fn get_locators(&self) -> Vec<Locator> {
+        zasyncread!(self.listeners)
             .values()
             .map(|x| x.endpoint.to_locator())
             .collect()

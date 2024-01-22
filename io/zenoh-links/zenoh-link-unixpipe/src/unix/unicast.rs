@@ -314,37 +314,11 @@ impl UnicastPipeListener {
                             access_mode,
                         ) => {}
 
-                        _ = c_token.cancelled() => {
-                            break
-                        }
+                        _ = c_token.cancelled() => break
                     }
-                    // let _ = handle_incoming_connections(
-                    //     &endpoint,
-                    //     &manager,
-                    //     &mut request_channel,
-                    //     &path_downlink,
-                    //     &path_uplink,
-                    //     access_mode,
-                    // )
-                    // .await;
                 }
             })
         });
-
-        // // create listening task
-        // let listening_task_handle = tokio::task::spawn(async move {
-        //     loop {
-        //         let _ = handle_incoming_connections(
-        //             &endpoint,
-        //             &manager,
-        //             &mut request_channel,
-        //             &path_downlink,
-        //             &path_uplink,
-        //             access_mode,
-        //         )
-        //         .await;
-        //     }
-        // });
 
         Ok(Self {
             uplink_locator: local,
@@ -606,22 +580,15 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastPipe {
         }
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
-        tokio::task::block_in_place(|| {
-            ZRuntime::Net.block_on(async { zasyncread!(self.listeners) })
-        })
-        .keys()
-        .cloned()
-        .collect()
+    async fn get_listeners(&self) -> Vec<EndPoint> {
+        zasyncread!(self.listeners).keys().cloned().collect()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
-        tokio::task::block_in_place(|| {
-            ZRuntime::Net.block_on(async { zasyncread!(self.listeners) })
-        })
-        .values()
-        .map(|v| v.uplink_locator.clone())
-        .collect()
+    async fn get_locators(&self) -> Vec<Locator> {
+        zasyncread!(self.listeners)
+            .values()
+            .map(|v| v.uplink_locator.clone())
+            .collect()
     }
 }
 

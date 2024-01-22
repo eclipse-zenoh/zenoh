@@ -20,15 +20,15 @@ use futures_util::StreamExt;
 use std::collections::HashMap;
 use std::fmt;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use tokio_tungstenite::accept_async;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh_core::{zasynclock, zread, zwrite};
+use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::{
     LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
 };
@@ -281,14 +281,14 @@ impl ListenerUnicastWs {
 
 pub struct LinkManagerUnicastWs {
     manager: NewLinkChannelSender,
-    listeners: Arc<RwLock<HashMap<SocketAddr, ListenerUnicastWs>>>,
+    listeners: Arc<AsyncRwLock<HashMap<SocketAddr, ListenerUnicastWs>>>,
 }
 
 impl LinkManagerUnicastWs {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: Arc::new(RwLock::new(HashMap::new())),
+            listeners: Arc::new(AsyncRwLock::new(HashMap::new())),
         }
     }
 }
@@ -368,7 +368,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
         let task = async move {
             // Wait for the accept loop to terminate
             let res = accept_task(socket, c_token, c_manager).await;
-            zwrite!(c_listeners).remove(&c_addr);
+            zasyncwrite!(c_listeners).remove(&c_addr);
             res
         };
         tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
@@ -376,7 +376,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
         let locator = endpoint.to_locator();
         let listener = ListenerUnicastWs::new(endpoint, token, tracker);
         // Update the list of active listeners on the manager
-        zwrite!(self.listeners).insert(local_addr, listener);
+        zasyncwrite!(self.listeners).insert(local_addr, listener);
 
         Ok(locator)
     }
@@ -385,7 +385,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
         let addr = get_ws_addr(endpoint.address()).await?;
 
         // Stop the listener
-        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
+        let listener = zasyncwrite!(self.listeners).remove(&addr).ok_or_else(|| {
             let e = zerror!(
                 "Can not delete the TCP (WebSocket) listener because it has not been found: {}",
                 addr
@@ -399,19 +399,19 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
         Ok(())
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
-        zread!(self.listeners)
+    async fn get_listeners(&self) -> Vec<EndPoint> {
+        zasyncread!(self.listeners)
             .values()
             .map(|l| l.endpoint.clone())
             .collect()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
+    async fn get_locators(&self) -> Vec<Locator> {
         let mut locators = Vec::new();
         let default_ipv4 = Ipv4Addr::UNSPECIFIED;
         let default_ipv6 = Ipv6Addr::UNSPECIFIED;
 
-        let guard = zread!(self.listeners);
+        let guard = zasyncread!(self.listeners);
         for (key, value) in guard.iter() {
             let listener_locator = value.endpoint.to_locator();
             if key.ip() == default_ipv4 {

@@ -114,7 +114,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
 
     // Wait a little bit
     ztimeout!(async {
-        while !router_manager.get_listeners().is_empty() {
+        while !router_manager.get_listeners().await.is_empty() {
             tokio::time::sleep(SLEEP).await;
         }
     });

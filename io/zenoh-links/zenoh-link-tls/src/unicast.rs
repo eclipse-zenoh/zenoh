@@ -29,16 +29,16 @@ use std::fs::File;
 use std::io::{BufReader, Cursor};
 use std::net::IpAddr;
 use std::net::SocketAddr;
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 use std::time::Duration;
 use std::{cell::UnsafeCell, io};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use webpki::anchor_from_trusted_cert;
-use zenoh_core::{zasynclock, zread, zwrite};
+use zenoh_core::{zasynclock, zasyncread, zasyncwrite};
 use zenoh_link_commons::tls::WebPkiVerifierAnyServerName;
 use zenoh_link_commons::{
     get_ip_interface_names, LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait,
@@ -258,14 +258,14 @@ impl ListenerUnicastTls {
 
 pub struct LinkManagerUnicastTls {
     manager: NewLinkChannelSender,
-    listeners: ListenersUnicastIP,
+    listeners: Arc<AsyncRwLock<HashMap<SocketAddr, ListenerUnicastTls>>>,
 }
 
 impl LinkManagerUnicastTls {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: ListenersUnicastIP::new(),
+            listeners: Arc::new(AsyncRwLock::new(HashMap::new())),
         }
     }
 }
@@ -365,7 +365,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let task = async move {
             // Wait for the accept loop to terminate
             let res = accept_task(socket, acceptor, c_token, c_manager).await;
-            zwrite!(c_listeners).remove(&c_addr);
+            zasyncwrite!(c_listeners).remove(&c_addr);
             res
         };
         tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
@@ -379,7 +379,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
 
         let listener = ListenerUnicastTls::new(endpoint, token, tracker);
         // Update the list of active listeners on the manager
-        zwrite!(self.listeners).insert(local_addr, listener);
+        zasyncwrite!(self.listeners).insert(local_addr, listener);
 
         Ok(locator)
     }
@@ -389,7 +389,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         let addr = get_tls_addr(&epaddr).await?;
 
         // Stop the listener
-        let listener = zwrite!(self.listeners).remove(&addr).ok_or_else(|| {
+        let listener = zasyncwrite!(self.listeners).remove(&addr).ok_or_else(|| {
             let e = zerror!(
                 "Can not delete the TLS listener because it has not been found: {}",
                 addr
@@ -403,12 +403,41 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastTls {
         Ok(())
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
-        self.listeners.get_endpoints()
+    async fn get_listeners(&self) -> Vec<EndPoint> {
+        zasyncread!(self.listeners)
+            .values()
+            .map(|x| x.endpoint.clone())
+            .collect()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
-        self.listeners.get_locators()
+    async fn get_locators(&self) -> Vec<Locator> {
+        let mut locators = vec![];
+
+        let guard = zasyncread!(self.listeners);
+        for (key, value) in guard.iter() {
+            let (kip, kpt) = (key.ip(), key.port());
+
+            // Either ipv4/0.0.0.0 or ipv6/[::]
+            if kip.is_unspecified() {
+                let mut addrs = match kip {
+                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(),
+                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(),
+                };
+                let iter = addrs.drain(..).map(|x| {
+                    Locator::new(
+                        value.endpoint.protocol(),
+                        SocketAddr::new(x, kpt).to_string(),
+                        value.endpoint.metadata(),
+                    )
+                    .unwrap()
+                });
+                locators.extend(iter);
+            } else {
+                locators.push(value.endpoint.to_locator());
+            }
+        }
+
+        locators
     }
 }
 

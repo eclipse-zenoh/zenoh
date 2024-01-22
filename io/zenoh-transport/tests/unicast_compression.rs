@@ -256,7 +256,7 @@ mod tests {
         }
 
         ztimeout!(async {
-            while !router_manager.get_listeners().is_empty() {
+            while !router_manager.get_listeners().await.is_empty() {
                 tokio::time::sleep(SLEEP).await;
             }
         });

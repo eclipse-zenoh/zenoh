@@ -20,12 +20,12 @@ use std::collections::HashMap;
 use std::fmt;
 use std::net::IpAddr;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
-use std::sync::{Arc, Mutex, RwLock, Weak};
+use std::sync::{Arc, Mutex, Weak};
 use std::time::Duration;
 use tokio::net::UdpSocket;
-use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::{Mutex as AsyncMutex, RwLock as AsyncRwLock};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
-use zenoh_core::{zasynclock, zlock, zread, zwrite};
+use zenoh_core::{zasynclock, zasyncread, zasyncwrite, zlock};
 use zenoh_link_commons::{
     get_ip_interface_names, ConstructibleLinkManagerUnicast, LinkManagerUnicastTrait, LinkUnicast,
     LinkUnicastTrait, ListenersUnicastIP, NewLinkChannelSender, BIND_INTERFACE,
@@ -268,14 +268,14 @@ impl ListenerUnicastUdp {
 
 pub struct LinkManagerUnicastUdp {
     manager: NewLinkChannelSender,
-    listeners: ListenersUnicastIP,
+    listeners: Arc<AsyncRwLock<HashMap<SocketAddr, ListenerUnicastUdp>>>,
 }
 
 impl LinkManagerUnicastUdp {
     pub fn new(manager: NewLinkChannelSender) -> Self {
         Self {
             manager,
-            listeners: ListenersUnicastIP::new(),
+            listeners: Arc::new(AsyncRwLock::new(HashMap::new())),
         }
     }
 }
@@ -419,7 +419,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
                     // Spawn the accept loop for the listener
                     let token = CancellationToken::new();
                     let c_token = token.clone();
-                    let mut listeners = zwrite!(self.listeners);
+                    let mut listeners = zasyncwrite!(self.listeners);
 
                     let c_manager = self.manager.clone();
                     let c_listeners = self.listeners.clone();
@@ -429,7 +429,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
                     let task = async move {
                         // Wait for the accept loop to terminate
                         let res = accept_read_task(socket, c_token, c_manager).await;
-                        zwrite!(c_listeners).remove(&c_addr);
+                        zasyncwrite!(c_listeners).remove(&c_addr);
                         res
                     };
                     tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
@@ -467,9 +467,11 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         let mut errs: Vec<ZError> = vec![];
         let mut failed = true;
         for a in addrs {
-            match self.listeners.del_listener(a).await {
-                Ok(_) => {
-                    failed = false;
+            match zasyncwrite!(self.listeners).remove(&a) {
+                Some(l) => {
+                    // We cannot keep a sync guard across a .await
+                    // Break the loop and assign the listener.
+                    listener = Some(l);
                     break;
                 }
                 Err(err) => {
@@ -495,12 +497,41 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
         Ok(())
     }
 
-    fn get_listeners(&self) -> Vec<EndPoint> {
-        self.listeners.get_endpoints()
+    async fn get_listeners(&self) -> Vec<EndPoint> {
+        zasyncread!(self.listeners)
+            .values()
+            .map(|l| l.endpoint.clone())
+            .collect()
     }
 
-    fn get_locators(&self) -> Vec<Locator> {
-        self.listeners.get_locators()
+    async fn get_locators(&self) -> Vec<Locator> {
+        let mut locators = vec![];
+
+        let guard = zasyncread!(self.listeners);
+        for (key, value) in guard.iter() {
+            let (kip, kpt) = (key.ip(), key.port());
+
+            // Either ipv4/0.0.0.0 or ipv6/[::]
+            if kip.is_unspecified() {
+                let mut addrs = match kip {
+                    IpAddr::V4(_) => zenoh_util::net::get_ipv4_ipaddrs(),
+                    IpAddr::V6(_) => zenoh_util::net::get_ipv6_ipaddrs(),
+                };
+                let iter = addrs.drain(..).map(|x| {
+                    Locator::new(
+                        value.endpoint.protocol(),
+                        SocketAddr::new(x, kpt).to_string(),
+                        value.endpoint.metadata(),
+                    )
+                    .unwrap()
+                });
+                locators.extend(iter);
+            } else {
+                locators.push(value.endpoint.to_locator());
+            }
+        }
+
+        locators
     }
 }
 

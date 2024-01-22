@@ -160,7 +160,7 @@ mod tests {
             println!("[Simultaneous 01a] => Adding endpoint {e:?}: {res:?}");
             assert!(res.is_ok());
         }
-        let locs = peer01_manager.get_listeners();
+        let locs = peer01_manager.get_listeners().await;
         println!("[Simultaneous 01b] => Getting endpoints: {endpoint01:?} {locs:?}");
         assert_eq!(endpoint01.len(), locs.len());
 
@@ -170,7 +170,7 @@ mod tests {
             println!("[Simultaneous 02a] => Adding endpoint {e:?}: {res:?}");
             assert!(res.is_ok());
         }
-        let locs = peer02_manager.get_listeners();
+        let locs = peer02_manager.get_listeners().await;
         println!("[Simultaneous 02b] => Getting endpoints: {endpoint02:?} {locs:?}");
         assert_eq!(endpoint02.len(), locs.len());
 

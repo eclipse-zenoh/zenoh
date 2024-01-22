@@ -315,7 +315,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
     // Add the locator on the router
     ztimeout!(router_manager.add_listener(endpoint.clone())).unwrap();
     println!("Transport Authenticator PubKey [1a2]");
-    let locators = router_manager.get_listeners();
+    let locators = router_manager.get_listeners().await;
     println!("Transport Authenticator PubKey [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
@@ -393,7 +393,7 @@ async fn auth_pubkey(endpoint: &EndPoint, lowlatency_transport: bool) {
     assert!(res.is_ok());
 
     ztimeout!(async {
-        while !router_manager.get_listeners().is_empty() {
+        while !router_manager.get_listeners().await.is_empty() {
             tokio::time::sleep(SLEEP).await;
         }
     });
@@ -520,7 +520,7 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
     println!("Transport Authenticator UserPassword [1a1]: {res:?}");
     assert!(res.is_ok());
     println!("Transport Authenticator UserPassword [1a2]");
-    let locators = router_manager.get_listeners();
+    let locators = router_manager.get_listeners().await;
     println!("Transport Authenticator UserPassword [1a2]: {locators:?}");
     assert_eq!(locators.len(), 1);
 
@@ -610,7 +610,7 @@ async fn auth_usrpwd(endpoint: &EndPoint, lowlatency_transport: bool) {
     assert!(res.is_ok());
 
     ztimeout!(async {
-        while !router_manager.get_listeners().is_empty() {
+        while !router_manager.get_listeners().await.is_empty() {
             tokio::time::sleep(SLEEP).await;
         }
     });
