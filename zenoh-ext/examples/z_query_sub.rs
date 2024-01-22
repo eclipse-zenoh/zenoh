@@ -14,6 +14,7 @@
 use clap::arg;
 use clap::Command;
 use futures::prelude::*;
+use tokio::io::AsyncReadExt;
 use futures::select;
 use std::time::Duration;
 use zenoh::config::Config;
