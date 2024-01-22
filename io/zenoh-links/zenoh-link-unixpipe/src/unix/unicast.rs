@@ -301,8 +301,9 @@ impl UnicastPipeListener {
         let token = CancellationToken::new();
         let c_token = token.clone();
         // create listening task
+        // TODO: Check the necessity of this spawn_blocking
         tokio::task::spawn_blocking(move || {
-            ZRuntime::Accept.block_on(async move {
+            ZRuntime::Reception.block_on(async move {
                 loop {
                     tokio::select! {
                         _ = handle_incoming_connections(

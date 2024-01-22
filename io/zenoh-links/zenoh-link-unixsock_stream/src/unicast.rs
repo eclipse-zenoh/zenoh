@@ -143,7 +143,8 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
 impl Drop for LinkUnicastUnixSocketStream {
     fn drop(&mut self) {
         // Close the underlying UnixSocketStream socket
-        let _ = self.get_mut_socket().shutdown();
+        let _ = zenoh_runtime::ZRuntime::Transport
+            .block_in_place(async move { self.get_mut_socket().shutdown().await });
     }
 }
 
@@ -392,7 +393,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUnixSocketStream {
             zasyncwrite!(c_listeners).remove(&c_path);
             res
         };
-        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
+        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::Transport);
 
         let locator = endpoint.to_locator();
         let listener = ListenerUnixSocketStream::new(endpoint, token, tracker, lock_fd);

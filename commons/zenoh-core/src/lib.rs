@@ -163,30 +163,7 @@ where
     F: Future<Output = To> + Send,
 {
     fn res_sync(self) -> <Self as Resolvable>::To {
-        tokio::task::block_in_place(move || zenoh_runtime::ZRuntime::Application.block_on(self.0))
-
-        // std::thread::scope(move |s| {
-        //     s.spawn(|| {
-        //         zenoh_runtime::ZRuntime::Application
-        //             .handle()
-        //             .block_on(self.0)
-        //     })
-        //     .join()
-        //     .expect("Failed to join ResolveFuture")
-        // })
-        // std::thread::spawn(|| {
-        //     zenoh_runtime::ZRuntime::Application
-        //         .handle()
-        //         .block_on(self.0)
-        // }).join().expect("failed")
-        // zenoh_runtime::ZRuntime::Application.handle().block_on(self.0)
-        //
-        // std::thread::Builder::new()
-        //     .name("async-global-executor/tokio".to_string())
-        //     .spawn(move || {
-        //         zenoh_runtime::ZRuntime::Application.handle().block_on(self.0)
-        //     })
-        //     .expect("failed to spawn tokio driver thread");
+        zenoh_runtime::ZRuntime::Application.block_in_place(self.0)
     }
 }
 

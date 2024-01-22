@@ -328,7 +328,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastSerial {
             zasyncwrite!(c_listeners).remove(&c_path);
             res
         };
-        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
+        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::Reception);
 
         let locator = endpoint.to_locator();
         let listener = ListenerUnicastSerial::new(endpoint, token, tracker);

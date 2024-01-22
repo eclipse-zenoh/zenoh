@@ -224,7 +224,7 @@ impl LinkUnicastTrait for LinkUnicastWs {
 
 impl Drop for LinkUnicastWs {
     fn drop(&mut self) {
-        zenoh_runtime::ZRuntime::TX.block_in_place(async {
+        zenoh_runtime::ZRuntime::Transport.block_in_place(async {
             let mut guard = zasynclock!(self.send);
             // Close the underlying TCP socket
             guard.close().await.unwrap_or_else(|e| {
@@ -371,7 +371,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastWs {
             zasyncwrite!(c_listeners).remove(&c_addr);
             res
         };
-        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
+        tracker.spawn_on(task, &zenoh_runtime::ZRuntime::Transport);
 
         let locator = endpoint.to_locator();
         let listener = ListenerUnicastWs::new(endpoint, token, tracker);
