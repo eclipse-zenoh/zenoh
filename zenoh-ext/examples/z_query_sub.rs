@@ -14,9 +14,9 @@
 use clap::arg;
 use clap::Command;
 use futures::prelude::*;
-use tokio::io::AsyncReadExt;
 use futures::select;
 use std::time::Duration;
+use tokio::io::AsyncReadExt;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh::query::ReplyKeyExpr;
