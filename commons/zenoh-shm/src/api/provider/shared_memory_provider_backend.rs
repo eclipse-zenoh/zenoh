@@ -19,12 +19,12 @@ use super::{chunk::ChunkDescriptor, types::ChunkAllocResult};
 pub trait SharedMemoryProviderBackend {
     // Allocate the chunk of desired size
     // If successful, the result's chunk size will be >= len
-    fn alloc(&self, len: usize) -> ChunkAllocResult;
+    fn alloc(&mut self, len: usize) -> ChunkAllocResult;
 
     // Deallocate the chunk
     // It is guaranteed that chunk's len will correspond to the len returned from alloc(...)
-    fn free(&self, chunk: &ChunkDescriptor);
+    fn free(&mut self, chunk: &ChunkDescriptor);
 
     // Defragment the memory
-    fn defragment(&self);
+    fn defragment(&mut self);
 }

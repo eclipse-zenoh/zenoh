@@ -19,16 +19,19 @@ use crate::api::common::types::{ChunkID, SegmentID};
 // ChunkDescriptor uniquely identifies the particular chunk within particular segment
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChunkDescriptor {
-    segment: SegmentID,
-    chunk: ChunkID,
-    len: u32,
+    pub segment: SegmentID,
+    pub chunk: ChunkID,
+    pub len: u32,
 }
 
 impl ChunkDescriptor {
-    pub fn new(segment: SegmentID, chunk: ChunkID, len: u32) -> Self { Self { segment, chunk, len } }
-
-    pub fn len(&self) -> u32 { self.len } 
-    pub fn chunk(&self) -> ChunkID { self.chunk } 
+    pub fn new(segment: SegmentID, chunk: ChunkID, len: u32) -> Self {
+        Self {
+            segment,
+            chunk,
+            len,
+        }
+    }
 }
 
 // Structure that represents an allocated chunk

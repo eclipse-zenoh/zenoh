@@ -13,6 +13,6 @@
 //
 
 pub mod posix_shared_memory_client;
-pub mod posix_shared_memory_segment;
 pub mod posix_shared_memory_provider_backend;
+pub mod posix_shared_memory_segment;
 pub mod protocol_id;

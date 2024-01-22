@@ -1,12 +1,3 @@
-use api::{provider::chunk::ChunkDescriptor, common::types::ProtocolID};
-use header::{
-    allocated_descriptor::AllocatedHeaderDescriptor,
-    chunk_header::ChunkHeaderType,
-    descriptor::{HeaderDescriptor, OwnedHeaderDescriptor},
-    storage::GLOBAL_HEADER_STORAGE,
-    subscription::GLOBAL_HEADER_SUBSCRIPTION,
-};
-use segment::{DataSegment, DataSegmentID};
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -20,25 +11,17 @@ use segment::{DataSegment, DataSegmentID};
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use api::{common::types::ProtocolID, provider::chunk::ChunkDescriptor};
+use header::descriptor::{HeaderDescriptor, OwnedHeaderDescriptor};
 use std::{
     any::Any,
-    cmp,
-    collections::{binary_heap::BinaryHeap, HashMap},
-    fmt, mem,
     sync::{
         atomic::{AtomicPtr, Ordering},
         Arc,
     },
 };
-use watchdog::{
-    allocated_watchdog::AllocatedWatchdog,
-    confirmator::{ConfirmedDescriptor, GLOBAL_CONFIRMATOR},
-    descriptor::Descriptor,
-    storage::GLOBAL_STORAGE,
-    validator::GLOBAL_VALIDATOR,
-};
+use watchdog::{confirmator::ConfirmedDescriptor, descriptor::Descriptor};
 use zenoh_buffers::ZSliceBuffer;
-use zenoh_result::{bail, zerror, ShmError, ZResult};
 
 #[macro_export]
 macro_rules! tested_module {
@@ -70,61 +53,35 @@ macro_rules! test_helpers_module {
 
 pub mod api;
 pub mod header;
+pub mod runtime;
 pub mod watchdog;
 
 tested_module!(posix_shm);
 tested_module!(segment);
 
+mod consumer;
+
 test_helpers_module!();
-
-const MIN_FREE_CHUNK_SIZE: usize = 1_024;
-
-fn align_addr_at(addr: usize, align: usize) -> usize {
-    match addr % align {
-        0 => addr,
-        r => addr + (align - r),
-    }
-}
-
-#[derive(Eq, Copy, Clone, Debug)]
-struct Chunk {
-    base_addr: *mut u8,
-    offset: usize,
-    size: usize,
-}
-
-impl Ord for Chunk {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        self.size.cmp(&other.size)
-    }
-}
-
-impl PartialOrd for Chunk {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl PartialEq for Chunk {
-    fn eq(&self, other: &Self) -> bool {
-        self.size == other.size
-    }
-}
 
 /// Informations about a [`SharedMemoryBuf`].
 ///
 /// This that can be serialized and can be used to retrieve the [`SharedMemoryBuf`] in a remote process.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SharedMemoryBufInfo {
-    /// The data chunk descriptor of buffer
+    /// The data chunk descriptor
     pub data_descriptor: ChunkDescriptor,
     /// Protocol identifier for particular SharedMemory implementation
     pub shm_protocol: ProtocolID,
-    /// The watchdog descriptor of buffer.
+    /// Actual data length
+    /// NOTE: data_descriptor's len is >= of this len and describes the actual memory length
+    /// dedicated in shared memory segment for this particular buffer.
+    pub data_len: usize,
+
+    /// The watchdog descriptor
     pub watchdog_descriptor: Descriptor,
-    /// The header descriptor of buffer.
+    /// The header descriptor
     pub header_descriptor: HeaderDescriptor,
-    /// The generation of this buffer
+    /// The generation of the buffer
     pub generation: u32,
 }
 
@@ -132,6 +89,7 @@ impl SharedMemoryBufInfo {
     pub fn new(
         data_descriptor: ChunkDescriptor,
         shm_protocol: ProtocolID,
+        data_len: usize,
         watchdog_descriptor: Descriptor,
         header_descriptor: HeaderDescriptor,
         generation: u32,
@@ -139,6 +97,7 @@ impl SharedMemoryBufInfo {
         SharedMemoryBufInfo {
             data_descriptor,
             shm_protocol,
+            data_len,
             watchdog_descriptor,
             header_descriptor,
             generation,
@@ -151,7 +110,6 @@ impl SharedMemoryBufInfo {
 pub struct SharedMemoryBuf {
     pub header: OwnedHeaderDescriptor,
     pub buf: AtomicPtr<u8>,
-    pub len: usize,
     pub info: SharedMemoryBufInfo,
     pub watchdog: Arc<ConfirmedDescriptor>,
 }
@@ -161,7 +119,6 @@ impl std::fmt::Debug for SharedMemoryBuf {
         f.debug_struct("SharedMemoryBuf")
             .field("header", &self.header)
             .field("buf", &self.buf)
-            .field("len", &self.len)
             .field("info", &self.info)
             .finish()
     }
@@ -169,7 +126,7 @@ impl std::fmt::Debug for SharedMemoryBuf {
 
 impl SharedMemoryBuf {
     pub fn len(&self) -> usize {
-        self.len
+        self.info.data_len
     }
 
     pub fn is_empty(&self) -> bool {
@@ -193,9 +150,12 @@ impl SharedMemoryBuf {
     }
 
     pub fn as_slice(&self) -> &[u8] {
-        log::trace!("SharedMemoryBuf::as_slice() == len = {:?}", self.len);
+        log::trace!(
+            "SharedMemoryBuf::as_slice() == len = {:?}",
+            self.info.data_len
+        );
         let bp = self.buf.load(Ordering::SeqCst);
-        unsafe { std::slice::from_raw_parts(bp, self.len) }
+        unsafe { std::slice::from_raw_parts(bp, self.info.data_len) }
     }
 
     /// Gets a mutable slice.
@@ -211,7 +171,7 @@ impl SharedMemoryBuf {
     /// guarantee that your in applications only one process at the time will actually write.
     pub unsafe fn as_mut_slice(&mut self) -> &mut [u8] {
         let bp = self.buf.load(Ordering::SeqCst);
-        std::slice::from_raw_parts_mut(bp, self.len)
+        std::slice::from_raw_parts_mut(bp, self.info.data_len)
     }
 }
 
@@ -228,359 +188,9 @@ impl Clone for SharedMemoryBuf {
         SharedMemoryBuf {
             header: self.header.clone(),
             buf: AtomicPtr::new(bp),
-            len: self.len,
             info: self.info.clone(),
             watchdog: self.watchdog.clone(),
         }
-    }
-}
-
-/*************************************/
-/*       SHARED MEMORY READER        */
-/*************************************/
-pub struct SharedMemoryReader {
-    segments: HashMap<DataSegmentID, DataSegment>,
-}
-
-unsafe impl Send for SharedMemoryReader {}
-unsafe impl Sync for SharedMemoryReader {}
-
-impl SharedMemoryReader {
-    pub fn new() -> Self {
-        Self {
-            segments: HashMap::new(),
-        }
-    }
-
-    pub fn connect_map_to_shm(&mut self, info: &SharedMemoryBufInfo) -> ZResult<()> {
-        match DataSegment::open(info.segment_id) {
-            Ok(segment) => {
-                self.segments.insert(info.segment_id, segment);
-                Ok(())
-            }
-            Err(e) => {
-                let e = zerror!(
-                    "Unable to bind shared memory segment {}: {:?}",
-                    info.segment_id,
-                    e
-                );
-                log::trace!("{}", e);
-                Err(ShmError(e).into())
-            }
-        }
-    }
-
-    pub fn try_read_shmbuf(&self, info: &SharedMemoryBufInfo) -> ZResult<SharedMemoryBuf> {
-        // Try read does not increment the reference count as it is assumed
-        // that the sender of this buffer has incremented for us.
-        match self.segments.get(&info.segment_id) {
-            Some(segment) => {
-                let base_ptr = segment.segment.shmem.as_ptr();
-                let buf = unsafe { base_ptr.add(info.offset) };
-                let shmb = SharedMemoryBuf {
-                    header: GLOBAL_HEADER_SUBSCRIPTION.link(&info.header_descriptor)?,
-                    buf: AtomicPtr::new(buf),
-                    len: info.length,
-                    info: info.clone(),
-                    watchdog: Arc::new(GLOBAL_CONFIRMATOR.add(&info.watchdog_descriptor)?),
-                };
-                // Validate buffer's generation
-                match shmb.is_generation_valid() {
-                    true => Ok(shmb),
-                    false => bail!(""),
-                }
-            }
-            None => {
-                let e = zerror!("Unable to find shared memory segment: {}", info.segment_id);
-                log::trace!("{}", e);
-                Err(ShmError(e).into())
-            }
-        }
-    }
-
-    pub fn read_shmbuf(&mut self, info: &SharedMemoryBufInfo) -> ZResult<SharedMemoryBuf> {
-        // Read does not increment the reference count as it is assumed
-        // that the sender of this buffer has incremented for us.
-        self.try_read_shmbuf(info).or_else(|_| {
-            self.connect_map_to_shm(info)?;
-            self.try_read_shmbuf(info)
-        })
-    }
-}
-
-impl Default for SharedMemoryReader {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl fmt::Debug for SharedMemoryReader {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SharedMemoryReader").finish()?;
-        f.debug_list().entries(self.segments.keys()).finish()
-    }
-}
-
-#[derive(Debug)]
-pub struct BusyChunk {
-    chunk: Chunk,
-    header: AllocatedHeaderDescriptor,
-    _watchdog: AllocatedWatchdog,
-}
-
-/// A shared memory segment manager.
-///
-/// Allows to access a shared memory segment and reserve some parts of this segment for writting.
-pub struct SharedMemoryManager {
-    available: usize,
-    own_segment: DataSegment,
-    free_list: BinaryHeap<Chunk>,
-    busy_list: Vec<BusyChunk>,
-    alignment: usize,
-}
-
-unsafe impl Send for SharedMemoryManager {}
-
-impl SharedMemoryManager {
-    pub fn available(&self) -> usize {
-        self.available
-    }
-
-    /// Creates a new SharedMemoryManager managing allocations of a region of the
-    /// given size.
-    pub fn make(size: usize) -> ZResult<SharedMemoryManager> {
-        let segment = DataSegment::create(size)?;
-
-        let mut free_list = BinaryHeap::new();
-        let chunk = Chunk {
-            base_addr: segment.segment.shmem.as_ptr(),
-            offset: 0,
-            size,
-        };
-        free_list.push(chunk);
-
-        let busy_list = vec![];
-
-        let shm = SharedMemoryManager {
-            available: size,
-            own_segment: segment,
-            free_list,
-            busy_list,
-            alignment: mem::align_of::<u32>(),
-        };
-        log::trace!(
-            "Created SharedMemoryManager for {:?}",
-            shm.own_segment.segment.shmem.as_ptr()
-        );
-        Ok(shm)
-    }
-
-    fn free_chunk_map_to_shmbuf(&self, chunk: &Chunk) -> ZResult<(SharedMemoryBuf, BusyChunk)> {
-        // allocate shared header
-        let allocated_header = GLOBAL_HEADER_STORAGE.allocate_header()?;
-        let header = allocated_header.descriptor.clone();
-
-        // allocate watchdog
-        let allocated_watchdog = GLOBAL_STORAGE.allocate_watchdog()?;
-        let descriptor = Descriptor::from(&allocated_watchdog.descriptor);
-
-        // add watchdog to confirmator
-        let confirmed_watchdog = GLOBAL_CONFIRMATOR.add(&descriptor)?;
-
-        // add watchdog to validator
-        let c_header = header.clone();
-        GLOBAL_VALIDATOR.add(
-            allocated_watchdog.descriptor.clone(),
-            Box::new(move || {
-                c_header
-                    .header()
-                    .watchdog_invalidated
-                    .store(true, Ordering::SeqCst);
-            }),
-        );
-
-        let info = SharedMemoryBufInfo::new(
-            chunk.offset,
-            chunk.size,
-            self.own_segment.segment.id,
-            0,
-            descriptor,
-            HeaderDescriptor::from(&header),
-            header.header().generation.load(Ordering::SeqCst),
-        );
-        let shmb = SharedMemoryBuf {
-            header,
-            buf: AtomicPtr::<u8>::new(chunk.base_addr),
-            len: chunk.size,
-            info,
-            watchdog: Arc::new(confirmed_watchdog),
-        };
-
-        let busy_chunk = BusyChunk {
-            chunk: *chunk,
-            header: allocated_header,
-            _watchdog: allocated_watchdog,
-        };
-
-        Ok((shmb, busy_chunk))
-    }
-
-    pub fn alloc(&mut self, len: usize) -> ZResult<SharedMemoryBuf> {
-        log::trace!("SharedMemoryManager::alloc({})", len);
-        // Always allocate a size that will keep the proper alignment requirements
-        let required_len = align_addr_at(len, self.alignment);
-        if self.available < required_len {
-            self.garbage_collect();
-        }
-        if self.available >= required_len {
-            // The strategy taken is the same for some Unix System V implementations -- as described in the
-            // famous Bach's book --  in essence keep an ordered list of free slot and always look for the
-            // biggest as that will give the biggest left-over.
-            match self.free_list.pop() {
-                Some(mut chunk) if chunk.size >= required_len => {
-                    self.available -= required_len;
-                    log::trace!("Allocator selected Chunk ({:?})", &chunk);
-                    if chunk.size - required_len >= MIN_FREE_CHUNK_SIZE {
-                        let free_chunk = Chunk {
-                            base_addr: unsafe { chunk.base_addr.add(required_len) },
-                            offset: chunk.offset + required_len,
-                            size: chunk.size - required_len,
-                        };
-                        log::trace!("The allocation will leave a Free Chunk: {:?}", &free_chunk);
-                        self.free_list.push(free_chunk);
-                    }
-                    chunk.size = required_len;
-
-                    let mapping_result = {
-                        match self.free_chunk_map_to_shmbuf(&chunk) {
-                            Ok(val) => Ok(val),
-                            Err(_) => {
-                                // no free watchdogs or headers, try to free some by collecting the garbage
-                                println!("No free watchdogs or headers, trying to reclaim...");
-                                log::trace!("No free watchdogs or headers, trying to reclaim...");
-                                self.garbage_collect();
-                                self.free_chunk_map_to_shmbuf(&chunk)
-                            }
-                        }
-                    };
-
-                    match mapping_result {
-                        Ok((shm_buf, busy_chunk)) => {
-                            log::trace!("The allocated Chunk is ({:?})", &busy_chunk);
-                            log::trace!("Allocated Shared Memory Buffer: {:?}", &shm_buf);
-                            self.busy_list.push(busy_chunk);
-                            Ok(shm_buf)
-                        }
-                        Err(e) => {
-                            log::trace!("free_chunk_map_to_shmbuf failed with error {}, reclaiming chunk back", e);
-                            self.available += chunk.size;
-                            self.free_list.push(chunk);
-                            Err(e)
-                        }
-                    }
-                }
-                Some(c) => {
-                    self.free_list.push(c);
-                    let e = zerror!("SharedMemoryManager::alloc({}) cannot find any available chunk\nSharedMemoryManager::free_list = {:?}", len, self.free_list);
-                    Err(e.into())
-                }
-                None => {
-                    let e = zerror!("SharedMemoryManager::alloc({}) cannot find any available chunk\nSharedMemoryManager::free_list = {:?}", len, self.free_list);
-                    log::trace!("{}", e);
-                    Err(e.into())
-                }
-            }
-        } else {
-            let e = zerror!( "SharedMemoryManager does not have sufficient free memory to allocate {} bytes, try de-fragmenting!", len);
-            log::warn!("{}", e);
-            Err(e.into())
-        }
-    }
-
-    fn is_free_chunk(chunk: &BusyChunk) -> bool {
-        let header = chunk.header.descriptor.header();
-        if header.refcount.load(Ordering::SeqCst) != 0 {
-            return header.watchdog_invalidated.load(Ordering::SeqCst);
-        }
-        true
-    }
-
-    fn try_merge_adjacent_chunks(a: &Chunk, b: &Chunk) -> Option<Chunk> {
-        let end_addr = unsafe { a.base_addr.add(a.size) };
-        if end_addr == b.base_addr {
-            Some(Chunk {
-                base_addr: a.base_addr,
-                size: a.size + b.size,
-                offset: a.offset,
-            })
-        } else {
-            None
-        }
-    }
-    // Returns the amount of memory that it was able to de-fragment
-    pub fn defragment(&mut self) -> usize {
-        if self.free_list.len() > 1 {
-            let mut fbs: Vec<Chunk> = self.free_list.drain().collect();
-            fbs.sort_by(|x, y| x.offset.partial_cmp(&y.offset).unwrap());
-            let mut current = fbs.remove(0);
-            let mut defrag_mem = 0;
-            let mut i = 0;
-            let n = fbs.len();
-            for chunk in fbs.iter() {
-                i += 1;
-                let next = *chunk;
-                match SharedMemoryManager::try_merge_adjacent_chunks(&current, &next) {
-                    Some(c) => {
-                        current = c;
-                        defrag_mem += current.size;
-                        if i == n {
-                            self.free_list.push(current)
-                        }
-                    }
-                    None => {
-                        self.free_list.push(current);
-                        if i == n {
-                            self.free_list.push(next);
-                        } else {
-                            current = next;
-                        }
-                    }
-                }
-            }
-            defrag_mem
-        } else {
-            0
-        }
-    }
-
-    /// Returns the amount of memory freed
-    pub fn garbage_collect(&mut self) -> usize {
-        log::trace!("Running Garbage Collector");
-
-        let mut freed = 0;
-        self.busy_list.retain(|maybe_free| {
-            if SharedMemoryManager::is_free_chunk(maybe_free) {
-                freed += maybe_free.chunk.size;
-                log::trace!("Garbage Collecting Chunk: {:?}", maybe_free);
-                self.free_list.push(maybe_free.chunk);
-                return false;
-            }
-            true
-        });
-        self.available += freed;
-        freed
-    }
-}
-
-impl fmt::Debug for SharedMemoryManager {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SharedMemoryManager")
-            .field("id", &self.own_segment.segment.id)
-            .field("size", &self.own_segment.segment.shmem.len())
-            .field("available", &self.available)
-            .field("free_list.len", &self.free_list.len())
-            .field("busy_list.len", &self.busy_list.len())
-            .finish()
     }
 }
 

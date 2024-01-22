@@ -68,28 +68,28 @@ pub struct PosixSharedMemoryProviderBackend {
 
 impl PosixSharedMemoryProviderBackend {
     pub fn new(size: u32) -> ZResult<Self> {
-        let mut segment = PosixSharedMemorySegment::create(size)?;
+        let segment = PosixSharedMemorySegment::create(size)?;
 
         let mut free_list = BinaryHeap::new();
         let root_chunk = Chunk { offset: 0, size };
         free_list.push(root_chunk);
 
-        let shm = Self {
-            available: size,
-            segment,
-            free_list,
-            alignment: mem::align_of::<u32>() as u32,
-        };
         log::trace!(
             "Created PosixSharedMemoryProviderBackend id {}, size {size}",
             segment.segment.id()
         );
-        Ok(shm)
+
+        Ok( Self {
+            available: size,
+            segment,
+            free_list,
+            alignment: mem::align_of::<u32>() as u32,
+        })
     }
 }
 
 impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
-    fn alloc(&self, len: usize) -> ChunkAllocResult {
+    fn alloc(&mut self, len: usize) -> ChunkAllocResult {
         fn align_addr_at(addr: u32, align: u32) -> u32 {
             match addr % align {
                 0 => addr,
@@ -153,15 +153,15 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
         }
     }
 
-    fn free(&self, chunk: &ChunkDescriptor) {
+    fn free(&mut self, chunk: &ChunkDescriptor) {
         let free_chunk = Chunk {
-            offset: chunk.chunk(),
-            size: chunk.len(),
+            offset: chunk.chunk,
+            size: chunk.len,
         };
         self.free_list.push(free_chunk);
     }
 
-    fn defragment(&self) {
+    fn defragment(&mut self) {
         fn try_merge_adjacent_chunks(a: &Chunk, b: &Chunk) -> Option<Chunk> {
             let end_offset = a.offset + a.size;
             if end_offset == b.offset {

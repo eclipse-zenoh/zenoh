@@ -18,9 +18,9 @@ use super::chunk::AllocatedChunk;
 
 // Allocation errors enum
 pub enum AllocError {
-    NeedDefragment,              // defragmentation needed
-    OutOfMemory,                 // the provider is out of memory
-    Other(zenoh_result::Error),  // other error
+    NeedDefragment,             // defragmentation needed
+    OutOfMemory,                // the provider is out of memory
+    Other(zenoh_result::Error), // other error
 }
 
 impl From<zenoh_result::Error> for AllocError {

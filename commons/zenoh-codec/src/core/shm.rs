@@ -17,7 +17,8 @@ use zenoh_buffers::{
     writer::{DidntWrite, Writer},
 };
 use zenoh_shm::{
-    header::descriptor::HeaderDescriptor, watchdog::descriptor::Descriptor, SharedMemoryBufInfo,
+    api::provider::chunk::ChunkDescriptor, header::descriptor::HeaderDescriptor,
+    posix_shm::segment, watchdog::descriptor::Descriptor, SharedMemoryBufInfo,
 };
 
 impl<W> WCodec<&Descriptor, &mut W> for Zenoh080
@@ -46,6 +47,20 @@ where
     }
 }
 
+impl<W> WCodec<&ChunkDescriptor, &mut W> for Zenoh080
+where
+    W: Writer,
+{
+    type Output = Result<(), DidntWrite>;
+
+    fn write(self, writer: &mut W, x: &ChunkDescriptor) -> Self::Output {
+        self.write(&mut *writer, x.segment)?;
+        self.write(&mut *writer, x.chunk)?;
+        self.write(&mut *writer, x.len)?;
+        Ok(())
+    }
+}
+
 impl<W> WCodec<&SharedMemoryBufInfo, &mut W> for Zenoh080
 where
     W: Writer,
@@ -54,22 +69,20 @@ where
 
     fn write(self, writer: &mut W, x: &SharedMemoryBufInfo) -> Self::Output {
         let SharedMemoryBufInfo {
-            offset,
-            length,
-            segment_id,
-            kind,
             watchdog_descriptor,
             header_descriptor,
             generation,
+            data_descriptor,
+            shm_protocol,
+            data_len,
         } = x;
 
-        self.write(&mut *writer, offset)?;
-        self.write(&mut *writer, length)?;
-        self.write(&mut *writer, segment_id)?;
-        self.write(&mut *writer, kind)?;
         self.write(&mut *writer, watchdog_descriptor)?;
         self.write(&mut *writer, header_descriptor)?;
         self.write(&mut *writer, generation)?;
+        self.write(&mut *writer, data_descriptor)?;
+        self.write(&mut *writer, shm_protocol)?;
+        self.write(&mut *writer, data_len)?;
         Ok(())
     }
 }
@@ -105,6 +118,25 @@ where
     }
 }
 
+impl<R> RCodec<ChunkDescriptor, &mut R> for Zenoh080
+where
+    R: Reader,
+{
+    type Error = DidntRead;
+
+    fn read(self, reader: &mut R) -> Result<ChunkDescriptor, Self::Error> {
+        let segment = self.read(&mut *reader)?;
+        let chunk = self.read(&mut *reader)?;
+        let len = self.read(&mut *reader)?;
+
+        Ok(ChunkDescriptor {
+            segment,
+            chunk,
+            len,
+        })
+    }
+}
+
 impl<R> RCodec<SharedMemoryBufInfo, &mut R> for Zenoh080
 where
     R: Reader,
@@ -112,22 +144,20 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<SharedMemoryBufInfo, Self::Error> {
-        let offset = self.read(&mut *reader)?;
-        let length = self.read(&mut *reader)?;
-        let segment_id = self.read(&mut *reader)?;
-        let kind = self.read(&mut *reader)?;
         let watchdog_descriptor = self.read(&mut *reader)?;
         let header_descriptor = self.read(&mut *reader)?;
-        let generatoion = self.read(&mut *reader)?;
+        let generation = self.read(&mut *reader)?;
+        let data_descriptor = self.read(&mut *reader)?;
+        let shm_protocol = self.read(&mut *reader)?;
+        let data_len = self.read(&mut *reader)?;
 
         let shm_info = SharedMemoryBufInfo::new(
-            offset,
-            length,
-            segment_id,
-            kind,
             watchdog_descriptor,
             header_descriptor,
-            generatoion,
+            generation,
+            data_descriptor,
+            shm_protocol,
+            data_len,
         );
         Ok(shm_info)
     }

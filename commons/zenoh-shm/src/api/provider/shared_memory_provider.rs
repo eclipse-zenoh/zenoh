@@ -59,27 +59,10 @@ impl BusyChunk {
     }
 }
 
-struct RAIIAllocatedChunk<'a> {
-    provider: &'a mut SharedMemoryProvider,
-    pub chunk: AllocatedChunk,
-}
-
-impl<'a> RAIIAllocatedChunk<'a> {
-    fn new(provider: &'a mut SharedMemoryProvider, chunk: AllocatedChunk) -> Self {
-        Self { provider, chunk }
-    }
-}
-
-impl<'a> Drop for RAIIAllocatedChunk<'a> {
-    fn drop(&mut self) {
-        self.provider.backend.free(&self.chunk.descriptor);
-    }
-}
-
 // SharedMemoryProvider aggregates backend, watchdog and refcount storages and
 // provides a generalized interface for shared memory data sources
 pub struct SharedMemoryProvider {
-    backend: Arc<dyn SharedMemoryProviderBackend>,
+    backend: Box<dyn SharedMemoryProviderBackend>,
     busy_list: Vec<BusyChunk>,
     id: ProtocolID,
 }
@@ -87,7 +70,7 @@ pub struct SharedMemoryProvider {
 impl SharedMemoryProvider {
     // Crete the new SharedMemoryProvider
     // this method is intentionally made private as the SharedMemoryProvider instantiation is up to SharedMemoryFactory
-    fn new(backend: Arc<dyn SharedMemoryProviderBackend>, id: ProtocolID) -> Self {
+    pub(crate) fn new(backend: Box<dyn SharedMemoryProviderBackend>, id: ProtocolID) -> Self {
         Self {
             backend,
             busy_list: Vec::default(),
@@ -96,7 +79,7 @@ impl SharedMemoryProvider {
     }
 
     // Allocate the buffer of desired size
-    pub fn alloc(&self, len: usize) -> BufAllocResult {
+    pub fn alloc(&mut self, len: usize) -> BufAllocResult {
         // allocate resources for SHM buffer
         let (allocated_header, allocated_watchdog, confirmed_watchdog) = Self::alloc_resources()?;
 
@@ -117,7 +100,7 @@ impl SharedMemoryProvider {
 
         // wrap everything to SHaredMemoryBuf
         let wrapped = self.wrap(
-            &chunk,
+            chunk,
             len,
             allocated_header,
             allocated_watchdog,
@@ -127,14 +110,14 @@ impl SharedMemoryProvider {
     }
 
     // Defragment the memory
-    pub fn defragment(&self) {
+    pub fn defragment(&mut self) {
         self.backend.defragment();
     }
 
     // Map externally-allocated chunk into SharedMemoryBuf
     // This method is designed to be used with push data sources
     // Remember that chunk's len may be >= len!
-    pub fn map(&self, chunk: &AllocatedChunk, len: usize) -> ZResult<SharedMemoryBuf> {
+    pub fn map(&mut self, chunk: AllocatedChunk, len: usize) -> ZResult<SharedMemoryBuf> {
         // allocate resources for SHM buffer
         let (allocated_header, allocated_watchdog, confirmed_watchdog) = Self::alloc_resources()?;
 
@@ -190,8 +173,8 @@ impl SharedMemoryProvider {
     }
 
     fn wrap(
-        &self,
-        chunk: &AllocatedChunk,
+        &mut self,
+        chunk: AllocatedChunk,
         len: usize,
         allocated_header: AllocatedHeaderDescriptor,
         allocated_watchdog: AllocatedWatchdog,
@@ -216,6 +199,7 @@ impl SharedMemoryProvider {
         let info = SharedMemoryBufInfo::new(
             chunk.descriptor.clone(),
             self.id,
+            len,
             descriptor,
             HeaderDescriptor::from(&header),
             header.header().generation.load(Ordering::SeqCst),
@@ -225,7 +209,6 @@ impl SharedMemoryProvider {
         let shmb = SharedMemoryBuf {
             header,
             buf: chunk.data,
-            len,
             info,
             watchdog: Arc::new(confirmed_watchdog),
         };

@@ -76,7 +76,7 @@ where
     /// # Safety
     /// Retrieves mut element by it's index. This is safe if the index doesn't go out of underlying array.
     /// Additional assert to check the index validity is added for "test" feature
-    pub unsafe fn elem_mut(&mut self, index: ElemIndex) -> *mut Elem {
+    pub unsafe fn elem_mut(&self, index: ElemIndex) -> *mut Elem {
         #[cfg(feature = "test")]
         assert!(self.inner.shmem.len() > index.as_() * size_of::<Elem>());
         (self.inner.shmem.as_ptr() as *mut Elem).add(index.as_())

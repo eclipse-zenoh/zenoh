@@ -12,8 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-pub mod client;
-pub mod common;
-pub mod factory;
-pub mod protocol_implementations;
-pub mod provider;
+use crate::consumer::SharedMemoryConsumer;
+
+pub struct SharedMemoryRuntime {
+    pub(crate) consumer: SharedMemoryConsumer,
+}
