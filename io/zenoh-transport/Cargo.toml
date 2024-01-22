@@ -52,14 +52,12 @@ default = ["test", "transport_multilink"]
 async-trait = { workspace = true }
 tokio = { workspace = true, features = [
   "sync",
-  "rt",
   "fs",
   "time",
   "macros",
   "rt-multi-thread",
   "io-util",
   "net",
-  "tracing"
 ] }
 tokio-util = { workspace = true, features = ["rt"]}
 flume = { workspace = true }

@@ -30,7 +30,7 @@ default = ["zenoh/default"]
 shared-memory = ["zenoh/shared-memory"]
 
 [dependencies]
-tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 clap = { workspace = true, features = ["derive"] }
 env_logger = { workspace = true }
 futures = { workspace = true }
