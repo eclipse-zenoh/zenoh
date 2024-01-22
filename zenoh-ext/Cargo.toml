@@ -31,8 +31,7 @@ unstable = []
 default = []
 
 [dependencies]
-async-std = { workspace = true, features = ["attributes", "unstable"] }
-tokio = { workspace = true, features = ["rt", "sync", "time"] }
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros", "io-std"] }
 bincode = { workspace = true }
 env_logger = { workspace = true }
 flume = { workspace = true }

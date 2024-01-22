@@ -11,10 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::channel::{bounded, Sender};
-use async_std::task;
-use futures::select;
-use futures::{FutureExt, StreamExt};
+use flume::{bounded, Sender};
 use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::future::Ready;
@@ -168,14 +165,14 @@ impl<'a> PublicationCache<'a> {
         let resources_limit = conf.resources_limit;
         let history = conf.history;
 
-        let (stoptx, mut stoprx) = bounded::<bool>(1);
-        task::spawn(async move {
+        let (stoptx, stoprx) = bounded::<bool>(1);
+        tokio::task::spawn(async move {
             let mut cache: HashMap<OwnedKeyExpr, VecDeque<Sample>> =
                 HashMap::with_capacity(resources_limit.unwrap_or(32));
             let limit = resources_limit.unwrap_or(usize::MAX);
 
             loop {
-                select!(
+                tokio::select! {
                     // on publication received by the local subscriber, store it
                     sample = sub_recv.recv_async() => {
                         if let Ok(sample) = sample {
@@ -237,10 +234,8 @@ impl<'a> PublicationCache<'a> {
                     },
 
                     // When stoptx is dropped, stop the task
-                    _ = stoprx.next().fuse() => {
-                        return
-                    }
-                );
+                    _ = stoprx.recv_async() => return
+                }
             }
         });
 

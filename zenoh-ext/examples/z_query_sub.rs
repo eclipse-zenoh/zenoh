@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::arg;
 use clap::Command;
 use futures::prelude::*;
@@ -22,7 +21,7 @@ use zenoh::prelude::r#async::*;
 use zenoh::query::ReplyKeyExpr;
 use zenoh_ext::*;
 
-#[async_std::main]
+#[tokio::main]
 async fn main() {
     // Initiate logging
     env_logger::init();
@@ -56,7 +55,7 @@ async fn main() {
     };
 
     println!("Enter 'q' to quit...");
-    let mut stdin = async_std::io::stdin();
+    let mut stdin = tokio::io::stdin();
     let mut input = [0_u8];
     loop {
         select!(
@@ -69,7 +68,7 @@ async fn main() {
             _ = stdin.read_exact(&mut input).fuse() => {
                 match input[0] {
                     b'q' => break,
-                    0 => sleep(Duration::from_secs(1)).await,
+                    0 => tokio::time::sleep(Duration::from_secs(1)).await,
                     _ => (),
                 }
             }
