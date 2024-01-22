@@ -90,12 +90,13 @@ impl<T> Default for Mvar<T> {
     }
 }
 
+#[cfg(test)]
 mod tests {
-    #[test]
-    fn mvar() {
+    use zenoh_result::ZResult;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+    async fn mvar() -> ZResult<()> {
         use super::Mvar;
-        use async_std::prelude::FutureExt;
-        use async_std::task;
         use std::sync::Arc;
         use std::time::Duration;
 
@@ -105,24 +106,23 @@ mod tests {
         let mvar: Arc<Mvar<usize>> = Arc::new(Mvar::new());
 
         let c_mvar = mvar.clone();
-        let ch = task::spawn(async move {
+        let ch = tokio::task::spawn(async move {
             for _ in 0..count {
                 let n = c_mvar.take().await;
                 print!("-{n} ");
             }
         });
 
-        let ph = task::spawn(async move {
+        let ph = tokio::task::spawn(async move {
             for i in 0..count {
                 mvar.put(i).await;
                 print!("+{i} ");
             }
         });
 
-        task::block_on(async {
-            ph.timeout(TIMEOUT).await.unwrap();
-            ch.timeout(TIMEOUT).await.unwrap();
-        });
+        let _ = tokio::time::timeout(TIMEOUT, ph).await?;
+        let _ = tokio::time::timeout(TIMEOUT, ch).await?;
         println!();
+        Ok(())
     }
 }
