@@ -31,7 +31,8 @@ pub use zenoh_protocol::scouting::Hello;
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::scouting::WhatAmI;
 ///
@@ -42,7 +43,7 @@ pub use zenoh_protocol::scouting::Hello;
 /// while let Ok(hello) = receiver.recv_async().await {
 ///     println!("{}", hello);
 /// }
-/// # })
+/// # }
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
@@ -57,7 +58,8 @@ impl ScoutBuilder<DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh::scouting::WhatAmI;
     ///
@@ -66,7 +68,7 @@ impl ScoutBuilder<DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> ScoutBuilder<Callback>
@@ -92,7 +94,8 @@ impl ScoutBuilder<DefaultHandler> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh::scouting::WhatAmI;
     ///
@@ -102,7 +105,7 @@ impl ScoutBuilder<DefaultHandler> {
     ///     .res()
     ///     .await
     ///     .unwrap();
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn callback_mut<CallbackMut>(
@@ -119,7 +122,8 @@ impl ScoutBuilder<DefaultHandler> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh::scouting::WhatAmI;
     ///
@@ -131,7 +135,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// while let Ok(hello) = receiver.recv_async().await {
     ///     println!("{}", hello);
     /// }
-    /// # })
+    /// # }
     /// ```
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> ScoutBuilder<Handler>
@@ -186,7 +190,8 @@ where
 ///
 /// # Examples
 /// ```
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::scouting::WhatAmI;
 ///
@@ -195,7 +200,7 @@ where
 ///     .res()
 ///     .await
 ///     .unwrap();
-/// # })
+/// # }
 /// ```
 pub(crate) struct ScoutInner {
     #[allow(dead_code)]
@@ -207,7 +212,8 @@ impl ScoutInner {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh::scouting::WhatAmI;
     ///
@@ -217,7 +223,7 @@ impl ScoutInner {
     ///     .await
     ///     .unwrap();
     /// scout.stop();
-    /// # })
+    /// # }
     /// ```
     pub fn stop(self) {
         // This drops the inner `stop_sender` and hence stops the scouting receiver
@@ -235,7 +241,8 @@ impl fmt::Debug for ScoutInner {
 ///
 /// # Examples
 /// ```no_run
-/// # async_std::task::block_on(async {
+/// # #[tokio::main]
+/// # async fn main() {
 /// use zenoh::prelude::r#async::*;
 /// use zenoh::scouting::WhatAmI;
 ///
@@ -247,7 +254,7 @@ impl fmt::Debug for ScoutInner {
 /// while let Ok(hello) = receiver.recv_async().await {
 ///     println!("{}", hello);
 /// }
-/// # })
+/// # }
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
@@ -269,7 +276,8 @@ impl<Receiver> Scout<Receiver> {
     ///
     /// # Examples
     /// ```no_run
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh::scouting::WhatAmI;
     ///
@@ -280,7 +288,7 @@ impl<Receiver> Scout<Receiver> {
     ///     .unwrap();
     /// let _router = scout.recv_async().await;
     /// scout.stop();
-    /// # })
+    /// # }
     /// ```
     pub fn stop(self) {
         self.scout.stop()
