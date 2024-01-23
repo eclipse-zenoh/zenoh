@@ -155,6 +155,7 @@ impl fmt::Display for Query {
 
 /// A builder returned by [`Query::reply()`](Query::reply).
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[derive(Debug)]
 pub struct ReplyBuilder<'a> {
     query: &'a Query,
     result: Result<Sample, Value>,
