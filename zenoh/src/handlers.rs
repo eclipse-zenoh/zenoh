@@ -86,3 +86,41 @@ pub fn locked<T>(fnmut: impl FnMut(T)) -> impl Fn(T) {
     let lock = std::sync::Mutex::new(fnmut);
     move |x| zlock!(lock)(x)
 }
+
+/// A handler containing 2 callback functions:
+///  - `callback`: the typical callback function. `context` will be passed as its last argument.
+///  - `drop`: a callback called when this handler is dropped.
+///
+/// It is guaranteed that:
+///
+///   - `callback` will never be called once `drop` has started.
+///   - `drop` will only be called **once**, and **after every** `callback` has ended.
+///   - The two previous guarantees imply that `call` and `drop` are never called concurrently.
+pub struct CallbackPair<Callback, DropFn>
+where
+    DropFn: FnMut() + Send + Sync + 'static,
+{
+    pub callback: Callback,
+    pub drop: DropFn,
+}
+
+impl<Callback, DropFn> Drop for CallbackPair<Callback, DropFn>
+where
+    DropFn: FnMut() + Send + Sync + 'static,
+{
+    fn drop(&mut self) {
+        (self.drop)()
+    }
+}
+
+impl<'a, OnEvent, Event, DropFn> IntoCallbackReceiverPair<'a, Event>
+    for CallbackPair<OnEvent, DropFn>
+where
+    OnEvent: Fn(Event) + Send + Sync + 'a,
+    DropFn: FnMut() + Send + Sync + 'static,
+{
+    type Receiver = ();
+    fn into_cb_receiver_pair(self) -> (Callback<'a, Event>, Self::Receiver) {
+        (Dyn::from(move |evt| (self.callback)(evt)), ())
+    }
+}
