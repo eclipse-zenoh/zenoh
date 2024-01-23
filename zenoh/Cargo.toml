@@ -119,7 +119,7 @@ features = ["unstable"]
 [package.metadata.deb]
 name = "zenoh"
 maintainer = "zenoh-dev@eclipse.org"
-copyright = "2022 ZettaScale Technology"
+copyright = "2024 ZettaScale Technology"
 section = "net"
 license-file = ["../LICENSE", "0"]
 depends = "zenohd (=0.11.0-dev-1), zenoh-plugin-rest (=0.11.0-dev-1), zenoh-plugin-storage-manager (=0.11.0-dev-1)"
