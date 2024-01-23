@@ -17,7 +17,7 @@ use std::sync::Arc;
 use zenoh::prelude::r#async::*;
 use zenoh::Session;
 use zenoh_backend_traits::config::StorageConfig;
-use zenoh_backend_traits::Capability;
+use zenoh_backend_traits::{Capability, VolumeInstance};
 use zenoh_result::ZResult;
 
 pub struct StoreIntercept {
@@ -30,12 +30,12 @@ pub struct StoreIntercept {
 pub(crate) async fn create_and_start_storage(
     admin_key: String,
     config: StorageConfig,
-    backend: &mut Box<dyn zenoh_backend_traits::Volume>,
+    backend: &VolumeInstance,
     in_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     out_interceptor: Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>,
     zenoh: Arc<Session>,
 ) -> ZResult<Sender<StorageMessage>> {
-    log::trace!("Create storage {}", &admin_key);
+    log::trace!("Create storage '{}'", &admin_key);
     let capability = backend.get_capability();
     let storage = backend.create_storage(config.clone()).await?;
     let store_intercept = StoreIntercept {

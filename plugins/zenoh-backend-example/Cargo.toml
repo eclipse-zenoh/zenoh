@@ -13,37 +13,33 @@
 #
 [package]
 rust-version = { workspace = true }
-name = "zenoh-plugin-example"
+name = "zenoh-backend-example"
 version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
-publish = false
 
 [features]
 default = ["no_mangle"]
 no_mangle = []
 
 [lib]
-# When auto-detecting the "example" plugin, `zenohd` will look for a dynamic library named "zenoh_plugin_example"
-# `zenohd` will expect the file to be named according to OS conventions:
-#   - libzenoh_plugin_example.so on linux
-#   - libzenoh_plugin_example.dylib on macOS
-#   - zenoh_plugin_example.dll on Windows
-name = "zenoh_plugin_example"
+name = "zenoh_backend_example"
 # This crate type will make `cargo` output a dynamic library instead of a rust static library
 crate-type = ["cdylib"]
 
 [dependencies]
 async-std = { workspace = true, features = ["default"] }
-const_format = { workspace = true }
 clap = { workspace = true }
+const_format = { workspace = true }
 env_logger = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
 log = { workspace = true }
 serde_json = { workspace = true }
-zenoh = { workspace = true, features = ["unstable"] }
+zenoh = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-plugin-trait = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
+async-trait = { workspace = true }
+zenoh_backend_traits = { workspace = true }

@@ -42,7 +42,7 @@ impl<'a> Resolvable for ZidBuilder<'a> {
 
 impl<'a> SyncResolve for ZidBuilder<'a> {
     fn res_sync(self) -> Self::To {
-        self.session.runtime.zid
+        self.session.runtime.zid()
     }
 }
 
