@@ -306,6 +306,18 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         self
     }
 
+    /// Change the encoding of the query value.
+    #[inline]
+    pub fn encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
+    where
+        IntoEncoding: Into<Encoding>,
+    {
+        if let Some(ref mut value) = self.value {
+            value.encoding = encoding.into();
+        }
+        self
+    }
+
     #[zenoh_macros::unstable]
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
