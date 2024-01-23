@@ -287,8 +287,13 @@ impl RunningPluginTrait for StorageRuntime {
         let name = { zlock!(self.0).name.clone() };
         let old = PluginConfig::try_from((&name, old))?;
         let new = PluginConfig::try_from((&name, new))?;
+        log::debug!("config change requested for plugin '{}'", name);
+        log::debug!("old config: {:?}", &old);
+        log::debug!("new config: {:?}", &new);
         let diffs = ConfigDiff::diffs(old, new);
+        log::debug!("applying diff: {:?}", &diffs);
         { zlock!(self.0).update(diffs) }?;
+        log::debug!("applying diff done");
         Ok(None)
     }
 
