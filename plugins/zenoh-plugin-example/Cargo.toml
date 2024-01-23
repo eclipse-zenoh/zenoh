@@ -36,7 +36,7 @@ env_logger = { workspace = true }
 futures = { workspace = true }
 log = { workspace = true }
 serde_json = { workspace = true }
-zenoh = { workspace = true }
+zenoh = { workspace = true, features = ["unstable"] }
 zenoh-core = { workspace = true }
 zenoh-plugin-trait = { workspace = true }
 zenoh-result = { workspace = true }
