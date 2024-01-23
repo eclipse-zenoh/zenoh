@@ -316,7 +316,7 @@ impl RunningPluginTrait for StorageRuntime {
         });
         let guard = self.0.lock().unwrap();
         with_extended_string(&mut key, &["/volumes/"], |key| {
-            for plugin in guard.plugins_manager.started_plugins() {
+            for plugin in guard.plugins_manager.started_plugins_iter() {
                 with_extended_string(key, &[plugin.name()], |key| {
                     with_extended_string(key, &["/__path__"], |key| {
                         if keyexpr::new(key.as_str())

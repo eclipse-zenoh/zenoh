@@ -171,7 +171,7 @@ impl AdminSpace {
         );
 
         let mut active_plugins = plugins_mgr
-            .started_plugins()
+            .started_plugins_iter()
             .map(|rec| (rec.name().to_string(), rec.path().to_string()))
             .collect::<HashMap<_, _>>();
 
@@ -458,7 +458,7 @@ fn router_data(context: &AdminContext, query: Query) {
     let plugins: serde_json::Value = {
         let plugins_mgr = zlock!(context.plugins_mgr);
         plugins_mgr
-            .started_plugins()
+            .started_plugins_iter()
             .map(|rec| (rec.name(), json!({ "path": rec.path() })))
             .collect()
     };
@@ -681,7 +681,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
     let guard = zlock!(context.plugins_mgr);
     let mut root_key = format!("@/router/{}/status/plugins/", &context.zid_str);
 
-    for plugin in guard.started_plugins() {
+    for plugin in guard.started_plugins_iter() {
         with_extended_string(&mut root_key, &[plugin.name()], |plugin_key| {
             // TODO: response to "__version__", this need not to be implemented by each plugin
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {

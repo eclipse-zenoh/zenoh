@@ -154,7 +154,7 @@ fn main() {
             }
         };
 
-        for plugin in plugin_mgr.loaded_plugins_mut() {
+        for plugin in plugin_mgr.loaded_plugins_iter_mut() {
             let required = required_plugins.contains(plugin.name());
             log::info!(
                 "Starting {req} plugin \"{name}\"",

@@ -35,7 +35,7 @@ pub enum PluginState {
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize, PartialOrd, Ord)]
 pub enum PluginReportLevel {
     #[default]
-    Normal,
+    Info,
     Warning,
     Error,
 }
@@ -203,8 +203,8 @@ impl PluginReport {
         self.level |= PluginReportLevel::Warning;
         self.messages.push(warning.into());
     }
-    pub fn add_message<S: Into<Cow<'static, str>>>(&mut self, message: S) {
-        self.level |= PluginReportLevel::Normal;
+    pub fn add_info<S: Into<Cow<'static, str>>>(&mut self, message: S) {
+        self.level |= PluginReportLevel::Info;
         self.messages.push(message.into());
     }
     pub fn messages(&self) -> &[Cow<'static, str>] {
@@ -215,7 +215,7 @@ impl PluginReport {
 pub trait PluginConditionSetter {
     fn add_error(self, report: &mut PluginReport) -> Self;
     fn add_warning(self, report: &mut PluginReport) -> Self;
-    fn add_message(self, report: &mut PluginReport) -> Self;
+    fn add_info(self, report: &mut PluginReport) -> Self;
 }
 
 impl<T, E: ToString> PluginConditionSetter for core::result::Result<T, E> {
@@ -231,9 +231,9 @@ impl<T, E: ToString> PluginConditionSetter for core::result::Result<T, E> {
         }
         self
     }
-    fn add_message(self, report: &mut PluginReport) -> Self {
+    fn add_info(self, report: &mut PluginReport) -> Self {
         if let Err(e) = &self {
-            report.add_message(e.to_string());
+            report.add_info(e.to_string());
         }
         self
     }

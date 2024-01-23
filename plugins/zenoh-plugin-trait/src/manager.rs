@@ -175,7 +175,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     }
 
     /// Lists all plugins
-    pub fn declared_plugins(
+    pub fn declared_plugins_iter(
         &self,
     ) -> impl Iterator<Item = &dyn DeclaredPlugin<StartArgs, Instance>> + '_ {
         self.plugins
@@ -184,7 +184,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     }
 
     /// Lists all plugins mutable
-    pub fn declared_plugins_mut(
+    pub fn declared_plugins_iter_mut(
         &mut self,
     ) -> impl Iterator<Item = &mut dyn DeclaredPlugin<StartArgs, Instance>> + '_ {
         self.plugins
@@ -193,41 +193,41 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     }
 
     /// Lists the loaded plugins
-    pub fn loaded_plugins(
+    pub fn loaded_plugins_iter(
         &self,
     ) -> impl Iterator<Item = &dyn LoadedPlugin<StartArgs, Instance>> + '_ {
-        self.declared_plugins().filter_map(|p| p.loaded())
+        self.declared_plugins_iter().filter_map(|p| p.loaded())
     }
 
     /// Lists the loaded plugins mutable
-    pub fn loaded_plugins_mut(
+    pub fn loaded_plugins_iter_mut(
         &mut self,
     ) -> impl Iterator<Item = &mut dyn LoadedPlugin<StartArgs, Instance>> + '_ {
         // self.plugins_mut().filter_map(|p| p.loaded_mut())
-        self.declared_plugins_mut().filter_map(|p| p.loaded_mut())
+        self.declared_plugins_iter_mut().filter_map(|p| p.loaded_mut())
     }
 
     /// Lists the started plugins
-    pub fn started_plugins(
+    pub fn started_plugins_iter(
         &self,
     ) -> impl Iterator<Item = &dyn StartedPlugin<StartArgs, Instance>> + '_ {
-        self.loaded_plugins().filter_map(|p| p.started())
+        self.loaded_plugins_iter().filter_map(|p| p.started())
     }
 
     /// Lists the started plugins mutable
-    pub fn started_plugins_mut(
+    pub fn started_plugins_iter_mut(
         &mut self,
     ) -> impl Iterator<Item = &mut dyn StartedPlugin<StartArgs, Instance>> + '_ {
-        self.loaded_plugins_mut().filter_map(|p| p.started_mut())
+        self.loaded_plugins_iter_mut().filter_map(|p| p.started_mut())
     }
 
-    /// Returns single plugin record
+    /// Returns single plugin record by name
     pub fn plugin(&self, name: &str) -> Option<&dyn DeclaredPlugin<StartArgs, Instance>> {
         let index = self.get_plugin_index(name)?;
         Some(&self.plugins[index])
     }
 
-    /// Returns mutable plugin record
+    /// Returns mutable plugin record by name
     pub fn plugin_mut(
         &mut self,
         name: &str,
@@ -236,12 +236,12 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         Some(&mut self.plugins[index])
     }
 
-    /// Returns loaded plugin record
+    /// Returns loaded plugin record by name
     pub fn loaded_plugin(&self, name: &str) -> Option<&dyn LoadedPlugin<StartArgs, Instance>> {
         self.plugin(name)?.loaded()
     }
 
-    /// Returns mutable loaded plugin record
+    /// Returns mutable loaded plugin record by name
     pub fn loaded_plugin_mut(
         &mut self,
         name: &str,
@@ -249,12 +249,12 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         self.plugin_mut(name)?.loaded_mut()
     }
 
-    /// Returns started plugin record
+    /// Returns started plugin record by name
     pub fn started_plugin(&self, name: &str) -> Option<&dyn StartedPlugin<StartArgs, Instance>> {
         self.loaded_plugin(name)?.started()
     }
 
-    /// Returns mutable started plugin record
+    /// Returns mutable started plugin record by name
     pub fn started_plugin_mut(
         &mut self,
         name: &str,
@@ -273,7 +273,7 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static> P
             names
         );
         let mut plugins = Vec::new();
-        for plugin in self.declared_plugins() {
+        for plugin in self.declared_plugins_iter() {
             let name = unsafe { keyexpr::from_str_unchecked(plugin.name()) };
             if names.includes(name) {
                 let status = PluginStatusRec::new(plugin.as_status());

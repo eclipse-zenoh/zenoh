@@ -1,9 +1,3 @@
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    sync::Arc,
-};
-
-use async_std::sync::RwLock;
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -17,7 +11,12 @@ use async_std::sync::RwLock;
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use async_std::sync::RwLock;
 use async_trait::async_trait;
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::Arc,
+};
 use zenoh::{prelude::OwnedKeyExpr, sample::Sample, time::Timestamp, value::Value};
 use zenoh_backend_traits::{
     config::{StorageConfig, VolumeConfig},

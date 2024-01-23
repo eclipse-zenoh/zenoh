@@ -203,9 +203,9 @@ impl Display for Compatibility {
 #[repr(C)]
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct RustVersion {
-    major: u64,
-    minor: u64,
-    patch: u64,
+    major: u32,
+    minor: u32,
+    patch: u32,
     stable: bool,
     commit: &'static str,
 }
