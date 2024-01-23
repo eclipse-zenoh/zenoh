@@ -204,7 +204,8 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
         &mut self,
     ) -> impl Iterator<Item = &mut dyn LoadedPlugin<StartArgs, Instance>> + '_ {
         // self.plugins_mut().filter_map(|p| p.loaded_mut())
-        self.declared_plugins_iter_mut().filter_map(|p| p.loaded_mut())
+        self.declared_plugins_iter_mut()
+            .filter_map(|p| p.loaded_mut())
     }
 
     /// Lists the started plugins
@@ -218,7 +219,8 @@ impl<StartArgs: PluginStartArgs + 'static, Instance: PluginInstance + 'static>
     pub fn started_plugins_iter_mut(
         &mut self,
     ) -> impl Iterator<Item = &mut dyn StartedPlugin<StartArgs, Instance>> + '_ {
-        self.loaded_plugins_iter_mut().filter_map(|p| p.started_mut())
+        self.loaded_plugins_iter_mut()
+            .filter_map(|p| p.started_mut())
     }
 
     /// Returns single plugin record by name
