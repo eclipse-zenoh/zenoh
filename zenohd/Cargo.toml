@@ -50,7 +50,7 @@ rustc_version = { workspace = true }
 [package.metadata.deb]
 name = "zenohd"
 maintainer = "zenoh-dev@eclipse.org"
-copyright = "2022 ZettaScale Technology"
+copyright = "2024 ZettaScale Technology"
 section = "net"
 license-file = ["../LICENSE", "0"]
 depends = "$auto"

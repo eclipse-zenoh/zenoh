@@ -47,7 +47,7 @@ log = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
-zenoh = { workspace = true, features = [ "unstable" ] }
+zenoh = { workspace = true, features = ["unstable"] }
 zenoh-collections = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-keyexpr = { workspace = true }
@@ -70,7 +70,7 @@ async-global-executor = { workspace = true }
 [package.metadata.deb]
 name = "zenoh-plugin-storage-manager"
 maintainer = "zenoh-dev@eclipse.org"
-copyright = "2022 ZettaScale Technology"
+copyright = "2024 ZettaScale Technology"
 section = "net"
 license-file = ["../../LICENSE", "0"]
-depends = "zenohd (=0.11.0-dev)"
+depends = "zenohd (=0.11.0-dev-1)"
