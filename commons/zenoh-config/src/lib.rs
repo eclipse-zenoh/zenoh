@@ -70,6 +70,12 @@ impl Zeroize for SecretString {
 
 pub type SecretValue = Secret<SecretString>;
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct DownsamplerConf {
+    pub keyexpr: OwnedKeyExpr,
+    pub threshold_ms: u64,
+}
+
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,
@@ -404,6 +410,11 @@ validated_struct::validator! {
                 pub write: bool,
             },
 
+        },
+        /// Configuration of the downsampling.
+        pub downsampling: #[derive(Default)]
+        DownsamplingConf {
+            downsamples: Vec<DownsamplerConf>,
         },
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.

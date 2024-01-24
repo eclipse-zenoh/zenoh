@@ -84,6 +84,22 @@ impl Tables {
         // let queries_default_timeout =
         //     Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
         let hat_code = hat::new_hat(whatami, config);
+
+        //TODO(sashacmc): add interceptors config reloading there or incapsulate in the interceptors, but it
+        //will require interface changes
+        //
+        //// config reloading sample:
+        //let cfg_rx = config.subscribe();
+        //task::spawn({
+        //    async move {
+        //        while let Ok(change) = cfg_rx.recv_async().await {
+        //            let change = change.strip_prefix('/').unwrap_or(&change);
+        //            if !change.starts_with("plugins") {
+        //                continue;
+        //            }
+        //    }
+        //});
+
         Tables {
             zid,
             whatami,

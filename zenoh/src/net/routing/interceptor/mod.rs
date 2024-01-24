@@ -17,10 +17,14 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+
 use super::RoutingContext;
 use zenoh_config::Config;
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
+
+pub mod downsampling;
+use crate::net::routing::interceptor::downsampling::DownsamplerInterceptor;
 
 pub(crate) trait InterceptorTrait {
     fn intercept(
@@ -44,11 +48,14 @@ pub(crate) trait InterceptorFactoryTrait {
 
 pub(crate) type InterceptorFactory = Box<dyn InterceptorFactoryTrait + Send + Sync>;
 
-pub(crate) fn interceptor_factories(_config: &Config) -> Vec<InterceptorFactory> {
-    // Add interceptors here
-    // @TODO build the list of intercetors with the correct order from the config
-    // vec![Box::new(LoggerInterceptor {})]
-    vec![]
+pub(crate) fn interceptor_factories(config: &Config) -> Vec<InterceptorFactory> {
+    let mut res: Vec<InterceptorFactory> = vec![];
+
+    for ds in config.downsampling().downsamples() {
+        res.push(Box::new(DownsamplerInterceptor::new(ds.clone())))
+    }
+    res.push(Box::new(LoggerInterceptor {}));
+    res
 }
 
 pub(crate) struct InterceptorsChain {
