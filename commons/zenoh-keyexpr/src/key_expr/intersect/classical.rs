@@ -89,9 +89,9 @@ fn it_intersect<const STAR_DSL: bool>(mut it1: &[u8], mut it2: &[u8]) -> bool {
                 if advanced1.is_empty() {
                     return !it2.has_verbatim();
                 }
-                return (!unsafe { current2.has_direct_verbatim_non_empty() }
-                    && it_intersect::<STAR_DSL>(it1, advanced2))
-                    || it_intersect::<STAR_DSL>(advanced1, it2);
+                return it_intersect::<STAR_DSL>(advanced1, it2)
+                    || (!unsafe { current2.has_direct_verbatim_non_empty() }
+                        && it_intersect::<STAR_DSL>(it1, advanced2));
             }
             (_, b"**") => {
                 if advanced2.is_empty() {
