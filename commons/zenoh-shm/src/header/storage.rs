@@ -26,14 +26,14 @@ use super::{
 };
 
 lazy_static! {
-    pub static ref GLOBAL_HEADER_STORAGE: Storage = Storage::new().unwrap();
+    pub static ref GLOBAL_HEADER_STORAGE: HeaderStorage = HeaderStorage::new().unwrap();
 }
 
-pub struct Storage {
+pub struct HeaderStorage {
     available: Arc<Mutex<LinkedList<OwnedHeaderDescriptor>>>,
 }
 
-impl Storage {
+impl HeaderStorage {
     fn new() -> ZResult<Self> {
         let initial_header_count = 32768usize;
         let initial_segment = Arc::new(HeaderSegment::create(initial_header_count)?);

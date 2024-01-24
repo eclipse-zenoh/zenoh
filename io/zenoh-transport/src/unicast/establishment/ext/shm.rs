@@ -12,20 +12,18 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::unicast::{
+    auth_segment::{AuthChallenge, AuthSegment, AuthSegmentID},
+    auth_unicast::AuthUnicast,
     establishment::{AcceptFsm, OpenFsm},
-    shared_memory_unicast::{Challenge, SharedMemoryUnicast},
 };
 use async_trait::async_trait;
-use std::convert::TryInto;
 use zenoh_buffers::{
     reader::{DidntRead, HasReader, Reader},
     writer::{DidntWrite, HasWriter, Writer},
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_core::zasyncwrite;
 use zenoh_protocol::transport::{init, open};
 use zenoh_result::{zerror, Error as ZError};
-use zenoh_shm::SharedMemoryBufInfo;
 
 /*************************************/
 /*             InitSyn               */
@@ -35,7 +33,7 @@ use zenoh_shm::SharedMemoryBufInfo;
 /// ~ ShmMemBufInfo ~
 /// +---------------+
 pub(crate) struct InitSyn {
-    pub(crate) alice_info: SharedMemoryBufInfo,
+    pub(crate) alice_info: AuthSegmentID,
 }
 
 // Codec
@@ -58,7 +56,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<InitSyn, Self::Error> {
-        let alice_info: SharedMemoryBufInfo = self.read(&mut *reader)?;
+        let alice_info = self.read(&mut *reader)?;
         Ok(InitSyn { alice_info })
     }
 }
@@ -74,7 +72,7 @@ where
 /// +---------------+
 struct InitAck {
     alice_challenge: u64,
-    bob_info: SharedMemoryBufInfo,
+    bob_info: AuthSegmentID,
 }
 
 impl<W> WCodec<&InitAck, &mut W> for Zenoh080
@@ -98,7 +96,7 @@ where
 
     fn read(self, reader: &mut R) -> Result<InitAck, Self::Error> {
         let alice_challenge: u64 = self.read(&mut *reader)?;
-        let bob_info: SharedMemoryBufInfo = self.read(&mut *reader)?;
+        let bob_info = self.read(&mut *reader)?;
         Ok(InitAck {
             alice_challenge,
             bob_info,
@@ -124,11 +122,11 @@ where
 
 // Extension Fsm
 pub(crate) struct ShmFsm<'a> {
-    inner: &'a SharedMemoryUnicast,
+    inner: &'a AuthUnicast,
 }
 
 impl<'a> ShmFsm<'a> {
-    pub(crate) const fn new(inner: &'a SharedMemoryUnicast) -> Self {
+    pub(crate) const fn new(inner: &'a AuthUnicast) -> Self {
         Self { inner }
     }
 }
@@ -168,7 +166,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         }
 
         let init_syn = InitSyn {
-            alice_info: self.inner.challenge.info.clone(),
+            alice_info: self.inner.id(),
         };
 
         let codec = Zenoh080::new();
@@ -182,7 +180,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
     }
 
     type RecvInitAckIn = (&'a mut StateOpen, Option<init::ext::Shm>);
-    type RecvInitAckOut = Challenge;
+    type RecvInitAckOut = AuthChallenge;
     async fn recv_init_ack(
         self,
         input: Self::RecvInitAckIn,
@@ -209,13 +207,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         };
 
         // Alice challenge as seen by Alice
-        let bytes: [u8; std::mem::size_of::<Challenge>()] = self
-            .inner
-            .challenge
-            .as_slice()
-            .try_into()
-            .map_err(|e| zerror!("{}", e))?;
-        let challenge = u64::from_le_bytes(bytes);
+        let challenge = self.inner.challenge();
 
         // Verify that Bob has correctly read Alice challenge
         if challenge != init_ack.alice_challenge {
@@ -230,7 +222,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         }
 
         // Read Bob's SharedMemoryBuf
-        let shm_buff = match zasyncwrite!(self.inner.reader).read_shmbuf(&init_ack.bob_info) {
+        let bob_segment = match AuthSegment::open(init_ack.bob_info) {
             Ok(buff) => buff,
             Err(e) => {
                 log::trace!("{} {}", S, e);
@@ -240,15 +232,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         };
 
         // Bob challenge as seen by Alice
-        let bytes: [u8; std::mem::size_of::<Challenge>()] = match shm_buff.as_slice().try_into() {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                log::trace!("{} Failed to read remote Shm.", S);
-                state.is_shm = false;
-                return Ok(0);
-            }
-        };
-        let bob_challenge = u64::from_le_bytes(bytes);
+        let bob_challenge = bob_segment.challenge();
 
         Ok(bob_challenge)
     }
@@ -356,7 +340,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
     type Error = ZError;
 
     type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::Shm>);
-    type RecvInitSynOut = Challenge;
+    type RecvInitSynOut = AuthChallenge;
     async fn recv_init_syn(
         self,
         input: Self::RecvInitSynIn,
@@ -383,25 +367,10 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         };
 
         // Read Alice's SharedMemoryBuf
-        let shm_buff = match zasyncwrite!(self.inner.reader).read_shmbuf(&init_syn.alice_info) {
-            Ok(buff) => buff,
-            Err(e) => {
-                log::trace!("{} {}", S, e);
-                state.is_shm = false;
-                return Ok(0);
-            }
-        };
+        let alice_segment = AuthSegment::open(init_syn.alice_info)?;
 
         // Alice challenge as seen by Bob
-        let bytes: [u8; std::mem::size_of::<Challenge>()] = match shm_buff.as_slice().try_into() {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                log::trace!("{} Failed to read remote Shm.", S);
-                state.is_shm = false;
-                return Ok(0);
-            }
-        };
-        let alice_challenge = u64::from_le_bytes(bytes);
+        let alice_challenge = alice_segment.challenge();
 
         Ok(alice_challenge)
     }
@@ -421,7 +390,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
 
         let init_syn = InitAck {
             alice_challenge,
-            bob_info: self.inner.challenge.info.clone(),
+            bob_info: self.inner.id(),
         };
 
         let codec = Zenoh080::new();
@@ -453,13 +422,7 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         };
 
         // Bob challenge as seen by Bob
-        let bytes: [u8; std::mem::size_of::<Challenge>()] = self
-            .inner
-            .challenge
-            .as_slice()
-            .try_into()
-            .map_err(|e| zerror!("{}", e))?;
-        let challenge = u64::from_le_bytes(bytes);
+        let challenge = self.inner.challenge();
 
         // Verify that Alice has correctly read Bob challenge
         let bob_challnge = ext.value;

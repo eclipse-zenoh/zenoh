@@ -25,13 +25,16 @@ use crate::{
             shared_memory_client::SharedMemoryClient, shared_memory_segment::SharedMemorySegment,
         },
         common::types::{ProtocolID, SegmentID},
+        protocol_implementations::posix::{
+            posix_shared_memory_client::PosixSharedMemoryClient, protocol_id::POSIX_PROTOCOL_ID,
+        },
     },
     header::subscription::GLOBAL_HEADER_SUBSCRIPTION,
     watchdog::confirmator::GLOBAL_CONFIRMATOR,
     SharedMemoryBuf, SharedMemoryBufInfo,
 };
 
-#[derive(PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 struct GlobalDataSegmentID {
     protocol: ProtocolID,
     segment: SegmentID,
@@ -43,13 +46,35 @@ impl GlobalDataSegmentID {
     }
 }
 
-pub struct SharedMemoryConsumer {
+#[derive(Debug)]
+pub struct SharedMemoryReader {
     clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>,
     segments: RwLock<HashMap<GlobalDataSegmentID, Arc<dyn SharedMemorySegment>>>,
 }
 
-impl SharedMemoryConsumer {
-    pub fn new(clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>) -> Self {
+impl Eq for SharedMemoryReader {}
+
+impl PartialEq for SharedMemoryReader {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(self, other)
+    }
+}
+
+impl Default for SharedMemoryReader {
+    fn default() -> Self {
+        let clients = HashMap::from([(
+            POSIX_PROTOCOL_ID,
+            Box::new(PosixSharedMemoryClient {}) as Box<dyn SharedMemoryClient>,
+        )]);
+        Self {
+            clients,
+            segments: Default::default(),
+        }
+    }
+}
+
+impl SharedMemoryReader {
+    pub(crate) fn new(clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>) -> Self {
         Self {
             clients,
             segments: RwLock::default(),

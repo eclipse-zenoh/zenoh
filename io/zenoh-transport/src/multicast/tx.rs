@@ -56,7 +56,7 @@ impl TransportMulticastInner {
             let res = if self.manager.config.multicast.is_shm {
                 crate::shm::map_zmsg_to_shminfo(&mut msg)
             } else {
-                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.state.multicast.shm.reader)
+                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr)
             };
             if let Err(e) = res {
                 log::trace!("Failed SHM conversion: {}", e);

@@ -23,6 +23,7 @@ use crate::posix_shm::array::ArrayInSHM;
 
 const POSIX_SHM_SEGMENT_PREFIX: &str = "posix_shm_provider";
 
+#[derive(Debug)]
 pub(crate) struct PosixSharedMemorySegment {
     pub(crate) segment: ArrayInSHM<SegmentID, u8, ChunkID>,
 }

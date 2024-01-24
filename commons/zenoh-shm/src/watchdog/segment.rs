@@ -27,9 +27,6 @@ pub struct Segment {
     pub array: ArrayInSHM<SegmentID, AtomicU64, u32>,
 }
 
-unsafe impl Send for Segment {}
-unsafe impl Sync for Segment {}
-
 impl Segment {
     pub fn create(watchdog_count: usize) -> ZResult<Self> {
         let elem_count = (watchdog_count + 63) / 64;

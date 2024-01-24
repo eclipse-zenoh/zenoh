@@ -30,7 +30,7 @@ impl TransportUnicastLowlatency {
             let res = if self.config.is_shm {
                 crate::shm::map_zmsg_to_shminfo(&mut msg)
             } else {
-                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shm().reader)
+                crate::shm::map_zmsg_to_shmbuf(&mut msg, &self.manager.shmr)
             };
             if let Err(e) = res {
                 bail!("Failed SHM conversion: {}", e);

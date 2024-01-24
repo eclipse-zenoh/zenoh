@@ -25,6 +25,7 @@ use crate::api::{
 
 use super::posix_shared_memory_segment::PosixSharedMemorySegment;
 
+#[derive(Debug)]
 pub struct PosixSharedMemoryClient;
 
 // SharedMemoryClient - client factory implementation for particular shared memory protocol

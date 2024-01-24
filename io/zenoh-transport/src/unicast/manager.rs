@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #[cfg(feature = "shared-memory")]
-use super::shared_memory_unicast::SharedMemoryUnicast;
+use super::auth_unicast::AuthUnicast;
 use super::{link::LinkUnicastWithOpenAck, transport_unicast_inner::InitTransportResult};
 #[cfg(feature = "transport_auth")]
 use crate::unicast::establishment::ext::auth::Auth;
@@ -79,9 +79,9 @@ pub struct TransportManagerStateUnicast {
     // Active authenticators
     #[cfg(feature = "transport_auth")]
     pub(super) authenticator: Arc<Auth>,
-    // Shared memory
+    // SHM probing
     #[cfg(feature = "shared-memory")]
-    pub(super) shm: Arc<SharedMemoryUnicast>,
+    pub(super) auth_shm: Arc<AuthUnicast>,
 }
 
 pub struct TransportManagerParamsUnicast {
@@ -235,10 +235,10 @@ impl TransportManagerBuilderUnicast {
             transports: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(feature = "transport_multilink")]
             multilink: Arc::new(MultiLink::make(prng)?),
-            #[cfg(feature = "shared-memory")]
-            shm: Arc::new(SharedMemoryUnicast::make()?),
             #[cfg(feature = "transport_auth")]
             authenticator: Arc::new(self.authenticator),
+            #[cfg(feature = "shared-memory")]
+            auth_shm: Arc::new(AuthUnicast::new()?),
         };
 
         let params = TransportManagerParamsUnicast { config, state };
@@ -283,11 +283,6 @@ impl Default for TransportManagerBuilderUnicast {
 impl TransportManager {
     pub fn config_unicast() -> TransportManagerBuilderUnicast {
         TransportManagerBuilderUnicast::default()
-    }
-
-    #[cfg(feature = "shared-memory")]
-    pub(crate) fn shm(&self) -> &Arc<SharedMemoryUnicast> {
-        &self.state.unicast.shm
     }
 
     pub async fn close_unicast(&self) {

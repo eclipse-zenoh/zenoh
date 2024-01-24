@@ -33,6 +33,8 @@ use zenoh_protocol::{
     VERSION,
 };
 use zenoh_result::{bail, ZResult};
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::reader::SharedMemoryReader;
 
 /// # Examples
 /// ```
@@ -130,6 +132,8 @@ pub struct TransportManagerBuilder {
     endpoints: HashMap<String, String>, // (protocol, config)
     tx_threads: usize,
     protocols: Option<Vec<String>>,
+    #[cfg(feature = "shared-memory")]
+    shm_reader: Option<Arc<SharedMemoryReader>>,
 }
 
 impl TransportManagerBuilder {
@@ -288,7 +292,13 @@ impl TransportManagerBuilder {
 
         let params = TransportManagerParams { config, state };
 
-        Ok(TransportManager::new(params, prng))
+        Ok(TransportManager::new(
+            params,
+            prng,
+            #[cfg(feature = "shared-memory")]
+            self.shm_reader
+                .unwrap_or_else(|| Arc::new(SharedMemoryReader::default())),
+        ))
     }
 }
 
@@ -312,6 +322,8 @@ impl Default for TransportManagerBuilder {
             multicast: TransportManagerBuilderMulticast::default(),
             tx_threads: 1,
             protocols: None,
+            #[cfg(feature = "shared-memory")]
+            shm_reader: None,
         }
     }
 }
@@ -358,12 +370,18 @@ pub struct TransportManager {
     pub(crate) locator_inspector: zenoh_link::LocatorInspector,
     pub(crate) new_unicast_link_sender: NewLinkChannelSender,
     pub(crate) tx_executor: TransportExecutor,
+    #[cfg(feature = "shared-memory")]
+    pub(crate) shmr: Arc<SharedMemoryReader>,
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
 }
 
 impl TransportManager {
-    pub fn new(params: TransportManagerParams, mut prng: PseudoRng) -> TransportManager {
+    pub fn new(
+        params: TransportManagerParams,
+        mut prng: PseudoRng,
+        #[cfg(feature = "shared-memory")] shmr: Arc<SharedMemoryReader>,
+    ) -> TransportManager {
         // Initialize the Cipher
         let mut key = [0_u8; BlockCipher::BLOCK_SIZE];
         prng.fill_bytes(&mut key);
@@ -383,6 +401,8 @@ impl TransportManager {
             tx_executor: TransportExecutor::new(tx_threads),
             #[cfg(feature = "stats")]
             stats: std::sync::Arc::new(crate::stats::TransportStats::default()),
+            #[cfg(feature = "shared-memory")]
+            shmr,
         };
 
         // @TODO: this should be moved into the unicast module

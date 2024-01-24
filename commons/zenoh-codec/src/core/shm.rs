@@ -18,7 +18,7 @@ use zenoh_buffers::{
 };
 use zenoh_shm::{
     api::provider::chunk::ChunkDescriptor, header::descriptor::HeaderDescriptor,
-    posix_shm::segment, watchdog::descriptor::Descriptor, SharedMemoryBufInfo,
+    watchdog::descriptor::Descriptor, SharedMemoryBufInfo,
 };
 
 impl<W> WCodec<&Descriptor, &mut W> for Zenoh080

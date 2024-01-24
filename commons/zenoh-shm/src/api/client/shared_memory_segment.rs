@@ -12,6 +12,8 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use std::fmt::Debug;
+
 use std::sync::atomic::AtomicPtr;
 
 use zenoh_result::ZResult;
@@ -19,7 +21,7 @@ use zenoh_result::ZResult;
 use crate::api::common::types::ChunkID;
 
 // SharedMemorySegment - RAII interface to interact with particular shared segment
-pub trait SharedMemorySegment: Send + Sync {
+pub trait SharedMemorySegment: Debug + Send + Sync {
     // Obtain the actual region of memory identified by it's id
     fn map(&self, chunk: ChunkID) -> ZResult<AtomicPtr<u8>>;
 }

@@ -11,10 +11,9 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::{sync::RwLock, task};
 use zenoh_buffers::{reader::HasReader, writer::HasWriter, ZBuf, ZSlice, ZSliceKind};
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
-use zenoh_core::{zasyncread, zasyncwrite, zerror};
+use zenoh_core::zerror;
 use zenoh_protocol::{
     network::{NetworkBody, NetworkMessage, Push, Request, Response},
     zenoh::{
@@ -25,12 +24,12 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
-use zenoh_shm::{SharedMemoryBuf, SharedMemoryBufInfo, SharedMemoryReader};
+use zenoh_shm::{reader::SharedMemoryReader, SharedMemoryBuf, SharedMemoryBufInfo};
 
 // Traits
 trait MapShm {
     fn map_to_shminfo(&mut self) -> ZResult<bool>;
-    fn map_to_shmbuf(&mut self, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool>;
+    fn map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<bool>;
 }
 
 macro_rules! map_to_shminfo {
@@ -63,7 +62,7 @@ impl MapShm for Put {
         map_to_shminfo!(payload, ext_shm)
     }
 
-    fn map_to_shmbuf(&mut self, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
+    fn map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<bool> {
         let Self {
             payload, ext_shm, ..
         } = self;
@@ -87,7 +86,7 @@ impl MapShm for Query {
         }
     }
 
-    fn map_to_shmbuf(&mut self, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
+    fn map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<bool> {
         if let Self {
             ext_body: Some(QueryBodyType {
                 payload, ext_shm, ..
@@ -111,7 +110,7 @@ impl MapShm for Reply {
         map_to_shminfo!(payload, ext_shm)
     }
 
-    fn map_to_shmbuf(&mut self, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
+    fn map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<bool> {
         let Self {
             payload, ext_shm, ..
         } = self;
@@ -135,7 +134,7 @@ impl MapShm for Err {
         }
     }
 
-    fn map_to_shmbuf(&mut self, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
+    fn map_to_shmbuf(&mut self, shmr: &SharedMemoryReader) -> ZResult<bool> {
         if let Self {
             ext_body: Some(ErrBodyType {
                 payload, ext_shm, ..
@@ -203,10 +202,7 @@ pub fn map_zslice_to_shminfo(shmb: &SharedMemoryBuf) -> ZResult<ZSlice> {
 }
 
 // ShmInfo -> ShmBuf
-pub fn map_zmsg_to_shmbuf(
-    msg: &mut NetworkMessage,
-    shmr: &RwLock<SharedMemoryReader>,
-) -> ZResult<bool> {
+pub fn map_zmsg_to_shmbuf(msg: &mut NetworkMessage, shmr: &SharedMemoryReader) -> ZResult<bool> {
     match &mut msg.body {
         NetworkBody::Push(Push { payload, .. }) => match payload {
             PushBody::Put(b) => b.map_to_shmbuf(shmr),
@@ -228,7 +224,7 @@ pub fn map_zmsg_to_shmbuf(
 }
 
 // Mapping
-pub fn map_zbuf_to_shmbuf(zbuf: &mut ZBuf, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
+pub fn map_zbuf_to_shmbuf(zbuf: &mut ZBuf, shmr: &SharedMemoryReader) -> ZResult<bool> {
     let mut res = false;
     for zs in zbuf.zslices_mut().filter(|x| x.kind == ZSliceKind::ShmPtr) {
         res |= map_zslice_to_shmbuf(zs, shmr)?;
@@ -238,23 +234,14 @@ pub fn map_zbuf_to_shmbuf(zbuf: &mut ZBuf, shmr: &RwLock<SharedMemoryReader>) ->
 
 #[cold]
 #[inline(never)]
-pub fn map_zslice_to_shmbuf(
-    zslice: &mut ZSlice,
-    shmr: &RwLock<SharedMemoryReader>,
-) -> ZResult<bool> {
+pub fn map_zslice_to_shmbuf(zslice: &mut ZSlice, shmr: &SharedMemoryReader) -> ZResult<bool> {
     // Deserialize the shmb info into shm buff
     let codec = Zenoh080::new();
     let mut reader = zslice.reader();
 
     let shmbinfo: SharedMemoryBufInfo = codec.read(&mut reader).map_err(|e| zerror!("{:?}", e))?;
 
-    // First, try in read mode allowing concurrenct lookups
-    let r_guard = task::block_on(async { zasyncread!(shmr) });
-    let smb = r_guard.try_read_shmbuf(&shmbinfo).or_else(|_| {
-        drop(r_guard);
-        let mut w_guard = task::block_on(async { zasyncwrite!(shmr) });
-        w_guard.read_shmbuf(&shmbinfo)
-    })?;
+    let smb = shmr.read_shmbuf(&shmbinfo)?;
 
     // Replace the content of the slice
     let zs: ZSlice = smb.into();

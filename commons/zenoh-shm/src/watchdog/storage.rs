@@ -22,17 +22,17 @@ use zenoh_result::{zerror, ZResult};
 use super::{allocated_watchdog::AllocatedWatchdog, descriptor::OwnedDescriptor, segment::Segment};
 
 lazy_static! {
-    pub static ref GLOBAL_STORAGE: Storage = Storage::new(65536).unwrap();
+    pub static ref GLOBAL_STORAGE: WatchdogStorage = WatchdogStorage::new(65536).unwrap();
 }
 
-pub struct Storage {
+pub struct WatchdogStorage {
     available: Arc<Mutex<BTreeSet<OwnedDescriptor>>>,
 }
 
 // todo: expand and shrink Storage when needed
 // OR
 // support multiple descrptor assignment (allow multiple buffers to be assigned to the same watchdog)
-impl Storage {
+impl WatchdogStorage {
     pub fn new(initial_watchdog_count: usize) -> ZResult<Self> {
         let segment = Arc::new(Segment::create(initial_watchdog_count)?);
 

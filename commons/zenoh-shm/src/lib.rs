@@ -53,13 +53,12 @@ macro_rules! test_helpers_module {
 
 pub mod api;
 pub mod header;
+pub mod reader;
 pub mod runtime;
 pub mod watchdog;
 
 tested_module!(posix_shm);
 tested_module!(segment);
-
-mod consumer;
 
 test_helpers_module!();
 

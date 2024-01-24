@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 #[cfg(feature = "shared-memory")]
-use crate::unicast::shared_memory_unicast::Challenge;
+use crate::unicast::auth_segment::AuthChallenge;
 use crate::{
     common::batch::BatchConfig,
     unicast::{
@@ -81,7 +81,7 @@ struct RecvInitAckOut {
     other_whatami: WhatAmI,
     other_cookie: ZSlice,
     #[cfg(feature = "shared-memory")]
-    ext_shm: Challenge,
+    ext_shm: AuthChallenge,
 }
 
 // OpenSyn
@@ -91,7 +91,7 @@ struct SendOpenSynIn {
     other_zid: ZenohId,
     other_cookie: ZSlice,
     #[cfg(feature = "shared-memory")]
-    ext_shm: Challenge,
+    ext_shm: AuthChallenge,
 }
 
 struct SendOpenSynOut {
@@ -531,7 +531,7 @@ pub(crate) async fn open_link(
         #[cfg(feature = "transport_multilink")]
         ext_mlink: manager.state.unicast.multilink.fsm(&manager.prng),
         #[cfg(feature = "shared-memory")]
-        ext_shm: ext::shm::ShmFsm::new(&manager.state.unicast.shm),
+        ext_shm: ext::shm::ShmFsm::new(&manager.state.unicast.auth_shm),
         #[cfg(feature = "transport_auth")]
         ext_auth: manager.state.unicast.authenticator.fsm(&manager.prng),
         ext_lowlatency: ext::lowlatency::LowLatencyFsm::new(),

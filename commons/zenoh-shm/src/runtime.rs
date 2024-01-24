@@ -12,8 +12,11 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use crate::consumer::SharedMemoryConsumer;
+use std::sync::Arc;
 
+use crate::reader::SharedMemoryReader;
+
+#[derive(Clone)]
 pub struct SharedMemoryRuntime {
-    pub(crate) consumer: SharedMemoryConsumer,
+    pub(crate) reader: Arc<SharedMemoryReader>,
 }

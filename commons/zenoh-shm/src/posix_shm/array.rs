@@ -26,6 +26,9 @@ pub struct ArrayInSHM<ID, Elem, ElemIndex> {
     _phantom: PhantomData<(Elem, ElemIndex)>,
 }
 
+unsafe impl<ID, Elem: Sync, ElemIndex> Sync for ArrayInSHM<ID, Elem, ElemIndex> {}
+unsafe impl<ID, Elem: Send, ElemIndex> Send for ArrayInSHM<ID, Elem, ElemIndex> {}
+
 impl<ID, Elem, ElemIndex> ArrayInSHM<ID, Elem, ElemIndex>
 where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,

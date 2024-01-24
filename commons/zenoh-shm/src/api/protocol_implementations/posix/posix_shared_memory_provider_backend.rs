@@ -79,7 +79,7 @@ impl PosixSharedMemoryProviderBackend {
             segment.segment.id()
         );
 
-        Ok( Self {
+        Ok(Self {
             available: size,
             segment,
             free_list,

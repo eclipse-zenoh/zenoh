@@ -22,7 +22,9 @@ pub(crate) mod universal;
 pub mod test_helpers;
 
 #[cfg(feature = "shared-memory")]
-pub(crate) mod shared_memory_unicast;
+pub(crate) mod auth_segment;
+#[cfg(feature = "shared-memory")]
+pub(crate) mod auth_unicast;
 
 use self::transport_unicast_inner::TransportUnicastTrait;
 

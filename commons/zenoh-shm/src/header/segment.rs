@@ -27,9 +27,6 @@ pub struct HeaderSegment {
     pub array: ArrayInSHM<HeaderSegmentID, ChunkHeaderType, HeaderIndex>,
 }
 
-unsafe impl Send for HeaderSegment {}
-unsafe impl Sync for HeaderSegment {}
-
 impl HeaderSegment {
     pub fn create(header_count: usize) -> ZResult<Self> {
         let array = ArrayInSHM::create(header_count, HEADER_SEGMENT_PREFIX)?;
