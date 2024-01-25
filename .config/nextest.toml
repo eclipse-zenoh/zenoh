@@ -6,10 +6,8 @@ slow-timeout = { period = "60s", terminate-after = 2 }
 # Run the following tests exclusively with longer timeout
 [[profile.default.overrides]]
 filter = """
-test(=zenoh_session_unicast) |
-test(=zenoh_session_multicast) |
-test(=transport_tcp_intermittent) |
-test(=transport_tcp_intermittent_for_lowlatency_transport) |
+test(=zenoh_session_unicast) |\
+test(=zenoh_session_multicast) |\
 test(=three_node_combination)
 """
 threads-required = 'num-cpus'
