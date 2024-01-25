@@ -15,5 +15,5 @@ description = { workspace = true }
 [dependencies]
 lazy_static = { workspace = true }
 zenoh-result = { workspace = true, features = ["std"] }
-zenoh-collections = { workspace = true }
+zenoh-collections = { workspace = true, features = ["std"] }
 tokio = { workspace = true, features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
