@@ -288,15 +288,13 @@ impl Recipe {
                     println!("Node: {} starting...", &node.name);
 
                     // In case of client can't connect to some peers/routers
-                    let session = loop {
+                    loop {
                         if let Ok(session) = zenoh::open(config.clone()).res_async().await {
                             break session.into_arc();
                         } else {
                             tokio::time::sleep(Duration::from_secs(1)).await;
                         }
-                    };
-
-                    session
+                    }
                 };
 
                 let mut node_join_set = tokio::task::JoinSet::new();
@@ -321,7 +319,7 @@ impl Recipe {
                 }
 
                 while let Some(res) = node_join_set.join_next().await {
-                    let _ = res??;
+                    res??;
                 }
                 // node_task_tracker.close();
                 // node_task_tracker.wait().await;
@@ -352,7 +350,7 @@ impl Recipe {
                 },
                 res = recipe_join_set.join_next() => {
                     if let Some(res) = res {
-                        let _ = res??;
+                        res??;
                     } else {
                         break
                     }
@@ -613,12 +611,12 @@ async fn three_node_combination() -> Result<()> {
         }
 
         while let Some(res) = join_set.join_next().await {
-            let _ = res??;
+            res??;
         }
     }
 
     println!("Three-node combination test passed.");
-    return Result::Ok(());
+    Ok(())
 }
 
 // All test cases varying in
