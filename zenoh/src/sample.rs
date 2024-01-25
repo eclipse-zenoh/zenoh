@@ -112,6 +112,7 @@ mod attachment {
 
     /// A builder for [`Attachment`]
     #[zenoh_macros::unstable]
+    #[derive(Debug)]
     pub struct AttachmentBuilder {
         pub(crate) inner: Vec<u8>,
     }
