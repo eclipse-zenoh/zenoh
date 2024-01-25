@@ -173,14 +173,14 @@ impl LinkUnicastTrait for LinkUnicastTcp {
 
 // WARN assume the drop of TcpStream would clean itself
 // https://docs.rs/tokio/latest/tokio/net/struct.TcpStream.html#method.into_split
-// impl Drop for LinkUnicastTcp {
-//     fn drop(&mut self) {
-//         // Close the underlying TCP socket
-//         ZRuntime::TX.handle().block_on(async {
-//             let _ = self.get_mut_socket().shutdown().await;
-//         });
-//     }
-// }
+impl Drop for LinkUnicastTcp {
+    fn drop(&mut self) {
+        // Close the underlying TCP socket
+        zenoh_runtime::ZRuntime::Transport.block_in_place(async {
+            let _ = self.get_mut_socket().shutdown().await;
+        });
+    }
+}
 
 impl fmt::Display for LinkUnicastTcp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
