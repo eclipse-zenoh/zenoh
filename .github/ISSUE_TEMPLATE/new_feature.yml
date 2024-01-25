@@ -1,6 +1,7 @@
-name: Request a feature
+name: New feature
 description: |
-  Suggest a new feature specific to this repository.
+  Suggest a new feature.
+labels: ["new feature"]
 body:
   - type: markdown
     attributes:

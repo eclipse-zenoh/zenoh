@@ -1,7 +1,7 @@
-name: Bug
+name: Bug report (Release)
 description: |
-  Report a bug.
-labels: ["bug"]
+  Suggest that a bugfix be part of the next release.
+labels: ["bug", "release"]
 body:
   - type: textarea
     id: summary
