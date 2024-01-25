@@ -1,6 +1,6 @@
 name: Request a feature
 description: |
-  Suggest a new feature specific to this repository. NOTE: for generic Zenoh ideas use "Ask a question".
+  Suggest a new feature specific to this repository.
 body:
   - type: markdown
     attributes:
