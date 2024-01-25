@@ -31,7 +31,7 @@ async fn create_session_pair(locator: &str) -> Result<(Session, Session)> {
             .unwrap();
         config
     };
-    let config2 = zenoh::config::client([Locator::from_str(&locator)?]);
+    let config2 = zenoh::config::client([Locator::from_str(locator)?]);
 
     let session1 = ztimeout!(zenoh::open(config1).res_async())?;
     let session2 = ztimeout!(zenoh::open(config2).res_async())?;

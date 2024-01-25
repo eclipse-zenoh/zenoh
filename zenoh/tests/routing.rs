@@ -31,7 +31,7 @@ const TIMEOUT: Duration = Duration::from_secs(30);
 const MSG_COUNT: usize = 50;
 const MSG_SIZE: [usize; 2] = [1_024, 131_072];
 // Maximal recipes to run at once
-const PARALLEL_RECIPES: usize = 8;
+const PARALLEL_RECIPES: usize = 4;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Task {
