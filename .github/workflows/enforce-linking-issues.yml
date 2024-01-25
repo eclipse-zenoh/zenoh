@@ -11,7 +11,7 @@ defaults:
 
 jobs:
   main:
-    name: Check if pull request has a linked issue
+    name: Check if the pull request has a linked issue
     runs-on: ubuntu-latest
     steps:
       - name: Count closing issue references
@@ -43,7 +43,7 @@ jobs:
               .totalCount > 0;
 
       - if: ${{ steps.has-closing-issue.outputs.result != 'true' }}
-        name: Suggest that the contributor linked an issue
+        name: Suggest that the contributor link an issue
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.BOT_TOKEN_WORKFLOW }}
