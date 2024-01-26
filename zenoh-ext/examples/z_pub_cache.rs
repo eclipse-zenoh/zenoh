@@ -60,12 +60,12 @@ fn parse_args() -> (Config, String, String, usize, Option<String>, bool) {
         )
         .arg(arg!(-v --value [VALUE]      "The value to publish.").default_value("Pub from Rust!"))
         .arg(
-            arg!(-h --history [SIZE] "The number of publications to keep in cache")
+            arg!(-i --history [SIZE] "The number of publications to keep in cache")
                 .default_value("1"),
         )
         .arg(arg!(-x --prefix [STRING] "An optional queryable prefix"))
         .arg(arg!(-c --config [FILE]      "A configuration file."))
-        // .arg(arg!(-o --complete  "Set `complete` option to true. This means that this queryable is ulitmate data source, no need to scan other queryables."))
+        .arg(arg!(-o --complete  "Set `complete` option to true. This means that this queryable is ulitmate data source, no need to scan other queryables."))
         .arg(arg!(--"no-multicast-scouting" "Disable the multicast-based scouting mechanism."))
         .get_matches();
 
