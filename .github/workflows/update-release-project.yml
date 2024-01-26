@@ -60,7 +60,6 @@ jobs:
             const login = "${{ github.event.issue.user.login }}";
 
             const result = contributors
-              .data
               .map(c => c.login)
               .includes(login);
 
