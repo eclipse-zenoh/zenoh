@@ -284,6 +284,70 @@ pub enum SessionRef<'a> {
     Shared(Arc<Session>),
 }
 
+impl<'a> SessionRef<'a> {
+    pub fn declare_subscriber<'b, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+    {
+        SubscriberBuilder {
+            session: self.clone(),
+            key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
+            reliability: Reliability::default(),
+            mode: PushMode,
+            origin: Locality::default(),
+            handler: DefaultHandler,
+        }
+    }
+
+    pub fn declare_queryable<'b, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> QueryableBuilder<'a, 'b, DefaultHandler>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+    {
+        QueryableBuilder {
+            session: self.clone(),
+            key_expr: key_expr.try_into().map_err(Into::into),
+            complete: false,
+            origin: Locality::default(),
+            handler: DefaultHandler,
+        }
+    }
+    pub fn declare_publisher<'b, TryIntoKeyExpr>(
+        &self,
+        key_expr: TryIntoKeyExpr,
+    ) -> PublisherBuilder<'a, 'b>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+    {
+        PublisherBuilder {
+            session: self.clone(),
+            key_expr: key_expr.try_into().map_err(Into::into),
+            congestion_control: CongestionControl::default(),
+            priority: Priority::default(),
+            destination: Locality::default(),
+        }
+    }
+    #[zenoh_macros::unstable]
+    pub fn liveliness(&self) -> Liveliness<'a> {
+        Liveliness {
+            session: self.clone(),
+        }
+    }
+    pub fn info(&self) -> SessionInfo<'a> {
+        SessionInfo {
+            session: self.clone(),
+        }
+    }
+}
+
 impl Deref for SessionRef<'_> {
     type Target = Session;
 
@@ -512,9 +576,7 @@ impl Session {
     /// # })
     /// ```
     pub fn info(&self) -> SessionInfo {
-        SessionInfo {
-            session: SessionRef::Borrow(self),
-        }
+        SessionRef::Borrow(self).info()
     }
 
     /// Create a [`Subscriber`](Subscriber) for the given key expression.
@@ -543,14 +605,7 @@ impl Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        SubscriberBuilder {
-            session: SessionRef::Borrow(self),
-            key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
-            reliability: Reliability::default(),
-            mode: PushMode,
-            origin: Locality::default(),
-            handler: DefaultHandler,
-        }
+        SessionRef::Borrow(self).declare_subscriber(key_expr)
     }
 
     /// Create a [`Queryable`](Queryable) for the given key expression.
@@ -583,13 +638,7 @@ impl Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        QueryableBuilder {
-            session: SessionRef::Borrow(self),
-            key_expr: key_expr.try_into().map_err(Into::into),
-            complete: false,
-            origin: Locality::default(),
-            handler: DefaultHandler,
-        }
+        SessionRef::Borrow(self).declare_queryable(key_expr)
     }
 
     /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
@@ -619,13 +668,7 @@ impl Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        PublisherBuilder {
-            session: SessionRef::Borrow(self),
-            key_expr: key_expr.try_into().map_err(Into::into),
-            congestion_control: CongestionControl::default(),
-            priority: Priority::default(),
-            destination: Locality::default(),
-        }
+        SessionRef::Borrow(self).declare_publisher(key_expr)
     }
 
     /// Informs Zenoh that you intend to use `key_expr` multiple times and that it should optimize its transmission.
@@ -827,9 +870,7 @@ impl Session {
     /// ```
     #[zenoh_macros::unstable]
     pub fn liveliness(&self) -> Liveliness {
-        Liveliness {
-            session: SessionRef::Borrow(self),
-        }
+        SessionRef::Borrow(self).liveliness()
     }
 }
 

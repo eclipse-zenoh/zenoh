@@ -32,7 +32,8 @@ pub struct PublicationCacheBuilder<'a, 'b, 'c> {
     session: SessionRef<'a>,
     pub_key_expr: ZResult<KeyExpr<'b>>,
     queryable_prefix: Option<ZResult<KeyExpr<'c>>>,
-    queryable_origin: Locality,
+    queryable_origin: Option<Locality>,
+    complete: Option<bool>,
     history: usize,
     resources_limit: Option<usize>,
 }
@@ -46,7 +47,8 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
             session,
             pub_key_expr,
             queryable_prefix: None,
-            queryable_origin: Locality::default(),
+            queryable_origin: None,
+            complete: None,
             history: 1,
             resources_limit: None,
         }
@@ -67,7 +69,13 @@ impl<'a, 'b, 'c> PublicationCacheBuilder<'a, 'b, 'c> {
     #[zenoh_macros::unstable]
     #[inline]
     pub fn queryable_allowed_origin(mut self, origin: Locality) -> Self {
-        self.queryable_origin = origin;
+        self.queryable_origin = Some(origin);
+        self
+    }
+
+    /// Set completeness option for the queryable.
+    pub fn queryable_complete(mut self, complete: bool) -> Self {
+        self.complete = Some(complete);
         self
     }
 
@@ -137,28 +145,21 @@ impl<'a> PublicationCache<'a> {
         }
 
         // declare the local subscriber that will store the local publications
-        let (local_sub, queryable) = match conf.session.clone() {
-            SessionRef::Borrow(session) => (
-                session
-                    .declare_subscriber(&key_expr)
-                    .allowed_origin(Locality::SessionLocal)
-                    .res_sync()?,
-                session
-                    .declare_queryable(&queryable_key_expr)
-                    .allowed_origin(conf.queryable_origin)
-                    .res_sync()?,
-            ),
-            SessionRef::Shared(session) => (
-                session
-                    .declare_subscriber(&key_expr)
-                    .allowed_origin(Locality::SessionLocal)
-                    .res_sync()?,
-                session
-                    .declare_queryable(&queryable_key_expr)
-                    .allowed_origin(conf.queryable_origin)
-                    .res_sync()?,
-            ),
-        };
+        let local_sub = conf
+            .session
+            .declare_subscriber(&key_expr)
+            .allowed_origin(Locality::SessionLocal)
+            .res_sync()?;
+
+        // declare the queryable which returns the cached publications
+        let mut queryable = conf.session.declare_queryable(&queryable_key_expr);
+        if let Some(origin) = conf.queryable_origin {
+            queryable = queryable.allowed_origin(origin);
+        }
+        if let Some(complete) = conf.complete {
+            queryable = queryable.complete(complete);
+        }
+        let queryable = queryable.res_sync()?;
 
         // take local ownership of stuff to be moved into task
         let sub_recv = local_sub.receiver.clone();

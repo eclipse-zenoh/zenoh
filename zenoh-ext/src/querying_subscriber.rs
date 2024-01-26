@@ -680,33 +680,20 @@ impl<'a, Receiver> FetchingSubscriber<'a, Receiver> {
         // register fetch handler
         let handler = register_handler(state.clone(), callback.clone());
         // declare subscriber
-        let subscriber = match conf.session.clone() {
-            SessionRef::Borrow(session) => match conf.key_space.into() {
-                crate::KeySpace::User => session
-                    .declare_subscriber(&key_expr)
-                    .callback(sub_callback)
-                    .reliability(conf.reliability)
-                    .allowed_origin(conf.origin)
-                    .res_sync()?,
-                crate::KeySpace::Liveliness => session
-                    .liveliness()
-                    .declare_subscriber(&key_expr)
-                    .callback(sub_callback)
-                    .res_sync()?,
-            },
-            SessionRef::Shared(session) => match conf.key_space.into() {
-                crate::KeySpace::User => session
-                    .declare_subscriber(&key_expr)
-                    .callback(sub_callback)
-                    .reliability(conf.reliability)
-                    .allowed_origin(conf.origin)
-                    .res_sync()?,
-                crate::KeySpace::Liveliness => session
-                    .liveliness()
-                    .declare_subscriber(&key_expr)
-                    .callback(sub_callback)
-                    .res_sync()?,
-            },
+        let subscriber = match conf.key_space.into() {
+            crate::KeySpace::User => conf
+                .session
+                .declare_subscriber(&key_expr)
+                .callback(sub_callback)
+                .reliability(conf.reliability)
+                .allowed_origin(conf.origin)
+                .res_sync()?,
+            crate::KeySpace::Liveliness => conf
+                .session
+                .liveliness()
+                .declare_subscriber(&key_expr)
+                .callback(sub_callback)
+                .res_sync()?,
         };
 
         let fetch_subscriber = FetchingSubscriber {
