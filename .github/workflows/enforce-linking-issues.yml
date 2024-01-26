@@ -50,7 +50,7 @@ jobs:
           script: |
             const login = "${{ github.event.pull_request.user.login }}";
             const syntaxUrl = "https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue";
-            const message = `@${login} Please consider linking this pull request to an issue using \`Closes #ISSUE-NUMBER\` [syntax](syntaxUrl), \
+            const message = `@${login} Please consider linking this pull request to an issue using \`Closes #ISSUE-NUMBER\` [syntax](${syntaxUrl}), \
             especially if this pull request contains a bugfix, an enchancement or a new feature.`;
 
             github.rest.issues.createComment({
