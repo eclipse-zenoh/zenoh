@@ -27,11 +27,11 @@ use zenoh_core::ztimeout;
 use zenoh_protocol::core::{WhatAmI, WhatAmIMatcher};
 use zenoh_result::bail;
 
-const TIMEOUT: Duration = Duration::from_secs(30);
+const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;
 const MSG_SIZE: [usize; 2] = [1_024, 131_072];
 // Maximal recipes to run at once
-const PARALLEL_RECIPES: usize = 4;
+const PARALLEL_RECIPES: usize = 16;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Task {
@@ -346,6 +346,9 @@ impl Recipe {
                     // Termination
                     remaining_checkpoints.swap(0, Ordering::Relaxed);
                     self.token.cancel();
+                    while let Some(res) = recipe_join_set.join_next().await {
+                        res??;
+                    }
                     bail!("Timeout");
                 },
                 res = recipe_join_set.join_next() => {
@@ -600,7 +603,8 @@ async fn three_node_combination() -> Result<()> {
         )
         .collect();
 
-    for chunks in recipe_list.chunks(PARALLEL_RECIPES).map(|x| x.to_vec()) {
+    // TODO: It should be able to run concurrently
+    for chunks in recipe_list.chunks(1).map(|x| x.to_vec()) {
         let mut join_set = tokio::task::JoinSet::new();
         for (pubsub, getqueryable) in chunks {
             join_set.spawn(async move {
