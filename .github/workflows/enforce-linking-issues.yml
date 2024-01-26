@@ -1,4 +1,4 @@
-name: Enforce linking issues to pull requests
+name: Enforce linking issues
 
 on:
   pull_request_target:
@@ -11,7 +11,7 @@ defaults:
 
 jobs:
   main:
-    name: Check if the pull request has a linked issue
+    name: Enforce referencing a closing issue
     runs-on: ubuntu-latest
     steps:
       - name: Count closing issue references

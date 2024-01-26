@@ -1,4 +1,4 @@
-name: Add relevant issues to the release project
+name: Update release project
 
 on:
   issues:
@@ -11,7 +11,7 @@ defaults:
 
 jobs:
   main:
-    name: Add issue to the release project
+    name: Add relevant issue to the release project
     runs-on: ubuntu-latest
     steps:
       - name: Get the latest release project
