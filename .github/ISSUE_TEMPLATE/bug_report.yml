@@ -1,7 +1,6 @@
-name: Report a bug
+name: Bug
 description: |
-  Create a bug report to help us improve Zenoh.
-title: "[Bug] "
+  Report a bug.
 labels: ["bug"]
 body:
   - type: textarea
@@ -19,7 +18,7 @@ body:
     attributes:
       label: To reproduce
       description: "Steps to reproduce the behavior:"
-      placeholder: | 
+      placeholder: |
         1. Start a subscriber "..."
         2. Start a publisher "...."
         3. See error

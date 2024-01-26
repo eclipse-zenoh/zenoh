@@ -13,26 +13,33 @@
 #
 [package]
 rust-version = { workspace = true }
-name = "zenoh-plugin-trait"
+name = "zenoh-backend-example"
 version = { workspace = true }
-repository = { workspace = true }
-homepage = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
-license = { workspace = true }
-categories = { workspace = true }
-description = { workspace = true }
+
+[features]
+default = ["no_mangle"]
+no_mangle = []
 
 [lib]
-name = "zenoh_plugin_trait"
+name = "zenoh_backend_example"
+# This crate type will make `cargo` output a dynamic library instead of a rust static library
+crate-type = ["cdylib"]
 
 [dependencies]
-libloading = { workspace = true }
+async-std = { workspace = true, features = ["default"] }
+clap = { workspace = true }
+const_format = { workspace = true }
+env_logger = { workspace = true }
+futures = { workspace = true }
+git-version = { workspace = true }
 log = { workspace = true }
-serde = { workspace = true }
 serde_json = { workspace = true }
-zenoh-macros = { workspace = true }
+zenoh = { workspace = true }
+zenoh-core = { workspace = true }
+zenoh-plugin-trait = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-util = { workspace = true }
-zenoh-keyexpr = { workspace = true }
-const_format = { workspace = true }
+async-trait = { workspace = true }
+zenoh_backend_traits = { workspace = true }

@@ -185,11 +185,14 @@ impl<'a> Liveliness<'a> {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
         let key_expr = key_expr.try_into().map_err(Into::into);
-        let conf = self.session.runtime.config.lock();
+        let timeout = {
+            let conf = self.session.runtime.config().lock();
+            Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout()))
+        };
         LivelinessGetBuilder {
             session: &self.session,
             key_expr,
-            timeout: Duration::from_millis(unwrap_or_default!(conf.queries_default_timeout())),
+            timeout,
             handler: DefaultHandler,
         }
     }

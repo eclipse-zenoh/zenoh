@@ -13,7 +13,7 @@
 use super::routing::face::Face;
 use super::Runtime;
 use crate::key_expr::KeyExpr;
-use crate::plugins::sealed as plugins;
+use crate::plugins::sealed::{self as plugins};
 use crate::prelude::sync::{Sample, SyncResolve};
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
@@ -27,7 +27,9 @@ use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::ValidatedMap;
+use zenoh_config::{ConfigValidator, ValidatedMap};
+use zenoh_plugin_trait::{PluginControl, PluginStatus};
+use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
     network::{
@@ -64,10 +66,67 @@ enum PluginDiff {
     Start(crate::config::PluginLoad),
 }
 
+impl ConfigValidator for AdminSpace {
+    fn check_config(
+        &self,
+        name: &str,
+        path: &str,
+        current: &serde_json::Map<String, serde_json::Value>,
+        new: &serde_json::Map<String, serde_json::Value>,
+    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+        let plugins_mgr = zlock!(self.context.plugins_mgr);
+        let plugin = plugins_mgr.started_plugin(name).ok_or(format!(
+            "Plugin `{}` is not running, but its configuration is being changed",
+            name
+        ))?;
+        plugin.instance().config_checker(path, current, new)
+    }
+}
+
 impl AdminSpace {
+    fn start_plugin(
+        plugin_mgr: &mut plugins::PluginsManager,
+        config: &crate::config::PluginLoad,
+        start_args: &Runtime,
+    ) -> ZResult<()> {
+        let name = &config.name;
+        let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
+            log::warn!("Plugin `{}` was already declared", declared.name());
+            declared
+        } else if let Some(paths) = &config.paths {
+            plugin_mgr.declare_dynamic_plugin_by_paths(name, paths)?
+        } else {
+            plugin_mgr.declare_dynamic_plugin_by_name(name, name)?
+        };
+
+        let loaded = if let Some(loaded) = declared.loaded_mut() {
+            log::warn!(
+                "Plugin `{}` was already loaded from {}",
+                loaded.name(),
+                loaded.path()
+            );
+            loaded
+        } else {
+            declared.load()?
+        };
+
+        if let Some(started) = loaded.started_mut() {
+            log::warn!("Plugin `{}` was already started", started.name());
+        } else {
+            let started = loaded.start(start_args)?;
+            log::info!(
+                "Successfully started plugin `{}` from {}",
+                started.name(),
+                started.path()
+            );
+        };
+
+        Ok(())
+    }
+
     pub async fn start(runtime: &Runtime, plugins_mgr: plugins::PluginsManager, version: String) {
-        let zid_str = runtime.zid.to_string();
-        let metadata = runtime.metadata.clone();
+        let zid_str = runtime.state.zid.to_string();
+        let metadata = runtime.state.metadata.clone();
         let root_key: OwnedKeyExpr = format!("@/router/{zid_str}").try_into().unwrap();
 
         let mut handlers: HashMap<_, Handler> = HashMap::new();
@@ -101,6 +160,10 @@ impl AdminSpace {
             Arc::new(queryables_data),
         );
         handlers.insert(
+            format!("@/router/{zid_str}/plugins/**").try_into().unwrap(),
+            Arc::new(plugins_data),
+        );
+        handlers.insert(
             format!("@/router/{zid_str}/status/plugins/**")
                 .try_into()
                 .unwrap(),
@@ -108,9 +171,8 @@ impl AdminSpace {
         );
 
         let mut active_plugins = plugins_mgr
-            .running_plugins_info()
-            .into_iter()
-            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .started_plugins_iter()
+            .map(|rec| (rec.name().to_string(), rec.path().to_string()))
             .collect::<HashMap<_, _>>();
 
         let context = Arc::new(AdminContext {
@@ -121,14 +183,22 @@ impl AdminSpace {
             metadata,
         });
         let admin = Arc::new(AdminSpace {
-            zid: runtime.zid,
+            zid: runtime.zid(),
             primitives: Mutex::new(None),
             mappings: Mutex::new(HashMap::new()),
             handlers,
             context,
         });
 
-        let cfg_rx = admin.context.runtime.config.subscribe();
+        admin
+            .context
+            .runtime
+            .state
+            .config
+            .lock()
+            .set_plugin_validator(Arc::downgrade(&admin));
+
+        let cfg_rx = admin.context.runtime.state.config.subscribe();
         task::spawn({
             let admin = admin.clone();
             async move {
@@ -139,7 +209,7 @@ impl AdminSpace {
                     }
 
                     let requested_plugins = {
-                        let cfg_guard = admin.context.runtime.config.lock();
+                        let cfg_guard = admin.context.runtime.state.config.lock();
                         cfg_guard.plugins().load_requests().collect::<Vec<_>>()
                     };
                     let mut diffs = Vec::new();
@@ -165,63 +235,37 @@ impl AdminSpace {
                     let mut plugins_mgr = zlock!(admin.context.plugins_mgr);
                     for diff in diffs {
                         match diff {
-                            PluginDiff::Delete(plugin) => {
-                                active_plugins.remove(plugin.as_str());
-                                plugins_mgr.stop(&plugin);
+                            PluginDiff::Delete(name) => {
+                                active_plugins.remove(name.as_str());
+                                if let Some(running) = plugins_mgr.started_plugin_mut(&name) {
+                                    running.stop()
+                                }
                             }
                             PluginDiff::Start(plugin) => {
-                                let load = match &plugin.paths {
-                                    Some(paths) => {
-                                        plugins_mgr.load_plugin_by_paths(plugin.name.clone(), paths)
-                                    }
-                                    None => plugins_mgr.load_plugin_by_name(plugin.name.clone()),
-                                };
-                                match load {
-                                    Err(e) => {
-                                        if plugin.required {
-                                            panic!("Failed to load plugin `{}`: {}", plugin.name, e)
-                                        } else {
-                                            log::error!(
-                                                "Failed to load plugin `{}`: {}",
-                                                plugin.name,
-                                                e
-                                            )
-                                        }
-                                    }
-                                    Ok(path) => {
-                                        let name = &plugin.name;
-                                        log::info!("Loaded plugin `{}` from {}", name, &path);
-                                        match plugins_mgr.start(name, &admin.context.runtime) {
-                                            Ok(Some((path, plugin))) => {
-                                                active_plugins.insert(name.into(), path.into());
-                                                let mut cfg_guard =
-                                                    admin.context.runtime.config.lock();
-                                                cfg_guard.add_plugin_validator(
-                                                    name,
-                                                    plugin.config_checker(),
-                                                );
-                                                log::info!(
-                                                    "Successfully started plugin `{}` from {}",
-                                                    name,
-                                                    path
-                                                );
-                                            }
-                                            Ok(None) => {
-                                                log::warn!("Plugin `{}` was already running", name)
-                                            }
-                                            Err(e) => log::error!("{}", e),
-                                        }
+                                if let Err(e) = Self::start_plugin(
+                                    &mut plugins_mgr,
+                                    &plugin,
+                                    &admin.context.runtime,
+                                ) {
+                                    if plugin.required {
+                                        panic!("Failed to load plugin `{}`: {}", plugin.name, e)
+                                    } else {
+                                        log::error!(
+                                            "Failed to load plugin `{}`: {}",
+                                            plugin.name,
+                                            e
+                                        )
                                     }
                                 }
                             }
                         }
                     }
-                    log::info!("Running plugins: {:?}", &active_plugins)
                 }
+                log::info!("Running plugins: {:?}", &active_plugins)
             }
         });
 
-        let primitives = runtime.router.new_primitives(admin.clone());
+        let primitives = runtime.state.router.new_primitives(admin.clone());
         zlock!(admin.primitives).replace(primitives.clone());
 
         primitives.send_declare(Declare {
@@ -283,7 +327,7 @@ impl Primitives for AdminSpace {
     fn send_push(&self, msg: Push) {
         trace!("recv Push {:?}", msg);
         {
-            let conf = self.context.runtime.config.lock();
+            let conf = self.context.runtime.state.config.lock();
             if !conf.adminspace.permissions().write {
                 log::error!(
                     "Received PUT on '{}' but adminspace.permissions.write=false in configuration",
@@ -307,7 +351,8 @@ impl Primitives for AdminSpace {
                             key,
                             json
                         );
-                        if let Err(e) = (&self.context.runtime.config).insert_json5(key, json) {
+                        if let Err(e) = (&self.context.runtime.state.config).insert_json5(key, json)
+                        {
                             error!(
                                 "Error inserting conf value /@/router/{}/config/{} : {} - {}",
                                 &self.context.zid_str, key, json, e
@@ -325,7 +370,7 @@ impl Primitives for AdminSpace {
                         &self.context.zid_str,
                         key
                     );
-                    if let Err(e) = self.context.runtime.config.remove(key) {
+                    if let Err(e) = self.context.runtime.state.config.remove(key) {
                         log::error!("Error deleting conf value {} : {}", msg.wire_expr, e)
                     }
                 }
@@ -338,7 +383,7 @@ impl Primitives for AdminSpace {
         if let RequestBody::Query(query) = msg.payload {
             let primitives = zlock!(self.primitives).as_ref().unwrap().clone();
             {
-                let conf = self.context.runtime.config.lock();
+                let conf = self.context.runtime.state.config.lock();
                 if !conf.adminspace.permissions().read {
                     log::error!(
                         "Received GET on '{}' but adminspace.permissions.read=false in configuration",
@@ -411,10 +456,10 @@ fn router_data(context: &AdminContext, query: Query) {
 
     // plugins info
     let plugins: serde_json::Value = {
-        zlock!(context.plugins_mgr)
-            .running_plugins_info()
-            .into_iter()
-            .map(|(k, v)| (k, json!({ "path": v })))
+        let plugins_mgr = zlock!(context.plugins_mgr);
+        plugins_mgr
+            .started_plugins_iter()
+            .map(|rec| (rec.name(), json!({ "path": rec.path() })))
             .collect()
     };
 
@@ -530,7 +575,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
         .try_into()
         .unwrap();
 
-    let tables = zread!(context.runtime.router.tables.tables);
+    let tables = zread!(context.runtime.state.router.tables.tables);
 
     if let Err(e) = query
         .reply(Ok(Sample::new(
@@ -557,7 +602,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
         .try_into()
         .unwrap();
 
-    let tables = zread!(context.runtime.router.tables.tables);
+    let tables = zread!(context.runtime.state.router.tables.tables);
 
     if let Err(e) = query
         .reply(Ok(Sample::new(
@@ -580,7 +625,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
 }
 
 fn subscribers_data(context: &AdminContext, query: Query) {
-    let tables = zread!(context.runtime.router.tables.tables);
+    let tables = zread!(context.runtime.state.router.tables.tables);
     for sub in tables.router_subs.iter() {
         let key = KeyExpr::try_from(format!(
             "@/router/{}/subscriber/{}",
@@ -597,7 +642,7 @@ fn subscribers_data(context: &AdminContext, query: Query) {
 }
 
 fn queryables_data(context: &AdminContext, query: Query) {
-    let tables = zread!(context.runtime.router.tables.tables);
+    let tables = zread!(context.runtime.state.router.tables.tables);
     for qabl in tables.router_qabls.iter() {
         let key = KeyExpr::try_from(format!(
             "@/router/{}/queryable/{}",
@@ -613,20 +658,39 @@ fn queryables_data(context: &AdminContext, query: Query) {
     }
 }
 
+fn plugins_data(context: &AdminContext, query: Query) {
+    let guard = zlock!(context.plugins_mgr);
+    let root_key = format!("@/router/{}/plugins", &context.zid_str);
+    let root_key = unsafe { keyexpr::from_str_unchecked(&root_key) };
+    log::debug!("requested plugins status {:?}", query.key_expr());
+    if let [names, ..] = query.key_expr().strip_prefix(root_key)[..] {
+        let statuses = guard.plugins_status(names);
+        for status in statuses {
+            log::debug!("plugin status: {:?}", status);
+            let key = root_key.join(status.name()).unwrap();
+            let status = serde_json::to_value(status).unwrap();
+            if let Err(e) = query.reply(Ok(Sample::new(key, Value::from(status)))).res() {
+                log::error!("Error sending AdminSpace reply: {:?}", e);
+            }
+        }
+    }
+}
+
 fn plugins_status(context: &AdminContext, query: Query) {
     let selector = query.selector();
     let guard = zlock!(context.plugins_mgr);
     let mut root_key = format!("@/router/{}/status/plugins/", &context.zid_str);
 
-    for (name, (path, plugin)) in guard.running_plugins() {
-        with_extended_string(&mut root_key, &[name], |plugin_key| {
+    for plugin in guard.started_plugins_iter() {
+        with_extended_string(&mut root_key, &[plugin.name()], |plugin_key| {
+            // TODO: response to "__version__", this need not to be implemented by each plugin
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {
                         if let Err(e) = query
                             .reply(Ok(Sample::new(
                                 key_expr,
-                                Value::from(path).encoding(KnownEncoding::AppJson.into()),
+                                Value::from(plugin.path()).encoding(KnownEncoding::AppJson.into()),
                             )))
                             .res()
                         {
@@ -646,7 +710,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                 return;
             }
             match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                plugin.adminspace_getter(&selector, plugin_key)
+                plugin.instance().adminspace_getter(&selector, plugin_key)
             })) {
                 Ok(Ok(responses)) => {
                     for response in responses {
@@ -665,15 +729,15 @@ fn plugins_status(context: &AdminContext, query: Query) {
                     }
                 }
                 Ok(Err(e)) => {
-                    log::error!("Plugin {} bailed from responding to {}: {}", name, query.key_expr(), e)
+                    log::error!("Plugin {} bailed from responding to {}: {}", plugin.name(), query.key_expr(), e)
                 }
                 Err(e) => match e
                     .downcast_ref::<String>()
                     .map(|s| s.as_str())
                     .or_else(|| e.downcast_ref::<&str>().copied())
                 {
-                    Some(e) => log::error!("Plugin {} panicked while responding to {}: {}", name, query.key_expr(), e),
-                    None => log::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", name, query.key_expr()),
+                    Some(e) => log::error!("Plugin {} panicked while responding to {}: {}", plugin.name(), query.key_expr(), e),
+                    None => log::error!("Plugin {} panicked while responding to {}. The panic message couldn't be recovered.", plugin.name(), query.key_expr()),
                 },
             }
         });

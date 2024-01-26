@@ -21,16 +21,18 @@ use std::sync::{
     atomic::{AtomicBool, Ordering::Relaxed},
     Arc, Mutex,
 };
-use zenoh::plugins::{Plugin, RunningPluginTrait, ValidationFunction, ZenohPlugin};
+use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::runtime::Runtime;
 use zenoh_core::zlock;
+use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, ZResult};
 
 // The struct implementing the ZenohPlugin and ZenohPlugin traits
 pub struct ExamplePlugin {}
 
 // declaration of the plugin's VTable for zenohd to find the plugin's functions to be called
+#[cfg(feature = "no_mangle")]
 zenoh_plugin_trait::declare_plugin!(ExamplePlugin);
 
 // A default selector for this example of storage plugin (in case the config doesn't set it)
@@ -40,14 +42,16 @@ const DEFAULT_SELECTOR: &str = "demo/example/**";
 impl ZenohPlugin for ExamplePlugin {}
 impl Plugin for ExamplePlugin {
     type StartArgs = Runtime;
-    type RunningPlugin = zenoh::plugins::RunningPlugin;
+    type Instance = zenoh::plugins::RunningPlugin;
 
     // A mandatory const to define, in case of the plugin is built as a standalone executable
-    const STATIC_NAME: &'static str = "example";
+    const DEFAULT_NAME: &'static str = "example";
+    const PLUGIN_VERSION: &'static str = plugin_version!();
+    const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
     // The first operation called by zenohd on the plugin
-    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::RunningPlugin> {
-        let config = runtime.config.lock();
+    fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<Self::Instance> {
+        let config = runtime.config().lock();
         let self_cfg = config.plugin(name).unwrap().as_object().unwrap();
         // get the plugin's config details from self_cfg Map (here the "storage-selector" property)
         let selector: KeyExpr = match self_cfg.get("storage-selector") {
@@ -85,57 +89,46 @@ struct RunningPluginInner {
 // The RunningPlugin struct implementing the RunningPluginTrait trait
 #[derive(Clone)]
 struct RunningPlugin(Arc<Mutex<RunningPluginInner>>);
+
+impl PluginControl for RunningPlugin {}
+
 impl RunningPluginTrait for RunningPlugin {
-    // Operation returning a ValidationFunction(path, old, new)-> ZResult<Option<serde_json::Map<String, serde_json::Value>>>
-    // this function will be called each time the plugin's config is changed via the zenohd admin space
-    fn config_checker(&self) -> ValidationFunction {
-        let guard = zlock!(&self.0);
-        let name = guard.name.clone();
-        std::mem::drop(guard);
-        let plugin = self.clone();
-        Arc::new(move |path, old, new| {
-            const STORAGE_SELECTOR: &str = "storage-selector";
-            if path == STORAGE_SELECTOR || path.is_empty() {
-                match (old.get(STORAGE_SELECTOR), new.get(STORAGE_SELECTOR)) {
-                    (Some(serde_json::Value::String(os)), Some(serde_json::Value::String(ns)))
-                        if os == ns => {}
-                    (_, Some(serde_json::Value::String(selector))) => {
-                        let mut guard = zlock!(&plugin.0);
-                        guard.flag.store(false, Relaxed);
-                        guard.flag = Arc::new(AtomicBool::new(true));
-                        match KeyExpr::try_from(selector.clone()) {
-                            Err(e) => log::error!("{}", e),
-                            Ok(selector) => {
-                                async_std::task::spawn(run(
-                                    guard.runtime.clone(),
-                                    selector,
-                                    guard.flag.clone(),
-                                ));
-                            }
+    fn config_checker(
+        &self,
+        path: &str,
+        old: &serde_json::Map<String, serde_json::Value>,
+        new: &serde_json::Map<String, serde_json::Value>,
+    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+        let mut guard = zlock!(&self.0);
+        const STORAGE_SELECTOR: &str = "storage-selector";
+        if path == STORAGE_SELECTOR || path.is_empty() {
+            match (old.get(STORAGE_SELECTOR), new.get(STORAGE_SELECTOR)) {
+                (Some(serde_json::Value::String(os)), Some(serde_json::Value::String(ns)))
+                    if os == ns => {}
+                (_, Some(serde_json::Value::String(selector))) => {
+                    guard.flag.store(false, Relaxed);
+                    guard.flag = Arc::new(AtomicBool::new(true));
+                    match KeyExpr::try_from(selector.clone()) {
+                        Err(e) => log::error!("{}", e),
+                        Ok(selector) => {
+                            async_std::task::spawn(run(
+                                guard.runtime.clone(),
+                                selector,
+                                guard.flag.clone(),
+                            ));
                         }
-                        return Ok(None);
                     }
-                    (_, None) => {
-                        let guard = zlock!(&plugin.0);
-                        guard.flag.store(false, Relaxed);
-                    }
-                    _ => {
-                        bail!("storage-selector for {} must be a string", &name)
-                    }
+                    return Ok(None);
+                }
+                (_, None) => {
+                    guard.flag.store(false, Relaxed);
+                }
+                _ => {
+                    bail!("storage-selector for {} must be a string", &guard.name)
                 }
             }
-            bail!("unknown option {} for {}", path, &name)
-        })
-    }
-
-    // Function called on any query on admin space that matches this plugin's sub-part of the admin space.
-    // Thus the plugin can reply its contribution to the global admin space of this zenohd.
-    fn adminspace_getter<'a>(
-        &'a self,
-        _selector: &'a Selector<'a>,
-        _plugin_status_key: &str,
-    ) -> ZResult<Vec<zenoh::plugins::Response>> {
-        Ok(Vec::new())
+        }
+        bail!("unknown option {} for {}", path, guard.name)
     }
 }
 

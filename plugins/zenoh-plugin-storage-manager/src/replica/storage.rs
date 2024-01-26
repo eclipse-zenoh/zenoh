@@ -146,7 +146,7 @@ impl StorageService {
         let storage_sub = match self.session.declare_subscriber(&self.key_expr).res().await {
             Ok(storage_sub) => storage_sub,
             Err(e) => {
-                log::error!("Error starting storage {}: {}", self.name, e);
+                log::error!("Error starting storage '{}': {}", self.name, e);
                 return;
             }
         };
@@ -161,7 +161,7 @@ impl StorageService {
         {
             Ok(storage_queryable) => storage_queryable,
             Err(e) => {
-                log::error!("Error starting storage {}: {}", self.name, e);
+                log::error!("Error starting storage '{}': {}", self.name, e);
                 return;
             }
         };
@@ -205,7 +205,7 @@ impl StorageService {
                     message = rx.recv_async() => {
                         match message {
                             Ok(StorageMessage::Stop) => {
-                                log::trace!("Dropping storage {}", self.name);
+                                log::trace!("Dropping storage '{}'", self.name);
                                 return
                             },
                             Ok(StorageMessage::GetStatus(tx)) => {
@@ -243,7 +243,7 @@ impl StorageService {
                     message = rx.recv_async() => {
                         match message {
                             Ok(StorageMessage::Stop) => {
-                                log::trace!("Dropping storage {}", self.name);
+                                log::trace!("Dropping storage '{}'", self.name);
                                 return
                             },
                             Ok(StorageMessage::GetStatus(tx)) => {
@@ -458,7 +458,7 @@ impl StorageService {
                     }
                     Err(e) => {
                         log::warn!(
-                            "Storage {} raised an error fetching a query on key {} : {}",
+                            "Storage '{}' raised an error fetching a query on key {} : {}",
                             self.name,
                             key_expr,
                             e
@@ -527,14 +527,14 @@ impl StorageService {
                             };
                             if let Err(e) = q.reply(Ok(sample)).res().await {
                                 log::warn!(
-                                    "Storage {} raised an error replying a query: {}",
+                                    "Storage '{}' raised an error replying a query: {}",
                                     self.name,
                                     e
                                 )
                             }
                         }
                     }
-                    Err(e) => log::warn!("Storage {} raised an error on query: {}", self.name, e),
+                    Err(e) => log::warn!("Storage'{}' raised an error on query: {}", self.name, e),
                 };
             }
             drop(storage);
@@ -561,7 +561,7 @@ impl StorageService {
                         };
                         if let Err(e) = q.reply(Ok(sample)).res().await {
                             log::warn!(
-                                "Storage {} raised an error replying a query: {}",
+                                "Storage '{}' raised an error replying a query: {}",
                                 self.name,
                                 e
                             )
@@ -570,11 +570,11 @@ impl StorageService {
                 }
                 Err(e) => {
                     let err_message =
-                        format!("Storage {} raised an error on query: {}", self.name, e);
+                        format!("Storage '{}' raised an error on query: {}", self.name, e);
                     log::warn!("{}", err_message);
                     if let Err(e) = q.reply(Err(err_message.into())).res().await {
                         log::warn!(
-                            "Storage {} raised an error replying a query: {}",
+                            "Storage '{}' raised an error replying a query: {}",
                             self.name,
                             e
                         )
@@ -602,7 +602,7 @@ impl StorageService {
                 }
             }
             Err(e) => log::warn!(
-                "Storage {} raised an error while retrieving keys: {}",
+                "Storage '{}' raised an error while retrieving keys: {}",
                 self.name,
                 e
             ),
@@ -659,7 +659,7 @@ impl StorageService {
             {
                 Ok(replies) => replies,
                 Err(e) => {
-                    log::error!("Error aligning storage {}: {}", self.name, e);
+                    log::error!("Error aligning storage '{}': {}", self.name, e);
                     return;
                 }
             };
@@ -669,7 +669,7 @@ impl StorageService {
                         self.process_sample(sample).await;
                     }
                     Err(e) => log::warn!(
-                        "Storage {} received an error to align query: {}",
+                        "Storage '{}' received an error to align query: {}",
                         self.name,
                         e
                     ),

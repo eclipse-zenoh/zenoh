@@ -4608,6 +4608,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-backend-example"
+version = "0.11.0-dev"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "clap",
+ "const_format",
+ "env_logger",
+ "futures",
+ "git-version",
+ "log",
+ "serde_json",
+ "zenoh",
+ "zenoh-core",
+ "zenoh-plugin-trait",
+ "zenoh-result",
+ "zenoh-util",
+ "zenoh_backend_traits",
+]
+
+[[package]]
 name = "zenoh-buffers"
 version = "0.11.0-dev"
 dependencies = [
@@ -4942,8 +4963,10 @@ version = "0.11.0-dev"
 dependencies = [
  "async-std",
  "clap",
+ "const_format",
  "env_logger",
  "futures",
+ "git-version",
  "log",
  "serde_json",
  "zenoh",
@@ -4961,6 +4984,7 @@ dependencies = [
  "async-std",
  "base64 0.21.4",
  "clap",
+ "const_format",
  "env_logger",
  "flume",
  "futures",
@@ -4988,6 +5012,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "clap",
+ "const_format",
  "crc",
  "derive-new",
  "env_logger",
@@ -4995,7 +5020,6 @@ dependencies = [
  "futures",
  "git-version",
  "jsonschema",
- "lazy_static",
  "libloading",
  "log",
  "rustc_version 0.4.0",
@@ -5017,9 +5041,12 @@ dependencies = [
 name = "zenoh-plugin-trait"
 version = "0.11.0-dev"
 dependencies = [
+ "const_format",
  "libloading",
  "log",
+ "serde",
  "serde_json",
+ "zenoh-keyexpr",
  "zenoh-macros",
  "zenoh-result",
  "zenoh-util",
@@ -5139,10 +5166,12 @@ version = "0.11.0-dev"
 dependencies = [
  "async-std",
  "async-trait",
+ "const_format",
  "derive_more",
  "schemars",
  "serde_json",
  "zenoh",
+ "zenoh-plugin-trait",
  "zenoh-result",
  "zenoh-util",
 ]
@@ -5162,6 +5191,7 @@ dependencies = [
  "rand 0.8.5",
  "rustc_version 0.4.0",
  "zenoh",
+ "zenoh_backend_traits",
 ]
 
 [[package]]

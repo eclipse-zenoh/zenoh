@@ -27,13 +27,14 @@ use std::sync::Arc;
 use tide::http::Mime;
 use tide::sse::Sender;
 use tide::{Request, Response, Server, StatusCode};
-use zenoh::plugins::{Plugin, RunningPluginTrait, ZenohPlugin};
+use zenoh::plugins::{RunningPluginTrait, ZenohPlugin};
 use zenoh::prelude::r#async::*;
 use zenoh::properties::Properties;
 use zenoh::query::{QueryConsolidation, Reply};
 use zenoh::runtime::Runtime;
 use zenoh::selector::TIME_RANGE_KEY;
 use zenoh::Session;
+use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin, PluginControl};
 use zenoh_result::{bail, zerror, ZResult};
 
 mod config;
@@ -188,7 +189,9 @@ fn response(status: StatusCode, content_type: impl TryInto<Mime>, body: &str) ->
     builder.build()
 }
 
+#[cfg(feature = "no_mangle")]
 zenoh_plugin_trait::declare_plugin!(RestPlugin);
+
 pub struct RestPlugin {}
 #[derive(Clone, Copy, Debug)]
 struct StrError {
@@ -215,8 +218,10 @@ impl ZenohPlugin for RestPlugin {}
 
 impl Plugin for RestPlugin {
     type StartArgs = Runtime;
-    type RunningPlugin = zenoh::plugins::RunningPlugin;
-    const STATIC_NAME: &'static str = "rest";
+    type Instance = zenoh::plugins::RunningPlugin;
+    const DEFAULT_NAME: &'static str = "rest";
+    const PLUGIN_VERSION: &'static str = plugin_version!();
+    const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
 
     fn start(name: &str, runtime: &Self::StartArgs) -> ZResult<zenoh::plugins::RunningPlugin> {
         // Try to initiate login.
@@ -225,7 +230,7 @@ impl Plugin for RestPlugin {
         let _ = env_logger::try_init();
         log::debug!("REST plugin {}", LONG_VERSION.as_str());
 
-        let runtime_conf = runtime.config.lock();
+        let runtime_conf = runtime.config().lock();
         let plugin_conf = runtime_conf
             .plugin(name)
             .ok_or_else(|| zerror!("Plugin `{}`: missing config", name))?;
@@ -242,13 +247,10 @@ impl Plugin for RestPlugin {
 }
 
 struct RunningPlugin(Config);
-impl RunningPluginTrait for RunningPlugin {
-    fn config_checker(&self) -> zenoh::plugins::ValidationFunction {
-        Arc::new(|_, _, _| {
-            bail!("zenoh-plugin-rest doesn't accept any runtime configuration changes")
-        })
-    }
 
+impl PluginControl for RunningPlugin {}
+
+impl RunningPluginTrait for RunningPlugin {
     fn adminspace_getter<'a>(
         &'a self,
         selector: &'a Selector<'a>,
@@ -476,7 +478,7 @@ pub async fn run(runtime: Runtime, conf: Config) -> ZResult<()> {
     // But cannot be done twice in case of static link.
     let _ = env_logger::try_init();
 
-    let zid = runtime.zid.to_string();
+    let zid = runtime.zid().to_string();
     let session = zenoh::init(runtime).res().await.unwrap();
 
     let mut app = Server::with_state((Arc::new(session), zid));

@@ -13,9 +13,11 @@
 //
 use async_std::prelude::FutureExt;
 use async_std::task;
+use std::str::FromStr;
 use std::time::Duration;
 use zenoh::prelude::r#async::*;
 use zenoh_core::zasync_executor_init;
+use zenoh_result::ZResult as Result;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const RECV_TIMEOUT: Duration = Duration::from_secs(1);
@@ -27,16 +29,32 @@ macro_rules! ztimeout {
 }
 
 #[cfg(feature = "unstable")]
+async fn create_session_pair(locator: &str) -> (Session, Session) {
+    let config1 = {
+        let mut config = zenoh::config::peer();
+        config.scouting.multicast.set_enabled(Some(false)).unwrap();
+        config
+            .listen
+            .set_endpoints(vec![locator.clone().parse().unwrap()])
+            .unwrap();
+        config
+    };
+    let config2 = zenoh::config::client([Locator::from_str(locator).unwrap()]);
+
+    let session1 = ztimeout!(zenoh::open(config1).res_async()).unwrap();
+    let session2 = ztimeout!(zenoh::open(config2).res_async()).unwrap();
+    (session1, session2)
+}
+
+#[cfg(feature = "unstable")]
 #[test]
-fn zenoh_matching_status_any() {
+fn zenoh_matching_status_any() -> Result<()> {
     use flume::RecvTimeoutError;
 
     task::block_on(async {
         zasync_executor_init!();
 
-        let session1 = ztimeout!(zenoh::open(config::peer()).res_async()).unwrap();
-
-        let session2 = ztimeout!(zenoh::open(config::peer()).res_async()).unwrap();
+        let (session1, session2) = create_session_pair("tcp/127.0.0.1:18001").await;
 
         let publisher1 = ztimeout!(session1
             .declare_publisher("zenoh_matching_status_any_test")
@@ -89,12 +107,13 @@ fn zenoh_matching_status_any() {
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
         assert!(!matching_status.matching_subscribers());
-    });
+        Ok(())
+    })
 }
 
 #[cfg(feature = "unstable")]
 #[test]
-fn zenoh_matching_status_remote() {
+fn zenoh_matching_status_remote() -> Result<()> {
     use flume::RecvTimeoutError;
 
     task::block_on(async {
@@ -155,12 +174,14 @@ fn zenoh_matching_status_remote() {
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
         assert!(!matching_status.matching_subscribers());
-    });
+
+        Ok(())
+    })
 }
 
 #[cfg(feature = "unstable")]
 #[test]
-fn zenoh_matching_status_local() {
+fn zenoh_matching_status_local() -> Result<()> {
     use flume::RecvTimeoutError;
 
     task::block_on(async {
@@ -221,5 +242,7 @@ fn zenoh_matching_status_local() {
 
         let matching_status = ztimeout!(publisher1.matching_status().res_async()).unwrap();
         assert!(!matching_status.matching_subscribers());
-    });
+
+        Ok(())
+    })
 }
