@@ -158,7 +158,8 @@ impl Runtime {
 
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("Runtime::close())");
-        // self.cancel_token.cancel();
+        // TODO: Check this
+        self.cancel_token.cancel();
         self.manager().close().await;
         Ok(())
     }

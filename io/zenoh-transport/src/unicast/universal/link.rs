@@ -258,7 +258,7 @@ async fn rx_task(
                 transport.read_messages(batch, &l)?;
             }
 
-            _ = token.cancelled() => { break }
+            _ = token.cancelled() => break
         }
     }
 
