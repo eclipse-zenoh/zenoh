@@ -1,4 +1,4 @@
-name: Enforce linking issues to pull requests
+name: Enforce linking issues
 
 on:
   pull_request_target:
@@ -11,7 +11,7 @@ defaults:
 
 jobs:
   main:
-    name: Check if the pull request has a linked issue
+    name: Enforce referencing a closing issue
     runs-on: ubuntu-latest
     steps:
       - name: Count closing issue references
@@ -50,8 +50,7 @@ jobs:
           script: |
             const login = "${{ github.event.pull_request.user.login }}";
             const syntaxUrl = "https://docs.github.com/en/issues/tracking-your-work-with-issues/linking-a-pull-request-to-an-issue";
-            const message = `@${login} Please consider linking this pull request to an issue using \`Closes #ISSUE-NUMBER\` [syntax](syntaxUrl), \
-            especially if this pull request contains a bugfix, an enchancement or a new feature.`;
+            const message = `@{login} If this pull request contains a bugfix or a new feature, then please consider using \`Closes #ISSUE-NUMBER\` [syntax](${syntaxUrl}) to link it to an issue.`
 
             github.rest.issues.createComment({
               owner: context.repo.owner,
@@ -59,5 +58,3 @@ jobs:
               issue_number: context.payload.pull_request.number,
               body: message,
             });
-
-            core.setFailed("This pull request has no linked issue")

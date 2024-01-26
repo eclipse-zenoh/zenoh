@@ -1,4 +1,4 @@
-name: Add relevant issues to the release project
+name: Update release project
 
 on:
   issues:
@@ -11,7 +11,7 @@ defaults:
 
 jobs:
   main:
-    name: Add issue to the release project
+    name: Add relevant issue to the release project
     runs-on: ubuntu-latest
     steps:
       - name: Get the latest release project
@@ -52,7 +52,7 @@ jobs:
         with:
           result-encoding: string
           script: |
-            const contributors = github.rest.repos.listContributors({
+            const contributors = await github.rest.repos.listContributors({
               owner: context.repo.owner,
               repo: context.repo.repo,
             });
@@ -60,6 +60,7 @@ jobs:
             const login = "${{ github.event.issue.user.login }}";
 
             const result = contributors
+              .data
               .map(c => c.login)
               .includes(login);
 
