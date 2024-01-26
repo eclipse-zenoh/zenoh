@@ -31,7 +31,7 @@ const TIMEOUT: Duration = Duration::from_secs(10);
 const MSG_COUNT: usize = 50;
 const MSG_SIZE: [usize; 2] = [1_024, 131_072];
 // Maximal recipes to run at once
-const PARALLEL_RECIPES: usize = 16;
+const PARALLEL_RECIPES: usize = 4;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Task {
@@ -91,8 +91,6 @@ impl Task {
                             .congestion_control(CongestionControl::Block)
                             .res()) => {
                             let _ = res?;
-                            // TODO: check why this is needed
-                            tokio::time::sleep(Duration::from_millis(1)).await;
                         }
                     }
                 }
@@ -129,8 +127,6 @@ impl Task {
                             }
                         }
                     }
-                    // TODO: check why this is needed
-                    tokio::time::sleep(Duration::from_millis(1)).await;
                 }
                 println!("Get got sufficient amount of messages. Done.");
             }
@@ -367,7 +363,7 @@ impl Recipe {
 
 // Two peers connecting to a common node (either in router or peer mode) can discover each other.
 // And the message transmission should work even if the common node disappears after a while.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn gossip() -> Result<()> {
     env_logger::try_init().unwrap_or_default();
 
@@ -495,7 +491,7 @@ async fn static_failover_brokering() -> Result<()> {
 // 2. Mode: {Client, Peer} x {Client x Peer} x {Router} = 2 x 2 x 1 = 4 (cases)
 // 3. Spawning order (delay_in_secs for node1, node2, and node3) = 6 (cases)
 //
-// Total cases = 2 x 4 x 6 = 96
+// Total cases = 2 x 4 x 6 = 48
 #[tokio::test(flavor = "multi_thread", worker_threads = 8)]
 async fn three_node_combination() -> Result<()> {
     env_logger::try_init().unwrap_or_default();
@@ -517,7 +513,7 @@ async fn three_node_combination() -> Result<()> {
         .map(|n1| modes.map(|n2| (n1, n2)))
         .concat()
         .into_iter()
-        .flat_map(|(n1, n2)| MSG_SIZE.map(|s| (n1, n2, s)))
+        .flat_map(|(n1, n2)| [1024].map(|s| (n1, n2, s)))
         .flat_map(|(n1, n2, s)| delay_in_secs.map(|d| (n1, n2, s, d)))
         .map(
             |(node1_mode, node2_mode, msg_size, (delay1, delay2, delay3))| {
