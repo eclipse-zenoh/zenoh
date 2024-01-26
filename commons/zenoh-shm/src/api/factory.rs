@@ -17,7 +17,6 @@ use std::collections::HashMap;
 use zenoh_result::{bail, ZResult};
 
 use super::{
-    client::shared_memory_client::SharedMemoryClient,
     common::types::ProtocolID,
     provider::{
         shared_memory_provider::SharedMemoryProvider,
@@ -29,16 +28,14 @@ use super::{
 #[derive(Default)]
 pub struct SharedMemoryFactoryBuilder {
     backends: HashMap<ProtocolID, Box<dyn SharedMemoryProviderBackend>>,
-    clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>,
 }
 
 impl SharedMemoryFactoryBuilder {
     // Add a new SharedMemoryProvider
-    pub fn provider(
-        mut self,
-        id: ProtocolID,
-        backend: Box<dyn SharedMemoryProviderBackend>,
-    ) -> ZResult<Self> {
+    pub fn provider<Tprovider>(mut self, id: ProtocolID, backend: Box<Tprovider>) -> ZResult<Self>
+    where
+        Tprovider: SharedMemoryProviderBackend + 'static,
+    {
         match self.backends.entry(id) {
             std::collections::hash_map::Entry::Occupied(_) => {
                 bail!("Provider backend already exists for id {id}!")
@@ -50,29 +47,15 @@ impl SharedMemoryFactoryBuilder {
         }
     }
 
-    // Add a new SharedMemoryClient with specified id
-    pub fn client(mut self, id: ProtocolID, client: Box<dyn SharedMemoryClient>) -> ZResult<Self> {
-        match self.clients.entry(id) {
-            std::collections::hash_map::Entry::Occupied(_) => {
-                bail!("Client already exists for id {id}!")
-            }
-            std::collections::hash_map::Entry::Vacant(vacant) => {
-                vacant.insert(client);
-                Ok(self)
-            }
-        }
-    }
-
     // Build the factory
     pub fn build(self) -> SharedMemoryFactory {
-        SharedMemoryFactory::new(self.backends, self.clients)
+        SharedMemoryFactory::new(self.backends)
     }
 }
 
 // the shared memory factory
 pub struct SharedMemoryFactory {
     providers: HashMap<ProtocolID, SharedMemoryProvider>,
-    clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>,
 }
 impl SharedMemoryFactory {
     // Get the builder
@@ -81,20 +64,17 @@ impl SharedMemoryFactory {
     }
 
     // Get the provider instance by id
-    pub fn provider(&self, id: ProtocolID) -> Option<&SharedMemoryProvider> {
-        self.providers.get(&id)
+    pub fn provider(&mut self, id: ProtocolID) -> Option<&mut SharedMemoryProvider> {
+        self.providers.get_mut(&id)
     }
 
-    fn new(
-        mut backends: HashMap<ProtocolID, Box<dyn SharedMemoryProviderBackend>>,
-        clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>,
-    ) -> Self {
+    fn new(mut backends: HashMap<ProtocolID, Box<dyn SharedMemoryProviderBackend>>) -> Self {
         // construct providers from provider backends
         let providers = backends
             .drain()
             .map(|(key, backend)| (key, SharedMemoryProvider::new(backend, key)))
             .collect();
 
-        Self { providers, clients }
+        Self { providers }
     }
 }

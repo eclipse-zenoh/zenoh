@@ -155,6 +155,11 @@ impl SharedMemoryProvider {
         });
     }
 
+    // Bytes available for use
+    pub fn available(&self) -> usize {
+        self.backend.available()
+    }
+
     fn alloc_resources() -> ZResult<(
         AllocatedHeaderDescriptor,
         AllocatedWatchdog,

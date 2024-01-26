@@ -34,8 +34,17 @@ mod tests {
         },
         zenoh::{PushBody, Put},
     };
-    use zenoh_result::{zerror, ZResult};
-    use zenoh_shm::{SharedMemoryBuf, SharedMemoryManager};
+    use zenoh_result::ZResult;
+    use zenoh_shm::{
+        api::{
+            factory::SharedMemoryFactory,
+            protocol_implementations::posix::{
+                posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
+                protocol_id::POSIX_PROTOCOL_ID,
+            },
+        },
+        SharedMemoryBuf,
+    };
     use zenoh_transport::{
         multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
         TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
@@ -157,18 +166,14 @@ mod tests {
         let peer_shm02 = ZenohId::try_from([2]).unwrap();
         let peer_net01 = ZenohId::try_from([3]).unwrap();
 
-        let mut tries = 100;
-        let mut shm01 = loop {
-            // Create the SharedMemoryManager
-            if let Ok(shm01) = SharedMemoryManager::make(2 * MSG_SIZE) {
-                break Ok(shm01);
-            }
-            tries -= 1;
-            if tries == 0 {
-                break Err(zerror!("Unable to create SharedMemoryManager!"));
-            }
-        }
-        .unwrap();
+        let mut factory = SharedMemoryFactory::builder()
+            .provider(
+                POSIX_PROTOCOL_ID,
+                Box::new(PosixSharedMemoryProviderBackend::new(2 * MSG_SIZE as u32).unwrap()),
+            )
+            .unwrap()
+            .build();
+        let shm01 = factory.provider(POSIX_PROTOCOL_ID).unwrap();
 
         // Create a peer manager with shared-memory authenticator enabled
         let peer_shm01_handler = Arc::new(SHPeer::new(true));

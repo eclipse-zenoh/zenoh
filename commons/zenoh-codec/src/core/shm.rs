@@ -69,20 +69,20 @@ where
 
     fn write(self, writer: &mut W, x: &SharedMemoryBufInfo) -> Self::Output {
         let SharedMemoryBufInfo {
-            watchdog_descriptor,
-            header_descriptor,
-            generation,
             data_descriptor,
             shm_protocol,
             data_len,
+            watchdog_descriptor,
+            header_descriptor,
+            generation,
         } = x;
 
-        self.write(&mut *writer, watchdog_descriptor)?;
-        self.write(&mut *writer, header_descriptor)?;
-        self.write(&mut *writer, generation)?;
         self.write(&mut *writer, data_descriptor)?;
         self.write(&mut *writer, shm_protocol)?;
         self.write(&mut *writer, data_len)?;
+        self.write(&mut *writer, watchdog_descriptor)?;
+        self.write(&mut *writer, header_descriptor)?;
+        self.write(&mut *writer, generation)?;
         Ok(())
     }
 }
@@ -144,20 +144,20 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<SharedMemoryBufInfo, Self::Error> {
-        let watchdog_descriptor = self.read(&mut *reader)?;
-        let header_descriptor = self.read(&mut *reader)?;
-        let generation = self.read(&mut *reader)?;
         let data_descriptor = self.read(&mut *reader)?;
         let shm_protocol = self.read(&mut *reader)?;
         let data_len = self.read(&mut *reader)?;
+        let watchdog_descriptor = self.read(&mut *reader)?;
+        let header_descriptor = self.read(&mut *reader)?;
+        let generation = self.read(&mut *reader)?;
 
         let shm_info = SharedMemoryBufInfo::new(
-            watchdog_descriptor,
-            header_descriptor,
-            generation,
             data_descriptor,
             shm_protocol,
             data_len,
+            watchdog_descriptor,
+            header_descriptor,
+            generation,
         );
         Ok(shm_info)
     }

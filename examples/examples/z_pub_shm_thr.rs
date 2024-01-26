@@ -15,8 +15,14 @@ use clap::Parser;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
 use zenoh::publication::CongestionControl;
-use zenoh::shm::SharedMemoryManager;
 use zenoh_examples::CommonArgs;
+use zenoh_shm::api::{
+    factory::SharedMemoryFactory,
+    protocol_implementations::posix::{
+        posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
+        protocol_id::POSIX_PROTOCOL_ID,
+    },
+};
 
 #[async_std::main]
 async fn main() {
@@ -30,7 +36,14 @@ async fn main() {
     config.transport.shared_memory.set_enabled(true).unwrap();
 
     let z = zenoh::open(config).res().await.unwrap();
-    let mut shm = SharedMemoryManager::make(sm_size).unwrap();
+    let mut factory = SharedMemoryFactory::builder()
+        .provider(
+            POSIX_PROTOCOL_ID,
+            Box::new(PosixSharedMemoryProviderBackend::new(sm_size as u32).unwrap()),
+        )
+        .unwrap()
+        .build();
+    let shm = factory.provider(POSIX_PROTOCOL_ID).unwrap();
     let mut buf = shm.alloc(size).unwrap();
     let bs = unsafe { buf.as_mut_slice() };
     for b in bs {

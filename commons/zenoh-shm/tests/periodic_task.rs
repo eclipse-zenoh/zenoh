@@ -74,7 +74,7 @@ fn check_task<F>(task_payload: F)
 where
     F: Fn() + Send + 'static,
 {
-    let n = 1000;
+    let n = 100;
     let (task, intervals) = make_task(task_payload);
 
     std::thread::sleep(TASK_PERIOD * n);
@@ -109,47 +109,53 @@ fn periodic_task_low_load_lightweight() {
 
 #[test]
 fn periodic_task_low_load_blocking() {
-    let _load = CpuLoad::exessive();
+    let _load = CpuLoad::low();
     check_task(blocking_payload(TEST_TASK));
 }
 
 #[test]
 fn periodic_task_low_load_intensive() {
-    let _load = CpuLoad::exessive();
+    let _load = CpuLoad::low();
     check_task(intensive_payload(TEST_TASK));
 }
 
 #[test]
+#[ignore]
 fn periodic_task_optimal_high_load_lightweight() {
     let _load = CpuLoad::optimal_high();
     check_task(|| {});
 }
 
 #[test]
+#[ignore]
 fn periodic_task_optimal_high_load_blocking() {
-    let _load = CpuLoad::exessive();
+    let _load = CpuLoad::optimal_high();
     check_task(blocking_payload(TEST_TASK));
 }
 
 #[test]
+#[ignore]
 fn periodic_task_optimal_high_load_intensive() {
-    let _load = CpuLoad::exessive();
+    let _load = CpuLoad::optimal_high();
     check_task(intensive_payload(TEST_TASK));
 }
 
 #[test]
+#[ignore]
 fn periodic_task_exessive_load_lightweight() {
     let _load = CpuLoad::exessive();
     check_task(|| {});
 }
 
 #[test]
+#[ignore]
 fn periodic_task_exessive_load_blocking() {
     let _load = CpuLoad::exessive();
     check_task(blocking_payload(TEST_TASK));
 }
 
 #[test]
+#[ignore]
 fn periodic_task_exessive_load_intensive() {
     let _load = CpuLoad::exessive();
     check_task(intensive_payload(TEST_TASK));

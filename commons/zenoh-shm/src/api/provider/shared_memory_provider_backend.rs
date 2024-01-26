@@ -27,4 +27,7 @@ pub trait SharedMemoryProviderBackend {
 
     // Defragment the memory
     fn defragment(&mut self);
+
+    // Bytes available for use
+    fn available(&self) -> usize;
 }

@@ -158,6 +158,7 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
             offset: chunk.chunk,
             size: chunk.len,
         };
+        self.available += free_chunk.size;
         self.free_list.push(free_chunk);
     }
 
@@ -201,5 +202,9 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
                 }
             }
         }
+    }
+
+    fn available(&self) -> usize {
+        self.available as usize
     }
 }

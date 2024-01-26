@@ -16,8 +16,14 @@ use clap::Parser;
 use std::time::Duration;
 use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
-use zenoh::shm::SharedMemoryManager;
 use zenoh_examples::CommonArgs;
+use zenoh_shm::api::{
+    factory::SharedMemoryFactory,
+    protocol_implementations::posix::{
+        posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
+        protocol_id::POSIX_PROTOCOL_ID,
+    },
+};
 
 const N: usize = 10;
 const K: u32 = 3;
@@ -37,8 +43,16 @@ async fn main() -> Result<(), zenoh::Error> {
     println!("Opening session...");
     let session = zenoh::open(config).res().await.unwrap();
 
-    println!("Creating Shared Memory Manager...");
-    let mut shm = SharedMemoryManager::make(N * 1024).unwrap();
+    println!("Creating Shared Memory Factory...");
+    let mut factory = SharedMemoryFactory::builder()
+        .provider(
+            POSIX_PROTOCOL_ID,
+            Box::new(PosixSharedMemoryProviderBackend::new(N as u32 * 1024).unwrap()),
+        )
+        .unwrap()
+        .build();
+    println!("Retrieving Shared Memory Provider...");
+    let shm = factory.provider(POSIX_PROTOCOL_ID).unwrap();
 
     println!("Allocating Shared Memory Buffer...");
     let publisher = session.declare_publisher(&path).res().await.unwrap();
@@ -49,14 +63,14 @@ async fn main() -> Result<(), zenoh::Error> {
             Ok(buf) => buf,
             Err(_) => {
                 sleep(Duration::from_millis(100)).await;
+                let av = shm.available();
+                shm.garbage_collect();
                 println!(
                     "Afer failing allocation the GC collected: {} bytes -- retrying",
-                    shm.garbage_collect()
+                    shm.available() - av
                 );
-                println!(
-                    "Trying to de-fragment memory... De-fragmented {} bytes",
-                    shm.defragment()
-                );
+                println!("Trying to de-fragment memory...",);
+                shm.defragment();
                 shm.alloc(1024).unwrap()
             }
         };
@@ -89,10 +103,12 @@ async fn main() -> Result<(), zenoh::Error> {
         );
         publisher.put(sbuf.clone()).res().await?;
         if idx % K == 0 {
-            let freed = shm.garbage_collect();
+            let av = shm.available();
+            shm.garbage_collect();
+            let freed = shm.available() - av;
             println!("The Gargabe collector freed {freed} bytes");
-            let defrag = shm.defragment();
-            println!("De-framented {defrag} bytes");
+            shm.defragment();
+            println!("De-framented...");
         }
         // Dropping the SharedMemoryBuf means to free it.
         drop(sbuf);

@@ -17,6 +17,7 @@ use crate::SharedMemoryBuf;
 use super::chunk::AllocatedChunk;
 
 // Allocation errors enum
+#[derive(Debug)]
 pub enum AllocError {
     NeedDefragment,             // defragmentation needed
     OutOfMemory,                // the provider is out of memory

@@ -57,7 +57,10 @@ where
                 .os_id(Self::os_id(id.clone(), id_prefix))
                 .create()
             {
-                Ok(shmem) => return Ok(Segment { shmem, id }),
+                Ok(shmem) => {
+                    log::debug!("Created SHM segment, size: {alloc_size}, prefix: {id_prefix}, id: {id}");
+                    return Ok(Segment { shmem, id })
+                },
                 Err(ShmemError::LinkExists) => {}
                 Err(ShmemError::MappingIdExists) => {}
                 Err(e) => bail!("Unable to create POSIX shm segment: {}", e),
@@ -71,7 +74,10 @@ where
         let shmem = ShmemConf::new()
             .os_id(Self::os_id(id.clone(), id_prefix))
             .open()
-            .map_err(|e| zerror!("Unable to open POSIX shm segment: {}", e))?;
+            .map_err(|e| zerror!("Error opening POSIX shm segment id {id}, prefix: {id_prefix}: {}", e))?;
+
+        log::debug!("Opened SHM segment, prefix: {id_prefix}, id: {id}");
+    
         Ok(Self { shmem, id })
     }
 

@@ -20,7 +20,9 @@ mod tests {
     use std::time::Duration;
     use zenoh::prelude::r#async::*;
     use zenoh_core::zasync_executor_init;
-    use zenoh_shm::SharedMemoryManager;
+    use zenoh_shm::api::factory::SharedMemoryFactory;
+    use zenoh_shm::api::protocol_implementations::posix::posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend;
+    use zenoh_shm::api::protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
@@ -116,7 +118,15 @@ mod tests {
             // Create the SharedMemoryManager
             let to_alloc = size * MSG_COUNT / 10;
             println!("[PS][02b] Allocating {to_alloc} bytes in SHM");
-            let mut shm01 = SharedMemoryManager::make(to_alloc).unwrap();
+
+            let mut factory = SharedMemoryFactory::builder()
+                .provider(
+                    POSIX_PROTOCOL_ID,
+                    Box::new(PosixSharedMemoryProviderBackend::new(to_alloc as u32).unwrap()),
+                )
+                .unwrap()
+                .build();
+            let shm01 = factory.provider(POSIX_PROTOCOL_ID).unwrap();
             let shm_segment_size = shm01.available();
 
             // Put data

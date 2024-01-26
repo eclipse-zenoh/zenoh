@@ -112,7 +112,7 @@ impl SharedMemoryReader {
         if let Some(val) = r_guard.get(&id) {
             return Ok(val.clone());
         }
-        // fastest path failed: need to attach to a new segment
+        // fastest path failed: need to mount a new segment
 
         // drop read lock because we're gonna obtain write lock further
         drop(r_guard);

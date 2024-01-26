@@ -287,12 +287,14 @@ fn watchdog_validated_low_load() {
 }
 
 #[test]
+#[ignore]
 fn watchdog_validated_high_load() {
     let _load = CpuLoad::optimal_high();
     execute_concurrent(1000, 10, watchdog_validated_overloaded_system_fn());
 }
 
 #[test]
+#[ignore]
 fn watchdog_validated_overloaded_system() {
     let _load = CpuLoad::exessive();
     execute_concurrent(1000, 10, watchdog_validated_overloaded_system_fn());

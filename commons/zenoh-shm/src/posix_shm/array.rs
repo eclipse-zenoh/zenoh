@@ -38,8 +38,12 @@ where
     isize: AsPrimitive<ElemIndex>,
 {
     pub fn create(elem_count: usize, file_prefix: &str) -> ZResult<Self> {
+        if elem_count == 0 {
+            bail!("Unable to create SHM array segment of 0 elements")
+        }
+
         let max: usize = ElemIndex::max_value().as_();
-        if elem_count > max + 1 {
+        if elem_count - 1 > max {
             bail!("Unable to create SHM array segment of {elem_count} elements: out of range for ElemIndex!")
         }
 
