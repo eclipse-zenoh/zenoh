@@ -19,75 +19,74 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 
 use crate::net::routing::interceptor::*;
-use crate::KeyExpr;
 use std::sync::{Arc, Mutex};
 use zenoh_config::DownsamplerConf;
+use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 
-pub(crate) struct IngressMsgDownsampler {
-    conf: DownsamplerConf,
-    latest_message_timestamp: Arc<Mutex<std::time::Instant>>,
-}
+// TODO(sashacmc): this is ratelimit strategy, we should also add decimation (with "factor" option)
+
+pub(crate) struct IngressMsgDownsampler {}
 
 impl InterceptorTrait for IngressMsgDownsampler {
     fn intercept(
         &self,
         ctx: RoutingContext<NetworkMessage>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        if let Some(full_expr) = ctx.full_expr() {
-            match KeyExpr::new(full_expr) {
-                Ok(keyexpr) => {
-                    if !self.conf.keyexpr.intersects(&keyexpr) {
-                        return Some(ctx);
-                    }
-
-                    let timestamp = std::time::Instant::now();
-                    let mut latest_message_timestamp =
-                        self.latest_message_timestamp.lock().unwrap();
-
-                    if timestamp - *latest_message_timestamp
-                        >= std::time::Duration::from_millis(self.conf.threshold_ms)
-                    {
-                        *latest_message_timestamp = timestamp;
-                        log::trace!("Interceptor: Passed threshold, passing.");
-                        Some(ctx)
-                    } else {
-                        log::trace!("Interceptor: Skipped due to threshold.");
-                        None
-                    }
-                }
-                Err(_) => {
-                    log::warn!("Interceptor: Wrong KeyExpr, passing.");
-                    Some(ctx)
-                }
-            }
-        } else {
-            // message has no key expr
-            Some(ctx)
-        }
+        Some(ctx)
     }
 }
 
-impl IngressMsgDownsampler {
-    pub fn new(conf: DownsamplerConf) -> Self {
-        // TODO (sashacmc): I need just := 0, but how???
-        let zero_ts =
-            std::time::Instant::now() - std::time::Duration::from_micros(conf.threshold_ms);
-        Self {
-            conf,
-            latest_message_timestamp: Arc::new(Mutex::new(zero_ts)),
-        }
-    }
+pub(crate) struct EgressMsgDownsampler {
+    keyexpr: Option<OwnedKeyExpr>,
+    threshold: std::time::Duration,
+    latest_message_timestamp: Arc<Mutex<std::time::Instant>>,
 }
-
-pub(crate) struct EgressMsgDownsampler {}
 
 impl InterceptorTrait for EgressMsgDownsampler {
     fn intercept(
         &self,
         ctx: RoutingContext<NetworkMessage>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        // TODO(sashacmc): Do we need Ergress Downsampler?
-        Some(ctx)
+        if let Some(cfg_keyexpr) = self.keyexpr.as_ref() {
+            if let Some(keyexpr) = ctx.full_key_expr() {
+                if !cfg_keyexpr.intersects(&keyexpr) {
+                    return Some(ctx);
+                }
+            } else {
+                return Some(ctx);
+            }
+        }
+
+        let timestamp = std::time::Instant::now();
+        let mut latest_message_timestamp = self.latest_message_timestamp.lock().unwrap();
+
+        if timestamp - *latest_message_timestamp >= self.threshold {
+            *latest_message_timestamp = timestamp;
+            log::debug!("Interceptor: Passed threshold, passing.");
+            Some(ctx)
+        } else {
+            log::debug!("Interceptor: Skipped due to threshold.");
+            None
+        }
+    }
+}
+
+impl EgressMsgDownsampler {
+    pub fn new(conf: DownsamplerConf) -> Self {
+        if let Some(threshold_ms) = conf.threshold_ms {
+            let threshold = std::time::Duration::from_millis(threshold_ms);
+            Self {
+                keyexpr: conf.keyexpr,
+                threshold,
+                // TODO (sashacmc): I need just := 0, but how???
+                latest_message_timestamp: Arc::new(Mutex::new(
+                    std::time::Instant::now() - threshold,
+                )),
+            }
+        } else {
+            // TODO (sashacmc): how correctly process an error?
+            panic!("Rate limit downsampler shoud have a threshold_ms parameter");
+        }
     }
 }
 
@@ -109,18 +108,18 @@ impl InterceptorFactoryTrait for DownsamplerInterceptor {
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
         log::debug!("New transport unicast {:?}", transport);
         (
-            Some(Box::new(IngressMsgDownsampler::new(self.conf.clone()))),
-            Some(Box::new(EgressMsgDownsampler {})),
+            Some(Box::new(IngressMsgDownsampler {})),
+            Some(Box::new(EgressMsgDownsampler::new(self.conf.clone()))),
         )
     }
 
     fn new_transport_multicast(&self, transport: &TransportMulticast) -> Option<EgressInterceptor> {
         log::debug!("New transport multicast {:?}", transport);
-        Some(Box::new(EgressMsgDownsampler {}))
+        Some(Box::new(EgressMsgDownsampler::new(self.conf.clone())))
     }
 
     fn new_peer_multicast(&self, transport: &TransportMulticast) -> Option<IngressInterceptor> {
         log::debug!("New peer multicast {:?}", transport);
-        Some(Box::new(IngressMsgDownsampler::new(self.conf.clone())))
+        Some(Box::new(IngressMsgDownsampler {}))
     }
 }

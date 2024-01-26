@@ -170,6 +170,19 @@ impl AdminSpace {
                 .unwrap(),
             Arc::new(plugins_status),
         );
+        //TODO(sashacmc): Adminspace configuration
+        //handlers.insert(
+        //    format!("@/router/{zid_str}/status/downsampling/**")
+        //        .try_into()
+        //        .unwrap(),
+        //    Arc::new(downsampling_status),
+        //);
+        //handlers.insert(
+        //    format!("@/router/{zid_str}/status/prefixes/**")
+        //        .try_into()
+        //        .unwrap(),
+        //    Arc::new(downsampling_status),
+        //);
 
         let mut active_plugins = plugins_mgr
             .started_plugins_iter()

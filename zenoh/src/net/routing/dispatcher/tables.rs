@@ -85,7 +85,7 @@ impl Tables {
         //     Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
         let hat_code = hat::new_hat(whatami, config);
 
-        //TODO(sashacmc): add interceptors config reloading there or incapsulate in the interceptors, but it
+        //TODO(sashacmc): add interceptors config reloading there or encapsulate in the interceptors, but it
         //will require interface changes
         //
         //// config reloading sample:

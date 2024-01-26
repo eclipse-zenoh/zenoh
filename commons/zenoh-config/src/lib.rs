@@ -72,8 +72,10 @@ pub type SecretValue = Secret<SecretString>;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DownsamplerConf {
-    pub keyexpr: OwnedKeyExpr,
-    pub threshold_ms: u64,
+    pub keyexpr: Option<OwnedKeyExpr>,
+    pub interface: Option<String>,
+    pub strategy: Option<String>,
+    pub threshold_ms: Option<u64>,
 }
 
 pub trait ConfigValidator: Send + Sync {

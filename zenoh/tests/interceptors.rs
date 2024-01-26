@@ -6,28 +6,8 @@ fn downsampling() {
 
     use zenoh::prelude::sync::*;
 
-    // declare publisher
-    let mut config = Config::default();
-    config
-        .insert_json5(
-            "downsampling/downsamples",
-            r#"
-              [
-                {
-                  keyexpr: "test/downsamples/r100",
-                  threshold_ms: 100,
-                },
-                {
-                  keyexpr: "test/downsamples/r50",
-                  threshold_ms: 50,
-                },
-              ]
-            "#,
-        )
-        .unwrap();
-
     // declare subscriber
-    let zenoh_sub = zenoh::open(config).res().unwrap();
+    let zenoh_sub = zenoh::open(Config::default()).res().unwrap();
 
     let last_time_r100 = Arc::new(Mutex::new(
         std::time::Instant::now() - std::time::Duration::from_millis(100),
@@ -57,7 +37,26 @@ fn downsampling() {
         .res()
         .unwrap();
 
-    let zenoh_pub = zenoh::open(Config::default()).res().unwrap();
+    // declare publisher
+    let mut config = Config::default();
+    config
+        .insert_json5(
+            "downsampling/downsamples",
+            r#"
+              [
+                {
+                  keyexpr: "test/downsamples/r100",
+                  threshold_ms: 100,
+                },
+                {
+                  keyexpr: "test/downsamples/r50",
+                  threshold_ms: 50,
+                },
+              ]
+            "#,
+        )
+        .unwrap();
+    let zenoh_pub = zenoh::open(config).res().unwrap();
     let publisher_r100 = zenoh_pub
         .declare_publisher("test/downsamples/r100")
         .res()

@@ -24,6 +24,7 @@ pub mod router;
 
 use std::{cell::OnceCell, sync::Arc};
 
+use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 
 use self::{dispatcher::face::Face, router::Resource};
@@ -167,5 +168,20 @@ impl RoutingContext<NetworkMessage> {
             }
         }
         None
+    }
+
+    //TODO (sashacmc): maybe rewrite full_expr to don't convert back?
+    #[inline]
+    pub(crate) fn full_key_expr(&self) -> Option<OwnedKeyExpr> {
+        match self.full_expr() {
+            Some(full_expr) => {
+                if let Ok(keyexpr) = OwnedKeyExpr::new(full_expr) {
+                    Some(keyexpr)
+                } else {
+                    None
+                }
+            }
+            None => None,
+        }
     }
 }
