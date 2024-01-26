@@ -58,5 +58,3 @@ jobs:
               issue_number: context.payload.pull_request.number,
               body: message,
             });
-
-            core.setFailed("This pull request has no linked issue")
