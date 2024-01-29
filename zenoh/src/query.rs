@@ -297,6 +297,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     }
 
     /// Set query value.
+    /// The existing value and encoding will be overwritten.
     #[inline]
     pub fn with_value<IntoValue>(mut self, value: IntoValue) -> Self
     where
@@ -306,7 +307,8 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
         self
     }
 
-    /// Change the encoding of the query value.
+    /// Set the encoding of the existing query value.
+    /// The empty value will be created if value is not set.
     #[inline]
     pub fn encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
     where
