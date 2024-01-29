@@ -1,6 +1,3 @@
-use crate::net::routing::hat::HatTrait;
-use crate::net::routing::RoutingContext;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -18,6 +15,8 @@ use super::face::FaceState;
 use super::resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource};
 use super::tables::NodeId;
 use super::tables::{RoutingExpr, Tables, TablesLock};
+use crate::net::routing::hat::HatTrait;
+use crate::net::routing::RoutingContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, MutexGuard, Weak};
