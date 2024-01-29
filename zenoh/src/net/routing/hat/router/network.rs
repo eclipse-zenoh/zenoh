@@ -135,7 +135,7 @@ impl Network {
         log::debug!("{} Add node (self) {}", name, zid);
         let idx = graph.add_node(Node {
             zid,
-            whatami: Some(runtime.whatami),
+            whatami: Some(runtime.whatami()),
             locators: None,
             sn: 1,
             links: vec![],

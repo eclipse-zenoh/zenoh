@@ -50,6 +50,7 @@ impl FaceState {
         id: usize,
         zid: ZenohId,
         whatami: WhatAmI,
+        #[allow(dead_code)]
         local: bool,
         #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
@@ -73,6 +74,7 @@ impl FaceState {
         })
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub fn is_local(&self) -> bool {
         self.local

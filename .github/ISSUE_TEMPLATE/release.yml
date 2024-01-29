@@ -1,13 +1,16 @@
-name: Request a feature
+name: Add an issue to the next release
 description: |
-  Suggest a new feature specific to this repository. NOTE: for generic Zenoh ideas use "Ask a question".
+  Add an issue as part of next release. 
+  This will be added to the current release project. 
+  You must be a contributor to use this template.
+labels: ["release"]
 body:
   - type: markdown
     attributes:
       value: |
         **Guidelines for a good issue**
 
-        *Is your feature request related to a problem?*
+        *Is your release item related to a problem?*
         A clear and concise description of what the problem is. Ex. I'm always frustrated when [...]
 
         *Describe the solution you'd like*
@@ -17,10 +20,10 @@ body:
         A clear and concise description of any alternative solutions or features you've considered.
 
         *Additional context*
-        Add any other context about the feature request here.
+        Add any other context about the release item request here.
   - type: textarea
-    id: feature
+    id: item
     attributes:
-      label: "Describe the feature"
+      label: "Describe the release item"
     validations:
       required: true

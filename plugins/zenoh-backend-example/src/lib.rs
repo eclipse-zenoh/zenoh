@@ -13,42 +13,54 @@
 //
 use async_std::sync::RwLock;
 use async_trait::async_trait;
-use std::collections::HashMap;
-use std::sync::Arc;
-use zenoh::prelude::r#async::*;
-use zenoh::time::Timestamp;
-use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
-use zenoh_backend_traits::*;
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    sync::Arc,
+};
+use zenoh::{prelude::OwnedKeyExpr, sample::Sample, time::Timestamp, value::Value};
+use zenoh_backend_traits::{
+    config::{StorageConfig, VolumeConfig},
+    Capability, History, Persistence, Storage, StorageInsertionResult, StoredData, Volume,
+    VolumeInstance,
+};
 use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin};
 use zenoh_result::ZResult;
 
-use crate::MEMORY_BACKEND_NAME;
+#[cfg(feature = "no_mangle")]
+zenoh_plugin_trait::declare_plugin!(ExampleBackend);
 
-pub struct MemoryBackend {
-    config: VolumeConfig,
-}
-
-impl Plugin for MemoryBackend {
+impl Plugin for ExampleBackend {
     type StartArgs = VolumeConfig;
     type Instance = VolumeInstance;
+    fn start(_name: &str, _args: &Self::StartArgs) -> ZResult<Self::Instance> {
+        let volume = ExampleBackend {};
+        Ok(Box::new(volume))
+    }
 
-    const DEFAULT_NAME: &'static str = MEMORY_BACKEND_NAME;
+    const DEFAULT_NAME: &'static str = "example_backend";
     const PLUGIN_VERSION: &'static str = plugin_version!();
     const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
+}
 
-    fn start(_: &str, args: &VolumeConfig) -> ZResult<VolumeInstance> {
-        Ok(Box::new(MemoryBackend {
-            config: args.clone(),
-        }))
+pub struct ExampleBackend {}
+
+pub struct ExampleStorage {
+    map: RwLock<HashMap<Option<OwnedKeyExpr>, StoredData>>,
+}
+
+impl Default for ExampleStorage {
+    fn default() -> Self {
+        Self {
+            map: RwLock::new(HashMap::new()),
+        }
     }
 }
 
 #[async_trait]
-impl Volume for MemoryBackend {
+impl Volume for ExampleBackend {
     fn get_admin_status(&self) -> serde_json::Value {
-        self.config.to_json_value()
+        serde_json::Value::Null
     }
-
     fn get_capability(&self) -> Capability {
         Capability {
             persistence: Persistence::Volatile,
@@ -56,74 +68,35 @@ impl Volume for MemoryBackend {
             read_cost: 0,
         }
     }
-
-    async fn create_storage(&self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
-        log::debug!("Create Memory Storage with configuration: {:?}", properties);
-        Ok(Box::new(MemoryStorage::new(properties).await?))
+    async fn create_storage(&self, _props: StorageConfig) -> ZResult<Box<dyn Storage>> {
+        Ok(Box::<ExampleStorage>::default())
     }
-
     fn incoming_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
-        // By default: no interception point
         None
-        // To test interceptors, uncomment this line:
-        // Some(Arc::new(|sample| {
-        //     trace!(">>>> IN INTERCEPTOR FOR {:?}", sample);
-        //     sample
-        // }))
     }
-
     fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>> {
-        // By default: no interception point
         None
-        // To test interceptors, uncomment this line:
-        // Some(Arc::new(|sample| {
-        //     trace!("<<<< OUT INTERCEPTOR FOR {:?}", sample);
-        //     sample
-        // }))
-    }
-}
-
-impl Drop for MemoryBackend {
-    fn drop(&mut self) {
-        // nothing to do in case of memory backend
-        log::trace!("MemoryBackend::drop()");
-    }
-}
-
-struct MemoryStorage {
-    config: StorageConfig,
-    map: Arc<RwLock<HashMap<Option<OwnedKeyExpr>, StoredData>>>,
-}
-
-impl MemoryStorage {
-    async fn new(properties: StorageConfig) -> ZResult<MemoryStorage> {
-        Ok(MemoryStorage {
-            config: properties,
-            map: Arc::new(RwLock::new(HashMap::new())),
-        })
     }
 }
 
 #[async_trait]
-impl Storage for MemoryStorage {
+impl Storage for ExampleStorage {
     fn get_admin_status(&self) -> serde_json::Value {
-        self.config.to_json_value()
+        serde_json::Value::Null
     }
-
     async fn put(
         &mut self,
         key: Option<OwnedKeyExpr>,
         value: Value,
         timestamp: Timestamp,
     ) -> ZResult<StorageInsertionResult> {
-        log::trace!("put for {:?}", key);
         let mut map = self.map.write().await;
         match map.entry(key) {
-            std::collections::hash_map::Entry::Occupied(mut e) => {
+            Entry::Occupied(mut e) => {
                 e.insert(StoredData { value, timestamp });
                 return Ok(StorageInsertionResult::Replaced);
             }
-            std::collections::hash_map::Entry::Vacant(e) => {
+            Entry::Vacant(e) => {
                 e.insert(StoredData { value, timestamp });
                 return Ok(StorageInsertionResult::Inserted);
             }
@@ -135,9 +108,8 @@ impl Storage for MemoryStorage {
         key: Option<OwnedKeyExpr>,
         _timestamp: Timestamp,
     ) -> ZResult<StorageInsertionResult> {
-        log::trace!("delete for {:?}", key);
         self.map.write().await.remove_entry(&key);
-        return Ok(StorageInsertionResult::Deleted);
+        Ok(StorageInsertionResult::Deleted)
     }
 
     async fn get(
@@ -145,8 +117,6 @@ impl Storage for MemoryStorage {
         key: Option<OwnedKeyExpr>,
         _parameters: &str,
     ) -> ZResult<Vec<StoredData>> {
-        log::trace!("get for {:?}", key);
-        // @TODO: use parameters???
         match self.map.read().await.get(&key) {
             Some(v) => Ok(vec![v.clone()]),
             None => Err(format!("Key {:?} is not present", key).into()),
@@ -160,12 +130,5 @@ impl Storage for MemoryStorage {
             result.push((k.clone(), v.timestamp));
         }
         Ok(result)
-    }
-}
-
-impl Drop for MemoryStorage {
-    fn drop(&mut self) {
-        // nothing to do in case of memory backend
-        log::trace!("MemoryStorage::drop()");
     }
 }

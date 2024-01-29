@@ -14,6 +14,8 @@
 
 //! ⚠️ WARNING ⚠️
 //!
+//! TODO: The example is outdated, rewrite it
+//!
 //! This crate should be considered unstable, as in we might change the APIs anytime.
 //!
 //! This crate provides the traits to be implemented by a zenoh backend library:
@@ -62,7 +64,7 @@
 //!         }
 //!     }
 //!
-//!     async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
+//!     async fn create_storage(&self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
 //!         // The properties are the ones passed via a PUT in the admin space for Storage creation.
 //!         Ok(Box::new(MyStorage::new(properties).await?))
 //!     }
@@ -132,15 +134,23 @@
 //! ```
 
 use async_trait::async_trait;
+use const_format::concatcp;
 use std::sync::Arc;
 use zenoh::prelude::{KeyExpr, OwnedKeyExpr, Sample, Selector};
 use zenoh::queryable::ReplyBuilder;
 use zenoh::time::Timestamp;
 use zenoh::value::Value;
 pub use zenoh::Result as ZResult;
+use zenoh_plugin_trait::{PluginControl, PluginInstance, PluginStatusRec, StructVersion};
+use zenoh_util::concat_enabled_features;
 
 pub mod config;
-use config::{StorageConfig, VolumeConfig};
+use config::StorageConfig;
+
+// No features are actually used in this crate, but this dummy list allows to demonstrate how to combine feature lists
+// from multiple crates. See impl `PluginStructVersion` for `VolumeConfig` below.
+const FEATURES: &str =
+    concat_enabled_features!(prefix = "zenoh-backend-traits", features = ["default"]);
 
 /// Capability of a storage indicates the guarantees of the storage
 /// It is used by the storage manager to take decisions on the trade-offs to ensure correct performance
@@ -173,10 +183,6 @@ pub enum History {
     All,
 }
 
-/// Signature of the `create_volume` operation to be implemented in the library as an entrypoint.
-pub const CREATE_VOLUME_FN_NAME: &[u8] = b"create_volume";
-pub type CreateVolume = fn(VolumeConfig) -> ZResult<Box<dyn Volume>>;
-
 ///
 pub enum StorageInsertionResult {
     Outdated,
@@ -203,7 +209,7 @@ pub trait Volume: Send + Sync {
     fn get_capability(&self) -> Capability;
 
     /// Creates a storage configured with some properties.
-    async fn create_storage(&mut self, props: StorageConfig) -> ZResult<Box<dyn Storage>>;
+    async fn create_storage(&self, props: StorageConfig) -> ZResult<Box<dyn Storage>>;
 
     /// Returns an interceptor that will be called before pushing any data
     /// into a storage created by this backend. `None` can be returned for no interception point.
@@ -213,6 +219,25 @@ pub trait Volume: Send + Sync {
     /// to a query from a storage created by this backend. `None` can be returned for no interception point.
     fn outgoing_data_interceptor(&self) -> Option<Arc<dyn Fn(Sample) -> Sample + Send + Sync>>;
 }
+
+pub type VolumeInstance = Box<dyn Volume + 'static>;
+
+impl StructVersion for VolumeInstance {
+    fn struct_version() -> u64 {
+        1
+    }
+    fn struct_features() -> &'static str {
+        concatcp!(zenoh::FEATURES, crate::FEATURES)
+    }
+}
+
+impl PluginControl for VolumeInstance {
+    fn plugins_status(&self, _names: &zenoh::prelude::keyexpr) -> Vec<PluginStatusRec> {
+        Vec::new()
+    }
+}
+
+impl PluginInstance for VolumeInstance {}
 
 /// Trait to be implemented by a Storage.
 #[async_trait]

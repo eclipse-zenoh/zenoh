@@ -32,6 +32,7 @@ use zenoh_protocol::core::{WhatAmI, ZenohId};
 /// # })
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[derive(Debug)]
 pub struct ZidBuilder<'a> {
     pub(crate) session: SessionRef<'a>,
 }
@@ -42,7 +43,7 @@ impl<'a> Resolvable for ZidBuilder<'a> {
 
 impl<'a> SyncResolve for ZidBuilder<'a> {
     fn res_sync(self) -> Self::To {
-        self.session.runtime.zid
+        self.session.runtime.zid()
     }
 }
 
@@ -69,6 +70,7 @@ impl<'a> AsyncResolve for ZidBuilder<'a> {
 /// # })
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[derive(Debug)]
 pub struct RoutersZidBuilder<'a> {
     pub(crate) session: SessionRef<'a>,
 }
@@ -115,6 +117,7 @@ impl<'a> AsyncResolve for RoutersZidBuilder<'a> {
 /// # })
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
+#[derive(Debug)]
 pub struct PeersZidBuilder<'a> {
     pub(crate) session: SessionRef<'a>,
 }

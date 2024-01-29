@@ -35,6 +35,7 @@ use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
 use zenoh_link::{EndPoint, Link};
+use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::core::{Locator, WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::{bail, ZResult};
@@ -44,17 +45,17 @@ use zenoh_transport::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
-pub struct RuntimeState {
-    pub zid: ZenohId,
-    pub whatami: WhatAmI,
-    pub metadata: serde_json::Value,
-    pub router: Arc<Router>,
-    pub config: Notifier<Config>,
-    pub manager: TransportManager,
-    pub transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
-    pub(crate) locators: std::sync::RwLock<Vec<Locator>>,
-    pub hlc: Option<Arc<HLC>>,
-    pub(crate) stop_source: std::sync::RwLock<Option<StopSource>>,
+struct RuntimeState {
+    zid: ZenohId,
+    whatami: WhatAmI,
+    metadata: serde_json::Value,
+    router: Arc<Router>,
+    config: Notifier<Config>,
+    manager: TransportManager,
+    transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
+    locators: std::sync::RwLock<Vec<Locator>>,
+    hlc: Option<Arc<HLC>>,
+    stop_source: std::sync::RwLock<Option<StopSource>>,
 }
 
 #[derive(Clone)]
@@ -62,13 +63,16 @@ pub struct Runtime {
     state: Arc<RuntimeState>,
 }
 
-impl std::ops::Deref for Runtime {
-    type Target = RuntimeState;
-
-    fn deref(&self) -> &RuntimeState {
-        self.state.deref()
+impl StructVersion for Runtime {
+    fn struct_version() -> u64 {
+        1
+    }
+    fn struct_features() -> &'static str {
+        crate::FEATURES
     }
 }
+
+impl PluginStartArgs for Runtime {}
 
 impl Runtime {
     pub async fn new(config: Config) -> ZResult<Runtime> {
@@ -121,7 +125,7 @@ impl Runtime {
             }),
         };
         *handler.runtime.write().unwrap() = Some(runtime.clone());
-        get_mut_unchecked(&mut runtime.router.clone()).init_link_state(runtime.clone());
+        get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone());
 
         let receiver = config.subscribe();
         runtime.spawn({
@@ -143,7 +147,7 @@ impl Runtime {
 
     #[inline(always)]
     pub fn manager(&self) -> &TransportManager {
-        &self.manager
+        &self.state.manager
     }
 
     pub fn new_handler(&self, handler: Arc<dyn TransportEventHandler>) {
@@ -152,17 +156,17 @@ impl Runtime {
 
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("Runtime::close())");
-        drop(self.stop_source.write().unwrap().take());
+        drop(self.state.stop_source.write().unwrap().take());
         self.manager().close().await;
         Ok(())
     }
 
     pub fn new_timestamp(&self) -> Option<uhlc::Timestamp> {
-        self.hlc.as_ref().map(|hlc| hlc.new_timestamp())
+        self.state.hlc.as_ref().map(|hlc| hlc.new_timestamp())
     }
 
     pub fn get_locators(&self) -> Vec<Locator> {
-        self.locators.read().unwrap().clone()
+        self.state.locators.read().unwrap().clone()
     }
 
     pub(crate) fn spawn<F, T>(&self, future: F) -> Option<JoinHandle<Result<T, TimedOutError>>>
@@ -170,11 +174,32 @@ impl Runtime {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        self.stop_source
+        self.state
+            .stop_source
             .read()
             .unwrap()
             .as_ref()
             .map(|source| async_std::task::spawn(future.timeout_at(source.token())))
+    }
+
+    pub(crate) fn router(&self) -> Arc<Router> {
+        self.state.router.clone()
+    }
+
+    pub fn config(&self) -> &Notifier<Config> {
+        &self.state.config
+    }
+
+    pub fn hlc(&self) -> Option<&HLC> {
+        self.state.hlc.as_ref().map(Arc::as_ref)
+    }
+
+    pub fn zid(&self) -> ZenohId {
+        self.state.zid
+    }
+
+    pub fn whatami(&self) -> WhatAmI {
+        self.state.whatami
     }
 }
 
@@ -191,7 +216,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         match zread!(self.runtime).as_ref() {
             Some(runtime) => {
                 let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> =
-                    zread!(runtime.transport_handlers)
+                    zread!(runtime.state.transport_handlers)
                         .iter()
                         .filter_map(|handler| {
                             handler.new_unicast(peer.clone(), transport.clone()).ok()
@@ -200,7 +225,11 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
                 Ok(Arc::new(RuntimeSession {
                     runtime: runtime.clone(),
                     endpoint: std::sync::RwLock::new(None),
-                    main_handler: runtime.router.new_transport_unicast(transport).unwrap(),
+                    main_handler: runtime
+                        .state
+                        .router
+                        .new_transport_unicast(transport)
+                        .unwrap(),
                     slave_handlers,
                 }))
             }
@@ -215,11 +244,14 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         match zread!(self.runtime).as_ref() {
             Some(runtime) => {
                 let slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>> =
-                    zread!(runtime.transport_handlers)
+                    zread!(runtime.state.transport_handlers)
                         .iter()
                         .filter_map(|handler| handler.new_multicast(transport.clone()).ok())
                         .collect();
-                runtime.router.new_transport_multicast(transport.clone())?;
+                runtime
+                    .state
+                    .router
+                    .new_transport_multicast(transport.clone())?;
                 Ok(Arc::new(RuntimeMuticastGroup {
                     runtime: runtime.clone(),
                     transport,
@@ -293,6 +325,7 @@ impl TransportMulticastEventHandler for RuntimeMuticastGroup {
         Ok(Arc::new(RuntimeMuticastSession {
             main_handler: self
                 .runtime
+                .state
                 .router
                 .new_peer_multicast(self.transport.clone(), peer)?,
             slave_handlers,

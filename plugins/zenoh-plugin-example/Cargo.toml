@@ -19,6 +19,10 @@ authors = { workspace = true }
 edition = { workspace = true }
 publish = false
 
+[features]
+default = ["no_mangle"]
+no_mangle = []
+
 [lib]
 # When auto-detecting the "example" plugin, `zenohd` will look for a dynamic library named "zenoh_plugin_example"
 # `zenohd` will expect the file to be named according to OS conventions:
@@ -31,12 +35,14 @@ crate-type = ["cdylib"]
 
 [dependencies]
 async-std = { workspace = true, features = ["default"] }
+const_format = { workspace = true }
 clap = { workspace = true }
 env_logger = { workspace = true }
 futures = { workspace = true }
+git-version = { workspace = true }
 log = { workspace = true }
 serde_json = { workspace = true }
-zenoh = { workspace = true }
+zenoh = { workspace = true, features = ["unstable"] }
 zenoh-core = { workspace = true }
 zenoh-plugin-trait = { workspace = true }
 zenoh-result = { workspace = true }

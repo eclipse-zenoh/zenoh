@@ -97,7 +97,7 @@ pub(crate) struct HatCode {}
 
 impl HatBaseTrait for HatCode {
     fn init(&self, tables: &mut Tables, runtime: Runtime) {
-        let config = runtime.config.lock();
+        let config = runtime.config().lock();
         let whatami = tables.whatami;
         let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
         let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());

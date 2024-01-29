@@ -1,7 +1,0 @@
-{
-  url: "https://localhost:8086",
-  private: {
-    username: "user1",
-    password: "pw1",
-  },
-}
