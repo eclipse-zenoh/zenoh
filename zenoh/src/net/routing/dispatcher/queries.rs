@@ -19,7 +19,7 @@ use crate::net::routing::hat::HatTrait;
 use crate::net::routing::RoutingContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::sync::{Arc, MutexGuard, Weak};
+use std::sync::{Arc, Weak};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::network::declare::queryable::ext::QueryableInfo;
@@ -41,7 +41,7 @@ pub(crate) struct Query {
 }
 
 pub(crate) fn declare_queryable(
-    hat_code: &MutexGuard<'_, Box<dyn HatTrait + Send + Sync>>,
+    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
@@ -98,7 +98,7 @@ pub(crate) fn declare_queryable(
 }
 
 pub(crate) fn undeclare_queryable(
-    hat_code: &MutexGuard<'_, Box<dyn HatTrait + Send + Sync>>,
+    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
