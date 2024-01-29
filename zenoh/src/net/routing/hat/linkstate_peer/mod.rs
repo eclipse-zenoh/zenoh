@@ -35,6 +35,7 @@ use crate::{
         protocol::linkstate::LinkStateList,
         routing::{
             dispatcher::face::Face,
+            hat::TREES_COMPUTATION_DELAY_MS,
             router::{
                 compute_data_routes, compute_matching_pulls, compute_query_routes, RoutesIndexes,
             },
@@ -60,10 +61,6 @@ use zenoh_transport::unicast::TransportUnicast;
 mod network;
 mod pubsub;
 mod queries;
-
-zconfigurable! {
-    static ref TREES_COMPUTATION_DELAY: u64 = 100;
-}
 
 macro_rules! hat {
     ($t:expr) => {
@@ -132,8 +129,10 @@ impl HatTables {
         log::trace!("Schedule computations");
         if self.peers_trees_task.is_none() {
             let task = Some(async_std::task::spawn(async move {
-                async_std::task::sleep(std::time::Duration::from_millis(*TREES_COMPUTATION_DELAY))
-                    .await;
+                async_std::task::sleep(std::time::Duration::from_millis(
+                    *TREES_COMPUTATION_DELAY_MS,
+                ))
+                .await;
                 let mut tables = zwrite!(tables_ref.tables);
 
                 log::trace!("Compute trees");

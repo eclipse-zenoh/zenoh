@@ -52,10 +52,6 @@ use zenoh_transport::unicast::TransportUnicast;
 mod pubsub;
 mod queries;
 
-zconfigurable! {
-    static ref TREES_COMPUTATION_DELAY: u64 = 100;
-}
-
 macro_rules! face_hat {
     ($f:expr) => {
         $f.hat.downcast_ref::<HatFace>().unwrap()

@@ -44,7 +44,7 @@ mod p2p_peer;
 mod router;
 
 zconfigurable! {
-    static ref TREES_COMPUTATION_DELAY: u64 = 100;
+    pub static ref TREES_COMPUTATION_DELAY_MS: u64 = 100;
 }
 
 pub(crate) trait HatTrait: HatBaseTrait + HatPubSubTrait + HatQueriesTrait {}
