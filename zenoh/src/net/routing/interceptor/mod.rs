@@ -22,7 +22,7 @@ mod authz;
 use self::authz::{Action, NewCtx};
 
 use super::RoutingContext;
-use crate::net::routing::interceptor::authz::{PolicyEnforcer, ZAuth};
+use crate::net::routing::interceptor::authz::PolicyEnforcer;
 use zenoh_config::{Config, ZenohId};
 use zenoh_protocol::network::{NetworkBody, NetworkMessage};
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};

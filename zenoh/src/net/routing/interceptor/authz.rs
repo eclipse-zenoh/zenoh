@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, hash::Hash};
 
 // use casbin::{CoreApi, Enforcer};
 use super::RoutingContext;
@@ -12,7 +12,7 @@ use zenoh_result::ZResult;
 
 use std::{collections::HashMap, error::Error};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub enum Action {
     Read,
     Write,
@@ -37,7 +37,7 @@ pub struct RequestBuilder {
     action: Option<Action>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Subject {
     id: ZenohId,
     attributes: Option<HashMap<String, String>>, //might be mapped to u8 values eventually
@@ -120,20 +120,9 @@ impl SubjectBuilder {
     }
 }
 
-// impl fmt::Debug for Action {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         write!(f, "{:?}", self)
-//     }
+// pub trait ZAuth {
+//     fn authz_testing(&self, _: String, _: String, _: String) -> ZResult<bool>;
 // }
-// impl fmt::Display for Action {
-//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-//         write!(f, "{:?}", self)
-//     }
-// }
-
-pub trait ZAuth {
-    fn authz_testing(&self, _: String, _: String, _: String) -> ZResult<bool>;
-}
 
 // impl ZAuth for Enforcer {
 //     fn authz_testing(&self, zid: String, ke: String, act: String) -> ZResult<bool> {
@@ -160,8 +149,8 @@ pub trait ZAuth {
 // }
 
 //struct that defines each policy (add policy type and ruleset)
-#[derive(Serialize, Deserialize, Debug)]
-struct Policy {
+#[derive(Serialize, Deserialize, Debug, Clone)]
+struct Rule {
     // policy_type: u8, //for l,a,r [access-list, abac, rbac type policy] will be assuming acl for now
     sub: Subject,
     ke: String,
@@ -169,10 +158,15 @@ struct Policy {
     permission: bool,
 }
 
-#[derive(Clone)]
-pub struct PolicyEnforcer {
-    policy_config: HashMap<String, HashMap<String, String>>,
-}
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct SubAct(Subject, Action);
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct PolicyEnforcer(HashMap<SubAct, KeTrie>); //need to add tries here
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+
+pub struct KeTrie {}
 
 impl PolicyEnforcer {
     pub fn init() -> ZResult<Self> {
@@ -184,28 +178,21 @@ impl PolicyEnforcer {
         */
         //policy should be derived from config/file (hardcoding it for now)
         //config for local static policy
-        let static_policy = r#"{
-                            ["subject":{"id": "muyid", "attributes": "location"},"ke":"my_ke","action":"Read","permission":true],
-                            ["subject":{"id": "muyid", "attributes": "location"},"ke":"myke","action":"Read","permission":true],
-                            ["subject":{"id": "muyid", "attributes": "location"},"ke":"myke","action":"Read","permission":true],
-                            ["subject":{"id": "muyid", "attributes": "location"},"ke":"myke","action":"Read","permission":true]
-                        }"#;
-        //desearlize to policy
-        let get_policy: Policy = serde_json::from_str(static_policy)?;
-        println!("print policy {:?}", get_policy);
-        let policy = Self::build_policy_map(get_policy);
+        let policy_info = Self::policy_resource_point().unwrap();
 
-        let pe = Self {
-            policy_config: policy,
-        };
+        //desearlize to vector of rules
+        let rule_set: Vec<Rule> = serde_json::from_str(policy_info)?;
+        println!("print policy {:?}", rule_set);
+        let pe = Self::build_policy_map(rule_set).expect("policy not established");
 
         //also should start the logger here
         Ok(pe)
     }
 
-    pub fn build_policy_map(policy: Policy) {
+    pub fn build_policy_map(policy: Vec<Rule>) -> ZResult<PolicyEnforcer> {
+        let pe: PolicyEnforcer;
 
-        //convert policy to vector of hashmap (WIP)
+        //convert vector of rules to a hashmap mapping subact to ketree (WIP)
         /*
                        policy = subject : [ rule_1,
                                            rule_2,
@@ -214,6 +201,7 @@ impl PolicyEnforcer {
                                         ]
                        where rule_i = action_i : (ke_tree_deny, ke_tree_allow) that deny/allow action_i
         */
+        Ok(pe)
     }
     pub fn policy_enforcement_point(&self, new_ctx: NewCtx, action: Action) -> ZResult<bool> {
         /*
@@ -253,11 +241,12 @@ impl PolicyEnforcer {
            PHASE1: just extract the ID (zid?) from the msg; can later add attributes to the list. have a struct with ID and attributes field (both Option)
         */
     }
+
     pub fn policy_decision_point(&self, request: Request) -> ZResult<bool> {
         /*
             input: (request)
             output: true(allow)/false(deny)
-            function: process the request from PEP against policy list
+            function: process the request from PEP against the policy (self)
                     policy list will(might) be a hashmap of subject:rules_vector (test and discuss)
         */
         /*
@@ -269,11 +258,24 @@ impl PolicyEnforcer {
             tried KeTrees, didn't work
             need own algorithm for pattern matching via modified trie-search
         */
+
+        //extract subject and action from request and create subact [this is our key for hashmap]
+        let subact = SubAct(request.sub, request.action);
+        let ke = request.obj;
+        // type policymap =
+        match self.0.get(&subact) {
+            Some(ktrie) => {
+
+                // check if request ke has a match in ke-trie
+                // if ke in ke-trie, then Ok(true) else Ok(false)
+            }
+            None => return Ok(false),
+        }
+
         Ok(false)
     }
 
-    pub fn policy_resource_point() {
-
+    pub fn policy_resource_point() -> ZResult<&'static str> {
         /*
            input: config file value along with &self
            output: loads the appropriate policy into the memory and returns back self (now with added policy info); might also select AC type (ACL or ABAC)
@@ -282,8 +284,19 @@ impl PolicyEnforcer {
         /*
            PHASE1: just have a vector of structs containing these values; later we can load them here from config
         */
+        let static_policy = r#"{
+            ["subject":{"id": 001, "attributes": "location_1"},"ke":"demo/a/*","action":"Read","permission":true],
+            ["subject":{"id": 002, "attributes": "location_1"},"ke":"demo/a/*","action":"Read","permission":true],
+            ["subject":{"id": 002, "attributes": "location_1"},"ke":"demo/a/*","action":"Read","permission":true],
+            ["subject":{"id": 003, "attributes": "location_1"},"ke":"demo/*","action":"Both","permission":true]
+        }"#;
+        Ok(static_policy)
     }
 }
+
+// fn ketrie_matcher(ke,ketrie){
+
+// }
 
 #[cfg(test)]
 mod tests {
