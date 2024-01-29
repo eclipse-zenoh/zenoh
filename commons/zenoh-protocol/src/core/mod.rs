@@ -345,6 +345,8 @@ impl TryFrom<u8> for Priority {
     }
 }
 
+/// The reliability request of a subscriber.
+// tags{options.reliability}
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Reliability {

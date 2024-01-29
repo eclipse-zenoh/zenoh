@@ -26,6 +26,7 @@ use zenoh_protocol::core::Encoding;
 pub type SourceSn = u64;
 
 /// The locality of samples to be received by subscribers or targeted by publishers.
+// tags{options.locality}
 #[zenoh_macros::unstable]
 #[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
 pub enum Locality {

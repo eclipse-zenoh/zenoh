@@ -303,7 +303,7 @@ fn register_peer_subscription(
     }
 }
 
-pub fn declare_peer_subscription(
+pub(crate) fn declare_peer_subscription(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,

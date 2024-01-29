@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+
+// ignore_tagging
 pub mod declare;
 pub mod oam;
 pub mod push;

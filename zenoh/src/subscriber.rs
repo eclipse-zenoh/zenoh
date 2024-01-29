@@ -349,6 +349,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{session.declare_subscriber.cb}
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> SubscriberBuilder<'a, 'b, Mode, Callback>
     where
@@ -392,6 +393,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{session.declare_subscriber.cb.locked}
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
@@ -422,6 +424,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// }
     /// # })
     /// ```
+    // tags{session.declare_subscriber.cb.generic}
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Mode, Handler>
     where
@@ -447,6 +450,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
 }
 impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
     /// Change the subscription reliability.
+    // tags{session.declare_subscriber.options.reliability}
     #[inline]
     pub fn reliability(mut self, reliability: Reliability) -> Self {
         self.reliability = reliability;
@@ -469,6 +473,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
 
     /// Restrict the matching publications that will be receive by this [`Subscriber`]
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    // tags{session.declare_subscriber.options.locality}
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
@@ -477,6 +482,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
     }
 
     /// Change the subscription mode to Pull.
+    // tags{session.declare_subscriber.options.pull}
     #[inline]
     pub fn pull_mode(self) -> SubscriberBuilder<'a, 'b, PullMode, Handler> {
         let SubscriberBuilder {
@@ -498,6 +504,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
     }
 
     /// Change the subscription mode to Push.
+    // tags{session.declare_subscriber.options.push}
     #[inline]
     pub fn push_mode(self) -> SubscriberBuilder<'a, 'b, PushMode, Handler> {
         let SubscriberBuilder {
@@ -725,6 +732,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     /// subscriber.pull();
     /// # })
     /// ```
+    // tags{session.declare_subscriber.pull}
     #[inline]
     pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
         self.subscriber.pull()
@@ -749,6 +757,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     /// subscriber.undeclare().res().await.unwrap();
     /// # })
     /// ```
+    // tags{session.declare_subscriber.pull.undeclare}
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         self.subscriber.undeclare()
@@ -757,6 +766,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
 
 impl<'a, Receiver> Subscriber<'a, Receiver> {
     /// Returns the [`KeyExpr`] this Subscriber subscribes to.
+    // tags{session.declare_subscriber.push.key_expr}
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.subscriber.state.key_expr
     }
@@ -779,6 +789,7 @@ impl<'a, Receiver> Subscriber<'a, Receiver> {
     /// subscriber.undeclare().res().await.unwrap();
     /// # })
     /// ```
+    // tags{session.declare_subscriber.push.undeclare}
     #[inline]
     pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
         self.subscriber.undeclare()

@@ -390,6 +390,7 @@ impl Session {
     /// }).await;
     /// # })
     /// ```
+    // tags{session.rc}
     pub fn into_arc(self) -> Arc<Self> {
         Arc::new(self)
     }
@@ -421,16 +422,19 @@ impl Session {
     /// }).await;
     /// # })
     /// ```
+    // tags{}
     pub fn leak(s: Self) -> &'static mut Self {
         Box::leak(Box::new(s))
     }
 
     /// Returns the identifier of the current session. `zid()` is a convenient shortcut.
     /// See [`Session::info()`](`Session::info()`) and [`SessionInfo::zid()`](`SessionInfo::zid()`) for more details.
+    // tags{session.zid}
     pub fn zid(&self) -> ZenohId {
         self.info().zid().res_sync()
     }
 
+    // tags{session.clock}
     pub fn hlc(&self) -> Option<&HLC> {
         self.runtime.hlc()
     }
@@ -449,6 +453,7 @@ impl Session {
     /// session.close().res().await.unwrap();
     /// # })
     /// ```
+    // tags{session.close}
     pub fn close(self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
             trace!("close()");
@@ -461,6 +466,7 @@ impl Session {
         })
     }
 
+    // tags{}
     pub fn undeclare<'a, T, O>(&'a self, decl: T) -> O
     where
         O: Resolve<ZResult<()>>,
@@ -496,6 +502,7 @@ impl Session {
     /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # })
     /// ```
+    // tags{session.config{get, subscribe}}
     pub fn config(&self) -> &Notifier<Config> {
         self.runtime.config()
     }
@@ -511,6 +518,7 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
+    // tags{session.info}
     pub fn info(&self) -> SessionInfo {
         SessionInfo {
             session: SessionRef::Borrow(self),
@@ -535,6 +543,7 @@ impl Session {
     /// }
     /// # })
     /// ```
+    // tags{session.declare_subscriber}
     pub fn declare_subscriber<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -575,6 +584,7 @@ impl Session {
     /// }
     /// # })
     /// ```
+    // tags{session.declare_queryable}
     pub fn declare_queryable<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -611,6 +621,7 @@ impl Session {
     /// publisher.put("value").res().await.unwrap();
     /// # })
     /// ```
+    // tags{session.declare_publisher}
     pub fn declare_publisher<'a, 'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -642,6 +653,7 @@ impl Session {
     /// let key_expr = session.declare_keyexpr("key/expression").res().await.unwrap();
     /// # })
     /// ```
+    // tags{session.declare_keyexpr}
     pub fn declare_keyexpr<'a, 'b: 'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -708,6 +720,7 @@ impl Session {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{session.put}
     #[inline]
     pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoValue>(
         &'a self,
@@ -743,6 +756,7 @@ impl Session {
     /// session.delete("key/expression").res().await.unwrap();
     /// # })
     /// ```
+    // tags{session.delete}
     #[inline]
     pub fn delete<'a, 'b: 'a, TryIntoKeyExpr>(
         &'a self,
@@ -781,6 +795,7 @@ impl Session {
     /// }
     /// # })
     /// ```
+    // tags{session.get}
     pub fn get<'a, 'b: 'a, IntoSelector>(
         &'a self,
         selector: IntoSelector,
@@ -825,6 +840,7 @@ impl Session {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{liveliness}
     #[zenoh_macros::unstable]
     pub fn liveliness(&self) -> Liveliness {
         Liveliness {
