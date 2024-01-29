@@ -11,12 +11,14 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use const_format::concatcp;
 use derive_more::{AsMut, AsRef};
 use schemars::JsonSchema;
 use serde_json::{Map, Value};
 use std::convert::TryFrom;
 use std::time::Duration;
 use zenoh::{key_expr::keyexpr, prelude::OwnedKeyExpr, Result as ZResult};
+use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_result::{bail, zerror, Error};
 
 #[derive(JsonSchema, Debug, Clone, AsMut, AsRef)]
@@ -66,6 +68,17 @@ pub struct ReplicaConfig {
     pub propagation_delay: Duration,
     pub delta: Duration,
 }
+
+impl StructVersion for VolumeConfig {
+    fn struct_version() -> u64 {
+        1
+    }
+    fn struct_features() -> &'static str {
+        concatcp!(zenoh::FEATURES, crate::FEATURES)
+    }
+}
+
+impl PluginStartArgs for VolumeConfig {}
 
 impl Default for ReplicaConfig {
     fn default() -> Self {
@@ -222,10 +235,6 @@ impl ConfigDiff {
         diffs
     }
 }
-pub enum BackendSearchMethod<'a> {
-    ByPaths(&'a [String]),
-    ByName(&'a str),
-}
 impl VolumeConfig {
     pub fn to_json_value(&self) -> Value {
         let mut result = self.rest.clone();
@@ -240,11 +249,14 @@ impl VolumeConfig {
         }
         Value::Object(result)
     }
-    pub fn backend_search_method(&self) -> BackendSearchMethod {
-        match &self.paths {
-            None => BackendSearchMethod::ByName(self.backend.as_deref().unwrap_or(&self.name)),
-            Some(paths) => BackendSearchMethod::ByPaths(paths),
-        }
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+    pub fn backend(&self) -> &str {
+        self.backend.as_deref().unwrap_or(&self.name)
+    }
+    pub fn paths(&self) -> Option<&[String]> {
+        self.paths.as_deref()
     }
     fn try_from<V: AsObject>(plugin_name: &str, configs: &V) -> ZResult<Vec<Self>> {
         let configs = configs.as_object().ok_or_else(|| {
@@ -312,6 +324,9 @@ impl VolumeConfig {
     }
 }
 impl StorageConfig {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
     pub fn to_json_value(&self) -> Value {
         let mut result = serde_json::Map::new();
         result.insert("key_expr".into(), Value::String(self.key_expr.to_string()));

@@ -26,13 +26,13 @@ use serde_json::Value;
 use std::convert::TryFrom; // This is a false positive from the rust analyser
 use std::{
     any::Any,
-    collections::{HashMap, HashSet},
+    collections::HashSet,
     fmt,
     io::Read,
     marker::PhantomData,
     net::SocketAddr,
     path::Path,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{Arc, Mutex, MutexGuard, Weak},
 };
 use validated_struct::ValidatedMapAssociatedTypes;
 pub use validated_struct::{GetError, ValidatedMap};
@@ -70,15 +70,21 @@ impl Zeroize for SecretString {
 
 pub type SecretValue = Secret<SecretString>;
 
-pub type ValidationFunction = std::sync::Arc<
-    dyn Fn(
-            &str,
-            &serde_json::Map<String, serde_json::Value>,
-            &serde_json::Map<String, serde_json::Value>,
-        ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>>
-        + Send
-        + Sync,
->;
+pub trait ConfigValidator: Send + Sync {
+    fn check_config(
+        &self,
+        _plugin_name: &str,
+        _path: &str,
+        _current: &serde_json::Map<String, serde_json::Value>,
+        _new: &serde_json::Map<String, serde_json::Value>,
+    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+        Ok(None)
+    }
+}
+
+// Necessary to allow to set default emplty weak referece value to plugin.validator field
+// because empty weak value is not allowed for Arc<dyn Trait>
+impl ConfigValidator for () {}
 
 /// Creates an empty zenoh net Session configuration.
 pub fn empty() -> Config {
@@ -520,8 +526,8 @@ fn config_deser() {
 }
 
 impl Config {
-    pub fn add_plugin_validator(&mut self, name: impl Into<String>, validator: ValidationFunction) {
-        self.plugins.validators.insert(name.into(), validator);
+    pub fn set_plugin_validator<T: ConfigValidator + 'static>(&mut self, validator: Weak<T>) {
+        self.plugins.validator = validator;
     }
 
     pub fn plugin(&self, name: &str) -> Option<&Value> {
@@ -882,7 +888,7 @@ fn user_conf_validator(u: &UsrPwdConf) -> bool {
 #[derive(Clone)]
 pub struct PluginsConfig {
     values: Value,
-    validators: HashMap<String, ValidationFunction>,
+    validator: std::sync::Weak<dyn ConfigValidator>,
 }
 fn sift_privates(value: &mut serde_json::Value) {
     match value {
@@ -948,11 +954,9 @@ impl PluginsConfig {
             Some(first_in_plugin) => first_in_plugin,
             None => {
                 self.values.as_object_mut().unwrap().remove(plugin);
-                self.validators.remove(plugin);
                 return Ok(());
             }
         };
-        let validator = self.validators.get(plugin);
         let (old_conf, mut new_conf) = match self.values.get_mut(plugin) {
             Some(plugin) => {
                 let clone = plugin.clone();
@@ -993,8 +997,9 @@ impl PluginsConfig {
             }
             other => bail!("{} cannot be indexed", other),
         }
-        let new_conf = if let Some(validator) = validator {
-            match validator(
+        let new_conf = if let Some(validator) = self.validator.upgrade() {
+            match validator.check_config(
+                plugin,
                 &key[("plugins/".len() + plugin.len())..],
                 old_conf.as_object().unwrap(),
                 new_conf.as_object().unwrap(),
@@ -1023,7 +1028,7 @@ impl Default for PluginsConfig {
     fn default() -> Self {
         Self {
             values: Value::Object(Default::default()),
-            validators: Default::default(),
+            validator: std::sync::Weak::<()>::new(),
         }
     }
 }
@@ -1033,8 +1038,8 @@ impl<'a> serde::Deserialize<'a> for PluginsConfig {
         D: serde::Deserializer<'a>,
     {
         Ok(PluginsConfig {
-            validators: Default::default(),
             values: serde::Deserialize::deserialize(deserializer)?,
+            validator: std::sync::Weak::<()>::new(),
         })
     }
 }
@@ -1122,7 +1127,6 @@ impl validated_struct::ValidatedMap for PluginsConfig {
         validated_struct::InsertionError: From<D::Error>,
     {
         let (plugin, key) = validated_struct::split_once(key, '/');
-        let validator = self.validators.get(plugin);
         let new_value: Value = serde::Deserialize::deserialize(deserializer)?;
         let value = self
             .values
@@ -1131,8 +1135,9 @@ impl validated_struct::ValidatedMap for PluginsConfig {
             .entry(plugin)
             .or_insert(Value::Null);
         let mut new_value = value.clone().merge(key, new_value)?;
-        if let Some(validator) = validator {
-            match validator(
+        if let Some(validator) = self.validator.upgrade() {
+            match validator.check_config(
+                plugin,
                 key,
                 value.as_object().unwrap(),
                 new_value.as_object().unwrap(),

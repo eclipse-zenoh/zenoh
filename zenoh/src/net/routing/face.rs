@@ -31,6 +31,7 @@ pub struct FaceState {
     pub(super) id: usize,
     pub(super) zid: ZenohId,
     pub(super) whatami: WhatAmI,
+    #[allow(dead_code)]
     pub(super) local: bool,
     #[cfg(feature = "stats")]
     pub(super) stats: Option<Arc<TransportStats>>,
@@ -80,6 +81,7 @@ impl FaceState {
         })
     }
 
+    #[allow(dead_code)]
     #[inline]
     pub fn is_local(&self) -> bool {
         self.local

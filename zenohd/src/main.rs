@@ -20,6 +20,7 @@ use zenoh::config::{Config, ModeDependentValue, PermissionsConf, PluginLoad, Val
 use zenoh::plugins::PluginsManager;
 use zenoh::prelude::{EndPoint, WhatAmI};
 use zenoh::runtime::{AdminSpace, Runtime};
+use zenoh::Result;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
@@ -79,6 +80,32 @@ struct Args {
     adminspace_permissions: Option<String>,
 }
 
+fn load_plugin(
+    plugin_mgr: &mut PluginsManager,
+    name: &str,
+    paths: &Option<Vec<String>>,
+) -> Result<()> {
+    let declared = if let Some(declared) = plugin_mgr.plugin_mut(name) {
+        log::warn!("Plugin `{}` was already declared", declared.name());
+        declared
+    } else if let Some(paths) = paths {
+        plugin_mgr.declare_dynamic_plugin_by_paths(name, paths)?
+    } else {
+        plugin_mgr.declare_dynamic_plugin_by_name(name, name)?
+    };
+
+    if let Some(loaded) = declared.loaded_mut() {
+        log::warn!(
+            "Plugin `{}` was already loaded from {}",
+            loaded.name(),
+            loaded.path()
+        );
+    } else {
+        let _ = declared.load()?;
+    };
+    Ok(())
+}
+
 fn main() {
     task::block_on(async {
         let mut log_builder =
@@ -94,7 +121,7 @@ fn main() {
         let config = config_from_args(&args);
         log::info!("Initial conf: {}", &config);
 
-        let mut plugins = PluginsManager::dynamic(config.libloader());
+        let mut plugin_mgr = PluginsManager::dynamic(config.libloader(), "zenoh_plugin_");
         // Static plugins are to be added here, with `.add_static::<PluginType>()`
         let mut required_plugins = HashSet::new();
         for plugin_load in config.plugins().load_requests() {
@@ -107,10 +134,7 @@ fn main() {
                 "Loading {req} plugin \"{name}\"",
                 req = if required { "required" } else { "" }
             );
-            if let Err(e) = match paths {
-                None => plugins.load_plugin_by_name(name.clone()),
-                Some(paths) => plugins.load_plugin_by_paths(name.clone(), &paths),
-            } {
+            if let Err(e) = load_plugin(&mut plugin_mgr, &name, &paths) {
                 if required {
                     panic!("Plugin load failure: {}", e)
                 } else {
@@ -130,39 +154,53 @@ fn main() {
             }
         };
 
-        for (name, path, start_result) in plugins.start_all(&runtime) {
-            let required = required_plugins.contains(name);
+        for plugin in plugin_mgr.loaded_plugins_iter_mut() {
+            let required = required_plugins.contains(plugin.name());
             log::info!(
                 "Starting {req} plugin \"{name}\"",
-                req = if required { "required" } else { "" }
+                req = if required { "required" } else { "" },
+                name = plugin.name()
             );
-            match start_result {
-                Ok(Some(_)) => log::info!("Successfully started plugin {} from {:?}", name, path),
-                Ok(None) => log::warn!("Plugin {} from {:?} wasn't loaded, as an other plugin by the same name is already running", name, path),
+            match plugin.start(&runtime) {
+                Ok(_) => {
+                    log::info!(
+                        "Successfully started plugin {} from {:?}",
+                        plugin.name(),
+                        plugin.path()
+                    );
+                }
                 Err(e) => {
                     let report = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| e.to_string())) {
                         Ok(s) => s,
-                        Err(_) => panic!("Formatting the error from plugin {} ({:?}) failed, this is likely due to ABI unstability.\r\nMake sure your plugin was built with the same version of cargo as zenohd", name, path),
+                        Err(_) => panic!("Formatting the error from plugin {} ({:?}) failed, this is likely due to ABI unstability.\r\nMake sure your plugin was built with the same version of cargo as zenohd", plugin.name(), plugin.path()),
                     };
                     if required {
-                        panic!("Plugin \"{name}\" failed to start: {}", if report.is_empty() {"no details provided"} else {report.as_str()});
-                    }else {
-                        log::error!("Required plugin \"{name}\" failed to start: {}", if report.is_empty() {"no details provided"} else {report.as_str()});
+                        panic!(
+                            "Plugin \"{}\" failed to start: {}",
+                            plugin.name(),
+                            if report.is_empty() {
+                                "no details provided"
+                            } else {
+                                report.as_str()
+                            }
+                        );
+                    } else {
+                        log::error!(
+                            "Required plugin \"{}\" failed to start: {}",
+                            plugin.name(),
+                            if report.is_empty() {
+                                "no details provided"
+                            } else {
+                                report.as_str()
+                            }
+                        );
                     }
                 }
             }
         }
         log::info!("Finished loading plugins");
 
-        {
-            let mut config_guard = runtime.config.lock();
-            for (name, (_, plugin)) in plugins.running_plugins() {
-                let hook = plugin.config_checker();
-                config_guard.add_plugin_validator(name, hook)
-            }
-        }
-
-        AdminSpace::start(&runtime, plugins, LONG_VERSION.clone()).await;
+        AdminSpace::start(&runtime, plugin_mgr, LONG_VERSION.clone()).await;
 
         future::pending::<()>().await;
     });

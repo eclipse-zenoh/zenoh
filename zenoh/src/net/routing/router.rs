@@ -142,6 +142,7 @@ impl Tables {
         &self.root_res
     }
 
+    #[cfg(test)]
     pub fn print(&self) -> String {
         Resource::print_tree(&self.root_res)
     }
