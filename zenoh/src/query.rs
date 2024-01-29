@@ -312,8 +312,9 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     where
         IntoEncoding: Into<Encoding>,
     {
-        if let Some(ref mut value) = self.value {
-            value.encoding = encoding.into();
+        match self.value {
+            Some(ref mut value) => value.encoding = encoding.into(),
+            None => self.value = Some(Value::empty().encoding(encoding.into())),
         }
         self
     }
