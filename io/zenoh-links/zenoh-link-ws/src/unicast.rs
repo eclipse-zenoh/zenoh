@@ -216,6 +216,11 @@ impl LinkUnicastTrait for LinkUnicastWs {
     fn is_streamed(&self) -> bool {
         false
     }
+
+    fn is_matched_to_interface(&self, _interface: &str) -> bool {
+        // Not supported for now
+        false
+    }
 }
 
 impl Drop for LinkUnicastWs {

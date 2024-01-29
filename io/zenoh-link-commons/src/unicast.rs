@@ -45,6 +45,7 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn get_dst(&self) -> &Locator;
     fn is_reliable(&self) -> bool;
     fn is_streamed(&self) -> bool;
+    fn is_matched_to_interface(&self, interface: &str) -> bool;
     async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;

@@ -21,6 +21,7 @@
 use crate::net::routing::interceptor::*;
 use std::sync::{Arc, Mutex};
 use zenoh_config::DownsamplerConf;
+use zenoh_link::LinkUnicast;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 
 // TODO(sashacmc): this is ratelimit strategy, we should also add decimation (with "factor" option)
@@ -107,6 +108,15 @@ impl InterceptorFactoryTrait for DownsamplerInterceptor {
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
         log::debug!("New transport unicast {:?}", transport);
+        if let Some(interface) = self.conf.interface {
+            if let Ok(links) = transport.get_links() {
+                for link in links {
+                    if !(link as LinkUnicast).is_matched_to_interface(interface) {
+                        return (None, None);
+                    }
+                }
+            }
+        };
         (
             Some(Box::new(IngressMsgDownsampler {})),
             Some(Box::new(EgressMsgDownsampler::new(self.conf.clone()))),

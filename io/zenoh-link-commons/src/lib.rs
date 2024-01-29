@@ -43,6 +43,8 @@ pub struct Link {
     pub mtu: u16,
     pub is_reliable: bool,
     pub is_streamed: bool,
+    // there no method to check interface
+    // may be will be better just add interface there in place of method?
 }
 
 #[async_trait]

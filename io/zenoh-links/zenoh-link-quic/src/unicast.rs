@@ -152,6 +152,11 @@ impl LinkUnicastTrait for LinkUnicastQuic {
     fn is_streamed(&self) -> bool {
         true
     }
+
+    fn is_matched_to_interface(&self, _interface: &str) -> bool {
+        // Not supported for now
+        false
+    }
 }
 
 impl Drop for LinkUnicastQuic {

@@ -153,6 +153,17 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     fn is_streamed(&self) -> bool {
         true
     }
+
+    fn is_matched_to_interface(&self, name: &str) -> bool {
+        if let Ok(opt_addr) = zenoh_util::net::get_interface(name.trim()) {
+            if let Some(addr) = opt_addr {
+                if addr == self.src_addr.ip() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
 }
 
 impl Drop for LinkUnicastTcp {
