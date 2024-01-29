@@ -187,7 +187,6 @@ fn local_qabl_info(tables: &Tables, res: &Arc<Resource>, face: &Arc<FaceState>) 
         })
 }
 
-#[allow(clippy::too_many_arguments)]
 #[inline]
 fn send_sourced_queryable_to_net_childs(
     tables: &Tables,
@@ -973,7 +972,6 @@ pub(super) fn queries_tree_change(
 }
 
 #[inline]
-#[allow(clippy::too_many_arguments)]
 fn insert_target_for_qabls(
     route: &mut QueryTargetQablSet,
     expr: &mut RoutingExpr,

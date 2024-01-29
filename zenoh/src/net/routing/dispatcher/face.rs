@@ -32,7 +32,6 @@ pub struct FaceState {
     pub(crate) id: usize,
     pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
-    pub(super) local: bool,
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
@@ -45,13 +44,10 @@ pub struct FaceState {
 }
 
 impl FaceState {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         id: usize,
         zid: ZenohId,
         whatami: WhatAmI,
-        #[allow(dead_code)]
-        local: bool,
         #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
         mcast_group: Option<TransportMulticast>,
@@ -61,7 +57,6 @@ impl FaceState {
             id,
             zid,
             whatami,
-            local,
             #[cfg(feature = "stats")]
             stats,
             primitives,
@@ -74,14 +69,7 @@ impl FaceState {
         })
     }
 
-    #[allow(dead_code)]
     #[inline]
-    pub fn is_local(&self) -> bool {
-        self.local
-    }
-
-    #[inline]
-    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub(crate) fn get_mapping(
         &self,
         prefixid: &ExprId,
@@ -94,7 +82,6 @@ impl FaceState {
     }
 
     #[inline]
-    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub(crate) fn get_sent_mapping(
         &self,
         prefixid: &ExprId,

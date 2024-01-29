@@ -363,7 +363,6 @@ impl Network {
         };
 
         // register psid<->zid mappings & apply mapping to nodes
-        #[allow(clippy::needless_collect)] // need to release borrow on self
         let link_states = link_states
             .into_iter()
             .filter_map(|link_state| {
@@ -638,7 +637,7 @@ impl Network {
         // Propagate link states
         // Note: we need to send all states at once for each face
         // to avoid premature node deletion on the other side
-        #[allow(clippy::type_complexity)]
+        #[allow(clippy::type_complexity)] // This is only used here
         if !link_states.is_empty() {
             let (new_idxs, updated_idxs): (
                 Vec<(Vec<ZenohId>, NodeIndex, bool)>,

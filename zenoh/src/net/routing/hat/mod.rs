@@ -52,7 +52,6 @@ pub(crate) trait HatTrait: HatBaseTrait + HatPubSubTrait + HatQueriesTrait {}
 pub(crate) trait HatBaseTrait {
     fn as_any(&self) -> &dyn Any;
 
-    #[allow(clippy::too_many_arguments)]
     fn init(&self, tables: &mut Tables, runtime: Runtime);
 
     fn new_tables(&self, router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync>;

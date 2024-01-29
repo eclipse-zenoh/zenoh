@@ -484,7 +484,6 @@ macro_rules! inc_res_stats {
     };
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn route_query(
     tables_ref: &Arc<TablesLock>,
     face: &Arc<FaceState>,
@@ -700,7 +699,6 @@ pub fn route_query(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn route_send_response(
     tables_ref: &Arc<TablesLock>,
     face: &mut Arc<FaceState>,

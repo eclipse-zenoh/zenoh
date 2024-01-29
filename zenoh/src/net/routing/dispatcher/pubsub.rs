@@ -424,7 +424,6 @@ macro_rules! inc_stats {
     };
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn full_reentrant_route_data(
     tables_ref: &Arc<TablesLock>,
     face: &FaceState,

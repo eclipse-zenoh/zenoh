@@ -81,7 +81,6 @@ impl Router {
                     fid,
                     zid,
                     WhatAmI::Client,
-                    true,
                     #[cfg(feature = "stats")]
                     None,
                     primitives.clone(),
@@ -132,7 +131,6 @@ impl Router {
                     fid,
                     zid,
                     whatami,
-                    false,
                     #[cfg(feature = "stats")]
                     Some(stats),
                     mux.clone(),
@@ -172,7 +170,6 @@ impl Router {
             fid,
             ZenohId::from_str("1").unwrap(),
             WhatAmI::Peer,
-            false,
             #[cfg(feature = "stats")]
             None,
             mux.clone(),
@@ -211,7 +208,6 @@ impl Router {
             fid,
             peer.zid,
             WhatAmI::Client, // Quick hack
-            false,
             #[cfg(feature = "stats")]
             Some(transport.get_stats().unwrap()),
             Arc::new(DummyPrimitives),
