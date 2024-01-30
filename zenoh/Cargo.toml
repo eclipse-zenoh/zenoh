@@ -102,6 +102,7 @@ zenoh-protocol = { workspace = true, features = ["std"] }
 zenoh-result = { workspace = true }
 zenoh-shm = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
+zenoh-task = { workspace = true }
 zenoh-transport = { workspace = true }
 zenoh-util = { workspace = true }
 

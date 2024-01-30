@@ -26,6 +26,7 @@ members = [
   "commons/zenoh-result",
   "commons/zenoh-shm",
   "commons/zenoh-sync",
+  "commons/zenoh-task",
   "commons/zenoh-util",
   "examples",
   "io/zenoh-link",
@@ -172,6 +173,7 @@ zenoh-util = { version = "0.11.0-dev", path = "commons/zenoh-util" }
 zenoh-crypto = { version = "0.11.0-dev", path = "commons/zenoh-crypto" }
 zenoh-codec = { version = "0.11.0-dev", path = "commons/zenoh-codec" }
 zenoh-sync = { version = "0.11.0-dev", path = "commons/zenoh-sync" }
+zenoh-task = { version = "0.11.0-dev", path = "commons/zenoh-task" }
 zenoh-collections = { version = "0.11.0-dev", path = "commons/zenoh-collections", default-features = false }
 zenoh-macros = { version = "0.11.0-dev", path = "commons/zenoh-macros" }
 zenoh-plugin-trait = { version = "0.11.0-dev", path = "plugins/zenoh-plugin-trait", default-features = false }

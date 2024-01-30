@@ -24,13 +24,15 @@ use super::primitives::DeMux;
 use super::routing;
 use super::routing::router::Router;
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
+use crate::net::routing::resource::Resource;
 use crate::GIT_VERSION;
 pub use adminspace::AdminSpace;
 use async_std::task::JoinHandle;
 use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
+use std::time::Duration;
 use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
@@ -56,6 +58,16 @@ struct RuntimeState {
     locators: std::sync::RwLock<Vec<Locator>>,
     hlc: Option<Arc<HLC>>,
     stop_source: std::sync::RwLock<Option<StopSource>>,
+}
+
+pub struct WeakRuntime {
+    state: Weak<RuntimeState>,
+}
+
+impl WeakRuntime {
+    pub fn upgrade(&self) -> Option<Runtime> {
+        self.state.upgrade().map(|state| Runtime { state })
+    }
 }
 
 #[derive(Clone)]
@@ -98,7 +110,7 @@ impl Runtime {
         let router = Arc::new(Router::new(zid, whatami, hlc.clone(), &config));
 
         let handler = Arc::new(RuntimeTransportEventHandler {
-            runtime: std::sync::RwLock::new(None),
+            runtime: std::sync::RwLock::new(WeakRuntime { state: Weak::new() }),
         });
 
         let transport_manager = TransportManager::builder()
@@ -124,7 +136,7 @@ impl Runtime {
                 stop_source: std::sync::RwLock::new(Some(StopSource::new())),
             }),
         };
-        *handler.runtime.write().unwrap() = Some(runtime.clone());
+        *handler.runtime.write().unwrap() = Runtime::downgrade(&runtime);
         get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone());
 
         let receiver = config.subscribe();
@@ -158,6 +170,13 @@ impl Runtime {
         log::trace!("Runtime::close())");
         drop(self.state.stop_source.write().unwrap().take());
         self.manager().close().await;
+        // clean up to break cyclic reference of self.state to itself
+        let router = self.router();
+        let mut tables = router.tables.tables.write().unwrap();
+        Resource::close(&mut tables.root_res);
+
+        drop(tables);
+        self.state.transport_handlers.write().unwrap().clear();
         Ok(())
     }
 
@@ -201,10 +220,16 @@ impl Runtime {
     pub fn whatami(&self) -> WhatAmI {
         self.state.whatami
     }
+
+    pub fn downgrade(this: &Runtime) -> WeakRuntime {
+        WeakRuntime {
+            state: Arc::downgrade(&this.state),
+        }
+    }
 }
 
 struct RuntimeTransportEventHandler {
-    runtime: std::sync::RwLock<Option<Runtime>>,
+    runtime: std::sync::RwLock<WeakRuntime>,
 }
 
 impl TransportEventHandler for RuntimeTransportEventHandler {
@@ -213,7 +238,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         peer: TransportPeer,
         transport: TransportUnicast,
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
-        match zread!(self.runtime).as_ref() {
+        match zread!(self.runtime).upgrade().as_ref() {
             Some(runtime) => {
                 let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> =
                     zread!(runtime.state.transport_handlers)
@@ -241,7 +266,7 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
         &self,
         transport: TransportMulticast,
     ) -> ZResult<Arc<dyn TransportMulticastEventHandler>> {
-        match zread!(self.runtime).as_ref() {
+        match zread!(self.runtime).upgrade().as_ref() {
             Some(runtime) => {
                 let slave_handlers: Vec<Arc<dyn TransportMulticastEventHandler>> =
                     zread!(runtime.state.transport_handlers)

@@ -73,6 +73,7 @@ zenoh-protocol = { workspace = true }
 zenoh-result = { workspace = true }
 zenoh-shm = { workspace = true, optional = true }
 zenoh-sync = { workspace = true }
+zenoh-task = { workspace = true }
 zenoh-util = { workspace = true }
 
 [dev-dependencies]

@@ -81,6 +81,7 @@ use zenoh_protocol::{
     },
 };
 use zenoh_result::ZResult;
+use zenoh_task::TaskController;
 use zenoh_util::core::AsyncResolve;
 
 zconfigurable! {
@@ -329,6 +330,7 @@ pub struct Session {
     pub(crate) state: Arc<RwLock<SessionState>>,
     pub(crate) id: u16,
     pub(crate) alive: bool,
+    pub(crate) task_controller: TaskController,
 }
 
 static SESSION_ID_COUNTER: AtomicU16 = AtomicU16::new(0);
@@ -349,6 +351,7 @@ impl Session {
                 state: state.clone(),
                 id: SESSION_ID_COUNTER.fetch_add(1, Ordering::SeqCst),
                 alive: true,
+                task_controller: TaskController::new(),
             };
 
             runtime.new_handler(Arc::new(admin::Handler::new(session.clone())));
@@ -452,10 +455,14 @@ impl Session {
     pub fn close(self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
             trace!("close()");
+            self.task_controller.terminate_all();
             self.runtime.close().await?;
 
-            let primitives = zwrite!(self.state).primitives.as_ref().unwrap().clone();
-            primitives.send_close();
+            let mut state = zwrite!(self.state);
+            state.primitives.as_ref().unwrap().send_close();
+            // clean up to break cyclic references from self.state to itself
+            state.primitives.take();
+            state.queryables.clear();
 
             Ok(())
         })
@@ -840,6 +847,7 @@ impl Session {
             state: self.state.clone(),
             id: self.id,
             alive: false,
+            task_controller: self.task_controller.clone(),
         }
     }
 
@@ -1537,7 +1545,7 @@ impl Session {
         for msub in state.matching_listeners.values() {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
-                async_std::task::spawn({
+                self.task_controller.spawn({
                     let session = self.clone();
                     let msub = msub.clone();
                     async move {
@@ -1570,7 +1578,7 @@ impl Session {
         for msub in state.matching_listeners.values() {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
-                async_std::task::spawn({
+                self.task_controller.spawn({
                     let session = self.clone();
                     let msub = msub.clone();
                     async move {
@@ -1788,7 +1796,7 @@ impl Session {
             Locality::Any => 2,
             _ => 1,
         };
-        task::spawn({
+        self.task_controller.spawn({
             let state = self.state.clone();
             let zid = self.runtime.zid();
             async move {

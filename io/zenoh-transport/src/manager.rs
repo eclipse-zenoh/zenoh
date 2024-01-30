@@ -19,10 +19,11 @@ use crate::multicast::manager::{
     TransportManagerBuilderMulticast, TransportManagerConfigMulticast,
     TransportManagerStateMulticast,
 };
+use async_std::channel::RecvError;
 use async_std::{sync::Mutex as AsyncMutex, task};
 use rand::{RngCore, SeedableRng};
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
@@ -33,6 +34,7 @@ use zenoh_protocol::{
     VERSION,
 };
 use zenoh_result::{bail, ZResult};
+use zenoh_task::TaskController;
 
 /// # Examples
 /// ```
@@ -320,25 +322,36 @@ impl Default for TransportManagerBuilder {
 pub(crate) struct TransportExecutor {
     executor: Arc<async_executor::Executor<'static>>,
     sender: async_std::channel::Sender<()>,
+    exec_handles: Arc<Mutex<Vec<std::thread::JoinHandle<Result<(), RecvError>>>>>,
 }
 
 impl TransportExecutor {
     fn new(num_threads: usize) -> Self {
         let (sender, receiver) = async_std::channel::bounded(1);
         let executor = Arc::new(async_executor::Executor::new());
+        let mut exec_handles = Vec::new();
         for i in 0..num_threads {
             let exec = executor.clone();
             let recv = receiver.clone();
-            std::thread::Builder::new()
+            let h = std::thread::Builder::new()
                 .name(format!("zenoh-tx-{}", i))
                 .spawn(move || async_std::task::block_on(exec.run(recv.recv())))
                 .unwrap();
+            exec_handles.push(h);
         }
-        Self { executor, sender }
+        Self {
+            executor,
+            sender,
+            exec_handles: Arc::new(Mutex::new(exec_handles)),
+        }
     }
 
     async fn stop(&self) {
         let _ = self.sender.send(()).await;
+        let mut eh = self.exec_handles.lock().unwrap();
+        for h in eh.drain(0..) {
+            let _ = h.join();
+        }
     }
 
     pub(crate) fn spawn<T: Send + 'static>(
@@ -360,6 +373,7 @@ pub struct TransportManager {
     pub(crate) tx_executor: TransportExecutor,
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
+    pub(crate) task_controller: TaskController,
 }
 
 impl TransportManager {
@@ -383,10 +397,11 @@ impl TransportManager {
             tx_executor: TransportExecutor::new(tx_threads),
             #[cfg(feature = "stats")]
             stats: std::sync::Arc::new(crate::stats::TransportStats::default()),
+            task_controller: TaskController::new(),
         };
 
         // @TODO: this should be moved into the unicast module
-        async_std::task::spawn({
+        this.task_controller.spawn({
             let this = this.clone();
             async move {
                 while let Ok(link) = new_unicast_link_receiver.recv_async().await {
@@ -412,6 +427,7 @@ impl TransportManager {
     }
 
     pub async fn close(&self) {
+        self.task_controller.terminate_all();
         self.close_unicast().await;
         self.tx_executor.stop().await;
     }

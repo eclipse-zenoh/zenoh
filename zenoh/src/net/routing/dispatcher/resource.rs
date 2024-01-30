@@ -285,6 +285,16 @@ impl Resource {
         })
     }
 
+    pub fn close(res: &mut Arc<Resource>) {
+        let r = get_mut_unchecked(res);
+        for (_s, c) in &mut r.childs {
+            Self::close(c);
+        }
+        r.parent.take();
+        r.childs.clear();
+        r.nonwild_prefix.take();
+    }
+
     pub fn clean(res: &mut Arc<Resource>) {
         let mut resclone = res.clone();
         let mutres = get_mut_unchecked(&mut resclone);

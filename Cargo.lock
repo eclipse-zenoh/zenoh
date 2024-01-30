@@ -4603,6 +4603,7 @@ dependencies = [
  "zenoh-result",
  "zenoh-shm",
  "zenoh-sync",
+ "zenoh-task",
  "zenoh-transport",
  "zenoh-util",
 ]
@@ -5102,6 +5103,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenoh-task"
+version = "0.11.0-dev"
+dependencies = [
+ "async-std",
+ "futures",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "zenoh-transport"
 version = "0.11.0-dev"
 dependencies = [
@@ -5131,6 +5142,7 @@ dependencies = [
  "zenoh-result",
  "zenoh-shm",
  "zenoh-sync",
+ "zenoh-task",
  "zenoh-util",
 ]
 
