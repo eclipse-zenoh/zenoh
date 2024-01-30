@@ -1603,7 +1603,8 @@ impl Session {
         for msub in state.matching_listeners.values() {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
-                zenoh_runtime::ZRuntime::Application.spawn({
+                // TODO: check which ZRuntime should be used
+                zenoh_runtime::ZRuntime::RX.spawn({
                     let session = self.clone();
                     let msub = msub.clone();
                     async move {
@@ -1636,7 +1637,8 @@ impl Session {
         for msub in state.matching_listeners.values() {
             if key_expr.intersects(&msub.key_expr) {
                 // Cannot hold session lock when calling tables (matching_status())
-                zenoh_runtime::ZRuntime::Application.spawn({
+                // TODO: check which ZRuntime should be used
+                zenoh_runtime::ZRuntime::RX.spawn({
                     let session = self.clone();
                     let msub = msub.clone();
                     async move {
@@ -1854,7 +1856,9 @@ impl Session {
             Locality::Any => 2,
             _ => 1,
         };
-        zenoh_runtime::ZRuntime::Application.spawn({
+
+        // TODO: check which ZRuntime should be used
+        zenoh_runtime::ZRuntime::Net.spawn({
             let state = self.state.clone();
             let zid = self.runtime.zid();
             async move {

@@ -100,7 +100,11 @@ impl Runtime {
                         Err(e) => log::warn!("Unable to connect to {}! {}", locator, e),
                     }
                 }
-                let e = zerror!("Unable to connect to any of {:?}! ", peers);
+                let e = zerror!(
+                    "{:?} Unable to connect to any of {:?}! ",
+                    self.manager().get_locators(),
+                    peers
+                );
                 log::error!("{}", &e);
                 Err(e.into())
             }

@@ -24,6 +24,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex as AsyncMutex;
+use tokio_util::sync::CancellationToken;
 use zenoh_config::{Config, LinkRxConf, QueueConf, QueueSizeConf};
 use zenoh_crypto::{BlockCipher, PseudoRng};
 use zenoh_link::NewLinkChannelSender;
@@ -33,7 +34,6 @@ use zenoh_protocol::{
     VERSION,
 };
 use zenoh_result::{bail, ZResult};
-use tokio_util::sync::CancellationToken;
 
 /// # Examples
 /// ```
@@ -322,7 +322,6 @@ pub struct TransportManager {
     #[cfg(feature = "stats")]
     pub(crate) stats: Arc<crate::stats::TransportStats>,
     pub(crate) token: CancellationToken,
-
 }
 
 impl TransportManager {
@@ -344,11 +343,11 @@ impl TransportManager {
             new_unicast_link_sender,
             #[cfg(feature = "stats")]
             stats: std::sync::Arc::new(crate::stats::TransportStats::default()),
-            token: CancellationToken::new()
+            token: CancellationToken::new(),
         };
 
         // @TODO: this should be moved into the unicast module
-        zenoh_runtime::ZRuntime::Reception.spawn({
+        zenoh_runtime::ZRuntime::Net.spawn({
             let this = this.clone();
             let token = this.token.clone();
             async move {
@@ -430,10 +429,8 @@ impl TransportManager {
 
     // TODO: Can we make this async as above?
     pub fn get_locators(&self) -> Vec<Locator> {
-        let mut lsu =
-            zenoh_runtime::ZRuntime::Application.block_in_place(self.get_locators_unicast());
-        let mut lsm =
-            zenoh_runtime::ZRuntime::Application.block_in_place(self.get_locators_multicast());
+        let mut lsu = zenoh_runtime::ZRuntime::TX.block_in_place(self.get_locators_unicast());
+        let mut lsm = zenoh_runtime::ZRuntime::TX.block_in_place(self.get_locators_multicast());
         lsu.append(&mut lsm);
         lsu
     }

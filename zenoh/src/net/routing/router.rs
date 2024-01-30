@@ -218,7 +218,7 @@ impl Router {
         if (net_type == WhatAmI::Router && self.routers_trees_task.is_none())
             || (net_type == WhatAmI::Peer && self.peers_trees_task.is_none())
         {
-            let task = Some(zenoh_runtime::ZRuntime::Application.spawn(async move {
+            let task = Some(zenoh_runtime::ZRuntime::Net.spawn(async move {
                 tokio::time::sleep(std::time::Duration::from_millis(*TREES_COMPUTATION_DELAY))
                     .await;
                 let mut tables = zwrite!(tables_ref.tables);

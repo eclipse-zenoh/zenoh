@@ -94,7 +94,7 @@ pub(crate) async fn read_with_link(
 
 impl TransportUnicastLowlatency {
     pub(super) fn send(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
-        zenoh_runtime::ZRuntime::Transport.block_in_place(self.send_async(msg))
+        zenoh_runtime::ZRuntime::TX.block_in_place(self.send_async(msg))
     }
 
     pub(super) async fn send_async(&self, msg: TransportMessageLowLatency) -> ZResult<()> {
@@ -134,7 +134,7 @@ impl TransportUnicastLowlatency {
                 let _ = c_transport.finalize(0).await;
             }
         };
-        self.tracker.spawn_on(task, &ZRuntime::Transport);
+        self.tracker.spawn_on(task, &ZRuntime::TX);
     }
 
     pub(super) fn internal_start_rx(&self, lease: Duration) {
@@ -207,7 +207,7 @@ impl TransportUnicastLowlatency {
             ZResult::Ok(())
         };
 
-        self.tracker.spawn_on(task, &ZRuntime::Transport);
+        self.tracker.spawn_on(task, &ZRuntime::TX);
     }
 }
 

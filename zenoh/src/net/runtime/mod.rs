@@ -177,10 +177,10 @@ impl Runtime {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        let child_token = self.cancel_token.child_token();
-        zenoh_runtime::ZRuntime::Application.spawn(async move {
+        let token = self.cancel_token.clone();
+        zenoh_runtime::ZRuntime::Net.spawn(async move {
             tokio::select! {
-                _ = child_token.cancelled() => {}
+                _ = token.cancelled() => {}
                 _ = future => {}
             }
         })

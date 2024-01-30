@@ -236,14 +236,23 @@ impl Plugin for RestPlugin {
 
         let conf: Config = serde_json::from_value(plugin_conf.clone())
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
-        let task = tokio::task::spawn(run(runtime.clone(), conf.clone()));
-        let task = zenoh_runtime::ZRuntime::Application.block_in_place(tokio::time::timeout(
-            std::time::Duration::from_millis(1),
-            task,
-        ));
-        if let Ok(Err(e)) = task {
+
+        // // ERROR: Timeout is not allowed to build in the plugin library
+        // let task = zenoh_runtime::ZRuntime::Application.block_in_place(tokio::time::timeout(
+        //     std::time::Duration::from_millis(1),
+        //     run(runtime.clone(), conf.clone()),
+        // ));
+        // if let Ok(Err(e)) = task {
+        //     bail!("REST server failed within 1ms: {e}")
+        // }
+
+        // TODO: Fix the above error
+        let task =
+            zenoh_runtime::ZRuntime::Application.block_in_place(run(runtime.clone(), conf.clone()));
+        if let Err(e) = task {
             bail!("REST server failed within 1ms: {e}")
         }
+
         Ok(Box::new(RunningPlugin(conf)))
     }
 }

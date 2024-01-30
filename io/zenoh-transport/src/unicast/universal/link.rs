@@ -84,7 +84,7 @@ impl TransportLinkUnicastUniversal {
     ) {
         // Spawn the TX task
         let mut tx = self.link.tx();
-        let token = self.token.child_token();
+        let token = self.token.clone();
         let task = async move {
             let res = tx_task(
                 consumer,
@@ -101,18 +101,18 @@ impl TransportLinkUnicastUniversal {
                 log::debug!("{}", e);
                 // Spawn a task to avoid a deadlock waiting for this same task
                 // to finish in the close() joining its handle
-                zenoh_runtime::ZRuntime::Transport
+                // TODO: check which ZRuntime should be used
+                zenoh_runtime::ZRuntime::TX
                     .spawn(async move { transport.del_link(tx.inner.link()).await });
             }
         };
-        self.tracker
-            .spawn_on(task, &zenoh_runtime::ZRuntime::Transport);
+        self.tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
     }
 
     // TODO: Not yet guaranteed is called at most once
     pub(super) fn start_rx(&mut self, transport: TransportUnicastUniversal, lease: Duration) {
         let mut rx = self.link.rx();
-        let token = self.token.child_token();
+        let token = self.token.clone();
         let task = async move {
             // Start the consume task
             let res = rx_task(
@@ -129,12 +129,13 @@ impl TransportLinkUnicastUniversal {
                 log::debug!("{}", e);
                 // Spawn a task to avoid a deadlock waiting for this same task
                 // to finish in the close() joining its handle
-                zenoh_runtime::ZRuntime::Transport
+                // TODO: check which ZRuntime should be used
+                zenoh_runtime::ZRuntime::Net
                     .spawn(async move { transport.del_link((&rx.link).into()).await });
             }
         };
-        self.tracker
-            .spawn_on(task, &zenoh_runtime::ZRuntime::Transport);
+        // WARN: If this is on ZRuntime::TX, a deadlock would occur.
+        self.tracker.spawn_on(task, &zenoh_runtime::ZRuntime::RX);
     }
 
     pub(super) async fn close(self) -> ZResult<()> {

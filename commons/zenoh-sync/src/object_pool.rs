@@ -113,7 +113,8 @@ impl<T> Drop for RecyclingObject<T> {
     fn drop(&mut self) {
         if let Some(pool) = self.pool.upgrade() {
             if let Some(obj) = self.object.take() {
-                zenoh_runtime::ZRuntime::Application.block_in_place(pool.push(obj));
+                // TODO: check which ZRuntime should be used
+                zenoh_runtime::ZRuntime::Net.block_in_place(pool.push(obj));
             }
         }
     }

@@ -32,13 +32,15 @@ const ZENOH_RUNTIME_THREADS_ENV: &str = "ZENOH_RUNTIME_THREADS";
 pub enum ZRuntime {
     Application,
     Reception,
-    Transport,
+    TX,
+    RX,
+    Net,
 }
 
 impl ZRuntime {
     fn iter() -> impl Iterator<Item = ZRuntime> {
         use ZRuntime::*;
-        [Application, Reception, Transport].into_iter()
+        [Application, Reception, TX, RX, Net].into_iter()
     }
 
     fn init(&self) -> Result<Runtime> {
@@ -48,8 +50,8 @@ impl ZRuntime {
 
         use ZRuntime::*;
         let rt = match self {
-            Transport => tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(config.transport_threads)
+            Application => tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(config.application_threads)
                 .enable_io()
                 .enable_time()
                 .thread_name_fn(move || {
@@ -68,8 +70,28 @@ impl ZRuntime {
                     format!("{thread_name}-{}", id)
                 })
                 .build()?,
-            Application => tokio::runtime::Builder::new_multi_thread()
-                .worker_threads(config.application_threads)
+            TX => tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(config.tx_threads)
+                .enable_io()
+                .enable_time()
+                .thread_name_fn(move || {
+                    static ATOMIC_THREAD_ID: AtomicUsize = AtomicUsize::new(0);
+                    let id = ATOMIC_THREAD_ID.fetch_add(1, Ordering::SeqCst);
+                    format!("{thread_name}-{}", id)
+                })
+                .build()?,
+            RX => tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(config.rx_threads)
+                .enable_io()
+                .enable_time()
+                .thread_name_fn(move || {
+                    static ATOMIC_THREAD_ID: AtomicUsize = AtomicUsize::new(0);
+                    let id = ATOMIC_THREAD_ID.fetch_add(1, Ordering::SeqCst);
+                    format!("{thread_name}-{}", id)
+                })
+                .build()?,
+            Net => tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(config.net_threads)
                 .enable_io()
                 .enable_time()
                 .thread_name_fn(move || {
@@ -122,7 +144,9 @@ impl ZRuntimePool {
 pub struct ZRuntimeConfig {
     pub application_threads: usize,
     pub reception_threads: usize,
-    pub transport_threads: usize,
+    pub tx_threads: usize,
+    pub rx_threads: usize,
+    pub net_threads: usize,
 }
 
 impl ZRuntimeConfig {
@@ -131,9 +155,19 @@ impl ZRuntimeConfig {
 
         if let Ok(s) = env::var(ZENOH_RUNTIME_THREADS_ENV) {
             let ps = Properties::from(s);
-            if let Some(n) = ps.get("transport") {
+            if let Some(n) = ps.get("tx") {
                 if let Ok(n) = n.parse::<usize>() {
-                    c.transport_threads = n;
+                    c.tx_threads = n;
+                }
+            }
+            if let Some(n) = ps.get("rx") {
+                if let Ok(n) = n.parse::<usize>() {
+                    c.rx_threads = n;
+                }
+            }
+            if let Some(n) = ps.get("net") {
+                if let Ok(n) = n.parse::<usize>() {
+                    c.net_threads = n;
                 }
             }
             if let Some(n) = ps.get("reception") {
@@ -157,7 +191,9 @@ impl Default for ZRuntimeConfig {
         Self {
             application_threads: 1,
             reception_threads: 1,
-            transport_threads: 1,
+            tx_threads: 1,
+            rx_threads: 1,
+            net_threads: 1,
         }
     }
 }

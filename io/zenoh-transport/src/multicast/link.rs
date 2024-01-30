@@ -332,7 +332,7 @@ impl TransportLinkMulticastUniversal {
 
             // Spawn the TX task
             let c_link = self.link.clone();
-            let ctransport = self.transport.clone();
+            let c_transport = self.transport.clone();
             let handle = zenoh_runtime::ZRuntime::TX.spawn(async move {
                 let res = tx_task(
                     consumer,
@@ -347,7 +347,8 @@ impl TransportLinkMulticastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    zenoh_runtime::ZRuntime::Net.spawn(async move { ctransport.delete().await });
+                    // TODO: check which ZRuntime should be used
+                    zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.delete().await });
                 }
             });
             self.handle_tx = Some(Arc::new(handle));
@@ -383,7 +384,8 @@ impl TransportLinkMulticastUniversal {
                     log::debug!("{}", e);
                     // Spawn a task to avoid a deadlock waiting for this same task
                     // to finish in the close() joining its handle
-                    zenoh_runtime::ZRuntime::Net.spawn(async move { ctransport.delete().await });
+                    // TODO: check which ZRuntime should be used
+                    zenoh_runtime::ZRuntime::Net.spawn(async move { c_transport.delete().await });
                 }
             });
             self.handle_rx = Some(Arc::new(handle));

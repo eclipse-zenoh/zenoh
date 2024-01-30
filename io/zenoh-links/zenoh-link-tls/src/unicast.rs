@@ -206,8 +206,8 @@ impl Drop for LinkUnicastTls {
     fn drop(&mut self) {
         // Close the underlying TCP stream
         let (tcp_stream, _) = self.get_sock_mut().get_mut();
-        let _ = zenoh_runtime::ZRuntime::Transport
-            .block_in_place(async move { tcp_stream.shutdown().await });
+        let _ =
+            zenoh_runtime::ZRuntime::TX.block_in_place(async move { tcp_stream.shutdown().await });
     }
 }
 
