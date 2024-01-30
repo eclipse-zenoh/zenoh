@@ -43,8 +43,7 @@ fn propagate_simple_subscription_to(
 ) {
     if (src_face.id != dst_face.id || res.expr().starts_with(PREFIX_LIVELINESS))
         && !face_hat!(dst_face).local_subs.contains(res)
-        && src_face.whatami == WhatAmI::Client
-        || dst_face.whatami == WhatAmI::Client
+        && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
     {
         face_hat_mut!(dst_face).local_subs.insert(res.clone());
         let key_expr = Resource::decl_key(res, dst_face);
