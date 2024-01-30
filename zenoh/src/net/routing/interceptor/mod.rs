@@ -218,10 +218,7 @@ impl InterceptorTrait for IngressAclEnforcer {
                 let new_ctx = NewCtx { ke, zid: Some(zid) }; //how to get the zid here
                 let decision = e.policy_enforcement_point(new_ctx, act).unwrap();
                 if !decision {
-                    // println!("Not allowed to Write");
                     return None;
-                } else {
-                    //  println!("Allowed to Write");
                 }
             }
         }
@@ -248,10 +245,7 @@ impl InterceptorTrait for EgressAclEnforcer {
                 let new_ctx = NewCtx { ke, zid: self.zid };
                 let decision = e.policy_enforcement_point(new_ctx, act).unwrap();
                 if !decision {
-                    // println!("Not allowed to Read");
                     return None;
-                } else {
-                    //  println!("Allowed to Read");
                 }
             }
         }
