@@ -116,6 +116,12 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     }
 
     #[inline(always)]
+    fn get_interfaces(&self) -> Vec<String> {
+        // Not supported for now
+        vec![]
+    }
+
+    #[inline(always)]
     fn is_reliable(&self) -> bool {
         true
     }
@@ -123,11 +129,6 @@ impl LinkUnicastTrait for LinkUnicastUnixSocketStream {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         true
-    }
-
-    fn is_matched_to_interface(&self, _interface: &str) -> bool {
-        // Not supported for now
-        false
     }
 }
 

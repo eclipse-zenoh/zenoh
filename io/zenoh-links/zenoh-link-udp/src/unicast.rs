@@ -204,6 +204,12 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     }
 
     #[inline(always)]
+    fn get_interfaces(&self) -> Vec<String> {
+        // Not supported for now
+        vec![]
+    }
+
+    #[inline(always)]
     fn get_mtu(&self) -> u16 {
         *UDP_DEFAULT_MTU
     }
@@ -215,11 +221,6 @@ impl LinkUnicastTrait for LinkUnicastUdp {
 
     #[inline(always)]
     fn is_streamed(&self) -> bool {
-        false
-    }
-
-    fn is_matched_to_interface(&self, _interface: &str) -> bool {
-        // Not supported for now
         false
     }
 }

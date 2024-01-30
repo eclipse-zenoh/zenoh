@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 #[test]
-fn downsampling() {
+fn downsampling_by_keyexpr() {
     let _ = env_logger::builder().is_test(true).try_init();
 
     use zenoh::prelude::sync::*;
@@ -16,17 +16,22 @@ fn downsampling() {
         std::time::Instant::now() - std::time::Duration::from_millis(50),
     ));
 
+    let total_count = Arc::new(Mutex::new(0));
+    let total_count_clone = total_count.clone();
+
     let _sub = zenoh_sub
-        .declare_subscriber("test/downsamples/*")
+        .declare_subscriber("test/downsamples_by_keyexp/*")
         .callback(move |sample| {
+            let mut count = total_count_clone.lock().unwrap();
+            *count += 1;
             let curr_time = std::time::Instant::now();
-            if sample.key_expr.as_str() == "test/downsamples/r100" {
+            if sample.key_expr.as_str() == "test/downsamples_by_keyexp/r100" {
                 let mut last_time = last_time_r100.lock().unwrap();
                 let interval = (curr_time - *last_time).as_millis() + 1;
                 *last_time = curr_time;
                 println!("interval 100: {}", interval);
                 assert!(interval >= 100);
-            } else if sample.key_expr.as_str() == "test/downsamples/r50" {
+            } else if sample.key_expr.as_str() == "test/downsamples_by_keyexp/r50" {
                 let mut last_time = last_time_r50.lock().unwrap();
                 let interval = (curr_time - *last_time).as_millis() + 1;
                 *last_time = curr_time;
@@ -45,11 +50,11 @@ fn downsampling() {
             r#"
               [
                 {
-                  keyexpr: "test/downsamples/r100",
+                  keyexpr: "test/downsamples_by_keyexp/r100",
                   threshold_ms: 100,
                 },
                 {
-                  keyexpr: "test/downsamples/r50",
+                  keyexpr: "test/downsamples_by_keyexp/r50",
                   threshold_ms: 50,
                 },
               ]
@@ -58,12 +63,17 @@ fn downsampling() {
         .unwrap();
     let zenoh_pub = zenoh::open(config).res().unwrap();
     let publisher_r100 = zenoh_pub
-        .declare_publisher("test/downsamples/r100")
+        .declare_publisher("test/downsamples_by_keyexp/r100")
         .res()
         .unwrap();
 
     let publisher_r50 = zenoh_pub
-        .declare_publisher("test/downsamples/r50")
+        .declare_publisher("test/downsamples_by_keyexp/r50")
+        .res()
+        .unwrap();
+
+    let publisher_all = zenoh_pub
+        .declare_publisher("test/downsamples_by_keyexp/all")
         .res()
         .unwrap();
 
@@ -72,7 +82,95 @@ fn downsampling() {
         println!("message {}", i);
         publisher_r100.put(format!("message {}", i)).res().unwrap();
         publisher_r50.put(format!("message {}", i)).res().unwrap();
+        publisher_all.put(format!("message {}", i)).res().unwrap();
 
         std::thread::sleep(interval);
     }
+
+    assert!(*(total_count.lock().unwrap()) >= 1000);
+}
+
+#[cfg(unix)]
+#[test]
+fn downsampling_by_interface() {
+    let _ = env_logger::builder().is_test(true).try_init();
+
+    use zenoh::prelude::sync::*;
+
+    // declare subscriber
+    let mut config_sub = Config::default();
+    config_sub
+        .insert_json5("listen/endpoints", r#"["tcp/127.0.0.1:7447"]"#)
+        .unwrap();
+    let zenoh_sub = zenoh::open(config_sub).res().unwrap();
+
+    let last_time_r100 = Arc::new(Mutex::new(
+        std::time::Instant::now() - std::time::Duration::from_millis(100),
+    ));
+    let total_count = Arc::new(Mutex::new(0));
+    let total_count_clone = total_count.clone();
+
+    let _sub = zenoh_sub
+        .declare_subscriber("test/downsamples_by_interface/*")
+        .callback(move |sample| {
+            let mut count = total_count_clone.lock().unwrap();
+            *count += 1;
+            let curr_time = std::time::Instant::now();
+            if sample.key_expr.as_str() == "test/downsamples_by_interface/r100" {
+                let mut last_time = last_time_r100.lock().unwrap();
+                let interval = (curr_time - *last_time).as_millis() + 1;
+                *last_time = curr_time;
+                println!("interval 100: {}", interval);
+                assert!(interval >= 100);
+            }
+        })
+        .res()
+        .unwrap();
+
+    // declare publisher
+    let mut config_pub = Config::default();
+    config_pub
+        .insert_json5("connect/endpoints", r#"["tcp/127.0.0.1:7447"]"#)
+        .unwrap();
+    config_pub
+        .insert_json5(
+            "downsampling/downsamples",
+            r#"
+              [
+                {
+                  keyexpr: "test/downsamples_by_interface/r100",
+                  interface: "lo",
+                  threshold_ms: 100,
+                },
+                {
+                  keyexpr: "test/downsamples_by_interface/all",
+                  interface: "some_unknown_interface",
+                  threshold_ms: 100,
+                },
+              ]
+            "#,
+        )
+        .unwrap();
+
+    let zenoh_pub = zenoh::open(config_pub).res().unwrap();
+    let publisher_r100 = zenoh_pub
+        .declare_publisher("test/downsamples_by_interface/r100")
+        .res()
+        .unwrap();
+
+    let publisher_all = zenoh_pub
+        .declare_publisher("test/downsamples_by_interface/all")
+        .res()
+        .unwrap();
+
+    let interval = std::time::Duration::from_millis(1);
+    for i in 0..1000 {
+        println!("message {}", i);
+        publisher_r100.put(format!("message {}", i)).res().unwrap();
+        publisher_all.put(format!("message {}", i)).res().unwrap();
+
+        std::thread::sleep(interval);
+    }
+
+    assert!(*(total_count.lock().unwrap()) >= 1000);
 }

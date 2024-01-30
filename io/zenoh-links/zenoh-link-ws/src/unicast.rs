@@ -208,17 +208,18 @@ impl LinkUnicastTrait for LinkUnicastWs {
     }
 
     #[inline(always)]
+    fn get_interfaces(&self) -> Vec<String> {
+        // Not supported for now
+        vec![]
+    }
+
+    #[inline(always)]
     fn is_reliable(&self) -> bool {
         true
     }
 
     #[inline(always)]
     fn is_streamed(&self) -> bool {
-        false
-    }
-
-    fn is_matched_to_interface(&self, _interface: &str) -> bool {
-        // Not supported for now
         false
     }
 }

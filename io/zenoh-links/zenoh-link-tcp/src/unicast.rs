@@ -140,6 +140,13 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     }
 
     #[inline(always)]
+    fn get_interfaces(&self) -> Vec<String> {
+        let res = zenoh_util::net::get_interface_by_addr(self.src_addr.ip());
+        log::debug!("get_interfaces for {:?}: {:?}", self.src_addr.ip(), res);
+        res
+    }
+
+    #[inline(always)]
     fn get_mtu(&self) -> u16 {
         *TCP_DEFAULT_MTU
     }
@@ -152,17 +159,6 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     #[inline(always)]
     fn is_streamed(&self) -> bool {
         true
-    }
-
-    fn is_matched_to_interface(&self, name: &str) -> bool {
-        if let Ok(opt_addr) = zenoh_util::net::get_interface(name.trim()) {
-            if let Some(addr) = opt_addr {
-                if addr == self.src_addr.ip() {
-                    return true;
-                }
-            }
-        }
-        false
     }
 }
 
