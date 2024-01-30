@@ -100,6 +100,8 @@ pub(crate) trait HatBaseTrait {
         expr: &mut RoutingExpr,
     ) -> bool;
 
+    fn info(&self, tables: &Tables, kind: WhatAmI) -> String;
+
     fn closing(
         &self,
         tables: &mut Tables,

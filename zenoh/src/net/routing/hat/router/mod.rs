@@ -735,6 +735,22 @@ impl HatBaseTrait for HatCode {
         }
         false
     }
+
+    fn info(&self, tables: &Tables, kind: WhatAmI) -> String {
+        match kind {
+            WhatAmI::Router => hat!(tables)
+                .routers_net
+                .as_ref()
+                .map(|net| net.dot())
+                .unwrap_or_else(|| "graph {}".to_string()),
+            WhatAmI::Peer => hat!(tables)
+                .peers_net
+                .as_ref()
+                .map(|net| net.dot())
+                .unwrap_or_else(|| "graph {}".to_string()),
+            _ => "graph {}".to_string(),
+        }
+    }
 }
 
 struct HatContext {

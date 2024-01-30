@@ -440,6 +440,17 @@ impl HatBaseTrait for HatCode {
                 _ => true,
             }
     }
+
+    fn info(&self, tables: &Tables, kind: WhatAmI) -> String {
+        match kind {
+            WhatAmI::Peer => hat!(tables)
+                .peers_net
+                .as_ref()
+                .map(|net| net.dot())
+                .unwrap_or_else(|| "graph {}".to_string()),
+            _ => "graph {}".to_string(),
+        }
+    }
 }
 
 struct HatContext {

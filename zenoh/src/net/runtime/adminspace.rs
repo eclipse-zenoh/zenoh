@@ -28,7 +28,7 @@ use std::convert::TryInto;
 use std::sync::Arc;
 use std::sync::Mutex;
 use zenoh_buffers::buffer::SplitBuffer;
-use zenoh_config::{ConfigValidator, ValidatedMap};
+use zenoh_config::{ConfigValidator, ValidatedMap, WhatAmI};
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
@@ -603,60 +603,54 @@ zenoh_build{{version="{}"}} 1
     }
 }
 
-fn routers_linkstate_data(_context: &AdminContext, _query: Query) {
-    // let reply_key: OwnedKeyExpr = format!("@/router/{}/linkstate/routers", context.zid_str)
-    //     .try_into()
-    //     .unwrap();
+fn routers_linkstate_data(context: &AdminContext, query: Query) {
+    let reply_key: OwnedKeyExpr = format!("@/router/{}/linkstate/routers", context.zid_str)
+        .try_into()
+        .unwrap();
 
-    // let tables = zread!(context.runtime.state.router.tables.tables);
+    let tables = zread!(context.runtime.state.router.tables.tables);
 
-    // if let Err(e) = query
-    //     .reply(Ok(Sample::new(
-    //         reply_key,
-    //         Value::from(
-    //             tables
-    //                 .hat
-    //                 .routers_net
-    //                 .as_ref()
-    //                 .map(|net| net.dot())
-    //                 .unwrap_or_else(|| "graph {}".to_string())
-    //                 .as_bytes()
-    //                 .to_vec(),
-    //         )
-    //         .encoding(KnownEncoding::TextPlain.into()),
-    //     )))
-    //     .res()
-    // {
-    //     log::error!("Error sending AdminSpace reply: {:?}", e);
-    // }
+    if let Err(e) = query
+        .reply(Ok(Sample::new(
+            reply_key,
+            Value::from(
+                tables
+                    .hat_code
+                    .info(&tables, WhatAmI::Router)
+                    .as_bytes()
+                    .to_vec(),
+            )
+            .encoding(KnownEncoding::TextPlain.into()),
+        )))
+        .res()
+    {
+        log::error!("Error sending AdminSpace reply: {:?}", e);
+    }
 }
 
-fn peers_linkstate_data(_context: &AdminContext, _query: Query) {
-    // let reply_key: OwnedKeyExpr = format!("@/router/{}/linkstate/peers", context.zid_str)
-    //     .try_into()
-    //     .unwrap();
+fn peers_linkstate_data(context: &AdminContext, query: Query) {
+    let reply_key: OwnedKeyExpr = format!("@/router/{}/linkstate/peers", context.zid_str)
+        .try_into()
+        .unwrap();
 
-    // let tables = zread!(context.runtime.state.router.tables.tables);
+    let tables = zread!(context.runtime.state.router.tables.tables);
 
-    // if let Err(e) = query
-    //     .reply(Ok(Sample::new(
-    //         reply_key,
-    //         Value::from(
-    //             tables
-    //                 .hat
-    //                 .peers_net
-    //                 .as_ref()
-    //                 .map(|net| net.dot())
-    //                 .unwrap_or_else(|| "graph {}".to_string())
-    //                 .as_bytes()
-    //                 .to_vec(),
-    //         )
-    //         .encoding(KnownEncoding::TextPlain.into()),
-    //     )))
-    //     .res()
-    // {
-    //     log::error!("Error sending AdminSpace reply: {:?}", e);
-    // }
+    if let Err(e) = query
+        .reply(Ok(Sample::new(
+            reply_key,
+            Value::from(
+                tables
+                    .hat_code
+                    .info(&tables, WhatAmI::Peer)
+                    .as_bytes()
+                    .to_vec(),
+            )
+            .encoding(KnownEncoding::TextPlain.into()),
+        )))
+        .res()
+    {
+        log::error!("Error sending AdminSpace reply: {:?}", e);
+    }
 }
 
 fn subscribers_data(context: &AdminContext, query: Query) {

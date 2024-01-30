@@ -348,6 +348,10 @@ impl HatBaseTrait for HatCode {
                 _ => true,
             }
     }
+
+    fn info(&self, _tables: &Tables, _kind: WhatAmI) -> String {
+        "graph {}".to_string()
+    }
 }
 
 struct HatContext {}

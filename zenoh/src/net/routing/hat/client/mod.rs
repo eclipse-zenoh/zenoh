@@ -43,6 +43,7 @@ use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
 };
+use zenoh_config::WhatAmI;
 use zenoh_protocol::network::declare::queryable::ext::QueryableInfo;
 use zenoh_protocol::network::Oam;
 use zenoh_result::ZResult;
@@ -273,6 +274,10 @@ impl HatBaseTrait for HatCode {
                 (Some(l), Some(r)) => l != r,
                 _ => true,
             }
+    }
+
+    fn info(&self, _tables: &Tables, _kind: WhatAmI) -> String {
+        "graph {}".to_string()
     }
 }
 

@@ -160,13 +160,12 @@ impl Network {
         }
     }
 
-    //noinspection ALL
-    // pub(super) fn dot(&self) -> String {
-    //     std::format!(
-    //         "{:?}",
-    //         petgraph::dot::Dot::with_config(&self.graph, &[petgraph::dot::Config::EdgeNoLabel])
-    //     )
-    // }
+    pub(super) fn dot(&self) -> String {
+        std::format!(
+            "{:?}",
+            petgraph::dot::Dot::with_config(&self.graph, &[petgraph::dot::Config::EdgeNoLabel])
+        )
+    }
 
     #[inline]
     pub(super) fn get_node(&self, zid: &ZenohId) -> Option<&Node> {
