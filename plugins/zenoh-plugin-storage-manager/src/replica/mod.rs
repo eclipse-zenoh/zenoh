@@ -16,14 +16,15 @@
 
 use crate::backends_mgt::StoreIntercept;
 use crate::storages_mgt::StorageMessage;
+use async_std::sync::Arc;
+use async_std::sync::RwLock;
+use async_std::task::sleep;
 use flume::{Receiver, Sender};
 use futures::{pin_mut, select, FutureExt};
 use std::collections::{HashMap, HashSet};
 use std::str;
 use std::str::FromStr;
-use std::sync::Arc;
 use std::time::{Duration, SystemTime};
-use tokio::sync::RwLock;
 use urlencoding::encode;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
@@ -271,7 +272,7 @@ impl Replica {
             .unwrap();
 
         loop {
-            tokio::time::sleep(self.replica_config.publication_interval).await;
+            sleep(self.replica_config.publication_interval).await;
 
             let digest = snapshotter.get_digest().await;
             let digest = digest.compress();

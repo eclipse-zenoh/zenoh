@@ -13,11 +13,11 @@
 //
 use super::digest::*;
 use super::Snapshotter;
+use async_std::sync::Arc;
 use std::cmp::Ordering;
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::str;
 use std::str::FromStr;
-use std::sync::Arc;
 use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh::Session;

@@ -769,6 +769,8 @@ impl Digest {
 
 #[test]
 fn test_create_digest_empty_initial() {
+    async_std::task::block_on(async {
+    });
     let created = Digest::create_digest(
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
         DigestConfig {
@@ -798,6 +800,8 @@ fn test_create_digest_empty_initial() {
 
 #[test]
 fn test_create_digest_with_initial_hot() {
+    async_std::task::block_on(async {
+    });
     let created = Digest::create_digest(
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
         DigestConfig {
@@ -851,6 +855,8 @@ fn test_create_digest_with_initial_hot() {
 
 #[test]
 fn test_create_digest_with_initial_warm() {
+    async_std::task::block_on(async {
+    });
     let created = Digest::create_digest(
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
         DigestConfig {
@@ -904,6 +910,8 @@ fn test_create_digest_with_initial_warm() {
 
 #[test]
 fn test_create_digest_with_initial_cold() {
+    async_std::task::block_on(async {
+    });
     let created = Digest::create_digest(
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
         DigestConfig {
@@ -955,9 +963,11 @@ fn test_create_digest_with_initial_cold() {
     assert_eq!(created, expected);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_update_digest_add_content() {
-    let created = Digest::update_digest(
+#[test]
+fn test_update_digest_add_content() {
+    async_std::task::block_on(async {
+    });
+    let created = async_std::task::block_on(Digest::update_digest(
         Digest {
             timestamp: Timestamp::from_str("2022-12-21T13:00:00.000000000Z/1").unwrap(),
             config: DigestConfig {
@@ -978,8 +988,7 @@ async fn test_update_digest_add_content() {
             key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
         }]),
         HashSet::new(),
-    )
-    .await;
+    ));
     let expected = Digest {
         timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
         config: DigestConfig {
@@ -1017,9 +1026,11 @@ async fn test_update_digest_add_content() {
     assert_eq!(created, expected);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_update_digest_remove_content() {
-    let created = Digest::update_digest(
+#[test]
+fn test_update_digest_remove_content() {
+    async_std::task::block_on(async {
+    });
+    let created = async_std::task::block_on(Digest::update_digest(
         Digest {
             timestamp: Timestamp::from_str("2022-12-21T13:00:00.000000000Z/1").unwrap(),
             config: DigestConfig {
@@ -1061,8 +1072,7 @@ async fn test_update_digest_remove_content() {
             timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
             key: OwnedKeyExpr::from_str("demo/example/a").unwrap(),
         }]),
-    )
-    .await;
+    ));
     let expected = Digest {
         timestamp: Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
         config: DigestConfig {
@@ -1079,8 +1089,10 @@ async fn test_update_digest_remove_content() {
     assert_eq!(created, expected);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn test_update_remove_digest() {
+#[test]
+fn test_update_remove_digest() {
+    async_std::task::block_on(async {
+    });
     let created = Digest::create_digest(
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
         DigestConfig {
@@ -1092,7 +1104,7 @@ async fn test_update_remove_digest() {
         Vec::new(),
         1671612730,
     );
-    let added = Digest::update_digest(
+    let added = async_std::task::block_on(Digest::update_digest(
         created.clone(),
         1671612730,
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
@@ -1101,11 +1113,10 @@ async fn test_update_remove_digest() {
             key: OwnedKeyExpr::from_str("a/b/c").unwrap(),
         }]),
         HashSet::new(),
-    )
-    .await;
+    ));
     assert_ne!(created, added);
 
-    let removed = Digest::update_digest(
+    let removed = async_std::task::block_on(Digest::update_digest(
         added.clone(),
         1671612730,
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
@@ -1114,11 +1125,10 @@ async fn test_update_remove_digest() {
             timestamp: Timestamp::from_str("2022-12-21T12:00:00.000000000Z/1").unwrap(),
             key: OwnedKeyExpr::from_str("a/b/c").unwrap(),
         }]),
-    )
-    .await;
+    ));
     assert_eq!(created, removed);
 
-    let added_again = Digest::update_digest(
+    let added_again = async_std::task::block_on(Digest::update_digest(
         removed,
         1671612730,
         Timestamp::from_str("2022-12-21T15:00:00.000000000Z/1").unwrap(),
@@ -1127,7 +1137,6 @@ async fn test_update_remove_digest() {
             key: OwnedKeyExpr::from_str("a/b/c").unwrap(),
         }]),
         HashSet::new(),
-    )
-    .await;
+    ));
     assert_eq!(added, added_again);
 }

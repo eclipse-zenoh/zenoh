@@ -17,6 +17,7 @@
 //! This crate is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+use async_std::prelude::FutureExt;
 use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
 use futures::StreamExt;
 use http_types::Method;
@@ -236,23 +237,11 @@ impl Plugin for RestPlugin {
 
         let conf: Config = serde_json::from_value(plugin_conf.clone())
             .map_err(|e| zerror!("Plugin `{}` configuration error: {}", name, e))?;
-
-        // // ERROR: Timeout is not allowed to build in the plugin library
-        // let task = zenoh_runtime::ZRuntime::Application.block_in_place(tokio::time::timeout(
-        //     std::time::Duration::from_millis(1),
-        //     run(runtime.clone(), conf.clone()),
-        // ));
-        // if let Ok(Err(e)) = task {
-        //     bail!("REST server failed within 1ms: {e}")
-        // }
-
-        // TODO: Fix the above error
-        let task =
-            zenoh_runtime::ZRuntime::Application.block_in_place(run(runtime.clone(), conf.clone()));
-        if let Err(e) = task {
+        let task = async_std::task::spawn(run(runtime.clone(), conf.clone()));
+        let task = async_std::task::block_on(task.timeout(std::time::Duration::from_millis(1)));
+        if let Ok(Err(e)) = task {
             bail!("REST server failed within 1ms: {e}")
         }
-
         Ok(Box::new(RunningPlugin(conf)))
     }
 }
@@ -337,12 +326,11 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         ))
                     }
                 };
-                tokio::task::spawn(async move {
-                    #[cfg(tokio_unstable)]
+                async_std::task::spawn(async move {
                     log::debug!(
                         "Subscribe to {} for SSE stream (task {})",
                         key_expr,
-                        tokio::runtime::Handle::current().id()
+                        async_std::task::current().id()
                     );
                     let sender = &sender;
                     let sub = req
@@ -354,21 +342,17 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                         .unwrap();
                     loop {
                         let sample = sub.recv_async().await.unwrap();
-                        match tokio::time::timeout(
-                            std::time::Duration::new(10, 0),
-                            sender.send(&sample.kind.to_string(), sample_to_json(sample), None),
-                        )
-                        .await
+                        match sender
+                            .send(&sample.kind.to_string(), sample_to_json(sample), None)
+                            .timeout(std::time::Duration::new(10, 0))
+                            .await
                         {
                             Ok(Ok(_)) => {}
-
-                            #[cfg_attr(not(tokio_unstable), allow(unused_variables))]
                             Ok(Err(e)) => {
-                                #[cfg(tokio_unstable)]
                                 log::debug!(
                                     "SSE error ({})! Unsubscribe and terminate (task {})",
                                     e,
-                                    tokio::runtime::Handle::current().id()
+                                    async_std::task::current().id()
                                 );
                                 if let Err(e) = sub.undeclare().res().await {
                                     log::error!("Error undeclaring subscriber: {}", e);
@@ -376,10 +360,9 @@ async fn query(mut req: Request<(Arc<Session>, String)>) -> tide::Result<Respons
                                 break;
                             }
                             Err(_) => {
-                                #[cfg(tokio_unstable)]
                                 log::debug!(
                                     "SSE timeout! Unsubscribe and terminate (task {})",
-                                    tokio::runtime::Handle::current().id()
+                                    async_std::task::current().id()
                                 );
                                 if let Err(e) = sub.undeclare().res().await {
                                     log::error!("Error undeclaring subscriber: {}", e);
