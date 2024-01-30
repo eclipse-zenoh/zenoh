@@ -69,7 +69,6 @@ impl<T> LifoQueue<T> {
     pub fn pull(&self) -> T {
         let mut guard = zlock!(self.buffer);
         loop {
-            let mut guard = zlock!(self.buffer);
             if let Some(e) = guard.pop() {
                 drop(guard);
                 self.not_full.notify_one();
