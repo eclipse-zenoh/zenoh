@@ -13,6 +13,7 @@
 //
 use super::PublicationCacheBuilder;
 use std::convert::TryInto;
+use std::sync::Arc;
 use zenoh::prelude::KeyExpr;
 use zenoh::{Session, SessionRef};
 
@@ -51,6 +52,38 @@ impl<'a> SessionExt<'a> for Session {
     {
         PublicationCacheBuilder::new(
             SessionRef::Borrow(self),
+            pub_key_expr.try_into().map_err(Into::into),
+        )
+    }
+}
+
+impl SessionExt<'static> for Arc<Session> {
+    /// Examples:
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    /// use zenoh::config::ModeDependentValue::Unique;
+    /// use zenoh_ext::SessionExt;
+    ///
+    /// let mut config = config::default();
+    /// config.timestamping.set_enabled(Some(Unique(true)));
+    /// let session = zenoh::open(config).res().await.unwrap().into_arc();
+    /// let publication_cache = session.declare_publication_cache("key/expression").res().await.unwrap();
+    /// async_std::task::spawn(async move {
+    ///     publication_cache.key_expr();
+    /// }).await;
+    /// # })
+    /// ```
+    fn declare_publication_cache<'b, 'c, TryIntoKeyExpr>(
+        &self,
+        pub_key_expr: TryIntoKeyExpr,
+    ) -> PublicationCacheBuilder<'static, 'b, 'c>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+    {
+        PublicationCacheBuilder::new(
+            SessionRef::Shared(self.clone()),
             pub_key_expr.try_into().map_err(Into::into),
         )
     }
