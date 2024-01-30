@@ -50,8 +50,8 @@ impl<T, F: Fn() -> T> RecyclingObjectPool<T, F> {
             .map(|obj| RecyclingObject::new(obj, Arc::downgrade(&self.inner)))
     }
 
-    pub async fn take(&self) -> RecyclingObject<T> {
-        let obj = self.inner.pull().await;
+    pub fn take(&self) -> RecyclingObject<T> {
+        let obj = self.inner.pull();
         RecyclingObject::new(obj, Arc::downgrade(&self.inner))
     }
 }
@@ -70,10 +70,10 @@ impl<T> RecyclingObject<T> {
         }
     }
 
-    pub async fn recycle(mut self) {
+    pub fn recycle(mut self) {
         if let Some(pool) = self.pool.upgrade() {
             if let Some(obj) = self.object.take() {
-                pool.push(obj).await;
+                pool.push(obj);
             }
         }
     }
@@ -108,17 +108,16 @@ impl<T> From<T> for RecyclingObject<T> {
     }
 }
 
-// // TODO: Check this necessity
-// impl<T> Drop for RecyclingObject<T> {
-//     fn drop(&mut self) {
-//         if let Some(pool) = self.pool.upgrade() {
-//             if let Some(obj) = self.object.take() {
-//                 // TODO: check which ZRuntime should be used
-//                 zenoh_runtime::ZRuntime::Net.block_in_place(pool.push(obj));
-//             }
-//         }
-//     }
-// }
+// TODO: Check this necessity
+impl<T> Drop for RecyclingObject<T> {
+    fn drop(&mut self) {
+        if let Some(pool) = self.pool.upgrade() {
+            if let Some(obj) = self.object.take() {
+                pool.push(obj);
+            }
+        }
+    }
+}
 
 impl<T: fmt::Debug> fmt::Debug for RecyclingObject<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
