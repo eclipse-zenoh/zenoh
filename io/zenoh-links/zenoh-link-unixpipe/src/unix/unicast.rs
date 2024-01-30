@@ -493,6 +493,12 @@ impl LinkUnicastTrait for UnicastPipe {
     }
 
     #[inline(always)]
+    fn get_interfaces(&self) -> Vec<String> {
+        // Not supported for now
+        vec![]
+    }
+
+    #[inline(always)]
     fn is_reliable(&self) -> bool {
         true
     }

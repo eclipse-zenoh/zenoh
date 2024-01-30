@@ -204,14 +204,14 @@ impl LinkUnicastTrait for LinkUnicastUdp {
     }
 
     #[inline(always)]
-    fn get_interfaces(&self) -> Vec<String> {
-        // Not supported for now
-        vec![]
+    fn get_mtu(&self) -> u16 {
+        *UDP_DEFAULT_MTU
     }
 
     #[inline(always)]
-    fn get_mtu(&self) -> u16 {
-        *UDP_DEFAULT_MTU
+    fn get_interfaces(&self) -> Vec<String> {
+        // Not supported for now
+        vec![]
     }
 
     #[inline(always)]

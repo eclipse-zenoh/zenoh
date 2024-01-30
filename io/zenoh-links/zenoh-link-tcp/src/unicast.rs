@@ -140,15 +140,15 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     }
 
     #[inline(always)]
+    fn get_mtu(&self) -> u16 {
+        *TCP_DEFAULT_MTU
+    }
+
+    #[inline(always)]
     fn get_interfaces(&self) -> Vec<String> {
         let res = zenoh_util::net::get_interface_by_addr(self.src_addr.ip());
         log::debug!("get_interfaces for {:?}: {:?}", self.src_addr.ip(), res);
         res
-    }
-
-    #[inline(always)]
-    fn get_mtu(&self) -> u16 {
-        *TCP_DEFAULT_MTU
     }
 
     #[inline(always)]
