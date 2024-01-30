@@ -600,7 +600,7 @@ async fn three_node_combination() -> Result<()> {
         .collect();
 
     // TODO: It should be able to run concurrently
-    for chunks in recipe_list.chunks(1).map(|x| x.to_vec()) {
+    for chunks in recipe_list.chunks(4).map(|x| x.to_vec()) {
         let mut join_set = tokio::task::JoinSet::new();
         for (pubsub, getqueryable) in chunks {
             join_set.spawn(async move {
