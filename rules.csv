@@ -1,6 +1,0 @@
-subject,ke,action,permission
-aaa3b411006ad57868988f9fec672a31,demo/example/*,Write,true
-aaa3b411006ad57868988f9fec672a31,demo/example/mypub,Write,false
-bbb3b411006ad57868988f9fec672a31,demo/example/mypub,Read,true
-aaabbb11006ad57868988f9fec672a31,demo/*,Read,true
-aaabbb11006ad57868988f9fec672a31,demo/*,Write,true

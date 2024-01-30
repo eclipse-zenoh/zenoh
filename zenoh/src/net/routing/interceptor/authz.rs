@@ -1,13 +1,13 @@
+use std::fs::File;
+use std::io::Read;
 use std::{fmt, hash::Hash};
 
-// use casbin::{CoreApi, Enforcer};
 use super::RoutingContext;
 use csv::ReaderBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::{Result, Value};
 use zenoh_config::ZenohId;
-//use ZenohID;
-//use zenoh_keyexpr::keyexpr_tree::box_tree::KeBoxTree;
+
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
 
@@ -18,6 +18,7 @@ use std::{collections::HashMap, error::Error};
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub enum Action {
+    None,
     Read,
     Write,
     Both,
@@ -46,14 +47,14 @@ type KeTree = AclTrie;
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Subject {
     id: ZenohId,
-    // attributes: Option<HashMap<String, String>>, //might be mapped to other types eventually
+    attributes: Option<Vec<String>>, //might be mapped to other types eventually
 }
 
 //subject_builder (add ID, attributes, roles)
 
 pub struct SubjectBuilder {
     id: Option<ZenohId>,
-    attributes: Option<HashMap<String, String>>,
+    attributes: Option<Vec<String>>,
 }
 
 //request_builder (add subject, resource, action) //do we need one?
@@ -111,7 +112,7 @@ impl SubjectBuilder {
         self
     }
 
-    pub fn attributes(&mut self, attributes: impl Into<HashMap<String, String>>) -> &mut Self {
+    pub fn attributes(&mut self, attributes: impl Into<Vec<String>>) -> &mut Self {
         self.attributes.insert(attributes.into());
         self
     }
@@ -121,7 +122,7 @@ impl SubjectBuilder {
         let attr = self.attributes.clone();
         Ok(Subject {
             id,
-            // attributes: attr,
+            attributes: attr,
         })
     }
 }
@@ -155,7 +156,7 @@ impl SubjectBuilder {
 // }
 
 //struct that defines each policy (add policy type and ruleset)
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Rule {
     // policy_type: u8, //for l,a,r [access-list, abac, rbac type policy] will be assuming acl for now
     sub: Subject,
@@ -164,7 +165,7 @@ pub struct Rule {
     permission: bool,
 }
 
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SubAct(Subject, Action);
 
 #[derive(Clone)] //, PartialEq, Eq, Hash)]
@@ -190,9 +191,7 @@ impl PolicyEnforcer {
         // let rule_set: Vec<Rule> = serde_json::from_str(policy_info)?;
 
         let rule_set = Self::policy_resource_point().unwrap();
-        println!("print policy {:?}", rule_set);
         let pe = Self::build_policy_map(rule_set).expect("policy not established");
-
         //also should start the logger here
         Ok(pe)
     }
@@ -213,18 +212,27 @@ impl PolicyEnforcer {
 
         // let mut policy = Policy(HashMap::new());
         //now create a hashmap for ketrees ((sub->action)->ketree)
-        let rules: HashMap<String, KeTree>; //u8 is 0 for disallowed and 1 for allowed??
-                                            //iterate through the map to get
+        //  let rules: HashMap<String, KeTree>; //u8 is 0 for disallowed and 1 for allowed??
+        //iterate through the map to get
         for v in rule_set {
             //for each rule
             //extract subject and action
+
+            /*
+               for now permission not allowed means it will not be added to the allow trie
+            */
+            let perm = v.permission;
+            if !perm {
+                continue;
+            }
             let sub = v.sub;
             let action = v.action;
             let ke = v.ke;
-            let perm = v.permission;
+            //let perm = v.permission;
             //create subact
             let subact = SubAct(sub, action);
             //match subact in the policy hashmap
+            #[allow(clippy::map_entry)]
             if !policy.0.contains_key(&subact) {
                 //create new entry for subact + ketree
                 let mut ketree = KeTree::new();
@@ -232,10 +240,10 @@ impl PolicyEnforcer {
                 // ketree.insert(ke,1).unwrap();    //1 for allowed??
                 policy.0.insert(subact, ketree);
             } else {
-                let mut ketree = policy.0.get_mut(&subact).unwrap();
+                let ketree = policy.0.get_mut(&subact).unwrap();
                 // ketree.insert(ke,1).unwrap();    //1 for allowed??
                 // let mut ketree = KeTree::new();
-                let x = Permissions::READ;
+                // let x = Permissions::READ;
                 ketree.insert(Acl::new(&ke), Permissions::READ);
                 // policy.0.insert(subact,ketree);
             }
@@ -256,32 +264,32 @@ impl PolicyEnforcer {
         let zid = new_ctx.zid.unwrap();
         //build subject here
 
-        let subject = SubjectBuilder::new().id(zid).build()?; //.attributes(None).build();
+        let subject = SubjectBuilder::new().id(zid).build()?;
         let request = RequestBuilder::new()
             .sub(subject)
             .obj(ke)
             .action(action)
             .build()?;
         let decision = self.policy_decision_point(request)?;
-        Ok(false)
+        Ok(decision)
     }
-    pub fn permission_request_builder(
-        msg: zenoh_protocol::network::NetworkMessage,
-        action: Action,
-    ) {
+    // pub fn permission_request_builder(
+    //     msg: zenoh_protocol::network::NetworkMessage,
+    //     action: Action,
+    // ) {
 
-        /*
-           input: msg body
-           output: (sub,ke,act)
-           function: extract relevant info from the incoming msg body
-                        build the subject [ID, Attributes and Roles]
-                        then use that to build the request [subject, key-expression, action ]
-                        return request to PEP
-        */
-        /*
-           PHASE1: just extract the ID (zid?) from the msg; can later add attributes to the list. have a struct with ID and attributes field (both Option)
-        */
-    }
+    //     /*
+    //        input: msg body
+    //        output: (sub,ke,act)
+    //        function: extract relevant info from the incoming msg body
+    //                     build the subject [ID, Attributes and Roles]
+    //                     then use that to build the request [subject, key-expression, action ]
+    //                     return request to PEP
+    //     */
+    //     /*
+    //        PHASE1: just extract the ID (zid?) from the msg; can later add attributes to the list. have a struct with ID and attributes field (both Option)
+    //     */
+    // }
 
     pub fn policy_decision_point(&self, request: Request) -> ZResult<bool> {
         /*
@@ -329,25 +337,28 @@ impl PolicyEnforcer {
         /*
            PHASE1: just have a vector of structs containing these values; later we can load them here from config
         */
-        let mut rule_set: Vec<Rule> = Vec::new();
-        let mut rdr = ReaderBuilder::new()
-            .has_headers(true)
-            .from_path("rules.csv")
-            .unwrap();
+        #[derive(Serialize, Deserialize, Clone)]
 
-        for result in rdr.deserialize() {
-            if let Ok(rec) = result {
-                let record: Rule = rec;
-                rule_set.push(record);
-            }
-        }
-        // let static_policy = r#"{
-        //     ["subject":{"id": 001, "attributes": "location_1"},"ke":"demo/a/*","action":"Read","permission":true],
-        //     ["subject":{"id": 002, "attributes": "location_1"},"ke":"demo/a/*","action":"Read","permission":true],
-        //     ["subject":{"id": 002, "attributes": "location_1"},"ke":"demo/a/*","action":"Read","permission":true],
-        //     ["subject":{"id": 003, "attributes": "location_1"},"ke":"demo/*","action":"Both","permission":true]
-        // }"#;
-        Ok(rule_set)
+        struct Rules(Vec<Rule>); // = Vec::new();
+                                 // let mut rdr = ReaderBuilder::new()
+                                 //     .has_headers(true)
+                                 //     .from_path("rules.csv")
+                                 //     .unwrap();
+        let mut file = File::open("rules.json5").unwrap();
+        let mut buff = String::new();
+        file.read_to_string(&mut buff).unwrap();
+
+        let rulevec: Rules = serde_json::from_str(&buff).unwrap();
+        // for result in rdr.deserialize() {
+        //     if let Ok(rec) = result {
+        //         let record: Rule = rec;
+        //         rule_set.push(record);
+        //     } else {
+        //         bail!("unable to parse json file");
+        //     }
+        // }
+
+        Ok(rulevec.0)
     }
 }
 
