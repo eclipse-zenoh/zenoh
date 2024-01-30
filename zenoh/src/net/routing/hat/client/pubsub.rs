@@ -21,7 +21,7 @@ use crate::net::routing::hat::HatPubSubTrait;
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 use zenoh_protocol::{
@@ -270,6 +270,16 @@ impl HatPubSubTrait for HatCode {
         _node_id: NodeId,
     ) {
         forget_client_subscription(tables, face, res);
+    }
+
+    fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>> {
+        let mut subs = HashSet::new();
+        for src_face in tables.faces.values() {
+            for sub in &face_hat!(src_face).remote_subs {
+                subs.insert(sub.clone());
+            }
+        }
+        Vec::from_iter(subs)
     }
 
     fn compute_data_route(

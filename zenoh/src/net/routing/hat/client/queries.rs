@@ -22,7 +22,7 @@ use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::core::key_expr::include::{Includer, DEFAULT_INCLUDER};
@@ -268,6 +268,16 @@ impl HatQueriesTrait for HatCode {
         _node_id: NodeId,
     ) {
         forget_client_queryable(tables, face, res);
+    }
+
+    fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>> {
+        let mut qabls = HashSet::new();
+        for src_face in tables.faces.values() {
+            for qabl in &face_hat!(src_face).remote_qabls {
+                qabls.insert(qabl.clone());
+            }
+        }
+        Vec::from_iter(qabls)
     }
 
     fn compute_query_route(

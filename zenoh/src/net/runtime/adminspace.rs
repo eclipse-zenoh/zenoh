@@ -659,38 +659,38 @@ fn peers_linkstate_data(_context: &AdminContext, _query: Query) {
     // }
 }
 
-fn subscribers_data(_context: &AdminContext, _query: Query) {
-    // let tables = zread!(context.runtime.state.router.tables.tables);
-    // for sub in tables.hat.router_subs.iter() {
-    //     let key = KeyExpr::try_from(format!(
-    //         "@/router/{}/subscriber/{}",
-    //         context.zid_str,
-    //         sub.expr()
-    //     ))
-    //     .unwrap();
-    //     if query.key_expr().intersects(&key) {
-    //         if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
-    //             log::error!("Error sending AdminSpace reply: {:?}", e);
-    //         }
-    //     }
-    // }
+fn subscribers_data(context: &AdminContext, query: Query) {
+    let tables = zread!(context.runtime.state.router.tables.tables);
+    for sub in tables.hat_code.get_subscriptions(&tables) {
+        let key = KeyExpr::try_from(format!(
+            "@/router/{}/subscriber/{}",
+            context.zid_str,
+            sub.expr()
+        ))
+        .unwrap();
+        if query.key_expr().intersects(&key) {
+            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
+                log::error!("Error sending AdminSpace reply: {:?}", e);
+            }
+        }
+    }
 }
 
-fn queryables_data(_context: &AdminContext, _query: Query) {
-    // let tables = zread!(context.runtime.state.router.tables.tables);
-    // for qabl in tables.hat.router_qabls.iter() {
-    //     let key = KeyExpr::try_from(format!(
-    //         "@/router/{}/queryable/{}",
-    //         context.zid_str,
-    //         qabl.expr()
-    //     ))
-    //     .unwrap();
-    //     if query.key_expr().intersects(&key) {
-    //         if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
-    //             log::error!("Error sending AdminSpace reply: {:?}", e);
-    //         }
-    //     }
-    // }
+fn queryables_data(context: &AdminContext, query: Query) {
+    let tables = zread!(context.runtime.state.router.tables.tables);
+    for qabl in tables.hat_code.get_queryables(&tables) {
+        let key = KeyExpr::try_from(format!(
+            "@/router/{}/queryable/{}",
+            context.zid_str,
+            qabl.expr()
+        ))
+        .unwrap();
+        if query.key_expr().intersects(&key) {
+            if let Err(e) = query.reply(Ok(Sample::new(key, Value::empty()))).res() {
+                log::error!("Error sending AdminSpace reply: {:?}", e);
+            }
+        }
+    }
 }
 
 fn plugins_data(context: &AdminContext, query: Query) {

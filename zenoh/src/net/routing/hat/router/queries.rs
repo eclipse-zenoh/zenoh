@@ -1071,6 +1071,10 @@ impl HatQueriesTrait for HatCode {
         }
     }
 
+    fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>> {
+        hat!(tables).router_qabls.iter().cloned().collect()
+    }
+
     fn compute_query_route(
         &self,
         tables: &Tables,

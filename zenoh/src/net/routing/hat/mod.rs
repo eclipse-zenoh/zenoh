@@ -127,6 +127,8 @@ pub(crate) trait HatPubSubTrait {
         node_id: NodeId,
     );
 
+    fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>>;
+
     fn compute_data_route(
         &self,
         tables: &Tables,
@@ -154,6 +156,9 @@ pub(crate) trait HatQueriesTrait {
         res: &mut Arc<Resource>,
         node_id: NodeId,
     );
+
+    fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>>;
+
     fn compute_query_route(
         &self,
         tables: &Tables,
