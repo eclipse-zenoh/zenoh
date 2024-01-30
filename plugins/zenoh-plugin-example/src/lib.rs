@@ -93,32 +93,29 @@ struct RunningPlugin(Arc<Mutex<RunningPluginInner>>);
 impl PluginControl for RunningPlugin {}
 
 impl RunningPluginTrait for RunningPlugin {
-    // Operation returning a ValidationFunction(path, old, new)-> ZResult<Option<serde_json::Map<String, serde_json::Value>>>
-    // this function will be called each time the plugin's config is changed via the zenohd admin space
-    fn config_checker(&self) -> ValidationFunction {
-        let guard = zlock!(&self.0);
-        let name = guard.name.clone();
-        std::mem::drop(guard);
-        let plugin = self.clone();
-        Arc::new(move |path, old, new| {
-            const STORAGE_SELECTOR: &str = "storage-selector";
-            if path == STORAGE_SELECTOR || path.is_empty() {
-                match (old.get(STORAGE_SELECTOR), new.get(STORAGE_SELECTOR)) {
-                    (Some(serde_json::Value::String(os)), Some(serde_json::Value::String(ns)))
-                        if os == ns => {}
-                    (_, Some(serde_json::Value::String(selector))) => {
-                        let mut guard = zlock!(&plugin.0);
-                        guard.flag.store(false, Relaxed);
-                        guard.flag = Arc::new(AtomicBool::new(true));
-                        match KeyExpr::try_from(selector.clone()) {
-                            Err(e) => log::error!("{}", e),
-                            Ok(selector) => {
-                                async_std::task::spawn(run(
-                                    guard.runtime.clone(),
-                                    selector,
-                                    guard.flag.clone(),
-                                ));
-                            }
+    fn config_checker(
+        &self,
+        path: &str,
+        old: &serde_json::Map<String, serde_json::Value>,
+        new: &serde_json::Map<String, serde_json::Value>,
+    ) -> ZResult<Option<serde_json::Map<String, serde_json::Value>>> {
+        let mut guard = zlock!(&self.0);
+        const STORAGE_SELECTOR: &str = "storage-selector";
+        if path == STORAGE_SELECTOR || path.is_empty() {
+            match (old.get(STORAGE_SELECTOR), new.get(STORAGE_SELECTOR)) {
+                (Some(serde_json::Value::String(os)), Some(serde_json::Value::String(ns)))
+                    if os == ns => {}
+                (_, Some(serde_json::Value::String(selector))) => {
+                    guard.flag.store(false, Relaxed);
+                    guard.flag = Arc::new(AtomicBool::new(true));
+                    match KeyExpr::try_from(selector.clone()) {
+                        Err(e) => log::error!("{}", e),
+                        Ok(selector) => {
+                            async_std::task::spawn(run(
+                                guard.runtime.clone(),
+                                selector,
+                                guard.flag.clone(),
+                            ));
                         }
                     }
                     return Ok(None);
