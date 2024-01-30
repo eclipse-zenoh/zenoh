@@ -36,7 +36,8 @@ std = []
 default = ["std"]
 
 [dependencies]
-async-std = { workspace = true, features = ["default", "unstable"] }
+async-std = { workspace = true, features = ["default", "unstable"] }         
+tokio = { workspace = true, features = ["time"] }
 async-trait = { workspace = true }
 clap = { workspace = true }
 const_format = { workspace = true }
