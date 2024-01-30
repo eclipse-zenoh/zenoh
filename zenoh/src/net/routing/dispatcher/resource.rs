@@ -312,7 +312,6 @@ impl Resource {
         }
     }
 
-    #[allow(dead_code)]
     #[cfg(test)]
     pub fn print_tree(from: &Arc<Resource>) -> String {
         let mut result = from.expr();
