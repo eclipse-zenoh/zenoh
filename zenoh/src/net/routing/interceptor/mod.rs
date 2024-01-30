@@ -167,12 +167,15 @@ impl InterceptorFactoryTrait for AclEnforcer {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        let e = self.e;
+        let e = &self.e;
 
         let uid = transport.get_zid().unwrap();
         (
-            Some(Box::new(IngressAclEnforcer { e })),
-            Some(Box::new(EgressAclEnforcer { zid: Some(uid), e })),
+            Some(Box::new(IngressAclEnforcer { e: e.clone() })),
+            Some(Box::new(EgressAclEnforcer {
+                zid: Some(uid),
+                e: e.clone(),
+            })),
         )
     }
 
@@ -180,15 +183,18 @@ impl InterceptorFactoryTrait for AclEnforcer {
         &self,
         _transport: &TransportMulticast,
     ) -> Option<EgressInterceptor> {
-        let e = self.e;
+        let e = &self.e;
         //let uid = _transport.get_zid().unwrap();
 
-        Some(Box::new(EgressAclEnforcer { e, zid: None }))
+        Some(Box::new(EgressAclEnforcer {
+            e: e.clone(),
+            zid: None,
+        }))
     }
 
     fn new_peer_multicast(&self, _transport: &TransportMulticast) -> Option<IngressInterceptor> {
-        let e = self.e;
-        Some(Box::new(IngressAclEnforcer { e }))
+        let e = &self.e;
+        Some(Box::new(IngressAclEnforcer { e: e.clone() }))
     }
 }
 
@@ -203,12 +209,13 @@ impl InterceptorTrait for IngressAclEnforcer {
         ctx: RoutingContext<NetworkMessage>,
     ) -> Option<RoutingContext<NetworkMessage>> {
         //intercept msg and send it to PEP
-        if let NetworkBody::Push(push) = ctx.msg.body {
+        if let NetworkBody::Push(push) = ctx.msg.body.clone() {
             if let zenoh_protocol::zenoh::PushBody::Put(_put) = push.payload {
-                let e = self.e;
+                let e = &self.e;
                 let act = Action::Write;
-                let new_ctx = NewCtx { ctx, zid: None };
-
+                let ke: &str = ctx.full_expr().unwrap();
+                let zid = ctx.inface().unwrap().state.zid;
+                let new_ctx = NewCtx { ke, zid: Some(zid) }; //how to get the zid here
                 let decision = e.policy_enforcement_point(new_ctx, act).unwrap();
                 if !decision {
                     println!("Not allowed to Write");
@@ -233,11 +240,12 @@ impl InterceptorTrait for EgressAclEnforcer {
         ctx: RoutingContext<NetworkMessage>,
     ) -> Option<RoutingContext<NetworkMessage>> {
         //intercept msg and send it to PEP
-        if let NetworkBody::Push(push) = ctx.msg.body {
+        if let NetworkBody::Push(push) = ctx.msg.body.clone() {
             if let zenoh_protocol::zenoh::PushBody::Put(_put) = push.payload {
-                let e = self.e;
+                let e = &self.e;
                 let act = Action::Read;
-                let new_ctx = NewCtx { ctx, zid: self.zid };
+                let ke: &str = ctx.full_expr().unwrap();
+                let new_ctx = NewCtx { ke, zid: self.zid };
                 let decision = e.policy_enforcement_point(new_ctx, act).unwrap();
                 if !decision {
                     println!("Not allowed to Read");

@@ -2,6 +2,7 @@ use std::{fmt, hash::Hash};
 
 // use casbin::{CoreApi, Enforcer};
 use super::RoutingContext;
+use csv::ReaderBuilder;
 use serde::{Deserialize, Serialize};
 use serde_json::{Result, Value};
 use zenoh_config::ZenohId;
@@ -9,6 +10,9 @@ use zenoh_config::ZenohId;
 //use zenoh_keyexpr::keyexpr_tree::box_tree::KeBoxTree;
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
+
+use fr_trie::glob::acl::{Acl, AclTrie, Permissions};
+use fr_trie::glob::GlobMatcher;
 
 use std::{collections::HashMap, error::Error};
 
@@ -19,8 +23,8 @@ pub enum Action {
     Both,
 }
 
-pub struct NewCtx {
-    pub(crate) ctx: RoutingContext<NetworkMessage>,
+pub struct NewCtx<'a> {
+    pub(crate) ke: &'a str,
     pub(crate) zid: Option<ZenohId>,
 }
 
@@ -37,10 +41,12 @@ pub struct RequestBuilder {
     action: Option<Action>,
 }
 
+type KeTree = AclTrie;
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub struct Subject {
     id: ZenohId,
-    attributes: Option<HashMap<String, String>>, //might be mapped to u8 values eventually
+    // attributes: Option<HashMap<String, String>>, //might be mapped to other types eventually
 }
 
 //subject_builder (add ID, attributes, roles)
@@ -82,9 +88,9 @@ impl RequestBuilder {
     }
 
     pub fn build(&mut self) -> ZResult<Request> {
-        let Some(sub) = self.sub;
-        let Some(obj) = self.obj;
-        let Some(action) = self.action;
+        let sub = self.sub.clone().unwrap();
+        let obj = self.obj.clone().unwrap();
+        let action = self.action.clone().unwrap();
 
         Ok(Request { sub, obj, action })
     }
@@ -111,11 +117,11 @@ impl SubjectBuilder {
     }
 
     pub fn build(&mut self) -> ZResult<Subject> {
-        let Some(id) = self.id;
-        let attr = self.attributes;
+        let id = self.id.unwrap();
+        let attr = self.attributes.clone();
         Ok(Subject {
             id,
-            attributes: attr,
+            // attributes: attr,
         })
     }
 }
@@ -150,7 +156,7 @@ impl SubjectBuilder {
 
 //struct that defines each policy (add policy type and ruleset)
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct Rule {
+pub struct Rule {
     // policy_type: u8, //for l,a,r [access-list, abac, rbac type policy] will be assuming acl for now
     sub: Subject,
     ke: String,
@@ -159,10 +165,10 @@ struct Rule {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct SubAct(Subject, Action);
+pub struct SubAct(Subject, Action);
 
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct PolicyEnforcer(HashMap<SubAct, KeTrie>); //need to add tries here
+#[derive(Clone)] //, PartialEq, Eq, Hash)]
+pub struct PolicyEnforcer(HashMap<SubAct, KeTree>); //need to add tries here
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 
@@ -178,10 +184,12 @@ impl PolicyEnforcer {
         */
         //policy should be derived from config/file (hardcoding it for now)
         //config for local static policy
-        let policy_info = Self::policy_resource_point().unwrap();
+        // let policy_info = Self::policy_resource_point().unwrap();
 
         //desearlize to vector of rules
-        let rule_set: Vec<Rule> = serde_json::from_str(policy_info)?;
+        // let rule_set: Vec<Rule> = serde_json::from_str(policy_info)?;
+
+        let rule_set = Self::policy_resource_point().unwrap();
         println!("print policy {:?}", rule_set);
         let pe = Self::build_policy_map(rule_set).expect("policy not established");
 
@@ -189,8 +197,9 @@ impl PolicyEnforcer {
         Ok(pe)
     }
 
-    pub fn build_policy_map(policy: Vec<Rule>) -> ZResult<PolicyEnforcer> {
-        let pe: PolicyEnforcer;
+    pub fn build_policy_map(rule_set: Vec<Rule>) -> ZResult<PolicyEnforcer> {
+        //let pe: PolicyEnforcer;
+        let mut policy = PolicyEnforcer(HashMap::new());
 
         //convert vector of rules to a hashmap mapping subact to ketree (WIP)
         /*
@@ -201,7 +210,39 @@ impl PolicyEnforcer {
                                         ]
                        where rule_i = action_i : (ke_tree_deny, ke_tree_allow) that deny/allow action_i
         */
-        Ok(pe)
+
+        // let mut policy = Policy(HashMap::new());
+        //now create a hashmap for ketrees ((sub->action)->ketree)
+        let rules: HashMap<String, KeTree>; //u8 is 0 for disallowed and 1 for allowed??
+                                            //iterate through the map to get
+        for v in rule_set {
+            //for each rule
+            //extract subject and action
+            let sub = v.sub;
+            let action = v.action;
+            let ke = v.ke;
+            let perm = v.permission;
+            //create subact
+            let subact = SubAct(sub, action);
+            //match subact in the policy hashmap
+            if !policy.0.contains_key(&subact) {
+                //create new entry for subact + ketree
+                let mut ketree = KeTree::new();
+                ketree.insert(Acl::new(&ke), Permissions::READ);
+                // ketree.insert(ke,1).unwrap();    //1 for allowed??
+                policy.0.insert(subact, ketree);
+            } else {
+                let mut ketree = policy.0.get_mut(&subact).unwrap();
+                // ketree.insert(ke,1).unwrap();    //1 for allowed??
+                // let mut ketree = KeTree::new();
+                let x = Permissions::READ;
+                ketree.insert(Acl::new(&ke), Permissions::READ);
+                // policy.0.insert(subact,ketree);
+            }
+        }
+        //return policy;
+
+        Ok(policy)
     }
     pub fn policy_enforcement_point(&self, new_ctx: NewCtx, action: Action) -> ZResult<bool> {
         /*
@@ -211,7 +252,7 @@ impl PolicyEnforcer {
                     collects result from PDP and then uses that allow/deny output to block or pass the msg to routing table
         */
 
-        let Some(ke) = new_ctx.ctx.full_expr();
+        let ke = new_ctx.ke;
         let zid = new_ctx.zid.unwrap();
         //build subject here
 
@@ -265,9 +306,13 @@ impl PolicyEnforcer {
         // type policymap =
         match self.0.get(&subact) {
             Some(ktrie) => {
-
                 // check if request ke has a match in ke-trie
                 // if ke in ke-trie, then Ok(true) else Ok(false)
+                //let trie = self.0.get.(&subact).clone();
+                let result = ktrie.get_merge::<GlobMatcher>(&Acl::new(&ke));
+                if let Some(value) = result {
+                    return Ok(true);
+                }
             }
             None => return Ok(false),
         }
@@ -275,7 +320,7 @@ impl PolicyEnforcer {
         Ok(false)
     }
 
-    pub fn policy_resource_point() -> ZResult<&'static str> {
+    pub fn policy_resource_point() -> ZResult<Vec<Rule>> {
         /*
            input: config file value along with &self
            output: loads the appropriate policy into the memory and returns back self (now with added policy info); might also select AC type (ACL or ABAC)
@@ -284,13 +329,25 @@ impl PolicyEnforcer {
         /*
            PHASE1: just have a vector of structs containing these values; later we can load them here from config
         */
-        let static_policy = r#"{
-            ["subject":{"id": 001, "attributes": "location_1"},"ke":"demo/a/*","action":"Read","permission":true],
-            ["subject":{"id": 002, "attributes": "location_1"},"ke":"demo/a/*","action":"Read","permission":true],
-            ["subject":{"id": 002, "attributes": "location_1"},"ke":"demo/a/*","action":"Read","permission":true],
-            ["subject":{"id": 003, "attributes": "location_1"},"ke":"demo/*","action":"Both","permission":true]
-        }"#;
-        Ok(static_policy)
+        let mut rule_set: Vec<Rule> = Vec::new();
+        let mut rdr = ReaderBuilder::new()
+            .has_headers(true)
+            .from_path("rules.csv")
+            .unwrap();
+
+        for result in rdr.deserialize() {
+            if let Ok(rec) = result {
+                let record: Rule = rec;
+                rule_set.push(record);
+            }
+        }
+        // let static_policy = r#"{
+        //     ["subject":{"id": 001, "attributes": "location_1"},"ke":"demo/a/*","action":"Read","permission":true],
+        //     ["subject":{"id": 002, "attributes": "location_1"},"ke":"demo/a/*","action":"Read","permission":true],
+        //     ["subject":{"id": 002, "attributes": "location_1"},"ke":"demo/a/*","action":"Read","permission":true],
+        //     ["subject":{"id": 003, "attributes": "location_1"},"ke":"demo/*","action":"Both","permission":true]
+        // }"#;
+        Ok(rule_set)
     }
 }
 
