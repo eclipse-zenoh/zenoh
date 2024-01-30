@@ -388,6 +388,7 @@ impl TransportManager {
 
     pub async fn close(&self) {
         self.close_unicast().await;
+        // TODO: Check this
         self.token.cancel();
         // WARN: depends on the auto-close of tokio runtime after dropped
         // self.tx_executor.runtime.shutdown_background();

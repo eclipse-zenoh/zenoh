@@ -44,6 +44,7 @@ impl ZRuntime {
     }
 
     fn init(&self) -> Result<Runtime> {
+        // dbg!(*ZRUNTIME_CONFIG);
         let config = &ZRUNTIME_CONFIG;
 
         let thread_name = format!("{self:?}");
@@ -141,6 +142,7 @@ impl ZRuntimePool {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct ZRuntimeConfig {
     pub application_threads: usize,
     pub reception_threads: usize,
@@ -186,14 +188,15 @@ impl ZRuntimeConfig {
     }
 }
 
+// WARN: at least two otherwise fail on the routing test
 impl Default for ZRuntimeConfig {
     fn default() -> Self {
         Self {
-            application_threads: 1,
-            reception_threads: 1,
-            tx_threads: 1,
-            rx_threads: 1,
-            net_threads: 1,
+            application_threads: 2,
+            reception_threads: 2,
+            tx_threads: 2,
+            rx_threads: 2,
+            net_threads: 2,
         }
     }
 }

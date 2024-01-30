@@ -127,11 +127,19 @@ impl TransportLinkUnicastUniversal {
             // TODO: improve this callback
             if let Err(e) = res {
                 log::debug!("{}", e);
+
                 // Spawn a task to avoid a deadlock waiting for this same task
                 // to finish in the close() joining its handle
                 // TODO: check which ZRuntime should be used
-                zenoh_runtime::ZRuntime::Net
+                zenoh_runtime::ZRuntime::RX
                     .spawn(async move { transport.del_link((&rx.link).into()).await });
+
+                // // WARN: This ZRuntime blocks
+                // zenoh_runtime::ZRuntime::Net
+                //     .spawn(async move { transport.del_link((&rx.link).into()).await });
+
+                // // WARN: Don't worry. This fix doesn't work
+                // transport.del_link((&rx.link).into()).await;
             }
         };
         // WARN: If this is on ZRuntime::TX, a deadlock would occur.
