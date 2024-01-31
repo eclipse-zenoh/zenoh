@@ -48,7 +48,6 @@ impl From<&CommonArgs> for Config {
             Some(path) => Config::from_file(path).unwrap(),
             None => Config::default(),
         };
-        println!("ARGS mode: {:?} ", value.mode);
         match value.mode {
             Some(Wai::Peer) => config.set_mode(Some(zenoh::scouting::WhatAmI::Peer)),
             Some(Wai::Client) => config.set_mode(Some(zenoh::scouting::WhatAmI::Client)),
