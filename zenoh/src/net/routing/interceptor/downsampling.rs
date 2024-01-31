@@ -122,11 +122,7 @@ impl InterceptorFactoryTrait for DownsamplerInterceptor {
                         "New downsampler transport unicast link interfaces: {:?}",
                         link.interfaces
                     );
-                    if !link
-                        .interfaces
-                        .iter()
-                        .any(|interface| interfaces.contains(&interface))
-                    {
+                    if !link.interfaces.iter().any(|x| interfaces.contains(x)) {
                         return (None, None);
                     }
                 }
