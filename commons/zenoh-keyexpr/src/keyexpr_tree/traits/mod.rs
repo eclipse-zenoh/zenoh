@@ -37,6 +37,12 @@ pub trait IKeyExprTree<'a, Weight> {
     ///
     /// Note that nodes without a `Weight` will also be yielded by the iterator.
     fn included_nodes(&'a self, key: &'a keyexpr) -> Self::Inclusion;
+    type IncluderItem;
+    type Includer: Iterator<Item = Self::IncluderItem>;
+    /// Iterates over all nodes of the tree whose KE is includes the given `key`.
+    ///
+    /// Note that nodes without a `Weight` will also be yielded by the iterator.
+    fn nodes_including(&'a self, key: &'a keyexpr) -> Self::Includer;
 }
 
 /// The basic mutable methods of all all KeTrees
@@ -65,6 +71,12 @@ pub trait IKeyExprTreeMut<'a, Weight>: IKeyExprTree<'a, Weight> {
     ///
     /// Note that nodes without a `Weight` will also be yielded by the iterator.
     fn included_nodes_mut(&'a mut self, key: &'a keyexpr) -> Self::InclusionMut;
+    type IncluderItemMut;
+    type IncluderMut: Iterator<Item = Self::IncluderItemMut>;
+    /// Iterates over all nodes of the tree whose KE includes the given `key`.
+    ///
+    /// Note that nodes without a `Weight` will also be yielded by the iterator.
+    fn nodes_including_mut(&'a mut self, key: &'a keyexpr) -> Self::IncluderMut;
     /// Prunes node from the tree where the predicate returns `true`.
     ///
     /// Note that nodes that still have children will not be pruned.

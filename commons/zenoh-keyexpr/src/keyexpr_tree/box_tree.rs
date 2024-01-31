@@ -117,6 +117,20 @@ where
             IterOrOption::Opt(node)
         }
     }
+
+    type IncluderItem = <Self::Includer as Iterator>::Item;
+    type Includer = IterOrOption<
+        Includer<'a, Children, Box<KeyExprTreeNode<Weight, Wildness, Children>>, Weight>,
+        &'a Self::Node,
+    >;
+    fn nodes_including(&'a self, ke: &'a keyexpr) -> Self::Includer {
+        if self.wildness.get() || ke.is_wild() {
+            Includer::new(&self.children, ke).into()
+        } else {
+            let node = self.node(ke);
+            IterOrOption::Opt(node)
+        }
+    }
 }
 impl<
         'a,
@@ -213,6 +227,19 @@ where
     fn included_nodes_mut(&'a mut self, ke: &'a keyexpr) -> Self::InclusionMut {
         if self.wildness.get() || ke.is_wild() {
             InclusionMut::new(&mut self.children, ke).into()
+        } else {
+            let node = self.node_mut(ke);
+            IterOrOption::Opt(node)
+        }
+    }
+    type IncluderItemMut = <Self::IncluderMut as Iterator>::Item;
+    type IncluderMut = IterOrOption<
+        IncluderMut<'a, Children, Box<KeyExprTreeNode<Weight, Wildness, Children>>, Weight>,
+        &'a mut Self::Node,
+    >;
+    fn nodes_including_mut(&'a mut self, ke: &'a keyexpr) -> Self::IncluderMut {
+        if self.wildness.get() || ke.is_wild() {
+            IncluderMut::new(&mut self.children, ke).into()
         } else {
             let node = self.node_mut(ke);
             IterOrOption::Opt(node)

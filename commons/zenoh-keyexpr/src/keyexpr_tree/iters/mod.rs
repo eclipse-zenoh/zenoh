@@ -18,3 +18,5 @@ mod intersection;
 pub use intersection::{Intersection, IntersectionMut};
 mod inclusion;
 pub use inclusion::{Inclusion, InclusionMut};
+mod includer;
+pub use includer::{Includer, IncluderMut};

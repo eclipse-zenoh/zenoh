@@ -28,7 +28,6 @@ default = ["std"]
 std = ["zenoh-result/std", "dep:schemars"]
 
 [dependencies]
-ahash = { workspace = true }
 keyed-set = { workspace = true }
 rand = { workspace = true, features = ["alloc", "getrandom"] }
 schemars = { workspace = true, optional = true }
@@ -41,6 +40,7 @@ hashbrown = { workspace = true }
 
 # NOTE: May cause problems when testing no_std stuff. Check this tool: https://docs.rs/crate/cargo-no-dev-deps/0.1.0
 [dev-dependencies]
+ahash = { workspace = true }
 criterion = { workspace = true }
 lazy_static = { workspace = true }
 rand = { workspace = true, features = ["default"] }

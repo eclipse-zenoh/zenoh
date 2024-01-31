@@ -124,8 +124,8 @@ fn test_keyset<K: Deref<Target = keyexpr> + Debug>(keys: &[K]) {
             }
         }
         let mut exclone = expected.clone();
-        for node in tree.intersecting_nodes(dbg!(target)) {
-            let ke = dbg!(node.keyexpr());
+        for node in tree.intersecting_nodes(target) {
+            let ke = node.keyexpr();
             let weight = node.weight();
             assert_eq!(
                 expected
@@ -176,6 +176,46 @@ fn test_keyset<K: Deref<Target = keyexpr> + Debug>(keys: &[K]) {
             )
         }
         for node in tree.included_nodes_mut(target) {
+            let ke = node.keyexpr();
+            let weight = node.weight();
+            assert_eq!(
+                exclone
+                    .remove(&ke)
+                    .unwrap_or_else(|| panic!("Couldn't find {ke} in {target}'s expected output"))
+                    .as_ref(),
+                weight
+            )
+        }
+        assert!(
+            expected.is_empty(),
+            "MISSING INCLUDES FOR {}: {:?}",
+            target.deref(),
+            &expected
+        );
+        assert!(
+            exclone.is_empty(),
+            "MISSING MUTABLE INCLUDES FOR {}: {:?}",
+            target.deref(),
+            &exclone
+        );
+        for (k, v) in &map {
+            if k.includes(target) {
+                assert!(expected.insert(k, v).is_none());
+            }
+        }
+        exclone = expected.clone();
+        for node in tree.nodes_including(dbg!(target)) {
+            let ke = node.keyexpr();
+            let weight = node.weight();
+            assert_eq!(
+                expected
+                    .remove(dbg!(&ke))
+                    .unwrap_or_else(|| panic!("Couldn't find {ke} in {target}'s expected output"))
+                    .as_ref(),
+                weight
+            )
+        }
+        for node in tree.nodes_including_mut(target) {
             let ke = node.keyexpr();
             let weight = node.weight();
             assert_eq!(
@@ -369,7 +409,7 @@ fn test_keyarctree<K: Deref<Target = keyexpr>>(keys: &[K]) {
 
 #[test]
 fn keyed_set_tree() {
-    let keys: [&keyexpr; 14] = [
+    let keys: [&keyexpr; 16] = [
         "a/b/**/c/**",
         "a/b/c",
         "a/b/c",
@@ -384,6 +424,8 @@ fn keyed_set_tree() {
         "@c/**",
         "@c/a",
         "a/@c",
+        "b/a$*a/b/bb",
+        "**/b$*/bb",
     ]
     .map(into_ke);
     test_keyset(&keys);
