@@ -19,6 +19,8 @@
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 //!
 mod authz;
+use std::sync::Arc;
+
 use self::authz::{Action, NewCtx};
 
 use super::RoutingContext;
@@ -62,8 +64,9 @@ pub(crate) fn interceptor_factories(_config: &Config) -> Vec<InterceptorFactory>
     println!("the interceptor is initialized");
 
     let policy_enforcer = PolicyEnforcer::init().expect("error setting up access control");
+    let pe = Arc::new(policy_enforcer);
     //store the enforcer instance for use in rest of the sessions
-    vec![Box::new(AclEnforcer { e: policy_enforcer })]
+    vec![Box::new(AclEnforcer { e: pe })]
 }
 
 pub(crate) struct InterceptorsChain {
@@ -159,7 +162,7 @@ impl InterceptorFactoryTrait for LoggerInterceptor {
 }
 
 pub(crate) struct AclEnforcer {
-    e: PolicyEnforcer,
+    e: Arc<PolicyEnforcer>,
 }
 
 impl InterceptorFactoryTrait for AclEnforcer {
@@ -200,7 +203,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
 
 pub(crate) struct IngressAclEnforcer {
     //  e: Option<PolicyEnforcer>,
-    e: PolicyEnforcer,
+    e: Arc<PolicyEnforcer>,
 }
 
 impl InterceptorTrait for IngressAclEnforcer {
@@ -227,7 +230,7 @@ impl InterceptorTrait for IngressAclEnforcer {
 }
 
 pub(crate) struct EgressAclEnforcer {
-    e: PolicyEnforcer,
+    e: Arc<PolicyEnforcer>,
     zid: Option<ZenohId>,
 }
 
@@ -236,7 +239,7 @@ impl InterceptorTrait for EgressAclEnforcer {
         &self,
         ctx: RoutingContext<NetworkMessage>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        //intercept msg and send it to PEP
+        //  intercept msg and send it to PEP
         if let NetworkBody::Push(push) = ctx.msg.body.clone() {
             if let zenoh_protocol::zenoh::PushBody::Put(_put) = push.payload {
                 let e = &self.e;

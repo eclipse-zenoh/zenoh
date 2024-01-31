@@ -56,7 +56,6 @@ impl ValueMerge for Permissions {
     fn merge_mut(&mut self, _other: &Self) {}
 }
 
-//type KeTree = AclTrie;
 type KeTree = Trie<Acl, Permissions>;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
@@ -168,7 +167,7 @@ impl PolicyEnforcer {
            creates the policy hashmap with the ke-tries for ke matching
            should have polic-type in the mix here...need to verify
         */
-        let rule_set = Self::policy_resource_point("rules.json5").unwrap();
+        let rule_set = Self::policy_resource_point("rules_test_thr.json5").unwrap();
         let pe = Self::build_policy_map(rule_set).expect("policy not established");
         //also should start the logger here
         Ok(pe)
@@ -220,6 +219,7 @@ impl PolicyEnforcer {
                     collects result from PDP and then uses that allow/deny output to block or pass the msg to routing table
         */
 
+        //get keyexpression and zid for the request; attributes will be added at this point (phase 2)
         let ke = new_ctx.ke;
         let zid = new_ctx.zid.unwrap();
         //build subject
@@ -243,7 +243,7 @@ impl PolicyEnforcer {
                     policy list is be a hashmap of (subject,action)->ketries (test and discuss)
         */
 
-        //extract subject and action from request and create subact [this will be our key for hashmap]
+        //get subject and action from request and create subact [this will be our key for hashmap]
         let subact = SubAct(request.sub, request.action);
         let ke = request.obj;
         match self.0.get(&subact) {
@@ -264,7 +264,7 @@ impl PolicyEnforcer {
         /*
            input: path to rules.json file
            output: loads the appropriate policy into the memory and returns back a vector of rules;
-           * might also be the point to select AC type (ACL, ABAC etc)??
+           * might also be the point to select AC type (ACL, ABAC etc)?? *
         */
         #[derive(Serialize, Deserialize, Clone)]
         struct Rules(Vec<Rule>);

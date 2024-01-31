@@ -4,16 +4,7 @@
             "id": "aaa3b411006ad57868988f9fec672a31",
             "attributes": null
         },
-        "ke": "demo/example/**",
-        "action": "Write",
-        "permission": false
-    },
-    {
-        "sub": {
-            "id": "aaa3b411006ad57868988f9fec672a31",
-            "attributes": null
-        },
-        "ke": "demo/example/zenoh-rs-pub",
+        "ke": "test/thr",
         "action": "Write",
         "permission": true
     },
@@ -22,7 +13,7 @@
             "id": "bbb3b411006ad57868988f9fec672a31",
             "attributes": null
         },
-        "ke": "demo/example/zenoh-rs-pub",
+        "ke": "test/thr",
         "action": "Read",
         "permission": true
     },
@@ -31,7 +22,7 @@
             "id": "aaabbb11006ad57868988f9fec672a31",
             "attributes": null
         },
-        "ke": "demo/example/**",
+        "ke": "test/thr",
         "action": "Read",
         "permission": true
     },
@@ -40,7 +31,7 @@
             "id": "aaabbb11006ad57868988f9fec672a31",
             "attributes": null
         },
-        "ke": "demo/example/**",
+        "ke": "test/thr",
         "action": "Write",
         "permission": true
     }
