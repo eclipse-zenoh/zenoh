@@ -274,7 +274,7 @@ impl AdminSpace {
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::default(),
             body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                id: 0, // TODO
+                id: 0, // @TODO use proper QueryableId (#703)
                 wire_expr: [&root_key, "/**"].concat().into(),
                 ext_info: QueryableInfo {
                     complete: 0,

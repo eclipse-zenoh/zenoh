@@ -214,7 +214,7 @@ fn send_sourced_queryable_to_net_childs(
                                     node_id: routing_context,
                                 },
                                 body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                    id: 0, // TODO
+                                    id: 0, // @TODO use proper QueryableId (#703)
                                     wire_expr: key_expr,
                                     ext_info: *qabl_info,
                                 }),
@@ -262,7 +262,7 @@ fn propagate_simple_queryable(
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper QueryableId (#703)
                         wire_expr: key_expr,
                         ext_info: info,
                     }),
@@ -494,7 +494,7 @@ fn send_forget_sourced_queryable_to_net_childs(
                                     node_id: routing_context,
                                 },
                                 body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                                    id: 0, // TODO
+                                    id: 0, // @TODO use proper QueryableId (#703)
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             },
@@ -518,7 +518,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper QueryableId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
                     }),
                 },
@@ -558,7 +558,7 @@ fn propagate_forget_simple_queryable_to_peers(tables: &mut Tables, res: &mut Arc
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::default(),
                         body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                            id: 0, // TODO
+                            id: 0, // @TODO use proper QueryableId (#703)
                             ext_wire_expr: WireExprType { wire_expr },
                         }),
                     },
@@ -727,7 +727,7 @@ pub(super) fn undeclare_client_queryable(
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper QueryableId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
                     }),
                 },
@@ -760,7 +760,7 @@ pub(super) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::default(),
                         body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                            id: 0, // TODO
+                            id: 0, // @TODO use proper QueryableId (#703)
                             wire_expr: key_expr,
                             ext_info: info,
                         }),
@@ -789,7 +789,7 @@ pub(super) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::default(),
                         body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                            id: 0, // TODO
+                            id: 0, // @TODO use proper QueryableId (#703)
                             wire_expr: key_expr,
                             ext_info: info,
                         }),
@@ -889,7 +889,7 @@ pub(super) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                                             ext_nodeid: ext::NodeIdType::default(),
                                             body: DeclareBody::UndeclareQueryable(
                                                 UndeclareQueryable {
-                                                    id: 0, // TODO
+                                                    id: 0, // @TODO use proper QueryableId (#703)
                                                     ext_wire_expr: WireExprType { wire_expr },
                                                 },
                                             ),
@@ -912,7 +912,7 @@ pub(super) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                                         ext_tstamp: None,
                                         ext_nodeid: ext::NodeIdType::default(),
                                         body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                            id: 0, // TODO
+                                            id: 0, // @TODO use proper QueryableId (#703)
                                             wire_expr: key_expr,
                                             ext_info: info,
                                         }),
