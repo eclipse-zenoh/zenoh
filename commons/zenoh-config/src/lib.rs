@@ -72,8 +72,11 @@ pub type SecretValue = Secret<SecretString>;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub struct DownsamplerConf {
-    pub keyexpr: Option<OwnedKeyExpr>,
-    pub interface: Option<String>,
+    /// A list of key-expressions to which the downsampling will be applied.
+    pub keyexprs: Option<Vec<OwnedKeyExpr>>,
+    /// A list of interfaces to which the downsampling will be applied.
+    pub interfaces: Option<Vec<String>>,
+    /// Downsampling strategy.
     pub strategy: Option<String>,
     pub threshold_ms: Option<u64>,
 }

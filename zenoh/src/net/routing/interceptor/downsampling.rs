@@ -37,7 +37,7 @@ impl InterceptorTrait for IngressMsgDownsampler {
 }
 
 pub(crate) struct EgressMsgDownsampler {
-    keyexpr: Option<OwnedKeyExpr>,
+    keyexprs: Option<Vec<OwnedKeyExpr>>,
     threshold: std::time::Duration,
     latest_message_timestamp: Arc<Mutex<std::time::Instant>>,
 }
@@ -47,12 +47,16 @@ impl InterceptorTrait for EgressMsgDownsampler {
         &self,
         ctx: RoutingContext<NetworkMessage>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        if let Some(cfg_keyexpr) = self.keyexpr.as_ref() {
+        if let Some(cfg_keyexprs) = self.keyexprs.as_ref() {
+            let mut matched = false;
             if let Some(keyexpr) = ctx.full_key_expr() {
-                if !cfg_keyexpr.intersects(&keyexpr) {
-                    return Some(ctx);
+                for cfg_keyexpr in cfg_keyexprs {
+                    if cfg_keyexpr.intersects(&keyexpr) {
+                        matched = true;
+                    }
                 }
-            } else {
+            }
+            if !matched {
                 return Some(ctx);
             }
         }
@@ -76,7 +80,7 @@ impl EgressMsgDownsampler {
         if let Some(threshold_ms) = conf.threshold_ms {
             let threshold = std::time::Duration::from_millis(threshold_ms);
             Self {
-                keyexpr: conf.keyexpr,
+                keyexprs: conf.keyexprs,
                 threshold,
                 // TODO (sashacmc): I need just := 0, but how???
                 latest_message_timestamp: Arc::new(Mutex::new(
@@ -106,21 +110,23 @@ impl InterceptorFactoryTrait for DownsamplerInterceptor {
         &self,
         transport: &TransportUnicast,
     ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        log::debug!("New transport unicast {:?}", transport);
-        if let Some(interface) = self.conf.interface.clone() {
-            log::debug!("New downsampler transport unicast interface: {}", interface);
-            print!("New downsampler transport unicast interface: {}", interface);
+        log::debug!("New downsampler transport unicast {:?}", transport);
+        if let Some(interfaces) = &self.conf.interfaces {
+            log::debug!(
+                "New downsampler transport unicast config interfaces: {:?}",
+                interfaces
+            );
             if let Ok(links) = transport.get_links() {
                 for link in links {
                     log::debug!(
-                        "New downsampler transport unicast interfaces: {:?}",
+                        "New downsampler transport unicast link interfaces: {:?}",
                         link.interfaces
                     );
-                    print!(
-                        "New downsampler transport unicast interfaces: {:?}",
-                        link.interfaces
-                    );
-                    if !link.interfaces.contains(&interface) {
+                    if !link
+                        .interfaces
+                        .iter()
+                        .any(|interface| interfaces.contains(&interface))
+                    {
                         return (None, None);
                     }
                 }

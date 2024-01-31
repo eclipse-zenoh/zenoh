@@ -50,11 +50,11 @@ fn downsampling_by_keyexpr() {
             r#"
               [
                 {
-                  keyexpr: "test/downsamples_by_keyexp/r100",
+                  keyexprs: ["test/downsamples_by_keyexp/r100"],
                   threshold_ms: 100,
                 },
                 {
-                  keyexpr: "test/downsamples_by_keyexp/r50",
+                  keyexprs: ["test/downsamples_by_keyexp/r50"],
                   threshold_ms: 50,
                 },
               ]
@@ -138,13 +138,13 @@ fn downsampling_by_interface() {
             r#"
               [
                 {
-                  keyexpr: "test/downsamples_by_interface/r100",
-                  interface: "lo",
+                  keyexprs: ["test/downsamples_by_interface/r100"],
+                  interfaces: ["lo", "lo0"],
                   threshold_ms: 100,
                 },
                 {
-                  keyexpr: "test/downsamples_by_interface/all",
-                  interface: "some_unknown_interface",
+                  keyexprs: ["test/downsamples_by_interface/all"],
+                  interfaces: ["some_unknown_interface"],
                   threshold_ms: 100,
                 },
               ]
