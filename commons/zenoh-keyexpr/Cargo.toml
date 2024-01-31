@@ -28,6 +28,7 @@ default = ["std"]
 std = ["zenoh-result/std", "dep:schemars"]
 
 [dependencies]
+ahash = { workspace = true }
 keyed-set = { workspace = true }
 rand = { workspace = true, features = ["alloc", "getrandom"] }
 schemars = { workspace = true, optional = true }
