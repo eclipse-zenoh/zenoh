@@ -93,7 +93,7 @@ jobs:
         uses: taiki-e/install-action@nextest
 
       - name: Run tests
-        run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace -- --nocapture
+        run: cargo nextest run --exclude zenoh-examples --exclude zenoh-plugin-example --workspace
         env:
           CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
           ASYNC_STD_THREAD_COUNT: 4

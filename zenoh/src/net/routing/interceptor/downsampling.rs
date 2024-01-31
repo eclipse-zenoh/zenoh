@@ -109,9 +109,14 @@ impl InterceptorFactoryTrait for DownsamplerInterceptor {
         log::debug!("New transport unicast {:?}", transport);
         if let Some(interface) = self.conf.interface.clone() {
             log::debug!("New downsampler transport unicast interface: {}", interface);
+            print!("New downsampler transport unicast interface: {}", interface);
             if let Ok(links) = transport.get_links() {
                 for link in links {
                     log::debug!(
+                        "New downsampler transport unicast interfaces: {:?}",
+                        link.interfaces
+                    );
+                    print!(
                         "New downsampler transport unicast interfaces: {:?}",
                         link.interfaces
                     );
