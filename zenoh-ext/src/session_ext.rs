@@ -18,9 +18,9 @@ use zenoh::prelude::KeyExpr;
 use zenoh::{Session, SessionRef};
 
 /// Some extensions to the [`zenoh::Session`](zenoh::Session)
-pub trait SessionExt<'a> {
+pub trait SessionExt<'s, 'a> {
     fn declare_publication_cache<'b, 'c, TryIntoKeyExpr>(
-        &'a self,
+        &'s self,
         pub_key_expr: TryIntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b, 'c>
     where
@@ -28,9 +28,9 @@ pub trait SessionExt<'a> {
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
 }
 
-impl<'a> SessionExt<'a> for SessionRef<'a> {
+impl<'s, 'a> SessionExt<'s, 'a> for SessionRef<'a> {
     fn declare_publication_cache<'b, 'c, TryIntoKeyExpr>(
-        &'a self,
+        &'s self,
         pub_key_expr: TryIntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b, 'c>
     where
@@ -41,7 +41,7 @@ impl<'a> SessionExt<'a> for SessionRef<'a> {
     }
 }
 
-impl<'a> SessionExt<'a> for Session {
+impl<'a> SessionExt<'a, 'a> for Session {
     fn declare_publication_cache<'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
@@ -50,14 +50,11 @@ impl<'a> SessionExt<'a> for Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        PublicationCacheBuilder::new(
-            SessionRef::Borrow(self),
-            pub_key_expr.try_into().map_err(Into::into),
-        )
+        SessionRef::Borrow(self).declare_publication_cache(pub_key_expr)
     }
 }
 
-impl SessionExt<'static> for Arc<Session> {
+impl<'s> SessionExt<'s, 'static> for Arc<Session> {
     /// Examples:
     /// ```
     /// # async_std::task::block_on(async {
@@ -75,16 +72,13 @@ impl SessionExt<'static> for Arc<Session> {
     /// # })
     /// ```
     fn declare_publication_cache<'b, 'c, TryIntoKeyExpr>(
-        &self,
+        &'s self,
         pub_key_expr: TryIntoKeyExpr,
     ) -> PublicationCacheBuilder<'static, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        PublicationCacheBuilder::new(
-            SessionRef::Shared(self.clone()),
-            pub_key_expr.try_into().map_err(Into::into),
-        )
+        SessionRef::Shared(self.clone()).declare_publication_cache(pub_key_expr)
     }
 }

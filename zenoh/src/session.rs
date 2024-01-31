@@ -278,7 +278,7 @@ impl Resource {
     }
 }
 
-pub trait SessionDeclarations<'s> {
+pub trait SessionDeclarations<'s, 'a> {
     /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
     ///
     /// # Arguments
@@ -302,13 +302,13 @@ pub trait SessionDeclarations<'s> {
     /// }).await;
     /// # })
     /// ```
-    fn declare_subscriber<'a, TryIntoKeyExpr>(
-        &self,
+    fn declare_subscriber<'b, TryIntoKeyExpr>(
+        &'s self,
         key_expr: TryIntoKeyExpr,
-    ) -> SubscriberBuilder<'s, 'a, PushMode, DefaultHandler>
+    ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_result::Error>;
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
 
     /// Create a [`Queryable`](crate::queryable::Queryable) for the given key expression.
     ///
@@ -337,13 +337,13 @@ pub trait SessionDeclarations<'s> {
     /// }).await;
     /// # })
     /// ```
-    fn declare_queryable<'a, TryIntoKeyExpr>(
-        &self,
+    fn declare_queryable<'b, TryIntoKeyExpr>(
+        &'s self,
         key_expr: TryIntoKeyExpr,
-    ) -> QueryableBuilder<'s, 'a, DefaultHandler>
+    ) -> QueryableBuilder<'a, 'b, DefaultHandler>
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_result::Error>;
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
 
     /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
     ///
@@ -364,13 +364,13 @@ pub trait SessionDeclarations<'s> {
     /// publisher.put("value").res().await.unwrap();
     /// # })
     /// ```
-    fn declare_publisher<'a, TryIntoKeyExpr>(
-        &self,
+    fn declare_publisher<'b, TryIntoKeyExpr>(
+        &'s self,
         key_expr: TryIntoKeyExpr,
-    ) -> PublisherBuilder<'s, 'a>
+    ) -> PublisherBuilder<'a, 'b>
     where
-        TryIntoKeyExpr: TryInto<KeyExpr<'a>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'a>>>::Error: Into<zenoh_result::Error>;
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
 
     /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
     ///
@@ -389,9 +389,9 @@ pub trait SessionDeclarations<'s> {
     /// # })
     /// ```
     #[zenoh_macros::unstable]
-    fn liveliness(&self) -> Liveliness<'s>;
+    fn liveliness(&'s self) -> Liveliness<'a>;
 
-    fn info(&self) -> SessionInfo<'s>;
+    fn info(&'s self) -> SessionInfo<'a>;
 }
 
 #[derive(Clone)]
@@ -426,9 +426,9 @@ pub enum SessionRef<'a> {
 /// }).await;
 /// # })
 /// ```
-impl<'a> SessionDeclarations<'a> for SessionRef<'a> {
+impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
     fn declare_subscriber<'b, TryIntoKeyExpr>(
-        &self,
+        &'s self,
         key_expr: TryIntoKeyExpr,
     ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
     where
@@ -446,7 +446,7 @@ impl<'a> SessionDeclarations<'a> for SessionRef<'a> {
     }
 
     fn declare_queryable<'b, TryIntoKeyExpr>(
-        &self,
+        &'s self,
         key_expr: TryIntoKeyExpr,
     ) -> QueryableBuilder<'a, 'b, DefaultHandler>
     where
@@ -462,7 +462,7 @@ impl<'a> SessionDeclarations<'a> for SessionRef<'a> {
         }
     }
     fn declare_publisher<'b, TryIntoKeyExpr>(
-        &self,
+        &'s self,
         key_expr: TryIntoKeyExpr,
     ) -> PublisherBuilder<'a, 'b>
     where
@@ -478,12 +478,12 @@ impl<'a> SessionDeclarations<'a> for SessionRef<'a> {
         }
     }
     #[zenoh_macros::unstable]
-    fn liveliness(&self) -> Liveliness<'a> {
+    fn liveliness(&'s self) -> Liveliness<'a> {
         Liveliness {
             session: self.clone(),
         }
     }
-    fn info(&self) -> SessionInfo<'a> {
+    fn info(&'s self) -> SessionInfo<'a> {
         SessionInfo {
             session: self.clone(),
         }
@@ -705,7 +705,9 @@ impl Session {
     pub fn config(&self) -> &Notifier<Config> {
         self.runtime.config()
     }
+}
 
+impl<'a> SessionDeclarations<'a, 'a> for Session {
     /// Get informations about the zenoh [`Session`](Session).
     ///
     /// # Examples
@@ -717,7 +719,7 @@ impl Session {
     /// let info = session.info();
     /// # })
     /// ```
-    pub fn info(&self) -> SessionInfo {
+    fn info(&self) -> SessionInfo {
         SessionRef::Borrow(self).info()
     }
 
@@ -739,7 +741,7 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn declare_subscriber<'a, 'b, TryIntoKeyExpr>(
+    fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
     ) -> SubscriberBuilder<'a, 'b, PushMode, DefaultHandler>
@@ -772,7 +774,7 @@ impl Session {
     /// }
     /// # })
     /// ```
-    pub fn declare_queryable<'a, 'b, TryIntoKeyExpr>(
+    fn declare_queryable<'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
     ) -> QueryableBuilder<'a, 'b, DefaultHandler>
@@ -802,7 +804,7 @@ impl Session {
     /// publisher.put("value").res().await.unwrap();
     /// # })
     /// ```
-    pub fn declare_publisher<'a, 'b, TryIntoKeyExpr>(
+    fn declare_publisher<'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
     ) -> PublisherBuilder<'a, 'b>
@@ -812,7 +814,29 @@ impl Session {
     {
         SessionRef::Borrow(self).declare_publisher(key_expr)
     }
+    /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let liveliness = session
+    ///     .liveliness()
+    ///     .declare_token("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    fn liveliness(&'a self) -> Liveliness {
+        SessionRef::Borrow(self).liveliness()
+    }
+}
 
+impl Session {
     /// Informs Zenoh that you intend to use `key_expr` multiple times and that it should optimize its transmission.
     ///
     /// The returned `KeyExpr`'s internal structure may differ from what you would have obtained through a simple
@@ -992,27 +1016,6 @@ impl Session {
             attachment: None,
             handler: DefaultHandler,
         }
-    }
-
-    /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let liveliness = session
-    ///     .liveliness()
-    ///     .declare_token("key/expression")
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
-    #[zenoh_macros::unstable]
-    pub fn liveliness(&self) -> Liveliness {
-        SessionRef::Borrow(self).liveliness()
     }
 }
 
@@ -2156,7 +2159,7 @@ impl Session {
     }
 }
 
-impl SessionDeclarations<'static> for Arc<Session> {
+impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
     /// Create a [`Subscriber`](Subscriber) for the given key expression.
     ///
     /// # Arguments
@@ -2181,7 +2184,7 @@ impl SessionDeclarations<'static> for Arc<Session> {
     /// # })
     /// ```
     fn declare_subscriber<'b, TryIntoKeyExpr>(
-        &self,
+        &'s self,
         key_expr: TryIntoKeyExpr,
     ) -> SubscriberBuilder<'static, 'b, PushMode, DefaultHandler>
     where
@@ -2226,7 +2229,7 @@ impl SessionDeclarations<'static> for Arc<Session> {
     /// # })
     /// ```
     fn declare_queryable<'b, TryIntoKeyExpr>(
-        &self,
+        &'s self,
         key_expr: TryIntoKeyExpr,
     ) -> QueryableBuilder<'static, 'b, DefaultHandler>
     where
@@ -2262,7 +2265,7 @@ impl SessionDeclarations<'static> for Arc<Session> {
     /// # })
     /// ```
     fn declare_publisher<'b, TryIntoKeyExpr>(
-        &self,
+        &'s self,
         key_expr: TryIntoKeyExpr,
     ) -> PublisherBuilder<'static, 'b>
     where
@@ -2295,13 +2298,13 @@ impl SessionDeclarations<'static> for Arc<Session> {
     /// # })
     /// ```
     #[zenoh_macros::unstable]
-    fn liveliness(&self) -> Liveliness<'static> {
+    fn liveliness(&'s self) -> Liveliness<'static> {
         Liveliness {
             session: SessionRef::Shared(self.clone()),
         }
     }
 
-    fn info(&self) -> SessionInfo<'static> {
+    fn info(&'s self) -> SessionInfo<'static> {
         SessionInfo {
             session: SessionRef::Shared(self.clone()),
         }
