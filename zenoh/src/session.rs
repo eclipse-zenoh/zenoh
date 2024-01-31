@@ -278,6 +278,32 @@ impl Resource {
     }
 }
 
+/// Functions to create zenoh entities
+///
+/// This trait contains functions to create zenoh entities like
+/// [`Subscriber`](crate::subscriber::Subscriber), and
+/// [`Queryable`](crate::queryable::Queryable)
+///
+/// This trait is implemented by [`Session`](crate::session::Session) itself and
+/// by wrappers [`SessionRef`](crate::session::SessionRef) and [`Arc<Session>`](crate::session::Arc<Session>)
+///
+/// # Examples
+/// ```no_run
+/// # async_std::task::block_on(async {
+/// use zenoh::prelude::r#async::*;
+///
+/// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
+/// let subscriber = session.declare_subscriber("key/expression")
+///     .res()
+///     .await
+///     .unwrap();
+/// async_std::task::spawn(async move {
+///     while let Ok(sample) = subscriber.recv_async().await {
+///         println!("Received: {:?}", sample);
+///     }
+/// }).await;
+/// # })
+/// ```
 pub trait SessionDeclarations<'s, 'a> {
     /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
     ///
@@ -390,7 +416,17 @@ pub trait SessionDeclarations<'s, 'a> {
     /// ```
     #[zenoh_macros::unstable]
     fn liveliness(&'s self) -> Liveliness<'a>;
-
+    /// Get informations about the zenoh [`Session`](Session).
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let info = session.info();
+    /// # })
+    /// ```
     fn info(&'s self) -> SessionInfo<'a>;
 }
 
@@ -400,32 +436,6 @@ pub enum SessionRef<'a> {
     Shared(Arc<Session>),
 }
 
-/// Functions to create zenoh entities with `'static` lifetime.
-///
-/// This trait contains functions to create zenoh entities like
-/// [`Subscriber`](crate::subscriber::Subscriber), and
-/// [`Queryable`](crate::queryable::Queryable) with a `'static` lifetime.
-/// This is useful to move zenoh entities to several threads and tasks.
-///
-/// This trait is implemented for `Arc<Session>`.
-///
-/// # Examples
-/// ```no_run
-/// # async_std::task::block_on(async {
-/// use zenoh::prelude::r#async::*;
-///
-/// let session = zenoh::open(config::peer()).res().await.unwrap().into_arc();
-/// let subscriber = session.declare_subscriber("key/expression")
-///     .res()
-///     .await
-///     .unwrap();
-/// async_std::task::spawn(async move {
-///     while let Ok(sample) = subscriber.recv_async().await {
-///         println!("Received: {:?}", sample);
-///     }
-/// }).await;
-/// # })
-/// ```
 impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'s self,
@@ -444,7 +454,6 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
             handler: DefaultHandler,
         }
     }
-
     fn declare_queryable<'b, TryIntoKeyExpr>(
         &'s self,
         key_expr: TryIntoKeyExpr,
@@ -708,39 +717,9 @@ impl Session {
 }
 
 impl<'a> SessionDeclarations<'a, 'a> for Session {
-    /// Get informations about the zenoh [`Session`](Session).
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let info = session.info();
-    /// # })
-    /// ```
     fn info(&self) -> SessionInfo {
         SessionRef::Borrow(self).info()
     }
-
-    /// Create a [`Subscriber`](Subscriber) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression to subscribe to
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let subscriber = session.declare_subscriber("key/expression").res().await.unwrap();
-    /// while let Ok(sample) = subscriber.recv_async().await {
-    ///     println!("Received: {:?}", sample);
-    /// }
-    /// # })
-    /// ```
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -751,29 +730,6 @@ impl<'a> SessionDeclarations<'a, 'a> for Session {
     {
         SessionRef::Borrow(self).declare_subscriber(key_expr)
     }
-
-    /// Create a [`Queryable`](Queryable) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression matching the queries the
-    /// [`Queryable`](Queryable) will reply to
-    ///
-    /// # Examples
-    /// ```no_run
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
-    /// while let Ok(query) = queryable.recv_async().await {
-    ///     query.reply(Ok(Sample::try_from(
-    ///         "key/expression",
-    ///         "value",
-    ///     ).unwrap())).res().await.unwrap();
-    /// }
-    /// # })
-    /// ```
     fn declare_queryable<'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -784,26 +740,6 @@ impl<'a> SessionDeclarations<'a, 'a> for Session {
     {
         SessionRef::Borrow(self).declare_queryable(key_expr)
     }
-
-    /// Create a [`Publisher`](crate::publication::Publisher) for the given key expression.
-    ///
-    /// # Arguments
-    ///
-    /// * `key_expr` - The key expression matching resources to write
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let publisher = session.declare_publisher("key/expression")
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// publisher.put("value").res().await.unwrap();
-    /// # })
-    /// ```
     fn declare_publisher<'b, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -814,22 +750,6 @@ impl<'a> SessionDeclarations<'a, 'a> for Session {
     {
         SessionRef::Borrow(self).declare_publisher(key_expr)
     }
-    /// Obtain a [`Liveliness`] struct tied to this Zenoh [`Session`].
-    ///
-    /// # Examples
-    /// ```
-    /// # async_std::task::block_on(async {
-    /// use zenoh::prelude::r#async::*;
-    ///
-    /// let session = zenoh::open(config::peer()).res().await.unwrap();
-    /// let liveliness = session
-    ///     .liveliness()
-    ///     .declare_token("key/expression")
-    ///     .res()
-    ///     .await
-    ///     .unwrap();
-    /// # })
-    /// ```
     #[zenoh_macros::unstable]
     fn liveliness(&'a self) -> Liveliness {
         SessionRef::Borrow(self).liveliness()
