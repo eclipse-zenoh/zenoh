@@ -329,6 +329,57 @@ where
             IterOrOption::Opt(self.node_mut(token, key).map(Into::into))
         }
     }
+
+    type IncluderItem = Self::Node;
+    type Includer = IterOrOption<
+        TokenPacker<
+            Includer<
+                'a,
+                Children,
+                Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+                Weight,
+            >,
+            &'a Token,
+        >,
+        Self::IncluderItem,
+    >;
+    fn nodes_including(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Includer {
+        let inner = ketree_borrow(&self.inner, token);
+        if inner.wildness.get() || key.is_wild() {
+            IterOrOption::Iter(TokenPacker {
+                iter: Includer::new(&inner.children, key),
+                token,
+            })
+        } else {
+            IterOrOption::Opt(self.node(token, key))
+        }
+    }
+    type IncluderItemMut = Self::TreeIterItemMut;
+    type IncluderMut = IterOrOption<
+        TokenPacker<
+            Includer<
+                'a,
+                Children,
+                Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+                Weight,
+            >,
+            &'a mut Token,
+        >,
+        Self::IncluderItemMut,
+    >;
+    fn nodes_including_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::IncluderMut {
+        let inner = ketree_borrow(&self.inner, token);
+        if inner.wildness.get() || key.is_wild() {
+            unsafe {
+                IterOrOption::Iter(TokenPacker {
+                    iter: Includer::new(core::mem::transmute(&inner.children), key),
+                    token,
+                })
+            }
+        } else {
+            IterOrOption::Opt(self.node_mut(token, key).map(Into::into))
+        }
+    }
     type PruneNode = KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>;
 
     fn prune_where<F: FnMut(&mut Self::PruneNode) -> bool>(

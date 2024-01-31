@@ -111,6 +111,12 @@ pub trait ITokenKeyExprTree<'a, Weight, Token> {
     type InclusionItemMut;
     type InclusionMut: Iterator<Item = Self::InclusionItemMut>;
     fn included_nodes_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::InclusionMut;
+    type IncluderItem;
+    type Includer: Iterator<Item = Self::IncluderItem>;
+    fn nodes_including(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Includer;
+    type IncluderItemMut;
+    type IncluderMut: Iterator<Item = Self::IncluderItemMut>;
+    fn nodes_including_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::IncluderMut;
     type PruneNode: IKeyExprTreeNodeMut<Weight>;
     fn prune_where<F: FnMut(&mut Self::PruneNode) -> bool>(&self, token: &mut Token, predicate: F);
 }
