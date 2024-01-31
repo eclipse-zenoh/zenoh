@@ -20,9 +20,9 @@ use crate::info::*;
 use crate::key_expr::KeyExprInner;
 #[zenoh_macros::unstable]
 use crate::liveliness::{Liveliness, LivelinessTokenState};
-use crate::net::routing::face::Face;
+use crate::net::primitives::Primitives;
+use crate::net::routing::dispatcher::face::Face;
 use crate::net::runtime::Runtime;
-use crate::net::transport::primitives::Primitives;
 use crate::prelude::Locality;
 use crate::prelude::{KeyExpr, Parameters};
 use crate::publication::*;
@@ -1174,7 +1174,7 @@ impl Session {
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::default(),
                                 body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id: 0, // TODO
+                                    id: 0, // @TODO use proper SubscriberId (#703)
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             });
@@ -1199,7 +1199,7 @@ impl Session {
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::default(),
                                 body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id: 0, // TODO
+                                    id: 0, // @TODO use proper SubscriberId (#703)
                                     ext_wire_expr: WireExprType {
                                         wire_expr: key_expr.to_wire(self).to_owned(),
                                     },
@@ -1348,7 +1348,7 @@ impl Session {
                                 ext_tstamp: None,
                                 ext_nodeid: declare::ext::NodeIdType::default(),
                                 body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                    id: 0, // TODO
+                                    id: 0, // @TODO use proper QueryableId (#703)
                                     wire_expr: qable_state.key_expr.clone(),
                                     ext_info: qabl_info,
                                 }),
@@ -1367,7 +1367,7 @@ impl Session {
                                     ext_tstamp: None,
                                     ext_nodeid: declare::ext::NodeIdType::default(),
                                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                        id: 0, // TODO
+                                        id: 0, // @TODO use proper QueryableId (#703)
                                         wire_expr: qable_state.key_expr.clone(),
                                         ext_info: qabl_info,
                                     }),
@@ -1383,7 +1383,7 @@ impl Session {
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::default(),
                         body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                            id: 0, // TODO
+                            id: 0, // @TODO use proper QueryableId (#703)
                             ext_wire_expr: WireExprType {
                                 wire_expr: qable_state.key_expr.clone(),
                             },
@@ -1443,7 +1443,7 @@ impl Session {
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper SubscriberId (#703)
                         ext_wire_expr: WireExprType {
                             wire_expr: key_expr.to_wire(self).to_owned(),
                         },
@@ -1497,23 +1497,20 @@ impl Session {
         key_expr: &KeyExpr,
         destination: Locality,
     ) -> ZResult<MatchingStatus> {
-        use crate::net::routing::router::RoutingExpr;
-        use zenoh_protocol::core::WhatAmI;
+        use crate::net::routing::dispatcher::tables::RoutingExpr;
         let router = self.runtime.router();
         let tables = zread!(router.tables.tables);
-        let res = crate::net::routing::resource::Resource::get_resource(
+        let res = crate::net::routing::dispatcher::resource::Resource::get_resource(
             &tables.root_res,
             key_expr.as_str(),
         );
 
-        let route = crate::net::routing::pubsub::get_data_route(
+        let route = crate::net::routing::dispatcher::pubsub::get_local_data_route(
             &tables,
-            WhatAmI::Client,
-            0,
             &res,
             &mut RoutingExpr::new(&tables.root_res, key_expr.as_str()),
-            0,
         );
+
         drop(tables);
         let matching = match destination {
             Locality::Any => !route.is_empty(),
@@ -1745,7 +1742,7 @@ impl Session {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
             primitives.send_request(Request {
-                id: 0, // TODO
+                id: 0, // @TODO compute a proper request ID
                 wire_expr: key_expr.to_wire(self).to_owned(),
                 ext_qos: ext::QoSType::request_default(),
                 ext_tstamp: None,
@@ -2674,4 +2671,36 @@ pub trait SessionDeclarations {
     /// ```
     #[zenoh_macros::unstable]
     fn liveliness(&self) -> Liveliness<'static>;
+}
+
+impl crate::net::primitives::EPrimitives for Session {
+    #[inline]
+    fn send_declare(&self, ctx: crate::net::routing::RoutingContext<Declare>) {
+        (self as &dyn Primitives).send_declare(ctx.msg)
+    }
+
+    #[inline]
+    fn send_push(&self, msg: Push) {
+        (self as &dyn Primitives).send_push(msg)
+    }
+
+    #[inline]
+    fn send_request(&self, ctx: crate::net::routing::RoutingContext<Request>) {
+        (self as &dyn Primitives).send_request(ctx.msg)
+    }
+
+    #[inline]
+    fn send_response(&self, ctx: crate::net::routing::RoutingContext<Response>) {
+        (self as &dyn Primitives).send_response(ctx.msg)
+    }
+
+    #[inline]
+    fn send_response_final(&self, ctx: crate::net::routing::RoutingContext<ResponseFinal>) {
+        (self as &dyn Primitives).send_response_final(ctx.msg)
+    }
+
+    #[inline]
+    fn send_close(&self) {
+        (self as &dyn Primitives).send_close()
+    }
 }

@@ -17,16 +17,8 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-#[doc(hidden)]
-pub(crate) mod codec;
-#[doc(hidden)]
-pub(crate) mod primitives;
-#[doc(hidden)]
-pub(crate) mod protocol;
-#[doc(hidden)]
-pub(crate) mod routing;
-#[doc(hidden)]
-pub mod runtime;
-
-#[cfg(test)]
-pub(crate) mod tests;
+pub mod face;
+pub mod pubsub;
+pub mod queries;
+pub mod resource;
+pub mod tables;

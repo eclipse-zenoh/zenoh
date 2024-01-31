@@ -11,13 +11,15 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::net::routing::router::{self, *};
+use crate::net::primitives::{DummyPrimitives, EPrimitives, Primitives};
+use crate::net::routing::dispatcher::tables::{self, Tables};
+use crate::net::routing::router::*;
+use crate::net::routing::RoutingContext;
 use std::convert::{TryFrom, TryInto};
-use std::sync::{Arc, Mutex, RwLock};
-use std::time::Duration;
+use std::sync::Arc;
 use uhlc::HLC;
 use zenoh_buffers::ZBuf;
-use zenoh_config::defaults::queries_default_timeout;
+use zenoh_config::Config;
 use zenoh_core::zlock;
 use zenoh_protocol::core::Encoding;
 use zenoh_protocol::core::{
@@ -27,29 +29,20 @@ use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
 use zenoh_protocol::network::declare::Mode;
 use zenoh_protocol::network::{ext, Declare, DeclareBody, DeclareKeyExpr};
 use zenoh_protocol::zenoh::{PushBody, Put};
-use zenoh_transport::primitives::{DummyPrimitives, Primitives};
 
 #[test]
 fn base_test() {
-    let tables = TablesLock {
-        tables: RwLock::new(Tables::new(
-            ZenohId::try_from([1]).unwrap(),
-            WhatAmI::Client,
-            Some(Arc::new(HLC::default())),
-            false,
-            true,
-            Duration::from_millis(queries_default_timeout),
-        )),
-        ctrl_lock: Mutex::new(()),
-        queries_lock: RwLock::new(()),
-    };
-
-    let primitives = Arc::new(DummyPrimitives::new());
-    let face = zwrite!(tables.tables).open_face(
+    let config = Config::default();
+    let router = Router::new(
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
-        primitives,
+        Some(Arc::new(HLC::default())),
+        &config,
     );
+    let tables = router.tables.clone();
+
+    let primitives = Arc::new(DummyPrimitives {});
+    let face = Arc::downgrade(&router.new_primitives(primitives).state);
     register_expr(
         &tables,
         &mut face.upgrade().unwrap(),
@@ -67,12 +60,14 @@ fn base_test() {
         reliability: Reliability::Reliable,
         mode: Mode::Push,
     };
-    declare_client_subscription(
+
+    declare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        zread!(tables.tables),
         &mut face.upgrade().unwrap(),
         &WireExpr::from(1).with_suffix("four/five"),
         &sub_info,
+        NodeId::default(),
     );
 
     Tables::print(&zread!(tables.tables));
@@ -132,24 +127,17 @@ fn match_test() {
     ]
     .map(|s| keyexpr::new(s).unwrap());
 
-    let tables = TablesLock {
-        tables: RwLock::new(Tables::new(
-            ZenohId::try_from([1]).unwrap(),
-            WhatAmI::Client,
-            Some(Arc::new(HLC::default())),
-            false,
-            true,
-            Duration::from_millis(queries_default_timeout),
-        )),
-        ctrl_lock: Mutex::new(()),
-        queries_lock: RwLock::new(()),
-    };
-    let primitives = Arc::new(DummyPrimitives::new());
-    let face = zwrite!(tables.tables).open_face(
+    let config = Config::default();
+    let router = Router::new(
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
-        primitives,
+        Some(Arc::new(HLC::default())),
+        &config,
     );
+    let tables = router.tables.clone();
+
+    let primitives = Arc::new(DummyPrimitives {});
+    let face = Arc::downgrade(&router.new_primitives(primitives).state);
     for (i, key_expr) in key_exprs.iter().enumerate() {
         register_expr(
             &tables,
@@ -178,25 +166,17 @@ fn match_test() {
 
 #[test]
 fn clean_test() {
-    let tables = TablesLock {
-        tables: RwLock::new(Tables::new(
-            ZenohId::try_from([1]).unwrap(),
-            WhatAmI::Client,
-            Some(Arc::new(HLC::default())),
-            false,
-            true,
-            Duration::from_millis(queries_default_timeout),
-        )),
-        ctrl_lock: Mutex::new(()),
-        queries_lock: RwLock::new(()),
-    };
-
-    let primitives = Arc::new(DummyPrimitives::new());
-    let face0 = zwrite!(tables.tables).open_face(
+    let config = Config::default();
+    let router = Router::new(
         ZenohId::try_from([1]).unwrap(),
         WhatAmI::Client,
-        primitives,
+        Some(Arc::new(HLC::default())),
+        &config,
     );
+    let tables = router.tables.clone();
+
+    let primitives = Arc::new(DummyPrimitives {});
+    let face0 = Arc::downgrade(&router.new_primitives(primitives).state);
     assert!(face0.upgrade().is_some());
 
     // --------------
@@ -254,12 +234,13 @@ fn clean_test() {
         mode: Mode::Push,
     };
 
-    declare_client_subscription(
+    declare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &"todrop1/todrop11".into(),
         &sub_info,
+        NodeId::default(),
     );
     let optres2 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop11")
         .map(|res| Arc::downgrade(&res));
@@ -267,34 +248,41 @@ fn clean_test() {
     let res2 = optres2.unwrap();
     assert!(res2.upgrade().is_some());
 
-    declare_client_subscription(
+    declare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &WireExpr::from(1).with_suffix("/todrop12"),
         &sub_info,
+        NodeId::default(),
     );
     let optres3 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop1/todrop12")
         .map(|res| Arc::downgrade(&res));
     assert!(optres3.is_some());
     let res3 = optres3.unwrap();
+    println!("COUNT: {}", res3.strong_count());
     assert!(res3.upgrade().is_some());
 
-    forget_client_subscription(
+    undeclare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &WireExpr::from(1).with_suffix("/todrop12"),
+        NodeId::default(),
     );
+
+    println!("COUNT2: {}", res3.strong_count());
+
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_some());
     assert!(res3.upgrade().is_none());
 
-    forget_client_subscription(
+    undeclare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &"todrop1/todrop11".into(),
+        NodeId::default(),
     );
     assert!(res1.upgrade().is_some());
     assert!(res2.upgrade().is_none());
@@ -307,12 +295,13 @@ fn clean_test() {
 
     // --------------
     register_expr(&tables, &mut face0.upgrade().unwrap(), 2, &"todrop3".into());
-    declare_client_subscription(
+    declare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &"todrop3".into(),
         &sub_info,
+        NodeId::default(),
     );
     let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop3")
         .map(|res| Arc::downgrade(&res));
@@ -320,11 +309,12 @@ fn clean_test() {
     let res1 = optres1.unwrap();
     assert!(res1.upgrade().is_some());
 
-    forget_client_subscription(
+    undeclare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &"todrop3".into(),
+        NodeId::default(),
     );
     assert!(res1.upgrade().is_some());
 
@@ -334,19 +324,21 @@ fn clean_test() {
     // --------------
     register_expr(&tables, &mut face0.upgrade().unwrap(), 3, &"todrop4".into());
     register_expr(&tables, &mut face0.upgrade().unwrap(), 4, &"todrop5".into());
-    declare_client_subscription(
+    declare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &"todrop5".into(),
         &sub_info,
+        NodeId::default(),
     );
-    declare_client_subscription(
+    declare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &"todrop6".into(),
         &sub_info,
+        NodeId::default(),
     );
 
     let optres1 = Resource::get_resource(zread!(tables.tables)._get_root(), "todrop4")
@@ -366,7 +358,7 @@ fn clean_test() {
     assert!(res2.upgrade().is_some());
     assert!(res3.upgrade().is_some());
 
-    router::close_face(&tables, &face0);
+    tables::close_face(&tables, &face0);
     assert!(face0.upgrade().is_none());
     assert!(res1.upgrade().is_none());
     assert!(res2.upgrade().is_none());
@@ -451,20 +443,43 @@ impl Primitives for ClientPrimitives {
     fn send_close(&self) {}
 }
 
+impl EPrimitives for ClientPrimitives {
+    fn send_declare(&self, ctx: RoutingContext<zenoh_protocol::network::Declare>) {
+        match ctx.msg.body {
+            DeclareBody::DeclareKeyExpr(d) => {
+                let name = self.get_name(&d.wire_expr);
+                zlock!(self.mapping).insert(d.id, name);
+            }
+            DeclareBody::UndeclareKeyExpr(u) => {
+                zlock!(self.mapping).remove(&u.id);
+            }
+            _ => (),
+        }
+    }
+
+    fn send_push(&self, msg: zenoh_protocol::network::Push) {
+        *zlock!(self.data) = Some(msg.wire_expr.to_owned());
+    }
+
+    fn send_request(&self, _ctx: RoutingContext<zenoh_protocol::network::Request>) {}
+
+    fn send_response(&self, _ctx: RoutingContext<zenoh_protocol::network::Response>) {}
+
+    fn send_response_final(&self, _ctx: RoutingContext<zenoh_protocol::network::ResponseFinal>) {}
+
+    fn send_close(&self) {}
+}
+
 #[test]
 fn client_test() {
-    let tables = TablesLock {
-        tables: RwLock::new(Tables::new(
-            ZenohId::try_from([1]).unwrap(),
-            WhatAmI::Client,
-            Some(Arc::new(HLC::default())),
-            false,
-            true,
-            Duration::from_millis(queries_default_timeout),
-        )),
-        ctrl_lock: Mutex::new(()),
-        queries_lock: RwLock::new(()),
-    };
+    let config = Config::default();
+    let router = Router::new(
+        ZenohId::try_from([1]).unwrap(),
+        WhatAmI::Client,
+        Some(Arc::new(HLC::default())),
+        &config,
+    );
+    let tables = router.tables.clone();
 
     let sub_info = SubscriberInfo {
         reliability: Reliability::Reliable,
@@ -472,33 +487,32 @@ fn client_test() {
     };
 
     let primitives0 = Arc::new(ClientPrimitives::new());
-
-    let face0 = zwrite!(tables.tables).open_face(
-        ZenohId::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        primitives0.clone(),
-    );
+    let face0 = Arc::downgrade(&router.new_primitives(primitives0.clone()).state);
     register_expr(
         &tables,
         &mut face0.upgrade().unwrap(),
         11,
         &"test/client".into(),
     );
-    primitives0.send_declare(Declare {
-        ext_qos: ext::QoSType::declare_default(),
-        ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
-        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
-            id: 11,
-            wire_expr: "test/client".into(),
-        }),
-    });
-    declare_client_subscription(
+    Primitives::send_declare(
+        primitives0.as_ref(),
+        Declare {
+            ext_qos: ext::QoSType::declare_default(),
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::default(),
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 11,
+                wire_expr: "test/client".into(),
+            }),
+        },
+    );
+    declare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        zread!(tables.tables),
         &mut face0.upgrade().unwrap(),
         &WireExpr::from(11).with_suffix("/**"),
         &sub_info,
+        NodeId::default(),
     );
     register_expr(
         &tables,
@@ -506,43 +520,46 @@ fn client_test() {
         12,
         &WireExpr::from(11).with_suffix("/z1_pub1"),
     );
-    primitives0.send_declare(Declare {
-        ext_qos: ext::QoSType::declare_default(),
-        ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
-        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
-            id: 12,
-            wire_expr: WireExpr::from(11).with_suffix("/z1_pub1"),
-        }),
-    });
+    Primitives::send_declare(
+        primitives0.as_ref(),
+        Declare {
+            ext_qos: ext::QoSType::declare_default(),
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::default(),
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 12,
+                wire_expr: WireExpr::from(11).with_suffix("/z1_pub1"),
+            }),
+        },
+    );
 
     let primitives1 = Arc::new(ClientPrimitives::new());
-    let face1 = zwrite!(tables.tables).open_face(
-        ZenohId::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        primitives1.clone(),
-    );
+    let face1 = Arc::downgrade(&router.new_primitives(primitives1.clone()).state);
     register_expr(
         &tables,
         &mut face1.upgrade().unwrap(),
         21,
         &"test/client".into(),
     );
-    primitives1.send_declare(Declare {
-        ext_qos: ext::QoSType::declare_default(),
-        ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
-        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
-            id: 21,
-            wire_expr: "test/client".into(),
-        }),
-    });
-    declare_client_subscription(
+    Primitives::send_declare(
+        primitives1.as_ref(),
+        Declare {
+            ext_qos: ext::QoSType::declare_default(),
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::default(),
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 21,
+                wire_expr: "test/client".into(),
+            }),
+        },
+    );
+    declare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        zread!(tables.tables),
         &mut face1.upgrade().unwrap(),
         &WireExpr::from(21).with_suffix("/**"),
         &sub_info,
+        NodeId::default(),
     );
     register_expr(
         &tables,
@@ -550,43 +567,46 @@ fn client_test() {
         22,
         &WireExpr::from(21).with_suffix("/z2_pub1"),
     );
-    primitives1.send_declare(Declare {
-        ext_qos: ext::QoSType::declare_default(),
-        ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
-        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
-            id: 22,
-            wire_expr: WireExpr::from(21).with_suffix("/z2_pub1"),
-        }),
-    });
+    Primitives::send_declare(
+        primitives1.as_ref(),
+        Declare {
+            ext_qos: ext::QoSType::declare_default(),
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::default(),
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 22,
+                wire_expr: WireExpr::from(21).with_suffix("/z2_pub1"),
+            }),
+        },
+    );
 
     let primitives2 = Arc::new(ClientPrimitives::new());
-    let face2 = zwrite!(tables.tables).open_face(
-        ZenohId::try_from([1]).unwrap(),
-        WhatAmI::Client,
-        primitives2.clone(),
-    );
+    let face2 = Arc::downgrade(&router.new_primitives(primitives2.clone()).state);
     register_expr(
         &tables,
         &mut face2.upgrade().unwrap(),
         31,
         &"test/client".into(),
     );
-    primitives2.send_declare(Declare {
-        ext_qos: ext::QoSType::declare_default(),
-        ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
-        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
-            id: 31,
-            wire_expr: "test/client".into(),
-        }),
-    });
-    declare_client_subscription(
+    Primitives::send_declare(
+        primitives2.as_ref(),
+        Declare {
+            ext_qos: ext::QoSType::declare_default(),
+            ext_tstamp: None,
+            ext_nodeid: ext::NodeIdType::default(),
+            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                id: 31,
+                wire_expr: "test/client".into(),
+            }),
+        },
+    );
+    declare_subscription(
+        zlock!(tables.ctrl_lock).as_ref(),
         &tables,
-        zread!(tables.tables),
         &mut face2.upgrade().unwrap(),
         &WireExpr::from(31).with_suffix("/**"),
         &sub_info,
+        NodeId::default(),
     );
 
     primitives0.clear_data();
@@ -594,7 +614,7 @@ fn client_test() {
     primitives2.clear_data();
 
     full_reentrant_route_data(
-        &tables.tables,
+        &tables,
         &face0.upgrade().unwrap(),
         &"test/client/z1_wr1".into(),
         ext::QoSType::default(),
@@ -604,9 +624,9 @@ fn client_test() {
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
-            ext_attachment: None,
             ext_unknown: vec![],
             payload: ZBuf::empty(),
+            ext_attachment: None,
         }),
         0,
     );
@@ -627,7 +647,7 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
     full_reentrant_route_data(
-        &tables.tables,
+        &router.tables,
         &face0.upgrade().unwrap(),
         &WireExpr::from(11).with_suffix("/z1_wr2"),
         ext::QoSType::default(),
@@ -637,9 +657,9 @@ fn client_test() {
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
-            ext_attachment: None,
             ext_unknown: vec![],
             payload: ZBuf::empty(),
+            ext_attachment: None,
         }),
         0,
     );
@@ -660,7 +680,7 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
     full_reentrant_route_data(
-        &tables.tables,
+        &router.tables,
         &face1.upgrade().unwrap(),
         &"test/client/**".into(),
         ext::QoSType::default(),
@@ -670,9 +690,9 @@ fn client_test() {
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
-            ext_attachment: None,
             ext_unknown: vec![],
             payload: ZBuf::empty(),
+            ext_attachment: None,
         }),
         0,
     );
@@ -693,7 +713,7 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
     full_reentrant_route_data(
-        &tables.tables,
+        &router.tables,
         &face0.upgrade().unwrap(),
         &12.into(),
         ext::QoSType::default(),
@@ -703,9 +723,9 @@ fn client_test() {
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
-            ext_attachment: None,
             ext_unknown: vec![],
             payload: ZBuf::empty(),
+            ext_attachment: None,
         }),
         0,
     );
@@ -726,7 +746,7 @@ fn client_test() {
     primitives1.clear_data();
     primitives2.clear_data();
     full_reentrant_route_data(
-        &tables.tables,
+        &router.tables,
         &face1.upgrade().unwrap(),
         &22.into(),
         ext::QoSType::default(),
@@ -736,9 +756,9 @@ fn client_test() {
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,
-            ext_attachment: None,
             ext_unknown: vec![],
             payload: ZBuf::empty(),
+            ext_attachment: None,
         }),
         0,
     );

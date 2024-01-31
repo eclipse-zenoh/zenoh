@@ -26,9 +26,8 @@ use zenoh_protocol::{
     network::{declare, DeclareBody, Mapping, UndeclareKeyExpr},
 };
 use zenoh_result::ZResult;
-use zenoh_transport::primitives::Primitives;
 
-use crate::{prelude::Selector, Session, Undeclarable};
+use crate::{net::primitives::Primitives, prelude::Selector, Session, Undeclarable};
 
 #[derive(Clone, Debug)]
 pub(crate) enum KeyExprInner<'a> {

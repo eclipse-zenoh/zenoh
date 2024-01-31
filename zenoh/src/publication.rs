@@ -17,7 +17,7 @@
 use crate::handlers::Callback;
 #[zenoh_macros::unstable]
 use crate::handlers::DefaultHandler;
-use crate::net::transport::primitives::Primitives;
+use crate::net::primitives::Primitives;
 use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;

@@ -12,17 +12,20 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use super::face::FaceState;
-use super::router::{Tables, TablesLock};
-use std::collections::{HashMap, HashSet};
+use super::tables::{Tables, TablesLock};
+use crate::net::routing::RoutingContext;
+use std::any::Any;
+use std::collections::HashMap;
 use std::convert::TryInto;
 use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Weak};
+use zenoh_config::WhatAmI;
 #[cfg(feature = "complete_n")]
 use zenoh_protocol::network::request::ext::TargetType;
 use zenoh_protocol::network::RequestId;
 use zenoh_protocol::zenoh::PushBody;
 use zenoh_protocol::{
-    core::{key_expr::keyexpr, ExprId, WireExpr, ZenohId},
+    core::{key_expr::keyexpr, ExprId, WireExpr},
     network::{
         declare::{
             ext, queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo, Declare,
@@ -33,114 +36,143 @@ use zenoh_protocol::{
 };
 use zenoh_sync::get_mut_unchecked;
 
-pub(super) type RoutingContext = u16;
+pub(crate) type NodeId = u16;
 
-pub(super) type Direction = (Arc<FaceState>, WireExpr<'static>, Option<RoutingContext>);
-pub(super) type Route = HashMap<usize, Direction>;
+pub(crate) type Direction = (Arc<FaceState>, WireExpr<'static>, NodeId);
+pub(crate) type Route = HashMap<usize, Direction>;
 #[cfg(feature = "complete_n")]
-pub(super) type QueryRoute = HashMap<usize, (Direction, RequestId, TargetType)>;
+pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId, TargetType)>;
 #[cfg(not(feature = "complete_n"))]
-pub(super) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
-pub(super) struct QueryTargetQabl {
-    pub(super) direction: Direction,
-    pub(super) complete: u64,
-    pub(super) distance: f64,
+pub(crate) type QueryRoute = HashMap<usize, (Direction, RequestId)>;
+pub(crate) struct QueryTargetQabl {
+    pub(crate) direction: Direction,
+    pub(crate) complete: u64,
+    pub(crate) distance: f64,
 }
-pub(super) type QueryTargetQablSet = Vec<QueryTargetQabl>;
-pub(super) type PullCaches = Vec<Arc<SessionContext>>;
+pub(crate) type QueryTargetQablSet = Vec<QueryTargetQabl>;
+pub(crate) type PullCaches = Vec<Arc<SessionContext>>;
 
-pub(super) struct SessionContext {
-    pub(super) face: Arc<FaceState>,
-    pub(super) local_expr_id: Option<ExprId>,
-    pub(super) remote_expr_id: Option<ExprId>,
-    pub(super) subs: Option<SubscriberInfo>,
-    pub(super) qabl: Option<QueryableInfo>,
-    pub(super) last_values: HashMap<String, PushBody>,
-}
-
-pub(super) struct DataRoutes {
-    pub(super) matching_pulls: Option<Arc<PullCaches>>,
-    pub(super) routers_data_routes: Vec<Arc<Route>>,
-    pub(super) peers_data_routes: Vec<Arc<Route>>,
-    pub(super) peer_data_route: Option<Arc<Route>>,
-    pub(super) client_data_route: Option<Arc<Route>>,
+pub(crate) struct SessionContext {
+    pub(crate) face: Arc<FaceState>,
+    pub(crate) local_expr_id: Option<ExprId>,
+    pub(crate) remote_expr_id: Option<ExprId>,
+    pub(crate) subs: Option<SubscriberInfo>,
+    pub(crate) qabl: Option<QueryableInfo>,
+    pub(crate) last_values: HashMap<String, PushBody>,
 }
 
-pub(super) struct QueryRoutes {
-    pub(super) routers_query_routes: Vec<Arc<QueryTargetQablSet>>,
-    pub(super) peers_query_routes: Vec<Arc<QueryTargetQablSet>>,
-    pub(super) peer_query_route: Option<Arc<QueryTargetQablSet>>,
-    pub(super) client_query_route: Option<Arc<QueryTargetQablSet>>,
+#[derive(Default)]
+pub(crate) struct RoutesIndexes {
+    pub(crate) routers: Vec<NodeId>,
+    pub(crate) peers: Vec<NodeId>,
+    pub(crate) clients: Vec<NodeId>,
 }
 
-pub(super) struct ResourceContext {
-    pub(super) router_subs: HashSet<ZenohId>,
-    pub(super) peer_subs: HashSet<ZenohId>,
-    pub(super) router_qabls: HashMap<ZenohId, QueryableInfo>,
-    pub(super) peer_qabls: HashMap<ZenohId, QueryableInfo>,
-    pub(super) matches: Vec<Weak<Resource>>,
-    pub(super) matching_pulls: Arc<PullCaches>,
-    pub(super) valid_data_routes: bool,
-    pub(super) routers_data_routes: Vec<Arc<Route>>,
-    pub(super) peers_data_routes: Vec<Arc<Route>>,
-    pub(super) peer_data_route: Option<Arc<Route>>,
-    pub(super) client_data_route: Option<Arc<Route>>,
-    pub(super) valid_query_routes: bool,
-    pub(super) routers_query_routes: Vec<Arc<QueryTargetQablSet>>,
-    pub(super) peers_query_routes: Vec<Arc<QueryTargetQablSet>>,
-    pub(super) peer_query_route: Option<Arc<QueryTargetQablSet>>,
-    pub(super) client_query_route: Option<Arc<QueryTargetQablSet>>,
+#[derive(Default)]
+pub(crate) struct DataRoutes {
+    pub(crate) routers: Vec<Arc<Route>>,
+    pub(crate) peers: Vec<Arc<Route>>,
+    pub(crate) clients: Vec<Arc<Route>>,
+}
+
+impl DataRoutes {
+    #[inline]
+    pub(crate) fn get_route(&self, whatami: WhatAmI, context: NodeId) -> Option<Arc<Route>> {
+        match whatami {
+            WhatAmI::Router => (self.routers.len() > context as usize)
+                .then(|| self.routers[context as usize].clone()),
+            WhatAmI::Peer => {
+                (self.peers.len() > context as usize).then(|| self.peers[context as usize].clone())
+            }
+            WhatAmI::Client => (self.clients.len() > context as usize)
+                .then(|| self.clients[context as usize].clone()),
+        }
+    }
+}
+
+#[derive(Default)]
+pub(crate) struct QueryRoutes {
+    pub(crate) routers: Vec<Arc<QueryTargetQablSet>>,
+    pub(crate) peers: Vec<Arc<QueryTargetQablSet>>,
+    pub(crate) clients: Vec<Arc<QueryTargetQablSet>>,
+}
+
+impl QueryRoutes {
+    #[inline]
+    pub(crate) fn get_route(
+        &self,
+        whatami: WhatAmI,
+        context: NodeId,
+    ) -> Option<Arc<QueryTargetQablSet>> {
+        match whatami {
+            WhatAmI::Router => (self.routers.len() > context as usize)
+                .then(|| self.routers[context as usize].clone()),
+            WhatAmI::Peer => {
+                (self.peers.len() > context as usize).then(|| self.peers[context as usize].clone())
+            }
+            WhatAmI::Client => (self.clients.len() > context as usize)
+                .then(|| self.clients[context as usize].clone()),
+        }
+    }
+}
+
+pub(crate) struct ResourceContext {
+    pub(crate) matches: Vec<Weak<Resource>>,
+    pub(crate) matching_pulls: Option<Arc<PullCaches>>,
+    pub(crate) hat: Box<dyn Any + Send + Sync>,
+    pub(crate) valid_data_routes: bool,
+    pub(crate) data_routes: DataRoutes,
+    pub(crate) valid_query_routes: bool,
+    pub(crate) query_routes: QueryRoutes,
 }
 
 impl ResourceContext {
-    fn new() -> ResourceContext {
+    fn new(hat: Box<dyn Any + Send + Sync>) -> ResourceContext {
         ResourceContext {
-            router_subs: HashSet::new(),
-            peer_subs: HashSet::new(),
-            router_qabls: HashMap::new(),
-            peer_qabls: HashMap::new(),
             matches: Vec::new(),
-            matching_pulls: Arc::new(Vec::new()),
+            matching_pulls: None,
+            hat,
             valid_data_routes: false,
-            routers_data_routes: Vec::new(),
-            peers_data_routes: Vec::new(),
-            peer_data_route: None,
-            client_data_route: None,
+            data_routes: DataRoutes::default(),
             valid_query_routes: false,
-            routers_query_routes: Vec::new(),
-            peers_query_routes: Vec::new(),
-            peer_query_route: None,
-            client_query_route: None,
+            query_routes: QueryRoutes::default(),
         }
     }
 
-    pub(super) fn update_data_routes(&mut self, data_routes: DataRoutes) {
+    pub(crate) fn update_data_routes(&mut self, data_routes: DataRoutes) {
         self.valid_data_routes = true;
-        if let Some(matching_pulls) = data_routes.matching_pulls {
-            self.matching_pulls = matching_pulls;
-        }
-        self.routers_data_routes = data_routes.routers_data_routes;
-        self.peers_data_routes = data_routes.peers_data_routes;
-        self.peer_data_route = data_routes.peer_data_route;
-        self.client_data_route = data_routes.client_data_route;
+        self.data_routes = data_routes;
     }
 
-    pub(super) fn update_query_routes(&mut self, query_routes: QueryRoutes) {
+    pub(crate) fn disable_data_routes(&mut self) {
+        self.valid_data_routes = false;
+    }
+
+    pub(crate) fn update_query_routes(&mut self, query_routes: QueryRoutes) {
         self.valid_query_routes = true;
-        self.routers_query_routes = query_routes.routers_query_routes;
-        self.peers_query_routes = query_routes.peers_query_routes;
-        self.peer_query_route = query_routes.peer_query_route;
-        self.client_query_route = query_routes.client_query_route;
+        self.query_routes = query_routes
+    }
+
+    pub(crate) fn disable_query_routes(&mut self) {
+        self.valid_query_routes = false;
+    }
+
+    pub(crate) fn update_matching_pulls(&mut self, pulls: Arc<PullCaches>) {
+        self.matching_pulls = Some(pulls);
+    }
+
+    pub(crate) fn disable_matching_pulls(&mut self) {
+        self.matching_pulls = None;
     }
 }
 
 pub struct Resource {
-    pub(super) parent: Option<Arc<Resource>>,
-    pub(super) suffix: String,
-    pub(super) nonwild_prefix: Option<(Arc<Resource>, String)>,
-    pub(super) childs: HashMap<String, Arc<Resource>>,
-    pub(super) context: Option<ResourceContext>,
-    pub(super) session_ctxs: HashMap<usize, Arc<SessionContext>>,
+    pub(crate) parent: Option<Arc<Resource>>,
+    pub(crate) suffix: String,
+    pub(crate) nonwild_prefix: Option<(Arc<Resource>, String)>,
+    pub(crate) childs: HashMap<String, Arc<Resource>>,
+    pub(crate) context: Option<ResourceContext>,
+    pub(crate) session_ctxs: HashMap<usize, Arc<SessionContext>>,
 }
 
 impl PartialEq for Resource {
@@ -187,12 +219,12 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub(super) fn context(&self) -> &ResourceContext {
+    pub(crate) fn context(&self) -> &ResourceContext {
         self.context.as_ref().unwrap()
     }
 
     #[inline(always)]
-    pub(super) fn context_mut(&mut self) -> &mut ResourceContext {
+    pub(crate) fn context_mut(&mut self) -> &mut ResourceContext {
         self.context.as_mut().unwrap()
     }
 
@@ -209,13 +241,12 @@ impl Resource {
         }
     }
 
-    #[inline(always)]
-    pub fn routers_data_route(&self, context: usize) -> Option<Arc<Route>> {
+    #[inline]
+    pub(crate) fn data_route(&self, whatami: WhatAmI, context: NodeId) -> Option<Arc<Route>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_data_routes {
-                    (ctx.routers_data_routes.len() > context)
-                        .then(|| ctx.routers_data_routes[context].clone())
+                    ctx.data_routes.get_route(whatami, context)
                 } else {
                     None
                 }
@@ -226,98 +257,15 @@ impl Resource {
     }
 
     #[inline(always)]
-    pub fn peers_data_route(&self, context: usize) -> Option<Arc<Route>> {
-        match &self.context {
-            Some(ctx) => {
-                if ctx.valid_data_routes {
-                    (ctx.peers_data_routes.len() > context)
-                        .then(|| ctx.peers_data_routes[context].clone())
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
-
-    #[inline(always)]
-    pub fn peer_data_route(&self) -> Option<Arc<Route>> {
-        match &self.context {
-            Some(ctx) => {
-                if ctx.valid_data_routes {
-                    ctx.peer_data_route.clone()
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
-
-    #[inline(always)]
-    pub fn client_data_route(&self) -> Option<Arc<Route>> {
-        match &self.context {
-            Some(ctx) => {
-                if ctx.valid_data_routes {
-                    ctx.client_data_route.clone()
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
-
-    #[inline(always)]
-    pub(super) fn routers_query_route(&self, context: usize) -> Option<Arc<QueryTargetQablSet>> {
+    pub(crate) fn query_route(
+        &self,
+        whatami: WhatAmI,
+        context: NodeId,
+    ) -> Option<Arc<QueryTargetQablSet>> {
         match &self.context {
             Some(ctx) => {
                 if ctx.valid_query_routes {
-                    (ctx.routers_query_routes.len() > context)
-                        .then(|| ctx.routers_query_routes[context].clone())
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
-
-    #[inline(always)]
-    pub(super) fn peers_query_route(&self, context: usize) -> Option<Arc<QueryTargetQablSet>> {
-        match &self.context {
-            Some(ctx) => {
-                if ctx.valid_query_routes {
-                    (ctx.peers_query_routes.len() > context)
-                        .then(|| ctx.peers_query_routes[context].clone())
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
-
-    #[inline(always)]
-    pub(super) fn peer_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
-        match &self.context {
-            Some(ctx) => {
-                if ctx.valid_query_routes {
-                    ctx.peer_query_route.clone()
-                } else {
-                    None
-                }
-            }
-            None => None,
-        }
-    }
-
-    #[inline(always)]
-    pub(super) fn client_query_route(&self) -> Option<Arc<QueryTargetQablSet>> {
-        match &self.context {
-            Some(ctx) => {
-                if ctx.valid_query_routes {
-                    ctx.client_query_route.clone()
+                    ctx.query_routes.get_route(whatami, context)
                 } else {
                     None
                 }
@@ -374,12 +322,12 @@ impl Resource {
     }
 
     pub fn make_resource(
-        _tables: &mut Tables,
+        tables: &mut Tables,
         from: &mut Arc<Resource>,
         suffix: &str,
     ) -> Arc<Resource> {
         if suffix.is_empty() {
-            Resource::upgrade_resource(from);
+            Resource::upgrade_resource(from, tables.hat_code.new_resource());
             from.clone()
         } else if let Some(stripped_suffix) = suffix.strip_prefix('/') {
             let (chunk, rest) = match stripped_suffix.find('/') {
@@ -388,13 +336,13 @@ impl Resource {
             };
 
             match get_mut_unchecked(from).childs.get_mut(chunk) {
-                Some(res) => Resource::make_resource(_tables, res, rest),
+                Some(res) => Resource::make_resource(tables, res, rest),
                 None => {
                     let mut new = Arc::new(Resource::new(from, chunk, None));
                     if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
                         log::debug!("Register resource {}", new.expr());
                     }
-                    let res = Resource::make_resource(_tables, &mut new, rest);
+                    let res = Resource::make_resource(tables, &mut new, rest);
                     get_mut_unchecked(from)
                         .childs
                         .insert(String::from(chunk), new);
@@ -404,7 +352,7 @@ impl Resource {
         } else {
             match from.parent.clone() {
                 Some(mut parent) => {
-                    Resource::make_resource(_tables, &mut parent, &[&from.suffix, suffix].concat())
+                    Resource::make_resource(tables, &mut parent, &[&from.suffix, suffix].concat())
                 }
                 None => {
                     let (chunk, rest) = match suffix[1..].find('/') {
@@ -413,13 +361,13 @@ impl Resource {
                     };
 
                     match get_mut_unchecked(from).childs.get_mut(chunk) {
-                        Some(res) => Resource::make_resource(_tables, res, rest),
+                        Some(res) => Resource::make_resource(tables, res, rest),
                         None => {
                             let mut new = Arc::new(Resource::new(from, chunk, None));
                             if log::log_enabled!(log::Level::Debug) && rest.is_empty() {
                                 log::debug!("Register resource {}", new.expr());
                             }
-                            let res = Resource::make_resource(_tables, &mut new, rest);
+                            let res = Resource::make_resource(tables, &mut new, rest);
                             get_mut_unchecked(from)
                                 .childs
                                 .insert(String::from(chunk), new);
@@ -516,15 +464,18 @@ impl Resource {
                     get_mut_unchecked(face)
                         .local_mappings
                         .insert(expr_id, nonwild_prefix.clone());
-                    face.primitives.send_declare(Declare {
-                        ext_qos: ext::QoSType::declare_default(),
-                        ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
-                        body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
-                            id: expr_id,
-                            wire_expr: nonwild_prefix.expr().into(),
-                        }),
-                    });
+                    face.primitives.send_declare(RoutingContext::with_expr(
+                        Declare {
+                            ext_qos: ext::QoSType::declare_default(),
+                            ext_tstamp: None,
+                            ext_nodeid: ext::NodeIdType::default(),
+                            body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
+                                id: expr_id,
+                                wire_expr: nonwild_prefix.expr().into(),
+                            }),
+                        },
+                        nonwild_prefix.expr(),
+                    ));
                     WireExpr {
                         scope: expr_id,
                         suffix: wildsuffix.into(),
@@ -675,9 +626,9 @@ impl Resource {
         }
     }
 
-    pub fn upgrade_resource(res: &mut Arc<Resource>) {
+    pub fn upgrade_resource(res: &mut Arc<Resource>, hat: Box<dyn Any + Send + Sync>) {
         if res.context.is_none() {
-            get_mut_unchecked(res).context = Some(ResourceContext::new());
+            get_mut_unchecked(res).context = Some(ResourceContext::new(hat));
         }
     }
 }
@@ -742,7 +693,7 @@ pub fn register_expr(
                 get_mut_unchecked(face)
                     .remote_mappings
                     .insert(expr_id, res.clone());
-                wtables.compute_matches_routes(&mut res);
+                wtables.update_matches_routes(&mut res);
                 drop(wtables);
             }
         },
