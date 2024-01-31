@@ -46,7 +46,7 @@ pub(crate) type InterceptorFactory = Box<dyn InterceptorFactoryTrait + Send + Sy
 
 pub(crate) fn interceptor_factories(_config: &Config) -> Vec<InterceptorFactory> {
     // Add interceptors here
-    // TODO build the list of intercetors with the correct order from the config
+    // @TODO build the list of intercetors with the correct order from the config
     // vec![Box::new(LoggerInterceptor {})]
     vec![]
 }

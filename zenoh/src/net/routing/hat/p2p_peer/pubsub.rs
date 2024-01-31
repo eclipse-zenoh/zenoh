@@ -53,7 +53,7 @@ fn propagate_simple_subscription_to(
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                    id: 0, // TODO
+                    id: 0, // @TODO use proper SubscriberId (#703)
                     wire_expr: key_expr,
                     ext_info: *sub_info,
                 }),
@@ -141,7 +141,7 @@ fn declare_client_subscription(
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper SubscriberId (#703)
                         wire_expr: res.expr().into(),
                         ext_info: *sub_info,
                     }),
@@ -175,7 +175,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper SubscriberId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
                     }),
                 },
@@ -213,7 +213,7 @@ pub(super) fn undeclare_client_subscription(
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper SubscriberId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
                     }),
                 },
@@ -235,7 +235,7 @@ fn forget_client_subscription(
 
 pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     let sub_info = SubscriberInfo {
-        reliability: Reliability::Reliable, // @TODO
+        reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
         mode: Mode::Push,
     };
     for src_face in tables

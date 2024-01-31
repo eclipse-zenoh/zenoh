@@ -230,7 +230,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                         {
                             Some(zenoh::reply::ext::SourceInfoType {
                                 zid: data_info.source_id.unwrap_or_default(),
-                                eid: 0, // TODO
+                                eid: 0, // @TODO use proper EntityId (#703)
                                 sn: data_info.source_sn.unwrap_or_default() as u32,
                             })
                         } else {
@@ -247,7 +247,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                     ext_tstamp: None,
                     ext_respid: Some(response::ext::ResponderIdType {
                         zid: self.query.inner.zid,
-                        eid: 0, // TODO
+                        eid: 0, // @TODO use proper EntityId (#703)
                     }),
                 });
                 Ok(())
@@ -277,7 +277,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                     ext_tstamp: None,
                     ext_respid: Some(response::ext::ResponderIdType {
                         zid: self.query.inner.zid,
-                        eid: 0, // TODO
+                        eid: 0, // @TODO use proper EntityId (#703)
                     }),
                 });
                 Ok(())

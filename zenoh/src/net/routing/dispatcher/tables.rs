@@ -72,7 +72,7 @@ pub struct Tables {
     pub(crate) interceptors: Vec<InterceptorFactory>,
     pub(crate) pull_caches_lock: Mutex<()>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
-    pub(crate) hat_code: Arc<dyn HatTrait + Send + Sync>, // TODO make this a Box
+    pub(crate) hat_code: Arc<dyn HatTrait + Send + Sync>, // @TODO make this a Box
 }
 
 impl Tables {

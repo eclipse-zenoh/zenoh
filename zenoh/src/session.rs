@@ -1174,7 +1174,7 @@ impl Session {
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::default(),
                                 body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id: 0, // TODO
+                                    id: 0, // @TODO use proper SubscriberId (#703)
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             });
@@ -1199,7 +1199,7 @@ impl Session {
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::default(),
                                 body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id: 0, // TODO
+                                    id: 0, // @TODO use proper SubscriberId (#703)
                                     ext_wire_expr: WireExprType {
                                         wire_expr: key_expr.to_wire(self).to_owned(),
                                     },
@@ -1348,7 +1348,7 @@ impl Session {
                                 ext_tstamp: None,
                                 ext_nodeid: declare::ext::NodeIdType::default(),
                                 body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                    id: 0, // TODO
+                                    id: 0, // @TODO use proper QueryableId (#703)
                                     wire_expr: qable_state.key_expr.clone(),
                                     ext_info: qabl_info,
                                 }),
@@ -1367,7 +1367,7 @@ impl Session {
                                     ext_tstamp: None,
                                     ext_nodeid: declare::ext::NodeIdType::default(),
                                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                        id: 0, // TODO
+                                        id: 0, // @TODO use proper QueryableId (#703)
                                         wire_expr: qable_state.key_expr.clone(),
                                         ext_info: qabl_info,
                                     }),
@@ -1383,7 +1383,7 @@ impl Session {
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::default(),
                         body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                            id: 0, // TODO
+                            id: 0, // @TODO use proper QueryableId (#703)
                             ext_wire_expr: WireExprType {
                                 wire_expr: qable_state.key_expr.clone(),
                             },
@@ -1443,7 +1443,7 @@ impl Session {
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper SubscriberId (#703)
                         ext_wire_expr: WireExprType {
                             wire_expr: key_expr.to_wire(self).to_owned(),
                         },
@@ -1742,7 +1742,7 @@ impl Session {
             let primitives = state.primitives.as_ref().unwrap().clone();
             drop(state);
             primitives.send_request(Request {
-                id: 0, // TODO
+                id: 0, // @TODO compute a proper request ID
                 wire_expr: key_expr.to_wire(self).to_owned(),
                 ext_qos: ext::QoSType::request_default(),
                 ext_tstamp: None,

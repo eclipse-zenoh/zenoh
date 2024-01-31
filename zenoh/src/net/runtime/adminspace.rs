@@ -288,7 +288,7 @@ impl AdminSpace {
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::default(),
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                id: 0, // TODO
+                id: 0, // @TODO use proper SubscriberId (#703)
                 wire_expr: [&root_key, "/config/**"].concat().into(),
                 ext_info: SubscriberInfo::default(),
             }),
@@ -712,7 +712,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
 
     for plugin in guard.started_plugins_iter() {
         with_extended_string(&mut root_key, &[plugin.name()], |plugin_key| {
-            // TODO: response to "__version__", this need not to be implemented by each plugin
+            // @TODO: response to "__version__", this need not to be implemented by each plugin
             with_extended_string(plugin_key, &["/__path__"], |plugin_path_key| {
                 if let Ok(key_expr) = KeyExpr::try_from(plugin_path_key.clone()) {
                     if query.key_expr().intersects(&key_expr) {

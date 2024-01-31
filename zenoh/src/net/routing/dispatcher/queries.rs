@@ -565,7 +565,7 @@ pub fn route_query(
                                 ext_tstamp: None,
                                 ext_respid: Some(response::ext::ResponderIdType {
                                     zid,
-                                    eid: 0, // TODO
+                                    eid: 0, // @TODO use proper ResponderId (#703)
                                 }),
                             },
                             expr.full_expr().to_string(),
@@ -614,7 +614,7 @@ pub fn route_query(
                                 Request {
                                     id: *qid,
                                     wire_expr: key_expr.into(),
-                                    ext_qos: ext::QoSType::request_default(), // TODO
+                                    ext_qos: ext::QoSType::request_default(),
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType { node_id: *context },
                                     ext_target: *t,
@@ -693,7 +693,7 @@ pub fn route_query(
                         ext_tstamp: None,
                     },
                     "".to_string(),
-                )); // TODO
+                ));
         }
     }
 }
@@ -740,8 +740,8 @@ pub(crate) fn route_send_response(
                         ext_tstamp: None,
                         ext_respid,
                     },
-                    "".to_string(),
-                )); // TODO
+                    "".to_string(), // @TODO provide the proper key expression of the response for interceptors
+                ));
         }
         None => log::warn!(
             "Route reply {}:{} from {}: Query nof found!",
@@ -800,6 +800,6 @@ pub(crate) fn finalize_pending_query(query: Arc<Query>) {
                     ext_tstamp: None,
                 },
                 "".to_string(),
-            )); // TODO
+            ));
     }
 }
