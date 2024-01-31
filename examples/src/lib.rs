@@ -53,7 +53,7 @@ impl From<&CommonArgs> for Config {
             Some(Wai::Peer) => config.set_mode(Some(zenoh::scouting::WhatAmI::Peer)),
             Some(Wai::Client) => config.set_mode(Some(zenoh::scouting::WhatAmI::Client)),
             Some(Wai::Router) => config.set_mode(Some(zenoh::scouting::WhatAmI::Router)),
-            None => Ok(None)
+            None => Ok(None),
         }
         .unwrap();
         if !value.connect.is_empty() {
