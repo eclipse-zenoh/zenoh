@@ -18,17 +18,16 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 //!
+mod accessintercept;
 mod authz;
-use std::sync::Arc;
-
-use self::authz::{Action, NewCtx};
+use std::{collections::HashMap, sync::Arc};
 
 use super::RoutingContext;
-use crate::net::routing::interceptor::authz::PolicyEnforcer;
-use zenoh_config::{Config, ZenohId};
-use zenoh_protocol::network::{NetworkBody, NetworkMessage};
+//use crate::net::routing::interceptor::authz;
+use crate::net::routing::interceptor::{accessintercept::AclEnforcer, authz::PolicyEnforcer};
+use zenoh_config::Config;
+use zenoh_protocol::network::NetworkMessage;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
-
 pub(crate) trait InterceptorTrait {
     fn intercept(
         &self,
@@ -54,19 +53,27 @@ pub(crate) type InterceptorFactory = Box<dyn InterceptorFactoryTrait + Send + Sy
 pub(crate) fn interceptor_factories(_config: &Config) -> Vec<InterceptorFactory> {
     // Add interceptors here
     // TODO build the list of intercetors with the correct order from the config
-    // vec![Box::new(LoggerInterceptor {})]
+    let mut res: Vec<InterceptorFactory> = vec![];
     /*
        this is the singleton for interceptors
        all init code for AC should be called here
        example, for casbin we are using the enforecer init here
        for in-built AC, we will load the policy rules here and also set the parameters (type of policy etc)
     */
-    println!("the interceptor is initialized");
 
-    let policy_enforcer = PolicyEnforcer::init().expect("error setting up access control");
-    let pe = Arc::new(policy_enforcer);
+    /* if config condition is selected this will be initialiased; putting true for now */
+    if true {
+        println!("the interceptor is initialized");
+        let mut policy_enforcer = PolicyEnforcer(HashMap::new());
+        match policy_enforcer.init() {
+            Ok(_) => res.push(Box::new(AclEnforcer {
+                e: Arc::new(policy_enforcer),
+            })),
+            Err(e) => log::error!("access control not initialized with error {}!", e),
+        }
+    }
     //store the enforcer instance for use in rest of the sessions
-    vec![Box::new(AclEnforcer { e: pe })]
+    res
 }
 
 pub(crate) struct InterceptorsChain {
@@ -158,101 +165,5 @@ impl InterceptorFactoryTrait for LoggerInterceptor {
     fn new_peer_multicast(&self, transport: &TransportMulticast) -> Option<IngressInterceptor> {
         log::debug!("New peer multicast {:?}", transport);
         Some(Box::new(IngressMsgLogger {}))
-    }
-}
-
-pub(crate) struct AclEnforcer {
-    e: Arc<PolicyEnforcer>,
-}
-
-impl InterceptorFactoryTrait for AclEnforcer {
-    fn new_transport_unicast(
-        &self,
-        transport: &TransportUnicast,
-    ) -> (Option<IngressInterceptor>, Option<EgressInterceptor>) {
-        let e = &self.e;
-
-        let uid = transport.get_zid().unwrap();
-        (
-            Some(Box::new(IngressAclEnforcer { e: e.clone() })),
-            Some(Box::new(EgressAclEnforcer {
-                zid: Some(uid),
-                e: e.clone(),
-            })),
-        )
-    }
-
-    fn new_transport_multicast(
-        &self,
-        _transport: &TransportMulticast,
-    ) -> Option<EgressInterceptor> {
-        let e = &self.e;
-        //let uid = _transport.get_zid().unwrap();
-
-        Some(Box::new(EgressAclEnforcer {
-            e: e.clone(),
-            zid: None,
-        }))
-    }
-
-    fn new_peer_multicast(&self, _transport: &TransportMulticast) -> Option<IngressInterceptor> {
-        let e = &self.e;
-        Some(Box::new(IngressAclEnforcer { e: e.clone() }))
-    }
-}
-
-pub(crate) struct IngressAclEnforcer {
-    //  e: Option<PolicyEnforcer>,
-    e: Arc<PolicyEnforcer>,
-}
-
-impl InterceptorTrait for IngressAclEnforcer {
-    fn intercept(
-        &self,
-        ctx: RoutingContext<NetworkMessage>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
-        //intercept msg and send it to PEP
-        if let NetworkBody::Push(push) = ctx.msg.body.clone() {
-            if let zenoh_protocol::zenoh::PushBody::Put(_put) = push.payload {
-                let e = &self.e;
-                let act = Action::Write;
-                let ke: &str = ctx.full_expr().unwrap();
-                let zid = ctx.inface().unwrap().state.zid;
-                let new_ctx = NewCtx { ke, zid: Some(zid) }; //how to get the zid here
-                let decision = e.policy_enforcement_point(new_ctx, act).unwrap();
-                if !decision {
-                    return None;
-                }
-            }
-        }
-        Some(ctx)
-    }
-}
-
-pub(crate) struct EgressAclEnforcer {
-    e: Arc<PolicyEnforcer>,
-    zid: Option<ZenohId>,
-}
-
-impl InterceptorTrait for EgressAclEnforcer {
-    fn intercept(
-        &self,
-        ctx: RoutingContext<NetworkMessage>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
-        //  intercept msg and send it to PEP
-        if let NetworkBody::Push(push) = ctx.msg.body.clone() {
-            if let zenoh_protocol::zenoh::PushBody::Put(_put) = push.payload {
-                let e = &self.e;
-                let act = Action::Read;
-                let ke: &str = ctx.full_expr().unwrap();
-                let new_ctx = NewCtx { ke, zid: self.zid };
-                let decision = e.policy_enforcement_point(new_ctx, act).unwrap();
-                if !decision {
-                    return None;
-                }
-            }
-        }
-
-        Some(ctx)
     }
 }

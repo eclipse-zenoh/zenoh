@@ -16,12 +16,28 @@ use fr_trie::trie::Trie;
 
 use std::collections::HashMap;
 
+use bitflags::bitflags;
+
+bitflags! {
+    #[derive(Clone,PartialEq)]
+    pub struct ActionFlag: u8 {
+        const None = 0b00000000;
+        const Read = 0b00000001;
+        const Write = 0b00000010;
+        const DeclareSub = 0b00000100;
+        const Delete = 0b00001000;
+        const DeclareQuery = 0b00010000;
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub enum Action {
     None,
     Read,
     Write,
-    Both,
+    DeclareSub,
+    Delete,
+    DeclareQuery,
 }
 
 pub struct NewCtx<'a> {
@@ -31,9 +47,9 @@ pub struct NewCtx<'a> {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Request {
-    sub: Subject,
-    obj: String,
-    action: Action,
+    pub(crate) sub: Subject,
+    pub(crate) obj: String,
+    pub(crate) action: Action,
 }
 
 pub struct RequestBuilder {
@@ -56,12 +72,13 @@ impl ValueMerge for Permissions {
     fn merge_mut(&mut self, _other: &Self) {}
 }
 
-type KeTree = Trie<Acl, Permissions>;
+//type KeTree = Trie<Acl, Permissions>;
+type KeTreeFast = Trie<Acl, ActionFlag>;
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Hash)]
 pub struct Subject {
-    id: ZenohId,
-    attributes: Option<Vec<String>>, //might be mapped to other types eventually
+    pub(crate) id: ZenohId,
+    pub(crate) attributes: Option<Vec<String>>, //might be mapped to other types eventually
 }
 
 //subject_builder (add ID, attributes, roles)
@@ -113,7 +130,7 @@ impl RequestBuilder {
 
 impl SubjectBuilder {
     pub fn new() -> Self {
-        //creates the default request
+        //creates a new request
         SubjectBuilder {
             id: None,
             attributes: None,
@@ -133,10 +150,10 @@ impl SubjectBuilder {
 
     pub fn build(&mut self) -> ZResult<Subject> {
         let id = self.id.unwrap();
-        let attr = self.attributes.clone();
+        let attr = &self.attributes;
         Ok(Subject {
             id,
-            attributes: attr,
+            attributes: self.attributes.clone(),
         })
     }
 }
@@ -154,34 +171,40 @@ pub struct Rule {
 pub struct SubAct(Subject, Action);
 
 #[derive(Clone)]
-pub struct PolicyEnforcer(HashMap<SubAct, KeTree>);
+//pub struct PolicyEnforcer(HashMap<SubAct, KeTree>);
+pub struct PolicyEnforcer(pub HashMap<Subject, KeTreeFast>);
 #[derive(Clone, PartialEq, Eq, Hash)]
 
 pub struct KeTrie {}
 
 impl PolicyEnforcer {
-    pub fn init() -> ZResult<Self> {
+    pub fn init(&mut self) -> ZResult<()> {
         /*
            Initializs the policy for the control logic
            loads policy into memory from file/network path
            creates the policy hashmap with the ke-tries for ke matching
            should have polic-type in the mix here...need to verify
         */
-        let rule_set = Self::policy_resource_point("rules_test_thr.json5").unwrap();
-        let pe = Self::build_policy_map(rule_set).expect("policy not established");
+        // let rule_set = Self::policy_resource_point("rules_test_thr.json5").unwrap();
+        // let pe = Self::build_policy_map_with_sub(rule_set).expect("policy not established");
+
+        let rule_set = self.policy_resource_point("rules_test_thr.json5").unwrap();
+        self.build_policy_map_with(rule_set)
+            .expect("policy not established");
+
         //also should start the logger here
-        Ok(pe)
+        Ok(())
     }
 
-    pub fn build_policy_map(rule_set: Vec<Rule>) -> ZResult<PolicyEnforcer> {
+    pub fn build_policy_map_with(&mut self, rule_set: Vec<Rule>) -> ZResult<()> {
         //convert vector of rules to a hashmap mapping subact to ketrie
         /*
             representaiton of policy list as a hashmap of trees
             tried KeTrees, didn't work
             using fr-trie for now as a placeholder for key-matching
         */
-
-        let mut policy = PolicyEnforcer(HashMap::new());
+        let mut policy = self;
+        //let mut policy = PolicyEnforcer(HashMap::new());
         //create a hashmap for ketries ((sub,action)->ketrie) from the vector of rules
         for v in rule_set {
             //  for now permission being false means this ke will not be inserted into the trie of allowed ke's
@@ -190,27 +213,74 @@ impl PolicyEnforcer {
                 continue;
             }
             let sub = v.sub;
-            let action = v.action;
             let ke = v.ke;
+            let action_flag = match v.action {
+                Action::Read => ActionFlag::Read,
+                Action::Write => ActionFlag::Write,
+                Action::None => ActionFlag::None,
+                Action::DeclareSub => ActionFlag::DeclareSub,
+                Action::Delete => ActionFlag::Delete,
+                Action::DeclareQuery => ActionFlag::DeclareQuery,
+            };
 
             //create subact
-            let subact = SubAct(sub, action);
+            //let subact = SubAct(sub, action);
             //match subact in the policy hashmap
             #[allow(clippy::map_entry)]
-            if !policy.0.contains_key(&subact) {
+            if !policy.0.contains_key(&sub) {
                 //create new entry for subact + ketree
-                let mut ketree = KeTree::new();
+                let mut ketree = KeTreeFast::new();
                 //ketree.insert(Acl::new(&ke), Permissionssions::READ);
-                ketree.insert(Acl::new(&ke), Permissions::Allow);
-                policy.0.insert(subact, ketree);
+                ketree.insert(Acl::new(&ke), action_flag);
+                policy.0.insert(sub, ketree);
             } else {
-                let ketree = policy.0.get_mut(&subact).unwrap();
+                let ketree = policy.0.get_mut(&sub).unwrap();
                 //ketree.insert(Acl::new(&ke), Permissionssions::READ);
-                ketree.insert(Acl::new(&ke), Permissions::Allow);
+                ketree.insert(Acl::new(&ke), action_flag);
             }
         }
-        Ok(policy)
+        Ok(())
     }
+
+    // pub fn build_policy_map(rule_set: Vec<Rule>) -> ZResult<PolicyEnforcer> {
+    //     //convert vector of rules to a hashmap mapping subact to ketrie
+    //     /*
+    //         representaiton of policy list as a hashmap of trees
+    //         tried KeTrees, didn't work
+    //         using fr-trie for now as a placeholder for key-matching
+    //     */
+    //     let mut policy = PolicyEnforcer(HashMap::new());
+    //     //create a hashmap for ketries ((sub,action)->ketrie) from the vector of rules
+    //     for v in rule_set {
+    //         //  for now permission being false means this ke will not be inserted into the trie of allowed ke's
+    //         let perm = v.permission;
+    //         if !perm {
+    //             continue;
+    //         }
+    //         let sub = v.sub;
+    //        // let action = v.action;
+    //         let action_flag = v.action as isize;
+    //         let ke = v.ke;
+
+    //         //create subact
+    //     //    let subact = SubAct(sub, action);
+    //         //match subact in the policy hashmap
+    //         #[allow(clippy::map_entry)]
+    //         if !policy.0.contains_key(&sub) {
+    //             //create new entry for subact + ketree
+    //             let mut ketree = KeTree::new();
+    //             //ketree.insert(Acl::new(&ke), Permissionssions::READ);
+    //             ketree.insert(Acl::new(&ke), ActionFlag::);
+    //             policy.0.insert(subact, ketree);
+    //         } else {
+    //             let ketree = policy.0.get_mut(&sub).unwrap();
+    //             //ketree.insert(Acl::new(&ke), Permissionssions::READ);
+    //             ketree.insert(Acl::new(&ke), Permissions::Allow);
+    //         }
+    //     }
+    //     Ok(policy)
+    // }
+
     pub fn policy_enforcement_point(&self, new_ctx: NewCtx, action: Action) -> ZResult<bool> {
         /*
            input: new_context and action (sub,act for now but will need attribute values later)
@@ -244,23 +314,33 @@ impl PolicyEnforcer {
         */
 
         //get subject and action from request and create subact [this will be our key for hashmap]
-        let subact = SubAct(request.sub, request.action);
+        // let subact = SubAct(request.sub, request.action);
+        let action_flag = match request.action {
+            Action::Read => ActionFlag::Read,
+            Action::Write => ActionFlag::Write,
+            Action::None => ActionFlag::None,
+            Action::DeclareSub => ActionFlag::DeclareSub,
+            Action::Delete => ActionFlag::Delete,
+            Action::DeclareQuery => ActionFlag::DeclareQuery,
+        };
         let ke = request.obj;
-        match self.0.get(&subact) {
+        match self.0.get(&request.sub) {
             Some(ktrie) => {
                 // check if request ke has a match in ke-trie; if ke in ketrie, then Ok(true) else Ok(false)
-                let result = ktrie.get_merge::<GlobMatcher>(&Acl::new(&ke));
-                if let Some(_value) = result {
-                    return Ok(true);
+                //let result = ktrie.get_merge::<GlobMatcher>(&Acl::new(&ke));
+                let result = ktrie.get::<GlobMatcher>(&Acl::new(&ke));
+                if let Some(value) = result {
+                    if (value & action_flag) != ActionFlag::None {
+                        return Ok(true);
+                    }
                 }
             }
             None => return Ok(false),
         }
-
         Ok(false)
     }
 
-    pub fn policy_resource_point(file_path: &str) -> ZResult<Vec<Rule>> {
+    pub fn policy_resource_point(&self, file_path: &str) -> ZResult<Vec<Rule>> {
         /*
            input: path to rules.json file
            output: loads the appropriate policy into the memory and returns back a vector of rules;
