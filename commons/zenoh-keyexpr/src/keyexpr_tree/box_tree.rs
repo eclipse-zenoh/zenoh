@@ -27,6 +27,8 @@ use super::impls::KeyedSetProvider;
 use super::support::IterOrOption;
 
 /// A fully owned KeTree.
+///
+/// Note that most of `KeBoxTree`'s methods are declared in the [`IKeyExprTree`] and [`IKeyExprTreeMut`] traits.
 #[repr(C)]
 pub struct KeBoxTree<
     Weight,
@@ -37,17 +39,13 @@ pub struct KeBoxTree<
     wildness: Wildness,
 }
 
-impl<
-        Weight,
-        Wildness: IWildness,
-        Children: IChildrenProvider<Box<KeyExprTreeNode<Weight, Wildness, Children>>>,
-    > KeBoxTree<Weight, Wildness, Children>
+impl<Weight> KeBoxTree<Weight, bool, DefaultChildrenProvider>
+where
+    DefaultChildrenProvider:
+        IChildrenProvider<Box<KeyExprTreeNode<Weight, bool, DefaultChildrenProvider>>>,
 {
     pub fn new() -> Self {
-        KeBoxTree {
-            children: Default::default(),
-            wildness: Wildness::non_wild(),
-        }
+        Default::default()
     }
 }
 impl<
@@ -57,7 +55,10 @@ impl<
     > Default for KeBoxTree<Weight, Wildness, Children>
 {
     fn default() -> Self {
-        Self::new()
+        KeBoxTree {
+            children: Default::default(),
+            wildness: Wildness::non_wild(),
+        }
     }
 }
 

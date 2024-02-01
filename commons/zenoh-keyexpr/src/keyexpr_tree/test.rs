@@ -246,7 +246,7 @@ fn test_keyset<K: Deref<Target = keyexpr> + Debug>(keys: &[K]) {
 }
 
 fn test_keyset_vec<K: Deref<Target = keyexpr>>(keys: &[K]) {
-    let mut tree = KeBoxTree::new();
+    let mut tree = KeBoxTree::default();
     let mut map = HashMap::new();
     for (v, k) in keys.iter().map(|k| k.deref()).enumerate() {
         insert_vecset(&mut tree, &mut map, k, v);

@@ -46,11 +46,11 @@ fn main() {
             let mut intersections = Averager::default();
             let results = Benchmarker::benchmark(|b| {
                 let keys = KeySet::generate(total, wildness, no_double_stars);
-                let mut ketree: KeBoxTree<_> = KeBoxTree::new();
-                let mut vectree: KeBoxTree<_, bool, VecSetProvider> = KeBoxTree::new();
-                let mut hashtree: KeBoxTree<_, bool, HashMapProvider> = KeBoxTree::new();
+                let mut ketree = KeBoxTree::new();
+                let mut vectree: KeBoxTree<_, bool, VecSetProvider> = KeBoxTree::default();
+                let mut hashtree: KeBoxTree<_, bool, HashMapProvider> = KeBoxTree::default();
                 let mut ahashtree: KeBoxTree<_, bool, HashMapProvider<ahash::AHasher>> =
-                    KeBoxTree::new();
+                    KeBoxTree::default();
                 let (kearctree, mut token): (KeArcTree<i32>, _) = KeArcTree::new().unwrap();
                 let mut map = HashMap::new();
                 for key in keys.iter() {
