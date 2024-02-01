@@ -87,6 +87,7 @@ fn downsampling_by_keyexpr() {
         std::thread::sleep(interval);
     }
 
+    std::thread::sleep(std::time::Duration::from_secs(1));
     assert!(*(total_count.lock().unwrap()) >= 1000);
 }
 
@@ -172,5 +173,6 @@ fn downsampling_by_interface() {
         std::thread::sleep(interval);
     }
 
+    std::thread::sleep(std::time::Duration::from_secs(1));
     assert!(*(total_count.lock().unwrap()) >= 1000);
 }
