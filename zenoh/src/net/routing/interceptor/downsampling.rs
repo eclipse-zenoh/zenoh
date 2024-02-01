@@ -23,7 +23,7 @@ use std::sync::{Arc, Mutex};
 use zenoh_config::DownsamplerConf;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 
-static RATELIMIT_STRATEGY: &'static str = "ratelimit";
+const RATELIMIT_STRATEGY: &str = "ratelimit";
 
 // TODO(sashacmc): this is ratelimit strategy, we can also add decimation (with "factor" option)
 
