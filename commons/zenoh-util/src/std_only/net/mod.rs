@@ -473,7 +473,7 @@ pub fn get_interface_by_addr(addr: IpAddr) -> Vec<String> {
             if addr.is_unspecified() {
                 let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
                 while let Some(iface) = next_iface {
-                    result.push(iface.AdapterName);
+                    result.push(ffi::pstr_to_string(iface.AdapterName));
                     next_iface = iface.Next.as_ref();
                 }
             } else {
@@ -483,7 +483,7 @@ pub fn get_interface_by_addr(addr: IpAddr) -> Vec<String> {
                     while let Some(ucast_addr) = next_ucast_addr {
                         if let Ok(ifaddr) = ffi::win::sockaddr_to_addr(ucast_addr.Address) {
                             if ifaddr.ip() == addr {
-                                result.push(iface.AdapterName);
+                                result.push(ffi::pstr_to_string(iface.AdapterName));
                             }
                         }
                         next_ucast_addr = ucast_addr.Next.as_ref();
