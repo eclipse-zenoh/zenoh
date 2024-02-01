@@ -34,7 +34,6 @@ use zenoh_link_commons::{
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, ZResult};
-// use zenoh_sync::Signal;
 
 use super::{get_ws_addr, get_ws_url, TCP_ACCEPT_THROTTLE_TIME, WS_DEFAULT_MTU, WS_LOCATOR_PREFIX};
 
