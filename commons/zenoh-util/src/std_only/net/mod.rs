@@ -121,7 +121,7 @@ unsafe fn get_adapters_adresses() -> ZResult<Vec<u8>> {
         bail!("GetAdaptersAddresses returned {}", ret)
     }
 
-    return Ok(buffer);
+    Ok(buffer)
 }
 
 pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
