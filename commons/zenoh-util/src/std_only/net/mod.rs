@@ -116,7 +116,7 @@ unsafe fn get_adapters_adresses() -> ZResult<Vec<u8>> {
         }
         retries += 1;
     }
-    
+
     if ret != 0 {
         bail!("GetAdaptersAddresses returned {}", ret)
     }
@@ -228,7 +228,7 @@ pub fn get_local_addresses() -> ZResult<Vec<IpAddr>> {
             use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
 
             let buffer = get_adapters_adresses()?;
- 
+
             let mut result = vec![];
             let mut next_iface = (buffer.as_ptr() as *mut IP_ADAPTER_ADDRESSES_LH).as_ref();
             while let Some(iface) = next_iface {

@@ -148,13 +148,21 @@ impl LinkUnicastTrait for LinkUnicastTcp {
     fn get_interfaces(&self) -> Vec<String> {
         match zenoh_util::net::get_interfaces_by_addr(self.src_addr.ip()) {
             Ok(interfaces) => {
-                log::debug!("get_interfaces for {:?}: {:?}", self.src_addr.ip(), interfaces);
+                log::debug!(
+                    "get_interfaces for {:?}: {:?}",
+                    self.src_addr.ip(),
+                    interfaces
+                );
                 interfaces
-            },
+            }
             Err(e) => {
-                log::error!("get_interfaces for {:?} failed: {:?}", self.src_addr.ip(), e);
+                log::error!(
+                    "get_interfaces for {:?} failed: {:?}",
+                    self.src_addr.ip(),
+                    e
+                );
                 vec![]
-            },
+            }
         }
     }
 
