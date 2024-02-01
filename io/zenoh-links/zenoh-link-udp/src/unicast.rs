@@ -432,7 +432,7 @@ impl LinkManagerUnicastTrait for LinkManagerUnicastUdp {
                         zasyncwrite!(c_listeners).remove(&c_addr);
                         res
                     };
-                    tracker.spawn_on(task, &zenoh_runtime::ZRuntime::TX);
+                    tracker.spawn_on(task, &zenoh_runtime::ZRuntime::Reception);
 
                     let locator = endpoint.to_locator();
                     let listener = ListenerUnicastUdp::new(endpoint, token, tracker);
@@ -631,7 +631,6 @@ async fn accept_read_task(
                         //       tool. In case of systemd-based systems, this can be changed by using the
                         //       "sysctl" command line tool.
                         tokio::time::sleep(Duration::from_micros(*UDP_ACCEPT_THROTTLE_TIME)).await;
-                        continue;
                     }
                 }
             }
