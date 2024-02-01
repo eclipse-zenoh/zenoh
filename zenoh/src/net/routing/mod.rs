@@ -170,7 +170,6 @@ impl RoutingContext<NetworkMessage> {
         None
     }
 
-    //TODO (sashacmc): maybe rewrite full_expr to don't convert back?
     #[inline]
     pub(crate) fn full_key_expr(&self) -> Option<OwnedKeyExpr> {
         match self.full_expr() {
