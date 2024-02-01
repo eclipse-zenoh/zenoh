@@ -45,17 +45,17 @@ use zenoh_transport::{
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
-pub struct RuntimeState {
-    pub zid: ZenohId,
-    pub whatami: WhatAmI,
-    pub metadata: serde_json::Value,
-    pub router: Arc<Router>,
-    pub config: Notifier<Config>,
-    pub manager: TransportManager,
-    pub transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
-    pub(crate) locators: std::sync::RwLock<Vec<Locator>>,
-    pub hlc: Option<Arc<HLC>>,
-    pub(crate) cancel_token: CancellationToken,
+struct RuntimeState {
+    zid: ZenohId,
+    whatami: WhatAmI,
+    metadata: serde_json::Value,
+    router: Arc<Router>,
+    config: Notifier<Config>,
+    manager: TransportManager,
+    transport_handlers: std::sync::RwLock<Vec<Arc<dyn TransportEventHandler>>>,
+    locators: std::sync::RwLock<Vec<Locator>>,
+    hlc: Option<Arc<HLC>>,
+    token: CancellationToken,
 }
 
 #[derive(Clone)]
@@ -123,7 +123,7 @@ impl Runtime {
                 transport_handlers: std::sync::RwLock::new(vec![]),
                 locators: std::sync::RwLock::new(vec![]),
                 hlc,
-                cancel_token: CancellationToken::new(),
+                token: CancellationToken::new(),
             }),
         };
         *handler.runtime.write().unwrap() = Some(runtime.clone());
@@ -158,8 +158,8 @@ impl Runtime {
 
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("Runtime::close())");
-        // TODO: Check this
-        self.cancel_token.cancel();
+        // TODO: Check this whether is able to terminate all spawned task by Runtime::spawn
+        self.state.token.cancel();
         self.manager().close().await;
         Ok(())
     }
@@ -177,7 +177,7 @@ impl Runtime {
         F: Future<Output = T> + Send + 'static,
         T: Send + 'static,
     {
-        let token = self.cancel_token.clone();
+        let token = self.state.token.clone();
         zenoh_runtime::ZRuntime::Net.spawn(async move {
             tokio::select! {
                 _ = token.cancelled() => {}
