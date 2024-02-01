@@ -352,6 +352,10 @@ impl HatBaseTrait for HatCode {
     fn info(&self, _tables: &Tables, _kind: WhatAmI) -> String {
         "graph {}".to_string()
     }
+
+    fn close(&self, tables: &mut Tables) {
+        hat_mut!(tables).gossip.take();
+    }
 }
 
 struct HatContext {}

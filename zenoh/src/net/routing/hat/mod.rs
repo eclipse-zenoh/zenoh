@@ -110,6 +110,7 @@ pub(crate) trait HatBaseTrait {
     ) -> ZResult<()>;
 
     fn close_face(&self, tables: &TablesLock, face: &mut Arc<FaceState>);
+    fn close(&self, tables: &mut Tables);
 }
 
 pub(crate) trait HatPubSubTrait {
