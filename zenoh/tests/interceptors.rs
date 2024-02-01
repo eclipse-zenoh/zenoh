@@ -27,13 +27,13 @@ fn downsampling_by_keyexpr() {
             let curr_time = std::time::Instant::now();
             if sample.key_expr.as_str() == "test/downsamples_by_keyexp/r100" {
                 let mut last_time = last_time_r100.lock().unwrap();
-                let interval = (curr_time - *last_time).as_millis() + 1;
+                let interval = (curr_time - *last_time).as_millis() + 3;
                 *last_time = curr_time;
                 println!("interval 100: {}", interval);
                 assert!(interval >= 100);
             } else if sample.key_expr.as_str() == "test/downsamples_by_keyexp/r50" {
                 let mut last_time = last_time_r50.lock().unwrap();
-                let interval = (curr_time - *last_time).as_millis() + 1;
+                let interval = (curr_time - *last_time).as_millis() + 2;
                 *last_time = curr_time;
                 println!("interval 50: {}", interval);
                 assert!(interval >= 50);

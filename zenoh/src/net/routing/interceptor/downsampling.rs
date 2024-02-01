@@ -23,26 +23,17 @@ use std::sync::{Arc, Mutex};
 use zenoh_config::DownsamplerConf;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 
-// TODO(sashacmc): this is ratelimit strategy, we should also add decimation (with "factor" option)
+static RATELIMIT_STRATEGY: &'static str = "ratelimit";
 
-pub(crate) struct IngressMsgDownsampler {}
+// TODO(sashacmc): this is ratelimit strategy, we can also add decimation (with "factor" option)
 
-impl InterceptorTrait for IngressMsgDownsampler {
-    fn intercept(
-        &self,
-        ctx: RoutingContext<NetworkMessage>,
-    ) -> Option<RoutingContext<NetworkMessage>> {
-        Some(ctx)
-    }
-}
-
-pub(crate) struct EgressMsgDownsampler {
+pub(crate) struct EgressMsgDownsamplerRatelimit {
     keyexprs: Option<Vec<OwnedKeyExpr>>,
     threshold: std::time::Duration,
     latest_message_timestamp: Arc<Mutex<std::time::Instant>>,
 }
 
-impl InterceptorTrait for EgressMsgDownsampler {
+impl InterceptorTrait for EgressMsgDownsamplerRatelimit {
     fn intercept(
         &self,
         ctx: RoutingContext<NetworkMessage>,
@@ -75,7 +66,7 @@ impl InterceptorTrait for EgressMsgDownsampler {
     }
 }
 
-impl EgressMsgDownsampler {
+impl EgressMsgDownsamplerRatelimit {
     pub fn new(conf: DownsamplerConf) -> Self {
         if let Some(threshold_ms) = conf.threshold_ms {
             let threshold = std::time::Duration::from_millis(threshold_ms);
@@ -128,19 +119,33 @@ impl InterceptorFactoryTrait for DownsamplerInterceptor {
                 }
             }
         };
-        (
-            Some(Box::new(IngressMsgDownsampler {})),
-            Some(Box::new(EgressMsgDownsampler::new(self.conf.clone()))),
-        )
+
+        let strategy = self
+            .conf
+            .strategy
+            .as_ref()
+            .map_or_else(|| RATELIMIT_STRATEGY.to_string(), |s| s.clone());
+
+        if strategy == RATELIMIT_STRATEGY {
+            (
+                None,
+                Some(Box::new(EgressMsgDownsamplerRatelimit::new(
+                    self.conf.clone(),
+                ))),
+            )
+        } else {
+            panic!("Unsupported downsampling strategy: {}", strategy)
+        }
     }
 
-    fn new_transport_multicast(&self, transport: &TransportMulticast) -> Option<EgressInterceptor> {
-        log::debug!("New transport multicast {:?}", transport);
-        Some(Box::new(EgressMsgDownsampler::new(self.conf.clone())))
+    fn new_transport_multicast(
+        &self,
+        _transport: &TransportMulticast,
+    ) -> Option<EgressInterceptor> {
+        None
     }
 
-    fn new_peer_multicast(&self, transport: &TransportMulticast) -> Option<IngressInterceptor> {
-        log::debug!("New peer multicast {:?}", transport);
-        Some(Box::new(IngressMsgDownsampler {}))
+    fn new_peer_multicast(&self, _transport: &TransportMulticast) -> Option<IngressInterceptor> {
+        None
     }
 }
