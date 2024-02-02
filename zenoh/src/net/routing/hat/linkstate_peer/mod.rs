@@ -43,12 +43,12 @@ use crate::{
     },
     runtime::Runtime,
 };
-use async_std::task::JoinHandle;
 use std::{
     any::Any,
     collections::{HashMap, HashSet},
     sync::Arc,
 };
+use tokio::task::JoinHandle;
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
     common::ZExtBody,
