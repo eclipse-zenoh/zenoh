@@ -1,3 +1,4 @@
+#[cfg(unix)]
 use std::sync::{Arc, Mutex};
 
 #[cfg(unix)]
