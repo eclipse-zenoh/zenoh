@@ -26,7 +26,7 @@ pub use err::Err;
 pub use pull::Pull;
 pub use put::Put;
 pub use query::{Consolidation, Query};
-pub use reply::Reply;
+pub use reply::{Reply, ReplyBody};
 
 pub mod id {
     pub const OAM: u8 = 0x00;
