@@ -215,6 +215,10 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
     ) -> ZResult<Arc<dyn TransportPeerEventHandler>> {
         match zread!(self.runtime).as_ref() {
             Some(runtime) => {
+                // TODO(sashacmc):
+                // for detect link update and reload interceptors we can add new slave_handler
+                // or add some call to RuntimeSession/RuntimeMuticastSession processing
+
                 let slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>> =
                     zread!(runtime.state.transport_handlers)
                         .iter()
