@@ -78,7 +78,8 @@ fn downsampling_by_keyexpr() {
         .unwrap();
 
     let interval = std::time::Duration::from_millis(1);
-    for i in 0..1000 {
+    let messages_count = 1000;
+    for i in 0..messages_count {
         println!("message {}", i);
         publisher_r100.put(format!("message {}", i)).res().unwrap();
         publisher_r50.put(format!("message {}", i)).res().unwrap();
@@ -87,8 +88,13 @@ fn downsampling_by_keyexpr() {
         std::thread::sleep(interval);
     }
 
-    std::thread::sleep(std::time::Duration::from_secs(1));
-    assert!(*(total_count.lock().unwrap()) >= 1000);
+    for _ in 0..100 {
+        if *(total_count.lock().unwrap()) >= messages_count {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    assert!(*(total_count.lock().unwrap()) >= messages_count);
 }
 
 #[cfg(unix)]
@@ -165,7 +171,8 @@ fn downsampling_by_interface() {
         .unwrap();
 
     let interval = std::time::Duration::from_millis(1);
-    for i in 0..1000 {
+    let messages_count = 1000;
+    for i in 0..messages_count {
         println!("message {}", i);
         publisher_r100.put(format!("message {}", i)).res().unwrap();
         publisher_all.put(format!("message {}", i)).res().unwrap();
@@ -173,6 +180,11 @@ fn downsampling_by_interface() {
         std::thread::sleep(interval);
     }
 
-    std::thread::sleep(std::time::Duration::from_secs(1));
-    assert!(*(total_count.lock().unwrap()) >= 1000);
+    for _ in 0..100 {
+        if *(total_count.lock().unwrap()) >= messages_count {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    assert!(*(total_count.lock().unwrap()) >= messages_count);
 }
