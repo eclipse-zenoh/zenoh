@@ -440,14 +440,19 @@ where
         let subscriber::UndeclareSubscriber { id, ext_wire_expr } = x;
 
         // Header
-        let header = declare::id::U_SUBSCRIBER | subscriber::flag::Z;
+        let mut header = declare::id::U_SUBSCRIBER;
+        if !ext_wire_expr.is_null() {
+            header |= subscriber::flag::Z;
+        }
         self.write(&mut *writer, header)?;
 
         // Body
         self.write(&mut *writer, id)?;
 
         // Extension
-        self.write(&mut *writer, (ext_wire_expr, false))?;
+        if !ext_wire_expr.is_null() {
+            self.write(&mut *writer, (ext_wire_expr, false))?;
+        }
 
         Ok(())
     }

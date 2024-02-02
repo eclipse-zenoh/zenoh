@@ -194,6 +194,10 @@ pub mod common {
                 }
             }
 
+            pub fn is_null(&self) -> bool {
+                self.wire_expr.is_empty()
+            }
+
             #[cfg(feature = "test")]
             pub fn rand() -> Self {
                 Self {
@@ -429,7 +433,6 @@ pub mod subscriber {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct UndeclareSubscriber {
         pub id: SubscriberId,
-        // WARNING: this is a temporary and mandatory extension used for undeclarations
         pub ext_wire_expr: common::ext::WireExprType,
     }
 

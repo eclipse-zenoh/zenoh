@@ -288,7 +288,7 @@ impl AdminSpace {
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::default(),
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                id: 0, // @TODO use proper SubscriberId (#703)
+                id: 0,
                 wire_expr: [&root_key, "/config/**"].concat().into(),
                 ext_info: SubscriberInfo::default(),
             }),

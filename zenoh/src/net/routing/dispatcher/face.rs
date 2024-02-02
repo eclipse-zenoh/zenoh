@@ -129,6 +129,7 @@ impl Primitives for Face {
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
+                    m.id,
                     &m.wire_expr,
                     &m.ext_info,
                     msg.ext_nodeid.node_id,
@@ -139,6 +140,7 @@ impl Primitives for Face {
                     ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
+                    m.id,
                     &m.ext_wire_expr.wire_expr,
                     msg.ext_nodeid.node_id,
                 );

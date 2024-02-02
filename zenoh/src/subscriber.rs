@@ -33,6 +33,7 @@ pub use zenoh_protocol::core::Reliability;
 
 pub(crate) struct SubscriberState {
     pub(crate) id: Id,
+    pub(crate) remote_id: Id,
     pub(crate) key_expr: KeyExpr<'static>,
     pub(crate) scope: Option<KeyExpr<'static>>,
     pub(crate) origin: Locality,

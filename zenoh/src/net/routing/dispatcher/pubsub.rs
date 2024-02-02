@@ -22,7 +22,7 @@ use std::sync::RwLock;
 use zenoh_core::zread;
 use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
-use zenoh_protocol::network::declare::Mode;
+use zenoh_protocol::network::declare::{Mode, SubscriberId};
 use zenoh_protocol::{
     core::{WhatAmI, WireExpr},
     network::{declare::ext, Push},
@@ -34,6 +34,7 @@ pub(crate) fn declare_subscription(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
+    id: SubscriberId,
     expr: &WireExpr,
     sub_info: &SubscriberInfo,
     node_id: NodeId,
@@ -66,7 +67,7 @@ pub(crate) fn declare_subscription(
                     (res, wtables)
                 };
 
-            hat_code.declare_subscription(&mut wtables, face, &mut res, sub_info, node_id);
+            hat_code.declare_subscription(&mut wtables, face, id, &mut res, sub_info, node_id);
 
             disable_matches_data_routes(&mut wtables, &mut res);
             drop(wtables);
@@ -94,41 +95,51 @@ pub(crate) fn undeclare_subscription(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
+    id: SubscriberId,
     expr: &WireExpr,
     node_id: NodeId,
 ) {
     log::debug!("Undeclare subscription {}", face);
-    let rtables = zread!(tables.tables);
-    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
-        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-            Some(mut res) => {
-                drop(rtables);
-                let mut wtables = zwrite!(tables.tables);
-
-                hat_code.undeclare_subscription(&mut wtables, face, &mut res, node_id);
-
-                disable_matches_data_routes(&mut wtables, &mut res);
-                drop(wtables);
-
-                let rtables = zread!(tables.tables);
-                let matches_data_routes = compute_matches_data_routes(&rtables, &res);
-                drop(rtables);
-
-                let wtables = zwrite!(tables.tables);
-                for (mut res, data_routes, matching_pulls) in matches_data_routes {
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_data_routes(data_routes);
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_matching_pulls(matching_pulls);
+    let res = if expr.is_empty() {
+        None
+    } else {
+        let rtables = zread!(tables.tables);
+        match rtables.get_mapping(face, &expr.scope, expr.mapping) {
+            Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
+                Some(res) => Some(res),
+                None => {
+                    log::error!("Undeclare unknown subscription!");
+                    return;
                 }
-                Resource::clean(&mut res);
-                drop(wtables);
+            },
+            None => {
+                log::error!("Undeclare subscription with unknown scope!");
+                return;
             }
-            None => log::error!("Undeclare unknown subscription!"),
-        },
-        None => log::error!("Undeclare subscription with unknown scope!"),
+        }
+    };
+    let mut wtables = zwrite!(tables.tables);
+    if let Some(mut res) = hat_code.undeclare_subscription(&mut wtables, face, id, res, node_id) {
+        disable_matches_data_routes(&mut wtables, &mut res);
+        drop(wtables);
+
+        let rtables = zread!(tables.tables);
+        let matches_data_routes = compute_matches_data_routes(&rtables, &res);
+        drop(rtables);
+
+        let wtables = zwrite!(tables.tables);
+        for (mut res, data_routes, matching_pulls) in matches_data_routes {
+            get_mut_unchecked(&mut res)
+                .context_mut()
+                .update_data_routes(data_routes);
+            get_mut_unchecked(&mut res)
+                .context_mut()
+                .update_matching_pulls(matching_pulls);
+        }
+        Resource::clean(&mut res);
+        drop(wtables);
+    } else {
+        log::error!("Undeclare unknown subscription {}:{}", face, id);
     }
 }
 

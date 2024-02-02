@@ -55,6 +55,8 @@ use zenoh_buffers::ZBuf;
 use zenoh_collections::SingleOrVec;
 use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
+#[cfg(feature = "unstable")]
+use zenoh_protocol::network::declare::SubscriberId;
 use zenoh_protocol::network::AtomicRequestId;
 use zenoh_protocol::network::RequestId;
 use zenoh_protocol::{
@@ -98,6 +100,8 @@ pub(crate) struct SessionState {
     pub(crate) decl_id_counter: AtomicUsize,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
     pub(crate) remote_resources: HashMap<ExprId, Resource>,
+    #[cfg(feature = "unstable")]
+    pub(crate) remote_subscribers: HashMap<SubscriberId, KeyExpr<'static>>,
     //pub(crate) publications: Vec<OwnedKeyExpr>,
     pub(crate) subscribers: HashMap<Id, Arc<SubscriberState>>,
     pub(crate) queryables: HashMap<Id, Arc<QueryableState>>,
@@ -122,6 +126,8 @@ impl SessionState {
             decl_id_counter: AtomicUsize::new(0),
             local_resources: HashMap::new(),
             remote_resources: HashMap::new(),
+            #[cfg(feature = "unstable")]
+            remote_subscribers: HashMap::new(),
             //publications: Vec::new(),
             subscribers: HashMap::new(),
             queryables: HashMap::new(),
@@ -972,13 +978,14 @@ impl Session {
             None => key_expr.clone(),
         };
 
-        let sub_state = Arc::new(SubscriberState {
+        let mut sub_state = SubscriberState {
             id,
+            remote_id: id,
             key_expr: key_expr.clone().into_owned(),
             scope: scope.clone().map(|e| e.into_owned()),
             origin,
             callback,
-        });
+        };
 
         #[cfg(not(feature = "unstable"))]
         let declared_sub = origin != Locality::SessionLocal;
@@ -988,29 +995,39 @@ impl Session {
                 .as_str()
                 .starts_with(crate::liveliness::PREFIX_LIVELINESS);
 
-        let declared_sub = declared_sub
-            .then(|| {
-                match state
-                .aggregated_subscribers // TODO: can this be an OwnedKeyExpr?
-                .iter()
-                .find(|s| s.includes( &key_expr))
-                {
-                    Some(join_sub) => {
-                        let joined_sub = state.subscribers.values().any(|s| {
-                            s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
-                        });
-                        (!joined_sub).then(|| join_sub.clone().into())
+        let declared_sub =
+            declared_sub
+                .then(|| {
+                    match state
+                        .aggregated_subscribers
+                        .iter()
+                        .find(|s| s.includes(&key_expr))
+                    {
+                        Some(join_sub) => {
+                            if let Some(joined_sub) = state.subscribers.values().find(|s| {
+                                s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
+                            }) {
+                                sub_state.remote_id = joined_sub.remote_id;
+                                None
+                            } else {
+                                Some(join_sub.clone().into())
+                            }
+                        }
+                        None => {
+                            if let Some(twin_sub) = state.subscribers.values().find(|s| {
+                                s.origin != Locality::SessionLocal && s.key_expr == key_expr
+                            }) {
+                                sub_state.remote_id = twin_sub.remote_id;
+                                None
+                            } else {
+                                Some(key_expr.clone())
+                            }
+                        }
                     }
-                    None => {
-                        let twin_sub = state
-                            .subscribers
-                            .values()
-                            .any(|s| s.origin != Locality::SessionLocal && s.key_expr == key_expr);
-                        (!twin_sub).then(|| key_expr.clone())
-                    }
-                }
-            })
-            .flatten();
+                })
+                .flatten();
+
+        let sub_state = Arc::new(sub_state);
 
         state.subscribers.insert(sub_state.id, sub_state.clone());
         for res in state
@@ -1109,65 +1126,28 @@ impl Session {
             if send_forget {
                 // Note: there might be several Subscribers on the same KeyExpr.
                 // Before calling forget_subscriber(key_expr), check if this was the last one.
-                let key_expr = &sub_state.key_expr;
-                match state
-                    .aggregated_subscribers
-                    .iter()
-                    .find(|s| s.includes(key_expr))
-                {
-                    Some(join_sub) => {
-                        let joined_sub = state.subscribers.values().any(|s| {
-                            s.origin != Locality::SessionLocal && join_sub.includes(&s.key_expr)
-                        });
-                        if !joined_sub {
-                            let primitives = state.primitives.as_ref().unwrap().clone();
-                            let wire_expr = WireExpr::from(join_sub).to_owned();
-                            drop(state);
-                            primitives.send_declare(Declare {
-                                ext_qos: ext::QoSType::declare_default(),
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::default(),
-                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id: 0, // @TODO use proper SubscriberId (#703)
-                                    ext_wire_expr: WireExprType { wire_expr },
-                                }),
-                            });
-
-                            #[cfg(feature = "unstable")]
-                            {
-                                let state = zread!(self.state);
-                                self.update_status_down(&state, &sub_state.key_expr)
-                            }
-                        }
+                if !state.subscribers.values().any(|s| {
+                    s.origin != Locality::SessionLocal && s.remote_id == sub_state.remote_id
+                }) {
+                    let primitives = state.primitives.as_ref().unwrap().clone();
+                    drop(state);
+                    primitives.send_declare(Declare {
+                        ext_qos: declare::ext::QoSType::default(),
+                        ext_tstamp: None,
+                        ext_nodeid: declare::ext::NodeIdType::default(),
+                        body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
+                            id: sub_state.remote_id as u32,
+                            ext_wire_expr: WireExprType {
+                                wire_expr: WireExpr::empty(),
+                            },
+                        }),
+                    });
+                    #[cfg(feature = "unstable")]
+                    {
+                        let state = zread!(self.state);
+                        self.update_status_down(&state, &sub_state.key_expr)
                     }
-                    None => {
-                        let twin_sub = state
-                            .subscribers
-                            .values()
-                            .any(|s| s.origin != Locality::SessionLocal && s.key_expr == *key_expr);
-                        if !twin_sub {
-                            let primitives = state.primitives.as_ref().unwrap().clone();
-                            drop(state);
-                            primitives.send_declare(Declare {
-                                ext_qos: ext::QoSType::declare_default(),
-                                ext_tstamp: None,
-                                ext_nodeid: ext::NodeIdType::default(),
-                                body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id: 0, // @TODO use proper SubscriberId (#703)
-                                    ext_wire_expr: WireExprType {
-                                        wire_expr: key_expr.to_wire(self).to_owned(),
-                                    },
-                                }),
-                            });
-
-                            #[cfg(feature = "unstable")]
-                            {
-                                let state = zread!(self.state);
-                                self.update_status_down(&state, &sub_state.key_expr)
-                            }
-                        }
-                    }
-                };
+                }
             }
             Ok(())
         } else {
@@ -1397,10 +1377,8 @@ impl Session {
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id: 0, // @TODO use proper SubscriberId (#703)
-                        ext_wire_expr: WireExprType {
-                            wire_expr: key_expr.to_wire(self).to_owned(),
-                        },
+                        id: tok_state.id as u32,
+                        ext_wire_expr: WireExprType::null(),
                     }),
                 });
             }
@@ -2110,9 +2088,13 @@ impl Primitives for Session {
                 trace!("recv DeclareSubscriber {} {:?}", m.id, m.wire_expr);
                 #[cfg(feature = "unstable")]
                 {
-                    let state = zread!(self.state);
-                    match state.wireexpr_to_keyexpr(&m.wire_expr, false) {
+                    let mut state = zwrite!(self.state);
+                    match state
+                        .wireexpr_to_keyexpr(&m.wire_expr, false)
+                        .map(|e| e.into_owned())
+                    {
                         Ok(expr) => {
+                            state.remote_subscribers.insert(m.id, expr.clone());
                             self.update_status_up(&state, &expr);
 
                             if expr
@@ -2140,33 +2122,30 @@ impl Primitives for Session {
                 trace!("recv UndeclareSubscriber {:?}", m.id);
                 #[cfg(feature = "unstable")]
                 {
-                    let state = zread!(self.state);
-                    match state.wireexpr_to_keyexpr(&m.ext_wire_expr.wire_expr, false) {
-                        Ok(expr) => {
-                            self.update_status_down(&state, &expr);
+                    let mut state = zwrite!(self.state);
+                    if let Some(expr) = state.remote_subscribers.remove(&m.id) {
+                        self.update_status_down(&state, &expr);
 
-                            if expr
-                                .as_str()
-                                .starts_with(crate::liveliness::PREFIX_LIVELINESS)
-                            {
-                                drop(state);
-                                let data_info = DataInfo {
-                                    kind: SampleKind::Delete,
-                                    ..Default::default()
-                                };
-                                self.handle_data(
-                                    false,
-                                    &m.ext_wire_expr.wire_expr,
-                                    Some(data_info),
-                                    ZBuf::default(),
-                                    #[cfg(feature = "unstable")]
-                                    None,
-                                );
-                            }
+                        if expr
+                            .as_str()
+                            .starts_with(crate::liveliness::PREFIX_LIVELINESS)
+                        {
+                            drop(state);
+                            let data_info = DataInfo {
+                                kind: SampleKind::Delete,
+                                ..Default::default()
+                            };
+                            self.handle_data(
+                                false,
+                                &m.ext_wire_expr.wire_expr,
+                                Some(data_info),
+                                ZBuf::default(),
+                                #[cfg(feature = "unstable")]
+                                None,
+                            );
                         }
-                        Err(err) => {
-                            log::error!("Received Forget Subscriber for unkown key_expr: {}", err)
-                        }
+                    } else {
+                        log::error!("Received Undeclare Subscriber for unkown id: {}", m.id);
                     }
                 }
             }

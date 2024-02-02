@@ -31,7 +31,7 @@ use zenoh_config::{unwrap_or_default, Config, WhatAmI};
 use zenoh_protocol::{
     core::WireExpr,
     network::{
-        declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo},
+        declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo, SubscriberId},
         Oam,
     },
 };
@@ -117,6 +117,7 @@ pub(crate) trait HatPubSubTrait {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
+        id: SubscriberId,
         res: &mut Arc<Resource>,
         sub_info: &SubscriberInfo,
         node_id: NodeId,
@@ -125,9 +126,10 @@ pub(crate) trait HatPubSubTrait {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        res: &mut Arc<Resource>,
+        id: SubscriberId,
+        res: Option<Arc<Resource>>,
         node_id: NodeId,
-    );
+    ) -> Option<Arc<Resource>>;
 
     fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>>;
 

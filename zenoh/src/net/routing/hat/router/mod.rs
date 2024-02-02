@@ -52,12 +52,16 @@ use std::{
     any::Any,
     collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::Hasher,
-    sync::Arc,
+    sync::{atomic::AtomicU32, Arc},
 };
 use zenoh_config::{unwrap_or_default, ModeDependent, WhatAmI, WhatAmIMatcher, ZenohId};
 use zenoh_protocol::{
     common::ZExtBody,
-    network::{declare::queryable::ext::QueryableInfo, oam::id::OAM_LINKSTATE, Oam},
+    network::{
+        declare::{queryable::ext::QueryableInfo, SubscriberId},
+        oam::id::OAM_LINKSTATE,
+        Oam,
+    },
 };
 use zenoh_result::ZResult;
 use zenoh_sync::get_mut_unchecked;
@@ -418,7 +422,7 @@ impl HatBaseTrait for HatCode {
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
-        for mut res in face
+        for (id, mut res) in face
             .hat
             .downcast_mut::<HatFace>()
             .unwrap()
@@ -426,7 +430,7 @@ impl HatBaseTrait for HatCode {
             .drain()
         {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res);
+            undeclare_client_subscription(&mut wtables, &mut face_clone, id, &mut res);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
@@ -773,8 +777,9 @@ impl HatContext {
 
 struct HatFace {
     link_id: usize,
-    local_subs: HashSet<Arc<Resource>>,
-    remote_subs: HashSet<Arc<Resource>>,
+    next_id: AtomicU32, // @TODO: manage rollover and uniqueness
+    local_subs: HashMap<Arc<Resource>, SubscriberId>,
+    remote_subs: HashMap<SubscriberId, Arc<Resource>>,
     local_qabls: HashMap<Arc<Resource>, QueryableInfo>,
     remote_qabls: HashSet<Arc<Resource>>,
 }
@@ -783,8 +788,9 @@ impl HatFace {
     fn new() -> Self {
         Self {
             link_id: 0,
-            local_subs: HashSet::new(),
-            remote_subs: HashSet::new(),
+            next_id: AtomicU32::new(0),
+            local_subs: HashMap::new(),
+            remote_subs: HashMap::new(),
             local_qabls: HashMap::new(),
             remote_qabls: HashSet::new(),
         }
