@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 
+# How to build
+# cargo build --release --example z_sub_thr --example z_pub_thr
+
 set -x
 
 SUB=./target/release/examples/z_sub_thr
@@ -9,7 +12,7 @@ PUB_CPUS="2-3"
 NUM=5000
 # NUM=10
 TIMEOUT=10s
-LOG_DIR="_throughtput_logs"
+LOG_DIR="_throughput_logs"
 
 function run() {
     ENDPOINT=$1
@@ -44,3 +47,4 @@ for PAYLOAD in 8 16 32 64 128 256 512 1024 2048 4096 8192 16384 32768; do
 done
 
 chown -R $(stat -c "%U:%G" Cargo.toml) $LOG_DIR
+terminate
