@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+#[cfg(unix)]
 #[test]
 fn downsampling_by_keyexpr() {
     let _ = env_logger::builder().is_test(true).try_init();
