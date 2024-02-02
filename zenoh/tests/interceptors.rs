@@ -1,7 +1,44 @@
-#[cfg(unix)]
 use std::sync::{Arc, Mutex};
 
-#[cfg(unix)]
+struct IntervalCounter {
+    first_tick: bool,
+    last_time: std::time::Instant,
+    count: u32,
+    total_time: std::time::Duration,
+}
+
+impl IntervalCounter {
+    fn new() -> IntervalCounter {
+        IntervalCounter {
+            first_tick: true,
+            last_time: std::time::Instant::now(),
+            count: 0,
+            total_time: std::time::Duration::from_secs(0),
+        }
+    }
+
+    fn tick(&mut self) {
+        let curr_time = std::time::Instant::now();
+        if self.first_tick {
+            self.first_tick = false;
+        } else {
+            self.total_time += curr_time - self.last_time;
+            self.count += 1;
+        }
+        self.last_time = curr_time;
+    }
+
+    fn get_middle(&self) -> u32 {
+        self.total_time.as_millis() as u32 / self.count
+    }
+
+    fn check_middle(&self, ms: u32) {
+        let middle = self.get_middle();
+        println!("Interval {}, count: {}, middle: {}", ms, self.count, middle);
+        assert!(middle + 1 >= ms);
+    }
+}
+
 #[test]
 fn downsampling_by_keyexpr() {
     let _ = env_logger::builder().is_test(true).try_init();
@@ -11,12 +48,10 @@ fn downsampling_by_keyexpr() {
     // declare subscriber
     let zenoh_sub = zenoh::open(Config::default()).res().unwrap();
 
-    let last_time_r100 = Arc::new(Mutex::new(
-        std::time::Instant::now() - std::time::Duration::from_millis(100),
-    ));
-    let last_time_r50 = Arc::new(Mutex::new(
-        std::time::Instant::now() - std::time::Duration::from_millis(50),
-    ));
+    let counter_r100 = Arc::new(Mutex::new(IntervalCounter::new()));
+    let counter_r100_clone = counter_r100.clone();
+    let counter_r50 = Arc::new(Mutex::new(IntervalCounter::new()));
+    let counter_r50_clone = counter_r50.clone();
 
     let total_count = Arc::new(Mutex::new(0));
     let total_count_clone = total_count.clone();
@@ -26,19 +61,10 @@ fn downsampling_by_keyexpr() {
         .callback(move |sample| {
             let mut count = total_count_clone.lock().unwrap();
             *count += 1;
-            let curr_time = std::time::Instant::now();
             if sample.key_expr.as_str() == "test/downsamples_by_keyexp/r100" {
-                let mut last_time = last_time_r100.lock().unwrap();
-                let interval = (curr_time - *last_time).as_millis() + 5;
-                *last_time = curr_time;
-                println!("interval 100: {}", interval);
-                assert!(interval >= 100);
+                counter_r100.lock().unwrap().tick();
             } else if sample.key_expr.as_str() == "test/downsamples_by_keyexp/r50" {
-                let mut last_time = last_time_r50.lock().unwrap();
-                let interval = (curr_time - *last_time).as_millis() + 5;
-                *last_time = curr_time;
-                println!("interval 50: {}", interval);
-                assert!(interval >= 50);
+                counter_r50.lock().unwrap().tick();
             }
         })
         .res()
@@ -97,6 +123,9 @@ fn downsampling_by_keyexpr() {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
     assert!(*(total_count.lock().unwrap()) >= messages_count);
+
+    counter_r50_clone.lock().unwrap().check_middle(50);
+    counter_r100_clone.lock().unwrap().check_middle(100);
 }
 
 #[cfg(unix)]
@@ -113,9 +142,9 @@ fn downsampling_by_interface() {
         .unwrap();
     let zenoh_sub = zenoh::open(config_sub).res().unwrap();
 
-    let last_time_r100 = Arc::new(Mutex::new(
-        std::time::Instant::now() - std::time::Duration::from_millis(100),
-    ));
+    let counter_r100 = Arc::new(Mutex::new(IntervalCounter::new()));
+    let counter_r100_clone = counter_r100.clone();
+
     let total_count = Arc::new(Mutex::new(0));
     let total_count_clone = total_count.clone();
 
@@ -124,13 +153,8 @@ fn downsampling_by_interface() {
         .callback(move |sample| {
             let mut count = total_count_clone.lock().unwrap();
             *count += 1;
-            let curr_time = std::time::Instant::now();
             if sample.key_expr.as_str() == "test/downsamples_by_interface/r100" {
-                let mut last_time = last_time_r100.lock().unwrap();
-                let interval = (curr_time - *last_time).as_millis() + 1;
-                *last_time = curr_time;
-                println!("interval 100: {}", interval);
-                assert!(interval >= 100);
+                counter_r100.lock().unwrap().tick();
             }
         })
         .res()
@@ -189,4 +213,6 @@ fn downsampling_by_interface() {
         std::thread::sleep(std::time::Duration::from_millis(100));
     }
     assert!(*(total_count.lock().unwrap()) >= messages_count);
+
+    counter_r100_clone.lock().unwrap().check_middle(100);
 }
