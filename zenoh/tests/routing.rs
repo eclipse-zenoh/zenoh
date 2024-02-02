@@ -492,7 +492,7 @@ async fn static_failover_brokering() -> Result<()> {
 // 3. Spawning order (delay_in_secs for node1, node2, and node3) = 6 (cases)
 //
 // Total cases = 2 x 4 x 6 = 48
-#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 9)]
 async fn three_node_combination() -> Result<()> {
     env_logger::try_init().unwrap_or_default();
     let modes = [WhatAmI::Peer, WhatAmI::Client];
