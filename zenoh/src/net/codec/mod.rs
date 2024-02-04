@@ -13,10 +13,12 @@
 //
 pub(crate) mod linkstate;
 
+// ignore_tagging
 #[derive(Clone, Copy)]
 pub struct Zenoh080Routing;
 
 impl Zenoh080Routing {
+    // ignore_tagging
     pub const fn new() -> Self {
         Self
     }

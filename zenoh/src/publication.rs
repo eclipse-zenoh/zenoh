@@ -74,6 +74,7 @@ pub type DeleteBuilder<'a, 'b> = PutBuilder<'a, 'b>;
 ///     .unwrap();
 /// # })
 /// ```
+/// tags{session.put}
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug, Clone)]
 pub struct PutBuilder<'a, 'b> {

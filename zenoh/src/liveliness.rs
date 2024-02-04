@@ -76,6 +76,7 @@ lazy_static::lazy_static!(
 ///     .unwrap();
 /// # })
 /// ```
+// tags{liveliness}
 #[zenoh_macros::unstable]
 pub struct Liveliness<'a> {
     pub(crate) session: SessionRef<'a>,
@@ -104,6 +105,7 @@ impl<'a> Liveliness<'a> {
     /// # })
     /// ```
     #[zenoh_macros::unstable]
+    // tags{liveliness.declare_token}
     pub fn declare_token<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
@@ -139,6 +141,7 @@ impl<'a> Liveliness<'a> {
     /// }
     /// # })
     /// ```
+    // tags{liveliness.declare_subscriber}
     #[zenoh_macros::unstable]
     pub fn declare_subscriber<'b, TryIntoKeyExpr>(
         &self,
@@ -175,6 +178,7 @@ impl<'a> Liveliness<'a> {
     /// }
     /// # })
     /// ```
+    // tags{liveliness.get}
     #[zenoh_macros::unstable]
     pub fn get<'b: 'a, TryIntoKeyExpr>(
         &'a self,
@@ -214,6 +218,7 @@ impl<'a> Liveliness<'a> {
 ///     .unwrap();
 /// # })
 /// ```
+// ignore_tagging
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[zenoh_macros::unstable]
 #[derive(Debug)]
@@ -288,6 +293,7 @@ pub(crate) struct LivelinessTokenState {
 ///     .unwrap();
 /// # })
 /// ```
+// tags{liveliness.token}
 #[zenoh_macros::unstable]
 #[derive(Debug)]
 pub struct LivelinessToken<'a> {
@@ -314,6 +320,7 @@ pub struct LivelinessToken<'a> {
 /// liveliness.undeclare().res().await.unwrap();
 /// # })
 /// ```
+// ignore_tagging
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[zenoh_macros::unstable]
 pub struct LivelinessTokenUndeclaration<'a> {
@@ -366,6 +373,7 @@ impl<'a> LivelinessToken<'a> {
     /// liveliness.undeclare().res().await.unwrap();
     /// # })
     /// ```
+    // tags{liveliness.token.undeclare}
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
@@ -405,6 +413,7 @@ impl Drop for LivelinessToken<'_> {
 ///     .unwrap();
 /// # })
 /// ```
+// ignore_tagging
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[zenoh_macros::unstable]
 #[derive(Debug)]
@@ -432,6 +441,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{liveliness.subscriber.callback}
     #[inline]
     #[zenoh_macros::unstable]
     pub fn callback<Callback>(
@@ -473,6 +483,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{liveliness.subscriber.callback}
     #[inline]
     #[zenoh_macros::unstable]
     pub fn callback_mut<CallbackMut>(
@@ -504,6 +515,7 @@ impl<'a, 'b> LivelinessSubscriberBuilder<'a, 'b, DefaultHandler> {
     /// }
     /// # })
     /// ```
+    // tags{liveliness.subscriber.pipe}
     #[inline]
     #[zenoh_macros::unstable]
     pub fn with<Handler>(self, handler: Handler) -> LivelinessSubscriberBuilder<'a, 'b, Handler>
@@ -600,6 +612,7 @@ where
 /// }
 /// # })
 /// ```
+// ignore_tagging
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct LivelinessGetBuilder<'a, 'b, Handler> {
@@ -627,6 +640,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{liveiness.get.callback}
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> LivelinessGetBuilder<'a, 'b, Callback>
     where
@@ -667,6 +681,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{liveiness.get.callback}
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
@@ -698,6 +713,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// }
     /// # })
     /// ```
+    // tags{liveiness.get.pipe}
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> LivelinessGetBuilder<'a, 'b, Handler>
     where
@@ -720,6 +736,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
 
 impl<'a, 'b, Handler> LivelinessGetBuilder<'a, 'b, Handler> {
     /// Set query timeout.
+    // tags{liveiness.get.timeout}
     #[inline]
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;

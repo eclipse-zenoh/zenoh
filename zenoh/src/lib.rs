@@ -99,6 +99,7 @@ pub use zenoh_result::ZResult as Result;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
+// ignore_tagging
 pub const FEATURES: &str = concat_enabled_features!(
     prefix = "zenoh",
     features = [
@@ -160,6 +161,7 @@ pub mod time {
     /// Generates a reception [`Timestamp`] with id=0x01.  
     /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
     /// that doesn't contain any timestamp.
+    // tags{time.new_reception_timestamp}
     pub fn new_reception_timestamp() -> Timestamp {
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -176,6 +178,7 @@ pub mod properties {
     /// Convert a set of [`Properties`] into a [`Value`].  
     /// For instance, Properties: `[("k1", "v1"), ("k2, v2")]`  
     /// is converted into Json: `{ "k1": "v1", "k2": "v2" }`
+    // tags{properties.properties_to_json_value}
     pub fn properties_to_json_value(props: &Properties) -> Value {
         let json_map = props
             .iter()
@@ -214,6 +217,7 @@ pub mod scouting;
 /// }
 /// # })
 /// ```
+// tags{scout}
 pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
     what: I,
     config: TryIntoConfig,
@@ -257,6 +261,7 @@ where
 /// let session = zenoh::open(config).res().await.unwrap();
 /// # })
 /// ```
+// tags{session.open}
 pub fn open<TryIntoConfig>(config: TryIntoConfig) -> OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
@@ -275,6 +280,7 @@ where
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// # })
 /// ```
+// ignore_tagging
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct OpenBuilder<TryIntoConfig>
 where
@@ -320,6 +326,7 @@ where
 
 /// Initialize a Session with an existing Runtime.
 /// This operation is used by the plugins to share the same Runtime as the router.
+// ignore_tagging
 #[doc(hidden)]
 #[zenoh_macros::unstable]
 pub fn init(runtime: Runtime) -> InitBuilder {
@@ -331,6 +338,7 @@ pub fn init(runtime: Runtime) -> InitBuilder {
 }
 
 /// A builder returned by [`init`] and used to initialize a Session with an existing Runtime.
+// ignore_tagging
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[doc(hidden)]
 #[zenoh_macros::unstable]
@@ -343,12 +351,14 @@ pub struct InitBuilder {
 #[zenoh_macros::unstable]
 impl InitBuilder {
     #[inline]
+    // ignore_tagging
     pub fn aggregated_subscribers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
         self.aggregated_subscribers = exprs;
         self
     }
 
     #[inline]
+    // ignore_tagging
     pub fn aggregated_publishers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
         self.aggregated_publishers = exprs;
         self

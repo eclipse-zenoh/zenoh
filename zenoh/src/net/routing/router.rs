@@ -76,6 +76,7 @@ impl<'a> RoutingExpr<'a> {
     }
 }
 
+// ignore_tagging
 pub struct Tables {
     pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,

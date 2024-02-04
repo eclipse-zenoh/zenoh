@@ -27,6 +27,7 @@ use zenoh_protocol::{
 use zenoh_transport::stats::TransportStats;
 use zenoh_transport::{multicast::TransportMulticast, primitives::Primitives};
 
+// ignore_tagging
 pub struct FaceState {
     pub(super) id: usize,
     pub(super) zid: ZenohId,
@@ -83,6 +84,7 @@ impl FaceState {
 
     #[allow(dead_code)]
     #[inline]
+    // ignore_tagging
     pub fn is_local(&self) -> bool {
         self.local
     }
@@ -159,6 +161,7 @@ impl fmt::Display for FaceState {
     }
 }
 
+// ignore_tagging
 #[derive(Clone)]
 pub struct Face {
     pub(crate) tables: Arc<TablesLock>,

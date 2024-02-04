@@ -53,6 +53,8 @@ pub(crate) enum KeyExprInner<'a> {
 /// A possibly-owned version of [`keyexpr`] that may carry optimisations for use with a [`Session`] that may have declared it.
 ///
 /// Check [`keyexpr`]'s documentation for detailed explainations of the Key Expression Language.
+///
+// tags{keyexpr}
 #[repr(transparent)]
 #[derive(Clone, serde::Deserialize, serde::Serialize)]
 #[serde(from = "OwnedKeyExpr")]
@@ -75,6 +77,7 @@ impl KeyExpr<'static> {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
+    // tags{keyexpr.from_unchecked}
     pub unsafe fn from_string_unchecked(s: String) -> Self {
         Self(KeyExprInner::Owned(OwnedKeyExpr::from_string_unchecked(s)))
     }
@@ -83,6 +86,7 @@ impl KeyExpr<'static> {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
+    // tags{keyexpr.from_unchecked}
     pub unsafe fn from_boxed_string_unchecked(s: Box<str>) -> Self {
         Self(KeyExprInner::Owned(
             OwnedKeyExpr::from_boxed_string_unchecked(s),
@@ -96,6 +100,7 @@ impl<'a> KeyExpr<'a> {
     /// Note that to be considered a valid key expression, a string MUST be canon.
     ///
     /// [`KeyExpr::autocanonize`] is an alternative constructor that will canonize the passed expression before constructing it.
+    // tags{keyexpr.new}
     pub fn new<T, E>(t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
@@ -106,6 +111,7 @@ impl<'a> KeyExpr<'a> {
     /// Constructs a new [`KeyExpr`] aliasing `self`.
     ///
     /// Note that [`KeyExpr`] (as well as [`OwnedKeyExpr`]) use reference counters internally, so you're probably better off using clone.
+    // ignore_tagging
     pub fn borrowing_clone(&'a self) -> Self {
         let inner = match &self.0 {
             KeyExprInner::Borrowed(key_expr) => KeyExprInner::Borrowed(key_expr),
@@ -143,6 +149,7 @@ impl<'a> KeyExpr<'a> {
     /// Canonizes the passed value before returning it as a `KeyExpr`.
     ///
     /// Will return Err if the passed value isn't a valid key expression despite canonization.
+    // tags{keyexpr.autocanonize}
     pub fn autocanonize<T, E>(mut t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
@@ -156,16 +163,19 @@ impl<'a> KeyExpr<'a> {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
-    pub unsafe fn from_str_uncheckend(s: &'a str) -> Self {
+    // tags{keyexpr.from_unchecked}
+    pub unsafe fn from_str_unchecked(s: &'a str) -> Self {
         keyexpr::from_str_unchecked(s).into()
     }
 
     /// Returns the borrowed version of `self`
+    // ignore_tagging
     pub fn as_keyexpr(&self) -> &keyexpr {
         self
     }
 
     /// Ensures `self` owns all of its data, and informs rustc that it does.
+    // ignore_tagging
     pub fn into_owned(self) -> KeyExpr<'static> {
         match self.0 {
             KeyExprInner::Borrowed(s) => KeyExpr(KeyExprInner::Owned(s.into())),
@@ -211,6 +221,7 @@ impl<'a> KeyExpr<'a> {
     /// let workspace: KeyExpr = get_workspace();
     /// let topic = workspace.join("some/topic").unwrap();
     /// ```
+    // tags{keyexpr.join}
     pub fn join<S: AsRef<str> + ?Sized>(&self, s: &S) -> ZResult<KeyExpr<'static>> {
         let r = self.as_keyexpr().join(s)?;
         if let KeyExprInner::Wire {
@@ -236,6 +247,7 @@ impl<'a> KeyExpr<'a> {
     /// Performs string concatenation and returns the result as a [`KeyExpr`] if possible.
     ///
     /// You should probably prefer [`KeyExpr::join`] as Zenoh may then take advantage of the hierachical separation it inserts.
+    // tags{keyexpr.concat}
     pub fn concat<S: AsRef<str> + ?Sized>(&self, s: &S) -> ZResult<KeyExpr<'static>> {
         let s = s.as_ref();
         self._concat(s)
@@ -273,6 +285,7 @@ impl<'a> KeyExpr<'a> {
         }
     }
 
+    // tags{keyexpr.with_parameters}
     pub fn with_parameters(self, selector: &'a str) -> Selector<'a> {
         Selector {
             key_expr: self,
@@ -280,6 +293,7 @@ impl<'a> KeyExpr<'a> {
         }
     }
 
+    // tags{keyexpr.with_parameters}
     pub fn with_owned_parameters(self, selector: String) -> Selector<'a> {
         Selector {
             key_expr: self,
@@ -585,6 +599,7 @@ impl<'a> Undeclarable<&'a Session, KeyExprUndeclaration<'a>> for KeyExpr<'a> {
 /// session.undeclare(key_expr).res().await.unwrap();
 /// # })
 /// ```
+// ignore_tagging
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct KeyExprUndeclaration<'a> {
     session: &'a Session,
