@@ -118,14 +118,12 @@ pub(crate) fn undeclare_subscription(
             Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
                 Some(res) => Some(res),
                 None => {
-                    if log::log_enabled!(log::Level::Error) {
-                        log::error!(
-                            "{} Undeclare unknown subscriber {}{}!",
-                            face,
-                            prefix.expr(),
-                            expr.suffix
-                        );
-                    }
+                    log::error!(
+                        "{} Undeclare unknown subscriber {}{}!",
+                        face,
+                        prefix.expr(),
+                        expr.suffix
+                    );
                     return;
                 }
             },

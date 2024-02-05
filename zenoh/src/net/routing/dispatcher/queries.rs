@@ -57,8 +57,9 @@ pub(crate) fn declare_queryable(
     {
         Some(mut prefix) => {
             log::debug!(
-                "{} Declare queryable ({}{})",
+                "{} Declare queryable {} ({}{})",
                 face,
+                id,
                 prefix.expr(),
                 expr.suffix
             );
@@ -101,8 +102,9 @@ pub(crate) fn declare_queryable(
             drop(wtables);
         }
         None => log::error!(
-            "{} Declare queryable for unknown scope {}!",
+            "{} Declare queryable {} for unknown scope {}!",
             face,
+            id,
             expr.scope
         ),
     }
