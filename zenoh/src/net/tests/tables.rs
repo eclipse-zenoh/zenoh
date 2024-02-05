@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::net::routing::pubsub::*;
 use crate::net::routing::router::{self, *};
 use std::convert::{TryFrom, TryInto};
 use std::sync::{Arc, Mutex, RwLock};

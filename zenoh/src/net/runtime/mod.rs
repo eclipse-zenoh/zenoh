@@ -17,8 +17,11 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
+
+// ignore_tagging
 mod adminspace;
-pub mod orchestrator;
+// ignore_tagging
+pub(crate) mod orchestrator;
 
 use super::routing;
 use super::routing::face::Face;
@@ -61,6 +64,7 @@ struct RuntimeState {
     stop_source: std::sync::RwLock<Option<StopSource>>,
 }
 
+// ignore_tagging
 #[derive(Clone)]
 pub struct Runtime {
     state: Arc<RuntimeState>,
@@ -78,6 +82,7 @@ impl StructVersion for Runtime {
 impl PluginStartArgs for Runtime {}
 
 impl Runtime {
+    // ignore_tagging
     pub async fn new(config: Config) -> ZResult<Runtime> {
         let mut runtime = Runtime::init(config).await?;
         match runtime.start().await {
@@ -182,14 +187,17 @@ impl Runtime {
     }
 
     #[inline(always)]
+    // ignore_tagging
     pub fn manager(&self) -> &TransportManager {
         &self.state.manager
     }
 
+    // ignore_tagging
     pub fn new_handler(&self, handler: Arc<dyn TransportEventHandler>) {
         zwrite!(self.state.transport_handlers).push(handler);
     }
 
+    // ignore_tagging
     pub async fn close(&self) -> ZResult<()> {
         log::trace!("Runtime::close())");
         drop(self.state.stop_source.write().unwrap().take());
@@ -197,10 +205,12 @@ impl Runtime {
         Ok(())
     }
 
+    // ignore_tagging
     pub fn new_timestamp(&self) -> Option<uhlc::Timestamp> {
         self.state.hlc.as_ref().map(|hlc| hlc.new_timestamp())
     }
 
+    // ignore_tagging
     pub fn get_locators(&self) -> Vec<Locator> {
         self.state.locators.read().unwrap().clone()
     }
@@ -222,18 +232,22 @@ impl Runtime {
         self.state.router.clone()
     }
 
+    // ignore_tagging
     pub fn config(&self) -> &Notifier<Config> {
         &self.state.config
     }
 
+    // ignore_tagging
     pub fn hlc(&self) -> Option<&HLC> {
         self.state.hlc.as_ref().map(Arc::as_ref)
     }
 
+    // ignore_tagging
     pub fn zid(&self) -> ZenohId {
         self.state.zid
     }
 
+    // ignore_tagging
     pub fn whatami(&self) -> WhatAmI {
         self.state.whatami
     }

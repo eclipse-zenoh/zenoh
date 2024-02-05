@@ -383,7 +383,7 @@ fn register_router_queryable(
     propagate_simple_queryable(tables, res, face);
 }
 
-pub fn declare_router_queryable(
+pub(crate) fn declare_router_queryable(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -473,7 +473,7 @@ fn register_peer_queryable(
     }
 }
 
-pub fn declare_peer_queryable(
+pub(crate) fn declare_peer_queryable(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -558,7 +558,7 @@ fn register_client_queryable(
     get_mut_unchecked(face).remote_qabls.insert(res.clone());
 }
 
-pub fn declare_client_queryable(
+pub(crate) fn declare_client_queryable(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -843,7 +843,7 @@ fn undeclare_router_queryable(
     }
 }
 
-pub fn forget_router_queryable(
+pub(crate) fn forget_router_queryable(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -903,7 +903,7 @@ fn undeclare_peer_queryable(
     }
 }
 
-pub fn forget_peer_queryable(
+pub(crate) fn forget_peer_queryable(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -1018,7 +1018,7 @@ pub(crate) fn undeclare_client_queryable(
     }
 }
 
-pub fn forget_client_queryable(
+pub(crate) fn forget_client_queryable(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -2060,7 +2060,7 @@ macro_rules! inc_res_stats {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn route_query(
+pub(crate) fn route_query(
     tables_ref: &Arc<TablesLock>,
     face: &Arc<FaceState>,
     expr: &WireExpr,

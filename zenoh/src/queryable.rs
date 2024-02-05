@@ -63,6 +63,7 @@ impl Drop for QueryInner {
 }
 
 /// Structs received by a [`Queryable`].
+// tags{session.queryable}
 #[derive(Clone)]
 pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
@@ -70,6 +71,7 @@ pub struct Query {
 
 impl Query {
     /// The full [`Selector`] of this Query.
+    // tags{session.queryable.selector}
     #[inline(always)]
     pub fn selector(&self) -> Selector<'_> {
         Selector {
@@ -79,23 +81,27 @@ impl Query {
     }
 
     /// The key selector part of this Query.
+    // tags{session.queryable.selector.key_expr}
     #[inline(always)]
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.inner.key_expr
     }
 
     /// This Query's selector parameters.
+    // tags{session.queryable.selector.parameters}
     #[inline(always)]
     pub fn parameters(&self) -> &str {
         &self.inner.parameters
     }
 
     /// This Query's value.
+    // tags{session.queryable.value}
     #[inline(always)]
     pub fn value(&self) -> Option<&Value> {
         self.inner.value.as_ref()
     }
 
+    // tags{session.queryable.attachment}
     #[zenoh_macros::unstable]
     pub fn attachment(&self) -> Option<&Attachment> {
         self.inner.attachment.as_ref()
@@ -106,6 +112,7 @@ impl Query {
     /// By default, queries only accept replies whose key expression intersects with the query's.
     /// Unless the query has enabled disjoint replies (you can check this through [`Query::accepts_replies`]),
     /// replying on a disjoint key expression will result in an error when resolving the reply.
+    // tags{session.queryable.reply}
     #[inline(always)]
     pub fn reply(&self, result: Result<Sample, Value>) -> ReplyBuilder<'_> {
         ReplyBuilder {
@@ -116,6 +123,7 @@ impl Query {
 
     /// Queries may or may not accept replies on key expressions that do not intersect with their own key expression.
     /// This getter allows you to check whether or not a specific query does.
+    // tags{session.queryable.accepts_replies}
     #[zenoh_macros::unstable]
     pub fn accepts_replies(&self) -> ZResult<ReplyKeyExpr> {
         self._accepts_any_replies().map(|any| {
@@ -154,6 +162,7 @@ impl fmt::Display for Query {
 }
 
 /// A builder returned by [`Query::reply()`](Query::reply).
+// ignore_tagging
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct ReplyBuilder<'a> {
@@ -164,6 +173,7 @@ pub struct ReplyBuilder<'a> {
 impl<'a> ReplyBuilder<'a> {
     #[allow(clippy::result_large_err)]
     #[zenoh_macros::unstable]
+    // tags{session.queryable.reply.attachment}
     pub fn with_attachment(mut self, attachment: Attachment) -> Result<Self, (Self, Attachment)> {
         match &mut self.result {
             Ok(sample) => {
@@ -363,6 +373,7 @@ impl<'a> Undeclarable<(), QueryableUndeclaration<'a>> for CallbackQueryable<'a> 
 /// queryable.undeclare().res().await.unwrap();
 /// # })
 /// ```
+// ignore_tagging
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct QueryableUndeclaration<'a> {
     queryable: CallbackQueryable<'a>,
@@ -409,6 +420,7 @@ impl Drop for CallbackQueryable<'_> {
 /// let queryable = session.declare_queryable("key/expression").res().await.unwrap();
 /// # })
 /// ```
+// ignore_tagging
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct QueryableBuilder<'a, 'b, Handler> {
@@ -436,6 +448,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{session.queryable.callback}
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> QueryableBuilder<'a, 'b, Callback>
     where
@@ -477,6 +490,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{session.queryable.callback}
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
@@ -507,6 +521,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
     /// }
     /// # })
     /// ```
+    // tags{session.queryable.pipe}
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> QueryableBuilder<'a, 'b, Handler>
     where
@@ -530,6 +545,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
 
     /// Restrict the matching queries that will be receive by this [`Queryable`]
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    // tags{session.queryable.allowed_origin}
     #[inline]
     #[zenoh_macros::unstable]
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
@@ -539,6 +555,7 @@ impl<'a, 'b> QueryableBuilder<'a, 'b, DefaultHandler> {
 }
 impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
     /// Change queryable completeness.
+    // tags{session.queryable.complete}
     #[inline]
     pub fn complete(mut self, complete: bool) -> Self {
         self.complete = complete;
@@ -576,6 +593,7 @@ impl<'a, 'b, Handler> QueryableBuilder<'a, 'b, Handler> {
 /// }
 /// # })
 /// ```
+// ignore_tagging
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct Queryable<'a, Receiver> {
@@ -585,6 +603,7 @@ pub struct Queryable<'a, Receiver> {
 
 impl<'a, Receiver> Queryable<'a, Receiver> {
     #[inline]
+    // tags{session.queryable.undeclare}
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
     }

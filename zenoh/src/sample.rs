@@ -54,6 +54,7 @@ pub(crate) struct DataInfo {
 }
 
 /// Informations on the source of a zenoh [`Sample`].
+// tags{sample.source_info}
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
@@ -112,6 +113,7 @@ mod attachment {
     use zenoh_protocol::zenoh::ext::AttachmentType;
 
     /// A builder for [`Attachment`]
+    // ignore_tagging
     #[zenoh_macros::unstable]
     #[derive(Debug)]
     pub struct AttachmentBuilder {
@@ -125,6 +127,7 @@ mod attachment {
     }
     #[zenoh_macros::unstable]
     impl AttachmentBuilder {
+        // ignore_tagging
         pub fn new() -> Self {
             Self { inner: Vec::new() }
         }
@@ -137,6 +140,7 @@ mod attachment {
         /// Inserts a key-value pair to the attachment.
         ///
         /// Note that [`Attachment`] is a list of non-unique key-value pairs: inserting at the same key multiple times leads to both values being transmitted for that key.
+        // tags{sample.attachment.insert}
         pub fn insert<Key: AsRef<[u8]> + ?Sized, Value: AsRef<[u8]> + ?Sized>(
             &mut self,
             key: &Key,
@@ -144,6 +148,7 @@ mod attachment {
         ) {
             self._insert(key.as_ref(), value.as_ref())
         }
+        // ignore_tagging
         pub fn build(self) -> Attachment {
             Attachment {
                 inner: self.inner.into(),
@@ -158,6 +163,7 @@ mod attachment {
             }
         }
     }
+    // tags{sample.attachment}
     #[zenoh_macros::unstable]
     #[derive(Clone)]
     pub struct Attachment {
@@ -183,17 +189,21 @@ mod attachment {
     }
     #[zenoh_macros::unstable]
     impl Attachment {
+        // tags{sample.attachment.new}
         pub fn new() -> Self {
             Self {
                 inner: ZBuf::empty(),
             }
         }
+        // tags{sample.attachment.is_empty}
         pub fn is_empty(&self) -> bool {
             self.len() == 0
         }
+        // tags{sample.attachment.len}
         pub fn len(&self) -> usize {
             self.iter().count()
         }
+        // ignore_tagging
         pub fn iter(&self) -> AttachmentIterator {
             self.into_iter()
         }
@@ -201,6 +211,7 @@ mod attachment {
             self.iter()
                 .find_map(|(k, v)| (k.as_slice() == key).then_some(v))
         }
+        // tags{sample.attachment.get}
         pub fn get<Key: AsRef<[u8]>>(&self, key: &Key) -> Option<ZSlice> {
             self._get(key.as_ref())
         }
@@ -215,6 +226,7 @@ mod attachment {
         /// Note that [`Attachment`] is a list of non-unique key-value pairs: inserting at the same key multiple times leads to both values being transmitted for that key.
         ///
         /// [`Attachment`] is not very efficient at inserting, so if you wish to perform multiple inserts, it's generally better to [`Attachment::extend`] after performing the inserts on an [`AttachmentBuilder`]
+        // tags{sample.attachment.insert}
         pub fn insert<Key: AsRef<[u8]> + ?Sized, Value: AsRef<[u8]> + ?Sized>(
             &mut self,
             key: &Key,
@@ -228,11 +240,13 @@ mod attachment {
             }
             self
         }
+        // tags{sample.attachment.extend}
         pub fn extend(&mut self, with: impl Into<Self>) -> &mut Self {
             let with = with.into();
             self._extend(with)
         }
     }
+    // ignore_tagging
     #[zenoh_macros::unstable]
     pub struct AttachmentIterator<'a> {
         reader: ZBufReader<'a>,
@@ -312,10 +326,12 @@ mod attachment {
         }
     }
 }
+
 #[zenoh_macros::unstable]
 pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 
 /// A zenoh sample.
+// tags{sample}
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Sample {
@@ -351,6 +367,7 @@ pub struct Sample {
 
 impl Sample {
     /// Creates a new Sample.
+    // tags{sample.new}
     #[inline]
     pub fn new<IntoKeyExpr, IntoValue>(key_expr: IntoKeyExpr, value: IntoValue) -> Self
     where
@@ -369,6 +386,7 @@ impl Sample {
         }
     }
     /// Creates a new Sample.
+    // tags{sample.from_value}
     #[inline]
     pub fn try_from<TryIntoKeyExpr, IntoValue>(
         key_expr: TryIntoKeyExpr,
@@ -392,6 +410,7 @@ impl Sample {
     }
 
     /// Creates a new Sample with optional data info.
+    // tags{sample.with_info}
     #[inline]
     pub(crate) fn with_info(
         key_expr: KeyExpr<'static>,
@@ -428,12 +447,14 @@ impl Sample {
     }
 
     /// Gets the timestamp of this Sample.
+    // tags{sample.get_timestamp}
     #[inline]
     pub fn get_timestamp(&self) -> Option<&Timestamp> {
         self.timestamp.as_ref()
     }
 
     /// Sets the timestamp of this Sample.
+    // tags{sample.with_timestamp}
     #[inline]
     pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
         self.timestamp = Some(timestamp);
@@ -441,6 +462,7 @@ impl Sample {
     }
 
     /// Sets the source info of this Sample.
+    // tags{sample.with_source_info}
     #[zenoh_macros::unstable]
     #[inline]
     pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
@@ -452,6 +474,7 @@ impl Sample {
     /// Ensure that an associated Timestamp is present in this Sample.
     /// If not, a new one is created with the current system time and 0x00 as id.
     /// Get the timestamp of this sample (either existing one or newly created)
+    // tags{sample.ensure_timestamp}
     pub fn ensure_timestamp(&mut self) -> &Timestamp {
         if let Some(ref timestamp) = self.timestamp {
             timestamp
@@ -463,17 +486,20 @@ impl Sample {
     }
 
     #[zenoh_macros::unstable]
+    // tags{sample.get_attachment}
     pub fn attachment(&self) -> Option<&Attachment> {
         self.attachment.as_ref()
     }
 
     #[zenoh_macros::unstable]
+    // tags{sample.get_attachment_mut}
     pub fn attachment_mut(&mut self) -> &mut Option<Attachment> {
         &mut self.attachment
     }
 
     #[allow(clippy::result_large_err)]
     #[zenoh_macros::unstable]
+    // tags{sample.with_attachment}
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
         self

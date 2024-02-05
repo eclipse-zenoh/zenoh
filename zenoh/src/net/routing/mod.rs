@@ -17,12 +17,14 @@
 //! This module is intended for Zenoh's internal use.
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
-pub mod face;
-pub mod network;
-pub mod pubsub;
-pub mod queries;
-pub mod resource;
-pub mod router;
+pub(crate) mod face;
+pub(crate) mod network;
+pub(crate) mod pubsub;
+pub(crate) mod queries;
+// ignore_tagging
+pub(crate) mod resource;
+// ignore_tagging
+pub(crate) mod router;
 
 use super::runtime;
 

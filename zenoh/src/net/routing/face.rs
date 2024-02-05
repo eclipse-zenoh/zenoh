@@ -11,6 +11,8 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use super::pubsub::*;
+use super::queries::*;
 use super::router::*;
 use std::collections::{HashMap, HashSet};
 use std::fmt;

@@ -222,7 +222,7 @@ fn register_router_subscription(
     propagate_simple_subscription(tables, res, sub_info, face);
 }
 
-pub fn declare_router_subscription(
+pub(crate) fn declare_router_subscription(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -404,7 +404,7 @@ fn register_client_subscription(
     get_mut_unchecked(face).remote_subs.insert(res.clone());
 }
 
-pub fn declare_client_subscription(
+pub(crate) fn declare_client_subscription(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -717,7 +717,7 @@ fn undeclare_router_subscription(
     }
 }
 
-pub fn forget_router_subscription(
+pub(crate) fn forget_router_subscription(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -783,7 +783,7 @@ fn undeclare_peer_subscription(
     }
 }
 
-pub fn forget_peer_subscription(
+pub(crate) fn forget_peer_subscription(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -884,7 +884,7 @@ pub(crate) fn undeclare_client_subscription(
     }
 }
 
-pub fn forget_client_subscription(
+pub(crate) fn forget_client_subscription(
     tables: &TablesLock,
     rtables: RwLockReadGuard<Tables>,
     face: &mut Arc<FaceState>,
@@ -1750,7 +1750,7 @@ macro_rules! inc_stats {
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn full_reentrant_route_data(
+pub(crate) fn full_reentrant_route_data(
     tables_ref: &RwLock<Tables>,
     face: &FaceState,
     expr: &WireExpr,
@@ -1894,7 +1894,7 @@ pub fn full_reentrant_route_data(
     }
 }
 
-pub fn pull_data(tables_ref: &RwLock<Tables>, face: &Arc<FaceState>, expr: WireExpr) {
+pub(crate) fn pull_data(tables_ref: &RwLock<Tables>, face: &Arc<FaceState>, expr: WireExpr) {
     let tables = zread!(tables_ref);
     match tables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {

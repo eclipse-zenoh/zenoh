@@ -61,6 +61,7 @@ pub struct Property {
 }
 
 /// The kind of a `Sample`.
+// tags{sample.kind}
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub enum SampleKind {
@@ -424,6 +425,7 @@ pub enum ConsolidationMode {
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
+// tags{session.query.target}
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum QueryTarget {
     #[default]

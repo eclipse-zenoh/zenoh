@@ -32,6 +32,7 @@ pub use zenoh_protocol::core::QueryTarget;
 pub use zenoh_protocol::core::ConsolidationMode;
 
 /// The operation: either manual or automatic.
+// ignore_tagging
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode<T> {
     Auto,
@@ -39,6 +40,7 @@ pub enum Mode<T> {
 }
 
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
+// tags{session.get.consolidation_mode}
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueryConsolidation {
     pub(crate) mode: Mode<ConsolidationMode>,
@@ -46,6 +48,7 @@ pub struct QueryConsolidation {
 
 impl QueryConsolidation {
     /// Automatic query consolidation strategy selection.
+    // tags{session.get.consolidation_mode.auto}
     pub const AUTO: Self = Self { mode: Mode::Auto };
 
     pub(crate) const fn from_mode(mode: ConsolidationMode) -> Self {
@@ -55,6 +58,7 @@ impl QueryConsolidation {
     }
 
     /// Returns the requested [`ConsolidationMode`].
+    // ignore_tagging
     pub fn mode(&self) -> Mode<ConsolidationMode> {
         self.mode
     }
@@ -77,6 +81,7 @@ impl Default for QueryConsolidation {
 }
 
 /// Structs returned by a [`get`](Session::get).
+// tags{session.get.reply}
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct Reply {
@@ -116,6 +121,7 @@ pub(crate) struct QueryState {
 /// }
 /// # })
 /// ```
+// ignore_tagging
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct GetBuilder<'a, 'b, Handler> {
@@ -149,6 +155,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{session.get.callback}
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> GetBuilder<'a, 'b, Callback>
     where
@@ -202,6 +209,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{session.get.callback}
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
@@ -232,6 +240,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
     /// }
     /// # })
     /// ```
+    // tags{session.get.pipe}
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> GetBuilder<'a, 'b, Handler>
     where
@@ -267,6 +276,7 @@ impl<'a, 'b> GetBuilder<'a, 'b, DefaultHandler> {
 }
 impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     /// Change the target of the query.
+    // tags{session.get.target}
     #[inline]
     pub fn target(mut self, target: QueryTarget) -> Self {
         self.target = target;
@@ -274,6 +284,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     }
 
     /// Change the consolidation mode of the query.
+    // tags{session.get.consolidation_mode}
     #[inline]
     pub fn consolidation<QC: Into<QueryConsolidation>>(mut self, consolidation: QC) -> Self {
         self.consolidation = consolidation.into();
@@ -282,6 +293,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
 
     /// Restrict the matching queryables that will receive the query
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
+    // tags{session.get.allowed_destination}
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
@@ -290,6 +302,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     }
 
     /// Set query timeout.
+    // tags{session.get.timeout}
     #[inline]
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
@@ -297,6 +310,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     }
 
     /// Set query value.
+    // tags{session.get.value}
     #[inline]
     pub fn with_value<IntoValue>(mut self, value: IntoValue) -> Self
     where
@@ -307,6 +321,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     }
 
     #[zenoh_macros::unstable]
+    // tags{session.get.attachment}
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
         self
@@ -317,6 +332,7 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
     ///
     /// If allowed to through `accept_replies(ReplyKeyExpr::Any)`, queryables may also reply on key
     /// expressions that don't intersect with the query's.
+    // tags{session.get.accept_replies}
     #[zenoh_macros::unstable]
     pub fn accept_replies(self, accept: ReplyKeyExpr) -> Self {
         let Self {
@@ -348,10 +364,12 @@ impl<'a, 'b, Handler> GetBuilder<'a, 'b, Handler> {
 
 pub(crate) const _REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = "_anyke";
 #[zenoh_macros::unstable]
+// tags{session.get.reply_key_expr_any_sel_param}
 pub const REPLY_KEY_EXPR_ANY_SEL_PARAM: &str = _REPLY_KEY_EXPR_ANY_SEL_PARAM;
 
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+// tags{session.get.accept_replies}
 pub enum ReplyKeyExpr {
     Any,
     MatchingQuery,

@@ -11,4 +11,5 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+// ignore_tagging
 pub(crate) mod linkstate;

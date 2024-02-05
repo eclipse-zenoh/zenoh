@@ -44,6 +44,7 @@ pub use zenoh_protocol::scouting::Hello;
 /// }
 /// # })
 /// ```
+// ignore_tagging
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct ScoutBuilder<Handler> {
@@ -68,6 +69,7 @@ impl ScoutBuilder<DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{scout.callback}
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> ScoutBuilder<Callback>
     where
@@ -104,6 +106,7 @@ impl ScoutBuilder<DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
+    /// tags{scout.callback}
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
@@ -133,6 +136,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// }
     /// # })
     /// ```
+    // tags{scout.pipe}
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> ScoutBuilder<Handler>
     where
@@ -219,7 +223,7 @@ impl ScoutInner {
     /// scout.stop();
     /// # })
     /// ```
-    pub fn stop(self) {
+    pub(crate) fn stop(self) {
         // This drops the inner `stop_sender` and hence stops the scouting receiver
         std::mem::drop(self);
     }
@@ -249,6 +253,7 @@ impl fmt::Debug for ScoutInner {
 /// }
 /// # })
 /// ```
+// tags{scout}
 #[non_exhaustive]
 #[derive(Debug)]
 pub struct Scout<Receiver> {
@@ -282,6 +287,7 @@ impl<Receiver> Scout<Receiver> {
     /// scout.stop();
     /// # })
     /// ```
+    // tags{scout.stop}
     pub fn stop(self) {
         self.scout.stop()
     }
