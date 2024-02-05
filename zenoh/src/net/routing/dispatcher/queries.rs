@@ -23,6 +23,7 @@ use std::sync::{Arc, Weak};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::network::declare::queryable::ext::QueryableInfo;
+use zenoh_protocol::network::declare::QueryableId;
 use zenoh_protocol::{
     core::{Encoding, WireExpr},
     network::{
@@ -44,6 +45,7 @@ pub(crate) fn declare_queryable(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
+    id: QueryableId,
     expr: &WireExpr,
     qabl_info: &QueryableInfo,
     node_id: NodeId,
@@ -81,7 +83,7 @@ pub(crate) fn declare_queryable(
                     (res, wtables)
                 };
 
-            hat_code.declare_queryable(&mut wtables, face, &mut res, qabl_info, node_id);
+            hat_code.declare_queryable(&mut wtables, face, id, &mut res, qabl_info, node_id);
 
             disable_matches_query_routes(&mut wtables, &mut res);
             drop(wtables);
@@ -110,47 +112,57 @@ pub(crate) fn undeclare_queryable(
     hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
+    id: QueryableId,
     expr: &WireExpr,
     node_id: NodeId,
 ) {
-    let rtables = zread!(tables.tables);
-    match rtables.get_mapping(face, &expr.scope, expr.mapping) {
-        Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
-            Some(mut res) => {
-                log::debug!("{} Undeclare queryable ({})", face, res.expr());
-                drop(rtables);
-                let mut wtables = zwrite!(tables.tables);
-
-                hat_code.undeclare_queryable(&mut wtables, face, &mut res, node_id);
-
-                disable_matches_query_routes(&mut wtables, &mut res);
-                drop(wtables);
-
-                let rtables = zread!(tables.tables);
-                let matches_query_routes = compute_matches_query_routes(&rtables, &res);
-                drop(rtables);
-
-                let wtables = zwrite!(tables.tables);
-                for (mut res, query_routes) in matches_query_routes {
-                    get_mut_unchecked(&mut res)
-                        .context_mut()
-                        .update_query_routes(query_routes);
+    let res = if expr.is_empty() {
+        None
+    } else {
+        let rtables = zread!(tables.tables);
+        match rtables.get_mapping(face, &expr.scope, expr.mapping) {
+            Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
+                Some(res) => Some(res),
+                None => {
+                    log::error!(
+                        "{} Undeclare unknown queryable {}{}!",
+                        face,
+                        prefix.expr(),
+                        expr.suffix
+                    );
+                    return;
                 }
-                Resource::clean(&mut res);
-                drop(wtables);
+            },
+            None => {
+                log::error!(
+                    "{} Undeclare queryable with unknown scope {}",
+                    face,
+                    expr.scope
+                );
+                return;
             }
-            None => log::error!(
-                "{} Undeclare unknown queryable ({}{})!",
-                face,
-                prefix.expr(),
-                expr.suffix
-            ),
-        },
-        None => log::error!(
-            "{} Undeclare queryable with unknown scope {}!",
-            face,
-            expr.scope
-        ),
+        }
+    };
+    let mut wtables = zwrite!(tables.tables);
+    if let Some(mut res) = hat_code.undeclare_queryable(&mut wtables, face, id, res, node_id) {
+        log::debug!("{} Undeclare queryable {} ({})", face, id, res.expr());
+        disable_matches_query_routes(&mut wtables, &mut res);
+        drop(wtables);
+
+        let rtables = zread!(tables.tables);
+        let matches_query_routes = compute_matches_query_routes(&rtables, &res);
+        drop(rtables);
+
+        let wtables = zwrite!(tables.tables);
+        for (mut res, query_routes) in matches_query_routes {
+            get_mut_unchecked(&mut res)
+                .context_mut()
+                .update_query_routes(query_routes);
+        }
+        Resource::clean(&mut res);
+        drop(wtables);
+    } else {
+        log::error!("{} Undeclare unknown queryable {}", face, id);
     }
 }
 

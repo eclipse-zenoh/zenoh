@@ -31,7 +31,10 @@ use zenoh_config::{unwrap_or_default, Config, WhatAmI};
 use zenoh_protocol::{
     core::WireExpr,
     network::{
-        declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo, SubscriberId},
+        declare::{
+            queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo, QueryableId,
+            SubscriberId,
+        },
         Oam,
     },
 };
@@ -149,6 +152,7 @@ pub(crate) trait HatQueriesTrait {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
+        id: QueryableId,
         res: &mut Arc<Resource>,
         qabl_info: &QueryableInfo,
         node_id: NodeId,
@@ -157,9 +161,10 @@ pub(crate) trait HatQueriesTrait {
         &self,
         tables: &mut Tables,
         face: &mut Arc<FaceState>,
-        res: &mut Arc<Resource>,
+        id: QueryableId,
+        res: Option<Arc<Resource>>,
         node_id: NodeId,
-    );
+    ) -> Option<Arc<Resource>>;
 
     fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>>;
 
