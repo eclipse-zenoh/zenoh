@@ -11,34 +11,40 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::ZExtUnknown, zenoh::PushBody};
+use crate::{
+    common::ZExtUnknown,
+    zenoh::{query::Consolidation, PushBody},
+};
 use alloc::vec::Vec;
 
 /// # Reply message
 ///
 /// ```text
 /// Flags:
-/// - X: Reserved
+/// - C: Consolidation  if C==1 then consolidation is present
 /// - X: Reserved
 /// - Z: Extension      If Z==1 then at least one extension is present
 ///
 ///   7 6 5 4 3 2 1 0
 ///  +-+-+-+-+-+-+-+-+
-///  |Z|X|X|  REPLY  |
+///  |Z|X|C|  REPLY  |
 ///  +-+-+-+---------+
+///  % consolidation %  if C==1
+///  +---------------+
 ///  ~  [repl_exts]  ~  if Z==1
 ///  +---------------+
 ///  ~   ReplyBody   ~  -- Payload
 ///  +---------------+
 /// ```
 pub mod flag {
-    pub const C: u8 = 1 << 5; // 0x20 Consolidation     if C==1 then the consolidation is present
+    pub const C: u8 = 1 << 5; // 0x20 Consolidation if C==1 then consolidation is present
                               // pub const X: u8 = 1 << 6; // 0x40 Reserved
     pub const Z: u8 = 1 << 7; // 0x80 Extensions    if Z==1 then an extension will follow
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Reply {
+    pub consolidation: Consolidation,
     pub ext_unknown: Vec<ZExtUnknown>,
     pub payload: ReplyBody,
 }
@@ -52,12 +58,14 @@ impl Reply {
         let mut rng = rand::thread_rng();
 
         let payload = ReplyBody::rand();
+        let consolidation = Consolidation::rand();
         let mut ext_unknown = Vec::new();
         for _ in 0..rng.gen_range(0..4) {
             ext_unknown.push(ZExtUnknown::rand2(1, false));
         }
 
         Self {
+            consolidation,
             ext_unknown,
             payload,
         }

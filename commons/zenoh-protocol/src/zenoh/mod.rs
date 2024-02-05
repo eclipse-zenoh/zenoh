@@ -26,7 +26,7 @@ pub use err::Err;
 pub use pull::Pull;
 pub use put::Put;
 pub use query::{Consolidation, Query};
-pub use reply::{Reply, ReplyBody};
+pub use reply::Reply;
 
 pub mod id {
     pub const OAM: u8 = 0x00;
@@ -95,10 +95,11 @@ impl RequestBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..3) {
+        match rng.gen_range(0..4) {
             0 => RequestBody::Query(Query::rand()),
             1 => RequestBody::Put(Put::rand()),
             2 => RequestBody::Del(Del::rand()),
+            3 => RequestBody::Pull(Pull::rand()),
             _ => unreachable!(),
         }
     }
@@ -126,23 +127,20 @@ impl From<Del> for RequestBody {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResponseBody {
     Reply(Reply),
-    Err(Err),
     Ack(Ack),
-    Put(Put),
+    Err(Err),
 }
 
 impl ResponseBody {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
-
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..4) {
+        match rng.gen_range(0..3) {
             0 => ResponseBody::Reply(Reply::rand()),
-            1 => ResponseBody::Err(Err::rand()),
-            2 => ResponseBody::Ack(Ack::rand()),
-            3 => ResponseBody::Put(Put::rand()),
+            1 => ResponseBody::Ack(Ack::rand()),
+            2 => ResponseBody::Err(Err::rand()),
             _ => unreachable!(),
         }
     }

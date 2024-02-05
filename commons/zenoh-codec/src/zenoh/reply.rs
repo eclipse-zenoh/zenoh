@@ -21,6 +21,7 @@ use zenoh_protocol::{
     common::imsg,
     zenoh::{
         id,
+        query::Consolidation,
         reply::{flag, Reply, ReplyBody},
     },
 };
@@ -33,12 +34,16 @@ where
 
     fn write(self, writer: &mut W, x: &Reply) -> Self::Output {
         let Reply {
+            consolidation,
             ext_unknown,
             payload,
         } = x;
 
         // Header
         let mut header = id::REPLY;
+        if consolidation != &Consolidation::default() {
+            header |= flag::C;
+        }
         let mut n_exts = ext_unknown.len() as u8;
         if n_exts != 0 {
             header |= flag::Z;
@@ -46,7 +51,9 @@ where
         self.write(&mut *writer, header)?;
 
         // Body
-        // - Empty
+        if consolidation != &Consolidation::default() {
+            self.write(&mut *writer, *consolidation as u64)?;
+        }
 
         // Extensions
         for u in ext_unknown.iter() {
@@ -86,7 +93,10 @@ where
         }
 
         // Body
-        // Empty
+        let mut consolidation = Consolidation::default();
+        if imsg::has_flag(self.header, flag::C) {
+            consolidation = self.codec.read(&mut *reader)?;
+        }
 
         // Extensions
         let mut ext_unknown = Vec::new();
@@ -103,6 +113,7 @@ where
         let payload: ReplyBody = self.codec.read(&mut *reader)?;
 
         Ok(Reply {
+            consolidation,
             ext_unknown,
             payload,
         })
