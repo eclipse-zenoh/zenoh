@@ -1,4 +1,4 @@
-name: Sync Cargo lockfile with Zenoh's dependants
+name: Sync Cargo lockfiles
 
 on:
   schedule:
