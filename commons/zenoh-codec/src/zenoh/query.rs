@@ -100,7 +100,7 @@ where
 
         // Body
         if consolidation != &Consolidation::default() {
-            self.write(&mut *writer, *consolidation as u64)?;
+            self.write(&mut *writer, *consolidation)?;
         }
         if !parameters.is_empty() {
             self.write(&mut *writer, parameters)?;
