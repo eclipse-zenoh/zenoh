@@ -92,7 +92,6 @@ fn register_client_subscription(
     // Register subscription
     {
         let res = get_mut_unchecked(res);
-        log::debug!("Register subscription {} for {}", res.expr(), face);
         match res.session_ctxs.get_mut(&face.id) {
             Some(ctx) => match &ctx.subs {
                 Some(info) => {
@@ -192,10 +191,8 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
 pub(super) fn undeclare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    id: SubscriberId,
     res: &mut Arc<Resource>,
 ) {
-    log::debug!("Unregister client subscription {} for {}", id, face);
     if !face_hat_mut!(face).remote_subs.values().any(|s| *s == *res) {
         if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
             get_mut_unchecked(ctx).subs = None;
@@ -233,7 +230,7 @@ fn forget_client_subscription(
     id: SubscriberId,
 ) -> Option<Arc<Resource>> {
     if let Some(mut res) = face_hat_mut!(face).remote_subs.remove(&id) {
-        undeclare_client_subscription(tables, face, id, &mut res);
+        undeclare_client_subscription(tables, face, &mut res);
         Some(res)
     } else {
         None

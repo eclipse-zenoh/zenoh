@@ -236,14 +236,12 @@ impl HatTables {
                 .as_ref()
                 .map(|net| {
                     let links = net.get_links(peer1);
-                    log::debug!("failover_brokering {} {} ({:?})", peer1, peer2, links);
                     HatTables::failover_brokering_to(links, peer2)
                 })
                 .unwrap_or(false)
     }
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>, net_type: WhatAmI) {
-        log::trace!("Schedule computations");
         if (net_type == WhatAmI::Router && self.routers_trees_task.is_none())
             || (net_type == WhatAmI::Peer && self.peers_trees_task.is_none())
         {
@@ -268,7 +266,6 @@ impl HatTables {
                 pubsub::pubsub_tree_change(&mut tables, &new_childs, net_type);
                 queries::queries_tree_change(&mut tables, &new_childs, net_type);
 
-                log::trace!("Computations completed");
                 match net_type {
                     WhatAmI::Router => hat_mut!(tables).routers_trees_task = None,
                     _ => hat_mut!(tables).peers_trees_task = None,
@@ -422,7 +419,7 @@ impl HatBaseTrait for HatCode {
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
-        for (id, mut res) in face
+        for (_id, mut res) in face
             .hat
             .downcast_mut::<HatFace>()
             .unwrap()
@@ -430,7 +427,7 @@ impl HatBaseTrait for HatCode {
             .drain()
         {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_subscription(&mut wtables, &mut face_clone, id, &mut res);
+            undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {

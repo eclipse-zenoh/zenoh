@@ -39,13 +39,19 @@ pub(crate) fn declare_subscription(
     sub_info: &SubscriberInfo,
     node_id: NodeId,
 ) {
-    log::debug!("Declare subscription {}", face);
     let rtables = zread!(tables.tables);
     match rtables
         .get_mapping(face, &expr.scope, expr.mapping)
         .cloned()
     {
         Some(mut prefix) => {
+            log::debug!(
+                "{} Declare subscriber {} ({}{})",
+                face,
+                id,
+                prefix.expr(),
+                expr.suffix
+            );
             let res = Resource::get_resource(&prefix, &expr.suffix);
             let (mut res, mut wtables) =
                 if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
@@ -87,7 +93,12 @@ pub(crate) fn declare_subscription(
             }
             drop(wtables);
         }
-        None => log::error!("Declare subscription for unknown scope {}!", expr.scope),
+        None => log::error!(
+            "{} Declare subscriber {} for unknown scope {}!",
+            face,
+            id,
+            expr.scope
+        ),
     }
 }
 
@@ -99,7 +110,6 @@ pub(crate) fn undeclare_subscription(
     expr: &WireExpr,
     node_id: NodeId,
 ) {
-    log::debug!("Undeclare subscription {}", face);
     let res = if expr.is_empty() {
         None
     } else {
@@ -108,18 +118,30 @@ pub(crate) fn undeclare_subscription(
             Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
                 Some(res) => Some(res),
                 None => {
-                    log::error!("Undeclare unknown subscription!");
+                    if log::log_enabled!(log::Level::Error) {
+                        log::error!(
+                            "{} Undeclare unknown subscriber {}{}!",
+                            face,
+                            prefix.expr(),
+                            expr.suffix
+                        );
+                    }
                     return;
                 }
             },
             None => {
-                log::error!("Undeclare subscription with unknown scope!");
+                log::error!(
+                    "{} Undeclare subscriber with unknown scope {}",
+                    face,
+                    expr.scope
+                );
                 return;
             }
         }
     };
     let mut wtables = zwrite!(tables.tables);
     if let Some(mut res) = hat_code.undeclare_subscription(&mut wtables, face, id, res, node_id) {
+        log::debug!("{} Undeclare subscriber {} ({})", face, id, res.expr());
         disable_matches_data_routes(&mut wtables, &mut res);
         drop(wtables);
 
@@ -139,7 +161,7 @@ pub(crate) fn undeclare_subscription(
         Resource::clean(&mut res);
         drop(wtables);
     } else {
-        log::error!("Undeclare unknown subscription {}:{}", face, id);
+        log::error!("{} Undeclare unknown subscriber {}", face, id);
     }
 }
 
@@ -447,7 +469,8 @@ pub fn full_reentrant_route_data(
     match tables.get_mapping(face, &expr.scope, expr.mapping).cloned() {
         Some(prefix) => {
             log::trace!(
-                "Route data for res {}{}",
+                "{} Route data for res {}{}",
+                face,
                 prefix.expr(),
                 expr.suffix.as_ref()
             );
@@ -563,7 +586,7 @@ pub fn full_reentrant_route_data(
             }
         }
         None => {
-            log::error!("Route data with unknown scope {}!", expr.scope);
+            log::error!("{} Route data with unknown scope {}!", face, expr.scope);
         }
     }
 }
@@ -604,14 +627,16 @@ pub fn pull_data(tables_ref: &RwLock<Tables>, face: &Arc<FaceState>, expr: WireE
                         }
                         None => {
                             log::error!(
-                                "Pull data for unknown subscription {} (no info)!",
+                                "{} Pull data for unknown subscriber {} (no info)!",
+                                face,
                                 prefix.expr() + expr.suffix.as_ref()
                             );
                         }
                     },
                     None => {
                         log::error!(
-                            "Pull data for unknown subscription {} (no context)!",
+                            "{} Pull data for unknown subscriber {} (no context)!",
+                            face,
                             prefix.expr() + expr.suffix.as_ref()
                         );
                     }
@@ -619,13 +644,14 @@ pub fn pull_data(tables_ref: &RwLock<Tables>, face: &Arc<FaceState>, expr: WireE
             }
             None => {
                 log::error!(
-                    "Pull data for unknown subscription {} (no resource)!",
+                    "{} Pull data for unknown subscriber {} (no resource)!",
+                    face,
                     prefix.expr() + expr.suffix.as_ref()
                 );
             }
         },
         None => {
-            log::error!("Pull data with unknown scope {}!", expr.scope);
+            log::error!("{} Pull data with unknown scope {}!", face, expr.scope);
         }
     };
 }

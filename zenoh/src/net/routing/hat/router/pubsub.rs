@@ -55,8 +55,6 @@ fn send_sourced_subscription_to_net_childs(
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let key_expr = Resource::decl_key(res, &mut someface);
 
-                        log::debug!("Send subscription {} on {}", res.expr(), someface);
-
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
                                 ext_qos: ext::QoSType::declare_default(),
@@ -191,11 +189,6 @@ fn register_router_subscription(
     if !res_hat!(res).router_subs.contains(&router) {
         // Register router subscription
         {
-            log::debug!(
-                "Register router subscription {} (router: {})",
-                res.expr(),
-                router
-            );
             res_hat_mut!(res).router_subs.insert(router);
             hat_mut!(tables).router_subs.insert(res.clone());
         }
@@ -232,7 +225,6 @@ fn register_peer_subscription(
     if !res_hat!(res).peer_subs.contains(&peer) {
         // Register peer subscription
         {
-            log::debug!("Register peer subscription {} (peer: {})", res.expr(), peer);
             res_hat_mut!(res).peer_subs.insert(peer);
             hat_mut!(tables).peer_subs.insert(res.clone());
         }
@@ -266,7 +258,6 @@ fn register_client_subscription(
     // Register subscription
     {
         let res = get_mut_unchecked(res);
-        log::debug!("Register subscription {} for {}", res.expr(), face);
         match res.session_ctxs.get_mut(&face.id) {
             Some(ctx) => match &ctx.subs {
                 Some(info) => {
@@ -357,8 +348,6 @@ fn send_forget_sourced_subscription_to_net_childs(
                 Some(mut someface) => {
                     if src_face.is_none() || someface.id != src_face.unwrap().id {
                         let wire_expr = Resource::decl_key(res, &mut someface);
-
-                        log::debug!("Send forget subscription {} on {}", res.expr(), someface);
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
@@ -478,11 +467,6 @@ fn propagate_forget_sourced_subscription(
 }
 
 fn unregister_router_subscription(tables: &mut Tables, res: &mut Arc<Resource>, router: &ZenohId) {
-    log::debug!(
-        "Unregister router subscription {} (router: {})",
-        res.expr(),
-        router
-    );
     res_hat_mut!(res).router_subs.retain(|sub| sub != router);
 
     if res_hat!(res).router_subs.is_empty() {
@@ -521,11 +505,6 @@ fn forget_router_subscription(
 }
 
 fn unregister_peer_subscription(tables: &mut Tables, res: &mut Arc<Resource>, peer: &ZenohId) {
-    log::debug!(
-        "Unregister peer subscription {} (peer: {})",
-        res.expr(),
-        peer
-    );
     res_hat_mut!(res).peer_subs.retain(|sub| sub != peer);
 
     if res_hat!(res).peer_subs.is_empty() {
@@ -565,10 +544,8 @@ fn forget_peer_subscription(
 pub(super) fn undeclare_client_subscription(
     tables: &mut Tables,
     face: &mut Arc<FaceState>,
-    id: SubscriberId,
     res: &mut Arc<Resource>,
 ) {
-    log::debug!("Unregister client subscription {} for {}", id, face);
     if !face_hat_mut!(face).remote_subs.values().any(|s| *s == *res) {
         if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
             get_mut_unchecked(ctx).subs = None;
@@ -610,7 +587,7 @@ fn forget_client_subscription(
     id: SubscriberId,
 ) -> Option<Arc<Resource>> {
     if let Some(mut res) = face_hat_mut!(face).remote_subs.remove(&id) {
-        undeclare_client_subscription(tables, face, id, &mut res);
+        undeclare_client_subscription(tables, face, &mut res);
         Some(res)
     } else {
         None

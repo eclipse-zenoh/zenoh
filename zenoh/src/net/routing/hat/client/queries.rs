@@ -120,7 +120,6 @@ fn register_client_queryable(
     // Register queryable
     {
         let res = get_mut_unchecked(res);
-        log::debug!("Register queryable {} (face: {})", res.expr(), face,);
         get_mut_unchecked(res.session_ctxs.entry(face.id).or_insert_with(|| {
             Arc::new(SessionContext {
                 face: face.clone(),
@@ -187,7 +186,6 @@ pub(super) fn undeclare_client_queryable(
     face: &mut Arc<FaceState>,
     res: &mut Arc<Resource>,
 ) {
-    log::debug!("Unregister client queryable {} for {}", res.expr(), face);
     if let Some(ctx) = get_mut_unchecked(res).session_ctxs.get_mut(&face.id) {
         get_mut_unchecked(ctx).qabl = None;
         if ctx.qabl.is_none() {

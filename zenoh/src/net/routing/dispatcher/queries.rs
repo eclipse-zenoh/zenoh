@@ -48,13 +48,18 @@ pub(crate) fn declare_queryable(
     qabl_info: &QueryableInfo,
     node_id: NodeId,
 ) {
-    log::debug!("Register queryable {}", face);
     let rtables = zread!(tables.tables);
     match rtables
         .get_mapping(face, &expr.scope, expr.mapping)
         .cloned()
     {
         Some(mut prefix) => {
+            log::debug!(
+                "{} Declare queryable ({}{})",
+                face,
+                prefix.expr(),
+                expr.suffix
+            );
             let res = Resource::get_resource(&prefix, &expr.suffix);
             let (mut res, mut wtables) =
                 if res.as_ref().map(|r| r.context.is_some()).unwrap_or(false) {
@@ -93,7 +98,11 @@ pub(crate) fn declare_queryable(
             }
             drop(wtables);
         }
-        None => log::error!("Declare queryable for unknown scope {}!", expr.scope),
+        None => log::error!(
+            "{} Declare queryable for unknown scope {}!",
+            face,
+            expr.scope
+        ),
     }
 }
 
@@ -108,6 +117,7 @@ pub(crate) fn undeclare_queryable(
     match rtables.get_mapping(face, &expr.scope, expr.mapping) {
         Some(prefix) => match Resource::get_resource(prefix, expr.suffix.as_ref()) {
             Some(mut res) => {
+                log::debug!("{} Undeclare queryable ({})", face, res.expr());
                 drop(rtables);
                 let mut wtables = zwrite!(tables.tables);
 
@@ -129,9 +139,18 @@ pub(crate) fn undeclare_queryable(
                 Resource::clean(&mut res);
                 drop(wtables);
             }
-            None => log::error!("Undeclare unknown queryable!"),
+            None => log::error!(
+                "{} Undeclare unknown queryable ({}{})!",
+                face,
+                prefix.expr(),
+                expr.suffix
+            ),
         },
-        None => log::error!("Undeclare queryable with unknown scope!"),
+        None => log::error!(
+            "{} Undeclare queryable with unknown scope {}!",
+            face,
+            expr.scope
+        ),
     }
 }
 
@@ -680,8 +699,9 @@ pub fn route_query(
         }
         None => {
             log::error!(
-                "Route query with unknown scope {}! Send final reply.",
-                expr.scope
+                "{} Route query with unknown scope {}! Send final reply.",
+                face,
+                expr.scope,
             );
             drop(rtables);
             face.primitives

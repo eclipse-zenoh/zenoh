@@ -130,7 +130,6 @@ impl HatTables {
     }
 
     fn schedule_compute_trees(&mut self, tables_ref: Arc<TablesLock>) {
-        log::trace!("Schedule computations");
         if self.peers_trees_task.is_none() {
             let task = Some(async_std::task::spawn(async move {
                 async_std::task::sleep(std::time::Duration::from_millis(
@@ -146,7 +145,6 @@ impl HatTables {
                 pubsub::pubsub_tree_change(&mut tables, &new_childs);
                 queries::queries_tree_change(&mut tables, &new_childs);
 
-                log::trace!("Computations completed");
                 hat_mut!(tables).peers_trees_task = None;
             }));
             self.peers_trees_task = task;
@@ -252,7 +250,7 @@ impl HatBaseTrait for HatCode {
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
-        for (id, mut res) in face
+        for (_id, mut res) in face
             .hat
             .downcast_mut::<HatFace>()
             .unwrap()
@@ -260,7 +258,7 @@ impl HatBaseTrait for HatCode {
             .drain()
         {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_subscription(&mut wtables, &mut face_clone, id, &mut res);
+            undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {

@@ -177,7 +177,7 @@ impl HatBaseTrait for HatCode {
         face.local_mappings.clear();
 
         let mut subs_matches = vec![];
-        for (id, mut res) in face
+        for (_id, mut res) in face
             .hat
             .downcast_mut::<HatFace>()
             .unwrap()
@@ -185,7 +185,7 @@ impl HatBaseTrait for HatCode {
             .drain()
         {
             get_mut_unchecked(&mut res).session_ctxs.remove(&face.id);
-            undeclare_client_subscription(&mut wtables, &mut face_clone, id, &mut res);
+            undeclare_client_subscription(&mut wtables, &mut face_clone, &mut res);
 
             if res.context.is_some() {
                 for match_ in &res.context().matches {
