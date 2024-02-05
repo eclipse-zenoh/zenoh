@@ -20,7 +20,7 @@
 
 use crate::net::routing::interceptor::*;
 use std::sync::{Arc, Mutex};
-use zenoh_config::DownsamplerConf;
+use zenoh_config::DownsamplingItemConf;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 
 const RATELIMIT_STRATEGY: &str = "ratelimit";
@@ -67,7 +67,7 @@ impl InterceptorTrait for EgressMsgDownsamplerRatelimit {
 }
 
 impl EgressMsgDownsamplerRatelimit {
-    pub fn new(conf: DownsamplerConf) -> Self {
+    pub fn new(conf: DownsamplingItemConf) -> Self {
         if let Some(threshold_ms) = conf.threshold_ms {
             let threshold = std::time::Duration::from_millis(threshold_ms);
             Self {
@@ -86,11 +86,11 @@ impl EgressMsgDownsamplerRatelimit {
 }
 
 pub struct DownsamplerInterceptor {
-    conf: DownsamplerConf,
+    conf: DownsamplingItemConf,
 }
 
 impl DownsamplerInterceptor {
-    pub fn new(conf: DownsamplerConf) -> Self {
+    pub fn new(conf: DownsamplingItemConf) -> Self {
         log::debug!("DownsamplerInterceptor enabled: {:?}", conf);
         Self { conf }
     }

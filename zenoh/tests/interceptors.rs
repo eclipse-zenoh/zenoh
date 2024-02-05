@@ -74,7 +74,7 @@ fn downsampling_by_keyexpr() {
     let mut config = Config::default();
     config
         .insert_json5(
-            "downsampling/downsamples",
+            "downsampling/items",
             r#"
               [
                 {
@@ -108,7 +108,6 @@ fn downsampling_by_keyexpr() {
     let interval = std::time::Duration::from_millis(1);
     let messages_count = 1000;
     for i in 0..messages_count {
-        println!("message {}", i);
         publisher_r100.put(format!("message {}", i)).res().unwrap();
         publisher_r50.put(format!("message {}", i)).res().unwrap();
         publisher_all.put(format!("message {}", i)).res().unwrap();
@@ -167,7 +166,7 @@ fn downsampling_by_interface() {
         .unwrap();
     config_pub
         .insert_json5(
-            "downsampling/downsamples",
+            "downsampling/items",
             r#"
               [
                 {
@@ -199,7 +198,6 @@ fn downsampling_by_interface() {
     let interval = std::time::Duration::from_millis(1);
     let messages_count = 1000;
     for i in 0..messages_count {
-        println!("message {}", i);
         publisher_r100.put(format!("message {}", i)).res().unwrap();
         publisher_all.put(format!("message {}", i)).res().unwrap();
 

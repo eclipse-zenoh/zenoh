@@ -211,3 +211,14 @@ impl Default for SharedMemoryConf {
         Self { enabled: false }
     }
 }
+
+impl Default for DownsamplingItemConf {
+    fn default() -> Self {
+        Self {
+            keyexprs: None,
+            interfaces: None,
+            strategy: Some("ratelimit".to_string()),
+            threshold_ms: None,
+        }
+    }
+}

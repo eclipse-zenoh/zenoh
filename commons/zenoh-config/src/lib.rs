@@ -71,13 +71,12 @@ impl Zeroize for SecretString {
 pub type SecretValue = Secret<SecretString>;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
-pub struct DownsamplerConf {
+pub struct DownsamplingItemConf {
     /// A list of key-expressions to which the downsampling will be applied.
     pub keyexprs: Option<Vec<OwnedKeyExpr>>,
     /// A list of interfaces to which the downsampling will be applied.
     pub interfaces: Option<Vec<String>>,
     /// Downsampling strategy (default: ratelimit).
-    // TODO(sashacmc): how specify default value and generate DEFAULT_CONFIG?
     pub strategy: Option<String>,
     /// Minimim timeout between two messages for ratelimit starategy
     pub threshold_ms: Option<u64>,
@@ -421,7 +420,7 @@ validated_struct::validator! {
         /// Configuration of the downsampling.
         pub downsampling: #[derive(Default)]
         DownsamplingConf {
-            downsamples: Vec<DownsamplerConf>,
+            items: Vec<DownsamplingItemConf>,
         },
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.

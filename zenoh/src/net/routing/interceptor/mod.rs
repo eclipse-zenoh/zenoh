@@ -51,7 +51,7 @@ pub(crate) type InterceptorFactory = Box<dyn InterceptorFactoryTrait + Send + Sy
 pub(crate) fn interceptor_factories(config: &Config) -> Vec<InterceptorFactory> {
     let mut res: Vec<InterceptorFactory> = vec![];
 
-    for ds in config.downsampling().downsamples() {
+    for ds in config.downsampling().items() {
         res.push(Box::new(DownsamplerInterceptor::new(ds.clone())))
     }
     res.push(Box::new(LoggerInterceptor {}));
