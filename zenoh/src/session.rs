@@ -278,6 +278,8 @@ impl Resource {
     }
 }
 
+
+// ignore_tagging
 #[derive(Clone)]
 pub enum SessionRef<'a> {
     Borrow(&'a Session),
@@ -305,6 +307,7 @@ impl fmt::Debug for SessionRef<'_> {
 }
 
 /// A trait implemented by types that can be undeclared.
+// ignore_tagging
 pub trait Undeclarable<S, O, T = ZResult<()>>
 where
     O: Resolve<T> + Send,
@@ -324,6 +327,7 @@ where
 
 /// A zenoh session.
 ///
+// tags{session}
 pub struct Session {
     pub(crate) runtime: Runtime,
     pub(crate) state: Arc<RwLock<SessionState>>,
@@ -2578,6 +2582,7 @@ impl fmt::Debug for Session {
 /// }).await;
 /// # })
 /// ```
+// tags{session}
 pub trait SessionDeclarations {
     /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
     ///
@@ -2602,6 +2607,7 @@ pub trait SessionDeclarations {
     /// }).await;
     /// # })
     /// ```
+    // tags{session.declare_subscriber}
     fn declare_subscriber<'a, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
@@ -2637,6 +2643,7 @@ pub trait SessionDeclarations {
     /// }).await;
     /// # })
     /// ```
+    // tags{session.declare_queryable}
     fn declare_queryable<'a, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
@@ -2664,6 +2671,7 @@ pub trait SessionDeclarations {
     /// publisher.put("value").res().await.unwrap();
     /// # })
     /// ```
+    // tags{session.declare_publisher}
     fn declare_publisher<'a, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
@@ -2688,6 +2696,7 @@ pub trait SessionDeclarations {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{liveliness.create}
     #[zenoh_macros::unstable]
     fn liveliness(&self) -> Liveliness<'static>;
 }

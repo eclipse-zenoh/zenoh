@@ -61,6 +61,7 @@ use std::{
 ///   this parameter must be readable by the [Zenoh Time DSL](zenoh_util::time_range::TimeRange) for the value to be considered valid.
 /// - **`[unstable]`** `_anyke`: used in queries to express interest in replies coming from any key expression. By default, only replies
 ///   whose key expression match query's key expression are accepted. `_anyke` disables the query-reply key expression matching check.
+// tags{selector}
 #[non_exhaustive]
 #[derive(Clone, PartialEq, Eq)]
 pub struct Selector<'a> {
@@ -70,13 +71,16 @@ pub struct Selector<'a> {
     pub(crate) parameters: Cow<'a, str>,
 }
 
+// tags{selector.time_range_key}
 pub const TIME_RANGE_KEY: &str = "_time";
 impl<'a> Selector<'a> {
     /// Gets the parameters as a raw string.
+    // tags{selector.parameters.get}
     pub fn parameters(&self) -> &str {
         &self.parameters
     }
     /// Extracts the selector parameters into a hashmap, returning an error in case of duplicated parameter names.
+    // tags{selector.parameters.get}
     pub fn parameters_map<K, V>(&'a self) -> ZResult<HashMap<K, V>>
     where
         K: AsRef<str> + std::hash::Hash + std::cmp::Eq,
@@ -86,10 +90,12 @@ impl<'a> Selector<'a> {
         self.decode_into_map()
     }
     /// Extracts the selector parameters' name-value pairs into a hashmap, returning an error in case of duplicated parameters.
+    // tags{selector.parameters.get}
     pub fn parameters_cowmap(&'a self) -> ZResult<HashMap<Cow<'a, str>, Cow<'a, str>>> {
         self.decode_into_map()
     }
     /// Extracts the selector parameters' name-value pairs into a hashmap, returning an error in case of duplicated parameters.
+    // tags{selector.parameters.get}
     pub fn parameters_stringmap(&'a self) -> ZResult<HashMap<String, String>> {
         self.decode_into_map()
     }
@@ -97,6 +103,7 @@ impl<'a> Selector<'a> {
     ///
     /// Note that calling this function may cause an allocation and copy if the selector's parameters wasn't
     /// already owned by `self`. `self` owns its parameters as soon as this function returns.
+    // tags{selector.parameters.set}
     pub fn parameters_mut(&mut self) -> &mut String {
         if let Cow::Borrowed(s) = self.parameters {
             self.parameters = Cow::Owned(s.to_owned())
@@ -107,15 +114,18 @@ impl<'a> Selector<'a> {
             unsafe { std::hint::unreachable_unchecked() } // this is safe because we just replaced the borrowed variant
         }
     }
+    // tags{selector.parameters.set}
     pub fn set_parameters(&mut self, selector: impl Into<Cow<'a, str>>) {
         self.parameters = selector.into();
     }
+    // ignore_tagging
     pub fn borrowing_clone(&'a self) -> Self {
         Selector {
             key_expr: self.key_expr.clone(),
             parameters: self.parameters.as_ref().into(),
         }
     }
+    // ignore_tagging
     pub fn into_owned(self) -> Selector<'static> {
         Selector {
             key_expr: self.key_expr.into_owned(),
@@ -124,22 +134,26 @@ impl<'a> Selector<'a> {
     }
 
     #[deprecated = "If you have ownership of this selector, prefer `Selector::into_owned`"]
+    // ignore_tagging
     pub fn to_owned(&self) -> Selector<'static> {
         self.borrowing_clone().into_owned()
     }
 
     /// Returns this selectors components as a tuple.
+    // tags{selector.parameters.get}
     pub fn split(self) -> (KeyExpr<'a>, Cow<'a, str>) {
         (self.key_expr, self.parameters)
     }
 
     /// Sets the `parameters` part of this `Selector`.
     #[inline(always)]
+    // tags{selector.parameters.set}
     pub fn with_parameters(mut self, parameters: &'a str) -> Self {
         self.parameters = parameters.into();
         self
     }
 
+    // tags{selector.parameters.set}
     pub fn extend<'b, I, K, V>(&'b mut self, parameters: I)
     where
         I: IntoIterator,
@@ -154,6 +168,7 @@ impl<'a> Selector<'a> {
     }
 
     /// Sets the time range targeted by the selector.
+    // tags{selector.parameters.timerange.set}
     pub fn with_time_range(&mut self, time_range: TimeRange) {
         self.remove_time_range();
         let selector = self.parameters_mut();
@@ -164,6 +179,7 @@ impl<'a> Selector<'a> {
         write!(selector, "{TIME_RANGE_KEY}={time_range}").unwrap(); // This unwrap is safe because `String: Write` should be infallibe.
     }
 
+    // tags{selector.parameters.timerange.remove}
     pub fn remove_time_range(&mut self) {
         let selector = self.parameters_mut();
 
@@ -281,10 +297,13 @@ fn selector_accessors() {
         assert_eq!(selector.to_string(), without_any + "&other");
     }
 }
+// tags{selector.parameter}
 pub trait Parameter: Sized {
     type Name: AsRef<str> + Sized;
     type Value: AsRef<str> + Sized;
+    // tags{selector.parameter.name.get}
     fn name(&self) -> &Self::Name;
+    // tags{selector.parameter.value.get}
     fn value(&self) -> &Self::Value;
     fn split(self) -> (Self::Name, Self::Value);
     fn extract_name(self) -> Self::Name {
@@ -321,6 +340,7 @@ type ExtractedValue<'a, VS: Parameters<'a>> = <<VS::Decoder as Iterator>::Item a
 /// A trait to help decode zenoh selector parameters.
 ///
 /// Most methods will return an Error if duplicates of a same parameter are found, to avoid HTTP Parameter Pollution like vulnerabilities.
+// tags{selector.parameters}
 pub trait Parameters<'a> {
     type Decoder: Iterator + 'a;
     /// Returns this selector's parameters as an iterator.
@@ -329,6 +349,7 @@ pub trait Parameters<'a> {
         <Self::Decoder as Iterator>::Item: Parameter;
 
     /// Extracts all parameters into a HashMap, returning an error if duplicate parameters arrise.
+    // tags{selector.parameters.get}
     fn decode_into_map<N, V>(&'a self) -> ZResult<HashMap<N, V>>
     where
         <Self::Decoder as Iterator>::Item: Parameter,
@@ -353,6 +374,7 @@ pub trait Parameters<'a> {
     /// Extracts the requested parameters from the selector parameters.
     ///
     /// The default implementation is done in a single pass through the selector parameters, returning an error if any of the requested parameters are present more than once.
+    // tags{selector.parameters.get}
     fn get_parameters<const N: usize>(
         &'a self,
         names: [&str; N],
@@ -383,6 +405,7 @@ pub trait Parameters<'a> {
     /// Extracts the requested arguments from the selector parameters as booleans, following the Zenoh convention that if a parameter name is present and has a value different from "false", its value is truthy.
     ///
     /// The default implementation is done in a single pass through the selector parameters, returning an error if some of the requested parameters are present more than once.
+    // tags{selector.parameters.get.bools}
     fn get_bools<const N: usize>(&'a self, names: [&str; N]) -> ZResult<[bool; N]>
     where
         <Self::Decoder as Iterator>::Item: Parameter,
@@ -396,6 +419,7 @@ pub trait Parameters<'a> {
     /// Extracts the standardized `_time` argument from the selector parameters.
     ///
     /// The default implementation still causes a complete pass through the selector parameters to ensure that there are no duplicates of the `_time` key.
+    // tags{selector.parameters.timerange.get}
     fn time_range(&'a self) -> ZResult<Option<TimeRange>>
     where
         <Self::Decoder as Iterator>::Item: Parameter,
@@ -406,12 +430,14 @@ pub trait Parameters<'a> {
         })
     }
 }
+// tags{selector.parameters.get}
 impl<'a> Parameters<'a> for Selector<'a> {
     type Decoder = <str as Parameters<'a>>::Decoder;
     fn decode(&'a self) -> Self::Decoder {
         self.parameters().decode()
     }
 }
+// tags{selector.parameters.create.from_str}
 impl<'a> Parameters<'a> for str {
     type Decoder = form_urlencoded::Parse<'a>;
     fn decode(&'a self) -> Self::Decoder {
@@ -419,6 +445,7 @@ impl<'a> Parameters<'a> for str {
     }
 }
 
+// tags{selector.parameters.create.from_hashmap}
 impl<'a, K: Borrow<str> + Hash + Eq + 'a, V: Borrow<str> + 'a> Parameters<'a> for HashMap<K, V> {
     type Decoder = std::collections::hash_map::Iter<'a, K, V>;
     fn decode(&'a self) -> Self::Decoder {
@@ -458,6 +485,7 @@ impl<'a> From<&Selector<'a>> for Selector<'a> {
     }
 }
 
+// tags{selector.create.from_str}
 impl TryFrom<String> for Selector<'_> {
     type Error = zenoh_result::Error;
     fn try_from(mut s: String) -> Result<Self, Self::Error> {
@@ -472,6 +500,7 @@ impl TryFrom<String> for Selector<'_> {
     }
 }
 
+// tags{selector.create.from_str}
 impl<'a> TryFrom<&'a str> for Selector<'a> {
     type Error = zenoh_result::Error;
     fn try_from(s: &'a str) -> Result<Self, Self::Error> {
@@ -484,6 +513,7 @@ impl<'a> TryFrom<&'a str> for Selector<'a> {
         }
     }
 }
+// tags{selector.create.from_str}
 impl FromStr for Selector<'static> {
     type Err = zenoh_result::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -491,6 +521,7 @@ impl FromStr for Selector<'static> {
     }
 }
 
+// tags{selector.create.from_str}
 impl<'a> TryFrom<&'a String> for Selector<'a> {
     type Error = zenoh_result::Error;
     fn try_from(s: &'a String) -> Result<Self, Self::Error> {
@@ -498,6 +529,7 @@ impl<'a> TryFrom<&'a String> for Selector<'a> {
     }
 }
 
+// tags{selector.create.from_query}
 impl<'a> From<&'a Query> for Selector<'a> {
     fn from(q: &'a Query) -> Self {
         Selector {
@@ -507,6 +539,7 @@ impl<'a> From<&'a Query> for Selector<'a> {
     }
 }
 
+// tags{selector.create.from_keyexpr}
 impl<'a> From<&KeyExpr<'a>> for Selector<'a> {
     fn from(key_selector: &KeyExpr<'a>) -> Self {
         Self {
@@ -516,6 +549,7 @@ impl<'a> From<&KeyExpr<'a>> for Selector<'a> {
     }
 }
 
+// tags{selector.create.from_keyexpr}
 impl<'a> From<&'a keyexpr> for Selector<'a> {
     fn from(key_selector: &'a keyexpr) -> Self {
         Self {
@@ -525,6 +559,7 @@ impl<'a> From<&'a keyexpr> for Selector<'a> {
     }
 }
 
+// tags{selector.create.from_keyexpr}
 impl<'a> From<&'a OwnedKeyExpr> for Selector<'a> {
     fn from(key_selector: &'a OwnedKeyExpr) -> Self {
         Self {
@@ -534,6 +569,7 @@ impl<'a> From<&'a OwnedKeyExpr> for Selector<'a> {
     }
 }
 
+// tags{selector.create.from_keyexpr}
 impl From<OwnedKeyExpr> for Selector<'static> {
     fn from(key_selector: OwnedKeyExpr) -> Self {
         Self {
@@ -543,6 +579,7 @@ impl From<OwnedKeyExpr> for Selector<'static> {
     }
 }
 
+// tags{selector.create.from_keyexpr}
 impl<'a> From<KeyExpr<'a>> for Selector<'a> {
     fn from(key_selector: KeyExpr<'a>) -> Self {
         Self {

@@ -29,6 +29,7 @@ use crate::prelude::{Encoding, KnownEncoding, Sample, SplitBuffer};
 use zenoh_shm::SharedMemoryBuf;
 
 /// A zenoh Value.
+// tags{value}
 #[non_exhaustive]
 #[derive(Clone)]
 pub struct Value {
@@ -40,6 +41,7 @@ pub struct Value {
 
 impl Value {
     /// Creates a new zenoh Value.
+    // tags{value.create.from_buffer}
     pub fn new(payload: ZBuf) -> Self {
         Value {
             payload,
@@ -48,6 +50,7 @@ impl Value {
     }
 
     /// Creates an empty Value.
+    // tags{value.create.empty}
     pub fn empty() -> Self {
         Value {
             payload: ZBuf::empty(),
@@ -56,6 +59,7 @@ impl Value {
     }
 
     /// Sets the encoding of this zenoh Value.
+    // tags{value.encoding.set}
     #[inline(always)]
     pub fn encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
