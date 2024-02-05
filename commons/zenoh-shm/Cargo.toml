@@ -44,6 +44,7 @@ num-traits = { workspace = true }
 num_cpus = { workspace = true, optional = true }
 thread-priority = "0.15.1"
 lockfree = "0.5.1"
+once_cell = { workspace = true }
 
 [dev-dependencies]
 zenoh-shm = { workspace = true, features = ["test"] }

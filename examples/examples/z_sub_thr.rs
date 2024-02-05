@@ -12,7 +12,6 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use clap::Parser;
-use log::info;
 use std::io::{stdin, Read};
 use std::time::Instant;
 use zenoh::config::Config;
@@ -54,7 +53,7 @@ impl Stats {
     fn print_round(&self) {
         let elapsed = self.round_start.elapsed().as_secs_f64();
         let throughtput = (self.round_size as f64) / elapsed;
-        info!("{throughtput} msg/s");
+        println!("{throughtput} msg/s");
     }
 }
 impl Drop for Stats {
@@ -65,7 +64,7 @@ impl Drop for Stats {
         let elapsed = global_start.elapsed().as_secs_f64();
         let total = self.round_size * self.finished_rounds + self.round_count;
         let throughtput = total as f64 / elapsed;
-        info!("Received {total} messages over {elapsed:.2}s: {throughtput}msg/s");
+        println!("Received {total} messages over {elapsed:.2}s: {throughtput}msg/s");
     }
 }
 

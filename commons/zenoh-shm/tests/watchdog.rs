@@ -124,7 +124,7 @@ fn watchdog_validated_fn() -> impl Fn(usize, usize) -> ZResult<()> + Clone + Sen
 
         // check that the watchdog becomes invalid once we stop it's confirmation
         drop(confirmed);
-        std::thread::sleep(VALIDATION_PERIOD * 3 + VALIDATION_PERIOD / 2);
+        std::thread::sleep(VALIDATION_PERIOD * 3 + CONFIRMATION_PERIOD);
         assert!(!valid.load(std::sync::atomic::Ordering::SeqCst));
 
         Ok(())
@@ -162,7 +162,7 @@ fn watchdog_validated_invalid_without_confirmator_fn(
         assert!(allocated.descriptor.test_validate() == 0);
 
         // check that the watchdog becomes invalid because we do not confirm it
-        std::thread::sleep(VALIDATION_PERIOD * 2 + VALIDATION_PERIOD / 2);
+        std::thread::sleep(VALIDATION_PERIOD * 2 + CONFIRMATION_PERIOD);
         assert!(!valid.load(std::sync::atomic::Ordering::SeqCst));
         Ok(())
     }
@@ -222,7 +222,7 @@ fn watchdog_validated_additional_confirmation_fn(
         // check that the watchdog becomes invalid once we stop it's regular confirmation
         drop(confirmed);
         allow_invalid.store(true, std::sync::atomic::Ordering::SeqCst);
-        std::thread::sleep(VALIDATION_PERIOD * 2 + VALIDATION_PERIOD / 2);
+        std::thread::sleep(VALIDATION_PERIOD * 2 + CONFIRMATION_PERIOD);
         // check that invalidation event happened!
         assert!(!allow_invalid.load(std::sync::atomic::Ordering::SeqCst));
         Ok(())
@@ -273,7 +273,7 @@ fn watchdog_validated_overloaded_system_fn(
         // check that the watchdog becomes invalid once we stop it's regular confirmation
         drop(confirmed);
         allow_invalid.store(true, std::sync::atomic::Ordering::SeqCst);
-        std::thread::sleep(VALIDATION_PERIOD * 2 + VALIDATION_PERIOD / 2);
+        std::thread::sleep(VALIDATION_PERIOD * 2 + CONFIRMATION_PERIOD);
         // check that invalidation event happened!
         assert!(!allow_invalid.load(std::sync::atomic::Ordering::SeqCst));
         Ok(())

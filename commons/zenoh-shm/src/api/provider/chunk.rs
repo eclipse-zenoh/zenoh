@@ -21,11 +21,11 @@ use crate::api::common::types::{ChunkID, SegmentID};
 pub struct ChunkDescriptor {
     pub segment: SegmentID,
     pub chunk: ChunkID,
-    pub len: u32,
+    pub len: usize,
 }
 
 impl ChunkDescriptor {
-    pub fn new(segment: SegmentID, chunk: ChunkID, len: u32) -> Self {
+    pub fn new(segment: SegmentID, chunk: ChunkID, len: usize) -> Self {
         Self {
             segment,
             chunk,

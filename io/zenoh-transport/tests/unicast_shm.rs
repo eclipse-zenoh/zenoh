@@ -167,10 +167,11 @@ mod tests {
         let peer_net01 = ZenohId::try_from([3]).unwrap();
 
         let mut factory = SharedMemoryFactory::builder()
-            .provider(
-                POSIX_PROTOCOL_ID,
-                Box::new(PosixSharedMemoryProviderBackend::new(2 * MSG_SIZE as u32).unwrap()),
-            )
+            .provider(POSIX_PROTOCOL_ID, || {
+                Ok(Box::new(PosixSharedMemoryProviderBackend::new(
+                    2 * MSG_SIZE,
+                )?))
+            })
             .unwrap()
             .build();
         let shm01 = factory.provider(POSIX_PROTOCOL_ID).unwrap();

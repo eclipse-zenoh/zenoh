@@ -21,19 +21,16 @@ use crate::api::{client::shared_memory_segment::SharedMemorySegment, common::typ
 
 use crate::posix_shm::array::ArrayInSHM;
 
-const POSIX_SHM_SEGMENT_PREFIX: &str = "posix_shm_provider";
+const POSIX_SHM_SEGMENT_PREFIX: &str = "posix_shm_provider_segment";
 
 #[derive(Debug)]
 pub(crate) struct PosixSharedMemorySegment {
     pub(crate) segment: ArrayInSHM<SegmentID, u8, ChunkID>,
 }
 
-unsafe impl Send for PosixSharedMemorySegment {}
-unsafe impl Sync for PosixSharedMemorySegment {}
-
 impl PosixSharedMemorySegment {
-    pub(crate) fn create(alloc_size: u32) -> ZResult<Self> {
-        let segment = ArrayInSHM::create(alloc_size as usize, POSIX_SHM_SEGMENT_PREFIX)?;
+    pub(crate) fn create(alloc_size: usize) -> ZResult<Self> {
+        let segment = ArrayInSHM::create(alloc_size, POSIX_SHM_SEGMENT_PREFIX)?;
         Ok(Self { segment })
     }
 

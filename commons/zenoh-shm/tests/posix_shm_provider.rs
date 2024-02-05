@@ -21,8 +21,8 @@ use zenoh_shm::api::{
     provider::shared_memory_provider_backend::SharedMemoryProviderBackend,
 };
 
-static BUFFER_NUM: u32 = 100;
-static BUFFER_SIZE: u32 = 1024;
+static BUFFER_NUM: usize = 100;
+static BUFFER_SIZE: usize = 1024;
 
 #[test]
 fn posix_shm_provider_create() {
@@ -65,16 +65,15 @@ fn posix_shm_provider_allocator() {
     let mut buffers = vec![];
     for _ in 0..BUFFER_NUM {
         let buf = backend
-            .alloc(BUFFER_SIZE as usize)
+            .alloc(BUFFER_SIZE)
             .expect("PosixSharedMemoryProviderBackend: error allocating buffer");
         buffers.push(buf);
     }
 
-    
     for _ in 0..BUFFER_NUM {
         // there is nothing to allocate at this point
         assert_eq!(backend.available(), 0);
-        assert!(backend.alloc(BUFFER_SIZE as usize).is_err());
+        assert!(backend.alloc(BUFFER_SIZE).is_err());
 
         // free buffer
         let to_free = buffers.pop().unwrap().descriptor;
@@ -82,7 +81,7 @@ fn posix_shm_provider_allocator() {
 
         // allocate new one
         let buf = backend
-            .alloc(BUFFER_SIZE as usize)
+            .alloc(BUFFER_SIZE)
             .expect("PosixSharedMemoryProviderBackend: error allocating buffer");
         buffers.push(buf);
     }
@@ -90,8 +89,8 @@ fn posix_shm_provider_allocator() {
     // free everything
     while let Some(buffer) = buffers.pop() {
         backend.free(&buffer.descriptor);
-    }    
+    }
 
     // confirm that allocator is free
-    assert_eq!(backend.available(), (BUFFER_NUM * BUFFER_SIZE) as usize);
+    assert_eq!(backend.available(), BUFFER_NUM * BUFFER_SIZE);
 }

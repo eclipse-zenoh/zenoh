@@ -164,5 +164,10 @@ name = "z_ping"
 path = "examples/z_ping.rs"
 
 [[example]]
+name = "z_ping_shm"
+path = "examples/z_ping_shm.rs"
+required-features = ["shared-memory"]
+
+[[example]]
 name = "z_pong"
 path = "examples/z_pong.rs"

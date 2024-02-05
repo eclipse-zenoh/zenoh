@@ -117,13 +117,11 @@ mod tests {
 
             // Create the SharedMemoryManager
             let to_alloc = size * MSG_COUNT / 10;
-            println!("[PS][02b] Allocating {to_alloc} bytes in SHM");
-
             let mut factory = SharedMemoryFactory::builder()
-                .provider(
-                    POSIX_PROTOCOL_ID,
-                    Box::new(PosixSharedMemoryProviderBackend::new(to_alloc as u32).unwrap()),
-                )
+                .provider(POSIX_PROTOCOL_ID, move || {
+                    println!("[PS][02b] Allocating {to_alloc} bytes in SHM");
+                    Ok(Box::new(PosixSharedMemoryProviderBackend::new(to_alloc)?))
+                })
                 .unwrap()
                 .build();
             let shm01 = factory.provider(POSIX_PROTOCOL_ID).unwrap();

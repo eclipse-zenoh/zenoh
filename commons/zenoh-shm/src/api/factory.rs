@@ -14,7 +14,8 @@
 
 use std::collections::HashMap;
 
-use zenoh_result::{bail, ZResult};
+use once_cell::unsync::Lazy;
+use zenoh_result::{bail, zerror, ZResult};
 
 use super::{
     common::types::ProtocolID,
@@ -24,24 +25,26 @@ use super::{
     },
 };
 
+type BackendFunc = dyn FnOnce() -> ZResult<Box<dyn SharedMemoryProviderBackend>>;
+
 // the builder for shared memory factory
 #[derive(Default)]
 pub struct SharedMemoryFactoryBuilder {
-    backends: HashMap<ProtocolID, Box<dyn SharedMemoryProviderBackend>>,
+    backends: HashMap<ProtocolID, Box<BackendFunc>>,
 }
 
 impl SharedMemoryFactoryBuilder {
     // Add a new SharedMemoryProvider
-    pub fn provider<Tprovider>(mut self, id: ProtocolID, backend: Box<Tprovider>) -> ZResult<Self>
+    pub fn provider<Tfunc>(mut self, id: ProtocolID, backend: Tfunc) -> ZResult<Self>
     where
-        Tprovider: SharedMemoryProviderBackend + 'static,
+        Tfunc: FnOnce() -> ZResult<Box<dyn SharedMemoryProviderBackend>> + 'static,
     {
         match self.backends.entry(id) {
             std::collections::hash_map::Entry::Occupied(_) => {
                 bail!("Provider backend already exists for id {id}!")
             }
             std::collections::hash_map::Entry::Vacant(vacant) => {
-                vacant.insert(backend);
+                vacant.insert(Box::new(backend));
                 Ok(self)
             }
         }
@@ -53,9 +56,11 @@ impl SharedMemoryFactoryBuilder {
     }
 }
 
+type LazyFunc = Box<dyn FnOnce() -> ZResult<SharedMemoryProvider>>;
+
 // the shared memory factory
 pub struct SharedMemoryFactory {
-    providers: HashMap<ProtocolID, SharedMemoryProvider>,
+    providers: HashMap<ProtocolID, Lazy<ZResult<SharedMemoryProvider>, LazyFunc>>,
 }
 impl SharedMemoryFactory {
     // Get the builder
@@ -64,15 +69,25 @@ impl SharedMemoryFactory {
     }
 
     // Get the provider instance by id
-    pub fn provider(&mut self, id: ProtocolID) -> Option<&mut SharedMemoryProvider> {
-        self.providers.get_mut(&id)
+    pub fn provider(&mut self, id: ProtocolID) -> ZResult<&mut SharedMemoryProvider> {
+        self.providers
+            .get_mut(&id)
+            .map(|val| val.as_mut().map_err(|e| zerror!("{e}")))
+            .unwrap_or_else(|| bail!("No provider for protocol {id}"))
+            .map_err(|e| e.into())
     }
 
-    fn new(mut backends: HashMap<ProtocolID, Box<dyn SharedMemoryProviderBackend>>) -> Self {
+    fn new(mut backends: HashMap<ProtocolID, Box<BackendFunc>>) -> Self {
         // construct providers from provider backends
         let providers = backends
             .drain()
-            .map(|(key, backend)| (key, SharedMemoryProvider::new(backend, key)))
+            .map(|(key, backend)| {
+                let v: Lazy<ZResult<SharedMemoryProvider>, LazyFunc> =
+                    Lazy::new(Box::new(move || {
+                        Ok(SharedMemoryProvider::new(backend()?, key))
+                    }));
+                (key, v)
+            })
             .collect();
 
         Self { providers }

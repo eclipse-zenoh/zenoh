@@ -46,9 +46,80 @@ impl GlobalDataSegmentID {
     }
 }
 
+pub struct SharedMemoryReaderBuilderBuilder;
+
+impl SharedMemoryReaderBuilderBuilder {
+    pub fn empty(self) -> SharedMemoryReaderBuilder {
+        let clients = HashMap::default();
+        SharedMemoryReaderBuilder::new(clients)
+    }
+
+    pub fn with_default_client_set(self) -> SharedMemoryReaderBuilder {
+        let clients = HashMap::from([(
+            POSIX_PROTOCOL_ID,
+            Box::new(PosixSharedMemoryClient {}) as Box<dyn SharedMemoryClient>,
+        )]);
+        SharedMemoryReaderBuilder::new(clients)
+    }
+}
+
+pub struct SharedMemoryReaderBuilder {
+    clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>,
+}
+
+impl SharedMemoryReaderBuilder {
+    fn new(clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>) -> Self {
+        Self { clients }
+    }
+
+    pub fn with_client<Tclient>(mut self, id: ProtocolID, client: Box<Tclient>) -> ZResult<Self>
+    where
+        Tclient: SharedMemoryClient + 'static,
+    {
+        match self.clients.entry(id) {
+            std::collections::hash_map::Entry::Occupied(occupied) => {
+                bail!("Client already exists for id {id}: {:?}!", occupied)
+            }
+            std::collections::hash_map::Entry::Vacant(vacant) => {
+                vacant.insert(client as Box<dyn SharedMemoryClient>);
+                Ok(self)
+            }
+        }
+    }
+
+    pub fn build(self) -> SharedMemoryReader {
+        SharedMemoryReader::new(self.clients)
+    }
+}
+
+#[derive(Debug)]
+struct ClientStorage<Inner>
+where
+    Inner: Sized
+{
+    clients: HashMap<ProtocolID, Inner>,
+}
+
+impl<Inner: Sized> ClientStorage<Inner> {
+    fn new(clients: HashMap<ProtocolID, Inner>) -> Self { Self { clients } }
+
+    fn get_clients(&self) -> &HashMap<ProtocolID, Inner> {
+        &self.clients
+    }
+}
+
+/// Safety: only immutable access to internal container is allowed,
+/// so we are Send if the contained type is Send
+unsafe impl<Inner: Send> Send for ClientStorage<Inner> {}
+
+/// Safety: only immutable access to internal container is allowed,
+/// so we are Sync if the contained type is Sync
+unsafe impl<Inner: Sync> Sync for ClientStorage<Inner> {}
+
+
 #[derive(Debug)]
 pub struct SharedMemoryReader {
-    clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>,
+    clients: ClientStorage<Box<dyn SharedMemoryClient>>,
     segments: RwLock<HashMap<GlobalDataSegmentID, Arc<dyn SharedMemorySegment>>>,
 }
 
@@ -62,30 +133,20 @@ impl PartialEq for SharedMemoryReader {
 
 impl Default for SharedMemoryReader {
     fn default() -> Self {
-        let clients = HashMap::from([(
-            POSIX_PROTOCOL_ID,
-            Box::new(PosixSharedMemoryClient {}) as Box<dyn SharedMemoryClient>,
-        )]);
-        Self {
-            clients,
-            segments: Default::default(),
-        }
+        Self::builder().with_default_client_set().build()
     }
 }
 
 impl SharedMemoryReader {
-    pub(crate) fn new(clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>) -> Self {
-        Self {
-            clients,
-            segments: RwLock::default(),
-        }
+    pub fn builder() -> SharedMemoryReaderBuilderBuilder {
+        SharedMemoryReaderBuilderBuilder
     }
 
     pub fn read_shmbuf(&self, info: &SharedMemoryBufInfo) -> ZResult<SharedMemoryBuf> {
         // Read does not increment the reference count as it is assumed
         // that the sender of this buffer has incremented it for us.
 
-        // attach to the watchdog before doing other stuff
+        // attach to the watchdog before doing other things
         let watchdog = Arc::new(GLOBAL_CONFIRMATOR.add(&info.watchdog_descriptor)?);
 
         let segment = self.ensure_segment(info)?;
@@ -120,6 +181,7 @@ impl SharedMemoryReader {
         // find appropriate client
         let client = self
             .clients
+            .get_clients()
             .get(&id.protocol)
             .ok_or_else(|| zerror!("Unsupported SHM protocol: {}", id.protocol))?;
 
@@ -136,6 +198,13 @@ impl SharedMemoryReader {
                 let new_segment = client.attach(info.data_descriptor.segment)?;
                 Ok(vacant.insert(new_segment).clone())
             }
+        }
+    }
+
+    fn new(clients: HashMap<ProtocolID, Box<dyn SharedMemoryClient>>) -> Self {
+        Self {
+            clients: ClientStorage::new(clients),
+            segments: RwLock::default(),
         }
     }
 }

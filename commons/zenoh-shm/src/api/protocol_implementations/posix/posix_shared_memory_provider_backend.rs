@@ -33,12 +33,19 @@ use super::posix_shared_memory_segment::PosixSharedMemorySegment;
 // buffer size (I guess it is 2K on x86_64). In other words, there should be some minimal size
 // threshold reasonable to use with SHM - and it would be good to synchronize this threshold with
 // MIN_FREE_CHUNK_SIZE limitation!
-const MIN_FREE_CHUNK_SIZE: u32 = 1_024;
+const MIN_FREE_CHUNK_SIZE: usize = 1_024;
+
+fn align_addr_at(addr: usize, align: usize) -> usize {
+    match addr % align {
+        0 => addr,
+        r => addr + (align - r),
+    }
+}
 
 #[derive(Eq, Copy, Clone, Debug)]
 struct Chunk {
     offset: ChunkID,
-    size: u32,
+    size: usize,
 }
 
 impl Ord for Chunk {
@@ -60,46 +67,45 @@ impl PartialEq for Chunk {
 }
 
 pub struct PosixSharedMemoryProviderBackend {
-    available: u32,
+    available: usize,
     segment: PosixSharedMemorySegment,
     free_list: BinaryHeap<Chunk>,
-    alignment: u32,
+    alignment: usize,
 }
 
 impl PosixSharedMemoryProviderBackend {
-    pub fn new(size: u32) -> ZResult<Self> {
-        let segment = PosixSharedMemorySegment::create(size)?;
+    // The implementation might allocate a little bit bigger size due to alignment requirements
+    pub fn new(size: usize) -> ZResult<Self> {
+        let alignment = mem::align_of::<u32>();
+        let alloc_size = align_addr_at(size, alignment);
+        let segment = PosixSharedMemorySegment::create(alloc_size)?;
 
         let mut free_list = BinaryHeap::new();
-        let root_chunk = Chunk { offset: 0, size };
+        let root_chunk = Chunk {
+            offset: 0,
+            size: alloc_size,
+        };
         free_list.push(root_chunk);
 
         log::trace!(
-            "Created PosixSharedMemoryProviderBackend id {}, size {size}",
+            "Created PosixSharedMemoryProviderBackend id {}, size {alloc_size}",
             segment.segment.id()
         );
 
         Ok(Self {
-            available: size,
+            available: alloc_size,
             segment,
             free_list,
-            alignment: mem::align_of::<u32>() as u32,
+            alignment,
         })
     }
 }
 
 impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
     fn alloc(&mut self, len: usize) -> ChunkAllocResult {
-        fn align_addr_at(addr: u32, align: u32) -> u32 {
-            match addr % align {
-                0 => addr,
-                r => addr + (align - r),
-            }
-        }
-
         log::trace!("PosixSharedMemoryProviderBackend::alloc({len})");
         // Always allocate a size that will keep the proper alignment requirements
-        let required_len = align_addr_at(len as u32, self.alignment);
+        let required_len = align_addr_at(len, self.alignment);
 
         if self.available >= required_len {
             // The strategy taken is the same for some Unix System V implementations -- as described in the
@@ -111,7 +117,7 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
                     log::trace!("Allocator selected Chunk ({:?})", &chunk);
                     if chunk.size - required_len >= MIN_FREE_CHUNK_SIZE {
                         let free_chunk = Chunk {
-                            offset: chunk.offset + required_len,
+                            offset: chunk.offset + required_len as ChunkID,
                             size: chunk.size - required_len,
                         };
                         log::trace!("The allocation will leave a Free Chunk: {:?}", &free_chunk);
@@ -164,8 +170,8 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
 
     fn defragment(&mut self) {
         fn try_merge_adjacent_chunks(a: &Chunk, b: &Chunk) -> Option<Chunk> {
-            let end_offset = a.offset + a.size;
-            if end_offset == b.offset {
+            let end_offset = a.offset as usize + a.size;
+            if end_offset == b.offset as usize {
                 Some(Chunk {
                     size: a.size + b.size,
                     offset: a.offset,
@@ -205,6 +211,6 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
     }
 
     fn available(&self) -> usize {
-        self.available as usize
+        self.available
     }
 }
