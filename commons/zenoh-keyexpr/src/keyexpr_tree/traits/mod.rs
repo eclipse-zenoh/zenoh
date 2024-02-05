@@ -343,16 +343,33 @@ pub trait ITokenKeyExprTree<'a, Weight, Token> {
     }
 }
 
+/// The non-mutating methods of a KeTree node.
 pub trait IKeyExprTreeNode<Weight>: UIKeyExprTreeNode<Weight> {
+    /// Access the parent node if it exists (the node isn't the first chunk of a key-expression).
     fn parent(&self) -> Option<&Self::Parent> {
         unsafe { self.__parent() }
     }
+    /// Compute this node's full key expression.
+    ///
+    /// Note that KeTrees don't normally store each node's full key expression.
+    /// If you need to repeatedly access a node's full key expression, it is suggested
+    /// to store that key expression as part of the node's `Weight` (it's optional value).
     fn keyexpr(&self) -> OwnedKeyExpr {
         unsafe { self.__keyexpr() }
     }
+
+    /// Access the node's weight (or value).
+    ///
+    /// Weights can be assigned to a node through many of [`IKeyExprTreeNodeMut`]'s methods, as well as through [`IKeyExprTreeMut::insert`].
+    ///
+    /// Nodes may not have a value in any of the following cases:
+    /// - The node is a parent to other nodes, but was never assigned a weight itself (or that weight has been removed).
+    /// - The node is a leaf of the KeTree whose value was [`IKeyExprTreeMut::remove`]d, but [`IKeyExprTreeMut::prune`] hasn't been called yet.
     fn weight(&self) -> Option<&Weight> {
         unsafe { self.__weight() }
     }
+
+    /// Access a node's children.
     fn children(&self) -> &Self::Children {
         unsafe { self.__children() }
     }
@@ -369,17 +386,33 @@ pub trait UIKeyExprTreeNode<Weight> {
     unsafe fn __children(&self) -> &Self::Children;
 }
 
+/// The mutating methods of a KeTree node.
 pub trait IKeyExprTreeNodeMut<Weight>: IKeyExprTreeNode<Weight> {
+    /// Mutably access the parent node if it exists (the node isn't the first chunk of a key-expression).
     fn parent_mut(&mut self) -> Option<&mut Self::Parent>;
+
+    /// Mutably access the node's weight.
     fn weight_mut(&mut self) -> Option<&mut Weight>;
+
+    /// Remove the node's weight.
     fn take_weight(&mut self) -> Option<Weight>;
+
+    /// Assign a weight to the node, returning the previous weight if the node had one.
     fn insert_weight(&mut self, weight: Weight) -> Option<Weight>;
+
+    /// Mutably access the node's children.
     fn children_mut(&mut self) -> &mut Self::Children;
 }
+
+/// Nodes from a token-locked tree need a token to obtain read/write permissions.
+///
+/// This trait allows tokenizing a node, allowing to use [`IKeyExprTreeNode`] and [`IKeyExprTreeNodeMut`]'s methods on it.
 pub trait ITokenKeyExprTreeNode<'a, Weight, Token> {
     type Tokenized: IKeyExprTreeNode<Weight>;
+    /// Wrap the node with the an immutable reference to the token to allow immutable access to its contents.
     fn tokenize(&'a self, token: &'a Token) -> Self::Tokenized;
     type TokenizedMut: IKeyExprTreeNodeMut<Weight>;
+    /// Wrap the node with a mutable reference to the token to allow mutable access to its contents
     fn tokenize_mut(&'a self, token: &'a mut Token) -> Self::TokenizedMut;
 }
 impl<'a, T: 'a, Weight, Token: 'a> ITokenKeyExprTreeNode<'a, Weight, Token> for T
