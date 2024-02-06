@@ -18,22 +18,31 @@ use zenoh::prelude::KeyExpr;
 use zenoh::{Session, SessionRef};
 
 /// Some extensions to the [`zenoh::Session`](zenoh::Session)
-pub trait SessionExt {
-    type PublicationCacheBuilder<'a, 'b, 'c>
-    where
-        Self: 'a;
-    fn declare_publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
-        &'a self,
+pub trait SessionExt<'s, 'a> {
+    fn declare_publication_cache<'b, 'c, TryIntoKeyExpr>(
+        &'s self,
         pub_key_expr: TryIntoKeyExpr,
-    ) -> Self::PublicationCacheBuilder<'a, 'b, 'c>
+    ) -> PublicationCacheBuilder<'a, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
 }
 
-impl SessionExt for Session {
-    type PublicationCacheBuilder<'a, 'b, 'c> = PublicationCacheBuilder<'a, 'b, 'c>;
-    fn declare_publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
+impl<'s, 'a> SessionExt<'s, 'a> for SessionRef<'a> {
+    fn declare_publication_cache<'b, 'c, TryIntoKeyExpr>(
+        &'s self,
+        pub_key_expr: TryIntoKeyExpr,
+    ) -> PublicationCacheBuilder<'a, 'b, 'c>
+    where
+        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
+        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
+    {
+        PublicationCacheBuilder::new(self.clone(), pub_key_expr.try_into().map_err(Into::into))
+    }
+}
+
+impl<'a> SessionExt<'a, 'a> for Session {
+    fn declare_publication_cache<'b, 'c, TryIntoKeyExpr>(
         &'a self,
         pub_key_expr: TryIntoKeyExpr,
     ) -> PublicationCacheBuilder<'a, 'b, 'c>
@@ -41,44 +50,17 @@ impl SessionExt for Session {
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        PublicationCacheBuilder::new(
-            SessionRef::Borrow(self),
-            pub_key_expr.try_into().map_err(Into::into),
-        )
+        SessionRef::Borrow(self).declare_publication_cache(pub_key_expr)
     }
 }
 
-impl<T: ArcSessionExt + 'static> SessionExt for T {
-    type PublicationCacheBuilder<'a, 'b, 'c> = PublicationCacheBuilder<'static, 'b, 'c>;
-    fn declare_publication_cache<'a, 'b, 'c, TryIntoKeyExpr>(
-        &'a self,
-        pub_key_expr: TryIntoKeyExpr,
-    ) -> Self::PublicationCacheBuilder<'a, 'b, 'c>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
-    {
-        ArcSessionExt::declare_publication_cache(self, pub_key_expr)
-    }
-}
-
-pub trait ArcSessionExt {
-    fn declare_publication_cache<'b, 'c, TryIntoKeyExpr>(
-        &self,
-        pub_key_expr: TryIntoKeyExpr,
-    ) -> PublicationCacheBuilder<'static, 'b, 'c>
-    where
-        TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
-        <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>;
-}
-
-impl ArcSessionExt for Arc<Session> {
+impl<'s> SessionExt<'s, 'static> for Arc<Session> {
     /// Examples:
     /// ```
     /// # async_std::task::block_on(async {
     /// use zenoh::prelude::r#async::*;
     /// use zenoh::config::ModeDependentValue::Unique;
-    /// use zenoh_ext::ArcSessionExt;
+    /// use zenoh_ext::SessionExt;
     ///
     /// let mut config = config::default();
     /// config.timestamping.set_enabled(Some(Unique(true)));
@@ -90,16 +72,13 @@ impl ArcSessionExt for Arc<Session> {
     /// # })
     /// ```
     fn declare_publication_cache<'b, 'c, TryIntoKeyExpr>(
-        &self,
+        &'s self,
         pub_key_expr: TryIntoKeyExpr,
     ) -> PublicationCacheBuilder<'static, 'b, 'c>
     where
         TryIntoKeyExpr: TryInto<KeyExpr<'b>>,
         <TryIntoKeyExpr as TryInto<KeyExpr<'b>>>::Error: Into<zenoh_result::Error>,
     {
-        PublicationCacheBuilder::new(
-            SessionRef::Shared(self.clone()),
-            pub_key_expr.try_into().map_err(Into::into),
-        )
+        SessionRef::Shared(self.clone()).declare_publication_cache(pub_key_expr)
     }
 }

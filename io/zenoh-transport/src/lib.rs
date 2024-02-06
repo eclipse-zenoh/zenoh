@@ -20,7 +20,6 @@
 pub mod common;
 pub mod manager;
 pub mod multicast;
-pub mod primitives;
 pub mod unicast;
 
 #[cfg(feature = "stats")]

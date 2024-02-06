@@ -23,10 +23,9 @@ mod adminspace;
 // ignore_tagging
 pub(crate) mod orchestrator;
 
+use super::primitives::DeMux;
 use super::routing;
-use super::routing::face::Face;
-use super::routing::pubsub::full_reentrant_route_data;
-use super::routing::router::{LinkStateInterceptor, Router};
+use super::routing::router::Router;
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
 use crate::GIT_VERSION;
 pub use adminspace::AdminSpace;
@@ -35,20 +34,18 @@ use futures::stream::StreamExt;
 use futures::Future;
 use std::any::Any;
 use std::sync::Arc;
-use std::time::Duration;
 use stop_token::future::FutureExt;
 use stop_token::{StopSource, TimedOutError};
 use uhlc::{HLCBuilder, HLC};
 use zenoh_link::{EndPoint, Link};
 use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
-use zenoh_protocol::core::{whatami::WhatAmIMatcher, Locator, WhatAmI, ZenohId};
-use zenoh_protocol::network::{NetworkBody, NetworkMessage};
+use zenoh_protocol::core::{Locator, WhatAmI, ZenohId};
+use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::{bail, ZResult};
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::{
-    multicast::TransportMulticast, primitives::DeMux, unicast::TransportUnicast,
-    TransportEventHandler, TransportManager, TransportMulticastEventHandler, TransportPeer,
-    TransportPeerEventHandler,
+    multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
+    TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
 
 struct RuntimeState {
@@ -102,33 +99,8 @@ impl Runtime {
         let metadata = config.metadata().clone();
         let hlc = (*unwrap_or_default!(config.timestamping().enabled().get(whatami)))
             .then(|| Arc::new(HLCBuilder::new().with_id(uhlc::ID::from(&zid)).build()));
-        let drop_future_timestamp =
-            unwrap_or_default!(config.timestamping().drop_future_timestamp());
 
-        let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
-        let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
-        let autoconnect = if gossip {
-            *unwrap_or_default!(config.scouting().gossip().autoconnect().get(whatami))
-        } else {
-            WhatAmIMatcher::empty()
-        };
-
-        let router_link_state = whatami == WhatAmI::Router;
-        let peer_link_state = whatami != WhatAmI::Client
-            && unwrap_or_default!(config.routing().peer().mode()) == *"linkstate";
-        let router_peers_failover_brokering =
-            unwrap_or_default!(config.routing().router().peers_failover_brokering());
-        let queries_default_timeout =
-            Duration::from_millis(unwrap_or_default!(config.queries_default_timeout()));
-
-        let router = Arc::new(Router::new(
-            zid,
-            whatami,
-            hlc.clone(),
-            drop_future_timestamp,
-            router_peers_failover_brokering,
-            queries_default_timeout,
-        ));
+        let router = Arc::new(Router::new(zid, whatami, hlc.clone(), &config));
 
         let handler = Arc::new(RuntimeTransportEventHandler {
             runtime: std::sync::RwLock::new(None),
@@ -158,15 +130,7 @@ impl Runtime {
             }),
         };
         *handler.runtime.write().unwrap() = Some(runtime.clone());
-        get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(
-            runtime.clone(),
-            router_link_state,
-            peer_link_state,
-            router_peers_failover_brokering,
-            gossip,
-            gossip_multihop,
-            autoconnect,
-        );
+        get_mut_unchecked(&mut runtime.state.router.clone()).init_link_state(runtime.clone());
 
         let receiver = config.subscribe();
         runtime.spawn({
@@ -316,27 +280,12 @@ impl TransportEventHandler for RuntimeTransportEventHandler {
 pub(super) struct RuntimeSession {
     pub(super) runtime: Runtime,
     pub(super) endpoint: std::sync::RwLock<Option<EndPoint>>,
-    pub(super) main_handler: Arc<LinkStateInterceptor>,
+    pub(super) main_handler: Arc<DeMux>,
     pub(super) slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>>,
 }
 
 impl TransportPeerEventHandler for RuntimeSession {
     fn handle_message(&self, msg: NetworkMessage) -> ZResult<()> {
-        // critical path shortcut
-        if let NetworkBody::Push(data) = msg.body {
-            let face = &self.main_handler.face.state;
-
-            full_reentrant_route_data(
-                &self.main_handler.tables.tables,
-                face,
-                &data.wire_expr,
-                data.ext_qos,
-                data.payload,
-                data.ext_nodeid.node_id.into(),
-            );
-            return Ok(());
-        }
-
         self.main_handler.handle_message(msg)
     }
 
@@ -415,7 +364,7 @@ impl TransportMulticastEventHandler for RuntimeMuticastGroup {
 }
 
 pub(super) struct RuntimeMuticastSession {
-    pub(super) main_handler: Arc<DeMux<Face>>,
+    pub(super) main_handler: Arc<DeMux>,
     pub(super) slave_handlers: Vec<Arc<dyn TransportPeerEventHandler>>,
 }
 
