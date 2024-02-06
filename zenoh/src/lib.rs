@@ -161,7 +161,7 @@ pub mod time {
     /// Generates a reception [`Timestamp`] with id=0x01.  
     /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
     /// that doesn't contain any timestamp.
-    // tags{time.new_reception_timestamp}
+    // tags{timestamp.create}
     pub fn new_reception_timestamp() -> Timestamp {
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -178,7 +178,7 @@ pub mod properties {
     /// Convert a set of [`Properties`] into a [`Value`].  
     /// For instance, Properties: `[("k1", "v1"), ("k2, v2")]`  
     /// is converted into Json: `{ "k1": "v1", "k2": "v2" }`
-    // tags{properties.properties_to_json_value}
+    // tags{value.create.from_properties}
     pub fn properties_to_json_value(props: &Properties) -> Value {
         let json_map = props
             .iter()
@@ -261,7 +261,7 @@ where
 /// let session = zenoh::open(config).res().await.unwrap();
 /// # })
 /// ```
-// tags{session.open}
+// tags{session.create}
 pub fn open<TryIntoConfig>(config: TryIntoConfig) -> OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,

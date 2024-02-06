@@ -77,7 +77,7 @@ impl KeyExpr<'static> {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
-    // tags{keyexpr.from_unchecked}
+    // tags{keyexpr.create.from_string_unchecked}
     pub unsafe fn from_string_unchecked(s: String) -> Self {
         Self(KeyExprInner::Owned(OwnedKeyExpr::from_string_unchecked(s)))
     }
@@ -86,7 +86,7 @@ impl KeyExpr<'static> {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
-    // tags{keyexpr.from_unchecked}
+    // tags{keyexpr.create.from_string_unchecked}
     pub unsafe fn from_boxed_string_unchecked(s: Box<str>) -> Self {
         Self(KeyExprInner::Owned(
             OwnedKeyExpr::from_boxed_string_unchecked(s),
@@ -100,7 +100,7 @@ impl<'a> KeyExpr<'a> {
     /// Note that to be considered a valid key expression, a string MUST be canon.
     ///
     /// [`KeyExpr::autocanonize`] is an alternative constructor that will canonize the passed expression before constructing it.
-    // tags{keyexpr.new}
+    // tags{keyexpr.create}
     pub fn new<T, E>(t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
@@ -163,7 +163,7 @@ impl<'a> KeyExpr<'a> {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
-    // tags{keyexpr.from_unchecked}
+    // tags{keyexpr.create.from_string_unchecked}
     pub unsafe fn from_str_unchecked(s: &'a str) -> Self {
         keyexpr::from_str_unchecked(s).into()
     }
@@ -285,7 +285,7 @@ impl<'a> KeyExpr<'a> {
         }
     }
 
-    // tags{keyexpr.with_parameters}
+    // tags{selector.create.from_keyexpr}
     pub fn with_parameters(self, selector: &'a str) -> Selector<'a> {
         Selector {
             key_expr: self,
@@ -293,7 +293,7 @@ impl<'a> KeyExpr<'a> {
         }
     }
 
-    // tags{keyexpr.with_parameters}
+    // tags{selector.create.from_keyexpr}
     pub fn with_owned_parameters(self, selector: String) -> Selector<'a> {
         Selector {
             key_expr: self,

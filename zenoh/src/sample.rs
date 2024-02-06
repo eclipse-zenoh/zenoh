@@ -59,8 +59,10 @@ pub(crate) struct DataInfo {
 #[derive(Debug, Clone)]
 pub struct SourceInfo {
     /// The [`ZenohId`] of the zenoh instance that published the concerned [`Sample`].
+    // tags{sample.source_info.source_id}
     pub source_id: Option<ZenohId>,
     /// The sequence number of the [`Sample`] from the source.
+    // tags{sample.source_info.source_sn}
     pub source_sn: Option<SourceSn>,
 }
 
@@ -189,7 +191,7 @@ mod attachment {
     }
     #[zenoh_macros::unstable]
     impl Attachment {
-        // tags{sample.attachment.new}
+        // tags{sample.attachment.create}
         pub fn new() -> Self {
             Self {
                 inner: ZBuf::empty(),
@@ -367,7 +369,7 @@ pub struct Sample {
 
 impl Sample {
     /// Creates a new Sample.
-    // tags{sample.new}
+    // tags{sample.create}
     #[inline]
     pub fn new<IntoKeyExpr, IntoValue>(key_expr: IntoKeyExpr, value: IntoValue) -> Self
     where
@@ -386,7 +388,7 @@ impl Sample {
         }
     }
     /// Creates a new Sample.
-    // tags{sample.from_value}
+    // tags{sample.create.from_value}
     #[inline]
     pub fn try_from<TryIntoKeyExpr, IntoValue>(
         key_expr: TryIntoKeyExpr,
@@ -410,7 +412,7 @@ impl Sample {
     }
 
     /// Creates a new Sample with optional data info.
-    // tags{sample.with_info}
+    // tags{sample.create.with_info}
     #[inline]
     pub(crate) fn with_info(
         key_expr: KeyExpr<'static>,
@@ -447,14 +449,14 @@ impl Sample {
     }
 
     /// Gets the timestamp of this Sample.
-    // tags{sample.get_timestamp}
+    // tags{sample.timestamp.get}
     #[inline]
     pub fn get_timestamp(&self) -> Option<&Timestamp> {
         self.timestamp.as_ref()
     }
 
     /// Sets the timestamp of this Sample.
-    // tags{sample.with_timestamp}
+    // tags{sample.timestamp.set}
     #[inline]
     pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
         self.timestamp = Some(timestamp);
@@ -462,7 +464,7 @@ impl Sample {
     }
 
     /// Sets the source info of this Sample.
-    // tags{sample.with_source_info}
+    // tags{sample.source_info.set}
     #[zenoh_macros::unstable]
     #[inline]
     pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
@@ -486,20 +488,21 @@ impl Sample {
     }
 
     #[zenoh_macros::unstable]
-    // tags{sample.get_attachment}
+    // tags{sample.attachment.get}
     pub fn attachment(&self) -> Option<&Attachment> {
         self.attachment.as_ref()
     }
 
     #[zenoh_macros::unstable]
-    // tags{sample.get_attachment_mut}
+    // tags{sample.attachment.get}
+    // tags{sample.attachment.set}
     pub fn attachment_mut(&mut self) -> &mut Option<Attachment> {
         &mut self.attachment
     }
 
     #[allow(clippy::result_large_err)]
     #[zenoh_macros::unstable]
-    // tags{sample.with_attachment}
+    // tags{sample.attachment.set}
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
         self

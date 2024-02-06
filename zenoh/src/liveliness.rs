@@ -105,7 +105,7 @@ impl<'a> Liveliness<'a> {
     /// # })
     /// ```
     #[zenoh_macros::unstable]
-    // tags{liveliness.declare_token}
+    // tags{liveliness.token.create}
     pub fn declare_token<'b, TryIntoKeyExpr>(
         &self,
         key_expr: TryIntoKeyExpr,
@@ -141,7 +141,7 @@ impl<'a> Liveliness<'a> {
     /// }
     /// # })
     /// ```
-    // tags{liveliness.declare_subscriber}
+    // tags{liveliness.subscriber.create}
     #[zenoh_macros::unstable]
     pub fn declare_subscriber<'b, TryIntoKeyExpr>(
         &self,
@@ -178,7 +178,7 @@ impl<'a> Liveliness<'a> {
     /// }
     /// # })
     /// ```
-    // tags{liveliness.get}
+    // tags{liveliness.query_token}
     #[zenoh_macros::unstable]
     pub fn get<'b: 'a, TryIntoKeyExpr>(
         &'a self,
@@ -640,7 +640,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
-    // tags{liveiness.get.callback}
+    // tags{liveliness.query_token.callback}
     #[inline]
     pub fn callback<Callback>(self, callback: Callback) -> LivelinessGetBuilder<'a, 'b, Callback>
     where
@@ -681,7 +681,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     ///     .unwrap();
     /// # })
     /// ```
-    // tags{liveiness.get.callback}
+    // tags{liveliness.query_token.callback}
     #[inline]
     pub fn callback_mut<CallbackMut>(
         self,
@@ -713,7 +713,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
     /// }
     /// # })
     /// ```
-    // tags{liveiness.get.pipe}
+    // tags{liveliness.query_token.pipe}
     #[inline]
     pub fn with<Handler>(self, handler: Handler) -> LivelinessGetBuilder<'a, 'b, Handler>
     where
@@ -736,7 +736,7 @@ impl<'a, 'b> LivelinessGetBuilder<'a, 'b, DefaultHandler> {
 
 impl<'a, 'b, Handler> LivelinessGetBuilder<'a, 'b, Handler> {
     /// Set query timeout.
-    // tags{liveiness.get.timeout}
+    // tags{liveliness.query_token.timeout}
     #[inline]
     pub fn timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;

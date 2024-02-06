@@ -87,7 +87,7 @@ pub struct PutBuilder<'a, 'b> {
 
 impl PutBuilder<'_, '_> {
     /// Change the encoding of the written data.
-    // tags{session.put.encoding}
+    // tags{session.put.encoding.set}
     #[inline]
     pub fn encoding<IntoEncoding>(mut self, encoding: IntoEncoding) -> Self
     where
@@ -97,7 +97,7 @@ impl PutBuilder<'_, '_> {
         self
     }
     /// Change the `congestion_control` to apply when routing the data.
-    // tags{session.put.congestion_control}
+    // tags{session.put.congestion_control.set}
     #[inline]
     pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
         self.publisher = self.publisher.congestion_control(congestion_control);
@@ -105,7 +105,7 @@ impl PutBuilder<'_, '_> {
     }
 
     /// Change the priority of the written data.
-    // tags{session.put.priority}
+    // tags{session.put.priority.set}
     #[inline]
     pub fn priority(mut self, priority: Priority) -> Self {
         self.publisher = self.publisher.priority(priority);
@@ -114,7 +114,7 @@ impl PutBuilder<'_, '_> {
 
     /// Restrict the matching subscribers that will receive the published data
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    // tags{session.put.allowed_destination}
+    // tags{session.put.allowed_destination.set}
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
@@ -122,14 +122,14 @@ impl PutBuilder<'_, '_> {
         self
     }
 
-    // tags{session.put.kind}
+    // tags{session.put.kind.set}
     pub fn kind(mut self, kind: SampleKind) -> Self {
         self.kind = kind;
         self
     }
 
     #[zenoh_macros::unstable]
-    // tags{session.put.attachment}
+    // tags{session.put.attachment.set}
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
         self
@@ -243,7 +243,7 @@ impl std::fmt::Debug for PublisherRef<'_> {
 /// subscriber.stream().map(Ok).forward(publisher).await.unwrap();
 /// # })
 /// ```
-// tags{session.publisher}
+// tags{publisher}
 #[derive(Debug, Clone)]
 pub struct Publisher<'a> {
     pub(crate) session: SessionRef<'a>,
@@ -254,13 +254,13 @@ pub struct Publisher<'a> {
 }
 
 impl<'a> Publisher<'a> {
-    // tags{session.publisher.key_expr}
+    // tags{publisher.key_expr.get}
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr
     }
 
     /// Change the `congestion_control` to apply when routing the data.
-    // tags{session.publisher.congestion_control}
+    // tags{publisher.congestion_control.set}
     #[inline]
     pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
         self.congestion_control = congestion_control;
@@ -268,7 +268,7 @@ impl<'a> Publisher<'a> {
     }
 
     /// Change the priority of the written data.
-    // tags{session.publisher.priority}
+    // tags{publisher.priority.set}
     #[inline]
     pub fn priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
@@ -277,7 +277,7 @@ impl<'a> Publisher<'a> {
 
     /// Restrict the matching subscribers that will receive the published data
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    // tags{session.publisher.allowed_destination}
+    // tags{publisher.allowed_destination.set}
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
@@ -343,7 +343,8 @@ impl<'a> Publisher<'a> {
     /// publisher.write(SampleKind::Put, "value").res().await.unwrap();
     /// # })
     /// ```
-    // tags{session.publisher.write}
+    // tags{publisher.write.kind}
+    // tags{publisher.write.value}
     pub fn write<IntoValue>(&self, kind: SampleKind, value: IntoValue) -> Publication
     where
         IntoValue: Into<Value>,
@@ -363,7 +364,7 @@ impl<'a> Publisher<'a> {
     /// publisher.put("value").res().await.unwrap();
     /// # })
     /// ```
-    // tags{session.publisher.put}
+    // tags{publisher.put}
     #[inline]
     pub fn put<IntoValue>(&self, value: IntoValue) -> Publication
     where
@@ -384,7 +385,7 @@ impl<'a> Publisher<'a> {
     /// publisher.delete().res().await.unwrap();
     /// # })
     /// ```
-    // tags{session.publisher.delete}
+    // tags{publisher.delete}
     pub fn delete(&self) -> Publication {
         self._write(SampleKind::Delete, Value::empty())
     }
@@ -409,7 +410,7 @@ impl<'a> Publisher<'a> {
     ///     .matching_subscribers();
     /// # })
     /// ```
-    // tags{session.publisher.matching_status}
+    // tags{publisher.matching_subscribers.get}
     #[zenoh_macros::unstable]
     pub fn matching_status(&self) -> impl Resolve<ZResult<MatchingStatus>> + '_ {
         zenoh_core::ResolveFuture::new(async move {
@@ -440,7 +441,7 @@ impl<'a> Publisher<'a> {
     /// }
     /// # })
     /// ```
-    // tags{session.publisher.matching_listener}
+    // tags{publisher.matching_listener.create}
     #[zenoh_macros::unstable]
     pub fn matching_listener(&self) -> MatchingListenerBuilder<'_, DefaultHandler> {
         MatchingListenerBuilder {
@@ -461,7 +462,7 @@ impl<'a> Publisher<'a> {
     /// publisher.undeclare().res().await.unwrap();
     /// # })
     /// ```
-    // tags{session.publisher.undeclare}
+    // tags{publisher.undeclare}
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
     }
@@ -615,7 +616,7 @@ impl Drop for Publisher<'_> {
 
 /// A [`Resolvable`] returned by [`Publisher::put()`](Publisher::put),
 /// [`Publisher::delete()`](Publisher::delete) and [`Publisher::write()`](Publisher::write).
-// ignore_tagging
+// tags{}
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct Publication<'a> {
     publisher: &'a Publisher<'a>,
@@ -626,7 +627,7 @@ pub struct Publication<'a> {
 }
 
 impl<'a> Publication<'a> {
-    // tags{session.publisher.put.attachment}
+    // tags{publisher.write.attachment}
     #[zenoh_macros::unstable]
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
@@ -730,7 +731,7 @@ impl<'a, 'b> Clone for PublisherBuilder<'a, 'b> {
 
 impl<'a, 'b> PublisherBuilder<'a, 'b> {
     /// Change the `congestion_control` to apply when routing the data.
-    // tags{session.publisher.congestion_control}
+    // tags{publisher.congestion_control.set}
     #[inline]
     pub fn congestion_control(mut self, congestion_control: CongestionControl) -> Self {
         self.congestion_control = congestion_control;
@@ -738,7 +739,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
     }
 
     /// Change the priority of the written data.
-    // tags{session.publisher.priority}
+    // tags{publisher.priority.set}
     #[inline]
     pub fn priority(mut self, priority: Priority) -> Self {
         self.priority = priority;
@@ -747,7 +748,7 @@ impl<'a, 'b> PublisherBuilder<'a, 'b> {
 
     /// Restrict the matching subscribers that will receive the published data
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
-    // tags{session.publisher.allowed_destination}
+    // tags{publisher.allowed_destination.set}
     #[zenoh_macros::unstable]
     #[inline]
     pub fn allowed_destination(mut self, destination: Locality) -> Self {
@@ -901,7 +902,7 @@ fn resolve_put(
 }
 
 /// The Priority of zenoh messages.
-// tags{session.put.priority}
+// tags{publisher.priority}
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Priority {
@@ -917,13 +918,13 @@ pub enum Priority {
 
 impl Priority {
     /// The lowest Priority
-    // tags{session.put.priority.min}
+    // tags{publisher.priority.min}
     pub const MIN: Self = Self::Background;
     /// The highest Priority
-    // tags{session.put.priority.max}
+    // tags{publisher.priority.max}
     pub const MAX: Self = Self::RealTime;
     /// The number of available priorities
-    // tags{session.put.priority.num}
+    // tags{publisher.priority.num}
     pub const NUM: usize = 1 + Self::MIN as usize - Self::MAX as usize;
 }
 
@@ -1009,7 +1010,7 @@ impl MatchingStatus {
     ///     .matching_subscribers();
     /// # })
     /// ```
-    /// tags{session.publisher.matching_status.matching_subscribers^}
+    // tags{}
     pub fn matching_subscribers(&self) -> bool {
         self.matching
     }
@@ -1244,7 +1245,7 @@ impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListene
 /// }
 /// # })
 /// ```
-// tags{session.publisher.matching_listener}
+// tags{publisher.matching_listener}
 #[zenoh_macros::unstable]
 pub struct MatchingListener<'a, Receiver> {
     pub(crate) listener: MatchingListenerInner<'a>,
@@ -1269,7 +1270,7 @@ impl<'a, Receiver> MatchingListener<'a, Receiver> {
     /// matching_listener.undeclare().res().await.unwrap();
     /// # })
     /// ```
-    // tags{session.publisher.matching_listener.undeclare}
+    // tags{publisher.matching_listener.undeclare}
     #[inline]
     pub fn undeclare(self) -> MatchingListenerUndeclaration<'a> {
         self.listener.undeclare()

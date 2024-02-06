@@ -61,7 +61,7 @@ pub struct Property {
 }
 
 /// The kind of a `Sample`.
-// tags{sample.kind}
+// tags{publisher.write.kind}
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub enum SampleKind {
@@ -93,6 +93,7 @@ impl TryFrom<u64> for SampleKind {
 }
 
 /// The global unique id of a zenoh peer.
+// tags{zenoh_id}
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct ZenohId(uhlc::ID);
@@ -347,7 +348,7 @@ impl TryFrom<u8> for Priority {
 }
 
 /// The reliability request of a subscriber.
-// tags{options.reliability}
+// tags{enum.reliability}
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 pub enum Reliability {
@@ -425,7 +426,7 @@ pub enum ConsolidationMode {
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-// tags{session.query.target}
+// tags{enum.query.target}
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum QueryTarget {
     #[default]
