@@ -1172,158 +1172,48 @@ impl Session {
             origin,
             callback,
         });
-        #[cfg(feature = "complete_n")]
-        {
-            state.queryables.insert(id, qable_state.clone());
 
-            if origin != Locality::SessionLocal && complete {
-                let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = Session::complete_twin_qabls(&state, key_expr);
-                drop(state);
-                let qabl_info = QueryableInfo {
-                    complete,
-                    distance: 0,
-                };
-                primitives.send_declare(Declare {
-                    ext_qos: declare::ext::QoSType::declare_default(),
-                    ext_tstamp: None,
-                    ext_nodeid: declare::ext::NodeIdType::default(),
-                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                        id: id as u32,
-                        wire_expr: key_expr.to_owned(),
-                        ext_info: qabl_info,
-                    }),
-                });
-            }
-        }
-        #[cfg(not(feature = "complete_n"))]
-        {
-            let twin_qabl = Session::twin_qabl(&state, key_expr);
-            let complete_twin_qabl = twin_qabl && Session::complete_twin_qabl(&state, key_expr);
+        state.queryables.insert(id, qable_state.clone());
 
-            state.queryables.insert(id, qable_state.clone());
-
-            if origin != Locality::SessionLocal && (!twin_qabl || (!complete_twin_qabl && complete))
-            {
-                let primitives = state.primitives.as_ref().unwrap().clone();
-                let complete = u8::from(!complete_twin_qabl && complete);
-                drop(state);
-                let qabl_info = QueryableInfo {
-                    complete,
-                    distance: 0,
-                };
-                primitives.send_declare(Declare {
-                    ext_qos: declare::ext::QoSType::declare_default(),
-                    ext_tstamp: None,
-                    ext_nodeid: declare::ext::NodeIdType::default(),
-                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                        id: id as u32,
-                        wire_expr: key_expr.to_owned(),
-                        ext_info: qabl_info,
-                    }),
-                });
-            }
+        if origin != Locality::SessionLocal {
+            let primitives = state.primitives.as_ref().unwrap().clone();
+            drop(state);
+            let qabl_info = QueryableInfo {
+                complete: if complete { 1 } else { 0 },
+                distance: 0,
+            };
+            primitives.send_declare(Declare {
+                ext_qos: declare::ext::QoSType::declare_default(),
+                ext_tstamp: None,
+                ext_nodeid: declare::ext::NodeIdType::default(),
+                body: DeclareBody::DeclareQueryable(DeclareQueryable {
+                    id: id as u32,
+                    wire_expr: key_expr.to_owned(),
+                    ext_info: qabl_info,
+                }),
+            });
         }
         Ok(qable_state)
     }
 
-    pub(crate) fn twin_qabl(state: &SessionState, key: &WireExpr) -> bool {
-        state.queryables.values().any(|q| {
-            q.origin != Locality::SessionLocal
-                && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
-                    == state.local_wireexpr_to_expr(key).unwrap()
-        })
-    }
-
-    #[cfg(not(feature = "complete_n"))]
-    pub(crate) fn complete_twin_qabl(state: &SessionState, key: &WireExpr) -> bool {
-        state.queryables.values().any(|q| {
-            q.origin != Locality::SessionLocal
-                && q.complete
-                && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
-                    == state.local_wireexpr_to_expr(key).unwrap()
-        })
-    }
-
-    #[cfg(feature = "complete_n")]
-    pub(crate) fn complete_twin_qabls(state: &SessionState, key: &WireExpr) -> u8 {
-        state
-            .queryables
-            .values()
-            .filter(|q| {
-                q.origin != Locality::SessionLocal
-                    && q.complete
-                    && state.local_wireexpr_to_expr(&q.key_expr).unwrap()
-                        == state.local_wireexpr_to_expr(key).unwrap()
-            })
-            .count() as u8
-    }
-
-    pub(crate) fn close_queryable(&self, qid: usize) -> ZResult<()> {
+    pub(crate) fn close_queryable(&self, qid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(qable_state) = state.queryables.remove(&qid) {
             trace!("close_queryable({:?})", qable_state);
             if qable_state.origin != Locality::SessionLocal {
                 let primitives = state.primitives.as_ref().unwrap().clone();
-                if Session::twin_qabl(&state, &qable_state.key_expr) {
-                    // There still exist Queryables on the same KeyExpr.
-                    if qable_state.complete {
-                        #[cfg(feature = "complete_n")]
-                        {
-                            let complete =
-                                Session::complete_twin_qabls(&state, &qable_state.key_expr);
-                            drop(state);
-                            let qabl_info = QueryableInfo {
-                                complete,
-                                distance: 0,
-                            };
-                            primitives.send_declare(Declare {
-                                ext_qos: declare::ext::QoSType::declare_default(),
-                                ext_tstamp: None,
-                                ext_nodeid: declare::ext::NodeIdType::default(),
-                                body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                    id: 0, // @TODO use proper QueryableId (#703)
-                                    wire_expr: qable_state.key_expr.clone(),
-                                    ext_info: qabl_info,
-                                }),
-                            });
-                        }
-                        #[cfg(not(feature = "complete_n"))]
-                        {
-                            if !Session::complete_twin_qabl(&state, &qable_state.key_expr) {
-                                drop(state);
-                                let qabl_info = QueryableInfo {
-                                    complete: 0,
-                                    distance: 0,
-                                };
-                                primitives.send_declare(Declare {
-                                    ext_qos: declare::ext::QoSType::declare_default(),
-                                    ext_tstamp: None,
-                                    ext_nodeid: declare::ext::NodeIdType::default(),
-                                    body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                                        id: 0, // @TODO use proper QueryableId (#703)
-                                        wire_expr: qable_state.key_expr.clone(),
-                                        ext_info: qabl_info,
-                                    }),
-                                });
-                            }
-                        }
-                    }
-                } else {
-                    // There are no more Queryables on the same KeyExpr.
-                    drop(state);
-                    primitives.send_declare(Declare {
-                        ext_qos: declare::ext::QoSType::declare_default(),
-                        ext_tstamp: None,
-                        ext_nodeid: declare::ext::NodeIdType::default(),
-                        body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                            id: 0, // @TODO use proper QueryableId (#703)
-                            ext_wire_expr: WireExprType {
-                                wire_expr: qable_state.key_expr.clone(),
-                            },
-                        }),
-                    });
-                }
+                drop(state);
+                primitives.send_declare(Declare {
+                    ext_qos: declare::ext::QoSType::declare_default(),
+                    ext_tstamp: None,
+                    ext_nodeid: declare::ext::NodeIdType::default(),
+                    body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
+                        id: qable_state.id as u32,
+                        ext_wire_expr: WireExprType {
+                            wire_expr: qable_state.key_expr.clone(),
+                        },
+                    }),
+                });
             }
             Ok(())
         } else {
