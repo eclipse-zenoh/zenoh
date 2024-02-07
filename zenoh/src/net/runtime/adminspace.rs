@@ -274,7 +274,7 @@ impl AdminSpace {
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::default(),
             body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                id: 0,
+                id: runtime.next_id(),
                 wire_expr: [&root_key, "/**"].concat().into(),
                 ext_info: QueryableInfo {
                     complete: 0,
@@ -288,7 +288,7 @@ impl AdminSpace {
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::default(),
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                id: 0,
+                id: runtime.next_id(),
                 wire_expr: [&root_key, "/config/**"].concat().into(),
                 ext_info: SubscriberInfo::default(),
             }),
