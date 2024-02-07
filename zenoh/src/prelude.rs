@@ -32,7 +32,7 @@ pub(crate) mod common {
     };
     pub use zenoh_core::Resolve;
 
-    pub(crate) type Id = usize;
+    pub(crate) type Id = u32;
 
     pub use crate::config::{self, Config, ValidatedMap};
     pub use crate::handlers::IntoCallbackReceiverPair;

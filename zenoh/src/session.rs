@@ -46,7 +46,7 @@ use std::convert::TryFrom;
 use std::convert::TryInto;
 use std::fmt;
 use std::ops::Deref;
-use std::sync::atomic::{AtomicU16, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicU16, Ordering};
 use std::sync::Arc;
 use std::sync::RwLock;
 use std::time::Duration;
@@ -97,7 +97,6 @@ pub(crate) struct SessionState {
     pub(crate) primitives: Option<Arc<Face>>, // @TODO replace with MaybeUninit ??
     pub(crate) expr_id_counter: AtomicExprId, // @TODO: manage rollover and uniqueness
     pub(crate) qid_counter: AtomicRequestId,
-    pub(crate) decl_id_counter: AtomicUsize,
     pub(crate) local_resources: HashMap<ExprId, Resource>,
     pub(crate) remote_resources: HashMap<ExprId, Resource>,
     #[cfg(feature = "unstable")]
@@ -123,7 +122,6 @@ impl SessionState {
             primitives: None,
             expr_id_counter: AtomicExprId::new(1), // Note: start at 1 because 0 is reserved for NO_RESOURCE
             qid_counter: AtomicRequestId::new(0),
-            decl_id_counter: AtomicUsize::new(0),
             local_resources: HashMap::new(),
             remote_resources: HashMap::new(),
             #[cfg(feature = "unstable")]
@@ -972,7 +970,7 @@ impl Session {
     ) -> ZResult<Arc<SubscriberState>> {
         let mut state = zwrite!(self.state);
         log::trace!("subscribe({:?})", key_expr);
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let id = self.runtime.next_id();
         let key_expr = match scope {
             Some(scope) => scope / key_expr,
             None => key_expr.clone(),
@@ -1080,7 +1078,7 @@ impl Session {
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::default(),
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                    id: id as u32,
+                    id,
                     wire_expr: key_expr.to_wire(self).to_owned(),
                     ext_info: *info,
                 }),
@@ -1096,7 +1094,7 @@ impl Session {
         Ok(sub_state)
     }
 
-    pub(crate) fn unsubscribe(&self, sid: usize) -> ZResult<()> {
+    pub(crate) fn unsubscribe(&self, sid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(sub_state) = state.subscribers.remove(&sid) {
             trace!("unsubscribe({:?})", sub_state);
@@ -1136,7 +1134,7 @@ impl Session {
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::default(),
                         body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                            id: sub_state.remote_id as u32,
+                            id: sub_state.remote_id,
                             ext_wire_expr: WireExprType {
                                 wire_expr: WireExpr::empty(),
                             },
@@ -1164,7 +1162,7 @@ impl Session {
     ) -> ZResult<Arc<QueryableState>> {
         let mut state = zwrite!(self.state);
         log::trace!("queryable({:?})", key_expr);
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let id = self.runtime.next_id();
         let qable_state = Arc::new(QueryableState {
             id,
             key_expr: key_expr.to_owned(),
@@ -1187,7 +1185,7 @@ impl Session {
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::default(),
                 body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                    id: id as u32,
+                    id,
                     wire_expr: key_expr.to_owned(),
                     ext_info: qabl_info,
                 }),
@@ -1208,7 +1206,7 @@ impl Session {
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                        id: qable_state.id as u32,
+                        id: qable_state.id,
                         ext_wire_expr: WireExprType {
                             wire_expr: qable_state.key_expr.clone(),
                         },
@@ -1228,7 +1226,7 @@ impl Session {
     ) -> ZResult<Arc<LivelinessTokenState>> {
         let mut state = zwrite!(self.state);
         log::trace!("declare_liveliness({:?})", key_expr);
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let id = self.runtime.next_id();
         let key_expr = KeyExpr::from(*crate::liveliness::KE_PREFIX_LIVELINESS / key_expr);
         let tok_state = Arc::new(LivelinessTokenState {
             id,
@@ -1243,7 +1241,7 @@ impl Session {
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::default(),
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                id: id as u32,
+                id,
                 wire_expr: key_expr.to_wire(self).to_owned(),
                 ext_info: SubscriberInfo::default(),
             }),
@@ -1252,7 +1250,7 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn undeclare_liveliness(&self, tid: usize) -> ZResult<()> {
+    pub(crate) fn undeclare_liveliness(&self, tid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(tok_state) = state.tokens.remove(&tid) {
             trace!("undeclare_liveliness({:?})", tok_state);
@@ -1267,7 +1265,7 @@ impl Session {
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id: tok_state.id as u32,
+                        id: tok_state.id,
                         ext_wire_expr: WireExprType::null(),
                     }),
                 });
@@ -1285,8 +1283,7 @@ impl Session {
         callback: Callback<'static, MatchingStatus>,
     ) -> ZResult<Arc<MatchingListenerState>> {
         let mut state = zwrite!(self.state);
-
-        let id = state.decl_id_counter.fetch_add(1, Ordering::SeqCst);
+        let id = self.runtime.next_id();
         log::trace!("matches_listener({:?}) => {id}", publisher.key_expr);
         let listener_state = Arc::new(MatchingListenerState {
             id,
@@ -1421,7 +1418,7 @@ impl Session {
     }
 
     #[zenoh_macros::unstable]
-    pub(crate) fn undeclare_matches_listener_inner(&self, sid: usize) -> ZResult<()> {
+    pub(crate) fn undeclare_matches_listener_inner(&self, sid: Id) -> ZResult<()> {
         let mut state = zwrite!(self.state);
         if let Some(state) = state.matching_listeners.remove(&sid) {
             trace!("undeclare_matches_listener_inner({:?})", state);
