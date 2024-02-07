@@ -2060,6 +2060,7 @@ impl Primitives for Session {
                     encoding: Some(m.encoding),
                     timestamp: m.timestamp,
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
+                    source_eid: m.ext_sinfo.as_ref().map(|i| i.eid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
                 self.handle_data(
@@ -2077,6 +2078,7 @@ impl Primitives for Session {
                     encoding: None,
                     timestamp: m.timestamp,
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
+                    source_eid: m.ext_sinfo.as_ref().map(|i| i.eid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
                 self.handle_data(
@@ -2213,6 +2215,7 @@ impl Primitives for Session {
                             encoding: Some(m.encoding),
                             timestamp: m.timestamp,
                             source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
+                            source_eid: m.ext_sinfo.as_ref().map(|i| i.eid),
                             source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                         };
                         #[allow(unused_mut)]

@@ -21,7 +21,7 @@ use crate::time::{new_reception_timestamp, Timestamp};
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::convert::{TryFrom, TryInto};
-use zenoh_protocol::core::Encoding;
+use zenoh_protocol::core::{Encoding, EntityId};
 
 pub type SourceSn = u64;
 
@@ -49,6 +49,7 @@ pub(crate) struct DataInfo {
     pub encoding: Option<Encoding>,
     pub timestamp: Option<Timestamp>,
     pub source_id: Option<ZenohId>,
+    pub source_eid: Option<EntityId>,
     pub source_sn: Option<SourceSn>,
 }
 
@@ -58,6 +59,8 @@ pub(crate) struct DataInfo {
 pub struct SourceInfo {
     /// The [`ZenohId`] of the zenoh instance that published the concerned [`Sample`].
     pub source_id: Option<ZenohId>,
+    /// The [`EntityId`] of the zenoh entity that published the concerned [`Sample`].
+    pub source_eid: Option<EntityId>,
     /// The sequence number of the [`Sample`] from the source.
     pub source_sn: Option<SourceSn>,
 }
@@ -73,6 +76,7 @@ impl SourceInfo {
     pub(crate) fn empty() -> Self {
         SourceInfo {
             source_id: None,
+            source_eid: None,
             source_sn: None,
         }
     }
@@ -83,6 +87,7 @@ impl From<DataInfo> for SourceInfo {
     fn from(data_info: DataInfo) -> Self {
         SourceInfo {
             source_id: data_info.source_id,
+            source_eid: data_info.source_eid,
             source_sn: data_info.source_sn,
         }
     }

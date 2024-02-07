@@ -21,7 +21,6 @@ use crate::prelude::*;
 use crate::query::ReplyKeyExpr;
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
-use crate::sample::DataInfo;
 use crate::SessionRef;
 use crate::Undeclarable;
 
@@ -192,7 +191,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                 let Sample {
                     key_expr,
                     value: Value { payload, encoding },
-                    kind,
+                    kind: _,
                     timestamp,
                     #[cfg(feature = "unstable")]
                     source_info,
@@ -200,21 +199,26 @@ impl SyncResolve for ReplyBuilder<'_> {
                     attachment,
                 } = sample;
                 #[allow(unused_mut)]
-                let mut data_info = DataInfo {
-                    kind,
-                    encoding: Some(encoding),
-                    timestamp,
-                    source_id: None,
-                    source_sn: None,
-                };
-                #[allow(unused_mut)]
                 let mut ext_attachment = None;
                 #[cfg(feature = "unstable")]
                 {
-                    data_info.source_id = source_info.source_id;
-                    data_info.source_sn = source_info.source_sn;
                     if let Some(attachment) = attachment {
                         ext_attachment = Some(attachment.into());
+                    }
+                }
+                #[allow(unused_mut)]
+                let mut ext_sinfo = None;
+                #[cfg(feature = "unstable")]
+                {
+                    if source_info.source_id.is_some()
+                        || source_info.source_eid.is_some()
+                        || source_info.source_sn.is_some()
+                    {
+                        ext_sinfo = Some(zenoh::reply::ext::SourceInfoType {
+                            zid: source_info.source_id.unwrap_or_default(),
+                            eid: source_info.source_eid.unwrap_or_default(),
+                            sn: source_info.source_sn.unwrap_or_default() as u32,
+                        })
                     }
                 }
                 self.query.inner.primitives.send_response(Response {
@@ -225,18 +229,9 @@ impl SyncResolve for ReplyBuilder<'_> {
                         mapping: Mapping::Sender,
                     },
                     payload: ResponseBody::Reply(zenoh::Reply {
-                        timestamp: data_info.timestamp,
-                        encoding: data_info.encoding.unwrap_or_default(),
-                        ext_sinfo: if data_info.source_id.is_some() || data_info.source_sn.is_some()
-                        {
-                            Some(zenoh::reply::ext::SourceInfoType {
-                                zid: data_info.source_id.unwrap_or_default(),
-                                eid: 0, // @TODO use proper EntityId (#703)
-                                sn: data_info.source_sn.unwrap_or_default() as u32,
-                            })
-                        } else {
-                            None
-                        },
+                        timestamp,
+                        encoding,
+                        ext_sinfo,
                         ext_consolidation: ConsolidationType::default(),
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
