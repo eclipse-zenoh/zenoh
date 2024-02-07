@@ -545,7 +545,9 @@ pub fn route_query(
                             encoding: Encoding::default(), // @TODO: handle encoding
                             ext_sinfo: None,               // @TODO: handle source info
                             ext_attachment: None,          // @TODO: expose it in the API
-                            ext_unknown: vec![],           // @TODO: handle unknown extensions
+                            #[cfg(feature = "shared-memory")]
+                            ext_shm: None,
+                            ext_unknown: vec![], // @TODO: handle unknown extensions
                             payload,
                         }),
                     });
