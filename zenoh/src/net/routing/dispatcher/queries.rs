@@ -464,11 +464,29 @@ macro_rules! inc_res_stats {
                 match &$body {
                     ResponseBody::Put(p) => {
                         stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
-                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](p.payload.len());
+                        let mut n =  p.payload.len();
+                        if let Some(a) = p.ext_attachment.as_ref() {
+                           n += a.buffer.len();
+                        }
+                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](n);
                     }
                     ResponseBody::Reply(r) => {
                         stats.[<$txrx _z_reply_msgs>].[<inc_ $space>](1);
-                        stats.[<$txrx _z_reply_pl_bytes>].[<inc_ $space>](r.payload.len());
+                        let mut n = 0;
+                        match &r.payload {
+                            ReplyBody::Put(p) => {
+                                if let Some(a) = p.ext_attachment.as_ref() {
+                                   n += a.buffer.len();
+                                }
+                                n += p.payload.len();
+                            }
+                            ReplyBody::Del(d) => {
+                                if let Some(a) = d.ext_attachment.as_ref() {
+                                   n += a.buffer.len();
+                                }
+                            }
+                        }
+                        stats.[<$txrx _z_reply_pl_bytes>].[<inc_ $space>](n);
                     }
                     ResponseBody::Err(e) => {
                         stats.[<$txrx _z_reply_msgs>].[<inc_ $space>](1);
