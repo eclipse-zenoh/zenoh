@@ -46,9 +46,11 @@ fn main() {
             let mut intersections = Averager::default();
             let results = Benchmarker::benchmark(|b| {
                 let keys = KeySet::generate(total, wildness, no_double_stars);
-                let mut ketree: KeBoxTree<_> = KeBoxTree::new();
-                let mut vectree: KeBoxTree<_, bool, VecSetProvider> = KeBoxTree::new();
-                let mut hashtree: KeBoxTree<_, bool, HashMapProvider> = KeBoxTree::new();
+                let mut ketree = KeBoxTree::new();
+                let mut vectree: KeBoxTree<_, bool, VecSetProvider> = KeBoxTree::default();
+                let mut hashtree: KeBoxTree<_, bool, HashMapProvider> = KeBoxTree::default();
+                let mut ahashtree: KeBoxTree<_, bool, HashMapProvider<ahash::AHasher>> =
+                    KeBoxTree::default();
                 let (kearctree, mut token): (KeArcTree<i32>, _) = KeArcTree::new().unwrap();
                 let mut map = HashMap::new();
                 for key in keys.iter() {
@@ -58,6 +60,7 @@ fn main() {
                     });
                     b.run_once("vectree_insert", || vectree.insert(key, 0));
                     b.run_once("hashtree_insert", || hashtree.insert(key, 0));
+                    b.run_once("ahashtree_insert", || ahashtree.insert(key, 0));
                     b.run_once("hashmap_insert", || map.insert(key.to_owned(), 0));
                 }
                 for key in keys.iter() {
@@ -65,6 +68,7 @@ fn main() {
                     b.run_once("kearctree_fetch", || kearctree.node(&token, key));
                     b.run_once("vectree_fetch", || vectree.node(key));
                     b.run_once("hashtree_fetch", || hashtree.node(key));
+                    b.run_once("ahashtree_fetch", || ahashtree.node(key));
                     b.run_once("hashmap_fetch", || map.get(key));
                 }
                 for key in keys.iter() {
@@ -81,6 +85,9 @@ fn main() {
                     b.run_once("hashtree_intersect", || {
                         hashtree.intersecting_nodes(key).count()
                     });
+                    b.run_once("ahashtree_intersect", || {
+                        ahashtree.intersecting_nodes(key).count()
+                    });
                     b.run_once("hashmap_intersect", || {
                         map.iter().filter(|(k, _)| key.intersects(k)).count()
                     });
@@ -92,6 +99,9 @@ fn main() {
                     });
                     b.run_once("vectree_include", || vectree.included_nodes(key).count());
                     b.run_once("hashtree_include", || hashtree.included_nodes(key).count());
+                    b.run_once("ahashtree_include", || {
+                        ahashtree.included_nodes(key).count()
+                    });
                     b.run_once("hashmap_include", || {
                         map.iter().filter(|(k, _)| key.includes(k)).count()
                     });
@@ -102,21 +112,25 @@ fn main() {
                 "kearctree_insert",
                 "vectree_insert",
                 "hashtree_insert",
+                "ahashtree_insert",
                 "hashmap_insert",
                 "ketree_fetch",
                 "kearctree_fetch",
                 "vectree_fetch",
                 "hashtree_fetch",
+                "ahashtree_fetch",
                 "hashmap_fetch",
                 "ketree_intersect",
                 "kearctree_intersect",
                 "vectree_intersect",
                 "hashtree_intersect",
+                "ahashtree_intersect",
                 "hashmap_intersect",
                 "ketree_include",
                 "kearctree_include",
                 "vectree_include",
                 "hashtree_include",
+                "ahashtree_include",
                 "hashmap_include",
             ] {
                 let b = results.benches.get(name).unwrap();
