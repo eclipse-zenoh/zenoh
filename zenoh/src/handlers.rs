@@ -26,6 +26,7 @@ pub type Callback<'a, T> = Dyn<dyn Fn(T) + Send + Sync + 'a>;
 /// while granting you access to the receiver through the returned value via [`std::ops::Deref`] and [`std::ops::DerefMut`].
 ///
 /// Any closure that accepts `T` can be converted into a pair of itself and `()`.
+// tags{}
 pub trait IntoCallbackReceiverPair<'a, T> {
     type Receiver;
     fn into_cb_receiver_pair(self) -> (Callback<'a, T>, Self::Receiver);
@@ -56,6 +57,7 @@ impl<T: Send + 'static> IntoCallbackReceiverPair<'static, T>
         )
     }
 }
+// tags{}
 pub struct DefaultHandler;
 impl<T: Send + 'static> IntoCallbackReceiverPair<'static, T> for DefaultHandler {
     type Receiver = flume::Receiver<T>;
@@ -82,6 +84,7 @@ impl<T: Send + Sync + 'static> IntoCallbackReceiverPair<'static, T>
 
 /// A function that can transform a [`FnMut`]`(T)` to
 /// a [`Fn`]`(T)` with the help of a [`Mutex`](std::sync::Mutex).
+// tags{}
 pub fn locked<T>(fnmut: impl FnMut(T)) -> impl Fn(T) {
     let lock = std::sync::Mutex::new(fnmut);
     move |x| zlock!(lock)(x)
@@ -96,6 +99,7 @@ pub fn locked<T>(fnmut: impl FnMut(T)) -> impl Fn(T) {
 ///   - `callback` will never be called once `drop` has started.
 ///   - `drop` will only be called **once**, and **after every** `callback` has ended.
 ///   - The two previous guarantees imply that `call` and `drop` are never called concurrently.
+// tags{}
 pub struct CallbackPair<Callback, DropFn>
 where
     DropFn: FnMut() + Send + Sync + 'static,

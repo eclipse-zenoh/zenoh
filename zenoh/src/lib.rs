@@ -99,6 +99,7 @@ pub use zenoh_result::ZResult as Result;
 
 const GIT_VERSION: &str = git_version!(prefix = "v", cargo_prefix = "v");
 
+// tags{}
 pub const FEATURES: &str = concat_enabled_features!(
     prefix = "zenoh",
     features = [
@@ -136,6 +137,7 @@ pub mod handlers;
 pub mod info;
 #[cfg(feature = "unstable")]
 pub mod liveliness;
+// ignore_tagging
 pub mod plugins;
 pub mod prelude;
 pub mod publication;
@@ -160,6 +162,7 @@ pub mod time {
     /// Generates a reception [`Timestamp`] with id=0x01.  
     /// This operation should be called if a timestamp is required for an incoming [`zenoh::Sample`](crate::Sample)
     /// that doesn't contain any timestamp.
+    // tags{timestamp.create}
     pub fn new_reception_timestamp() -> Timestamp {
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -173,9 +176,10 @@ pub mod properties {
     use super::prelude::Value;
     pub use zenoh_collections::Properties;
 
-    /// Convert a set of [`Properties`] into a [`Value`].  
-    /// For instance, Properties: `[("k1", "v1"), ("k2, v2")]`  
+    /// Convert a set of [`Properties`] into a [`Value`].
+    /// For instance, Properties: `[("k1", "v1"), ("k2, v2")]`
     /// is converted into Json: `{ "k1": "v1", "k2": "v2" }`
+    // tags{value.create.from_properties}
     pub fn properties_to_json_value(props: &Properties) -> Value {
         let json_map = props
             .iter()
@@ -214,6 +218,7 @@ pub mod scouting;
 /// }
 /// # })
 /// ```
+/// tags{scout}
 pub fn scout<I: Into<WhatAmIMatcher>, TryIntoConfig>(
     what: I,
     config: TryIntoConfig,
@@ -257,6 +262,7 @@ where
 /// let session = zenoh::open(config).res().await.unwrap();
 /// # })
 /// ```
+// tags{session.create}
 pub fn open<TryIntoConfig>(config: TryIntoConfig) -> OpenBuilder<TryIntoConfig>
 where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
@@ -275,6 +281,7 @@ where
 /// let session = zenoh::open(config::peer()).res().await.unwrap();
 /// # })
 /// ```
+// tags{}
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 pub struct OpenBuilder<TryIntoConfig>
 where
@@ -322,6 +329,7 @@ where
 /// This operation is used by the plugins to share the same Runtime as the router.
 #[doc(hidden)]
 #[zenoh_macros::unstable]
+// tags{}
 pub fn init(runtime: Runtime) -> InitBuilder {
     InitBuilder {
         runtime,
@@ -334,6 +342,7 @@ pub fn init(runtime: Runtime) -> InitBuilder {
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[doc(hidden)]
 #[zenoh_macros::unstable]
+// tags{}
 pub struct InitBuilder {
     runtime: Runtime,
     aggregated_subscribers: Vec<OwnedKeyExpr>,
@@ -343,12 +352,14 @@ pub struct InitBuilder {
 #[zenoh_macros::unstable]
 impl InitBuilder {
     #[inline]
+    // tags{}
     pub fn aggregated_subscribers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
         self.aggregated_subscribers = exprs;
         self
     }
 
     #[inline]
+    // tags{}
     pub fn aggregated_publishers(mut self, exprs: Vec<OwnedKeyExpr>) -> Self {
         self.aggregated_publishers = exprs;
         self

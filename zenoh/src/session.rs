@@ -279,6 +279,7 @@ impl Resource {
 }
 
 #[derive(Clone)]
+// tags{}
 pub enum SessionRef<'a> {
     Borrow(&'a Session),
     Shared(Arc<Session>),
@@ -368,6 +369,7 @@ impl fmt::Debug for SessionRef<'_> {
 }
 
 /// A trait implemented by types that can be undeclared.
+// tags{}
 pub trait Undeclarable<S, O, T = ZResult<()>>
 where
     O: Resolve<T> + Send,
@@ -387,6 +389,7 @@ where
 
 /// A zenoh session.
 ///
+// tags{session}
 pub struct Session {
     pub(crate) runtime: Runtime,
     pub(crate) state: Arc<RwLock<SessionState>>,
@@ -453,6 +456,7 @@ impl Session {
     /// }).await;
     /// # })
     /// ```
+    // tags{}
     pub fn into_arc(self) -> Arc<Self> {
         Arc::new(self)
     }
@@ -484,16 +488,19 @@ impl Session {
     /// }).await;
     /// # })
     /// ```
+    // tags{}
     pub fn leak(s: Self) -> &'static mut Self {
         Box::leak(Box::new(s))
     }
 
     /// Returns the identifier of the current session. `zid()` is a convenient shortcut.
     /// See [`Session::info()`](`Session::info()`) and [`SessionInfo::zid()`](`SessionInfo::zid()`) for more details.
+    // tags{session.zid.get}
     pub fn zid(&self) -> ZenohId {
         self.info().zid().res_sync()
     }
 
+    // tags{session.hlc.get}
     pub fn hlc(&self) -> Option<&HLC> {
         self.runtime.hlc()
     }
@@ -512,6 +519,7 @@ impl Session {
     /// session.close().res().await.unwrap();
     /// # })
     /// ```
+    // tags{session.close}
     pub fn close(self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
             trace!("close()");
@@ -524,6 +532,7 @@ impl Session {
         })
     }
 
+    // tags{session.undeclare}
     pub fn undeclare<'a, T, O>(&'a self, decl: T) -> O
     where
         O: Resolve<ZResult<()>>,
@@ -559,6 +568,8 @@ impl Session {
     /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # })
     /// ```
+    // tags{session.config.get}
+    // tags{session.config.notifier.get}
     pub fn config(&self) -> &Notifier<Config> {
         self.runtime.config()
     }
@@ -619,6 +630,7 @@ impl Session {
     /// let key_expr = session.declare_keyexpr("key/expression").res().await.unwrap();
     /// # })
     /// ```
+    // tags{session.declare_keyexpr}
     pub fn declare_keyexpr<'a, 'b: 'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -686,6 +698,7 @@ impl Session {
     /// # })
     /// ```
     #[inline]
+    // tags{session.put}
     pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoValue>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -721,6 +734,7 @@ impl Session {
     /// # })
     /// ```
     #[inline]
+    // tags{session.delete}
     pub fn delete<'a, 'b: 'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -758,6 +772,7 @@ impl Session {
     /// }
     /// # })
     /// ```
+    // tags{session.query}
     pub fn get<'a, 'b: 'a, IntoSelector>(
         &'a self,
         selector: IntoSelector,
@@ -2519,6 +2534,7 @@ impl fmt::Debug for Session {
 /// }).await;
 /// # })
 /// ```
+// tags{}
 pub trait SessionDeclarations<'s, 'a> {
     /// Create a [`Subscriber`](crate::subscriber::Subscriber) for the given key expression.
     ///
@@ -2543,6 +2559,7 @@ pub trait SessionDeclarations<'s, 'a> {
     /// }).await;
     /// # })
     /// ```
+    // tags{session.declare_subscriber}
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'s self,
         key_expr: TryIntoKeyExpr,
@@ -2578,6 +2595,7 @@ pub trait SessionDeclarations<'s, 'a> {
     /// }).await;
     /// # })
     /// ```
+    // tags{session.declare_queryable}
     fn declare_queryable<'b, TryIntoKeyExpr>(
         &'s self,
         key_expr: TryIntoKeyExpr,
@@ -2605,6 +2623,7 @@ pub trait SessionDeclarations<'s, 'a> {
     /// publisher.put("value").res().await.unwrap();
     /// # })
     /// ```
+    // tags{session.declare_publisher}
     fn declare_publisher<'b, TryIntoKeyExpr>(
         &'s self,
         key_expr: TryIntoKeyExpr,
@@ -2629,6 +2648,7 @@ pub trait SessionDeclarations<'s, 'a> {
     ///     .unwrap();
     /// # })
     /// ```
+    // tags{session.liveliness}
     #[zenoh_macros::unstable]
     fn liveliness(&'s self) -> Liveliness<'a>;
     /// Get informations about the zenoh [`Session`](Session).

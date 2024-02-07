@@ -31,6 +31,7 @@ use zenoh_shm::SharedMemoryBuf;
 /// A zenoh Value.
 #[non_exhaustive]
 #[derive(Clone)]
+// tags{value}
 pub struct Value {
     /// The payload of this Value.
     pub payload: ZBuf,
@@ -40,6 +41,7 @@ pub struct Value {
 
 impl Value {
     /// Creates a new zenoh Value.
+    // tags{value.create}
     pub fn new(payload: ZBuf) -> Self {
         Value {
             payload,
@@ -57,6 +59,7 @@ impl Value {
 
     /// Sets the encoding of this zenoh Value.
     #[inline(always)]
+    // tags{value.encoding.set}
     pub fn encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
         self

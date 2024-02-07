@@ -18,15 +18,21 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 #[doc(hidden)]
+// ignore_tagging
 pub(crate) mod codec;
 #[doc(hidden)]
+// ignore_tagging
 pub(crate) mod primitives;
 #[doc(hidden)]
+// ignore_tagging
 pub(crate) mod protocol;
 #[doc(hidden)]
+// ignore_tagging
 pub(crate) mod routing;
 #[doc(hidden)]
+// ignore_tagging
 pub mod runtime;
 
 #[cfg(test)]
+// ignore_tagging
 pub(crate) mod tests;

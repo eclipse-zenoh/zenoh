@@ -63,6 +63,7 @@ use std::{
 ///   whose key expression match query's key expression are accepted. `_anyke` disables the query-reply key expression matching check.
 #[non_exhaustive]
 #[derive(Clone, PartialEq, Eq)]
+// tags{selector}
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
     pub key_expr: KeyExpr<'a>,
@@ -70,13 +71,16 @@ pub struct Selector<'a> {
     pub(crate) parameters: Cow<'a, str>,
 }
 
+// tags{selector.options.time_range_key}
 pub const TIME_RANGE_KEY: &str = "_time";
 impl<'a> Selector<'a> {
     /// Gets the parameters as a raw string.
+    // tags{selector.parameters.get}
     pub fn parameters(&self) -> &str {
         &self.parameters
     }
     /// Extracts the selector parameters into a hashmap, returning an error in case of duplicated parameter names.
+    // tags{selector.parameters.get}
     pub fn parameters_map<K, V>(&'a self) -> ZResult<HashMap<K, V>>
     where
         K: AsRef<str> + std::hash::Hash + std::cmp::Eq,
@@ -86,10 +90,12 @@ impl<'a> Selector<'a> {
         self.decode_into_map()
     }
     /// Extracts the selector parameters' name-value pairs into a hashmap, returning an error in case of duplicated parameters.
+    // tags{selector.parameters.get}
     pub fn parameters_cowmap(&'a self) -> ZResult<HashMap<Cow<'a, str>, Cow<'a, str>>> {
         self.decode_into_map()
     }
     /// Extracts the selector parameters' name-value pairs into a hashmap, returning an error in case of duplicated parameters.
+    // tags{selector.parameters.get}
     pub fn parameters_stringmap(&'a self) -> ZResult<HashMap<String, String>> {
         self.decode_into_map()
     }
@@ -97,6 +103,7 @@ impl<'a> Selector<'a> {
     ///
     /// Note that calling this function may cause an allocation and copy if the selector's parameters wasn't
     /// already owned by `self`. `self` owns its parameters as soon as this function returns.
+    // tags{selector.parameters.get}
     pub fn parameters_mut(&mut self) -> &mut String {
         if let Cow::Borrowed(s) = self.parameters {
             self.parameters = Cow::Owned(s.to_owned())
@@ -107,15 +114,18 @@ impl<'a> Selector<'a> {
             unsafe { std::hint::unreachable_unchecked() } // this is safe because we just replaced the borrowed variant
         }
     }
+    // tags{selector.parameters.get}
     pub fn set_parameters(&mut self, selector: impl Into<Cow<'a, str>>) {
         self.parameters = selector.into();
     }
+    // tags{}
     pub fn borrowing_clone(&'a self) -> Self {
         Selector {
             key_expr: self.key_expr.clone(),
             parameters: self.parameters.as_ref().into(),
         }
     }
+    // tags{}
     pub fn into_owned(self) -> Selector<'static> {
         Selector {
             key_expr: self.key_expr.into_owned(),
@@ -124,22 +134,26 @@ impl<'a> Selector<'a> {
     }
 
     #[deprecated = "If you have ownership of this selector, prefer `Selector::into_owned`"]
+    // tags{}
     pub fn to_owned(&self) -> Selector<'static> {
         self.borrowing_clone().into_owned()
     }
 
     /// Returns this selectors components as a tuple.
+    /// tags{}
     pub fn split(self) -> (KeyExpr<'a>, Cow<'a, str>) {
         (self.key_expr, self.parameters)
     }
 
     /// Sets the `parameters` part of this `Selector`.
+    // tags{selector.parameters.set}
     #[inline(always)]
     pub fn with_parameters(mut self, parameters: &'a str) -> Self {
         self.parameters = parameters.into();
         self
     }
 
+    // tags{selector.parameters.set}
     pub fn extend<'b, I, K, V>(&'b mut self, parameters: I)
     where
         I: IntoIterator,
@@ -154,6 +168,7 @@ impl<'a> Selector<'a> {
     }
 
     /// Sets the time range targeted by the selector.
+    // tags{selector.parameters.time_range.set}
     pub fn with_time_range(&mut self, time_range: TimeRange) {
         self.remove_time_range();
         let selector = self.parameters_mut();
@@ -164,6 +179,7 @@ impl<'a> Selector<'a> {
         write!(selector, "{TIME_RANGE_KEY}={time_range}").unwrap(); // This unwrap is safe because `String: Write` should be infallibe.
     }
 
+    // tags{selector.parameters.time_range.remove}
     pub fn remove_time_range(&mut self) {
         let selector = self.parameters_mut();
 
@@ -186,6 +202,7 @@ impl<'a> Selector<'a> {
         }
     }
     #[cfg(any(feature = "unstable", test))]
+    // tags{}
     pub(crate) fn parameter_index(&self, param_name: &str) -> ZResult<Option<u32>> {
         let starts_with_param = |s: &str| {
             if let Some(rest) = s.strip_prefix(param_name) {
@@ -321,6 +338,7 @@ type ExtractedValue<'a, VS: Parameters<'a>> = <<VS::Decoder as Iterator>::Item a
 /// A trait to help decode zenoh selector parameters.
 ///
 /// Most methods will return an Error if duplicates of a same parameter are found, to avoid HTTP Parameter Pollution like vulnerabilities.
+// tags{selector.parameters}
 pub trait Parameters<'a> {
     type Decoder: Iterator + 'a;
     /// Returns this selector's parameters as an iterator.
@@ -329,6 +347,7 @@ pub trait Parameters<'a> {
         <Self::Decoder as Iterator>::Item: Parameter;
 
     /// Extracts all parameters into a HashMap, returning an error if duplicate parameters arrise.
+    // tags{selector.parameters.get}
     fn decode_into_map<N, V>(&'a self) -> ZResult<HashMap<N, V>>
     where
         <Self::Decoder as Iterator>::Item: Parameter,
@@ -353,6 +372,7 @@ pub trait Parameters<'a> {
     /// Extracts the requested parameters from the selector parameters.
     ///
     /// The default implementation is done in a single pass through the selector parameters, returning an error if any of the requested parameters are present more than once.
+    // tags{selector.parameters.get}
     fn get_parameters<const N: usize>(
         &'a self,
         names: [&str; N],
@@ -383,6 +403,7 @@ pub trait Parameters<'a> {
     /// Extracts the requested arguments from the selector parameters as booleans, following the Zenoh convention that if a parameter name is present and has a value different from "false", its value is truthy.
     ///
     /// The default implementation is done in a single pass through the selector parameters, returning an error if some of the requested parameters are present more than once.
+    // tags{selector.parameters.get.booleans}
     fn get_bools<const N: usize>(&'a self, names: [&str; N]) -> ZResult<[bool; N]>
     where
         <Self::Decoder as Iterator>::Item: Parameter,
@@ -396,6 +417,7 @@ pub trait Parameters<'a> {
     /// Extracts the standardized `_time` argument from the selector parameters.
     ///
     /// The default implementation still causes a complete pass through the selector parameters to ensure that there are no duplicates of the `_time` key.
+    // tags{selector.parameters.time_range.get}
     fn time_range(&'a self) -> ZResult<Option<TimeRange>>
     where
         <Self::Decoder as Iterator>::Item: Parameter,

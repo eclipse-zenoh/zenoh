@@ -31,6 +31,7 @@ use zenoh_protocol::core::{WhatAmI, ZenohId};
 /// let zid = session.info().zid().res().await;
 /// # })
 /// ```
+// tags{}
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct ZidBuilder<'a> {
@@ -69,6 +70,7 @@ impl<'a> AsyncResolve for ZidBuilder<'a> {
 /// while let Some(router_zid) = routers_zid.next() {}
 /// # })
 /// ```
+// tags{}
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct RoutersZidBuilder<'a> {
@@ -116,6 +118,7 @@ impl<'a> AsyncResolve for RoutersZidBuilder<'a> {
 /// while let Some(peer_zid) = peers_zid.next() {}
 /// # })
 /// ```
+// tags{}
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
 pub struct PeersZidBuilder<'a> {
@@ -162,6 +165,7 @@ impl<'a> AsyncResolve for PeersZidBuilder<'a> {
 /// let zid = info.zid().res().await;
 /// # })
 /// ```
+// tags{}
 pub struct SessionInfo<'a> {
     pub(crate) session: SessionRef<'a>,
 }
@@ -178,6 +182,7 @@ impl SessionInfo<'_> {
     /// let zid = session.info().zid().res().await;
     /// # })
     /// ```
+    // tags{session.zid.get}
     pub fn zid(&self) -> ZidBuilder<'_> {
         ZidBuilder {
             session: self.session.clone(),
@@ -197,6 +202,7 @@ impl SessionInfo<'_> {
     /// while let Some(router_zid) = routers_zid.next() {}
     /// # })
     /// ```
+    // tags{session.routers_zid.get}
     pub fn routers_zid(&self) -> RoutersZidBuilder<'_> {
         RoutersZidBuilder {
             session: self.session.clone(),
@@ -215,6 +221,7 @@ impl SessionInfo<'_> {
     /// while let Some(peer_zid) = peers_zid.next() {}
     /// # })
     /// ```
+    // tags{session.peers_zid.get}
     pub fn peers_zid(&self) -> PeersZidBuilder<'_> {
         PeersZidBuilder {
             session: self.session.clone(),
