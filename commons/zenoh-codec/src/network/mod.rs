@@ -26,7 +26,7 @@ use zenoh_buffers::{
 };
 use zenoh_protocol::{
     common::{imsg, ZExtZ64, ZExtZBufHeader},
-    core::{Reliability, ZenohId},
+    core::{EntityId, Reliability, ZenohId},
     network::{ext::EntityIdType, *},
 };
 
@@ -263,7 +263,7 @@ where
         let lodec = Zenoh080Length::new(length);
         let zid: ZenohId = lodec.read(&mut *reader)?;
 
-        let eid: u32 = self.codec.read(&mut *reader)?;
+        let eid: EntityId = self.codec.read(&mut *reader)?;
 
         Ok((ext::EntityIdType { zid, eid }, more))
     }

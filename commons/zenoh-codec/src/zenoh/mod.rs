@@ -33,7 +33,7 @@ use zenoh_buffers::{
 use zenoh_protocol::common::{iext, ZExtUnit};
 use zenoh_protocol::{
     common::{imsg, ZExtZBufHeader},
-    core::{Encoding, ZenohId},
+    core::{Encoding, EntityId, ZenohId},
     zenoh::{ext, id, PushBody, RequestBody, ResponseBody},
 };
 
@@ -199,7 +199,7 @@ where
         let lodec = Zenoh080Length::new(length);
         let zid: ZenohId = lodec.read(&mut *reader)?;
 
-        let eid: u32 = self.codec.read(&mut *reader)?;
+        let eid: EntityId = self.codec.read(&mut *reader)?;
         let sn: u32 = self.codec.read(&mut *reader)?;
 
         Ok((ext::SourceInfoType { zid, eid, sn }, more))

@@ -289,9 +289,11 @@ pub mod keyexpr {
 }
 
 pub mod subscriber {
+    use crate::core::EntityId;
+
     use super::*;
 
-    pub type SubscriberId = u32;
+    pub type SubscriberId = EntityId;
 
     pub mod flag {
         pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix
@@ -451,9 +453,11 @@ pub mod subscriber {
 }
 
 pub mod queryable {
+    use crate::core::EntityId;
+
     use super::*;
 
-    pub type QueryableId = u32;
+    pub type QueryableId = EntityId;
 
     pub mod flag {
         pub const N: u8 = 1 << 5; // 0x20 Named         if N==1 then the key expr has name/suffix

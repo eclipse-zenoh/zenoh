@@ -30,7 +30,7 @@ use std::future::Ready;
 use std::ops::Deref;
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-use zenoh_protocol::core::WireExpr;
+use zenoh_protocol::core::{EntityId, WireExpr};
 use zenoh_protocol::network::{response, Mapping, RequestId, Response, ResponseFinal};
 use zenoh_protocol::zenoh::ext::ValueType;
 use zenoh_protocol::zenoh::reply::ext::ConsolidationType;
@@ -66,7 +66,7 @@ impl Drop for QueryInner {
 #[derive(Clone)]
 pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
-    pub(crate) eid: u32,
+    pub(crate) eid: EntityId,
 }
 
 impl Query {

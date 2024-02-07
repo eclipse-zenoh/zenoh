@@ -299,6 +299,8 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
     }
 }
 
+pub type EntityId = u32;
+
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
 pub enum Priority {

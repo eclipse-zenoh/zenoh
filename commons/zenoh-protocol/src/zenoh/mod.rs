@@ -169,7 +169,7 @@ impl From<Ack> for ResponseBody {
 pub mod ext {
     use zenoh_buffers::ZBuf;
 
-    use crate::core::{Encoding, ZenohId};
+    use crate::core::{Encoding, EntityId, ZenohId};
 
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+
@@ -184,7 +184,7 @@ pub mod ext {
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct SourceInfoType<const ID: u8> {
         pub zid: ZenohId,
-        pub eid: u32,
+        pub eid: EntityId,
         pub sn: u32,
     }
 
@@ -195,7 +195,7 @@ pub mod ext {
             let mut rng = rand::thread_rng();
 
             let zid = ZenohId::rand();
-            let eid: u32 = rng.gen();
+            let eid: EntityId = rng.gen();
             let sn: u32 = rng.gen();
             Self { zid, eid, sn }
         }
