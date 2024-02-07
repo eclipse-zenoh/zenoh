@@ -57,6 +57,9 @@ use zenoh_config::unwrap_or_default;
 use zenoh_core::{zconfigurable, zread, Resolve, ResolveClosure, ResolveFuture, SyncResolve};
 use zenoh_protocol::network::AtomicRequestId;
 use zenoh_protocol::network::RequestId;
+use zenoh_protocol::zenoh::reply::ReplyBody;
+use zenoh_protocol::zenoh::Del;
+use zenoh_protocol::zenoh::Put;
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
@@ -73,10 +76,7 @@ use zenoh_protocol::{
         Mapping, Push, Response, ResponseFinal,
     },
     zenoh::{
-        query::{
-            self,
-            ext::{ConsolidationType, QueryBodyType},
-        },
+        query::{self, ext::QueryBodyType, Consolidation},
         Pull, PushBody, RequestBody, ResponseBody,
     },
 };
@@ -1808,9 +1808,9 @@ impl Session {
                 ext_budget: None,
                 ext_timeout: Some(timeout),
                 payload: RequestBody::Query(zenoh_protocol::zenoh::Query {
+                    consolidation: consolidation.into(),
                     parameters: selector.parameters().to_string(),
                     ext_sinfo: None,
-                    ext_consolidation: consolidation.into(),
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
@@ -1851,7 +1851,7 @@ impl Session {
         parameters: &str,
         qid: RequestId,
         _target: TargetType,
-        _consolidation: ConsolidationType,
+        _consolidation: Consolidation,
         body: Option<QueryBodyType>,
         #[cfg(feature = "unstable")] attachment: Option<Attachment>,
     ) {
@@ -2233,7 +2233,7 @@ impl Primitives for Session {
                 &m.parameters,
                 msg.id,
                 msg.ext_target,
-                m.ext_consolidation,
+                m.consolidation,
                 m.ext_body,
                 #[cfg(feature = "unstable")]
                 m.ext_attachment.map(Into::into),
@@ -2341,19 +2341,63 @@ impl Primitives for Session {
                             }
                             None => key_expr,
                         };
-                        let info = DataInfo {
-                            kind: SampleKind::Put,
-                            encoding: Some(m.encoding),
-                            timestamp: m.timestamp,
-                            source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
-                            source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
+
+                        struct Ret {
+                            payload: ZBuf,
+                            info: DataInfo,
+                            #[cfg(feature = "unstable")]
+                            attachment: Option<Attachment>,
+                        }
+                        let Ret {
+                            payload,
+                            info,
+                            #[cfg(feature = "unstable")]
+                            attachment,
+                        } = match m.payload {
+                            ReplyBody::Put(Put {
+                                timestamp,
+                                encoding,
+                                ext_sinfo,
+                                ext_attachment: _attachment,
+                                payload,
+                                ..
+                            }) => Ret {
+                                payload,
+                                info: DataInfo {
+                                    kind: SampleKind::Put,
+                                    encoding: Some(encoding),
+                                    timestamp,
+                                    source_id: ext_sinfo.as_ref().map(|i| i.zid),
+                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
+                                },
+                                #[cfg(feature = "unstable")]
+                                attachment: _attachment.map(Into::into),
+                            },
+                            ReplyBody::Del(Del {
+                                timestamp,
+                                ext_sinfo,
+                                ext_attachment: _attachment,
+                                ..
+                            }) => Ret {
+                                payload: ZBuf::empty(),
+                                info: DataInfo {
+                                    kind: SampleKind::Delete,
+                                    encoding: None,
+                                    timestamp,
+                                    source_id: ext_sinfo.as_ref().map(|i| i.zid),
+                                    source_sn: ext_sinfo.as_ref().map(|i| i.sn as u64),
+                                },
+                                #[cfg(feature = "unstable")]
+                                attachment: _attachment.map(Into::into),
+                            },
                         };
+
                         #[allow(unused_mut)]
                         let mut sample =
-                            Sample::with_info(key_expr.into_owned(), m.payload, Some(info));
+                            Sample::with_info(key_expr.into_owned(), payload, Some(info));
                         #[cfg(feature = "unstable")]
                         {
-                            sample.attachment = m.ext_attachment.map(Into::into);
+                            sample.attachment = attachment;
                         }
                         let new_reply = Reply {
                             sample: Ok(sample),

@@ -21,16 +21,16 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use zenoh_config::WhatAmI;
-use zenoh_protocol::core::key_expr::keyexpr;
-use zenoh_protocol::network::declare::queryable::ext::QueryableInfo;
+use zenoh_protocol::zenoh::reply::ReplyBody;
+use zenoh_protocol::zenoh::Put;
 use zenoh_protocol::{
-    core::{Encoding, WireExpr},
+    core::{key_expr::keyexpr, Encoding, WireExpr},
     network::{
-        declare::ext,
+        declare::{ext, queryable::ext::QueryableInfo},
         request::{ext::TargetType, Request, RequestId},
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
     },
-    zenoh::{reply::ext::ConsolidationType, Reply, RequestBody, ResponseBody},
+    zenoh::{query::Consolidation, Reply, RequestBody, ResponseBody},
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;
@@ -537,15 +537,17 @@ pub fn route_query(
 
                 for (wexpr, payload) in local_replies {
                     let payload = ResponseBody::Reply(Reply {
-                        timestamp: None,
-                        encoding: Encoding::default(),
-                        ext_sinfo: None,
-                        ext_consolidation: ConsolidationType::default(),
-                        #[cfg(feature = "shared-memory")]
-                        ext_shm: None,
-                        ext_attachment: None, // @TODO: expose it in the API
-                        ext_unknown: vec![],
-                        payload,
+                        consolidation: Consolidation::default(), // @TODO: handle Del case
+                        ext_unknown: vec![],                     // @TODO: handle unknown extensions
+                        payload: ReplyBody::Put(Put {
+                            // @TODO: handle Del case
+                            timestamp: None,               // @TODO: handle timestamp
+                            encoding: Encoding::default(), // @TODO: handle encoding
+                            ext_sinfo: None,               // @TODO: handle source info
+                            ext_attachment: None,          // @TODO: expose it in the API
+                            ext_unknown: vec![],           // @TODO: handle unknown extensions
+                            payload,
+                        }),
                     });
                     #[cfg(feature = "stats")]
                     if !admin {

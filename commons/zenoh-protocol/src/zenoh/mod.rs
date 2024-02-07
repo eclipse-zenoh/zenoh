@@ -129,6 +129,7 @@ pub enum ResponseBody {
     Reply(Reply),
     Ack(Ack),
     Err(Err),
+    Put(Put),
 }
 
 impl ResponseBody {
@@ -137,10 +138,11 @@ impl ResponseBody {
         use rand::Rng;
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..3) {
+        match rng.gen_range(0..4) {
             0 => ResponseBody::Reply(Reply::rand()),
             1 => ResponseBody::Ack(Ack::rand()),
             2 => ResponseBody::Err(Err::rand()),
+            3 => ResponseBody::Put(Put::rand()),
             _ => unreachable!(),
         }
     }

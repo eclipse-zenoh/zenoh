@@ -123,6 +123,7 @@ where
             ResponseBody::Reply(b) => self.write(&mut *writer, b),
             ResponseBody::Ack(b) => self.write(&mut *writer, b),
             ResponseBody::Err(b) => self.write(&mut *writer, b),
+            ResponseBody::Put(b) => self.write(&mut *writer, b),
         }
     }
 }
@@ -141,6 +142,7 @@ where
             id::REPLY => ResponseBody::Reply(codec.read(&mut *reader)?),
             id::ACK => ResponseBody::Ack(codec.read(&mut *reader)?),
             id::ERR => ResponseBody::Err(codec.read(&mut *reader)?),
+            id::PUT => ResponseBody::Put(codec.read(&mut *reader)?),
             _ => return Err(DidntRead),
         };
 
