@@ -31,6 +31,7 @@ use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{ConfigValidator, ValidatedMap, WhatAmI};
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
 use zenoh_protocol::core::key_expr::keyexpr;
+use zenoh_protocol::network::declare::QueryableId;
 use zenoh_protocol::{
     core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
     network::{
@@ -55,6 +56,7 @@ type Handler = Arc<dyn Fn(&AdminContext, Query) + Send + Sync>;
 
 pub struct AdminSpace {
     zid: ZenohId,
+    queryable_id: QueryableId,
     primitives: Mutex<Option<Arc<Face>>>,
     mappings: Mutex<HashMap<ExprId, String>>,
     handlers: HashMap<OwnedKeyExpr, Handler>,
@@ -185,6 +187,7 @@ impl AdminSpace {
         });
         let admin = Arc::new(AdminSpace {
             zid: runtime.zid(),
+            queryable_id: runtime.next_id(),
             primitives: Mutex::new(None),
             mappings: Mutex::new(HashMap::new()),
             handlers,
@@ -427,6 +430,7 @@ impl Primitives for AdminSpace {
                     #[cfg(feature = "unstable")]
                     attachment: query.ext_attachment.map(Into::into),
                 }),
+                eid: self.queryable_id,
             };
 
             for (key, handler) in &self.handlers {

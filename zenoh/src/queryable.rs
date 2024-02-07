@@ -66,6 +66,7 @@ impl Drop for QueryInner {
 #[derive(Clone)]
 pub struct Query {
     pub(crate) inner: Arc<QueryInner>,
+    pub(crate) eid: u32,
 }
 
 impl Query {
@@ -247,7 +248,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                     ext_tstamp: None,
                     ext_respid: Some(response::ext::ResponderIdType {
                         zid: self.query.inner.zid,
-                        eid: 0, // @TODO use proper EntityId (#703)
+                        eid: self.query.eid,
                     }),
                 });
                 Ok(())
@@ -277,7 +278,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                     ext_tstamp: None,
                     ext_respid: Some(response::ext::ResponderIdType {
                         zid: self.query.inner.zid,
-                        eid: 0, // @TODO use proper EntityId (#703)
+                        eid: self.query.eid,
                     }),
                 });
                 Ok(())

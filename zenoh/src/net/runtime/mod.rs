@@ -116,7 +116,7 @@ impl Runtime {
             state: Arc::new(RuntimeState {
                 zid,
                 whatami,
-                next_id: AtomicU32::new(0),
+                next_id: AtomicU32::new(1), // 0 is reserved for routing core
                 metadata,
                 router,
                 config: config.clone(),

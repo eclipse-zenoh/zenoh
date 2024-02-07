@@ -598,7 +598,7 @@ pub fn route_query(
                                 ext_tstamp: None,
                                 ext_respid: Some(response::ext::ResponderIdType {
                                     zid,
-                                    eid: 0, // @TODO use proper ResponderId (#703)
+                                    eid: 0, // 0 is reserved for routing core
                                 }),
                             },
                             expr.full_expr().to_string(),

@@ -1720,15 +1720,15 @@ impl Session {
         body: Option<QueryBodyType>,
         #[cfg(feature = "unstable")] attachment: Option<Attachment>,
     ) {
-        let (primitives, key_expr, callbacks) = {
+        let (primitives, key_expr, queryables) = {
             let state = zread!(self.state);
             match state.wireexpr_to_keyexpr(key_expr, local) {
                 Ok(key_expr) => {
-                    let callbacks = state
+                    let queryables = state
                         .queryables
-                        .values()
+                        .iter()
                         .filter(
-                            |queryable|
+                            |(_, queryable)|
                                 (queryable.origin == Locality::Any
                                     || (local == (queryable.origin == Locality::SessionLocal)))
                                 &&
@@ -1745,12 +1745,12 @@ impl Session {
                                     }
                                 }
                         )
-                        .map(|qable| qable.callback.clone())
-                        .collect::<Vec<Arc<dyn Fn(Query) + Send + Sync>>>();
+                        .map(|(id, qable)| (*id, qable.callback.clone()))
+                        .collect::<Vec<(u32, Arc<dyn Fn(Query) + Send + Sync>)>>();
                     (
                         state.primitives.as_ref().unwrap().clone(),
                         key_expr.into_owned(),
-                        callbacks,
+                        queryables,
                     )
                 }
                 Err(err) => {
@@ -1762,29 +1762,30 @@ impl Session {
 
         let parameters = parameters.to_owned();
 
-        let zid = self.runtime.zid(); // @TODO build/use prebuilt specific zid
+        let zid = self.runtime.zid();
 
-        let query = Query {
-            inner: Arc::new(QueryInner {
-                key_expr,
-                parameters,
-                value: body.map(|b| Value {
-                    payload: b.payload,
-                    encoding: b.encoding,
-                }),
-                qid,
-                zid,
-                primitives: if local {
-                    Arc::new(self.clone())
-                } else {
-                    primitives
-                },
-                #[cfg(feature = "unstable")]
-                attachment,
+        let query_inner = Arc::new(QueryInner {
+            key_expr,
+            parameters,
+            value: body.map(|b| Value {
+                payload: b.payload,
+                encoding: b.encoding,
             }),
-        };
-        for callback in callbacks.iter() {
-            callback(query.clone());
+            qid,
+            zid,
+            primitives: if local {
+                Arc::new(self.clone())
+            } else {
+                primitives
+            },
+            #[cfg(feature = "unstable")]
+            attachment,
+        });
+        for (eid, callback) in queryables {
+            callback(Query {
+                inner: query_inner.clone(),
+                eid,
+            });
         }
     }
 }
