@@ -202,7 +202,7 @@ impl SessionInfo<'_> {
     /// while let Some(router_zid) = routers_zid.next() {}
     /// # })
     /// ```
-    // tags{session.routers_zid.get}
+    // tags{session.zid_routers.get}
     pub fn routers_zid(&self) -> RoutersZidBuilder<'_> {
         RoutersZidBuilder {
             session: self.session.clone(),
@@ -221,7 +221,7 @@ impl SessionInfo<'_> {
     /// while let Some(peer_zid) = peers_zid.next() {}
     /// # })
     /// ```
-    // tags{session.peers_zid.get}
+    // tags{session.zid_peers.get}
     pub fn peers_zid(&self) -> PeersZidBuilder<'_> {
         PeersZidBuilder {
             session: self.session.clone(),

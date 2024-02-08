@@ -75,7 +75,7 @@ impl KeyExpr<'static> {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
-    // tags{keyexpr.create.from_string_unchecked}
+    // tags{keyexpr.create.unchecked}
     pub unsafe fn from_string_unchecked(s: String) -> Self {
         Self(KeyExprInner::Owned(OwnedKeyExpr::from_string_unchecked(s)))
     }
@@ -84,7 +84,7 @@ impl KeyExpr<'static> {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
-    // tags{keyexpr.create.from_string_unchecked}
+    // tags{keyexpr.create.unchecked}
     pub unsafe fn from_boxed_string_unchecked(s: Box<str>) -> Self {
         Self(KeyExprInner::Owned(
             OwnedKeyExpr::from_boxed_string_unchecked(s),
@@ -99,6 +99,7 @@ impl<'a> KeyExpr<'a> {
     ///
     /// [`KeyExpr::autocanonize`] is an alternative constructor that will canonize the passed expression before constructing it.
     // tags{keyexpr.create}
+    // tags{keyexpr.is_canon}
     pub fn new<T, E>(t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
@@ -147,7 +148,7 @@ impl<'a> KeyExpr<'a> {
     /// Canonizes the passed value before returning it as a `KeyExpr`.
     ///
     /// Will return Err if the passed value isn't a valid key expression despite canonization.
-    // tags{keyexpr.autocanonize}
+    // tags{keyexpr.canonize}
     pub fn autocanonize<T, E>(mut t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
@@ -161,7 +162,7 @@ impl<'a> KeyExpr<'a> {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
-    // tags{keyexpr.create.from_string_unchecked}
+    // tags{keyexpr.create.unchecked}
     pub unsafe fn from_str_uncheckend(s: &'a str) -> Self {
         keyexpr::from_str_unchecked(s).into()
     }
@@ -425,6 +426,7 @@ impl std::fmt::Display for KeyExpr<'_> {
         std::fmt::Display::fmt(self.as_keyexpr(), f)
     }
 }
+// tags{keyexpr.equal}
 impl PartialEq for KeyExpr<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.as_keyexpr() == other.as_keyexpr()

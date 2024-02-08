@@ -104,31 +104,31 @@ impl TryFrom<u64> for SampleKind {
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
-// tags{zenoh_id}
+// tags{zid}
 pub struct ZenohId(uhlc::ID);
 
 impl ZenohId {
-    // tags{zenoh_id.MAX_SIZE}
+    // tags{zid.MAX_SIZE}
     pub const MAX_SIZE: usize = 16;
 
     #[inline]
-    // tags{zenoh_id.size}
+    // tags{zid.size}
     pub fn size(&self) -> usize {
         self.0.size()
     }
 
     #[inline]
-    // tags{zenoh_id.to_le_bytes}
+    // tags{zid.to_le_bytes}
     pub fn to_le_bytes(&self) -> [u8; uhlc::ID::MAX_SIZE] {
         self.0.to_le_bytes()
     }
 
-    // tags{zenoh_id.rand}
+    // tags{zid.rand}
     pub fn rand() -> ZenohId {
         ZenohId(uhlc::ID::rand())
     }
 
-    // tags{zenoh_id.into_keyexpr}
+    // tags{zid.into_keyexpr}
     pub fn into_keyexpr(self) -> OwnedKeyExpr {
         self.into()
     }

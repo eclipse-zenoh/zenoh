@@ -28,19 +28,25 @@ pub use borrowed::*;
 
 /// Used to implement and expose the tools to implement canonization of Key Expressions for string-like types.
 /// The average user doesn't need to bother with it.
+// ignore_tagging
 pub mod canon;
 /// Used to implement and expose the tools to implement algorithms to detect Key Expression inclusivity.
 /// The average user doesn't need to bother with it.
+// ignore_tagging
 pub mod include;
 /// Used to implement and expose the tools to implement algorithms to detect Key Expression intersection.
 /// The average user doesn't need to bother with it.
+// ignore_tagging
 pub mod intersect;
+// ignore_tagging
 pub(crate) mod utils;
 
 /// Exposes a random Key Expression generator to help with testing.
+// ignore_tagging
 #[cfg(feature = "std")]
 pub mod fuzzer;
 
+// ignore_tagging
 pub mod format;
 
 #[cfg(test)]

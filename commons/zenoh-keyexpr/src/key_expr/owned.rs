@@ -26,6 +26,7 @@ use core::{
 /// A [`Arc<str>`] newtype that is statically known to be a valid key expression.
 ///
 /// See [`keyexpr`](super::borrowed::keyexpr).
+// tags{keyexpr}
 #[derive(Clone, PartialEq, Eq, Hash, serde::Deserialize)]
 #[cfg_attr(feature = "std", derive(schemars::JsonSchema))]
 #[serde(try_from = "String")]
@@ -46,6 +47,7 @@ impl OwnedKeyExpr {
     /// Note that to be considered a valid key expression, a string MUST be canon.
     ///
     /// [`OwnedKeyExpr::autocanonize`] is an alternative constructor that will canonize the passed expression before constructing it.
+    // tags{keyexpr.create}
     pub fn new<T, E>(t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
@@ -56,6 +58,7 @@ impl OwnedKeyExpr {
     /// Canonizes the passed value before returning it as an `OwnedKeyExpr`.
     ///
     /// Will return Err if the passed value isn't a valid key expression despite canonization.
+    // tags{keyexpr.canonize}
     pub fn autocanonize<T, E>(mut t: T) -> Result<Self, E>
     where
         Self: TryFrom<T, Error = E>,
@@ -69,6 +72,7 @@ impl OwnedKeyExpr {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
+    // tags{keyexpr.create.unchecked}
     pub unsafe fn from_string_unchecked(s: String) -> Self {
         Self::from_boxed_string_unchecked(s.into_boxed_str())
     }
@@ -76,6 +80,7 @@ impl OwnedKeyExpr {
     /// # Safety
     /// Key Expressions must follow some rules to be accepted by a Zenoh network.
     /// Messages addressed with invalid key expressions will be dropped.
+    // tags{keyexpr.create.unchecked}
     pub unsafe fn from_boxed_string_unchecked(s: Box<str>) -> Self {
         OwnedKeyExpr(s.into())
     }

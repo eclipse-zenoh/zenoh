@@ -42,6 +42,7 @@ use zenoh_result::{bail, Error as ZError, ZResult};
 /// * Two sets [intersect](keyexpr::intersects()) if they have at least one element in common. `a/*` intersects `*/a` on `a/a` for example.
 /// * One set A [includes](keyexpr::includes()) the other set B if all of B's elements are in A: `a/*/**` includes `a/b/**`
 /// * Two sets A and B are equal if all A includes B and B includes A. The Key Expression language is designed so that string equality is equivalent to set equality.
+// tags{keyexpr}
 #[allow(non_camel_case_types)]
 #[repr(transparent)]
 #[derive(PartialEq, Eq, Hash)]
@@ -54,6 +55,8 @@ impl keyexpr {
     /// Note that to be considered a valid key expression, a string MUST be canon.
     ///
     /// [`keyexpr::autocanonize`] is an alternative constructor that will canonize the passed expression before constructing it.
+    // tags{keyexpr.create}
+    // tags{keyexpr.is_canon}
     pub fn new<'a, T, E>(t: &'a T) -> Result<&'a Self, E>
     where
         &'a Self: TryFrom<&'a T, Error = E>,
@@ -67,6 +70,7 @@ impl keyexpr {
     /// Will return Err if the passed value isn't a valid key expression despite canonization.
     ///
     /// Note that this function does not allocate, and will instead mutate the passed value in place during canonization.
+    // tags{keyexpr.canonize}
     pub fn autocanonize<'a, T, E>(t: &'a mut T) -> Result<&'a Self, E>
     where
         &'a Self: TryFrom<&'a T, Error = E>,
@@ -77,12 +81,14 @@ impl keyexpr {
     }
 
     /// Returns `true` if the `keyexpr`s intersect, i.e. there exists at least one key which is contained in both of the sets defined by `self` and `other`.
+    /// tags{keyexpr.intersects}
     pub fn intersects(&self, other: &Self) -> bool {
         use super::intersect::Intersector;
         super::intersect::DEFAULT_INTERSECTOR.intersect(self, other)
     }
 
     /// Returns `true` if `self` includes `other`, i.e. the set defined by `self` contains every key belonging to the set defined by `other`.
+    // tags{keyexpr.includes}
     pub fn includes(&self, other: &Self) -> bool {
         use super::include::Includer;
         super::include::DEFAULT_INCLUDER.includes(self, other)
@@ -91,6 +97,7 @@ impl keyexpr {
     /// Returns the relation between `self` and `other` from `self`'s point of view ([`SetIntersectionLevel::Includes`] signifies that `self` includes `other`).
     ///
     /// Note that this is slower than [`keyexpr::intersects`] and [`keyexpr::includes`], so you should favor these methods for most applications.
+    // tags{keyexpr.relation_to}
     pub fn relation_to(&self, other: &Self) -> SetIntersectionLevel {
         use SetIntersectionLevel::*;
         if self.intersects(other) {
@@ -120,11 +127,13 @@ impl keyexpr {
     /// ```
     ///
     /// If `other` is of type `&keyexpr`, you may use `self / other` instead, as the joining becomes infallible.
+    // tags{keyexpr.join}
     pub fn join<S: AsRef<str> + ?Sized>(&self, other: &S) -> ZResult<OwnedKeyExpr> {
         OwnedKeyExpr::autocanonize(format!("{}/{}", self, other.as_ref()))
     }
 
     /// Returns `true` if `self` contains any wildcard character (`**` or `$*`).
+    // tags{keyexpr.is_wild}
     pub fn is_wild(&self) -> bool {
         self.0.contains(super::SINGLE_WILD as char)
     }
@@ -157,6 +166,7 @@ impl keyexpr {
     ///     None,
     ///     keyexpr::new("dem$*").unwrap().get_nonwild_prefix());
     /// ```
+    // tags{keyexpr.get_nonwild_prefix}
     pub fn get_nonwild_prefix(&self) -> Option<&keyexpr> {
         match self.0.find('*') {
             Some(i) => match self.0[..i].rfind('/') {
@@ -221,6 +231,7 @@ impl keyexpr {
     ///     keyexpr::new("demo/example/test/**").unwrap().strip_prefix(keyexpr::new("not/a/prefix").unwrap()).is_empty()
     /// );
     /// ```
+    // tags{keyexpr.strip_prefix}
     pub fn strip_prefix(&self, prefix: &Self) -> Vec<&keyexpr> {
         let mut result = vec![];
         'chunks: for i in (0..=self.len()).rev() {
@@ -265,6 +276,7 @@ impl keyexpr {
         result
     }
 
+    // tags{keyexpr.as_str}
     pub fn as_str(&self) -> &str {
         self
     }
@@ -274,6 +286,7 @@ impl keyexpr {
     ///
     /// Much like [`core::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
     /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
+    // tags{keyexpr.create.unchecked}
     pub unsafe fn from_str_unchecked(s: &str) -> &Self {
         core::mem::transmute(s)
     }
@@ -283,9 +296,11 @@ impl keyexpr {
     ///
     /// Much like [`core::str::from_utf8_unchecked`], this is memory-safe, but calling this without maintaining
     /// [`keyexpr`]'s invariants yourself may lead to unexpected behaviors, the Zenoh network dropping your messages.
+    // tags{keyexpr.create.unchecked}
     pub unsafe fn from_slice_unchecked(s: &[u8]) -> &Self {
         core::mem::transmute(s)
     }
+    // tags{keyexpr.chunks}
     pub fn chunks(&self) -> impl Iterator<Item = &Self> + DoubleEndedIterator {
         self.split('/').map(|c| unsafe {
             // Any chunk of a valid KE is itself a valid KE => we can safely call the unchecked constructor.
@@ -306,6 +321,7 @@ impl Div for &keyexpr {
 /// Note that [`Equals`](SetIntersectionLevel::Equals) implies [`Includes`](SetIntersectionLevel::Includes), which itself implies [`Intersects`](SetIntersectionLevel::Intersects).
 ///
 /// You can check for intersection with `level >= SetIntersecionLevel::Intersection` and for inclusion with `level >= SetIntersectionLevel::Includes`.
+// tags{options.keyexpr.set_intersection_level}
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SetIntersectionLevel {
     Disjoint,
@@ -334,6 +350,7 @@ impl fmt::Display for keyexpr {
     }
 }
 
+// tags{options.keyexpr.construction_error}
 #[repr(i8)]
 enum KeyExprConstructionError {
     LoneDollarStar = -1,
