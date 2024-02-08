@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{cmp, collections::BinaryHeap, mem, sync::atomic::AtomicPtr};
+use std::{cmp, collections::BinaryHeap, sync::atomic::AtomicPtr};
 
 use zenoh_result::ZResult;
 
@@ -21,7 +21,7 @@ use crate::api::{
     provider::{
         chunk::{AllocatedChunk, ChunkDescriptor},
         shared_memory_provider_backend::SharedMemoryProviderBackend,
-        types::{AllocError, ChunkAllocResult},
+        types::{ChunkAllocResult, ZAllocError},
     },
 };
 
@@ -76,7 +76,7 @@ pub struct PosixSharedMemoryProviderBackend {
 impl PosixSharedMemoryProviderBackend {
     // The implementation might allocate a little bit bigger size due to alignment requirements
     pub fn new(size: usize) -> ZResult<Self> {
-        let alignment = mem::align_of::<u32>();
+        let alignment = 64usize; //mem::align_of::<u32>();
         let alloc_size = align_addr_at(size, alignment);
         let segment = PosixSharedMemorySegment::create(alloc_size)?;
 
@@ -139,7 +139,7 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
                 Some(c) => {
                     log::trace!("PosixSharedMemoryProviderBackend::alloc({}) cannot find any big enough chunk\nSharedMemoryManager::free_list = {:?}", len, self.free_list);
                     self.free_list.push(c);
-                    Err(AllocError::NeedDefragment)
+                    Err(ZAllocError::NeedDefragment)
                 }
                 None => {
                     // NOTE: that should never happen! If this happens - there is a critical bug somewhere around!
@@ -149,13 +149,13 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
                     #[cfg(not(feature = "test"))]
                     {
                         log::error!("{err}");
-                        Err(AllocError::OutOfMemory)
+                        Err(ZAllocError::OutOfMemory)
                     }
                 }
             }
         } else {
             log::trace!( "PosixSharedMemoryProviderBackend does not have sufficient free memory to allocate {} bytes, try de-fragmenting!", len);
-            Err(AllocError::OutOfMemory)
+            Err(ZAllocError::OutOfMemory)
         }
     }
 
@@ -168,7 +168,7 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
         self.free_list.push(free_chunk);
     }
 
-    fn defragment(&mut self) {
+    fn defragment(&mut self) -> usize {
         fn try_merge_adjacent_chunks(a: &Chunk, b: &Chunk) -> Option<Chunk> {
             let end_offset = a.offset as usize + a.size;
             if end_offset == b.offset as usize {
@@ -180,6 +180,8 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
                 None
             }
         }
+
+        let mut largest = 0usize;
 
         if self.free_list.len() > 1 {
             let mut fbs: Vec<Chunk> = self.free_list.drain().collect();
@@ -193,6 +195,7 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
                 match try_merge_adjacent_chunks(&current, &next) {
                     Some(c) => {
                         current = c;
+                        largest = largest.max(current.size);
                         if i == n {
                             self.free_list.push(current)
                         }
@@ -208,6 +211,7 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
                 }
             }
         }
+        largest
     }
 
     fn available(&self) -> usize {

@@ -54,9 +54,8 @@ macro_rules! test_helpers_module {
 pub mod api;
 pub mod header;
 pub mod posix_shm;
+pub mod reader;
 pub mod watchdog;
-
-tested_module!(reader);
 
 test_helpers_module!();
 

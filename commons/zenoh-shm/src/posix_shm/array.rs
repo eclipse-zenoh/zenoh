@@ -15,6 +15,7 @@
 use std::{fmt::Display, marker::PhantomData, mem::size_of};
 
 use num_traits::{AsPrimitive, PrimInt, Unsigned};
+use stabby::IStable;
 use zenoh_result::{bail, ZResult};
 
 use super::segment::Segment;
@@ -34,7 +35,7 @@ where
     rand::distributions::Standard: rand::distributions::Distribution<ID>,
     ID: Clone + Display,
     ElemIndex: Unsigned + PrimInt + 'static + AsPrimitive<usize>,
-    Elem: Sized,
+    Elem: IStable<ContainsIndirections = stabby::abi::B0>,
     isize: AsPrimitive<ElemIndex>,
 {
     pub fn create(elem_count: usize, file_prefix: &str) -> ZResult<Self> {

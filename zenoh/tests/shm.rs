@@ -23,6 +23,7 @@ mod tests {
     use zenoh_shm::api::factory::SharedMemoryFactory;
     use zenoh_shm::api::protocol_implementations::posix::posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend;
     use zenoh_shm::api::protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID;
+    use zenoh_shm::api::provider::shared_memory_provider::GarbageCollect;
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
@@ -134,7 +135,7 @@ mod tests {
                 // Create the message to send
                 let sbuf = ztimeout!(async {
                     loop {
-                        match shm01.alloc(size) {
+                        match shm01.alloc::<GarbageCollect>(size) {
                             Ok(sbuf) => break sbuf,
                             Err(_) => task::sleep(USLEEP).await, // allocation failed -> memory is full, wait for it's reclamation
                         }

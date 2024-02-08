@@ -15,7 +15,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU32};
 
 // Chunk header
-#[repr(C)]
+#[stabby::stabby]
 #[derive(Debug)]
 pub struct ChunkHeaderType {
     /*

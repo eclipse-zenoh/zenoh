@@ -20,6 +20,7 @@ use zenoh_shm::{posix_shm::array::ArrayInSHM, test_helpers::TEST_SEGMENT_PREFIX}
 type TestSegmentID = u32;
 
 #[derive(Debug)]
+#[stabby::stabby]
 struct TestElem {
     value: u32,
 }

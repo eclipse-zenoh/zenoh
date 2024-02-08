@@ -42,6 +42,7 @@ mod tests {
                 posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
                 protocol_id::POSIX_PROTOCOL_ID,
             },
+            provider::shared_memory_provider::GarbageCollect,
         },
         SharedMemoryBuf,
     };
@@ -259,7 +260,7 @@ mod tests {
             // Create the message to send
             let mut sbuf = ztimeout!(async {
                 loop {
-                    match shm01.alloc(MSG_SIZE) {
+                    match shm01.alloc::<GarbageCollect>(MSG_SIZE) {
                         Ok(sbuf) => break sbuf,
                         Err(_) => task::sleep(USLEEP).await,
                     }
@@ -308,7 +309,7 @@ mod tests {
             // Create the message to send
             let mut sbuf = ztimeout!(async {
                 loop {
-                    match shm01.alloc(MSG_SIZE) {
+                    match shm01.alloc::<GarbageCollect>(MSG_SIZE) {
                         Ok(sbuf) => break sbuf,
                         Err(_) => task::sleep(USLEEP).await,
                     }

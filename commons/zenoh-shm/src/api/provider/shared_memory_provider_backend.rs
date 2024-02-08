@@ -26,8 +26,10 @@ pub trait SharedMemoryProviderBackend {
     fn free(&mut self, chunk: &ChunkDescriptor);
 
     // Defragment the memory
-    fn defragment(&mut self);
+    // Should return the size of largest defragmented chunk
+    fn defragment(&mut self) -> usize;
 
     // Bytes available for use
+    // Note: Zenoh algorithms expect O(1) complexity for this method
     fn available(&self) -> usize;
 }

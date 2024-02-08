@@ -95,13 +95,15 @@ impl SharedMemoryReaderBuilder {
 #[derive(Debug)]
 struct ClientStorage<Inner>
 where
-    Inner: Sized
+    Inner: Sized,
 {
     clients: HashMap<ProtocolID, Inner>,
 }
 
 impl<Inner: Sized> ClientStorage<Inner> {
-    fn new(clients: HashMap<ProtocolID, Inner>) -> Self { Self { clients } }
+    fn new(clients: HashMap<ProtocolID, Inner>) -> Self {
+        Self { clients }
+    }
 
     fn get_clients(&self) -> &HashMap<ProtocolID, Inner> {
         &self.clients
@@ -115,7 +117,6 @@ unsafe impl<Inner: Send> Send for ClientStorage<Inner> {}
 /// Safety: only immutable access to internal container is allowed,
 /// so we are Sync if the contained type is Sync
 unsafe impl<Inner: Sync> Sync for ClientStorage<Inner> {}
-
 
 #[derive(Debug)]
 pub struct SharedMemoryReader {

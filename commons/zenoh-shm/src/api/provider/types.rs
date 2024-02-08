@@ -18,17 +18,17 @@ use super::chunk::AllocatedChunk;
 
 // Allocation errors enum
 #[derive(Debug)]
-pub enum AllocError {
+pub enum ZAllocError {
     NeedDefragment,             // defragmentation needed
     OutOfMemory,                // the provider is out of memory
     Other(zenoh_result::Error), // other error
 }
 
-impl From<zenoh_result::Error> for AllocError {
+impl From<zenoh_result::Error> for ZAllocError {
     fn from(value: zenoh_result::Error) -> Self {
         Self::Other(value)
     }
 }
 
-pub type ChunkAllocResult = Result<AllocatedChunk, AllocError>;
-pub type BufAllocResult = Result<SharedMemoryBuf, AllocError>;
+pub type ChunkAllocResult = Result<AllocatedChunk, ZAllocError>;
+pub type BufAllocResult = Result<SharedMemoryBuf, ZAllocError>;

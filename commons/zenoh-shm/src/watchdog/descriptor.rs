@@ -104,11 +104,7 @@ impl Ord for OwnedDescriptor {
 
 impl PartialOrd for OwnedDescriptor {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match self.atomic.partial_cmp(&other.atomic) {
-            Some(core::cmp::Ordering::Equal) => {}
-            ord => return ord,
-        }
-        self.mask.partial_cmp(&other.mask)
+        Some(self.cmp(other))
     }
 }
 
