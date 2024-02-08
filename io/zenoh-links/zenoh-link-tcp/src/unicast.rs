@@ -146,28 +146,24 @@ impl LinkUnicastTrait for LinkUnicastTcp {
 
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
-        zenoh_util::net::get_interface_names_by_addr(self.src_addr.ip()).ok();
-        /*
-                match zenoh_util::net::get_interface_names_by_addr(self.src_addr.ip()) {
-                    Ok(interfaces) => {
-                        log::trace!(
-                            "get_interface_names for {:?}: {:?}",
-                            self.src_addr.ip(),
-                            interfaces
-                        );
-                        interfaces
-                    }
-                    Err(e) => {
-                        log::debug!(
-                            "get_interface_names for {:?} failed: {:?}",
-                            self.src_addr.ip(),
-                            e
-                        );
-                        vec![]
-                    }
-                }
-        */
-        vec![]
+        match zenoh_util::net::get_interface_names_by_addr(self.src_addr.ip()) {
+            Ok(interfaces) => {
+                log::trace!(
+                    "get_interface_names for {:?}: {:?}",
+                    self.src_addr.ip(),
+                    interfaces
+                );
+                interfaces
+            }
+            Err(e) => {
+                log::debug!(
+                    "get_interface_names for {:?} failed: {:?}",
+                    self.src_addr.ip(),
+                    e
+                );
+                vec![]
+            }
+        }
     }
 
     #[inline(always)]
