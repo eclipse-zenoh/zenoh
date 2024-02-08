@@ -15,7 +15,10 @@ use super::OwnedKeyExpr;
 
 fn random_chunk(rng: &'_ mut impl rand::Rng) -> impl Iterator<Item = u8> + '_ {
     let n = rng.gen_range(1..3);
-    (0..n).map(move |_| rng.sample(rand::distributions::Uniform::from(b'a'..b'c')))
+    rng.gen_bool(0.05)
+        .then_some(b'@')
+        .into_iter()
+        .chain((0..n).map(move |_| rng.sample(rand::distributions::Uniform::from(b'a'..b'c'))))
 }
 
 fn make(ke: &mut Vec<u8>, rng: &mut impl rand::Rng) {
