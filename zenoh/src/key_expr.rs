@@ -426,7 +426,7 @@ impl std::fmt::Display for KeyExpr<'_> {
         std::fmt::Display::fmt(self.as_keyexpr(), f)
     }
 }
-// tags{keyexpr.equal}
+// tags{keyexpr.equals}
 impl PartialEq for KeyExpr<'_> {
     fn eq(&self, other: &Self) -> bool {
         self.as_keyexpr() == other.as_keyexpr()
