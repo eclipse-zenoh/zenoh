@@ -173,8 +173,7 @@ impl Runtime {
         // clean up to break cyclic reference of self.state to itself
         let router = self.router();
         let mut tables = router.tables.tables.write().unwrap();
-        
-        Resource::close(&mut tables.root_res);
+
         let hat_code = tables.hat_code.clone();
         hat_code.close(&mut tables);
 
