@@ -42,7 +42,7 @@ use zenoh_transport::{
 
 const MSG_SIZE: usize = 8;
 const MSG_COUNT: usize = 100_000;
-const TIMEOUT: Duration = Duration::from_secs(3000);
+const TIMEOUT: Duration = Duration::from_secs(300);
 const SLEEP: Duration = Duration::from_millis(100);
 const USLEEP: Duration = Duration::from_millis(1);
 
