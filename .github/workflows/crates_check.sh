@@ -11,6 +11,7 @@ cargo check -p zenoh-macros --manifest-path commons/zenoh-macros/Cargo.toml &&
 cargo check -p zenoh-shm --manifest-path commons/zenoh-shm/Cargo.toml &&
 cargo check -p zenoh-codec --manifest-path commons/zenoh-codec/Cargo.toml &&
 cargo check -p zenoh-config --manifest-path commons/zenoh-config/Cargo.toml &&
+cargo check -p zenoh-task --manifest-path commons/zenoh-task/Cargo.toml &&
 cargo check -p zenoh-link-commons --manifest-path io/zenoh-link-commons/Cargo.toml &&
 cargo check -p zenoh-link-udp --manifest-path io/zenoh-links/zenoh-link-udp/Cargo.toml &&
 cargo check -p zenoh-link-tcp --manifest-path io/zenoh-links/zenoh-link-tcp/Cargo.toml &&

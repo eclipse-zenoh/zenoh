@@ -12,6 +12,7 @@ cargo login $1
 (cd commons/zenoh-shm && cargo publish; cargo clean)
 (cd commons/zenoh-codec && cargo publish; cargo clean)
 (cd commons/zenoh-config && cargo publish; cargo clean)
+(cd commons/zenoh-task && cargo publish; cargo clean)
 (cd io/zenoh-link-commons && cargo publish; cargo clean)
 (cd io/zenoh-links/zenoh-link-udp && cargo publish; cargo clean)
 (cd io/zenoh-links/zenoh-link-tcp && cargo publish; cargo clean)
