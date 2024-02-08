@@ -20,14 +20,20 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
+// ignore_tagging
 pub mod common;
 pub mod core;
+// ignore_tagging
 pub mod network;
+// ignore_tagging
 pub mod scouting;
+// ignore_tagging
 pub mod transport;
+// ignore_tagging
 pub mod zenoh;
 
 // Zenoh version
+// tags{}
 pub const VERSION: u8 = 0x08;
 
 // Zenoh protocol uses the following conventions for message definition and representation.

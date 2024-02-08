@@ -32,35 +32,45 @@ use zenoh_result::{bail, zerror};
 pub type TimestampId = uhlc::ID;
 
 /// Constants and helpers for zenoh `whatami` flags.
+// ignore_tagging
 pub mod whatami;
 pub use whatami::*;
 
 pub use zenoh_keyexpr::key_expr;
 
+// ignore_tagging
 pub mod wire_expr;
 pub use wire_expr::*;
 
+// ignore_tagging
 mod cowstr;
 pub use cowstr::CowStr;
+// ignore_tagging
 mod encoding;
 pub use encoding::{Encoding, KnownEncoding};
 
+// ignore_tagging
 pub mod locator;
+// ignore_tagging
 pub use locator::*;
 
+// ignore_tagging
 pub mod endpoint;
 pub use endpoint::*;
 
+// ignore_tagging
 pub mod resolution;
 pub use resolution::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+// tags{}
 pub struct Property {
     pub key: u64,
     pub value: Vec<u8>,
 }
 
 /// The kind of a `Sample`.
+// tags{sample.options.kind}
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub enum SampleKind {
@@ -94,25 +104,31 @@ impl TryFrom<u64> for SampleKind {
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
+// tags{zenoh_id}
 pub struct ZenohId(uhlc::ID);
 
 impl ZenohId {
+    // tags{zenoh_id.MAX_SIZE}
     pub const MAX_SIZE: usize = 16;
 
     #[inline]
+    // tags{zenoh_id.size}
     pub fn size(&self) -> usize {
         self.0.size()
     }
 
     #[inline]
+    // tags{zenoh_id.to_le_bytes}
     pub fn to_le_bytes(&self) -> [u8; uhlc::ID::MAX_SIZE] {
         self.0.to_le_bytes()
     }
 
+    // tags{zenoh_id.rand}
     pub fn rand() -> ZenohId {
         ZenohId(uhlc::ID::rand())
     }
 
+    // tags{zenoh_id.into_keyexpr}
     pub fn into_keyexpr(self) -> OwnedKeyExpr {
         self.into()
     }
@@ -125,6 +141,7 @@ impl Default for ZenohId {
 }
 
 // Mimics uhlc::SizeError,
+// tags{}
 #[derive(Debug, Clone, Copy)]
 pub struct SizeError(usize);
 
@@ -301,6 +318,7 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
 
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
+// tags{}
 pub enum Priority {
     Control = 0,
     RealTime = 1,
@@ -315,10 +333,13 @@ pub enum Priority {
 
 impl Priority {
     /// The lowest Priority
+    // tags{}
     pub const MIN: Self = Self::Background;
     /// The highest Priority
+    // tags{}
     pub const MAX: Self = Self::Control;
     /// The number of available priorities
+    // tags{}
     pub const NUM: usize = 1 + Self::MIN as usize - Self::MAX as usize;
 }
 
@@ -347,6 +368,7 @@ impl TryFrom<u8> for Priority {
 
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
+// tags{options.reliability}
 pub enum Reliability {
     #[default]
     BestEffort,
@@ -355,6 +377,7 @@ pub enum Reliability {
 
 impl Reliability {
     #[cfg(feature = "test")]
+    // tags{}
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -369,14 +392,18 @@ impl Reliability {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+// tags{}
 pub struct Channel {
+    // tags{}
     pub priority: Priority,
+    // tags{}
     pub reliability: Reliability,
 }
 
 /// The kind of congestion control.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
+// tags{options.congestion_control}
 pub enum CongestionControl {
     #[default]
     Drop = 0,
@@ -386,26 +413,16 @@ pub enum CongestionControl {
 /// The subscription mode.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
+// tags{options.subscriber.mode}
 pub enum SubMode {
     #[default]
     Push = 0,
     Pull = 1,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct SubInfo {
-    pub reliability: Reliability,
-    pub mode: SubMode,
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct QueryableInfo {
-    pub complete: u64, // Default 0: incomplete
-    pub distance: u64, // Default 0: no distance
-}
-
 /// The kind of consolidation.
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
+// tags{options.consolidation_mode}
 pub enum ConsolidationMode {
     /// No consolidation applied: multiple samples may be received for the same key-timestamp.
     None,
@@ -423,6 +440,7 @@ pub enum ConsolidationMode {
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+// tags{query.options.target}
 pub enum QueryTarget {
     #[default]
     BestMatching,
