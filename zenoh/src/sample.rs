@@ -134,7 +134,7 @@ mod attachment {
     }
     #[zenoh_macros::unstable]
     impl AttachmentBuilder {
-        // tags{sample.attachment.create}
+        // tags{attachment.create}
         pub fn new() -> Self {
             Self { inner: Vec::new() }
         }
@@ -147,7 +147,7 @@ mod attachment {
         /// Inserts a key-value pair to the attachment.
         ///
         /// Note that [`Attachment`] is a list of non-unique key-value pairs: inserting at the same key multiple times leads to both values being transmitted for that key.
-        // tags{sample.attachment.insert}
+        // tags{attachment.insert}
         pub fn insert<Key: AsRef<[u8]> + ?Sized, Value: AsRef<[u8]> + ?Sized>(
             &mut self,
             key: &Key,
@@ -172,7 +172,7 @@ mod attachment {
     }
     #[zenoh_macros::unstable]
     #[derive(Clone)]
-    // tags{sample.attachment}
+    // tags{attachment}
     pub struct Attachment {
         pub(crate) inner: ZBuf,
     }
@@ -196,21 +196,21 @@ mod attachment {
     }
     #[zenoh_macros::unstable]
     impl Attachment {
-        // tags{sample.attachment.create}
+        // tags{attachment.create}
         pub fn new() -> Self {
             Self {
                 inner: ZBuf::empty(),
             }
         }
-        // tags{sample.attachment.create}
+        // tags{attachment.is_empty}
         pub fn is_empty(&self) -> bool {
             self.len() == 0
         }
-        // tags{sample.attachment.len}
+        // tags{attachment.len}
         pub fn len(&self) -> usize {
             self.iter().count()
         }
-        // tags{sample.attachment.get}
+        // tags{attachment.iter}
         pub fn iter(&self) -> AttachmentIterator {
             self.into_iter()
         }
@@ -218,7 +218,7 @@ mod attachment {
             self.iter()
                 .find_map(|(k, v)| (k.as_slice() == key).then_some(v))
         }
-        // tags{sample.attachment.get}
+        // tags{attachment.get}
         pub fn get<Key: AsRef<[u8]>>(&self, key: &Key) -> Option<ZSlice> {
             self._get(key.as_ref())
         }
@@ -233,7 +233,7 @@ mod attachment {
         /// Note that [`Attachment`] is a list of non-unique key-value pairs: inserting at the same key multiple times leads to both values being transmitted for that key.
         ///
         /// [`Attachment`] is not very efficient at inserting, so if you wish to perform multiple inserts, it's generally better to [`Attachment::extend`] after performing the inserts on an [`AttachmentBuilder`]
-        // tags{sample.attachment.insert}
+        // tags{attachment.insert}
         pub fn insert<Key: AsRef<[u8]> + ?Sized, Value: AsRef<[u8]> + ?Sized>(
             &mut self,
             key: &Key,
@@ -247,14 +247,14 @@ mod attachment {
             }
             self
         }
-        // tags{sample.attachment.extend}
+        // tags{attachment.extend}
         pub fn extend(&mut self, with: impl Into<Self>) -> &mut Self {
             let with = with.into();
             self._extend(with)
         }
     }
     #[zenoh_macros::unstable]
-    // tags{}
+    // tags{attachment.iter}
     pub struct AttachmentIterator<'a> {
         reader: ZBufReader<'a>,
     }
@@ -327,6 +327,7 @@ mod attachment {
         }
     }
     #[zenoh_macros::unstable]
+    // tags{attachment.create.from_map}
     impl<'a> core::iter::FromIterator<(&'a [u8], &'a [u8])> for Attachment {
         fn from_iter<T: IntoIterator<Item = (&'a [u8], &'a [u8])>>(iter: T) -> Self {
             AttachmentBuilder::from_iter(iter).into()
@@ -373,7 +374,7 @@ pub struct Sample {
     /// </div>
     ///
     /// A map of key-value pairs, where each key and value are byte-slices.
-    // tags{sample.attachment}
+    // tags{attachment}
     pub attachment: Option<Attachment>,
 }
 
