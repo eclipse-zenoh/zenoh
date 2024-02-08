@@ -495,7 +495,7 @@ impl LinkUnicastTrait for UnicastPipe {
     #[inline(always)]
     fn get_interface_names(&self) -> Vec<String> {
         // @TODO: Not supported for now
-        log::debug!("The get_interface_names for UnicastPipe is not supported");
+        log::debug!("The get_interface_names for UnicastPipe is not supported!");
         vec![]
     }
 
