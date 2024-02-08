@@ -1,0 +1,20 @@
+name: Build & publish Debian packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        type: string
+        required: true
+      version:
+        type: string
+        required: true
+
+jobs:
+  main:
+    uses: ZettaScaleLabs/ci/.github/workflows/build-and-publish-perif-debian.yml@staging
+    with:
+      repo: ${{ github.repository }}
+      branch: ${{ inputs.branch }}
+      version: ${{ inputs.version }}
+    secrets: inherit
