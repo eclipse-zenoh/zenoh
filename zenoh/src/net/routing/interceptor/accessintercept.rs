@@ -7,16 +7,14 @@ use zenoh_protocol::{
 };
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
-use crate::net::routing::{interceptor::authz::PolicyEnforcer, RoutingContext};
+use crate::net::routing::RoutingContext;
 
 use super::{
-    authz::{self, NewCtx},
+    authz::{ActionFlag, NewCtx, NewPolicyEnforcer},
     EgressInterceptor, IngressInterceptor, InterceptorFactoryTrait, InterceptorTrait,
 };
-use authz::{Action, Request, Subject};
-
 pub(crate) struct AclEnforcer {
-    pub(crate) e: Arc<PolicyEnforcer>,
+    pub(crate) e: Arc<NewPolicyEnforcer>,
 }
 
 impl InterceptorFactoryTrait for AclEnforcer {
@@ -28,10 +26,10 @@ impl InterceptorFactoryTrait for AclEnforcer {
         (
             Some(Box::new(IngressAclEnforcer {
                 e: self.e.clone(),
-                zid: Some(uid),
+                zid: uid,
             })),
             Some(Box::new(EgressAclEnforcer {
-                zid: Some(uid),
+                zid: uid,
                 e: self.e.clone(),
             })),
         )
@@ -44,7 +42,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
         let e = &self.e;
         Some(Box::new(EgressAclEnforcer {
             e: e.clone(),
-            zid: None,
+            zid: ZenohId::default(),
         }))
     }
 
@@ -52,14 +50,14 @@ impl InterceptorFactoryTrait for AclEnforcer {
         let e = &self.e;
         Some(Box::new(IngressAclEnforcer {
             e: e.clone(),
-            zid: None,
+            zid: ZenohId::default(),
         }))
     }
 }
 
 struct IngressAclEnforcer {
-    e: Arc<PolicyEnforcer>,
-    zid: Option<ZenohId>,
+    e: Arc<NewPolicyEnforcer>,
+    zid: ZenohId,
 }
 
 impl InterceptorTrait for IngressAclEnforcer {
@@ -74,23 +72,21 @@ impl InterceptorTrait for IngressAclEnforcer {
         }) = &ctx.msg.body
         {
             let e = &self.e;
-            let ke: &str = ctx.full_expr().unwrap();
-            let new_ctx = NewCtx { ke, zid: self.zid }; //how to get the zid here
-            let decision = e.policy_enforcement_point(new_ctx, Action::Write).unwrap();
 
-            // let sub = Subject {
-            //     id: self.zid.unwrap(),
-            //     attributes: None,
-            // };
-            // let request = Request {
-            //     sub,
-            //     obj: ke.to_owned(),
-            //     action: Action::Write,
-            // };
-            // let decision = e.policy_decision_point(request).unwrap();
-
-            if !decision {
-                return None;
+            let ke: String = ctx.full_expr().unwrap().to_owned();
+            // let ke: String = "test/thr".to_owned(); //for testing
+            let new_ctx = NewCtx {
+                ke: &ke,
+                zid: self.zid,
+                attributes: None,
+            };
+            match e.policy_enforcement_point(new_ctx, ActionFlag::Write) {
+                Ok(decision) => {
+                    if !decision {
+                        return None;
+                    }
+                }
+                Err(_) => return None,
             }
         }
 
@@ -99,8 +95,8 @@ impl InterceptorTrait for IngressAclEnforcer {
 }
 
 struct EgressAclEnforcer {
-    e: Arc<PolicyEnforcer>,
-    zid: Option<ZenohId>,
+    e: Arc<NewPolicyEnforcer>,
+    zid: ZenohId,
 }
 
 impl InterceptorTrait for EgressAclEnforcer {
@@ -115,23 +111,21 @@ impl InterceptorTrait for EgressAclEnforcer {
         }) = &ctx.msg.body
         {
             let e = &self.e;
-            let ke: &str = ctx.full_expr().unwrap();
-            let new_ctx = NewCtx { ke, zid: self.zid };
-            let decision = e.policy_enforcement_point(new_ctx, Action::Read).unwrap();
+            let ke: String = ctx.full_expr().unwrap().to_owned();
 
-            // let sub = Subject {
-            //     id: self.zid.unwrap(),
-            //     attributes: None,
-            // };
-            // let request = Request {
-            //     sub,
-            //     obj: ke.to_owned(),
-            //     action: Action::Read,
-            // };
-            // let decision = e.policy_decision_point(request).unwrap();
-
-            if !decision {
-                return None;
+            // let ke: String = "test/thr".to_owned(); //for testing
+            let new_ctx = NewCtx {
+                ke: &ke,
+                zid: self.zid,
+                attributes: None,
+            };
+            match e.policy_enforcement_point(new_ctx, ActionFlag::Read) {
+                Ok(decision) => {
+                    if !decision {
+                        return None;
+                    }
+                }
+                Err(_) => return None,
             }
         }
 

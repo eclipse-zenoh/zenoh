@@ -140,9 +140,12 @@ impl RoutingContext<NetworkMessage> {
                     }
                 }
                 if let Some(prefix) = self.prefix.get().cloned() {
-                    let _ = self
-                        .full_expr
-                        .set(prefix.expr() + wire_expr.suffix.as_ref());
+                    // let _ = self
+                    //     .full_expr
+                    //     .set(prefix.expr() + wire_expr.suffix.as_ref());
+                    let mut full_expr = prefix.expr();
+                    full_expr.push_str(wire_expr.suffix.as_ref());
+                    let _ = self.full_expr.set(full_expr);
                     return Some(self.full_expr.get().as_ref().unwrap());
                 }
             }

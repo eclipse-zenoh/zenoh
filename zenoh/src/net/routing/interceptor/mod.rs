@@ -20,11 +20,11 @@
 //!
 mod accessintercept;
 mod authz;
-use std::{collections::HashMap, sync::Arc};
+use std::sync::Arc;
 
 use super::RoutingContext;
 //use crate::net::routing::interceptor::authz;
-use crate::net::routing::interceptor::{accessintercept::AclEnforcer, authz::PolicyEnforcer};
+use crate::net::routing::interceptor::{accessintercept::AclEnforcer, authz::NewPolicyEnforcer};
 use zenoh_config::Config;
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
@@ -62,9 +62,9 @@ pub(crate) fn interceptor_factories(_config: &Config) -> Vec<InterceptorFactory>
     */
 
     /* if config condition is selected this will be initialiased; putting true for now */
-    if true {
+    if false {
         println!("the interceptor is initialized");
-        let mut policy_enforcer = PolicyEnforcer(HashMap::new());
+        let mut policy_enforcer = NewPolicyEnforcer::new().unwrap(); //(HashMap::new());
         match policy_enforcer.init() {
             Ok(_) => res.push(Box::new(AclEnforcer {
                 e: Arc::new(policy_enforcer),
