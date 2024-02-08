@@ -202,10 +202,10 @@
           /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
           /// Higher values lead to a more aggressive batching but it will introduce additional latency.
           backoff: 100,
-          // Number of threads dedicated to transmission
-          // By default, the number of threads is calculated as follows: 1 + ((#cores - 1) / 4)
-          // threads: 4,
         },
+        // Number of threads dedicated to transmission
+        // By default, the number of threads is calculated as follows: 1 + ((#cores - 1) / 4)
+        // threads: 4,
       },
       /// Configure the zenoh RX parameters of a link
       rx: {
