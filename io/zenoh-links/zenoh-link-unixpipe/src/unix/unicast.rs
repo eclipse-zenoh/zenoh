@@ -494,6 +494,7 @@ impl LinkUnicastTrait for UnicastPipe {
 
     #[inline(always)]
     fn is_reliable(&self) -> bool {
+        // test
         true
     }
 
