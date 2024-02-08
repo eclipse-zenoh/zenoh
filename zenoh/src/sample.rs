@@ -68,7 +68,7 @@ pub struct SourceInfo {
 #[test]
 #[cfg(feature = "unstable")]
 fn source_info_stack_size() {
-    assert_eq!(std::mem::size_of::<SourceInfo>(), 16 * 2);
+    assert_eq!(std::mem::size_of::<SourceInfo>(), 16 * 3);
 }
 
 #[zenoh_macros::unstable]
