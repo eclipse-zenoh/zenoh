@@ -59,7 +59,7 @@ where
             header |= flag::E;
         }
         let mut n_exts = (ext_sinfo.is_some()) as u8
-            + ((ext_consolidation != &ext::ConsolidationType::default()) as u8)
+            + ((ext_consolidation != &ext::ConsolidationType::DEFAULT) as u8)
             + (ext_attachment.is_some()) as u8
             + (ext_unknown.len() as u8);
         #[cfg(feature = "shared-memory")]
@@ -84,7 +84,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
         }
-        if ext_consolidation != &ext::ConsolidationType::default() {
+        if ext_consolidation != &ext::ConsolidationType::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_consolidation, n_exts != 0))?;
         }
@@ -156,7 +156,7 @@ where
 
         // Extensions
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
-        let mut ext_consolidation = ext::ConsolidationType::default();
+        let mut ext_consolidation = ext::ConsolidationType::DEFAULT;
         #[cfg(feature = "shared-memory")]
         let mut ext_shm: Option<ext::ShmType> = None;
         let mut ext_attachment: Option<ext::AttachmentType> = None;

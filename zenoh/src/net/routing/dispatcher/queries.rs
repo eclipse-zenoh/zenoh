@@ -539,7 +539,7 @@ pub fn route_query(
                         timestamp: None,
                         encoding: Encoding::DEFAULT,
                         ext_sinfo: None,
-                        ext_consolidation: ConsolidationType::default(),
+                        ext_consolidation: ConsolidationType::DEFAULT,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
                         ext_attachment: None, // @TODO: expose it in the API

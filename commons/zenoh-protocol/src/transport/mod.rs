@@ -75,13 +75,18 @@ pub enum TransportBodyLowLatency {
 
 pub type TransportSn = u32;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct PrioritySn {
     pub reliable: TransportSn,
     pub best_effort: TransportSn,
 }
 
 impl PrioritySn {
+    pub const DEFAULT: Self = Self {
+        reliable: TransportSn::MIN,
+        best_effort: TransportSn::MIN,
+    };
+
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;

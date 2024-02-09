@@ -89,7 +89,7 @@ where
             header |= flag::P;
         }
         let mut n_exts = (ext_sinfo.is_some() as u8)
-            + ((ext_consolidation != &ext::ConsolidationType::default()) as u8)
+            + ((ext_consolidation != &ext::ConsolidationType::DEFAULT) as u8)
             + (ext_body.is_some() as u8)
             + (ext_attachment.is_some() as u8)
             + (ext_unknown.len() as u8);
@@ -108,7 +108,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (sinfo, n_exts != 0))?;
         }
-        if ext_consolidation != &ext::ConsolidationType::default() {
+        if ext_consolidation != &ext::ConsolidationType::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_consolidation, n_exts != 0))?;
         }
@@ -161,7 +161,7 @@ where
 
         // Extensions
         let mut ext_sinfo: Option<ext::SourceInfoType> = None;
-        let mut ext_consolidation = ext::ConsolidationType::default();
+        let mut ext_consolidation = ext::ConsolidationType::DEFAULT;
         let mut ext_body: Option<ext::QueryBodyType> = None;
         let mut ext_attachment: Option<ext::AttachmentType> = None;
         let mut ext_unknown = Vec::new();

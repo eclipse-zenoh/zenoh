@@ -236,7 +236,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                         } else {
                             None
                         },
-                        ext_consolidation: ConsolidationType::default(),
+                        ext_consolidation: ConsolidationType::DEFAULT,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
                         ext_attachment,
