@@ -476,7 +476,6 @@ macro_rules! inc_res_stats {
                             e.ext_body.as_ref().map(|b| b.payload.len()).unwrap_or(0),
                         );
                     }
-                    ResponseBody::Ack(_) => (),
                 }
             }
         }
