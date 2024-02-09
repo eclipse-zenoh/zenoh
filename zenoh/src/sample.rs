@@ -67,8 +67,16 @@ pub struct SourceInfo {
 
 #[test]
 #[cfg(feature = "unstable")]
+#[cfg(not(all(target_os = "macos", target_arch = "aarch64")))]
 fn source_info_stack_size() {
-    assert_eq!(std::mem::size_of::<SourceInfo>(), 16 * 3);
+    assert_eq!(std::mem::size_of::<SourceInfo>(), 40);
+}
+
+#[test]
+#[cfg(feature = "unstable")]
+#[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+fn source_info_stack_size() {
+    assert_eq!(std::mem::size_of::<SourceInfo>(), 48);
 }
 
 #[zenoh_macros::unstable]
