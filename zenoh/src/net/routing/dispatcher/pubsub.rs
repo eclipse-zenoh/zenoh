@@ -586,7 +586,7 @@ pub fn pull_data(tables_ref: &RwLock<Tables>, face: &Arc<FaceState>, expr: WireE
                                     wire_expr: key_expr,
                                     ext_qos: ext::QoSType::PUSH,
                                     ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::default(),
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
                                     payload,
                                 });
                             }

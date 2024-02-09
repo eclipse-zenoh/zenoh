@@ -81,7 +81,7 @@ async fn run(endpoint: &EndPoint, channel: Channel, msg_size: usize) {
         wire_expr: "test".into(),
         ext_qos: QoSType::new(channel.priority, CongestionControl::Block, false),
         ext_tstamp: None,
-        ext_nodeid: NodeIdType::default(),
+        ext_nodeid: NodeIdType::DEFAULT,
         payload: Put {
             payload: vec![0u8; msg_size].into(),
             timestamp: None,

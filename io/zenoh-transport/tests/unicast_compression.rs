@@ -297,7 +297,7 @@ mod tests {
             wire_expr: "test".into(),
             ext_qos: QoSType::new(channel.priority, cctrl, false),
             ext_tstamp: None,
-            ext_nodeid: NodeIdType::default(),
+            ext_nodeid: NodeIdType::DEFAULT,
             payload: Put {
                 payload: vec![0u8; msg_size].into(),
                 timestamp: None,

@@ -260,7 +260,7 @@ fn propagate_simple_queryable(
                 Declare {
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
                         id: 0, // @TODO use proper QueryableId (#703)
                         wire_expr: key_expr,
@@ -516,7 +516,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
                 Declare {
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                         id: 0, // @TODO use proper QueryableId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
@@ -556,7 +556,7 @@ fn propagate_forget_simple_queryable_to_peers(tables: &mut Tables, res: &mut Arc
                     Declare {
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
                         body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                             id: 0, // @TODO use proper QueryableId (#703)
                             ext_wire_expr: WireExprType { wire_expr },
@@ -725,7 +725,7 @@ pub(super) fn undeclare_client_queryable(
                 Declare {
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                         id: 0, // @TODO use proper QueryableId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
@@ -758,7 +758,7 @@ pub(super) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                     Declare {
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
                         body: DeclareBody::DeclareQueryable(DeclareQueryable {
                             id: 0, // @TODO use proper QueryableId (#703)
                             wire_expr: key_expr,
@@ -787,7 +787,7 @@ pub(super) fn queries_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                     Declare {
                         ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
                         body: DeclareBody::DeclareQueryable(DeclareQueryable {
                             id: 0, // @TODO use proper QueryableId (#703)
                             wire_expr: key_expr,
@@ -886,7 +886,7 @@ pub(super) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                                         Declare {
                                             ext_qos: ext::QoSType::DECLARE,
                                             ext_tstamp: None,
-                                            ext_nodeid: ext::NodeIdType::default(),
+                                            ext_nodeid: ext::NodeIdType::DEFAULT,
                                             body: DeclareBody::UndeclareQueryable(
                                                 UndeclareQueryable {
                                                     id: 0, // @TODO use proper QueryableId (#703)
@@ -910,7 +910,7 @@ pub(super) fn queries_linkstate_change(tables: &mut Tables, zid: &ZenohId, links
                                     Declare {
                                         ext_qos: ext::QoSType::DECLARE,
                                         ext_tstamp: None,
-                                        ext_nodeid: ext::NodeIdType::default(),
+                                        ext_nodeid: ext::NodeIdType::DEFAULT,
                                         body: DeclareBody::DeclareQueryable(DeclareQueryable {
                                             id: 0, // @TODO use proper QueryableId (#703)
                                             wire_expr: key_expr,

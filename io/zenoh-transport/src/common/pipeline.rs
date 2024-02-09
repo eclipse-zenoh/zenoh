@@ -751,7 +751,7 @@ mod tests {
                 wire_expr: key,
                 ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
                 ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::default(),
+                ext_nodeid: ext::NodeIdType::DEFAULT,
                 payload: PushBody::Put(Put {
                     timestamp: None,
                     encoding: Encoding::DEFAULT,
@@ -881,7 +881,7 @@ mod tests {
                 wire_expr: key,
                 ext_qos: ext::QoSType::new(Priority::Control, CongestionControl::Block, false),
                 ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::default(),
+                ext_nodeid: ext::NodeIdType::DEFAULT,
                 payload: PushBody::Put(Put {
                     timestamp: None,
                     encoding: Encoding::DEFAULT,
@@ -993,7 +993,7 @@ mod tests {
                             false,
                         ),
                         ext_tstamp: None,
-                        ext_nodeid: ext::NodeIdType::default(),
+                        ext_nodeid: ext::NodeIdType::DEFAULT,
                         payload: PushBody::Put(Put {
                             timestamp: None,
                             encoding: Encoding::DEFAULT,

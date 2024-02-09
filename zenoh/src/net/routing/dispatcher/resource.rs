@@ -468,7 +468,7 @@ impl Resource {
                         Declare {
                             ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
-                            ext_nodeid: ext::NodeIdType::default(),
+                            ext_nodeid: ext::NodeIdType::DEFAULT,
                             body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
                                 id: expr_id,
                                 wire_expr: nonwild_prefix.expr().into(),

@@ -576,7 +576,7 @@ mod tests {
             wire_expr: WireExpr::empty(),
             ext_qos: ext::QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             payload: PushBody::Put(Put {
                 timestamp: None,
                 encoding: Encoding::DEFAULT,

@@ -272,7 +272,7 @@ impl AdminSpace {
         primitives.send_declare(Declare {
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareQueryable(DeclareQueryable {
                 id: 0, // @TODO use proper QueryableId (#703)
                 wire_expr: [&root_key, "/**"].concat().into(),
@@ -286,7 +286,7 @@ impl AdminSpace {
         primitives.send_declare(Declare {
             ext_qos: ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                 id: 0, // @TODO use proper SubscriberId (#703)
                 wire_expr: [&root_key, "/config/**"].concat().into(),

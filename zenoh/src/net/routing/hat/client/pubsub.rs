@@ -51,7 +51,7 @@ fn propagate_simple_subscription_to(
             Declare {
                 ext_qos: ext::QoSType::DECLARE,
                 ext_tstamp: None,
-                ext_nodeid: ext::NodeIdType::default(),
+                ext_nodeid: ext::NodeIdType::DEFAULT,
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                     id: 0, // @TODO use proper SubscriberId (#703)
                     wire_expr: key_expr,
@@ -139,7 +139,7 @@ fn declare_client_subscription(
                 Declare {
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                         id: 0, // @TODO use proper SubscriberId (#703)
                         wire_expr: res.expr().into(),
@@ -173,7 +173,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
                 Declare {
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                         id: 0, // @TODO use proper SubscriberId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
@@ -211,7 +211,7 @@ pub(super) fn undeclare_client_subscription(
                 Declare {
                     ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
                         id: 0, // @TODO use proper SubscriberId (#703)
                         ext_wire_expr: WireExprType { wire_expr },

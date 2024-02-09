@@ -299,7 +299,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
             wire_expr: "test".into(),
             ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
             ext_tstamp: None,
-            ext_nodeid: NodeIdType::default(),
+            ext_nodeid: NodeIdType::DEFAULT,
             payload: Put {
                 payload: vec![0u8; MSG_SIZE].into(),
                 timestamp: None,

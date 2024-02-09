@@ -635,7 +635,7 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
         primitives.send_declare(zenoh_protocol::network::Declare {
             ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
-            ext_nodeid: declare::ext::NodeIdType::default(),
+            ext_nodeid: declare::ext::NodeIdType::DEFAULT,
             body: DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr { id: expr_id }),
         });
 

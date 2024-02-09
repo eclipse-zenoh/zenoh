@@ -811,7 +811,7 @@ fn resolve_put(
                 false,
             ),
             ext_tstamp: None,
-            ext_nodeid: ext::NodeIdType::default(),
+            ext_nodeid: ext::NodeIdType::DEFAULT,
             payload: match kind {
                 SampleKind::Put => {
                     #[allow(unused_mut)]

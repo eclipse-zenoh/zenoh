@@ -46,7 +46,7 @@ where
         let mut header = id::PUSH;
         let mut n_exts = ((ext_qos != &ext::QoSType::DEFAULT) as u8)
             + (ext_tstamp.is_some() as u8)
-            + ((ext_nodeid != &ext::NodeIdType::default()) as u8);
+            + ((ext_nodeid != &ext::NodeIdType::DEFAULT) as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -70,7 +70,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
         }
-        if ext_nodeid != &ext::NodeIdType::default() {
+        if ext_nodeid != &ext::NodeIdType::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_nodeid, n_exts != 0))?;
         }
@@ -118,7 +118,7 @@ where
         // Extensions
         let mut ext_qos = ext::QoSType::DEFAULT;
         let mut ext_tstamp = None;
-        let mut ext_nodeid = ext::NodeIdType::default();
+        let mut ext_nodeid = ext::NodeIdType::DEFAULT;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);
         while has_ext {

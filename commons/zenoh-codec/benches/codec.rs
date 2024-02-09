@@ -84,7 +84,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         wire_expr: WireExpr::empty(),
         ext_qos: ext::QoSType::DEFAULT,
         ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
+        ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
             encoding: Encoding::DEFAULT,
@@ -130,7 +130,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         wire_expr: WireExpr::empty(),
         ext_qos: ext::QoSType::DEFAULT,
         ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
+        ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
             encoding: Encoding::DEFAULT,
@@ -171,7 +171,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         wire_expr: WireExpr::empty(),
         ext_qos: ext::QoSType::DEFAULT,
         ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
+        ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
             encoding: Encoding::DEFAULT,
@@ -212,7 +212,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         wire_expr: WireExpr::empty(),
         ext_qos: ext::QoSType::DEFAULT,
         ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
+        ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
             encoding: Encoding::DEFAULT,
@@ -240,7 +240,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         wire_expr: WireExpr::empty(),
         ext_qos: ext::QoSType::DEFAULT,
         ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
+        ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
             encoding: Encoding::DEFAULT,
@@ -279,7 +279,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         wire_expr: WireExpr::empty(),
         ext_qos: ext::QoSType::DEFAULT,
         ext_tstamp: None,
-        ext_nodeid: ext::NodeIdType::default(),
+        ext_nodeid: ext::NodeIdType::DEFAULT,
         payload: PushBody::Put(Put {
             timestamp: None,
             encoding: Encoding::DEFAULT,

@@ -98,7 +98,7 @@ where
             + ((ext_target != &ext::TargetType::DEFAULT) as u8)
             + (ext_budget.is_some() as u8)
             + (ext_timeout.is_some() as u8)
-            + ((ext_nodeid != &ext::NodeIdType::default()) as u8);
+            + ((ext_nodeid != &ext::NodeIdType::DEFAULT) as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -137,7 +137,7 @@ where
             let e = ext::Timeout::new(to.as_millis() as u64);
             self.write(&mut *writer, (&e, n_exts != 0))?;
         }
-        if ext_nodeid != &ext::NodeIdType::default() {
+        if ext_nodeid != &ext::NodeIdType::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_nodeid, n_exts != 0))?;
         }
@@ -187,7 +187,7 @@ where
         // Extensions
         let mut ext_qos = ext::QoSType::DEFAULT;
         let mut ext_tstamp = None;
-        let mut ext_nodeid = ext::NodeIdType::default();
+        let mut ext_nodeid = ext::NodeIdType::DEFAULT;
         let mut ext_target = ext::TargetType::DEFAULT;
         let mut ext_limit = None;
         let mut ext_timeout = None;

@@ -273,7 +273,7 @@ mod tests {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
                 ext_tstamp: None,
-                ext_nodeid: NodeIdType::default(),
+                ext_nodeid: NodeIdType::DEFAULT,
                 payload: Put {
                     payload: sbuf.into(),
                     timestamp: None,
@@ -321,7 +321,7 @@ mod tests {
                 wire_expr: "test".into(),
                 ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
                 ext_tstamp: None,
-                ext_nodeid: NodeIdType::default(),
+                ext_nodeid: NodeIdType::DEFAULT,
                 payload: Put {
                     payload: sbuf.into(),
                     timestamp: None,
