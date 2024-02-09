@@ -537,7 +537,7 @@ pub fn route_query(
                 for (wexpr, payload) in local_replies {
                     let payload = ResponseBody::Reply(Reply {
                         timestamp: None,
-                        encoding: Encoding::default(),
+                        encoding: Encoding::DEFAULT,
                         ext_sinfo: None,
                         ext_consolidation: ConsolidationType::default(),
                         #[cfg(feature = "shared-memory")]

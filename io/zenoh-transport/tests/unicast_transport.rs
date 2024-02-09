@@ -472,7 +472,7 @@ async fn test_transport(
         payload: Put {
             payload: vec![0u8; msg_size].into(),
             timestamp: None,
-            encoding: Encoding::default(),
+            encoding: Encoding::DEFAULT,
             ext_sinfo: None,
             #[cfg(feature = "shared-memory")]
             ext_shm: None,

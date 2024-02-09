@@ -266,6 +266,8 @@ impl Default for Encoding {
 }
 
 impl Encoding {
+    pub const DEFAULT: Self = Self::EMPTY;
+
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::{
