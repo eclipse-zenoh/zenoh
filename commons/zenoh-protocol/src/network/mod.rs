@@ -226,6 +226,8 @@ pub mod ext {
         const D_FLAG: u8 = 0b00001000;
         const E_FLAG: u8 = 0b00010000;
 
+        pub const DEFAULT: Self = Self::new(Priority::DEFAULT, CongestionControl::DEFAULT, false);
+
         pub const DECLARE: Self = Self::new(Priority::DEFAULT, CongestionControl::Block, false);
         pub const PUSH: Self = Self::new(Priority::DEFAULT, CongestionControl::Drop, false);
         pub const REQUEST: Self = Self::new(Priority::DEFAULT, CongestionControl::Block, false);
@@ -287,7 +289,7 @@ pub mod ext {
 
     impl<const ID: u8> Default for QoSType<{ ID }> {
         fn default() -> Self {
-            Self::new(Priority::DEFAULT, CongestionControl::default(), false)
+            Self::new(Priority::DEFAULT, CongestionControl::DEFAULT, false)
         }
     }
 
