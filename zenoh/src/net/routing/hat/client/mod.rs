@@ -279,9 +279,6 @@ impl HatBaseTrait for HatCode {
     fn info(&self, _tables: &Tables, _kind: WhatAmI) -> String {
         "graph {}".to_string()
     }
-
-    fn close(&self, _tables: &mut Tables) {
-    }
 }
 
 struct HatContext {}

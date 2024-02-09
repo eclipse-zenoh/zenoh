@@ -751,11 +751,6 @@ impl HatBaseTrait for HatCode {
             _ => "graph {}".to_string(),
         }
     }
-
-    fn close(&self, tables: &mut Tables) {
-        hat_mut!(tables).peers_net.take();
-        hat_mut!(tables).routers_net.take();
-    }
 }
 
 struct HatContext {

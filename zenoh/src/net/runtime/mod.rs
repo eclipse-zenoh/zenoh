@@ -24,7 +24,6 @@ use super::primitives::DeMux;
 use super::routing;
 use super::routing::router::Router;
 use crate::config::{unwrap_or_default, Config, ModeDependent, Notifier};
-use crate::net::routing::dispatcher::resource::Resource;
 use crate::GIT_VERSION;
 pub use adminspace::AdminSpace;
 use async_std::task::JoinHandle;
@@ -171,13 +170,6 @@ impl Runtime {
         drop(self.state.stop_source.write().unwrap().take());
         self.manager().close().await;
         // clean up to break cyclic reference of self.state to itself
-        let router = self.router();
-        let mut tables = router.tables.tables.write().unwrap();
-
-        let hat_code = tables.hat_code.clone();
-        hat_code.close(&mut tables);
-
-        drop(tables);
         self.state.transport_handlers.write().unwrap().clear();
         Ok(())
     }
