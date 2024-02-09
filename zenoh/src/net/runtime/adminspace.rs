@@ -290,7 +290,7 @@ impl AdminSpace {
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                 id: 0, // @TODO use proper SubscriberId (#703)
                 wire_expr: [&root_key, "/config/**"].concat().into(),
-                ext_info: SubscriberInfo::default(),
+                ext_info: SubscriberInfo::DEFAULT,
             }),
         });
     }

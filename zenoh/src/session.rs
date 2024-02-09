@@ -1375,7 +1375,7 @@ impl Session {
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
                 id: id as u32,
                 wire_expr: key_expr.to_wire(self).to_owned(),
-                ext_info: SubscriberInfo::default(),
+                ext_info: SubscriberInfo::DEFAULT,
             }),
         });
         Ok(tok_state)

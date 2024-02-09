@@ -340,7 +340,7 @@ where
 
         // Header
         let mut header = declare::id::D_SUBSCRIBER;
-        let mut n_exts = (ext_info != &subscriber::ext::SubscriberInfo::default()) as u8;
+        let mut n_exts = (ext_info != &subscriber::ext::SubscriberInfo::DEFAULT) as u8;
         if n_exts != 0 {
             header |= subscriber::flag::Z;
         }
@@ -357,7 +357,7 @@ where
         self.write(&mut *writer, wire_expr)?;
 
         // Extensions
-        if ext_info != &subscriber::ext::SubscriberInfo::default() {
+        if ext_info != &subscriber::ext::SubscriberInfo::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_info, n_exts != 0))?;
         }
@@ -402,7 +402,7 @@ where
         };
 
         // Extensions
-        let mut ext_info = subscriber::ext::SubscriberInfo::default();
+        let mut ext_info = subscriber::ext::SubscriberInfo::DEFAULT;
 
         let mut has_ext = imsg::has_flag(self.header, subscriber::flag::Z);
         while has_ext {
@@ -524,7 +524,7 @@ where
 
         // Header
         let mut header = declare::id::D_QUERYABLE;
-        let mut n_exts = (ext_info != &queryable::ext::QueryableInfo::default()) as u8;
+        let mut n_exts = (ext_info != &queryable::ext::QueryableInfo::DEFAULT) as u8;
         if n_exts != 0 {
             header |= subscriber::flag::Z;
         }
@@ -539,7 +539,7 @@ where
         // Body
         self.write(&mut *writer, id)?;
         self.write(&mut *writer, wire_expr)?;
-        if ext_info != &queryable::ext::QueryableInfo::default() {
+        if ext_info != &queryable::ext::QueryableInfo::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_info, n_exts != 0))?;
         }
@@ -584,7 +584,7 @@ where
         };
 
         // Extensions
-        let mut ext_info = queryable::ext::QueryableInfo::default();
+        let mut ext_info = queryable::ext::QueryableInfo::DEFAULT;
 
         let mut has_ext = imsg::has_flag(self.header, queryable::flag::Z);
         while has_ext {

@@ -156,6 +156,8 @@ pub enum Mode {
 }
 
 impl Mode {
+    pub const DEFAULT: Self = Self::Push;
+
     #[cfg(feature = "test")]
     fn rand() -> Self {
         use rand::Rng;
@@ -344,7 +346,7 @@ pub mod subscriber {
         /// - if P==1 then the subscription is pull, else it is push
         /// - rsv:  Reserved
         /// ```        
-        #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub struct SubscriberInfo {
             pub reliability: Reliability,
             pub mode: Mode,
@@ -354,12 +356,23 @@ pub mod subscriber {
             pub const R: u64 = 1;
             pub const P: u64 = 1 << 1;
 
+            pub const DEFAULT: Self = Self {
+                reliability: Reliability::DEFAULT,
+                mode: Mode::DEFAULT,
+            };
+
             #[cfg(feature = "test")]
             pub fn rand() -> Self {
                 let reliability = Reliability::rand();
                 let mode = Mode::rand();
 
                 Self { reliability, mode }
+            }
+        }
+
+        impl Default for SubscriberInfo {
+            fn default() -> Self {
+                Self::DEFAULT
             }
         }
 
@@ -502,13 +515,18 @@ pub mod queryable {
         /// +---------------+
         /// ~   distance    ~
         /// +---------------+
-        #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub struct QueryableInfo {
             pub complete: u8,  // Default 0: incomplete // @TODO: maybe a bitflag
             pub distance: u32, // Default 0: no distance
         }
 
         impl QueryableInfo {
+            pub const DEFAULT: Self = Self {
+                complete: 0,
+                distance: 0,
+            };
+
             #[cfg(feature = "test")]
             pub fn rand() -> Self {
                 use rand::Rng;
@@ -517,6 +535,12 @@ pub mod queryable {
                 let distance: u32 = rng.gen();
 
                 Self { complete, distance }
+            }
+        }
+
+        impl Default for QueryableInfo {
+            fn default() -> Self {
+                Self::DEFAULT
             }
         }
 
