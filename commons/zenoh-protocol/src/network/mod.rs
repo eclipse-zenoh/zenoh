@@ -226,13 +226,13 @@ pub mod ext {
         const D_FLAG: u8 = 0b00001000;
         const E_FLAG: u8 = 0b00010000;
 
-        pub const DECLARE: Self = Self::new(Priority::DEAULT, CongestionControl::Block, false);
-        pub const PUSH: Self = Self::new(Priority::DEAULT, CongestionControl::Drop, false);
-        pub const REQUEST: Self = Self::new(Priority::DEAULT, CongestionControl::Block, false);
-        pub const RESPONSE: Self = Self::new(Priority::DEAULT, CongestionControl::Block, false);
+        pub const DECLARE: Self = Self::new(Priority::DEFAULT, CongestionControl::Block, false);
+        pub const PUSH: Self = Self::new(Priority::DEFAULT, CongestionControl::Drop, false);
+        pub const REQUEST: Self = Self::new(Priority::DEFAULT, CongestionControl::Block, false);
+        pub const RESPONSE: Self = Self::new(Priority::DEFAULT, CongestionControl::Block, false);
         pub const RESPONSE_FINAL: Self =
-            Self::new(Priority::DEAULT, CongestionControl::Block, false);
-        pub const OAM: Self = Self::new(Priority::DEAULT, CongestionControl::Block, false);
+            Self::new(Priority::DEFAULT, CongestionControl::Block, false);
+        pub const OAM: Self = Self::new(Priority::DEFAULT, CongestionControl::Block, false);
 
         pub const fn new(
             priority: Priority,

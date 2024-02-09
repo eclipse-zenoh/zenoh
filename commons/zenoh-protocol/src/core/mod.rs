@@ -315,7 +315,7 @@ pub enum Priority {
 
 impl Priority {
     /// Default
-    pub const DEAULT: Self = Self::Data;
+    pub const DEFAULT: Self = Self::Data;
     /// The lowest Priority
     pub const MIN: Self = Self::Background;
     /// The highest Priority
