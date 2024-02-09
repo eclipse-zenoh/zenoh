@@ -776,7 +776,7 @@ impl Session {
             selector,
             scope: Ok(None),
             target: QueryTarget::default(),
-            consolidation: QueryConsolidation::default(),
+            consolidation: QueryConsolidation::DEFAULT,
             destination: Locality::default(),
             timeout,
             value: None,

@@ -338,7 +338,7 @@ impl<'a, 'b, Handler> SubscriberBuilderExt<'a, 'b, Handler>
             origin: Locality::default(),
             query_selector: None,
             query_target: QueryTarget::default(),
-            query_consolidation: QueryConsolidation::default(),
+            query_consolidation: QueryConsolidation::DEFAULT,
             query_accept_replies: ReplyKeyExpr::MatchingQuery,
             query_timeout: Duration::from_secs(10),
             handler: self.handler,
