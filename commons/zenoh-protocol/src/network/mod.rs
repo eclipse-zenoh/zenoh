@@ -227,7 +227,7 @@ pub mod ext {
         const E_FLAG: u8 = 0b00010000;
 
         pub const DECLARE: Self = Self::new(Priority::DEAULT, CongestionControl::Block, false);
-        pub const PUSH: Self = Self::new(Priority::DEAULT, CongestionControl::Block, false);
+        pub const PUSH: Self = Self::new(Priority::DEAULT, CongestionControl::Drop, false);
         pub const REQUEST: Self = Self::new(Priority::DEAULT, CongestionControl::Block, false);
         pub const RESPONSE: Self = Self::new(Priority::DEAULT, CongestionControl::Block, false);
         pub const RESPONSE_FINAL: Self =
