@@ -331,6 +331,17 @@ pub mod ext {
         }
     }
 
+    type QoSPublic = crate::core::QoS;
+    impl<const ID: u8> From<QoSType<{ ID }>> for QoSPublic {
+        fn from(ext: QoSType<{ ID }>) -> Self {
+            QoSPublic {
+                priority: ext.get_priority(),
+                congestion_control: ext.get_congestion_control(),
+                express: ext.is_express(),
+            }
+        }
+    }
+
     /// ```text
     ///  7 6 5 4 3 2 1 0
     /// +-+-+-+-+-+-+-+-+

@@ -21,7 +21,7 @@ use crate::time::{new_reception_timestamp, Timestamp};
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::convert::{TryFrom, TryInto};
-use zenoh_protocol::core::Encoding;
+use zenoh_protocol::core::{Encoding, QoS};
 
 pub type SourceSn = u64;
 
@@ -50,6 +50,7 @@ pub(crate) struct DataInfo {
     pub timestamp: Option<Timestamp>,
     pub source_id: Option<ZenohId>,
     pub source_sn: Option<SourceSn>,
+    pub qos: QoS,
 }
 
 /// Informations on the source of a zenoh [`Sample`].
@@ -326,6 +327,8 @@ pub struct Sample {
     pub kind: SampleKind,
     /// The [`Timestamp`] of this Sample.
     pub timestamp: Option<Timestamp>,
+    /// Quality of service settings the sample was send with
+    pub qos: QoS,
 
     #[cfg(feature = "unstable")]
     /// <div class="stab unstable">
@@ -361,6 +364,7 @@ impl Sample {
             value: value.into(),
             kind: SampleKind::default(),
             timestamp: None,
+            qos: QoS::default(),
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
             #[cfg(feature = "unstable")]
@@ -383,6 +387,7 @@ impl Sample {
             value: value.into(),
             kind: SampleKind::default(),
             timestamp: None,
+            qos: QoS::default(),
             #[cfg(feature = "unstable")]
             source_info: SourceInfo::empty(),
             #[cfg(feature = "unstable")]
@@ -407,6 +412,7 @@ impl Sample {
                 value,
                 kind: data_info.kind,
                 timestamp: data_info.timestamp,
+                qos: data_info.qos,
                 #[cfg(feature = "unstable")]
                 source_info: data_info.into(),
                 #[cfg(feature = "unstable")]
@@ -418,6 +424,7 @@ impl Sample {
                 value,
                 kind: SampleKind::default(),
                 timestamp: None,
+                qos: QoS::default(),
                 #[cfg(feature = "unstable")]
                 source_info: SourceInfo::empty(),
                 #[cfg(feature = "unstable")]

@@ -857,7 +857,14 @@ fn resolve_put(
             kind,
             encoding: Some(value.encoding),
             timestamp,
-            ..Default::default()
+            source_id: None,
+            source_sn: None,
+            qos: ext::QoSType::new (
+                publisher.priority.into(),
+                publisher.congestion_control,
+                false,
+                )
+                .into(),
         };
 
         publisher.session.handle_data(
