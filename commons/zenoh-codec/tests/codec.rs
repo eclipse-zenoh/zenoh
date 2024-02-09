@@ -583,11 +583,6 @@ fn codec_err() {
 }
 
 #[test]
-fn codec_ack() {
-    run!(zenoh::Ack, zenoh::Ack::rand());
-}
-
-#[test]
 fn codec_pull() {
     run!(zenoh::Pull, zenoh::Pull::rand());
 }

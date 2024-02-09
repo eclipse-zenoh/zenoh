@@ -11,7 +11,6 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-pub mod ack;
 pub mod del;
 pub mod err;
 pub mod pull;
@@ -20,7 +19,6 @@ pub mod query;
 pub mod reply;
 
 use crate::core::Encoding;
-pub use ack::Ack;
 pub use del::Del;
 pub use err::Err;
 pub use pull::Pull;
@@ -35,8 +33,7 @@ pub mod id {
     pub const QUERY: u8 = 0x03;
     pub const REPLY: u8 = 0x04;
     pub const ERR: u8 = 0x05;
-    pub const ACK: u8 = 0x06;
-    pub const PULL: u8 = 0x07;
+    pub const PULL: u8 = 0x06;
 }
 
 // DataInfo
@@ -127,7 +124,6 @@ impl From<Del> for RequestBody {
 pub enum ResponseBody {
     Reply(Reply),
     Err(Err),
-    Ack(Ack),
     Put(Put),
 }
 
@@ -138,11 +134,10 @@ impl ResponseBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..4) {
+        match rng.gen_range(0..3) {
             0 => ResponseBody::Reply(Reply::rand()),
             1 => ResponseBody::Err(Err::rand()),
-            2 => ResponseBody::Ack(Ack::rand()),
-            3 => ResponseBody::Put(Put::rand()),
+            2 => ResponseBody::Put(Put::rand()),
             _ => unreachable!(),
         }
     }
@@ -157,12 +152,6 @@ impl From<Reply> for ResponseBody {
 impl From<Err> for ResponseBody {
     fn from(r: Err) -> ResponseBody {
         ResponseBody::Err(r)
-    }
-}
-
-impl From<Ack> for ResponseBody {
-    fn from(r: Ack) -> ResponseBody {
-        ResponseBody::Ack(r)
     }
 }
 

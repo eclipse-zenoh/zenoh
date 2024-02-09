@@ -2247,11 +2247,6 @@ impl Primitives for Session {
     fn send_response(&self, msg: Response) {
         trace!("recv Response {:?}", msg);
         match msg.payload {
-            ResponseBody::Ack(_) => {
-                log::warn!(
-                    "Received a ResponseBody::Ack, but this isn't supported yet. Dropping message."
-                )
-            }
             ResponseBody::Put(_) => {
                 log::warn!(
                     "Received a ResponseBody::Put, but this isn't supported yet. Dropping message."
