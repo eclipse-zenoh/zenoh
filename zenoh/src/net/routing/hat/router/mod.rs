@@ -753,10 +753,6 @@ impl HatBaseTrait for HatCode {
     }
 
     fn close(&self, tables: &mut Tables) {
-        hat_mut!(tables).peer_qabls.clear();
-        hat_mut!(tables).router_qabls.clear();
-        hat_mut!(tables).peer_subs.clear();
-        hat_mut!(tables).router_subs.clear();
         hat_mut!(tables).peers_net.take();
         hat_mut!(tables).routers_net.take();
     }
