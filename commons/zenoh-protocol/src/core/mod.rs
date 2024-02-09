@@ -356,6 +356,8 @@ pub enum Reliability {
 }
 
 impl Reliability {
+    pub const DEFAULT: Self = Self::BestEffort;
+
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
@@ -376,6 +378,13 @@ pub struct Channel {
     pub reliability: Reliability,
 }
 
+impl Channel {
+    pub const DEFAULT: Self = Self {
+        priority: Priority::DEFAULT,
+        reliability: Reliability::DEFAULT,
+    };
+}
+
 /// The kind of congestion control.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
@@ -383,6 +392,10 @@ pub enum CongestionControl {
     #[default]
     Drop = 0,
     Block = 1,
+}
+
+impl CongestionControl {
+    pub const DEFAULT: Self = Self::Drop;
 }
 
 /// The subscription mode.
@@ -394,10 +407,21 @@ pub enum SubMode {
     Pull = 1,
 }
 
+impl SubMode {
+    pub const DEFAULT: Self = Self::Push;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SubInfo {
     pub reliability: Reliability,
     pub mode: SubMode,
+}
+
+impl SubInfo {
+    pub const DEFAULT: Self = Self {
+        reliability: Reliability::DEFAULT,
+        mode: SubMode::DEFAULT,
+    };
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
@@ -407,7 +431,7 @@ pub struct QueryableInfo {
 }
 
 /// The kind of consolidation.
-#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Copy)]
 pub enum ConsolidationMode {
     /// No consolidation applied: multiple samples may be received for the same key-timestamp.
     None,
@@ -420,7 +444,12 @@ pub enum ConsolidationMode {
     /// been observed with the same key.
     Monotonic,
     /// Holds back samples to only send the set of samples that had the highest timestamp for their key.
+    #[default]
     Latest,
+}
+
+impl ConsolidationMode {
+    pub const DEFAULT: Self = Self::Latest;
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
@@ -432,4 +461,8 @@ pub enum QueryTarget {
     AllComplete,
     #[cfg(feature = "complete_n")]
     Complete(u64),
+}
+
+impl QueryTarget {
+    pub const DEFAULT: Self = Self::BestMatching;
 }

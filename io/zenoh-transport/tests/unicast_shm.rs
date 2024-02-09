@@ -271,7 +271,7 @@ mod tests {
 
             let message: NetworkMessage = Push {
                 wire_expr: "test".into(),
-                ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+                ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
                 ext_tstamp: None,
                 ext_nodeid: NodeIdType::default(),
                 payload: Put {
@@ -319,7 +319,7 @@ mod tests {
 
             let message: NetworkMessage = Push {
                 wire_expr: "test".into(),
-                ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+                ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
                 ext_tstamp: None,
                 ext_nodeid: NodeIdType::default(),
                 payload: Put {

@@ -148,11 +148,11 @@ fn transport_unicast_defragmentation_tcp_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -186,11 +186,11 @@ fn transport_unicast_defragmentation_ws_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {
@@ -226,11 +226,11 @@ fn transport_unicast_defragmentation_unixpipe_only() {
     // Define the reliability and congestion control
     let channel = [
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::Reliable,
         },
         Channel {
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             reliability: Reliability::BestEffort,
         },
         Channel {

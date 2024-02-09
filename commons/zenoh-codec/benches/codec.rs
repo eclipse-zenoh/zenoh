@@ -75,7 +75,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let codec = Zenoh080::new();
 
     let frame = FrameHeader {
-        reliability: Reliability::default(),
+        reliability: Reliability::DEFAULT,
         sn: TransportSn::MIN,
         ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
     };
@@ -121,7 +121,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let codec = Zenoh080::new();
 
     let frame = FrameHeader {
-        reliability: Reliability::default(),
+        reliability: Reliability::DEFAULT,
         sn: TransportSn::MIN,
         ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
     };
@@ -162,7 +162,7 @@ fn criterion_benchmark(c: &mut Criterion) {
     let codec = Zenoh080::new();
 
     let frame = FrameHeader {
-        reliability: Reliability::default(),
+        reliability: Reliability::DEFAULT,
         sn: TransportSn::MIN,
         ext_qos: zenoh_protocol::transport::frame::ext::QoSType::default(),
     };

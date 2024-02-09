@@ -574,7 +574,7 @@ mod tests {
         let tmsg: TransportMessage = KeepAlive.into();
         let nmsg: NetworkMessage = Push {
             wire_expr: WireExpr::empty(),
-            ext_qos: ext::QoSType::new(Priority::default(), CongestionControl::Block, false),
+            ext_qos: ext::QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
             ext_tstamp: None,
             ext_nodeid: ext::NodeIdType::default(),
             payload: PushBody::Put(Put {

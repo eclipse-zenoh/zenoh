@@ -513,7 +513,7 @@ impl TransmissionPipeline {
         let mut stage_in = vec![];
         let mut stage_out = vec![];
 
-        let default_queue_size = [config.queue_size[Priority::default() as usize]];
+        let default_queue_size = [config.queue_size[Priority::DEFAULT as usize]];
         let size_iter = if priority.len() == 1 {
             default_queue_size.iter()
         } else {
@@ -602,7 +602,7 @@ impl TransmissionPipelineProducer {
             let priority = msg.priority();
             (priority as usize, priority)
         } else {
-            (0, Priority::default())
+            (0, Priority::DEFAULT)
         };
         // Lock the channel. We are the only one that will be writing on it.
         let mut queue = zlock!(self.stage_in[idx]);

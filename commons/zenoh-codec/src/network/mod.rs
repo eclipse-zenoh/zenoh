@@ -58,7 +58,7 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<NetworkMessage, Self::Error> {
-        let codec = Zenoh080Reliability::new(Reliability::default());
+        let codec = Zenoh080Reliability::new(Reliability::DEFAULT);
         codec.read(reader)
     }
 }

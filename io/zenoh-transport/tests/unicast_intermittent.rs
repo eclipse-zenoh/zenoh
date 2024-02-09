@@ -297,7 +297,7 @@ async fn transport_intermittent(endpoint: &EndPoint, lowlatency_transport: bool)
         // Create the message to send
         let message: NetworkMessage = Push {
             wire_expr: "test".into(),
-            ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+            ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
             ext_tstamp: None,
             ext_nodeid: NodeIdType::default(),
             payload: Put {

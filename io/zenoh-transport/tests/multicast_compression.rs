@@ -363,7 +363,7 @@ mod tests {
         // Define the reliability and congestion control
         let channel = [
             Channel {
-                priority: Priority::default(),
+                priority: Priority::DEFAULT,
                 reliability: Reliability::BestEffort,
             },
             Channel {

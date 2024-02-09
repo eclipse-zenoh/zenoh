@@ -276,7 +276,7 @@ pub mod ext {
 
     impl<const ID: u8> Default for QoSType<{ ID }> {
         fn default() -> Self {
-            Self::new(Priority::default())
+            Self::new(Priority::DEFAULT)
         }
     }
 

@@ -296,7 +296,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
         SubscriberBuilder {
             session: self.clone(),
             key_expr: TryIntoKeyExpr::try_into(key_expr).map_err(Into::into),
-            reliability: Reliability::default(),
+            reliability: Reliability::DEFAULT,
             mode: PushMode,
             origin: Locality::default(),
             handler: DefaultHandler,
@@ -330,7 +330,7 @@ impl<'s, 'a> SessionDeclarations<'s, 'a> for SessionRef<'a> {
             session: self.clone(),
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             destination: Locality::default(),
         }
     }
@@ -1959,7 +1959,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
         SubscriberBuilder {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
-            reliability: Reliability::default(),
+            reliability: Reliability::DEFAULT,
             mode: PushMode,
             origin: Locality::default(),
             handler: DefaultHandler,
@@ -2041,7 +2041,7 @@ impl<'s> SessionDeclarations<'s, 'static> for Arc<Session> {
             session: SessionRef::Shared(self.clone()),
             key_expr: key_expr.try_into().map_err(Into::into),
             congestion_control: CongestionControl::default(),
-            priority: Priority::default(),
+            priority: Priority::DEFAULT,
             destination: Locality::default(),
         }
     }

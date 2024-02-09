@@ -194,7 +194,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         // Create the message to send
         let message: NetworkMessage = Push {
             wire_expr: "test".into(),
-            ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+            ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
             ext_tstamp: None,
             ext_nodeid: NodeIdType::default(),
             payload: Put {
@@ -299,7 +299,7 @@ async fn transport_concurrent(endpoint01: Vec<EndPoint>, endpoint02: Vec<EndPoin
         // Create the message to send
         let message: NetworkMessage = Push {
             wire_expr: "test".into(),
-            ext_qos: QoSType::new(Priority::default(), CongestionControl::Block, false),
+            ext_qos: QoSType::new(Priority::DEFAULT, CongestionControl::Block, false),
             ext_tstamp: None,
             ext_nodeid: NodeIdType::default(),
             payload: Put {
