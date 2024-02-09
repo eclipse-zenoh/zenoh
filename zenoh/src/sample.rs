@@ -327,7 +327,7 @@ pub struct Sample {
     pub kind: SampleKind,
     /// The [`Timestamp`] of this Sample.
     pub timestamp: Option<Timestamp>,
-    /// Quality of service settings the sample was send with
+    /// Quality of service settings this sample was sent with.
     pub qos: QoS,
 
     #[cfg(feature = "unstable")]
