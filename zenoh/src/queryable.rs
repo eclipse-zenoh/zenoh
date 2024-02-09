@@ -30,11 +30,11 @@ use std::future::Ready;
 use std::ops::Deref;
 use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-use zenoh_protocol::core::WireExpr;
-use zenoh_protocol::network::{response, Mapping, RequestId, Response, ResponseFinal};
-use zenoh_protocol::zenoh::ext::ValueType;
-use zenoh_protocol::zenoh::reply::ext::ConsolidationType;
-use zenoh_protocol::zenoh::{self, ResponseBody};
+use zenoh_protocol::{
+    core::WireExpr,
+    network::{response, Mapping, RequestId, Response, ResponseFinal},
+    zenoh::{self, ext::ValueType, reply::ReplyBody, Del, Put, ResponseBody},
+};
 use zenoh_result::ZResult;
 
 pub(crate) struct QueryInner {
@@ -206,16 +206,33 @@ impl SyncResolve for ReplyBuilder<'_> {
                     source_id: None,
                     source_sn: None,
                 };
-                #[allow(unused_mut)]
-                let mut ext_attachment = None;
-                #[cfg(feature = "unstable")]
-                {
-                    data_info.source_id = source_info.source_id;
-                    data_info.source_sn = source_info.source_sn;
-                    if let Some(attachment) = attachment {
-                        ext_attachment = Some(attachment.into());
-                    }
+
+                // Use a macro for inferring the proper const extension ID between Put and Del cases
+                macro_rules! ext_attachment {
+                    () => {{
+                        #[allow(unused_mut)]
+                        let mut ext_attachment = None;
+                        #[cfg(feature = "unstable")]
+                        {
+                            data_info.source_id = source_info.source_id;
+                            data_info.source_sn = source_info.source_sn;
+                            if let Some(attachment) = attachment {
+                                ext_attachment = Some(attachment.into());
+                            }
+                        }
+                        ext_attachment
+                    }};
                 }
+
+                let ext_sinfo = if data_info.source_id.is_some() || data_info.source_sn.is_some() {
+                    Some(zenoh::put::ext::SourceInfoType {
+                        zid: data_info.source_id.unwrap_or_default(),
+                        eid: 0, // @TODO use proper EntityId (#703)
+                        sn: data_info.source_sn.unwrap_or_default() as u32,
+                    })
+                } else {
+                    None
+                };
                 self.query.inner.primitives.send_response(Response {
                     rid: self.query.inner.qid,
                     wire_expr: WireExpr {
@@ -224,24 +241,26 @@ impl SyncResolve for ReplyBuilder<'_> {
                         mapping: Mapping::Sender,
                     },
                     payload: ResponseBody::Reply(zenoh::Reply {
-                        timestamp: data_info.timestamp,
-                        encoding: data_info.encoding.unwrap_or_default(),
-                        ext_sinfo: if data_info.source_id.is_some() || data_info.source_sn.is_some()
-                        {
-                            Some(zenoh::reply::ext::SourceInfoType {
-                                zid: data_info.source_id.unwrap_or_default(),
-                                eid: 0, // @TODO use proper EntityId (#703)
-                                sn: data_info.source_sn.unwrap_or_default() as u32,
-                            })
-                        } else {
-                            None
-                        },
-                        ext_consolidation: ConsolidationType::default(),
-                        #[cfg(feature = "shared-memory")]
-                        ext_shm: None,
-                        ext_attachment,
+                        consolidation: zenoh::Consolidation::default(),
                         ext_unknown: vec![],
-                        payload,
+                        payload: match kind {
+                            SampleKind::Put => ReplyBody::Put(Put {
+                                timestamp: data_info.timestamp,
+                                encoding: data_info.encoding.unwrap_or_default(),
+                                ext_sinfo,
+                                #[cfg(feature = "shared-memory")]
+                                ext_shm: None,
+                                ext_attachment: ext_attachment!(),
+                                ext_unknown: vec![],
+                                payload,
+                            }),
+                            SampleKind::Delete => ReplyBody::Del(Del {
+                                timestamp,
+                                ext_sinfo,
+                                ext_attachment: ext_attachment!(),
+                                ext_unknown: vec![],
+                            }),
+                        },
                     }),
                     ext_qos: response::ext::QoSType::response_default(),
                     ext_tstamp: None,

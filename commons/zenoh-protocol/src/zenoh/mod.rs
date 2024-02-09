@@ -95,10 +95,11 @@ impl RequestBody {
 
         let mut rng = rand::thread_rng();
 
-        match rng.gen_range(0..3) {
+        match rng.gen_range(0..4) {
             0 => RequestBody::Query(Query::rand()),
             1 => RequestBody::Put(Put::rand()),
             2 => RequestBody::Del(Del::rand()),
+            3 => RequestBody::Pull(Pull::rand()),
             _ => unreachable!(),
         }
     }
@@ -126,8 +127,8 @@ impl From<Del> for RequestBody {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ResponseBody {
     Reply(Reply),
-    Err(Err),
     Ack(Ack),
+    Err(Err),
     Put(Put),
 }
 
@@ -135,13 +136,12 @@ impl ResponseBody {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;
-
         let mut rng = rand::thread_rng();
 
         match rng.gen_range(0..4) {
             0 => ResponseBody::Reply(Reply::rand()),
-            1 => ResponseBody::Err(Err::rand()),
-            2 => ResponseBody::Ack(Ack::rand()),
+            1 => ResponseBody::Ack(Ack::rand()),
+            2 => ResponseBody::Err(Err::rand()),
             3 => ResponseBody::Put(Put::rand()),
             _ => unreachable!(),
         }
