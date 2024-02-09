@@ -561,7 +561,7 @@ pub fn route_query(
                                 rid: qid,
                                 wire_expr: wexpr,
                                 payload,
-                                ext_qos: response::ext::QoSType::declare_default(),
+                                ext_qos: response::ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_respid: Some(response::ext::ResponderIdType {
                                     zid,
@@ -583,7 +583,7 @@ pub fn route_query(
                         .send_response_final(RoutingContext::with_expr(
                             ResponseFinal {
                                 rid: qid,
-                                ext_qos: response::ext::QoSType::response_final_default(),
+                                ext_qos: response::ext::QoSType::RESPONSE_FINAL,
                                 ext_tstamp: None,
                             },
                             expr.full_expr().to_string(),
@@ -614,7 +614,7 @@ pub fn route_query(
                                 Request {
                                     id: *qid,
                                     wire_expr: key_expr.into(),
-                                    ext_qos: ext::QoSType::request_default(),
+                                    ext_qos: ext::QoSType::REQUEST,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType { node_id: *context },
                                     ext_target: *t,
@@ -650,7 +650,7 @@ pub fn route_query(
                                 Request {
                                     id: *qid,
                                     wire_expr: key_expr.into(),
-                                    ext_qos: ext::QoSType::request_default(),
+                                    ext_qos: ext::QoSType::REQUEST,
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType { node_id: *context },
                                     ext_target: target,
@@ -671,7 +671,7 @@ pub fn route_query(
                     .send_response_final(RoutingContext::with_expr(
                         ResponseFinal {
                             rid: qid,
-                            ext_qos: response::ext::QoSType::response_final_default(),
+                            ext_qos: response::ext::QoSType::RESPONSE_FINAL,
                             ext_tstamp: None,
                         },
                         expr.full_expr().to_string(),
@@ -689,7 +689,7 @@ pub fn route_query(
                 .send_response_final(RoutingContext::with_expr(
                     ResponseFinal {
                         rid: qid,
-                        ext_qos: response::ext::QoSType::response_final_default(),
+                        ext_qos: response::ext::QoSType::RESPONSE_FINAL,
                         ext_tstamp: None,
                     },
                     "".to_string(),
@@ -736,7 +736,7 @@ pub(crate) fn route_send_response(
                         rid: query.src_qid,
                         wire_expr: key_expr.to_owned(),
                         payload: body,
-                        ext_qos: response::ext::QoSType::response_default(),
+                        ext_qos: response::ext::QoSType::RESPONSE,
                         ext_tstamp: None,
                         ext_respid,
                     },
@@ -796,7 +796,7 @@ pub(crate) fn finalize_pending_query(query: Arc<Query>) {
             .send_response_final(RoutingContext::with_expr(
                 ResponseFinal {
                     rid: query.src_qid,
-                    ext_qos: response::ext::QoSType::response_final_default(),
+                    ext_qos: response::ext::QoSType::RESPONSE_FINAL,
                     ext_tstamp: None,
                 },
                 "".to_string(),

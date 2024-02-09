@@ -633,7 +633,7 @@ impl SyncResolve for KeyExprUndeclaration<'_> {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_declare(zenoh_protocol::network::Declare {
-            ext_qos: declare::ext::QoSType::declare_default(),
+            ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::default(),
             body: DeclareBody::UndeclareKeyExpr(UndeclareKeyExpr { id: expr_id }),

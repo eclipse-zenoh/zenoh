@@ -96,7 +96,7 @@ fn propagate_simple_queryable(
             let key_expr = Resource::decl_key(res, &mut dst_face);
             dst_face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    ext_qos: ext::QoSType::declare_default(),
+                    ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
@@ -166,7 +166,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
             let wire_expr = Resource::get_best_key(res, "", face.id);
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    ext_qos: ext::QoSType::declare_default(),
+                    ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
@@ -207,7 +207,7 @@ pub(super) fn undeclare_client_queryable(
             let wire_expr = Resource::get_best_key(res, "", face.id);
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    ext_qos: ext::QoSType::declare_default(),
+                    ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {

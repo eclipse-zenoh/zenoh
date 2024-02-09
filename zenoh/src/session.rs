@@ -858,7 +858,7 @@ impl Session {
                     let primitives = state.primitives.as_ref().unwrap().clone();
                     drop(state);
                     primitives.send_declare(Declare {
-                        ext_qos: declare::ext::QoSType::declare_default(),
+                        ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::default(),
                         body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
@@ -1059,7 +1059,7 @@ impl Session {
             // };
 
             primitives.send_declare(Declare {
-                ext_qos: declare::ext::QoSType::declare_default(),
+                ext_qos: declare::ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: declare::ext::NodeIdType::default(),
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
@@ -1124,7 +1124,7 @@ impl Session {
                             let wire_expr = WireExpr::from(join_sub).to_owned();
                             drop(state);
                             primitives.send_declare(Declare {
-                                ext_qos: ext::QoSType::declare_default(),
+                                ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::default(),
                                 body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
@@ -1149,7 +1149,7 @@ impl Session {
                             let primitives = state.primitives.as_ref().unwrap().clone();
                             drop(state);
                             primitives.send_declare(Declare {
-                                ext_qos: ext::QoSType::declare_default(),
+                                ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType::default(),
                                 body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
@@ -1205,7 +1205,7 @@ impl Session {
                     distance: 0,
                 };
                 primitives.send_declare(Declare {
-                    ext_qos: declare::ext::QoSType::declare_default(),
+                    ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::default(),
                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
@@ -1233,7 +1233,7 @@ impl Session {
                     distance: 0,
                 };
                 primitives.send_declare(Declare {
-                    ext_qos: declare::ext::QoSType::declare_default(),
+                    ext_qos: declare::ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: declare::ext::NodeIdType::default(),
                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
@@ -1298,7 +1298,7 @@ impl Session {
                                 distance: 0,
                             };
                             primitives.send_declare(Declare {
-                                ext_qos: declare::ext::QoSType::declare_default(),
+                                ext_qos: declare::ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: declare::ext::NodeIdType::default(),
                                 body: DeclareBody::DeclareQueryable(DeclareQueryable {
@@ -1317,7 +1317,7 @@ impl Session {
                                     distance: 0,
                                 };
                                 primitives.send_declare(Declare {
-                                    ext_qos: declare::ext::QoSType::declare_default(),
+                                    ext_qos: declare::ext::QoSType::DECLARE,
                                     ext_tstamp: None,
                                     ext_nodeid: declare::ext::NodeIdType::default(),
                                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
@@ -1333,7 +1333,7 @@ impl Session {
                     // There are no more Queryables on the same KeyExpr.
                     drop(state);
                     primitives.send_declare(Declare {
-                        ext_qos: declare::ext::QoSType::declare_default(),
+                        ext_qos: declare::ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: declare::ext::NodeIdType::default(),
                         body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
@@ -1369,7 +1369,7 @@ impl Session {
         let primitives = state.primitives.as_ref().unwrap().clone();
         drop(state);
         primitives.send_declare(Declare {
-            ext_qos: declare::ext::QoSType::declare_default(),
+            ext_qos: declare::ext::QoSType::DECLARE,
             ext_tstamp: None,
             ext_nodeid: declare::ext::NodeIdType::default(),
             body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
@@ -1393,7 +1393,7 @@ impl Session {
                 let primitives = state.primitives.as_ref().unwrap().clone();
                 drop(state);
                 primitives.send_declare(Declare {
-                    ext_qos: ext::QoSType::declare_default(),
+                    ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
@@ -1698,7 +1698,7 @@ impl Session {
             primitives.send_request(Request {
                 id: 0, // @TODO compute a proper request ID
                 wire_expr: key_expr.to_wire(self).to_owned(),
-                ext_qos: ext::QoSType::request_default(),
+                ext_qos: ext::QoSType::REQUEST,
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
                 ext_target: request::ext::TargetType::default(),
@@ -1801,7 +1801,7 @@ impl Session {
             primitives.send_request(Request {
                 id: qid,
                 wire_expr: wexpr.clone(),
-                ext_qos: request::ext::QoSType::request_default(),
+                ext_qos: request::ext::QoSType::REQUEST,
                 ext_tstamp: None,
                 ext_nodeid: request::ext::NodeIdType::default(),
                 ext_target: target,

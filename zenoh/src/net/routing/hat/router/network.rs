@@ -275,7 +275,7 @@ impl Network {
         Ok(NetworkBody::OAM(Oam {
             id: OAM_LINKSTATE,
             body: ZExtBody::ZBuf(buf),
-            ext_qos: oam::ext::QoSType::oam_default(),
+            ext_qos: oam::ext::QoSType::OAM,
             ext_tstamp: None,
         })
         .into())

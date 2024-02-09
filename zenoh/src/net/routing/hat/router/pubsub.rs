@@ -57,7 +57,7 @@ fn send_sourced_subscription_to_net_childs(
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                ext_qos: ext::QoSType::declare_default(),
+                                ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
                                     node_id: routing_context,
@@ -102,7 +102,7 @@ fn propagate_simple_subscription_to(
         let key_expr = Resource::decl_key(res, dst_face);
         dst_face.primitives.send_declare(RoutingContext::with_expr(
             Declare {
-                ext_qos: ext::QoSType::declare_default(),
+                ext_qos: ext::QoSType::DECLARE,
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
@@ -357,7 +357,7 @@ fn send_forget_sourced_subscription_to_net_childs(
 
                         someface.primitives.send_declare(RoutingContext::with_expr(
                             Declare {
-                                ext_qos: ext::QoSType::declare_default(),
+                                ext_qos: ext::QoSType::DECLARE,
                                 ext_tstamp: None,
                                 ext_nodeid: ext::NodeIdType {
                                     node_id: routing_context.unwrap_or(0),
@@ -383,7 +383,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
             let wire_expr = Resource::get_best_key(res, "", face.id);
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    ext_qos: ext::QoSType::declare_default(),
+                    ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
@@ -422,7 +422,7 @@ fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<
                 let wire_expr = Resource::get_best_key(res, "", face.id);
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
-                        ext_qos: ext::QoSType::declare_default(),
+                        ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::default(),
                         body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
@@ -587,7 +587,7 @@ pub(super) fn undeclare_client_subscription(
             let wire_expr = Resource::get_best_key(res, "", face.id);
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    ext_qos: ext::QoSType::declare_default(),
+                    ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
@@ -623,7 +623,7 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
             let key_expr = Resource::decl_key(sub, face);
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    ext_qos: ext::QoSType::declare_default(),
+                    ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
@@ -650,7 +650,7 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                 let key_expr = Resource::decl_key(sub, face);
                 face.primitives.send_declare(RoutingContext::with_expr(
                     Declare {
-                        ext_qos: ext::QoSType::declare_default(),
+                        ext_qos: ext::QoSType::DECLARE,
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::default(),
                         body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
@@ -790,7 +790,7 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                     let wire_expr = Resource::get_best_key(res, "", dst_face.id);
                                     dst_face.primitives.send_declare(RoutingContext::with_expr(
                                         Declare {
-                                            ext_qos: ext::QoSType::declare_default(),
+                                            ext_qos: ext::QoSType::DECLARE,
                                             ext_tstamp: None,
                                             ext_nodeid: ext::NodeIdType::default(),
                                             body: DeclareBody::UndeclareSubscriber(
@@ -815,7 +815,7 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                 };
                                 dst_face.primitives.send_declare(RoutingContext::with_expr(
                                     Declare {
-                                        ext_qos: ext::QoSType::declare_default(),
+                                        ext_qos: ext::QoSType::DECLARE,
                                         ext_tstamp: None,
                                         ext_nodeid: ext::NodeIdType::default(),
                                         body: DeclareBody::DeclareSubscriber(DeclareSubscriber {

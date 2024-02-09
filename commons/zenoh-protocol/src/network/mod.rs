@@ -226,6 +226,14 @@ pub mod ext {
         const D_FLAG: u8 = 0b00001000;
         const E_FLAG: u8 = 0b00010000;
 
+        pub const DECLARE: Self = Self::new(Priority::DEAULT, CongestionControl::Block, false);
+        pub const PUSH: Self = Self::new(Priority::DEAULT, CongestionControl::Block, false);
+        pub const REQUEST: Self = Self::new(Priority::DEAULT, CongestionControl::Block, false);
+        pub const RESPONSE: Self = Self::new(Priority::DEAULT, CongestionControl::Block, false);
+        pub const RESPONSE_FINAL: Self =
+            Self::new(Priority::DEAULT, CongestionControl::Block, false);
+        pub const OAM: Self = Self::new(Priority::DEAULT, CongestionControl::Block, false);
+
         pub const fn new(
             priority: Priority,
             congestion_control: CongestionControl,
@@ -274,30 +282,6 @@ pub mod ext {
 
             let inner: u8 = rng.gen();
             Self { inner }
-        }
-
-        pub fn declare_default() -> Self {
-            Self::new(Priority::default(), CongestionControl::Block, false)
-        }
-
-        pub fn push_default() -> Self {
-            Self::new(Priority::default(), CongestionControl::Drop, false)
-        }
-
-        pub fn request_default() -> Self {
-            Self::new(Priority::default(), CongestionControl::Block, false)
-        }
-
-        pub fn response_default() -> Self {
-            Self::new(Priority::default(), CongestionControl::Block, false)
-        }
-
-        pub fn response_final_default() -> Self {
-            Self::new(Priority::default(), CongestionControl::Block, false)
-        }
-
-        pub fn oam_default() -> Self {
-            Self::new(Priority::default(), CongestionControl::Block, false)
         }
     }
 

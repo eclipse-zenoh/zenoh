@@ -466,7 +466,7 @@ impl Resource {
                         .insert(expr_id, nonwild_prefix.clone());
                     face.primitives.send_declare(RoutingContext::with_expr(
                         Declare {
-                            ext_qos: ext::QoSType::declare_default(),
+                            ext_qos: ext::QoSType::DECLARE,
                             ext_tstamp: None,
                             ext_nodeid: ext::NodeIdType::default(),
                             body: DeclareBody::DeclareKeyExpr(DeclareKeyExpr {
