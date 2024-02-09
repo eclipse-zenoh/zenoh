@@ -859,12 +859,12 @@ fn resolve_put(
             timestamp,
             source_id: None,
             source_sn: None,
-            qos: ext::QoSType::new (
+            qos: ext::QoSType::new(
                 publisher.priority.into(),
                 publisher.congestion_control,
                 false,
-                )
-                .into(),
+            )
+            .into(),
         };
 
         publisher.session.handle_data(

@@ -1,10 +1,9 @@
 use std::time::Duration;
 
 use async_std::task;
-use zenoh::{publication::Priority, subscriber, SessionDeclarations};
+use zenoh::{publication::Priority, SessionDeclarations};
 use zenoh_core::{zasync_executor_init, AsyncResolve};
 use zenoh_protocol::core::CongestionControl;
-
 
 const SLEEP: Duration = Duration::from_secs(1);
 
@@ -25,11 +24,7 @@ fn pubsub() {
 
         task::sleep(SLEEP).await;
 
-        let sub = session2
-            .declare_subscriber("test/qos")
-            .res()
-            .await
-            .unwrap();
+        let sub = session2.declare_subscriber("test/qos").res().await.unwrap();
         task::sleep(SLEEP).await;
 
         publisher.put("qos").res_async().await.unwrap();
@@ -38,7 +33,9 @@ fn pubsub() {
         assert_eq!(qos.priority, Priority::DataHigh.into());
         assert_eq!(qos.congestion_control, CongestionControl::Drop);
 
-        let publisher = publisher.priority(Priority::DataLow).congestion_control(CongestionControl::Block);
+        let publisher = publisher
+            .priority(Priority::DataLow)
+            .congestion_control(CongestionControl::Block);
         publisher.put("qos").res_async().await.unwrap();
         let qos = sub.recv_async().await.unwrap().qos;
 
