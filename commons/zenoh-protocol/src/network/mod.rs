@@ -51,6 +51,8 @@ pub enum Mapping {
 }
 
 impl Mapping {
+    pub const DEFAULT: Self = Self::Receiver;
+
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
         use rand::Rng;

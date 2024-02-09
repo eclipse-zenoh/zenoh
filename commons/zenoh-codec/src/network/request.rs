@@ -102,7 +102,7 @@ where
         if n_exts != 0 {
             header |= flag::Z;
         }
-        if wire_expr.mapping != Mapping::default() {
+        if wire_expr.mapping != Mapping::DEFAULT {
             header |= flag::M;
         }
         if wire_expr.has_suffix() {
