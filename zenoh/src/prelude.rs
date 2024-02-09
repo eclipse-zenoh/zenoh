@@ -61,6 +61,12 @@ pub(crate) mod common {
 
     /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
     pub use zenoh_protocol::core::EndPoint;
+    /// The global unique id of a zenoh entity.
+    #[zenoh_macros::unstable]
+    pub use zenoh_protocol::core::EntityGlobalId;
+    /// The unique id of a zenoh entity inside it's parent [`Session`].
+    #[zenoh_macros::unstable]
+    pub use zenoh_protocol::core::EntityId;
     /// A [`Locator`] contains a choice of protocol, an address and port, as well as optional additional properties to work with.
     pub use zenoh_protocol::core::Locator;
     /// The global unique id of a zenoh peer.

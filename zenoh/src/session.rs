@@ -2059,8 +2059,7 @@ impl Primitives for Session {
                     kind: SampleKind::Put,
                     encoding: Some(m.encoding),
                     timestamp: m.timestamp,
-                    source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
-                    source_eid: m.ext_sinfo.as_ref().map(|i| i.eid),
+                    source_id: m.ext_sinfo.as_ref().map(|i| i.id.clone()),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
                 self.handle_data(
@@ -2077,8 +2076,7 @@ impl Primitives for Session {
                     kind: SampleKind::Delete,
                     encoding: None,
                     timestamp: m.timestamp,
-                    source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
-                    source_eid: m.ext_sinfo.as_ref().map(|i| i.eid),
+                    source_id: m.ext_sinfo.as_ref().map(|i| i.id.clone()),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
                 self.handle_data(
@@ -2143,7 +2141,7 @@ impl Primitives for Session {
                             },
                         };
                         let replier_id = match e.ext_sinfo {
-                            Some(info) => info.zid,
+                            Some(info) => info.id.zid,
                             None => ZenohId::rand(),
                         };
                         let new_reply = Reply {
@@ -2214,8 +2212,7 @@ impl Primitives for Session {
                             kind: SampleKind::Put,
                             encoding: Some(m.encoding),
                             timestamp: m.timestamp,
-                            source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
-                            source_eid: m.ext_sinfo.as_ref().map(|i| i.eid),
+                            source_id: m.ext_sinfo.as_ref().map(|i| i.id.clone()),
                             source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                         };
                         #[allow(unused_mut)]

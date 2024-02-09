@@ -410,12 +410,12 @@ pub mod ext {
     /// %      eid      %
     /// +---------------+
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct EntityIdType<const ID: u8> {
+    pub struct EntityGlobalIdType<const ID: u8> {
         pub zid: ZenohId,
         pub eid: EntityId,
     }
 
-    impl<const ID: u8> EntityIdType<{ ID }> {
+    impl<const ID: u8> EntityGlobalIdType<{ ID }> {
         #[cfg(feature = "test")]
         pub fn rand() -> Self {
             use rand::Rng;

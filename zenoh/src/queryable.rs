@@ -210,13 +210,9 @@ impl SyncResolve for ReplyBuilder<'_> {
                 let mut ext_sinfo = None;
                 #[cfg(feature = "unstable")]
                 {
-                    if source_info.source_id.is_some()
-                        || source_info.source_eid.is_some()
-                        || source_info.source_sn.is_some()
-                    {
+                    if source_info.source_id.is_some() || source_info.source_sn.is_some() {
                         ext_sinfo = Some(zenoh::reply::ext::SourceInfoType {
-                            zid: source_info.source_id.unwrap_or_default(),
-                            eid: source_info.source_eid.unwrap_or_default(),
+                            id: source_info.source_id.unwrap_or_default(),
                             sn: source_info.source_sn.unwrap_or_default() as u32,
                         })
                     }
