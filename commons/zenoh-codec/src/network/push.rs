@@ -44,7 +44,7 @@ where
 
         // Header
         let mut header = id::PUSH;
-        let mut n_exts = ((ext_qos != &ext::QoSType::default()) as u8)
+        let mut n_exts = ((ext_qos != &ext::QoSType::DEFAULT) as u8)
             + (ext_tstamp.is_some() as u8)
             + ((ext_nodeid != &ext::NodeIdType::default()) as u8);
         if n_exts != 0 {
@@ -62,7 +62,7 @@ where
         self.write(&mut *writer, wire_expr)?;
 
         // Extensions
-        if ext_qos != &ext::QoSType::default() {
+        if ext_qos != &ext::QoSType::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
         }
@@ -116,7 +116,7 @@ where
         };
 
         // Extensions
-        let mut ext_qos = ext::QoSType::default();
+        let mut ext_qos = ext::QoSType::DEFAULT;
         let mut ext_tstamp = None;
         let mut ext_nodeid = ext::NodeIdType::default();
 

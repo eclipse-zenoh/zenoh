@@ -601,7 +601,7 @@ mod tests {
         let mut frame = FrameHeader {
             reliability: Reliability::Reliable,
             sn: 0,
-            ext_qos: frame::ext::QoSType::default(),
+            ext_qos: frame::ext::QoSType::DEFAULT,
         };
 
         // Serialize with a frame

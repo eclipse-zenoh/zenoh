@@ -252,7 +252,8 @@ pub mod ext {
     }
 
     impl<const ID: u8> QoSType<{ ID }> {
-        pub const P_MASK: u8 = 0b00000111;
+        const P_MASK: u8 = 0b00000111;
+        pub const DEFAULT: Self = Self::new(Priority::DEFAULT);
 
         pub const fn new(priority: Priority) -> Self {
             Self {
@@ -276,7 +277,7 @@ pub mod ext {
 
     impl<const ID: u8> Default for QoSType<{ ID }> {
         fn default() -> Self {
-            Self::new(Priority::DEFAULT)
+            Self::DEFAULT
         }
     }
 
