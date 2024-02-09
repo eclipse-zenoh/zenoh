@@ -775,7 +775,7 @@ impl Session {
             session: self,
             selector,
             scope: Ok(None),
-            target: QueryTarget::default(),
+            target: QueryTarget::DEFAULT,
             consolidation: QueryConsolidation::DEFAULT,
             destination: Locality::default(),
             timeout,
@@ -1701,7 +1701,7 @@ impl Session {
                 ext_qos: ext::QoSType::REQUEST,
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
-                ext_target: request::ext::TargetType::default(),
+                ext_target: request::ext::TargetType::DEFAULT,
                 ext_budget: None,
                 ext_timeout: None,
                 payload: RequestBody::Pull(Pull {

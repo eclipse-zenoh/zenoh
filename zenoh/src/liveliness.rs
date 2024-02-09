@@ -747,7 +747,7 @@ where
             .query(
                 &self.key_expr?.into(),
                 &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
-                QueryTarget::default(),
+                QueryTarget::DEFAULT,
                 QueryConsolidation::DEFAULT,
                 Locality::default(),
                 self.timeout,

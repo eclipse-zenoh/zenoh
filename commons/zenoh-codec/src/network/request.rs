@@ -95,7 +95,7 @@ where
         let mut header = id::REQUEST;
         let mut n_exts = ((ext_qos != &ext::QoSType::DEFAULT) as u8)
             + (ext_tstamp.is_some() as u8)
-            + ((ext_target != &ext::TargetType::default()) as u8)
+            + ((ext_target != &ext::TargetType::DEFAULT) as u8)
             + (ext_budget.is_some() as u8)
             + (ext_timeout.is_some() as u8)
             + ((ext_nodeid != &ext::NodeIdType::default()) as u8);
@@ -123,7 +123,7 @@ where
             n_exts -= 1;
             self.write(&mut *writer, (ts, n_exts != 0))?;
         }
-        if ext_target != &ext::TargetType::default() {
+        if ext_target != &ext::TargetType::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (ext_target, n_exts != 0))?;
         }
@@ -188,7 +188,7 @@ where
         let mut ext_qos = ext::QoSType::DEFAULT;
         let mut ext_tstamp = None;
         let mut ext_nodeid = ext::NodeIdType::default();
-        let mut ext_target = ext::TargetType::default();
+        let mut ext_target = ext::TargetType::DEFAULT;
         let mut ext_limit = None;
         let mut ext_timeout = None;
 
