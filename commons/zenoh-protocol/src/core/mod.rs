@@ -261,37 +261,6 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
     }
 }
 
-/// The kind of a `Sample`.
-#[repr(u8)]
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
-pub enum SampleKind {
-    /// if the `Sample` was issued by a `put` operation.
-    #[default]
-    Put = 0,
-    /// if the `Sample` was issued by a `delete` operation.
-    Delete = 1,
-}
-
-impl fmt::Display for SampleKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SampleKind::Put => write!(f, "PUT"),
-            SampleKind::Delete => write!(f, "DELETE"),
-        }
-    }
-}
-
-impl TryFrom<u64> for SampleKind {
-    type Error = u64;
-    fn try_from(kind: u64) -> Result<Self, u64> {
-        match kind {
-            0 => Ok(SampleKind::Put),
-            1 => Ok(SampleKind::Delete),
-            _ => Err(kind),
-        }
-    }
-}
-
 /// The subscription mode.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
