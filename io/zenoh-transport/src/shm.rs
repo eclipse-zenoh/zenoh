@@ -21,6 +21,7 @@ use zenoh_protocol::{
         err::{ext::ErrBodyType, Err},
         ext::ShmType,
         query::{ext::QueryBodyType, Query},
+        reply::ReplyBody,
         PushBody, Put, Reply, RequestBody, ResponseBody,
     },
 };
@@ -105,17 +106,17 @@ impl MapShm for Query {
 // Impl - Reply
 impl MapShm for Reply {
     fn map_to_shminfo(&mut self) -> ZResult<bool> {
-        let Self {
-            payload, ext_shm, ..
-        } = self;
-        map_to_shminfo!(payload, ext_shm)
+        match &mut self.payload {
+            ReplyBody::Put(b) => b.map_to_shminfo(),
+            _ => Ok(false),
+        }
     }
 
     fn map_to_shmbuf(&mut self, shmr: &RwLock<SharedMemoryReader>) -> ZResult<bool> {
-        let Self {
-            payload, ext_shm, ..
-        } = self;
-        map_to_shmbuf!(payload, ext_shm, shmr)
+        match &mut self.payload {
+            ReplyBody::Put(b) => b.map_to_shmbuf(shmr),
+            _ => Ok(false),
+        }
     }
 }
 

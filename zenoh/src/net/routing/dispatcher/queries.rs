@@ -21,16 +21,16 @@ use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::{Arc, Weak};
 use zenoh_config::WhatAmI;
-use zenoh_protocol::core::key_expr::keyexpr;
-use zenoh_protocol::network::declare::queryable::ext::QueryableInfo;
+use zenoh_protocol::zenoh::reply::ReplyBody;
+use zenoh_protocol::zenoh::Put;
 use zenoh_protocol::{
-    core::{Encoding, WireExpr},
+    core::{key_expr::keyexpr, Encoding, WireExpr},
     network::{
-        declare::ext,
+        declare::{ext, queryable::ext::QueryableInfo},
         request::{ext::TargetType, Request, RequestId},
         response::{self, ext::ResponderIdType, Response, ResponseFinal},
     },
-    zenoh::{reply::ext::ConsolidationType, Reply, RequestBody, ResponseBody},
+    zenoh::{query::Consolidation, Reply, RequestBody, ResponseBody},
 };
 use zenoh_sync::get_mut_unchecked;
 use zenoh_util::Timed;
@@ -464,11 +464,29 @@ macro_rules! inc_res_stats {
                 match &$body {
                     ResponseBody::Put(p) => {
                         stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
-                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](p.payload.len());
+                        let mut n =  p.payload.len();
+                        if let Some(a) = p.ext_attachment.as_ref() {
+                           n += a.buffer.len();
+                        }
+                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](n);
                     }
                     ResponseBody::Reply(r) => {
                         stats.[<$txrx _z_reply_msgs>].[<inc_ $space>](1);
-                        stats.[<$txrx _z_reply_pl_bytes>].[<inc_ $space>](r.payload.len());
+                        let mut n = 0;
+                        match &r.payload {
+                            ReplyBody::Put(p) => {
+                                if let Some(a) = p.ext_attachment.as_ref() {
+                                   n += a.buffer.len();
+                                }
+                                n += p.payload.len();
+                            }
+                            ReplyBody::Del(d) => {
+                                if let Some(a) = d.ext_attachment.as_ref() {
+                                   n += a.buffer.len();
+                                }
+                            }
+                        }
+                        stats.[<$txrx _z_reply_pl_bytes>].[<inc_ $space>](n);
                     }
                     ResponseBody::Err(e) => {
                         stats.[<$txrx _z_reply_msgs>].[<inc_ $space>](1);
@@ -536,15 +554,19 @@ pub fn route_query(
 
                 for (wexpr, payload) in local_replies {
                     let payload = ResponseBody::Reply(Reply {
-                        timestamp: None,
-                        encoding: Encoding::DEFAULT,
-                        ext_sinfo: None,
-                        ext_consolidation: ConsolidationType::DEFAULT,
-                        #[cfg(feature = "shared-memory")]
-                        ext_shm: None,
-                        ext_attachment: None, // @TODO: expose it in the API
-                        ext_unknown: vec![],
-                        payload,
+                        consolidation: Consolidation::DEFAULT, // @TODO: handle Del case
+                        ext_unknown: vec![],                   // @TODO: handle unknown extensions
+                        payload: ReplyBody::Put(Put {
+                            // @TODO: handle Del case
+                            timestamp: None,             // @TODO: handle timestamp
+                            encoding: Encoding::DEFAULT, // @TODO: handle encoding
+                            ext_sinfo: None,             // @TODO: handle source info
+                            ext_attachment: None,        // @TODO: expose it in the API
+                            #[cfg(feature = "shared-memory")]
+                            ext_shm: None,
+                            ext_unknown: vec![], // @TODO: handle unknown extensions
+                            payload,
+                        }),
                     });
                     #[cfg(feature = "stats")]
                     if !admin {

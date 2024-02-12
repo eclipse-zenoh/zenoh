@@ -413,10 +413,19 @@ macro_rules! inc_stats {
                 match &$body {
                     PushBody::Put(p) => {
                         stats.[<$txrx _z_put_msgs>].[<inc_ $space>](1);
-                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](p.payload.len());
+                        let mut n =  p.payload.len();
+                        if let Some(a) = p.ext_attachment.as_ref() {
+                           n += a.buffer.len();
+                        }
+                        stats.[<$txrx _z_put_pl_bytes>].[<inc_ $space>](n);
                     }
-                    PushBody::Del(_) => {
+                    PushBody::Del(d) => {
                         stats.[<$txrx _z_del_msgs>].[<inc_ $space>](1);
+                        let mut n = 0;
+                        if let Some(a) = d.ext_attachment.as_ref() {
+                           n += a.buffer.len();
+                        }
+                        stats.[<$txrx _z_del_pl_bytes>].[<inc_ $space>](n);
                     }
                 }
             }

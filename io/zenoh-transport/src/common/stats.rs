@@ -208,6 +208,10 @@ stats_struct! {
         # TYPE "counter"
         pub tx_z_del_msgs DiscriminatedStats,
 
+         # HELP "Counter of received bytes in zenoh del message attachments."
+        # TYPE "counter"
+        pub tx_z_del_pl_bytes DiscriminatedStats,
+
         # HELP "Counter of sent zenoh query messages."
         # TYPE "counter"
         pub tx_z_query_msgs DiscriminatedStats,
@@ -251,6 +255,10 @@ stats_struct! {
         # HELP "Counter of received zenoh del messages."
         # TYPE "counter"
         pub rx_z_del_msgs DiscriminatedStats,
+
+        # HELP "Counter of received bytes in zenoh del message attachments."
+        # TYPE "counter"
+        pub rx_z_del_pl_bytes DiscriminatedStats,
 
         # HELP "Counter of received zenoh query messages."
         # TYPE "counter"
