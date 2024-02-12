@@ -22,6 +22,8 @@ use crate::prelude::*;
 #[zenoh_macros::unstable]
 use crate::sample::Attachment;
 use crate::sample::DataInfo;
+#[zenoh_macros::unstable]
+use crate::sample::SourceInfo;
 use crate::Encoding;
 use crate::SessionRef;
 use crate::Undeclarable;
@@ -30,6 +32,8 @@ use zenoh_core::{zread, AsyncResolve, Resolvable, Resolve, SyncResolve};
 use zenoh_protocol::network::push::ext;
 use zenoh_protocol::network::Mapping;
 use zenoh_protocol::network::Push;
+#[zenoh_macros::unstable]
+use zenoh_protocol::zenoh::ext::SourceInfoType;
 use zenoh_protocol::zenoh::Del;
 use zenoh_protocol::zenoh::PushBody;
 use zenoh_protocol::zenoh::Put;
@@ -158,6 +162,8 @@ impl SyncResolve for PutBuilder<'_, '_> {
             &publisher,
             self.value,
             self.kind,
+            #[cfg(feature = "unstable")]
+            None,
             #[cfg(feature = "unstable")]
             self.attachment,
         )
@@ -339,6 +345,8 @@ impl<'a> Publisher<'a> {
             publisher: self,
             value,
             kind,
+            #[cfg(feature = "unstable")]
+            source_info: None,
             #[cfg(feature = "unstable")]
             attachment: None,
         }
@@ -626,6 +634,8 @@ pub struct Publication<'a> {
     value: Value,
     kind: SampleKind,
     #[cfg(feature = "unstable")]
+    pub(crate) source_info: Option<SourceInfo>,
+    #[cfg(feature = "unstable")]
     pub(crate) attachment: Option<Attachment>,
 }
 
@@ -633,6 +643,27 @@ impl<'a> Publication<'a> {
     #[zenoh_macros::unstable]
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
+        self
+    }
+
+    /// Send data with the given [`SourceInfo`].
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression").res().await.unwrap();
+    /// publisher.put("Value").with_source_info(SourceInfo {
+    ///     id: publisher.id(),
+    ///     sn: 0,
+    /// }).res().await.unwrap();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
+        self.source_info = Some(source_info);
         self
     }
 }
@@ -647,6 +678,8 @@ impl SyncResolve for Publication<'_> {
             self.publisher,
             self.value,
             self.kind,
+            #[cfg(feature = "unstable")]
+            self.source_info,
             #[cfg(feature = "unstable")]
             self.attachment,
         )
@@ -823,6 +856,7 @@ fn resolve_put(
     publisher: &Publisher<'_>,
     value: Value,
     kind: SampleKind,
+    #[cfg(feature = "unstable")] source_info: Option<SourceInfo>,
     #[cfg(feature = "unstable")] attachment: Option<Attachment>,
 ) -> ZResult<()> {
     log::trace!("write({:?}, [...])", &publisher.key_expr);
@@ -856,6 +890,12 @@ fn resolve_put(
                     PushBody::Put(Put {
                         timestamp,
                         encoding: value.encoding.clone(),
+                        #[cfg(feature = "unstable")]
+                        ext_sinfo: source_info.map(|s| SourceInfoType {
+                            id: s.source_id.unwrap_or_default(),
+                            sn: s.source_sn.unwrap_or_default() as u32,
+                        }),
+                        #[cfg(not(feature = "unstable"))]
                         ext_sinfo: None,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
@@ -875,6 +915,12 @@ fn resolve_put(
                     }
                     PushBody::Del(Del {
                         timestamp,
+                        #[cfg(feature = "unstable")]
+                        ext_sinfo: source_info.map(|s| SourceInfoType {
+                            id: s.source_id.unwrap_or_default(),
+                            sn: s.source_sn.unwrap_or_default() as u32,
+                        }),
+                        #[cfg(not(feature = "unstable"))]
                         ext_sinfo: None,
                         ext_attachment,
                         ext_unknown: vec![],

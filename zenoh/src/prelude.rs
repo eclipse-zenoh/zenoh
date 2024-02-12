@@ -48,6 +48,8 @@ pub(crate) mod common {
     pub use crate::query::ConsolidationMode;
     #[zenoh_macros::unstable]
     pub use crate::sample::Locality;
+    #[zenoh_macros::unstable]
+    pub use crate::sample::SourceInfo;
     #[cfg(not(feature = "unstable"))]
     pub(crate) use crate::sample::Locality;
     pub use crate::sample::Sample;
