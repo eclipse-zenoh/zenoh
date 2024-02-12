@@ -16,7 +16,6 @@ use alloc::{
     boxed::Box,
     format,
     string::{String, ToString},
-    vec::Vec,
 };
 use core::{
     convert::{From, TryFrom, TryInto},
@@ -53,43 +52,6 @@ pub use endpoint::*;
 
 pub mod resolution;
 pub use resolution::*;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Property {
-    pub key: u64,
-    pub value: Vec<u8>,
-}
-
-/// The kind of a `Sample`.
-#[repr(u8)]
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
-pub enum SampleKind {
-    /// if the `Sample` was issued by a `put` operation.
-    #[default]
-    Put = 0,
-    /// if the `Sample` was issued by a `delete` operation.
-    Delete = 1,
-}
-
-impl fmt::Display for SampleKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            SampleKind::Put => write!(f, "PUT"),
-            SampleKind::Delete => write!(f, "DELETE"),
-        }
-    }
-}
-
-impl TryFrom<u64> for SampleKind {
-    type Error = u64;
-    fn try_from(kind: u64) -> Result<Self, u64> {
-        match kind {
-            0 => Ok(SampleKind::Put),
-            1 => Ok(SampleKind::Delete),
-            _ => Err(kind),
-        }
-    }
-}
 
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -299,6 +261,50 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
     }
 }
 
+/// The kind of a `Sample`.
+#[repr(u8)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub enum SampleKind {
+    /// if the `Sample` was issued by a `put` operation.
+    #[default]
+    Put = 0,
+    /// if the `Sample` was issued by a `delete` operation.
+    Delete = 1,
+}
+
+impl fmt::Display for SampleKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SampleKind::Put => write!(f, "PUT"),
+            SampleKind::Delete => write!(f, "DELETE"),
+        }
+    }
+}
+
+impl TryFrom<u64> for SampleKind {
+    type Error = u64;
+    fn try_from(kind: u64) -> Result<Self, u64> {
+        match kind {
+            0 => Ok(SampleKind::Put),
+            1 => Ok(SampleKind::Delete),
+            _ => Err(kind),
+        }
+    }
+}
+
+/// The subscription mode.
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+#[repr(u8)]
+pub enum SubMode {
+    #[default]
+    Push = 0,
+    Pull = 1,
+}
+
+impl SubMode {
+    pub const DEFAULT: Self = Self::Push;
+}
+
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
 pub enum Priority {
@@ -396,38 +402,6 @@ pub enum CongestionControl {
 
 impl CongestionControl {
     pub const DEFAULT: Self = Self::Drop;
-}
-
-/// The subscription mode.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
-#[repr(u8)]
-pub enum SubMode {
-    #[default]
-    Push = 0,
-    Pull = 1,
-}
-
-impl SubMode {
-    pub const DEFAULT: Self = Self::Push;
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct SubInfo {
-    pub reliability: Reliability,
-    pub mode: SubMode,
-}
-
-impl SubInfo {
-    pub const DEFAULT: Self = Self {
-        reliability: Reliability::DEFAULT,
-        mode: SubMode::DEFAULT,
-    };
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct QueryableInfo {
-    pub complete: u64, // Default 0: incomplete
-    pub distance: u64, // Default 0: no distance
 }
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
