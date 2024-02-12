@@ -13,7 +13,6 @@
 //
 
 //! Query primitives.
-
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::prelude::*;
 #[zenoh_macros::unstable]
