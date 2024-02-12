@@ -14,8 +14,7 @@
 
 //! Subscribing primitives.
 use crate::handlers::{locked, Callback, DefaultHandler};
-use crate::prelude::Locality;
-use crate::prelude::{Id, IntoCallbackReceiverPair, KeyExpr, Sample};
+use crate::prelude::*;
 use crate::Undeclarable;
 use crate::{Result as ZResult, SessionRef};
 use std::fmt;
@@ -757,6 +756,29 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
 }
 
 impl<'a, Receiver> Subscriber<'a, Receiver> {
+    /// Returns the [`EntityGlobalId`] of this Subscriber.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let subscriber = session.declare_subscriber("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// let subscriber_id = subscriber.id();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        EntityGlobalId {
+            zid: self.subscriber.session.zid(),
+            eid: self.subscriber.state.id,
+        }
+    }
+
     /// Returns the [`KeyExpr`] this Subscriber subscribes to.
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.subscriber.state.key_expr

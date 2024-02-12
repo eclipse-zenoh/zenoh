@@ -146,6 +146,8 @@ impl SyncResolve for PutBuilder<'_, '_> {
 
         let publisher = Publisher {
             session,
+            #[cfg(feature = "unstable")]
+            eid: 0, // This is a one shot Publisher
             key_expr: key_expr?,
             congestion_control,
             priority,
@@ -238,6 +240,8 @@ impl std::fmt::Debug for PublisherRef<'_> {
 #[derive(Debug, Clone)]
 pub struct Publisher<'a> {
     pub(crate) session: SessionRef<'a>,
+    #[cfg(feature = "unstable")]
+    pub(crate) eid: EntityId,
     pub(crate) key_expr: KeyExpr<'a>,
     pub(crate) congestion_control: CongestionControl,
     pub(crate) priority: Priority,
@@ -245,6 +249,29 @@ pub struct Publisher<'a> {
 }
 
 impl<'a> Publisher<'a> {
+    /// Returns the [`EntityGlobalId`] of this Publisher.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let publisher = session.declare_publisher("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// let publisher_id = publisher.id();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        EntityGlobalId {
+            zid: self.session.zid(),
+            eid: self.eid,
+        }
+    }
+
     pub fn key_expr(&self) -> &KeyExpr<'a> {
         &self.key_expr
     }
@@ -768,8 +795,12 @@ impl<'a, 'b> SyncResolve for PublisherBuilder<'a, 'b> {
         self.session
             .declare_publication_intent(key_expr.clone())
             .res_sync()?;
+        #[cfg(feature = "unstable")]
+        let eid = self.session.runtime.next_id();
         let publisher = Publisher {
             session: self.session,
+            #[cfg(feature = "unstable")]
+            eid,
             key_expr,
             congestion_control: self.congestion_control,
             priority: self.priority,

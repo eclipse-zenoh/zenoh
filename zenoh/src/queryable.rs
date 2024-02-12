@@ -576,6 +576,29 @@ pub struct Queryable<'a, Receiver> {
 }
 
 impl<'a, Receiver> Queryable<'a, Receiver> {
+    /// Returns the [`EntityGlobalId`] of this Queryable.
+    ///
+    /// # Examples
+    /// ```
+    /// # async_std::task::block_on(async {
+    /// use zenoh::prelude::r#async::*;
+    ///
+    /// let session = zenoh::open(config::peer()).res().await.unwrap();
+    /// let queryable = session.declare_queryable("key/expression")
+    ///     .res()
+    ///     .await
+    ///     .unwrap();
+    /// let queryable_id = queryable.id();
+    /// # })
+    /// ```
+    #[zenoh_macros::unstable]
+    pub fn id(&self) -> EntityGlobalId {
+        EntityGlobalId {
+            zid: self.queryable.session.zid(),
+            eid: self.queryable.state.id,
+        }
+    }
+
     #[inline]
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self, ())
