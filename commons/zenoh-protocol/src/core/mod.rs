@@ -261,19 +261,6 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
     }
 }
 
-/// The subscription mode.
-#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
-#[repr(u8)]
-pub enum SubMode {
-    #[default]
-    Push = 0,
-    Pull = 1,
-}
-
-impl SubMode {
-    pub const DEFAULT: Self = Self::Push;
-}
-
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
 pub enum Priority {
