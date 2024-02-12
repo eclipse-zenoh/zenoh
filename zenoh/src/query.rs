@@ -27,7 +27,7 @@ use zenoh_protocol::zenoh::query::Consolidation;
 use zenoh_result::ZResult;
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
-pub use zenoh_protocol::core::QueryTarget;
+pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
 
 /// The kind of consolidation.
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]

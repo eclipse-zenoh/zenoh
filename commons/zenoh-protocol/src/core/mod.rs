@@ -359,18 +359,3 @@ pub enum CongestionControl {
 impl CongestionControl {
     pub const DEFAULT: Self = Self::Drop;
 }
-
-/// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum QueryTarget {
-    #[default]
-    BestMatching,
-    All,
-    AllComplete,
-    #[cfg(feature = "complete_n")]
-    Complete(u64),
-}
-
-impl QueryTarget {
-    pub const DEFAULT: Self = Self::BestMatching;
-}
