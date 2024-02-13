@@ -527,12 +527,26 @@ pub struct QoS {
     pub express: bool,
 }
 
-impl From<QoSType> for QoS {
-    fn from(ext: QoSType) -> Self {
-        QoS {
-            priority: ext.get_priority().into(),
+impl QoS {
+    /// Helper function to fallback to default QoS value and log a error in case of conversion failure
+    pub(crate) fn from_or_default(ext: QoSType) -> QoS {
+        match QoS::try_from(ext) {
+            Ok(qos) => return qos,
+            Err(e) => {
+                log::error!("Failed to convert: {}", e.to_string());
+                QoS::default()
+            }
+        }
+    }
+}
+
+impl TryFrom<QoSType> for QoS {
+    type Error = zenoh_result::Error;
+    fn try_from(ext: QoSType) -> Result<Self, Self::Error> {
+        Ok(QoS {
+            priority: ext.get_priority().try_into()?,
             congestion_control: ext.get_congestion_control(),
             express: ext.is_express(),
-        }
+        })
     }
 }
