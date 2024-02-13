@@ -70,7 +70,7 @@ pub struct Property {
 }
 
 /// The kind of a `Sample`.
-// tags{sample.options.kind}
+// tags{options.sample.kind}
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub enum SampleKind {
