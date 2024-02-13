@@ -431,11 +431,3 @@ pub enum QueryTarget {
     #[cfg(feature = "complete_n")]
     Complete(u64),
 }
-
-/// Structure containing quality of service data
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
-pub struct QoS {
-    pub priority: Priority,
-    pub congestion_control: CongestionControl,
-    pub express: bool,
-}

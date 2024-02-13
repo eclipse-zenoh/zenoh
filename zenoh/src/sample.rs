@@ -18,10 +18,12 @@ use crate::prelude::ZenohId;
 use crate::prelude::{KeyExpr, SampleKind, Value};
 use crate::query::Reply;
 use crate::time::{new_reception_timestamp, Timestamp};
+use crate::Priority;
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::convert::{TryFrom, TryInto};
-use zenoh_protocol::core::{Encoding, QoS};
+use zenoh_protocol::core::{CongestionControl, Encoding};
+use zenoh_protocol::network::push::ext::QoSType;
 
 pub type SourceSn = u64;
 
@@ -514,5 +516,23 @@ impl TryFrom<Reply> for Sample {
 
     fn try_from(value: Reply) -> Result<Self, Self::Error> {
         value.sample
+    }
+}
+
+/// Structure containing quality of service data
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+pub struct QoS {
+    pub priority: Priority,
+    pub congestion_control: CongestionControl,
+    pub express: bool,
+}
+
+impl From<QoSType> for QoS {
+    fn from(ext: QoSType) -> Self {
+        QoS {
+            priority: ext.get_priority().into(),
+            congestion_control: ext.get_congestion_control(),
+            express: ext.is_express(),
+        }
     }
 }

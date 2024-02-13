@@ -54,13 +54,13 @@ fn pubsub() {
         ztimeout!(publisher1.put("qos").res_async()).unwrap();
         let qos = ztimeout!(subscriber.recv_async()).unwrap().qos;
 
-        assert_eq!(qos.priority, Priority::DataHigh.into());
+        assert_eq!(qos.priority, Priority::DataHigh);
         assert_eq!(qos.congestion_control, CongestionControl::Drop);
 
         ztimeout!(publisher2.put("qos").res_async()).unwrap();
         let qos = ztimeout!(subscriber.recv_async()).unwrap().qos;
 
-        assert_eq!(qos.priority, Priority::DataLow.into());
+        assert_eq!(qos.priority, Priority::DataLow);
         assert_eq!(qos.congestion_control, CongestionControl::Block);
     });
 }

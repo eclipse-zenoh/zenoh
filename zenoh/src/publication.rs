@@ -902,6 +902,12 @@ impl Priority {
     pub const NUM: usize = 1 + Self::MIN as usize - Self::MAX as usize;
 }
 
+impl From<zenoh_protocol::core::Priority> for Priority {
+    fn from(priority: zenoh_protocol::core::Priority) -> Self {
+        Self::try_from(priority as u8).unwrap()
+    }
+}
+
 impl TryFrom<u8> for Priority {
     type Error = zenoh_result::Error;
 
