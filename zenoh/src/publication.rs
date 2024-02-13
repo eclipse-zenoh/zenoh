@@ -1345,9 +1345,9 @@ mod tests {
 
     #[test]
     fn sample_kind_integrity_in_publication() {
+        use crate::publication::HasWriteWithSampleKind;
         use crate::{open, prelude::sync::*};
         use zenoh_protocol::core::SampleKind;
-        use crate::publication::HasWriteWithSampleKind;
 
         const KEY_EXPR: &str = "test/sample_kind_integrity/publication";
         const VALUE: &str = "zenoh";
