@@ -282,7 +282,6 @@ jobs:
               # check if debian packages has been created and packages them in a single tgz
               if [[ -d target/${TARGET}/debian ]]; then
                 cd target/${TARGET}/debian
-                ${GITHUB_WORKSPACE}/gen_zenoh_deb.sh ${{ needs.checks.outputs.ZENOH_VERSION }} ${{ matrix.job.arch }}
                 echo "Packaging ${DEBS_PKG_NAME}:"
                 zip ${DEBS_PKG_NAME} *.deb
                 cd -
