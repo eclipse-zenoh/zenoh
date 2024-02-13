@@ -528,14 +528,19 @@ pub struct QoS {
 }
 
 impl QoS {
-    /// Helper function to fallback to default QoS value and log a error in case of conversion failure
+    /// Helper function to fallback to QoS with default priortiy value, in case we fail to extract it
     pub(crate) fn from_or_default(ext: QoSType) -> QoS {
-        match QoS::try_from(ext) {
-            Ok(qos) => return qos,
+        let priority = match Priority::try_from(ext.get_priority()) {
+            Ok(p) => p,
             Err(e) => {
-                log::error!("Failed to convert: {}", e.to_string());
-                QoS::default()
+                log::error!("Failed to convert priority: {}", e.to_string());
+                Priority::default()
             }
+        };
+        QoS {
+            priority,
+            congestion_control: ext.get_congestion_control(),
+            express: ext.is_express(),
         }
     }
 }
