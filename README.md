@@ -94,6 +94,8 @@ Zenoh's router is built as `target/release/zenohd`. All the examples are built i
 
 **Routed tests:**
 
+> **Windows users**: to properly execute the commands below in PowerShell you need to escape `"` characters as `\"`.
+
  - **put/store/get**
     - run the Zenoh router with a memory storage:  
       `./target/release/zenohd --cfg='plugins/storage_manager/storages/demo:{key_expr:"demo/example/**",volume:"memory"}'`
