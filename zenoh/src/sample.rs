@@ -528,7 +528,7 @@ pub struct QoS {
 }
 
 impl QoS {
-    /// Helper function to fallback to QoS with default priortiy value, in case we fail to extract it
+    /// Helper function to fallback to QoS with default priority value, in case we fail to extract it
     pub(crate) fn from_or_default(ext: QoSType) -> QoS {
         let priority = match Priority::try_from(ext.get_priority()) {
             Ok(p) => p,
