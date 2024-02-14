@@ -24,6 +24,7 @@ pub mod router;
 
 use std::{cell::OnceCell, sync::Arc};
 
+use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 
 use self::{dispatcher::face::Face, router::Resource};
@@ -167,5 +168,11 @@ impl RoutingContext<NetworkMessage> {
             }
         }
         None
+    }
+
+    #[inline]
+    pub(crate) fn full_key_expr(&self) -> Option<OwnedKeyExpr> {
+        let full_expr = self.full_expr()?;
+        OwnedKeyExpr::new(full_expr).ok()
     }
 }

@@ -23,6 +23,9 @@ use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
+pub mod downsampling;
+use crate::net::routing::interceptor::downsampling::downsampling_interceptor_factories;
+
 pub(crate) trait InterceptorTrait {
     fn intercept(
         &self,
@@ -45,11 +48,15 @@ pub(crate) trait InterceptorFactoryTrait {
 
 pub(crate) type InterceptorFactory = Box<dyn InterceptorFactoryTrait + Send + Sync>;
 
-pub(crate) fn interceptor_factories(_config: &Config) -> ZResult<Vec<InterceptorFactory>> {
-    // Add interceptors here
-    // @TODO build the list of intercetors with the correct order from the config
-    // vec![Box::new(LoggerInterceptor {})]
-    Ok(vec![])
+pub(crate) fn interceptor_factories(config: &Config) -> ZResult<Vec<InterceptorFactory>> {
+    let mut res: Vec<InterceptorFactory> = vec![];
+
+    // Uncomment to log the interceptors initialisation
+    // res.push(Box::new(LoggerInterceptor {}));
+
+    res.extend(downsampling_interceptor_factories(config.downsampling())?);
+
+    Ok(res)
 }
 
 pub(crate) struct InterceptorsChain {
