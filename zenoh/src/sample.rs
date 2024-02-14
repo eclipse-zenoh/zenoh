@@ -533,7 +533,10 @@ impl QoS {
         let priority = match Priority::try_from(ext.get_priority()) {
             Ok(p) => p,
             Err(e) => {
-                log::error!("Failed to convert priority: {}", e.to_string());
+                log::trace!(
+                    "Failed to convert priority: {}; replacing with default value",
+                    e.to_string()
+                );
                 Priority::default()
             }
         };
