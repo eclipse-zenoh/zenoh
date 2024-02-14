@@ -20,6 +20,7 @@
 use super::RoutingContext;
 use zenoh_config::Config;
 use zenoh_protocol::network::NetworkMessage;
+use zenoh_result::ZResult;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 
 pub(crate) trait InterceptorTrait {
@@ -44,11 +45,11 @@ pub(crate) trait InterceptorFactoryTrait {
 
 pub(crate) type InterceptorFactory = Box<dyn InterceptorFactoryTrait + Send + Sync>;
 
-pub(crate) fn interceptor_factories(_config: &Config) -> Vec<InterceptorFactory> {
+pub(crate) fn interceptor_factories(_config: &Config) -> ZResult<Vec<InterceptorFactory>> {
     // Add interceptors here
     // @TODO build the list of intercetors with the correct order from the config
     // vec![Box::new(LoggerInterceptor {})]
-    vec![]
+    Ok(vec![])
 }
 
 pub(crate) struct InterceptorsChain {
