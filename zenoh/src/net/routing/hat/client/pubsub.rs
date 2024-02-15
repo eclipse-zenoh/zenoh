@@ -145,7 +145,7 @@ fn declare_client_subscription(
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                        id: 0, // @TODO use proper SubscriberId (#703)
+                        id: 0, // @TODO use proper SubscriberId
                         wire_expr: res.expr().into(),
                         ext_info: *sub_info,
                     }),
