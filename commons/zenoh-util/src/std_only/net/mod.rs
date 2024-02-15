@@ -22,6 +22,38 @@ zconfigurable! {
     static ref WINDOWS_GET_ADAPTERS_ADDRESSES_MAX_RETRIES: u32 = 3;
 }
 
+#[cfg(windows)]
+unsafe fn get_adapters_adresses(af_spec: i32) -> ZResult<Vec<u8>> {
+    use winapi::um::iptypes::IP_ADAPTER_ADDRESSES_LH;
+
+    let mut ret;
+    let mut retries = 0;
+    let mut size: u32 = *WINDOWS_GET_ADAPTERS_ADDRESSES_BUF_SIZE;
+    let mut buffer: Vec<u8>;
+    loop {
+        buffer = Vec::with_capacity(size as usize);
+        ret = winapi::um::iphlpapi::GetAdaptersAddresses(
+            af_spec.try_into().unwrap(),
+            0,
+            std::ptr::null_mut(),
+            buffer.as_mut_ptr() as *mut IP_ADAPTER_ADDRESSES_LH,
+            &mut size,
+        );
+        if ret != winapi::shared::winerror::ERROR_BUFFER_OVERFLOW {
+            break;
+        }
+        if retries >= *WINDOWS_GET_ADAPTERS_ADDRESSES_MAX_RETRIES {
+            break;
+        }
+        retries += 1;
+    }
+
+    if ret != 0 {
+        bail!("GetAdaptersAddresses returned {}", ret)
+    }
+
+    Ok(buffer)
+}
 pub fn get_interface(name: &str) -> ZResult<Option<IpAddr>> {
     #[cfg(unix)]
     {
