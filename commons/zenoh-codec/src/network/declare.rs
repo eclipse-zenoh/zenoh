@@ -24,6 +24,7 @@ use zenoh_protocol::{
     network::{
         declare::{
             self, common, interest, keyexpr, queryable, subscriber, token, Declare, DeclareBody,
+            Interest,
         },
         id, Mapping,
     },
@@ -843,26 +844,28 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &interest::DeclareInterest) -> Self::Output {
+        println!(
+            "Message: {:?}, Flags: {}, Options: {}",
+            x,
+            x.flags(),
+            x.options()
+        );
         let interest::DeclareInterest {
             id,
+            interest: _,
             wire_expr,
-            interest,
         } = x;
 
         // Header
-        let mut header = declare::id::D_INTEREST;
-        if wire_expr.mapping != Mapping::default() {
-            header |= subscriber::flag::M;
-        }
-        if wire_expr.has_suffix() {
-            header |= subscriber::flag::N;
-        }
+        let header = declare::id::D_INTEREST | x.flags();
         self.write(&mut *writer, header)?;
 
         // Body
         self.write(&mut *writer, id)?;
-        self.write(&mut *writer, wire_expr)?;
-        self.write(&mut *writer, interest.as_u8())?;
+        self.write(&mut *writer, x.options())?;
+        if let Some(we) = wire_expr.as_ref() {
+            self.write(&mut *writer, we)?;
+        }
 
         Ok(())
     }
@@ -892,16 +895,29 @@ where
             return Err(DidntRead);
         }
 
+        println!("Read, Flags: {}", imsg::flags(self.header));
+
         // Body
         let id: interest::InterestId = self.codec.read(&mut *reader)?;
-        let ccond = Zenoh080Condition::new(imsg::has_flag(self.header, token::flag::N));
-        let mut wire_expr: WireExpr<'static> = ccond.read(&mut *reader)?;
-        wire_expr.mapping = if imsg::has_flag(self.header, token::flag::M) {
-            Mapping::Sender
-        } else {
-            Mapping::Receiver
-        };
-        let interest: u8 = self.codec.read(&mut *reader)?;
+        let options: u8 = self.codec.read(&mut *reader)?;
+        println!(
+            "Read, Flags: {}, Options: {}",
+            imsg::flags(self.header),
+            options,
+        );
+        let interest = Interest::from((imsg::flags(self.header), options));
+
+        let mut wire_expr = None;
+        if interest.restricted() {
+            let ccond = Zenoh080Condition::new(interest.named());
+            let mut we: WireExpr<'static> = ccond.read(&mut *reader)?;
+            we.mapping = if interest.mapping() {
+                Mapping::Sender
+            } else {
+                Mapping::Receiver
+            };
+            wire_expr = Some(we);
+        }
 
         // Extensions
         let has_ext = imsg::has_flag(self.header, token::flag::Z);
@@ -911,8 +927,8 @@ where
 
         Ok(interest::DeclareInterest {
             id,
+            interest,
             wire_expr,
-            interest: interest.into(),
         })
     }
 }
