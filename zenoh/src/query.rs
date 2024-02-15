@@ -23,47 +23,38 @@ use std::collections::HashMap;
 use std::future::Ready;
 use std::time::Duration;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_protocol::zenoh::query::Consolidation;
 use zenoh_result::ZResult;
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
 pub use zenoh_protocol::core::QueryTarget;
 
 /// The kind of consolidation.
-pub use zenoh_protocol::core::ConsolidationMode;
-
-/// The operation: either manual or automatic.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Mode<T> {
-    Auto,
-    Manual(T),
-}
+pub type ConsolidationMode = Consolidation;
 
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QueryConsolidation {
-    pub(crate) mode: Mode<ConsolidationMode>,
+    pub(crate) mode: ConsolidationMode,
 }
 
 impl QueryConsolidation {
     /// Automatic query consolidation strategy selection.
-    pub const AUTO: Self = Self { mode: Mode::Auto };
+    pub const AUTO: Self = Self {
+        mode: ConsolidationMode::Auto,
+    };
+    pub const DEFAULT: Self = Self::AUTO;
 
     pub(crate) const fn from_mode(mode: ConsolidationMode) -> Self {
-        Self {
-            mode: Mode::Manual(mode),
-        }
+        Self { mode }
     }
 
     /// Returns the requested [`ConsolidationMode`].
-    pub fn mode(&self) -> Mode<ConsolidationMode> {
+    pub fn mode(&self) -> ConsolidationMode {
         self.mode
     }
 }
-impl From<Mode<ConsolidationMode>> for QueryConsolidation {
-    fn from(mode: Mode<ConsolidationMode>) -> Self {
-        Self { mode }
-    }
-}
+
 impl From<ConsolidationMode> for QueryConsolidation {
     fn from(mode: ConsolidationMode) -> Self {
         Self::from_mode(mode)
@@ -72,7 +63,7 @@ impl From<ConsolidationMode> for QueryConsolidation {
 
 impl Default for QueryConsolidation {
     fn default() -> Self {
-        QueryConsolidation::AUTO
+        QueryConsolidation::DEFAULT
     }
 }
 

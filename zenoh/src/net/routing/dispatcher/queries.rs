@@ -555,8 +555,8 @@ pub fn route_query(
 
                 for (wexpr, payload) in local_replies {
                     let payload = ResponseBody::Reply(Reply {
-                        consolidation: Consolidation::default(), // @TODO: handle Del case
-                        ext_unknown: vec![],                     // @TODO: handle unknown extensions
+                        consolidation: Consolidation::DEFAULT, // @TODO: handle Del case
+                        ext_unknown: vec![],                   // @TODO: handle unknown extensions
                         payload: ReplyBody::Put(Put {
                             // @TODO: handle Del case
                             timestamp: None,               // @TODO: handle timestamp

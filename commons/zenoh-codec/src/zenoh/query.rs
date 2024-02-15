@@ -39,7 +39,6 @@ where
             Consolidation::None => 1,
             Consolidation::Monotonic => 2,
             Consolidation::Latest => 3,
-            Consolidation::Unique => 4,
         };
         self.write(&mut *writer, v)
     }
@@ -58,7 +57,6 @@ where
             1 => Consolidation::None,
             2 => Consolidation::Monotonic,
             3 => Consolidation::Latest,
-            4 => Consolidation::Unique,
             _ => Consolidation::Auto, // Fallback on Auto if Consolidation is unknown
         };
         Ok(c)
@@ -83,7 +81,7 @@ where
 
         // Header
         let mut header = id::QUERY;
-        if consolidation != &Consolidation::default() {
+        if consolidation != &Consolidation::DEFAULT {
             header |= flag::C;
         }
         if !parameters.is_empty() {
@@ -99,7 +97,7 @@ where
         self.write(&mut *writer, header)?;
 
         // Body
-        if consolidation != &Consolidation::default() {
+        if consolidation != &Consolidation::DEFAULT {
             self.write(&mut *writer, *consolidation)?;
         }
         if !parameters.is_empty() {
@@ -153,7 +151,7 @@ where
         }
 
         // Body
-        let mut consolidation = Consolidation::default();
+        let mut consolidation = Consolidation::DEFAULT;
         if imsg::has_flag(self.header, flag::C) {
             consolidation = self.codec.read(&mut *reader)?;
         }

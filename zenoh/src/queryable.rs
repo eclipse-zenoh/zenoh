@@ -241,7 +241,7 @@ impl SyncResolve for ReplyBuilder<'_> {
                         mapping: Mapping::Sender,
                     },
                     payload: ResponseBody::Reply(zenoh::Reply {
-                        consolidation: zenoh::Consolidation::default(),
+                        consolidation: zenoh::Consolidation::DEFAULT,
                         ext_unknown: vec![],
                         payload: match kind {
                             SampleKind::Put => ReplyBody::Put(Put {
