@@ -2763,12 +2763,13 @@ pub trait SessionDeclarations<'s, 'a> {
     ///
     /// # Examples
     /// ```
-    /// # async_std::task::block_on(async {
+    /// # #[tokio::main]
+    /// # async fn main() {
     /// use zenoh::prelude::r#async::*;
     ///
     /// let session = zenoh::open(config::peer()).res().await.unwrap();
     /// let info = session.info();
-    /// # })
+    /// # }
     /// ```
     fn info(&'s self) -> SessionInfo<'a>;
 }

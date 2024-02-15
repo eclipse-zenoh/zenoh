@@ -16,19 +16,14 @@ use async_std::task;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use tokio::runtime::Handle;
 use zenoh::prelude::r#async::*;
-use zenoh_core::zasync_executor_init;
+use zenoh_core::ztimeout;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const SLEEP: Duration = Duration::from_secs(1);
 
 const MSG_SIZE: [usize; 2] = [1_024, 100_000];
-
-macro_rules! ztimeout {
-    ($f:expr) => {
-        $f.timeout(TIMEOUT).await.unwrap()
-    };
-}
 
 async fn open_p2p_sessions() -> (Session, Session, Session) {
     // Open the sessions
@@ -197,7 +192,11 @@ async fn test_unicity_qryrep(s01: &Session, s02: &Session, s03: &Session) {
             .callback(move |sample| {
                 c_msgs1.fetch_add(1, Ordering::Relaxed);
                 let rep = Sample::try_from(key_expr, vec![0u8; size]).unwrap();
-                task::block_on(async { ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap() });
+                tokio::task::block_in_place(move || {
+                    Handle::current().block_on(async move {
+                        ztimeout!(sample.reply(Ok(rep)).res_async()).unwrap()
+                    });
+                });
             })
             .res_async())
         .unwrap();
