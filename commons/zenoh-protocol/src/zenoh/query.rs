@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::{common::ZExtUnknown, core::ConsolidationMode};
+use crate::common::ZExtUnknown;
 use alloc::{string::String, vec::Vec};
 
 /// The kind of consolidation.
@@ -48,16 +48,6 @@ impl Consolidation {
         *[Self::None, Self::Monotonic, Self::Latest, Self::Auto]
             .choose(&mut rng)
             .unwrap()
-    }
-}
-
-impl From<ConsolidationMode> for Consolidation {
-    fn from(val: ConsolidationMode) -> Self {
-        match val {
-            ConsolidationMode::None => Consolidation::None,
-            ConsolidationMode::Monotonic => Consolidation::Monotonic,
-            ConsolidationMode::Latest => Consolidation::Latest,
-        }
     }
 }
 

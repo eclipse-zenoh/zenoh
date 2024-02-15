@@ -14,13 +14,15 @@
 
 //! Sample primitives
 use crate::buffers::ZBuf;
-use crate::prelude::ZenohId;
-use crate::prelude::{KeyExpr, SampleKind, Value};
+use crate::prelude::{KeyExpr, Value, ZenohId};
 use crate::query::Reply;
 use crate::time::{new_reception_timestamp, Timestamp};
 #[zenoh_macros::unstable]
 use serde::Serialize;
-use std::convert::{TryFrom, TryInto};
+use std::{
+    convert::{TryFrom, TryInto},
+    fmt,
+};
 use zenoh_protocol::core::Encoding;
 
 pub type SourceSn = u64;
@@ -311,6 +313,38 @@ mod attachment {
         }
     }
 }
+
+/// The kind of a `Sample`.
+#[repr(u8)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
+pub enum SampleKind {
+    /// if the `Sample` was issued by a `put` operation.
+    #[default]
+    Put = 0,
+    /// if the `Sample` was issued by a `delete` operation.
+    Delete = 1,
+}
+
+impl fmt::Display for SampleKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            SampleKind::Put => write!(f, "PUT"),
+            SampleKind::Delete => write!(f, "DELETE"),
+        }
+    }
+}
+
+impl TryFrom<u64> for SampleKind {
+    type Error = u64;
+    fn try_from(kind: u64) -> Result<Self, u64> {
+        match kind {
+            0 => Ok(SampleKind::Put),
+            1 => Ok(SampleKind::Delete),
+            _ => Err(kind),
+        }
+    }
+}
+
 #[zenoh_macros::unstable]
 pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 

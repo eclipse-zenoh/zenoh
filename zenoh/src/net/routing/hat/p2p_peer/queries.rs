@@ -96,9 +96,9 @@ fn propagate_simple_queryable(
             let key_expr = Resource::decl_key(res, &mut dst_face);
             dst_face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    ext_qos: ext::QoSType::declare_default(),
+                    ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
                         id: 0, // @TODO use proper QueryableId (#703)
                         wire_expr: key_expr,
@@ -166,9 +166,9 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
             let wire_expr = Resource::get_best_key(res, "", face.id);
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    ext_qos: ext::QoSType::declare_default(),
+                    ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                         id: 0, // @TODO use proper QueryableId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
@@ -207,9 +207,9 @@ pub(super) fn undeclare_client_queryable(
             let wire_expr = Resource::get_best_key(res, "", face.id);
             face.primitives.send_declare(RoutingContext::with_expr(
                 Declare {
-                    ext_qos: ext::QoSType::declare_default(),
+                    ext_qos: ext::QoSType::DECLARE,
                     ext_tstamp: None,
-                    ext_nodeid: ext::NodeIdType::default(),
+                    ext_nodeid: ext::NodeIdType::DEFAULT,
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
                         id: 0, // @TODO use proper QueryableId (#703)
                         ext_wire_expr: WireExprType { wire_expr },

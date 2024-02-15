@@ -52,8 +52,7 @@ where
                 header |= iext::ENC_ZBUF;
             }
         }
-        let mut n_exts =
-            ((ext_qos != &ext::QoSType::default()) as u8) + (ext_tstamp.is_some() as u8);
+        let mut n_exts = ((ext_qos != &ext::QoSType::DEFAULT) as u8) + (ext_tstamp.is_some() as u8);
         if n_exts != 0 {
             header |= flag::Z;
         }
@@ -63,7 +62,7 @@ where
         self.write(&mut *writer, id)?;
 
         // Extensions
-        if ext_qos != &ext::QoSType::default() {
+        if ext_qos != &ext::QoSType::DEFAULT {
             n_exts -= 1;
             self.write(&mut *writer, (*ext_qos, n_exts != 0))?;
         }
@@ -115,7 +114,7 @@ where
         let id: OamId = self.codec.read(&mut *reader)?;
 
         // Extensions
-        let mut ext_qos = ext::QoSType::default();
+        let mut ext_qos = ext::QoSType::DEFAULT;
         let mut ext_tstamp = None;
 
         let mut has_ext = imsg::has_flag(self.header, flag::Z);

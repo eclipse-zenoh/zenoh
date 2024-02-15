@@ -13,7 +13,6 @@
 //
 
 //! Query primitives.
-
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::prelude::*;
 #[zenoh_macros::unstable]
@@ -23,14 +22,20 @@ use std::collections::HashMap;
 use std::future::Ready;
 use std::time::Duration;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
-use zenoh_protocol::zenoh::query::Consolidation;
 use zenoh_result::ZResult;
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
-pub use zenoh_protocol::core::QueryTarget;
+pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
 
 /// The kind of consolidation.
-pub type ConsolidationMode = Consolidation;
+pub type ConsolidationMode = zenoh_protocol::zenoh::query::Consolidation;
+
+/// The operation: either manual or automatic.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mode<T> {
+    Auto,
+    Manual(T),
+}
 
 /// The replies consolidation strategy to apply on replies to a [`get`](Session::get).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -39,11 +44,11 @@ pub struct QueryConsolidation {
 }
 
 impl QueryConsolidation {
+    pub const DEFAULT: Self = Self::AUTO;
     /// Automatic query consolidation strategy selection.
     pub const AUTO: Self = Self {
         mode: ConsolidationMode::Auto,
     };
-    pub const DEFAULT: Self = Self::AUTO;
 
     pub(crate) const fn from_mode(mode: ConsolidationMode) -> Self {
         Self { mode }
@@ -63,7 +68,7 @@ impl From<ConsolidationMode> for QueryConsolidation {
 
 impl Default for QueryConsolidation {
     fn default() -> Self {
-        QueryConsolidation::DEFAULT
+        QueryConsolidation::AUTO
     }
 }
 
