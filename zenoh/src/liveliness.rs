@@ -549,7 +549,7 @@ where
                 &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
                 Locality::default(),
                 callback,
-                &SubscriberInfo::default(),
+                &SubscriberInfo::DEFAULT,
             )
             .map(|sub_state| Subscriber {
                 subscriber: SubscriberInner {
@@ -747,8 +747,8 @@ where
             .query(
                 &self.key_expr?.into(),
                 &Some(KeyExpr::from(*KE_PREFIX_LIVELINESS)),
-                QueryTarget::default(),
-                QueryConsolidation::default(),
+                QueryTarget::DEFAULT,
+                QueryConsolidation::DEFAULT,
                 Locality::default(),
                 self.timeout,
                 None,

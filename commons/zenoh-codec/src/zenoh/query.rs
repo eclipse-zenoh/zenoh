@@ -83,7 +83,7 @@ where
 
         // Header
         let mut header = id::QUERY;
-        if consolidation != &Consolidation::default() {
+        if consolidation != &Consolidation::DEFAULT {
             header |= flag::C;
         }
         if !parameters.is_empty() {
@@ -99,7 +99,7 @@ where
         self.write(&mut *writer, header)?;
 
         // Body
-        if consolidation != &Consolidation::default() {
+        if consolidation != &Consolidation::DEFAULT {
             self.write(&mut *writer, *consolidation)?;
         }
         if !parameters.is_empty() {
@@ -153,7 +153,7 @@ where
         }
 
         // Body
-        let mut consolidation = Consolidation::default();
+        let mut consolidation = Consolidation::DEFAULT;
         if imsg::has_flag(self.header, flag::C) {
             consolidation = self.codec.read(&mut *reader)?;
         }
