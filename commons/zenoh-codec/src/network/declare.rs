@@ -844,12 +844,6 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &interest::DeclareInterest) -> Self::Output {
-        println!(
-            "Message: {:?}, Flags: {}, Options: {}",
-            x,
-            x.flags(),
-            x.options()
-        );
         let interest::DeclareInterest {
             id,
             interest: _,
@@ -895,16 +889,9 @@ where
             return Err(DidntRead);
         }
 
-        println!("Read, Flags: {}", imsg::flags(self.header));
-
         // Body
         let id: interest::InterestId = self.codec.read(&mut *reader)?;
         let options: u8 = self.codec.read(&mut *reader)?;
-        println!(
-            "Read, Flags: {}, Options: {}",
-            imsg::flags(self.header),
-            options,
-        );
         let interest = Interest::from((imsg::flags(self.header), options));
 
         let mut wire_expr = None;
