@@ -68,7 +68,7 @@ impl From<ConsolidationMode> for QueryConsolidation {
 
 impl Default for QueryConsolidation {
     fn default() -> Self {
-        QueryConsolidation::AUTO
+        Self::DEFAULT
     }
 }
 
