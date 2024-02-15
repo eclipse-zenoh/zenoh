@@ -13,7 +13,6 @@
 //
 
 //! Query primitives.
-
 use crate::handlers::{locked, Callback, DefaultHandler};
 use crate::prelude::*;
 #[zenoh_macros::unstable]
@@ -23,13 +22,38 @@ use std::collections::HashMap;
 use std::future::Ready;
 use std::time::Duration;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
+use zenoh_protocol::zenoh::query::Consolidation;
 use zenoh_result::ZResult;
 
 /// The [`Queryable`](crate::queryable::Queryable)s that should be target of a [`get`](Session::get).
-pub use zenoh_protocol::core::QueryTarget;
+pub type QueryTarget = zenoh_protocol::network::request::ext::TargetType;
 
 /// The kind of consolidation.
-pub use zenoh_protocol::core::ConsolidationMode;
+#[derive(Debug, Clone, PartialEq, Eq, Copy)]
+pub enum ConsolidationMode {
+    /// No consolidation applied: multiple samples may be received for the same key-timestamp.
+    None,
+    /// Monotonic consolidation immediately forwards samples, except if one with an equal or more recent timestamp
+    /// has already been sent with the same key.
+    ///
+    /// This optimizes latency while potentially reducing bandwidth.
+    ///
+    /// Note that this doesn't cause re-ordering, but drops the samples for which a more recent timestamp has already
+    /// been observed with the same key.
+    Monotonic,
+    /// Holds back samples to only send the set of samples that had the highest timestamp for their key.
+    Latest,
+}
+
+impl From<ConsolidationMode> for Consolidation {
+    fn from(val: ConsolidationMode) -> Self {
+        match val {
+            ConsolidationMode::None => Consolidation::None,
+            ConsolidationMode::Monotonic => Consolidation::Monotonic,
+            ConsolidationMode::Latest => Consolidation::Latest,
+        }
+    }
+}
 
 /// The operation: either manual or automatic.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -45,6 +69,7 @@ pub struct QueryConsolidation {
 }
 
 impl QueryConsolidation {
+    pub const DEFAULT: Self = Self::AUTO;
     /// Automatic query consolidation strategy selection.
     pub const AUTO: Self = Self { mode: Mode::Auto };
 
@@ -72,7 +97,7 @@ impl From<ConsolidationMode> for QueryConsolidation {
 
 impl Default for QueryConsolidation {
     fn default() -> Self {
-        QueryConsolidation::AUTO
+        Self::DEFAULT
     }
 }
 

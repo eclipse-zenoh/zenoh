@@ -593,9 +593,9 @@ pub fn pull_data(tables_ref: &RwLock<Tables>, face: &Arc<FaceState>, expr: WireE
                             for (key_expr, payload) in route {
                                 face.primitives.send_push(Push {
                                     wire_expr: key_expr,
-                                    ext_qos: ext::QoSType::push_default(),
+                                    ext_qos: ext::QoSType::PUSH,
                                     ext_tstamp: None,
-                                    ext_nodeid: ext::NodeIdType::default(),
+                                    ext_nodeid: ext::NodeIdType::DEFAULT,
                                     payload,
                                 });
                             }

@@ -257,7 +257,7 @@ impl WireExpr<'_> {
         WireExpr {
             scope,
             suffix: suffix.into(),
-            mapping: Mapping::default(),
+            mapping: Mapping::DEFAULT,
         }
     }
 }
