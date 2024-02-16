@@ -31,7 +31,7 @@ use zenoh_shm::SharedMemoryBuf;
 /// A zenoh Value.
 #[non_exhaustive]
 #[derive(Clone)]
-// tags{value}
+// tags{value, buffer}
 pub struct Value {
     /// The payload of this Value.
     pub payload: ZBuf,

@@ -28,34 +28,42 @@ fn get_mut_unchecked<T>(arc: &mut Arc<T>) -> &mut T {
 }
 
 #[derive(Debug, Clone, Default, Eq)]
+// tags{zbuf, buffer}
+// tags{zbuf.clone, buffer.rcinc}
 pub struct ZBuf {
     slices: SingleOrVec<ZSlice>,
 }
 
 impl ZBuf {
     #[must_use]
+    // tags{zbuf.create, buffer.create}
     pub fn empty() -> Self {
         Self::default()
     }
 
+    // tags{zbuf.clear}
     pub fn clear(&mut self) {
         self.slices.clear();
     }
 
+    // tags{zbuf.slices.iter}
     pub fn zslices(&self) -> impl Iterator<Item = &ZSlice> + '_ {
         self.slices.as_ref().iter()
     }
 
+    // tags{zbuf.slices.iter}
     pub fn zslices_mut(&mut self) -> impl Iterator<Item = &mut ZSlice> + '_ {
         self.slices.as_mut().iter_mut()
     }
 
+    // tags{zbuf.slices.push}
     pub fn push_zslice(&mut self, zslice: ZSlice) {
         if !zslice.is_empty() {
             self.slices.push(zslice);
         }
     }
 
+    // tags{zbuf.splice}
     pub fn splice<Range: RangeBounds<usize>>(&mut self, erased: Range, replacement: &[u8]) {
         let start = match erased.start_bound() {
             core::ops::Bound::Included(n) => *n,
@@ -139,6 +147,7 @@ impl ZBuf {
 // Buffer
 impl Buffer for ZBuf {
     #[inline(always)]
+    // tags{zbuf.len, buffer.len}
     fn len(&self) -> usize {
         self.slices
             .as_ref()
@@ -151,12 +160,14 @@ impl Buffer for ZBuf {
 impl SplitBuffer for ZBuf {
     type Slices<'a> = iter::Map<core::slice::Iter<'a, ZSlice>, fn(&'a ZSlice) -> &'a [u8]>;
 
+    // tags{zbuf.slices.get}
     fn slices(&self) -> Self::Slices<'_> {
         self.slices.as_ref().iter().map(ZSlice::as_slice)
     }
 }
 
 impl PartialEq for ZBuf {
+    // tags{zbuf.compare, buffer.compare}
     fn eq(&self, other: &Self) -> bool {
         let mut self_slices = self.slices();
         let mut other_slices = other.slices();
@@ -383,6 +394,7 @@ impl<'a> SiphonableReader for ZBufReader<'a> {
 }
 
 #[cfg(feature = "std")]
+// tags{zbuf.read, buffer.read}
 impl<'a> std::io::Read for ZBufReader<'a> {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match <Self as Reader>::read(self, buf) {

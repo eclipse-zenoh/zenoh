@@ -28,7 +28,7 @@ pub type SourceSn = u64;
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_macros::unstable]
 #[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
-// tags{sample.options.locality}
+// tags{options.sample.locality}
 pub enum Locality {
     SessionLocal,
     Remote,
@@ -45,30 +45,30 @@ pub(crate) enum Locality {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-// tags{sample.options.data_info}
+// tags{options.sample.data_info}
 pub(crate) struct DataInfo {
-    // tags{sample.options.data_info.kind}
+    // tags{options.sample.data_info.kind}
     pub kind: SampleKind,
-    // tags{sample.options.data_info.encoding}
+    // tags{options.sample.data_info.encoding}
     pub encoding: Option<Encoding>,
-    // tags{sample.options.data_info.timestamp}
+    // tags{options.sample.data_info.timestamp}
     pub timestamp: Option<Timestamp>,
-    // tags{sample.options.data_info.source_id}
+    // tags{options.sample.data_info.source_id}
     pub source_id: Option<ZenohId>,
-    // tags{sample.options.data_info.source_sn}
+    // tags{options.sample.data_info.source_sn}
     pub source_sn: Option<SourceSn>,
 }
 
 /// Informations on the source of a zenoh [`Sample`].
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
-// tags{sample.options.source_info}
+// tags{options.sample.source_info}
 pub struct SourceInfo {
     /// The [`ZenohId`] of the zenoh instance that published the concerned [`Sample`].
-    // tags{sample.options.source_info.source_id}
+    // tags{options.sample.source_info.source_id}
     pub source_id: Option<ZenohId>,
     /// The sequence number of the [`Sample`] from the source.
-    // tags{sample.options.source_info.source_sn}
+    // tags{options.sample.source_info.source_sn}
     pub source_sn: Option<SourceSn>,
 }
 
