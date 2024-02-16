@@ -24,7 +24,8 @@ use core::{
     hash::Hash,
     str::FromStr,
 };
-// tags{timestamp}
+// tags{rust.uhlc.timestamp}
+// tags{rust.uhlc.ntp64}
 pub use uhlc::{Timestamp, NTP64};
 use zenoh_keyexpr::OwnedKeyExpr;
 use zenoh_result::{bail, zerror};
@@ -64,14 +65,16 @@ pub mod resolution;
 pub use resolution::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-// tags{}
+// tags{rust.property}
 pub struct Property {
+    // tags{rust.property.key}
     pub key: u64,
+    // tags{rust.property.value}
     pub value: Vec<u8>,
 }
 
 /// The kind of a `Sample`.
-// tags{options.sample.kind}
+// tags{rust.sample_kind, api.options.sample.kind}
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 pub enum SampleKind {
@@ -105,31 +108,31 @@ impl TryFrom<u64> for SampleKind {
 /// The global unique id of a zenoh peer.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
-// tags{zid}
+// tags{rust.zenoh_id, api.zid}
 pub struct ZenohId(uhlc::ID);
 
 impl ZenohId {
-    // tags{zid.MAX_SIZE}
+    // tags{rust.zenoh_id.max_size, api.zid.max_size}
     pub const MAX_SIZE: usize = 16;
 
     #[inline]
-    // tags{zid.size}
+    // tags{rust.zenoh_id.size, api.zid.size}
     pub fn size(&self) -> usize {
         self.0.size()
     }
 
     #[inline]
-    // tags{zid.to_le_bytes}
+    // tags{rust.zenoh_id.to_le_bytes, api.zid.to_le_bytes}
     pub fn to_le_bytes(&self) -> [u8; uhlc::ID::MAX_SIZE] {
         self.0.to_le_bytes()
     }
 
-    // tags{zid.rand}
+    // tags{rust.zenoh_id.rand, api.zid.create.rand}
     pub fn rand() -> ZenohId {
         ZenohId(uhlc::ID::rand())
     }
 
-    // tags{zid.into_keyexpr}
+    // tags{rust.zenoh_id.into_keyexpr, api.keyexpr.create.from_zid}
     pub fn into_keyexpr(self) -> OwnedKeyExpr {
         self.into()
     }
@@ -369,7 +372,7 @@ impl TryFrom<u8> for Priority {
 
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
-// tags{options.reliability}
+// tags{rust.reliability, api.options.reliability}
 pub enum Reliability {
     #[default]
     BestEffort,
@@ -378,7 +381,7 @@ pub enum Reliability {
 
 impl Reliability {
     #[cfg(feature = "test")]
-    // tags{}
+    // tags{rust.reliability.rand, api.options.reliability.create.rand}
     pub fn rand() -> Self {
         use rand::Rng;
 
@@ -393,18 +396,18 @@ impl Reliability {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Default)]
-// tags{}
+// tags{rust.channel}
 pub struct Channel {
-    // tags{}
+    // tags{rust.channel.priority}
     pub priority: Priority,
-    // tags{}
+    // tags{rust.channel.reliability}
     pub reliability: Reliability,
 }
 
 /// The kind of congestion control.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
-// tags{options.congestion_control}
+// tags{rust.congestion_control, api.options.congestion_control}
 pub enum CongestionControl {
     #[default]
     Drop = 0,
@@ -414,7 +417,7 @@ pub enum CongestionControl {
 /// The subscription mode.
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
-// tags{options.subscriber.mode}
+// tags{rust.sub_mode, api.options.sub_mode}
 pub enum SubMode {
     #[default]
     Push = 0,
@@ -423,7 +426,7 @@ pub enum SubMode {
 
 /// The kind of consolidation.
 #[derive(Debug, Clone, PartialEq, Eq, Copy)]
-// tags{options.consolidation_mode}
+// tags{rust.consolidation_mode, api.options.consolidation_mode}
 pub enum ConsolidationMode {
     /// No consolidation applied: multiple samples may be received for the same key-timestamp.
     None,
@@ -441,7 +444,7 @@ pub enum ConsolidationMode {
 
 /// The `zenoh::queryable::Queryable`s that should be target of a `zenoh::Session::get()`.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-// tags{query.options.target}
+// tags{rust.query_target, api.options.query_target}
 pub enum QueryTarget {
     #[default]
     BestMatching,
