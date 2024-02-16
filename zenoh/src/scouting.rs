@@ -46,7 +46,7 @@ pub use zenoh_protocol::scouting::Hello;
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-// tags{scout}
+// tags{rust.scout_builder, api.scout}
 pub struct ScoutBuilder<Handler> {
     pub(crate) what: WhatAmIMatcher,
     pub(crate) config: ZResult<crate::config::Config>,
@@ -70,7 +70,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{scout.callback}
+    // tags{rust.scout_builder.callback, api.scout.callback}
     pub fn callback<Callback>(self, callback: Callback) -> ScoutBuilder<Callback>
     where
         Callback: Fn(Hello) + Send + Sync + 'static,
@@ -107,7 +107,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{scout.callback}
+    // tags{rust.scout_builder.callback_mut, api.scout.callback_mut}
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
@@ -137,7 +137,7 @@ impl ScoutBuilder<DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{scout.pipe}
+    // tags{rust.scout_builder.with, api.scout.pipe}
     pub fn with<Handler>(self, handler: Handler) -> ScoutBuilder<Handler>
     where
         Handler: crate::prelude::IntoCallbackReceiverPair<'static, Hello>,
@@ -223,7 +223,7 @@ impl ScoutInner {
     /// scout.stop();
     /// # })
     /// ```
-    // tags{scout.stop}
+    // tag{}
     pub fn stop(self) {
         // This drops the inner `stop_sender` and hence stops the scouting receiver
         std::mem::drop(self);
@@ -256,7 +256,7 @@ impl fmt::Debug for ScoutInner {
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
-// tags{scout}
+// tags{rust.scout, api.scout}
 pub struct Scout<Receiver> {
     pub(crate) scout: ScoutInner,
     pub receiver: Receiver,
@@ -288,7 +288,7 @@ impl<Receiver> Scout<Receiver> {
     /// scout.stop();
     /// # })
     /// ```
-    // tags{scout.stop}
+    // tags{rust.scout.stop, api.scout.stop}
     pub fn stop(self) {
         self.scout.stop()
     }

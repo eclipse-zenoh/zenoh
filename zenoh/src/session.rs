@@ -389,7 +389,7 @@ where
 
 /// A zenoh session.
 ///
-// tags{session}
+// tags{rust.session, api.session}
 pub struct Session {
     pub(crate) runtime: Runtime,
     pub(crate) state: Arc<RwLock<SessionState>>,
@@ -456,7 +456,7 @@ impl Session {
     /// }).await;
     /// # })
     /// ```
-    // tags{}
+    // tags{rust.session.into_arc}
     pub fn into_arc(self) -> Arc<Self> {
         Arc::new(self)
     }
@@ -488,19 +488,19 @@ impl Session {
     /// }).await;
     /// # })
     /// ```
-    // tags{}
+    // tags{rust.session.leak}
     pub fn leak(s: Self) -> &'static mut Self {
         Box::leak(Box::new(s))
     }
 
     /// Returns the identifier of the current session. `zid()` is a convenient shortcut.
     /// See [`Session::info()`](`Session::info()`) and [`SessionInfo::zid()`](`SessionInfo::zid()`) for more details.
-    // tags{session.zid.get}
+    // tags{rust.session.zid, api.session.zid.get}
     pub fn zid(&self) -> ZenohId {
         self.info().zid().res_sync()
     }
 
-    // tags{session.hlc.get}
+    // tags{rust.session.hlc, api.session.hlc.get}
     pub fn hlc(&self) -> Option<&HLC> {
         self.runtime.hlc()
     }
@@ -519,7 +519,7 @@ impl Session {
     /// session.close().res().await.unwrap();
     /// # })
     /// ```
-    // tags{session.close}
+    // tags{rust.session.close, api.session.close}
     pub fn close(self) -> impl Resolve<ZResult<()>> {
         ResolveFuture::new(async move {
             trace!("close()");
@@ -532,7 +532,7 @@ impl Session {
         })
     }
 
-    // tags{session.undeclare}
+    // tags{rust.session.undeclare, api.session.undeclare}
     pub fn undeclare<'a, T, O>(&'a self, decl: T) -> O
     where
         O: Resolve<ZResult<()>>,
@@ -568,8 +568,7 @@ impl Session {
     /// let _ = session.config().insert_json5("connect/endpoints", r#"["tcp/127.0.0.1/7447"]"#);
     /// # })
     /// ```
-    // tags{session.config.get}
-    // tags{session.config.notifier.get}
+    // tags{rust.session.config, api.session.config.get}
     pub fn config(&self) -> &Notifier<Config> {
         self.runtime.config()
     }
@@ -630,7 +629,7 @@ impl Session {
     /// let key_expr = session.declare_keyexpr("key/expression").res().await.unwrap();
     /// # })
     /// ```
-    // tags{session.declare_keyexpr}
+    // tags{rust.session.declare_keyexpr, api.session.declare_keyexpr}
     pub fn declare_keyexpr<'a, 'b: 'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -698,7 +697,7 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    // tags{session.put}
+    // tags{rust.session.put, api.session.put}
     pub fn put<'a, 'b: 'a, TryIntoKeyExpr, IntoValue>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -734,7 +733,7 @@ impl Session {
     /// # })
     /// ```
     #[inline]
-    // tags{session.delete}
+    // tags{rust.session.delete, api.session.delete}
     pub fn delete<'a, 'b: 'a, TryIntoKeyExpr>(
         &'a self,
         key_expr: TryIntoKeyExpr,
@@ -772,7 +771,7 @@ impl Session {
     /// }
     /// # })
     /// ```
-    // tags{session.query}
+    // tags{rust.session.get, api.session.get}
     pub fn get<'a, 'b: 'a, IntoSelector>(
         &'a self,
         selector: IntoSelector,
@@ -2559,7 +2558,7 @@ pub trait SessionDeclarations<'s, 'a> {
     /// }).await;
     /// # })
     /// ```
-    // tags{session.declare_subscriber}
+    // tags{rust.session.declare_subscriber, api.session.declare_subscriber}
     fn declare_subscriber<'b, TryIntoKeyExpr>(
         &'s self,
         key_expr: TryIntoKeyExpr,
@@ -2595,7 +2594,7 @@ pub trait SessionDeclarations<'s, 'a> {
     /// }).await;
     /// # })
     /// ```
-    // tags{session.declare_queryable}
+    // tags{rust.session.declare_queryable, api.session.declare_queryable}
     fn declare_queryable<'b, TryIntoKeyExpr>(
         &'s self,
         key_expr: TryIntoKeyExpr,
@@ -2623,7 +2622,7 @@ pub trait SessionDeclarations<'s, 'a> {
     /// publisher.put("value").res().await.unwrap();
     /// # })
     /// ```
-    // tags{session.declare_publisher}
+    // tags{rust.session.declare_publisher, api.session.declare_publisher}
     fn declare_publisher<'b, TryIntoKeyExpr>(
         &'s self,
         key_expr: TryIntoKeyExpr,
@@ -2648,7 +2647,7 @@ pub trait SessionDeclarations<'s, 'a> {
     ///     .unwrap();
     /// # })
     /// ```
-    // tags{session.liveliness}
+    // tags{rust.session.liveliness, api.session.liveliness}
     #[zenoh_macros::unstable]
     fn liveliness(&'s self) -> Liveliness<'a>;
     /// Get informations about the zenoh [`Session`](Session).

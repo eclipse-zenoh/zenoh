@@ -31,17 +31,19 @@ use zenoh_shm::SharedMemoryBuf;
 /// A zenoh Value.
 #[non_exhaustive]
 #[derive(Clone)]
-// tags{value, buffer}
+// tags{rust.value, api.value}
 pub struct Value {
     /// The payload of this Value.
+    // tags{rust.value.payload, api.value.payload}
     pub payload: ZBuf,
     /// An encoding description indicating how the associated payload is encoded.
+    // tags{rust.value.encoding, api.value.encoding}
     pub encoding: Encoding,
 }
 
 impl Value {
     /// Creates a new zenoh Value.
-    // tags{value.create}
+    // tags{rust.value.new, api.value.create}
     pub fn new(payload: ZBuf) -> Self {
         Value {
             payload,
@@ -50,6 +52,7 @@ impl Value {
     }
 
     /// Creates an empty Value.
+    // tags{rust.value.empty}
     pub fn empty() -> Self {
         Value {
             payload: ZBuf::empty(),
@@ -59,7 +62,7 @@ impl Value {
 
     /// Sets the encoding of this zenoh Value.
     #[inline(always)]
-    // tags{value.encoding.set}
+    // tags{rust.value.encoding, api.value.encoding.set}
     pub fn encoding(mut self, encoding: Encoding) -> Self {
         self.encoding = encoding;
         self

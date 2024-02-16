@@ -63,7 +63,7 @@ use std::{
 ///   whose key expression match query's key expression are accepted. `_anyke` disables the query-reply key expression matching check.
 #[non_exhaustive]
 #[derive(Clone, PartialEq, Eq)]
-// tags{selector}
+// tags{rust.selector, api.selector}
 pub struct Selector<'a> {
     /// The part of this selector identifying which keys should be part of the selection.
     pub key_expr: KeyExpr<'a>,
@@ -75,12 +75,12 @@ pub struct Selector<'a> {
 pub const TIME_RANGE_KEY: &str = "_time";
 impl<'a> Selector<'a> {
     /// Gets the parameters as a raw string.
-    // tags{selector.parameters.get}
+    // tags{rust.selector.parameters, api.selector.parameters.get}
     pub fn parameters(&self) -> &str {
         &self.parameters
     }
     /// Extracts the selector parameters into a hashmap, returning an error in case of duplicated parameter names.
-    // tags{selector.parameters.get}
+    // tags{rust.selector.parameters_map, api.selector.parameters.get.as_map}
     pub fn parameters_map<K, V>(&'a self) -> ZResult<HashMap<K, V>>
     where
         K: AsRef<str> + std::hash::Hash + std::cmp::Eq,
@@ -90,12 +90,12 @@ impl<'a> Selector<'a> {
         self.decode_into_map()
     }
     /// Extracts the selector parameters' name-value pairs into a hashmap, returning an error in case of duplicated parameters.
-    // tags{selector.parameters.get}
+    // tags{rust.selector.parameters_cowmap}
     pub fn parameters_cowmap(&'a self) -> ZResult<HashMap<Cow<'a, str>, Cow<'a, str>>> {
         self.decode_into_map()
     }
     /// Extracts the selector parameters' name-value pairs into a hashmap, returning an error in case of duplicated parameters.
-    // tags{selector.parameters.get}
+    // tags{rust.selector.parameters_stringmap}
     pub fn parameters_stringmap(&'a self) -> ZResult<HashMap<String, String>> {
         self.decode_into_map()
     }
@@ -103,7 +103,7 @@ impl<'a> Selector<'a> {
     ///
     /// Note that calling this function may cause an allocation and copy if the selector's parameters wasn't
     /// already owned by `self`. `self` owns its parameters as soon as this function returns.
-    // tags{selector.parameters.get}
+    // tags{rust.selector.parameters_mut, api.selector.parameters.get_mut}
     pub fn parameters_mut(&mut self) -> &mut String {
         if let Cow::Borrowed(s) = self.parameters {
             self.parameters = Cow::Owned(s.to_owned())
@@ -114,18 +114,18 @@ impl<'a> Selector<'a> {
             unsafe { std::hint::unreachable_unchecked() } // this is safe because we just replaced the borrowed variant
         }
     }
-    // tags{selector.parameters.get}
+    // tags{rust.selector.set_parameters, api.selector.parameters.set}
     pub fn set_parameters(&mut self, selector: impl Into<Cow<'a, str>>) {
         self.parameters = selector.into();
     }
-    // tags{}
+    // tags{rust.selector.borrowing_clone}
     pub fn borrowing_clone(&'a self) -> Self {
         Selector {
             key_expr: self.key_expr.clone(),
             parameters: self.parameters.as_ref().into(),
         }
     }
-    // tags{}
+    // tags{rust.selector.into_owned}
     pub fn into_owned(self) -> Selector<'static> {
         Selector {
             key_expr: self.key_expr.into_owned(),
@@ -140,20 +140,20 @@ impl<'a> Selector<'a> {
     }
 
     /// Returns this selectors components as a tuple.
-    /// tags{}
+    /// tags{rust.selector.split, api.selector.split}
     pub fn split(self) -> (KeyExpr<'a>, Cow<'a, str>) {
         (self.key_expr, self.parameters)
     }
 
     /// Sets the `parameters` part of this `Selector`.
-    // tags{selector.parameters.set}
+    // tags{rust.selector.with_parameters, api.selector.parameters.set}
     #[inline(always)]
     pub fn with_parameters(mut self, parameters: &'a str) -> Self {
         self.parameters = parameters.into();
         self
     }
 
-    // tags{selector.parameters.set}
+    // tags{rust.selector.extend, api.selector.extend}
     pub fn extend<'b, I, K, V>(&'b mut self, parameters: I)
     where
         I: IntoIterator,
@@ -168,7 +168,7 @@ impl<'a> Selector<'a> {
     }
 
     /// Sets the time range targeted by the selector.
-    // tags{selector.parameters.time_range.set}
+    // tags{rust.selector.with_time_range, api.selector.time_range.set}
     pub fn with_time_range(&mut self, time_range: TimeRange) {
         self.remove_time_range();
         let selector = self.parameters_mut();
@@ -179,7 +179,7 @@ impl<'a> Selector<'a> {
         write!(selector, "{TIME_RANGE_KEY}={time_range}").unwrap(); // This unwrap is safe because `String: Write` should be infallibe.
     }
 
-    // tags{selector.parameters.time_range.remove}
+    // tags{rust.selector.remove_time_range, api.selector.time_range.remove}
     pub fn remove_time_range(&mut self) {
         let selector = self.parameters_mut();
 
@@ -202,7 +202,6 @@ impl<'a> Selector<'a> {
         }
     }
     #[cfg(any(feature = "unstable", test))]
-    // tags{}
     pub(crate) fn parameter_index(&self, param_name: &str) -> ZResult<Option<u32>> {
         let starts_with_param = |s: &str| {
             if let Some(rest) = s.strip_prefix(param_name) {

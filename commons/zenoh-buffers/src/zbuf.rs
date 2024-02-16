@@ -28,42 +28,42 @@ fn get_mut_unchecked<T>(arc: &mut Arc<T>) -> &mut T {
 }
 
 #[derive(Debug, Clone, Default, Eq)]
-// tags{rust.zbuf.zbuf, api.buffer}
-// tags{rust.zbuf.zbuf.clone, api.buffer.rcinc}
+// tags{rust.zbuf, api.buffer}
+// tags{rust.zbuf.clone, api.buffer.rcinc}
 pub struct ZBuf {
     slices: SingleOrVec<ZSlice>,
 }
 
 impl ZBuf {
     #[must_use]
-    // tags{rust.zbuf.zbuf.empty, api.buffer.create.empty}
+    // tags{rust.zbuf.empty, api.buffer.create.empty}
     pub fn empty() -> Self {
         Self::default()
     }
 
-    // tags{rust.zbuf.zbuf.clear}
+    // tags{rust.zbuf.clear}
     pub fn clear(&mut self) {
         self.slices.clear();
     }
 
-    // tags{rust.zbuf.zbuf.zslices}
+    // tags{rust.zbuf.zslices}
     pub fn zslices(&self) -> impl Iterator<Item = &ZSlice> + '_ {
         self.slices.as_ref().iter()
     }
 
-    // tags{rust.zbuf.zbuf.zslices_mut}
+    // tags{rust.zbuf.zslices_mut}
     pub fn zslices_mut(&mut self) -> impl Iterator<Item = &mut ZSlice> + '_ {
         self.slices.as_mut().iter_mut()
     }
 
-    // tags{rust.zbuf.zbuf.push_zslice}
+    // tags{rust.zbuf.push_zslice}
     pub fn push_zslice(&mut self, zslice: ZSlice) {
         if !zslice.is_empty() {
             self.slices.push(zslice);
         }
     }
 
-    // tags{rust.zbuf.zbuf.splice}
+    // tags{rust.zbuf.splice}
     pub fn splice<Range: RangeBounds<usize>>(&mut self, erased: Range, replacement: &[u8]) {
         let start = match erased.start_bound() {
             core::ops::Bound::Included(n) => *n,
@@ -147,7 +147,7 @@ impl ZBuf {
 // Buffer
 impl Buffer for ZBuf {
     #[inline(always)]
-    // tags{rust.zbuf.zbuf.buffer.len, api.buffer.len}
+    // tags{rust.zbuf.buffer.len, api.buffer.len}
     fn len(&self) -> usize {
         self.slices
             .as_ref()
@@ -160,14 +160,14 @@ impl Buffer for ZBuf {
 impl SplitBuffer for ZBuf {
     type Slices<'a> = iter::Map<core::slice::Iter<'a, ZSlice>, fn(&'a ZSlice) -> &'a [u8]>;
 
-    // tags{rust.zbuf.zbuf.split_buffer.slices}
+    // tags{rust.zbuf.split_buffer.slices}
     fn slices(&self) -> Self::Slices<'_> {
         self.slices.as_ref().iter().map(ZSlice::as_slice)
     }
 }
 
 impl PartialEq for ZBuf {
-    // tags{rust.zbuf.zbuf.partial_eq.eq, api.buffer.compare}
+    // tags{rust.zbuf.partial_eq.eq, api.buffer.compare}
     fn eq(&self, other: &Self) -> bool {
         let mut self_slices = self.slices();
         let mut other_slices = other.slices();
@@ -225,7 +225,7 @@ pub struct ZBufPos {
 }
 
 #[derive(Debug, Clone)]
-// tags{rust.zbuf.zbuf_reader}
+// tags{rust.zbuf_reader}
 pub struct ZBufReader<'a> {
     inner: &'a ZBuf,
     cursor: ZBufPos,
@@ -396,7 +396,7 @@ impl<'a> SiphonableReader for ZBufReader<'a> {
 
 #[cfg(feature = "std")]
 impl<'a> std::io::Read for ZBufReader<'a> {
-    // tags{rust.zbuf.zbuf_reader.read api.buffer.read}
+    // tags{rust.zbuf_reader.read api.buffer.read}
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match <Self as Reader>::read(self, buf) {
             Ok(n) => Ok(n.get()),

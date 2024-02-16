@@ -322,7 +322,7 @@ impl<'de> serde::Deserialize<'de> for ZenohId {
 
 #[repr(u8)]
 #[derive(Debug, Default, Copy, Clone, Eq, Hash, PartialEq)]
-// tags{}
+// tags{rust.priority, api.options.priority}
 pub enum Priority {
     Control = 0,
     RealTime = 1,
@@ -337,13 +337,13 @@ pub enum Priority {
 
 impl Priority {
     /// The lowest Priority
-    // tags{}
+    // tags{rust.priority.min, api.options.priority.min}
     pub const MIN: Self = Self::Background;
     /// The highest Priority
-    // tags{}
+    // tags{rust.priority.max, api.options.priority.max}
     pub const MAX: Self = Self::Control;
     /// The number of available priorities
-    // tags{}
+    // tags{rust.priority.num, api.options.priority.num}
     pub const NUM: usize = 1 + Self::MIN as usize - Self::MAX as usize;
 }
 

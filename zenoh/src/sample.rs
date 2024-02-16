@@ -28,7 +28,7 @@ pub type SourceSn = u64;
 /// The locality of samples to be received by subscribers or targeted by publishers.
 #[zenoh_macros::unstable]
 #[derive(Clone, Copy, Debug, Default, Serialize, PartialEq, Eq)]
-// tags{options.sample.locality}
+// tags{rust.locality, api.options.locality}
 pub enum Locality {
     SessionLocal,
     Remote,
@@ -45,30 +45,30 @@ pub(crate) enum Locality {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-// tags{options.sample.data_info}
+// tags{rust.data_info, api.options.data_info}
 pub(crate) struct DataInfo {
-    // tags{options.sample.data_info.kind}
+    // tags{rust.data_info.kind, api.options.data_info.kind}
     pub kind: SampleKind,
-    // tags{options.sample.data_info.encoding}
+    // tags{rust.data_info.encoding, api.options.data_info.encoding}
     pub encoding: Option<Encoding>,
-    // tags{options.sample.data_info.timestamp}
+    // tags{rust.data_info.timestamp, api.options.data_info.timestamp}
     pub timestamp: Option<Timestamp>,
-    // tags{options.sample.data_info.source_id}
+    // tags{rust.data_info.source_id, api.options.data_info.source_id}
     pub source_id: Option<ZenohId>,
-    // tags{options.sample.data_info.source_sn}
+    // tags{rust.data_info.source_sn, api.options.data_info.source_sn}
     pub source_sn: Option<SourceSn>,
 }
 
 /// Informations on the source of a zenoh [`Sample`].
 #[zenoh_macros::unstable]
 #[derive(Debug, Clone)]
-// tags{options.sample.source_info}
+// tags{rust.source_info, api.options.source_info}
 pub struct SourceInfo {
     /// The [`ZenohId`] of the zenoh instance that published the concerned [`Sample`].
-    // tags{options.sample.source_info.source_id}
+    // tags{rust.source_info.source_id, api.options.source_info.source_id}
     pub source_id: Option<ZenohId>,
     /// The sequence number of the [`Sample`] from the source.
-    // tags{options.sample.source_info.source_sn}
+    // tags{rust.source_info.source_sn, api.options.source_info.source_sn}
     pub source_sn: Option<SourceSn>,
 }
 
@@ -123,6 +123,7 @@ mod attachment {
     /// A builder for [`Attachment`]
     #[zenoh_macros::unstable]
     #[derive(Debug)]
+    // tags{rust.attachment_builder}
     pub struct AttachmentBuilder {
         pub(crate) inner: Vec<u8>,
     }
@@ -134,7 +135,7 @@ mod attachment {
     }
     #[zenoh_macros::unstable]
     impl AttachmentBuilder {
-        // tags{attachment.create}
+        // tags{rust.attachment_builder.new, api.attachment.create}
         pub fn new() -> Self {
             Self { inner: Vec::new() }
         }
@@ -147,7 +148,7 @@ mod attachment {
         /// Inserts a key-value pair to the attachment.
         ///
         /// Note that [`Attachment`] is a list of non-unique key-value pairs: inserting at the same key multiple times leads to both values being transmitted for that key.
-        // tags{attachment.insert}
+        // tags{rust.attachment_builder.insert, api.attachment.insert}
         pub fn insert<Key: AsRef<[u8]> + ?Sized, Value: AsRef<[u8]> + ?Sized>(
             &mut self,
             key: &Key,
@@ -172,7 +173,7 @@ mod attachment {
     }
     #[zenoh_macros::unstable]
     #[derive(Clone)]
-    // tags{attachment}
+    // tags{rust.attachment, api.attachment}
     pub struct Attachment {
         pub(crate) inner: ZBuf,
     }
@@ -196,21 +197,21 @@ mod attachment {
     }
     #[zenoh_macros::unstable]
     impl Attachment {
-        // tags{attachment.create}
+        // tags{rust.attachment.new, api.attachment.create}
         pub fn new() -> Self {
             Self {
                 inner: ZBuf::empty(),
             }
         }
-        // tags{attachment.is_empty}
+        // tags{rust.attachment.is_empty, api.attachment.is_empty}
         pub fn is_empty(&self) -> bool {
             self.len() == 0
         }
-        // tags{attachment.len}
+        // tags{rust.attachment.len, api.attachment.len}
         pub fn len(&self) -> usize {
             self.iter().count()
         }
-        // tags{attachment.iter}
+        // tags{rust.attachment.iter, api.attachment.iter}
         pub fn iter(&self) -> AttachmentIterator {
             self.into_iter()
         }
@@ -218,7 +219,7 @@ mod attachment {
             self.iter()
                 .find_map(|(k, v)| (k.as_slice() == key).then_some(v))
         }
-        // tags{attachment.get}
+        // tags{rust.attachment.get, api.attachment.get}
         pub fn get<Key: AsRef<[u8]>>(&self, key: &Key) -> Option<ZSlice> {
             self._get(key.as_ref())
         }
@@ -233,7 +234,7 @@ mod attachment {
         /// Note that [`Attachment`] is a list of non-unique key-value pairs: inserting at the same key multiple times leads to both values being transmitted for that key.
         ///
         /// [`Attachment`] is not very efficient at inserting, so if you wish to perform multiple inserts, it's generally better to [`Attachment::extend`] after performing the inserts on an [`AttachmentBuilder`]
-        // tags{attachment.insert}
+        // tags{rust.attachment.insert, api.attachment.insert}
         pub fn insert<Key: AsRef<[u8]> + ?Sized, Value: AsRef<[u8]> + ?Sized>(
             &mut self,
             key: &Key,
@@ -247,14 +248,14 @@ mod attachment {
             }
             self
         }
-        // tags{attachment.extend}
+        // tags{rust.attachment.extend, api.attachment.extend}
         pub fn extend(&mut self, with: impl Into<Self>) -> &mut Self {
             let with = with.into();
             self._extend(with)
         }
     }
     #[zenoh_macros::unstable]
-    // tags{attachment.iter}
+    // tags{}
     pub struct AttachmentIterator<'a> {
         reader: ZBufReader<'a>,
     }
@@ -327,7 +328,7 @@ mod attachment {
         }
     }
     #[zenoh_macros::unstable]
-    // tags{attachment.create.from_map}
+    // tags{rust.attachment_builder.from_iterator, api.attachment.create.from_map}
     impl<'a> core::iter::FromIterator<(&'a [u8], &'a [u8])> for Attachment {
         fn from_iter<T: IntoIterator<Item = (&'a [u8], &'a [u8])>>(iter: T) -> Self {
             AttachmentBuilder::from_iter(iter).into()
@@ -340,19 +341,19 @@ pub use attachment::{Attachment, AttachmentBuilder, AttachmentIterator};
 /// A zenoh sample.
 #[non_exhaustive]
 #[derive(Clone, Debug)]
-// tags{sample}
+// tags{rust.sample, api.sample}
 pub struct Sample {
     /// The key expression on which this Sample was published.
-    // tags{sample.key_expr}
+    // tags{rust.sample.key_expr, api.sample.key_expr}
     pub key_expr: KeyExpr<'static>,
     /// The value of this Sample.
-    // tags{sample.value}
+    // tags{rust.sample.value, api.sample.value}
     pub value: Value,
     /// The kind of this Sample.
-    // tags{sample.kind}
+    // tags{rust.sample.kind, api.sample.kind}
     pub kind: SampleKind,
     /// The [`Timestamp`] of this Sample.
-    // tags{sample.timestamp}
+    // tags{rust.sample.timestamp, api.sample.timestamp}
     pub timestamp: Option<Timestamp>,
 
     #[cfg(feature = "unstable")]
@@ -363,7 +364,7 @@ pub struct Sample {
     /// </div>
     ///
     /// Infos on the source of this Sample.
-    // tags{sample.source_info}
+    // tags{rust.sample.source_info, api.sample.source_info}
     pub source_info: SourceInfo,
 
     #[cfg(feature = "unstable")]
@@ -374,14 +375,14 @@ pub struct Sample {
     /// </div>
     ///
     /// A map of key-value pairs, where each key and value are byte-slices.
-    // tags{attachment}
+    // tags{rust.sample.attachment, api.sample.attachment}
     pub attachment: Option<Attachment>,
 }
 
 impl Sample {
     /// Creates a new Sample.
     #[inline]
-    // tags{sample.create}
+    // tags{rust.sample.new, api.sample.create.unchecked}
     pub fn new<IntoKeyExpr, IntoValue>(key_expr: IntoKeyExpr, value: IntoValue) -> Self
     where
         IntoKeyExpr: Into<KeyExpr<'static>>,
@@ -400,7 +401,7 @@ impl Sample {
     }
     /// Creates a new Sample.
     #[inline]
-    // tags{sample.create.from_value}
+    // tags{rust.sample.try_from, api.sample.create.checked}
     pub fn try_from<TryIntoKeyExpr, IntoValue>(
         key_expr: TryIntoKeyExpr,
         value: IntoValue,
@@ -424,7 +425,7 @@ impl Sample {
 
     /// Creates a new Sample with optional data info.
     #[inline]
-    // tags{sample.create.from_value_and_datainfo}
+    // tags{rust.sample.with_info, api.sample.create.with_info}
     pub(crate) fn with_info(
         key_expr: KeyExpr<'static>,
         payload: ZBuf,
@@ -461,14 +462,14 @@ impl Sample {
 
     /// Gets the timestamp of this Sample.
     #[inline]
-    // tags{sample.timestamp.get}
+    // tags{rust.sample.get_timestamp, api.sample.timestamp.get}
     pub fn get_timestamp(&self) -> Option<&Timestamp> {
         self.timestamp.as_ref()
     }
 
     /// Sets the timestamp of this Sample.
     #[inline]
-    // tags{sample.timestamp.set}
+    // tags{rust.sample.set_timestamp, api.sample.timestamp.set}
     pub fn with_timestamp(mut self, timestamp: Timestamp) -> Self {
         self.timestamp = Some(timestamp);
         self
@@ -477,7 +478,7 @@ impl Sample {
     /// Sets the source info of this Sample.
     #[zenoh_macros::unstable]
     #[inline]
-    // tags{sample.source_info.set}
+    // tags{rust.sample.with_source_info, api.sample.source_info.set}
     pub fn with_source_info(mut self, source_info: SourceInfo) -> Self {
         self.source_info = source_info;
         self
@@ -487,7 +488,7 @@ impl Sample {
     /// Ensure that an associated Timestamp is present in this Sample.
     /// If not, a new one is created with the current system time and 0x00 as id.
     /// Get the timestamp of this sample (either existing one or newly created)
-    // tags{sample.timestamp.ensure}
+    // tags{rust.sample.ensure_timestamp, api.sample.timestamp.ensure}
     pub fn ensure_timestamp(&mut self) -> &Timestamp {
         if let Some(ref timestamp) = self.timestamp {
             timestamp
@@ -499,20 +500,20 @@ impl Sample {
     }
 
     #[zenoh_macros::unstable]
-    // tags{sample.attachment.get}
+    // tags{rust.sample.attachment, api.sample.attachment.get}
     pub fn attachment(&self) -> Option<&Attachment> {
         self.attachment.as_ref()
     }
 
     #[zenoh_macros::unstable]
-    // tags{sample.attachment.get}
+    // tags{rust.sample.attachment_mut, api.sample.attachment.get_mut}
     pub fn attachment_mut(&mut self) -> &mut Option<Attachment> {
         &mut self.attachment
     }
 
     #[allow(clippy::result_large_err)]
     #[zenoh_macros::unstable]
-    // tags{sample.attachment.set}
+    // tags{rust.sample.with_attachment, api.sample.attachment.set}
     pub fn with_attachment(mut self, attachment: Attachment) -> Self {
         self.attachment = Some(attachment);
         self

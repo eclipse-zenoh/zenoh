@@ -131,7 +131,7 @@ impl<'a> PullSubscriberInner<'a> {
     /// # })
     /// ```
     #[inline]
-    // tags{subscriber.pull}
+    // tags{}
     pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
         self.inner.session.pull(&self.inner.state.key_expr)
     }
@@ -159,7 +159,7 @@ impl<'a> PullSubscriberInner<'a> {
     /// # })
     /// ```
     #[inline]
-    // tags{subscriber.undeclare}
+    // tags{}
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         Undeclarable::undeclare_inner(self.inner, ())
     }
@@ -188,7 +188,7 @@ impl<'a> SubscriberInner<'a> {
     /// # })
     /// ```
     #[inline]
-    // tags{subscriber.undeclare}
+    // tags{}
     pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
         Undeclarable::undeclare_inner(self, ())
     }
@@ -254,7 +254,7 @@ impl Drop for SubscriberInner<'_> {
 /// The mode for pull subscribers.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
-// tags{subscriber.option.pull_mode}
+// tags{rust.pull_mode, api.options.pull_mode}
 pub struct PullMode;
 
 impl From<PullMode> for SubMode {
@@ -272,7 +272,7 @@ impl From<PullMode> for Mode {
 /// The mode for push subscribers.
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy)]
-// tags{push_subscriber.option.push_mode}
+// tags{rust.push_mode, api.options.push_mode}
 pub struct PushMode;
 
 impl From<PushMode> for SubMode {
@@ -306,7 +306,7 @@ impl From<PushMode> for Mode {
 /// ```
 #[must_use = "Resolvables do nothing unless you resolve them using the `res` method from either `SyncResolve` or `AsyncResolve`"]
 #[derive(Debug)]
-// tags{}
+// tags{rust.subscriber_builder}
 pub struct SubscriberBuilder<'a, 'b, Mode, Handler> {
     #[cfg(feature = "unstable")]
     pub session: SessionRef<'a>,
@@ -357,7 +357,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{subscriber.callback}
+    // tags{rust.subscriber_builder.callback, api.subscriber.callback}
     pub fn callback<Callback>(self, callback: Callback) -> SubscriberBuilder<'a, 'b, Mode, Callback>
     where
         Callback: Fn(Sample) + Send + Sync + 'static,
@@ -401,7 +401,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{subscriber.callback}
+    // tags{rust.subscriber_builder.callback_mut, api.subscriber.callback_mut}
     pub fn callback_mut<CallbackMut>(
         self,
         callback: CallbackMut,
@@ -432,7 +432,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
     /// # })
     /// ```
     #[inline]
-    // tags{subscriber.pipe}
+    // tags{rust.subscriber_builder.with, api.subscriber.pipe}
     pub fn with<Handler>(self, handler: Handler) -> SubscriberBuilder<'a, 'b, Mode, Handler>
     where
         Handler: crate::prelude::IntoCallbackReceiverPair<'static, Sample>,
@@ -458,7 +458,7 @@ impl<'a, 'b, Mode> SubscriberBuilder<'a, 'b, Mode, DefaultHandler> {
 impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
     /// Change the subscription reliability.
     #[inline]
-    // tags{subscriber.reliability.set}
+    // tags{rust.subscriber_builder.reliability, api.subscriber.reliability.set}
     pub fn reliability(mut self, reliability: Reliability) -> Self {
         self.reliability = reliability;
         self
@@ -466,7 +466,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
 
     /// Change the subscription reliability to `Reliable`.
     #[inline]
-    // tags{subscriber.reliability.set.reliable}
+    // tags{rust.subscriber_builder.reliable, api.subscriber.reliability.set.reliable}
     pub fn reliable(mut self) -> Self {
         self.reliability = Reliability::Reliable;
         self
@@ -474,7 +474,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
 
     /// Change the subscription reliability to `BestEffort`.
     #[inline]
-    // tags{subscriber.reliability.set.best_effort}
+    // tags{rust.subscriber_builder.best_effort, api.subscriber.reliability.set.best_effort}
     pub fn best_effort(mut self) -> Self {
         self.reliability = Reliability::BestEffort;
         self
@@ -484,7 +484,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
     /// to the ones that have the given [`Locality`](crate::prelude::Locality).
     #[zenoh_macros::unstable]
     #[inline]
-    // tags{subscriber.allowed_origin.set}
+    // tags{rust.subscriber_builder.allowed_origin, api.subscriber.allowed_origin.set}
     pub fn allowed_origin(mut self, origin: Locality) -> Self {
         self.origin = origin;
         self
@@ -492,7 +492,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
 
     /// Change the subscription mode to Pull.
     #[inline]
-    // tags{subscriber.pull_mode.set}
+    // tags{rust.subscriber_builder.pull_mode, api.subscriber.pull_mode.set}
     pub fn pull_mode(self) -> SubscriberBuilder<'a, 'b, PullMode, Handler> {
         let SubscriberBuilder {
             session,
@@ -514,7 +514,7 @@ impl<'a, 'b, Mode, Handler> SubscriberBuilder<'a, 'b, Mode, Handler> {
 
     /// Change the subscription mode to Push.
     #[inline]
-    // tags{subscriber.push_mode.set}
+    // tags{rust.subscriber_builder.push_mode, api.subscriber.push_mode.set}
     pub fn push_mode(self) -> SubscriberBuilder<'a, 'b, PushMode, Handler> {
         let SubscriberBuilder {
             session,
@@ -669,7 +669,7 @@ where
 /// ```
 #[non_exhaustive]
 #[derive(Debug)]
-// tags{subscriber}
+// tags{rust.subscriber, api.subscriber}
 pub struct Subscriber<'a, Receiver> {
     pub(crate) subscriber: SubscriberInner<'a>,
     pub receiver: Receiver,
@@ -704,7 +704,7 @@ pub struct Subscriber<'a, Receiver> {
 /// # })
 /// ```
 #[non_exhaustive]
-// tags{subscriber}
+// tags{rust.pull_subscriber, api.pull_subscriber}
 pub struct PullSubscriber<'a, Receiver> {
     pub(crate) subscriber: PullSubscriberInner<'a>,
     pub receiver: Receiver,
@@ -744,7 +744,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     /// # })
     /// ```
     #[inline]
-    // tags{subscriber.pull}
+    // tags{rust.pull_subscriber.pull, api.pull_subscriber.pull}
     pub fn pull(&self) -> impl Resolve<ZResult<()>> + '_ {
         self.subscriber.pull()
     }
@@ -769,7 +769,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
     /// # })
     /// ```
     #[inline]
-    // tags{subscriber.undeclare}
+    // tags{rust.pull_subscriber.undeclare, api.pull_subscriber.undeclare}
     pub fn undeclare(self) -> impl Resolve<ZResult<()>> + 'a {
         self.subscriber.undeclare()
     }
@@ -777,7 +777,7 @@ impl<'a, Receiver> PullSubscriber<'a, Receiver> {
 
 impl<'a, Receiver> Subscriber<'a, Receiver> {
     /// Returns the [`KeyExpr`] this Subscriber subscribes to.
-    // tags{subscriber.key_expr.get}
+    // tags{rust.subscriber.key_expr, api.subscriber.key_expr.get}
     pub fn key_expr(&self) -> &KeyExpr<'static> {
         &self.subscriber.state.key_expr
     }
@@ -801,7 +801,7 @@ impl<'a, Receiver> Subscriber<'a, Receiver> {
     /// # })
     /// ```
     #[inline]
-    // tags{subscriber.undeclare}
+    // tags{rust.subscriber.undeclare, api.subscriber.undeclare}
     pub fn undeclare(self) -> SubscriberUndeclaration<'a> {
         self.subscriber.undeclare()
     }
