@@ -71,7 +71,7 @@ pub struct Selector<'a> {
     pub(crate) parameters: Cow<'a, str>,
 }
 
-// tags{selector.options.time_range_key}
+// tags{rust.time_range_key, api.options.selector.time_range_key}
 pub const TIME_RANGE_KEY: &str = "_time";
 impl<'a> Selector<'a> {
     /// Gets the parameters as a raw string.
@@ -337,7 +337,6 @@ type ExtractedValue<'a, VS: Parameters<'a>> = <<VS::Decoder as Iterator>::Item a
 /// A trait to help decode zenoh selector parameters.
 ///
 /// Most methods will return an Error if duplicates of a same parameter are found, to avoid HTTP Parameter Pollution like vulnerabilities.
-// tags{selector.parameters}
 pub trait Parameters<'a> {
     type Decoder: Iterator + 'a;
     /// Returns this selector's parameters as an iterator.
@@ -346,7 +345,7 @@ pub trait Parameters<'a> {
         <Self::Decoder as Iterator>::Item: Parameter;
 
     /// Extracts all parameters into a HashMap, returning an error if duplicate parameters arrise.
-    // tags{selector.parameters.get}
+    // tags{rust.selector.parameters.decode_into_map}
     fn decode_into_map<N, V>(&'a self) -> ZResult<HashMap<N, V>>
     where
         <Self::Decoder as Iterator>::Item: Parameter,
@@ -371,7 +370,7 @@ pub trait Parameters<'a> {
     /// Extracts the requested parameters from the selector parameters.
     ///
     /// The default implementation is done in a single pass through the selector parameters, returning an error if any of the requested parameters are present more than once.
-    // tags{selector.parameters.get}
+    // tags{rust.selector.parameters.get_parameters}
     fn get_parameters<const N: usize>(
         &'a self,
         names: [&str; N],
@@ -402,7 +401,7 @@ pub trait Parameters<'a> {
     /// Extracts the requested arguments from the selector parameters as booleans, following the Zenoh convention that if a parameter name is present and has a value different from "false", its value is truthy.
     ///
     /// The default implementation is done in a single pass through the selector parameters, returning an error if some of the requested parameters are present more than once.
-    // tags{selector.parameters.get.booleans}
+    // tags{rust.selector.parameters.get_bools}
     fn get_bools<const N: usize>(&'a self, names: [&str; N]) -> ZResult<[bool; N]>
     where
         <Self::Decoder as Iterator>::Item: Parameter,
@@ -416,7 +415,7 @@ pub trait Parameters<'a> {
     /// Extracts the standardized `_time` argument from the selector parameters.
     ///
     /// The default implementation still causes a complete pass through the selector parameters to ensure that there are no duplicates of the `_time` key.
-    // tags{selector.parameters.time_range.get}
+    // tags{rust.selector.parameters.time_range}
     fn time_range(&'a self) -> ZResult<Option<TimeRange>>
     where
         <Self::Decoder as Iterator>::Item: Parameter,
