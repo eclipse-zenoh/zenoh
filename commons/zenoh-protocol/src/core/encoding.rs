@@ -13,7 +13,10 @@
 //
 use crate::core::CowStr;
 use alloc::{borrow::Cow, string::String};
-use core::fmt::{self, Debug};
+use core::{
+    fmt::{self, Debug},
+    write,
+};
 use zenoh_result::{bail, ZResult};
 
 pub type EncodingPrefix = u8;
@@ -120,14 +123,7 @@ impl Encoding {
     where
         IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
     {
-        let suffix: Cow<'static, str> = suffix.into();
-        if suffix.as_bytes().len() > EncodingPrefix::MAX as usize {
-            bail!("Suffix length is limited to 255 characters")
-        }
-        Ok(Self {
-            prefix,
-            suffix: suffix.into(),
-        })
+        Self::exact(prefix).with_suffix(suffix)
     }
 
     /// Sets the suffix of this encoding.
