@@ -116,6 +116,44 @@ impl InterceptorTrait for InterceptorsChain {
     }
 }
 
+pub(crate) struct ComputeOnMiss<T: InterceptorTrait> {
+    interceptor: T,
+}
+
+impl<T: InterceptorTrait> ComputeOnMiss<T> {
+    #[allow(dead_code)]
+    pub(crate) fn new(interceptor: T) -> Self {
+        Self { interceptor }
+    }
+}
+
+impl<T: InterceptorTrait> InterceptorTrait for ComputeOnMiss<T> {
+    #[inline]
+    fn compute_keyexpr_cache(&self, key_expr: &KeyExpr<'_>) -> Option<Box<dyn Any + Send + Sync>> {
+        self.interceptor.compute_keyexpr_cache(key_expr)
+    }
+
+    #[inline]
+    fn intercept<'a>(
+        &self,
+        ctx: RoutingContext<NetworkMessage>,
+        cache: Option<&Box<dyn Any + Send + Sync>>,
+    ) -> Option<RoutingContext<NetworkMessage>> {
+        if cache.is_some() {
+            self.interceptor.intercept(ctx, cache)
+        } else if let Some(key_expr) = ctx.full_key_expr() {
+            self.interceptor.intercept(
+                ctx,
+                self.interceptor
+                    .compute_keyexpr_cache(&key_expr.into())
+                    .as_ref(),
+            )
+        } else {
+            self.interceptor.intercept(ctx, cache)
+        }
+    }
+}
+
 pub(crate) struct IngressMsgLogger {}
 
 impl InterceptorTrait for IngressMsgLogger {
