@@ -23,11 +23,11 @@ mod tests {
     use zenoh_shm::api::factory::SharedMemoryFactory;
     use zenoh_shm::api::protocol_implementations::posix::posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend;
     use zenoh_shm::api::protocol_implementations::posix::protocol_id::POSIX_PROTOCOL_ID;
-    use zenoh_shm::api::provider::shared_memory_provider::GarbageCollect;
+    use zenoh_shm::api::provider::shared_memory_provider::{BlockOn, GarbageCollect};
+    use zenoh_shm::api::provider::types::{AllocAlignment, AllocLayout, MemoryLayout};
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const USLEEP: Duration = Duration::from_micros(100);
 
     const MSG_COUNT: usize = 1_00;
     const MSG_SIZE: [usize; 2] = [1_024, 100_000];
@@ -116,31 +116,36 @@ mod tests {
             // Wait for the declaration to propagate
             task::sleep(SLEEP).await;
 
-            // Create the SharedMemoryManager
-            let to_alloc = size * MSG_COUNT / 10;
+            // Make factory with POSIX SHM provider
+            let c_size = size;
             let mut factory = SharedMemoryFactory::builder()
                 .provider(POSIX_PROTOCOL_ID, move || {
-                    println!("[PS][02b] Allocating {to_alloc} bytes in SHM");
-                    Ok(Box::new(PosixSharedMemoryProviderBackend::new(to_alloc)?))
+                    Ok(Box::new(
+                        PosixSharedMemoryProviderBackend::builder()
+                            .with_size(c_size * MSG_COUNT / 10)?
+                            .res()?,
+                    ))
                 })
                 .unwrap()
                 .build();
             let shm01 = factory.provider(POSIX_PROTOCOL_ID).unwrap();
+
+            // remember segment size that was allocated
             let shm_segment_size = shm01.available();
 
             // Put data
             println!("[PS][03b] Putting on peer02 session. {MSG_COUNT} msgs of {size} bytes.");
 
+            let layout = AllocLayout::new(size, AllocAlignment::default(), shm01).unwrap();
+
             for c in 0..msg_count {
                 // Create the message to send
-                let sbuf = ztimeout!(async {
-                    loop {
-                        match shm01.alloc::<GarbageCollect>(size) {
-                            Ok(sbuf) => break sbuf,
-                            Err(_) => task::sleep(USLEEP).await, // allocation failed -> memory is full, wait for it's reclamation
-                        }
-                    }
-                });
+                let sbuf = ztimeout!(shm01
+                    .alloc()
+                    .with_policy::<BlockOn<GarbageCollect>>()
+                    .with_layout(&layout)
+                    .res_async())
+                .unwrap();
                 println!("{c} created");
 
                 ztimeout!(peer02
@@ -204,6 +209,88 @@ mod tests {
                 open_session_multicast("udp/224.0.0.1:17448", "udp/224.0.0.1:17448").await;
             test_session_pubsub(&peer01, &peer02, Reliability::BestEffort).await;
             close_session(peer01, peer02).await;
+        });
+    }
+
+    #[cfg(feature = "shared-memory")]
+    #[test]
+    fn shm_api_example() {
+        use zenoh_result::{bail, ZResult};
+
+        let _ = task::block_on::<_, ZResult<()>>(async {
+            zasync_executor_init!();
+            let _ = env_logger::try_init();
+
+            // Initialize the SHM factory
+            // In this example the provider is lazily-initialized and does not consume any resources until used
+            // It is up to the user to use lazy-initialization or move an already-initialized backend instance
+            // into factory's initialization lambda
+            let mut factory = SharedMemoryFactory::builder()
+                .provider(POSIX_PROTOCOL_ID, || {
+                    // NOTE: code in this block is a specific PosixSharedMemoryProviderBackend API.
+                    // The initialisation of SHM backend is completely backend-specific and user is free to do
+                    // anything reasonable here. This code is execuated at the provider's first use
+
+                    // Alignment for POSIX SHM provider
+                    // All allocations will be aligned corresponding to this alignment -
+                    // that means that the provider will be able to satisfy allocation layouts
+                    // with alignment <= provider_alignment
+                    let provider_alignment = AllocAlignment::default();
+
+                    // Create layout for POSIX Provider's memory
+                    let provider_layout = MemoryLayout::new(1024, provider_alignment).unwrap();
+
+                    // Construct and return the backend with specified memory layout
+                    Ok(Box::new(
+                        PosixSharedMemoryProviderBackend::builder()
+                            .with_layout(provider_layout)
+                            .res()?,
+                    ))
+                })?
+                .build();
+
+            // Get the SHM provider for POSIX_PROTOCOL_ID
+            // The actual resource initialization happens here
+            let provider = factory.provider(POSIX_PROTOCOL_ID)?;
+
+            // Create a layout for particular buffer and particular SHM provider
+            // The layout is validated for argument correctness and also is checked
+            // against particular SHM provider's layouting capabilities. This approach
+            // allows making a reusable layout for series of similar allocations
+            let buffer_layout = AllocLayout::new(512, AllocAlignment::default(), provider).unwrap();
+
+            // Allocate SharedMemoryBuf using asynchronous BlockOn<GarbageCollect<JustAlloc>> policy.
+            // Policy generics collection is a mechanism to describe necessary allocation behaviour
+            // that will be higly optimized at compile-time.
+            // The basic policies are:
+            // -JustAlloc (sync)
+            // -GarbageCollect (sync)
+            // -Deallocate (sync)
+            // --contains own set of dealloc policy generics:
+            // ---DeallocateYoungest
+            // ---DeallocateEldest
+            // ---DeallocateOptimal
+            // -BlockOn (sync and async)
+            // SharedMemoryProvider's alloc supports sync and async APIs to do the allocations
+            let sbuf = ztimeout!(provider
+                .alloc()
+                .with_policy::<BlockOn<GarbageCollect>>()
+                .with_layout(&buffer_layout)
+                .res_async())
+            .unwrap();
+
+            // alloc_with_gc(..) // <GarbageCollect>
+            // alloc_with_defragment_gc(..) // <Defragment<GarbageCollect>>
+
+            // Declare Session and Publisher (common code)
+            // Session and Publisher do not depend from SHM subsystem...
+            let session = zenoh::open(Config::default()).res_async().await?;
+            let publisher = session.declare_publisher("my/key/expr").res_async().await?;
+
+            // Publish sbuf (not implemented)
+            let _ = publisher.put(sbuf).res_async().await;
+
+            bail!("Finished...")
         });
     }
 }

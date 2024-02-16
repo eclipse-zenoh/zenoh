@@ -42,7 +42,10 @@ mod tests {
                 posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
                 protocol_id::POSIX_PROTOCOL_ID,
             },
-            provider::shared_memory_provider::GarbageCollect,
+            provider::{
+                shared_memory_provider::{BlockOn, GarbageCollect},
+                types::{AllocAlignment, AllocLayout},
+            },
         },
         SharedMemoryBuf,
     };
@@ -53,7 +56,6 @@ mod tests {
 
     const TIMEOUT: Duration = Duration::from_secs(60);
     const SLEEP: Duration = Duration::from_secs(1);
-    const USLEEP: Duration = Duration::from_micros(100);
 
     const MSG_COUNT: usize = 1_000;
     const MSG_SIZE: usize = 1_024;
@@ -169,9 +171,11 @@ mod tests {
 
         let mut factory = SharedMemoryFactory::builder()
             .provider(POSIX_PROTOCOL_ID, || {
-                Ok(Box::new(PosixSharedMemoryProviderBackend::new(
-                    2 * MSG_SIZE,
-                )?))
+                Ok(Box::new(
+                    PosixSharedMemoryProviderBackend::builder()
+                        .with_size(2 * MSG_SIZE)?
+                        .res()?,
+                ))
             })
             .unwrap()
             .build();
@@ -253,19 +257,19 @@ mod tests {
             .unwrap();
         assert!(!peer_net01_transport.is_shm().unwrap());
 
+        let layout = AllocLayout::new(MSG_SIZE, AllocAlignment::default(), shm01).unwrap();
+
         // Send the message
         println!("Transport SHM [3a]");
         // The msg count
         for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
-            let mut sbuf = ztimeout!(async {
-                loop {
-                    match shm01.alloc::<GarbageCollect>(MSG_SIZE) {
-                        Ok(sbuf) => break sbuf,
-                        Err(_) => task::sleep(USLEEP).await,
-                    }
-                }
-            });
+            let mut sbuf = ztimeout!(shm01
+                .alloc()
+                .with_policy::<BlockOn<GarbageCollect>>()
+                .with_layout(&layout)
+                .res_async())
+            .unwrap();
 
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
@@ -307,14 +311,13 @@ mod tests {
         // The msg count
         for (msg_count, _) in (0..MSG_COUNT).enumerate() {
             // Create the message to send
-            let mut sbuf = ztimeout!(async {
-                loop {
-                    match shm01.alloc::<GarbageCollect>(MSG_SIZE) {
-                        Ok(sbuf) => break sbuf,
-                        Err(_) => task::sleep(USLEEP).await,
-                    }
-                }
-            });
+            let mut sbuf = ztimeout!(shm01
+                .alloc()
+                .with_policy::<BlockOn<GarbageCollect>>()
+                .with_layout(&layout)
+                .res_async())
+            .unwrap();
+
             let bs = unsafe { sbuf.as_mut_slice() };
             bs[0..8].copy_from_slice(&msg_count.to_le_bytes());
 

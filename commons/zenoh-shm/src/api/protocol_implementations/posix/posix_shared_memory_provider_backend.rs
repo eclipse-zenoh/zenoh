@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::{cmp, collections::BinaryHeap, sync::atomic::AtomicPtr};
+use std::{borrow::Borrow, cmp, collections::BinaryHeap, sync::atomic::AtomicPtr};
 
 use zenoh_result::ZResult;
 
@@ -21,7 +21,7 @@ use crate::api::{
     provider::{
         chunk::{AllocatedChunk, ChunkDescriptor},
         shared_memory_provider_backend::SharedMemoryProviderBackend,
-        types::{ChunkAllocResult, ZAllocError},
+        types::{AllocAlignment, AllocLayout, ChunkAllocResult, MemoryLayout, ZAllocError},
     },
 };
 
@@ -34,13 +34,6 @@ use super::posix_shared_memory_segment::PosixSharedMemorySegment;
 // threshold reasonable to use with SHM - and it would be good to synchronize this threshold with
 // MIN_FREE_CHUNK_SIZE limitation!
 const MIN_FREE_CHUNK_SIZE: usize = 1_024;
-
-fn align_addr_at(addr: usize, align: usize) -> usize {
-    match addr % align {
-        0 => addr,
-        r => addr + (align - r),
-    }
-}
 
 #[derive(Eq, Copy, Clone, Debug)]
 struct Chunk {
@@ -66,46 +59,88 @@ impl PartialEq for Chunk {
     }
 }
 
+pub struct PosixSharedMemoryProviderBackendBuilder;
+
+impl PosixSharedMemoryProviderBackendBuilder {
+    pub fn with_layout<Layout: Borrow<MemoryLayout>>(
+        self,
+        layout: Layout,
+    ) -> LayoutedPosixSharedMemoryProviderBackendBuilder<Layout> {
+        LayoutedPosixSharedMemoryProviderBackendBuilder { layout }
+    }
+
+    pub fn with_layout_args(
+        self,
+        size: usize,
+        alignment: AllocAlignment,
+    ) -> ZResult<LayoutedPosixSharedMemoryProviderBackendBuilder<MemoryLayout>> {
+        let layout = MemoryLayout::new(size, alignment)?;
+        Ok(LayoutedPosixSharedMemoryProviderBackendBuilder { layout })
+    }
+
+    pub fn with_size(
+        self,
+        size: usize,
+    ) -> ZResult<LayoutedPosixSharedMemoryProviderBackendBuilder<MemoryLayout>> {
+        let layout = MemoryLayout::new(size, AllocAlignment::default())?;
+        Ok(LayoutedPosixSharedMemoryProviderBackendBuilder { layout })
+    }
+}
+
+pub struct LayoutedPosixSharedMemoryProviderBackendBuilder<Layout: Borrow<MemoryLayout>> {
+    layout: Layout,
+}
+
+impl<Layout: Borrow<MemoryLayout>> LayoutedPosixSharedMemoryProviderBackendBuilder<Layout> {
+    pub fn res(self) -> ZResult<PosixSharedMemoryProviderBackend> {
+        PosixSharedMemoryProviderBackend::new(self.layout.borrow())
+    }
+}
+
 pub struct PosixSharedMemoryProviderBackend {
     available: usize,
     segment: PosixSharedMemorySegment,
     free_list: BinaryHeap<Chunk>,
-    alignment: usize,
+    alignment: AllocAlignment,
 }
 
 impl PosixSharedMemoryProviderBackend {
+    pub fn builder() -> PosixSharedMemoryProviderBackendBuilder {
+        PosixSharedMemoryProviderBackendBuilder
+    }
+
     // The implementation might allocate a little bit bigger size due to alignment requirements
-    pub fn new(size: usize) -> ZResult<Self> {
-        let alignment = 64usize; //mem::align_of::<u32>();
-        let alloc_size = align_addr_at(size, alignment);
-        let segment = PosixSharedMemorySegment::create(alloc_size)?;
+    fn new(layout: &MemoryLayout) -> ZResult<Self> {
+        let segment = PosixSharedMemorySegment::create(layout.size())?;
 
         let mut free_list = BinaryHeap::new();
         let root_chunk = Chunk {
             offset: 0,
-            size: alloc_size,
+            size: layout.size(),
         };
         free_list.push(root_chunk);
 
         log::trace!(
-            "Created PosixSharedMemoryProviderBackend id {}, size {alloc_size}",
-            segment.segment.id()
+            "Created PosixSharedMemoryProviderBackend id {}, layout {:?}",
+            segment.segment.id(),
+            layout
         );
 
         Ok(Self {
-            available: alloc_size,
+            available: layout.size(),
             segment,
             free_list,
-            alignment,
+            alignment: layout.alignment(),
         })
     }
 }
 
 impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
-    fn alloc(&mut self, len: usize) -> ChunkAllocResult {
-        log::trace!("PosixSharedMemoryProviderBackend::alloc({len})");
-        // Always allocate a size that will keep the proper alignment requirements
-        let required_len = align_addr_at(len, self.alignment);
+    fn alloc(&mut self, layout: &AllocLayout) -> ChunkAllocResult {
+        log::trace!("PosixSharedMemoryProviderBackend::alloc({:?})", layout);
+
+        // Change required size to fit internal alignment
+        let required_len = self.alignment.align_size(layout.size());
 
         if self.available >= required_len {
             // The strategy taken is the same for some Unix System V implementations -- as described in the
@@ -137,13 +172,13 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
                     })
                 }
                 Some(c) => {
-                    log::trace!("PosixSharedMemoryProviderBackend::alloc({}) cannot find any big enough chunk\nSharedMemoryManager::free_list = {:?}", len, self.free_list);
+                    log::trace!("PosixSharedMemoryProviderBackend::alloc({:?}) cannot find any big enough chunk\nSharedMemoryManager::free_list = {:?}", layout, self.free_list);
                     self.free_list.push(c);
                     Err(ZAllocError::NeedDefragment)
                 }
                 None => {
                     // NOTE: that should never happen! If this happens - there is a critical bug somewhere around!
-                    let err = format!("PosixSharedMemoryProviderBackend::alloc({}) cannot find any available chunk\nSharedMemoryManager::free_list = {:?}", len, self.free_list);
+                    let err = format!("PosixSharedMemoryProviderBackend::alloc({:?}) cannot find any available chunk\nSharedMemoryManager::free_list = {:?}", layout, self.free_list);
                     #[cfg(feature = "test")]
                     panic!("{err}");
                     #[cfg(not(feature = "test"))]
@@ -154,7 +189,7 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
                 }
             }
         } else {
-            log::trace!( "PosixSharedMemoryProviderBackend does not have sufficient free memory to allocate {} bytes, try de-fragmenting!", len);
+            log::trace!( "PosixSharedMemoryProviderBackend does not have sufficient free memory to allocate {:?}, try de-fragmenting!", layout);
             Err(ZAllocError::OutOfMemory)
         }
     }
@@ -216,5 +251,9 @@ impl SharedMemoryProviderBackend for PosixSharedMemoryProviderBackend {
 
     fn available(&self) -> usize {
         self.available
+    }
+
+    fn max_align(&self) -> crate::api::provider::types::AllocAlignment {
+        self.alignment
     }
 }

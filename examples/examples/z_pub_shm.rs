@@ -11,11 +11,11 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use async_std::task::sleep;
 use clap::Parser;
-use std::time::Duration;
-use zenoh::config::Config;
 use zenoh::prelude::r#async::*;
+use zenoh::shm::api::provider::shared_memory_provider::{BlockOn, GarbageCollect};
+use zenoh::shm::api::provider::types::AllocAlignment;
+use zenoh::{config::Config, shm::api::provider::types::AllocLayout};
 use zenoh_examples::CommonArgs;
 use zenoh_shm::api::{
     factory::SharedMemoryFactory,
@@ -45,10 +45,13 @@ async fn main() -> Result<(), zenoh::Error> {
 
     println!("Creating Shared Memory Factory...");
     let mut factory = SharedMemoryFactory::builder()
-        .provider(
-            POSIX_PROTOCOL_ID,
-            Box::new(PosixSharedMemoryProviderBackend::new(N as u32 * 1024).unwrap()),
-        )
+        .provider(POSIX_PROTOCOL_ID, || {
+            Ok(Box::new(
+                PosixSharedMemoryProviderBackend::builder()
+                    .with_size(N * 1024)?
+                    .res()?,
+            ))
+        })
         .unwrap()
         .build();
     println!("Retrieving Shared Memory Provider...");
@@ -57,23 +60,16 @@ async fn main() -> Result<(), zenoh::Error> {
     println!("Allocating Shared Memory Buffer...");
     let publisher = session.declare_publisher(&path).res().await.unwrap();
 
+    let layout = AllocLayout::new(1024, AllocAlignment::default(), shm).unwrap();
+
     for idx in 0..(K * N as u32) {
-        sleep(Duration::from_secs(1)).await;
-        let mut sbuf = match shm.alloc(1024) {
-            Ok(buf) => buf,
-            Err(_) => {
-                sleep(Duration::from_millis(100)).await;
-                let av = shm.available();
-                shm.garbage_collect();
-                println!(
-                    "Afer failing allocation the GC collected: {} bytes -- retrying",
-                    shm.available() - av
-                );
-                println!("Trying to de-fragment memory...",);
-                shm.defragment();
-                shm.alloc(1024).unwrap()
-            }
-        };
+        let mut sbuf = shm
+            .alloc()
+            .with_policy::<BlockOn<GarbageCollect>>()
+            .with_layout(&layout)
+            .res_async()
+            .await
+            .unwrap();
 
         // We reserve a small space at the beginning of the buffer to include the iteration index
         // of the write. This is simply to have the same format as zn_pub.
@@ -102,14 +98,7 @@ async fn main() -> Result<(), zenoh::Error> {
             String::from_utf8_lossy(&slice[0..slice_len])
         );
         publisher.put(sbuf.clone()).res().await?;
-        if idx % K == 0 {
-            let av = shm.available();
-            shm.garbage_collect();
-            let freed = shm.available() - av;
-            println!("The Gargabe collector freed {freed} bytes");
-            shm.defragment();
-            println!("De-framented...");
-        }
+
         // Dropping the SharedMemoryBuf means to free it.
         drop(sbuf);
     }

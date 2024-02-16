@@ -32,12 +32,16 @@ description = "Internal crate for zenoh."
 test = ["num_cpus"]
 
 [dependencies]
+async-std = { workspace = true }
+async-trait = { workspace = true }
+allocator-api2 = "*"
 bincode = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 shared_memory = { workspace = true }
 zenoh-buffers = { workspace = true }
 zenoh-result = { workspace = true }
+zenoh-core = { workspace = true }
 rand = { workspace = true }
 lazy_static = { workspace = true }
 num-traits = { workspace = true }

@@ -53,15 +53,19 @@ fn main() {
 
     let mut samples = Vec::with_capacity(n);
 
+    let c_size = size;
     let mut factory = SharedMemoryFactory::builder()
-        .provider(
-            POSIX_PROTOCOL_ID,
-            Box::new(PosixSharedMemoryProviderBackend::new((size) as u32).unwrap()),
-        )
+        .provider(POSIX_PROTOCOL_ID, move || {
+            Ok(Box::new(
+                PosixSharedMemoryProviderBackend::builder()
+                    .with_size(c_size)?
+                    .res()?,
+            ))
+        })
         .unwrap()
         .build();
     let shm = factory.provider(POSIX_PROTOCOL_ID).unwrap();
-    let buf = shm.alloc(size).unwrap();
+    let buf = shm.alloc().with_size(size).unwrap().res().unwrap();
 
     // -- warmup --
     println!("Warming up for {warmup:?}...");

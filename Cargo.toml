@@ -140,7 +140,7 @@ serde = { version = "1.0.154", default-features = false, features = [
 ] } # Default features are disabled due to usage in no_std crates
 serde_json = "1.0.94"
 serde_yaml = "0.9.19"
-stabby = { git = "https://github.com/ZettaScaleLabs/stabby.git", branch="plain-old-data" }
+stabby = "3.0.3"
 sha3 = "0.10.6"
 shared_memory = "0.12.4"
 shellexpand = "3.0.0"

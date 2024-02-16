@@ -12,14 +12,17 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use super::{chunk::ChunkDescriptor, types::ChunkAllocResult};
+use super::{
+    chunk::ChunkDescriptor,
+    types::{AllocAlignment, AllocLayout, ChunkAllocResult},
+};
 
 // The provider backend trait
 // Implemet this interface to create a Zenoh-compatible shared memory provider
-pub trait SharedMemoryProviderBackend {
+pub trait SharedMemoryProviderBackend: Send {
     // Allocate the chunk of desired size
     // If successful, the result's chunk size will be >= len
-    fn alloc(&mut self, len: usize) -> ChunkAllocResult;
+    fn alloc(&mut self, layout: &AllocLayout) -> ChunkAllocResult;
 
     // Deallocate the chunk
     // It is guaranteed that chunk's len will correspond to the len returned from alloc(...)
@@ -32,4 +35,7 @@ pub trait SharedMemoryProviderBackend {
     // Bytes available for use
     // Note: Zenoh algorithms expect O(1) complexity for this method
     fn available(&self) -> usize;
+
+    // Maximum supported alignment
+    fn max_align(&self) -> AllocAlignment;
 }

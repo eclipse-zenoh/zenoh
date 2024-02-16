@@ -36,15 +36,20 @@ async fn main() {
     config.transport.shared_memory.set_enabled(true).unwrap();
 
     let z = zenoh::open(config).res().await.unwrap();
+
     let mut factory = SharedMemoryFactory::builder()
-        .provider(
-            POSIX_PROTOCOL_ID,
-            Box::new(PosixSharedMemoryProviderBackend::new(sm_size as u32).unwrap()),
-        )
+        .provider(POSIX_PROTOCOL_ID, move || {
+            Ok(Box::new(
+                PosixSharedMemoryProviderBackend::builder()
+                    .with_size(sm_size)?
+                    .res()?,
+            ))
+        })
         .unwrap()
         .build();
     let shm = factory.provider(POSIX_PROTOCOL_ID).unwrap();
-    let mut buf = shm.alloc(size).unwrap();
+
+    let mut buf = shm.alloc().with_size(size).unwrap().res().unwrap();
     let bs = unsafe { buf.as_mut_slice() };
     for b in bs {
         *b = rand::random::<u8>();

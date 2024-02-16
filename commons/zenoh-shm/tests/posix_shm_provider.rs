@@ -18,7 +18,10 @@ use zenoh_shm::api::{
         posix_shared_memory_client::PosixSharedMemoryClient,
         posix_shared_memory_provider_backend::PosixSharedMemoryProviderBackend,
     },
-    provider::shared_memory_provider_backend::SharedMemoryProviderBackend,
+    provider::{
+        shared_memory_provider_backend::SharedMemoryProviderBackend,
+        types::{AllocAlignment, AllocLayout},
+    },
 };
 
 static BUFFER_NUM: usize = 100;
@@ -26,27 +29,40 @@ static BUFFER_SIZE: usize = 1024;
 
 #[test]
 fn posix_shm_provider_create() {
-    let _backend = PosixSharedMemoryProviderBackend::new(1024)
+    let _backend = PosixSharedMemoryProviderBackend::builder()
+        .with_size(1024)
+        .expect("Error creating Layout!")
+        .res()
         .expect("Error creating PosixSharedMemoryProviderBackend!");
 }
 
 #[test]
 fn posix_shm_provider_alloc() {
-    let mut backend = PosixSharedMemoryProviderBackend::new(1024)
+    let mut backend = PosixSharedMemoryProviderBackend::builder()
+        .with_size(1024)
+        .expect("Error creating Layout!")
+        .res()
         .expect("Error creating PosixSharedMemoryProviderBackend!");
 
+    let layout = AllocLayout::new(100, AllocAlignment::default(), &backend).unwrap();
+
     let _buf = backend
-        .alloc(100)
+        .alloc(&layout)
         .expect("PosixSharedMemoryProviderBackend: error allocating buffer");
 }
 
 #[test]
 fn posix_shm_provider_open() {
-    let mut backend = PosixSharedMemoryProviderBackend::new(1024)
+    let mut backend = PosixSharedMemoryProviderBackend::builder()
+        .with_size(1024)
+        .expect("Error creating Layout!")
+        .res()
         .expect("Error creating PosixSharedMemoryProviderBackend!");
 
+    let layout = AllocLayout::new(100, AllocAlignment::default(), &backend).unwrap();
+
     let buf = backend
-        .alloc(100)
+        .alloc(&layout)
         .expect("PosixSharedMemoryProviderBackend: error allocating buffer");
 
     let client = PosixSharedMemoryClient {};
@@ -58,14 +74,19 @@ fn posix_shm_provider_open() {
 
 #[test]
 fn posix_shm_provider_allocator() {
-    let mut backend = PosixSharedMemoryProviderBackend::new(BUFFER_NUM * BUFFER_SIZE)
+    let mut backend = PosixSharedMemoryProviderBackend::builder()
+        .with_size(BUFFER_SIZE*BUFFER_NUM)
+        .expect("Error creating Layout!")
+        .res()
         .expect("Error creating PosixSharedMemoryProviderBackend!");
+
+    let layout = AllocLayout::new(BUFFER_SIZE, AllocAlignment::default(), &backend).unwrap();
 
     // exaust memory by allocating it all
     let mut buffers = vec![];
     for _ in 0..BUFFER_NUM {
         let buf = backend
-            .alloc(BUFFER_SIZE)
+            .alloc(&layout)
             .expect("PosixSharedMemoryProviderBackend: error allocating buffer");
         buffers.push(buf);
     }
@@ -73,7 +94,7 @@ fn posix_shm_provider_allocator() {
     for _ in 0..BUFFER_NUM {
         // there is nothing to allocate at this point
         assert_eq!(backend.available(), 0);
-        assert!(backend.alloc(BUFFER_SIZE).is_err());
+        assert!(backend.alloc(&layout).is_err());
 
         // free buffer
         let to_free = buffers.pop().unwrap().descriptor;
@@ -81,7 +102,7 @@ fn posix_shm_provider_allocator() {
 
         // allocate new one
         let buf = backend
-            .alloc(BUFFER_SIZE)
+            .alloc(&layout)
             .expect("PosixSharedMemoryProviderBackend: error allocating buffer");
         buffers.push(buf);
     }
