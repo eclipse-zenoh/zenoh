@@ -133,7 +133,7 @@ impl InterceptorTrait for IngressMsgLogger {
             .or_else(|| ctx.full_expr());
 
         log::debug!(
-            "Recv {} {} Expr:{:?}",
+            "{} Recv {} Expr:{:?}",
             ctx.inface()
                 .map(|f| f.to_string())
                 .unwrap_or("None".to_string()),
@@ -158,7 +158,14 @@ impl InterceptorTrait for EgressMsgLogger {
         let expr = cache
             .and_then(|i| i.downcast_ref::<String>().map(|e| e.as_str()))
             .or_else(|| ctx.full_expr());
-        log::debug!("Send {} Expr:{:?}", ctx.msg, expr);
+        log::debug!(
+            "{} Send {} Expr:{:?}",
+            ctx.outface()
+                .map(|f| f.to_string())
+                .unwrap_or("None".to_string()),
+            ctx.msg,
+            expr
+        );
         Some(ctx)
     }
 }
