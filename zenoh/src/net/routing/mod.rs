@@ -125,10 +125,7 @@ impl RoutingContext<NetworkMessage> {
     }
 
     #[inline]
-    pub(crate) fn full_expr(&self) -> Option<&str> {
-        if self.full_expr.get().is_some() {
-            return Some(self.full_expr.get().as_ref().unwrap());
-        }
+    pub(crate) fn prefix(&self) -> Option<&Arc<Resource>> {
         if let Some(face) = self.outface.get() {
             if let Some(wire_expr) = self.wire_expr() {
                 let wire_expr = wire_expr.to_owned();
@@ -140,12 +137,7 @@ impl RoutingContext<NetworkMessage> {
                         let _ = self.prefix.set(prefix);
                     }
                 }
-                if let Some(prefix) = self.prefix.get().cloned() {
-                    let _ = self
-                        .full_expr
-                        .set(prefix.expr() + wire_expr.suffix.as_ref());
-                    return Some(self.full_expr.get().as_ref().unwrap());
-                }
+                return self.prefix.get();
             }
         }
         if let Some(face) = self.inface.get() {
@@ -159,13 +151,23 @@ impl RoutingContext<NetworkMessage> {
                         let _ = self.prefix.set(prefix);
                     }
                 }
-                if let Some(prefix) = self.prefix.get().cloned() {
-                    let _ = self
-                        .full_expr
-                        .set(prefix.expr() + wire_expr.suffix.as_ref());
-                    return Some(self.full_expr.get().as_ref().unwrap());
-                }
+                return self.prefix.get();
             }
+        }
+        None
+    }
+
+    #[inline]
+    #[allow(dead_code)]
+    pub(crate) fn full_expr(&self) -> Option<&str> {
+        if self.full_expr.get().is_some() {
+            return Some(self.full_expr.get().as_ref().unwrap());
+        }
+        if let Some(prefix) = self.prefix() {
+            let _ = self
+                .full_expr
+                .set(prefix.expr() + self.wire_expr().unwrap().suffix.as_ref());
+            return Some(self.full_expr.get().as_ref().unwrap());
         }
         None
     }

@@ -2675,4 +2675,8 @@ impl crate::net::primitives::EPrimitives for Session {
     fn send_close(&self) {
         (self as &dyn Primitives).send_close()
     }
+
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
 }
