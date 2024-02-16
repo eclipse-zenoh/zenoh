@@ -30,9 +30,11 @@ use std::sync::Mutex;
 use zenoh_buffers::buffer::SplitBuffer;
 use zenoh_config::{ConfigValidator, ValidatedMap, WhatAmI};
 use zenoh_plugin_trait::{PluginControl, PluginStatus};
-use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::{
-    core::{key_expr::OwnedKeyExpr, ExprId, KnownEncoding, WireExpr, ZenohId, EMPTY_EXPR_ID},
+    core::{
+        key_expr::{keyexpr, OwnedKeyExpr},
+        Encoding, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
+    },
     network::{
         declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo},
         ext, Declare, DeclareBody, DeclareQueryable, DeclareSubscriber, Push, Request, Response,
@@ -560,8 +562,7 @@ fn router_data(context: &AdminContext, query: Query) {
     if let Err(e) = query
         .reply(Ok(Sample::new(
             reply_key,
-            Value::from(json.to_string().as_bytes().to_vec())
-                .encoding(KnownEncoding::AppJson.into()),
+            Value::from(json.to_string().as_bytes().to_vec()).encoding(Encoding::APP_JSON),
         )))
         .res()
     {
@@ -595,7 +596,7 @@ zenoh_build{{version="{}"}} 1
     if let Err(e) = query
         .reply(Ok(Sample::new(
             reply_key,
-            Value::from(metrics.as_bytes().to_vec()).encoding(KnownEncoding::TextPlain.into()),
+            Value::from(metrics.as_bytes().to_vec()).encoding(Encoding::TEXT_PLAIN),
         )))
         .res()
     {
@@ -620,7 +621,7 @@ fn routers_linkstate_data(context: &AdminContext, query: Query) {
                     .as_bytes()
                     .to_vec(),
             )
-            .encoding(KnownEncoding::TextPlain.into()),
+            .encoding(Encoding::TEXT_PLAIN),
         )))
         .res()
     {
@@ -645,7 +646,7 @@ fn peers_linkstate_data(context: &AdminContext, query: Query) {
                     .as_bytes()
                     .to_vec(),
             )
-            .encoding(KnownEncoding::TextPlain.into()),
+            .encoding(Encoding::TEXT_PLAIN),
         )))
         .res()
     {
@@ -719,7 +720,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                         if let Err(e) = query
                             .reply(Ok(Sample::new(
                                 key_expr,
-                                Value::from(plugin.path()).encoding(KnownEncoding::AppJson.into()),
+                                Value::from(plugin.path()).encoding(Encoding::TEXT_PLAIN),
                             )))
                             .res()
                         {
@@ -746,7 +747,7 @@ fn plugins_status(context: &AdminContext, query: Query) {
                         if let Ok(key_expr) = KeyExpr::try_from(response.key) {
                             if let Err(e) = query.reply(Ok(Sample::new(
                                 key_expr,
-                                Value::from(response.value).encoding(KnownEncoding::AppJson.into()),
+                                Value::from(response.value).encoding(Encoding::TEXT_PLAIN),
                             )))
                             .res()
                             {

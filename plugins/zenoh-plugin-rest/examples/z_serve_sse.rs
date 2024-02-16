@@ -76,7 +76,7 @@ async fn main() {
     println!("Data updates are accessible through HTML5 SSE at http://<hostname>:8000/{key}");
     loop {
         publisher
-            .put(Value::from(value).encoding(KnownEncoding::TextPlain.into()))
+            .put(Value::from(value).encoding(Encoding::TEXT_PLAIN))
             .res()
             .await
             .unwrap();

@@ -110,11 +110,12 @@ libloading = "0.8"
 log = "0.4.17"
 lz4_flex = "0.11"
 nix = { version = "0.27", features = ["fs"] }
-num_cpus = "1.15.0"
+num_cpus = "1.16.0"
 ordered-float = "4.1.1"
 panic-message = "0.3.0"
 paste = "1.0.12"
 petgraph = "0.6.3"
+phf = { version = "0.11.2", features = ["macros"] }
 pnet = "0.34"
 pnet_datalink = "0.34"
 proc-macro2 = "1.0.51"

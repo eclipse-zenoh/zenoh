@@ -26,7 +26,7 @@ use std::{
 };
 use zenoh_core::SyncResolve;
 use zenoh_protocol::{
-    core::{Encoding, KnownEncoding, WireExpr},
+    core::{Encoding, WireExpr},
     network::NetworkMessage,
 };
 use zenoh_transport::{
@@ -145,7 +145,7 @@ impl TransportMulticastEventHandler for Handler {
                 let expr = WireExpr::from(&(*KE_PREFIX / own_zid / *KE_TRANSPORT_UNICAST / zid))
                     .to_owned();
                 let info = DataInfo {
-                    encoding: Some(Encoding::Exact(KnownEncoding::AppJson)),
+                    encoding: Some(Encoding::APP_JSON),
                     ..Default::default()
                 };
                 self.session.handle_data(
@@ -191,7 +191,7 @@ impl TransportPeerEventHandler for PeerHandler {
         let mut s = DefaultHasher::new();
         link.hash(&mut s);
         let info = DataInfo {
-            encoding: Some(Encoding::Exact(KnownEncoding::AppJson)),
+            encoding: Some(Encoding::APP_JSON),
             ..Default::default()
         };
         self.session.handle_data(

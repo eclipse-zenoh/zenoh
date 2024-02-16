@@ -688,15 +688,15 @@ fn serialize_update(update: &Update) -> String {
 }
 
 fn construct_update(data: String) -> Update {
-    let result: (String, String, String, Vec<&[u8]>) = serde_json::from_str(&data).unwrap();
+    let result: (String, String, String, Vec<&[u8]>) = serde_json::from_str(&data).unwrap(); // @TODO: remove the unwrap()
     let mut payload = ZBuf::default();
     for slice in result.3 {
         payload.push_zslice(slice.to_vec().into());
     }
-    let value = Value::new(payload).encoding(Encoding::from(result.2));
+    let value = Value::new(payload).encoding(Encoding::try_from(result.2).unwrap()); // @TODO: remove the unwrap()
     let data = StoredData {
         value,
-        timestamp: Timestamp::from_str(&result.1).unwrap(),
+        timestamp: Timestamp::from_str(&result.1).unwrap(), // @TODO: remove the unwrap()
     };
     let kind = if result.0.eq(&(SampleKind::Put).to_string()) {
         SampleKind::Put

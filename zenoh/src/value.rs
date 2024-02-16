@@ -24,7 +24,7 @@ use zenoh_collections::Properties;
 use zenoh_result::ZError;
 
 use crate::buffers::ZBuf;
-use crate::prelude::{Encoding, KnownEncoding, Sample, SplitBuffer};
+use crate::prelude::{Encoding, EncodingPrefix, Sample, SplitBuffer};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::SharedMemoryBuf;
 
@@ -43,7 +43,7 @@ impl Value {
     pub fn new(payload: ZBuf) -> Self {
         Value {
             payload,
-            encoding: KnownEncoding::AppOctetStream.into(),
+            encoding: Encoding::APP_OCTET_STREAM,
         }
     }
 
@@ -51,7 +51,7 @@ impl Value {
     pub fn empty() -> Self {
         Value {
             payload: ZBuf::empty(),
-            encoding: KnownEncoding::AppOctetStream.into(),
+            encoding: Encoding::EMPTY,
         }
     }
 
@@ -93,7 +93,7 @@ impl From<Arc<SharedMemoryBuf>> for Value {
     fn from(smb: Arc<SharedMemoryBuf>) -> Self {
         Value {
             payload: smb.into(),
-            encoding: KnownEncoding::AppOctetStream.into(),
+            encoding: Encoding::APP_OCTET_STREAM,
         }
     }
 }
@@ -111,7 +111,7 @@ impl From<SharedMemoryBuf> for Value {
     fn from(smb: SharedMemoryBuf) -> Self {
         Value {
             payload: smb.into(),
-            encoding: KnownEncoding::AppOctetStream.into(),
+            encoding: Encoding::APP_OCTET_STREAM,
         }
     }
 }
@@ -121,7 +121,7 @@ impl From<ZBuf> for Value {
     fn from(buf: ZBuf) -> Self {
         Value {
             payload: buf,
-            encoding: KnownEncoding::AppOctetStream.into(),
+            encoding: Encoding::APP_OCTET_STREAM,
         }
     }
 }
@@ -131,7 +131,7 @@ impl TryFrom<&Value> for ZBuf {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppOctetStream => Ok(v.payload.clone()),
+            EncodingPrefix::APP_OCTET_STREAM => Ok(v.payload.clone()),
             unexpected => Err(zerror!(
                 "{:?} can not be converted into Cow<'a, [u8]>",
                 unexpected
@@ -159,7 +159,7 @@ impl<'a> TryFrom<&'a Value> for Cow<'a, [u8]> {
 
     fn try_from(v: &'a Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppOctetStream => Ok(v.payload.contiguous()),
+            EncodingPrefix::APP_OCTET_STREAM => Ok(v.payload.contiguous()),
             unexpected => Err(zerror!(
                 "{:?} can not be converted into Cow<'a, [u8]>",
                 unexpected
@@ -179,7 +179,7 @@ impl TryFrom<&Value> for Vec<u8> {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppOctetStream => Ok(v.payload.contiguous().to_vec()),
+            EncodingPrefix::APP_OCTET_STREAM => Ok(v.payload.contiguous().to_vec()),
             unexpected => Err(zerror!(
                 "{:?} can not be converted into Vec<u8>",
                 unexpected
@@ -201,7 +201,7 @@ impl From<String> for Value {
     fn from(s: String) -> Self {
         Value {
             payload: ZBuf::from(s.into_bytes()),
-            encoding: KnownEncoding::TextPlain.into(),
+            encoding: Encoding::TEXT_PLAIN,
         }
     }
 }
@@ -210,7 +210,7 @@ impl From<&str> for Value {
     fn from(s: &str) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(s)),
-            encoding: KnownEncoding::TextPlain.into(),
+            encoding: Encoding::TEXT_PLAIN,
         }
     }
 }
@@ -220,7 +220,7 @@ impl TryFrom<&Value> for String {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::TextPlain => {
+            EncodingPrefix::TEXT_PLAIN => {
                 String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e))
             }
             unexpected => Err(zerror!("{:?} can not be converted into String", unexpected)),
@@ -248,7 +248,7 @@ impl From<i64> for Value {
     fn from(i: i64) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
-            encoding: KnownEncoding::AppInteger.into(),
+            encoding: Encoding::APP_INTEGER,
         }
     }
 }
@@ -258,7 +258,7 @@ impl TryFrom<&Value> for i64 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -280,7 +280,7 @@ impl From<i32> for Value {
     fn from(i: i32) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
-            encoding: KnownEncoding::AppInteger.into(),
+            encoding: Encoding::APP_INTEGER,
         }
     }
 }
@@ -290,7 +290,7 @@ impl TryFrom<&Value> for i32 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -312,7 +312,7 @@ impl From<i16> for Value {
     fn from(i: i16) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
-            encoding: KnownEncoding::AppInteger.into(),
+            encoding: Encoding::APP_INTEGER,
         }
     }
 }
@@ -322,7 +322,7 @@ impl TryFrom<&Value> for i16 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -344,7 +344,7 @@ impl From<i8> for Value {
     fn from(i: i8) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
-            encoding: KnownEncoding::AppInteger.into(),
+            encoding: Encoding::APP_INTEGER,
         }
     }
 }
@@ -354,7 +354,7 @@ impl TryFrom<&Value> for i8 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -376,7 +376,7 @@ impl From<isize> for Value {
     fn from(i: isize) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
-            encoding: KnownEncoding::AppInteger.into(),
+            encoding: Encoding::APP_INTEGER,
         }
     }
 }
@@ -386,7 +386,7 @@ impl TryFrom<&Value> for isize {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -408,7 +408,7 @@ impl From<u64> for Value {
     fn from(i: u64) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
-            encoding: KnownEncoding::AppInteger.into(),
+            encoding: Encoding::APP_INTEGER,
         }
     }
 }
@@ -418,7 +418,7 @@ impl TryFrom<&Value> for u64 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -440,7 +440,7 @@ impl From<u32> for Value {
     fn from(i: u32) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
-            encoding: KnownEncoding::AppInteger.into(),
+            encoding: Encoding::APP_INTEGER,
         }
     }
 }
@@ -450,7 +450,7 @@ impl TryFrom<&Value> for u32 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -472,7 +472,7 @@ impl From<u16> for Value {
     fn from(i: u16) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
-            encoding: KnownEncoding::AppInteger.into(),
+            encoding: Encoding::APP_INTEGER,
         }
     }
 }
@@ -482,7 +482,7 @@ impl TryFrom<&Value> for u16 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -504,7 +504,7 @@ impl From<u8> for Value {
     fn from(i: u8) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
-            encoding: KnownEncoding::AppInteger.into(),
+            encoding: Encoding::APP_INTEGER,
         }
     }
 }
@@ -514,7 +514,7 @@ impl TryFrom<&Value> for u8 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -536,7 +536,7 @@ impl From<usize> for Value {
     fn from(i: usize) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(i.to_string())),
-            encoding: KnownEncoding::AppInteger.into(),
+            encoding: Encoding::APP_INTEGER,
         }
     }
 }
@@ -546,7 +546,7 @@ impl TryFrom<&Value> for usize {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppInteger => std::str::from_utf8(&v.payload.contiguous())
+            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -568,7 +568,7 @@ impl From<f64> for Value {
     fn from(f: f64) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(f.to_string())),
-            encoding: KnownEncoding::AppFloat.into(),
+            encoding: Encoding::APP_FLOAT,
         }
     }
 }
@@ -578,7 +578,7 @@ impl TryFrom<&Value> for f64 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppFloat => std::str::from_utf8(&v.payload.contiguous())
+            EncodingPrefix::APP_FLOAT => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -600,7 +600,7 @@ impl From<f32> for Value {
     fn from(f: f32) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(f.to_string())),
-            encoding: KnownEncoding::AppFloat.into(),
+            encoding: Encoding::APP_FLOAT,
         }
     }
 }
@@ -610,7 +610,7 @@ impl TryFrom<&Value> for f32 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppFloat => std::str::from_utf8(&v.payload.contiguous())
+            EncodingPrefix::APP_FLOAT => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -632,7 +632,7 @@ impl From<&serde_json::Value> for Value {
     fn from(json: &serde_json::Value) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(json.to_string())),
-            encoding: KnownEncoding::AppJson.into(),
+            encoding: Encoding::APP_JSON,
         }
     }
 }
@@ -648,7 +648,7 @@ impl TryFrom<&Value> for serde_json::Value {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            KnownEncoding::AppJson | KnownEncoding::TextJson => {
+            EncodingPrefix::APP_JSON | EncodingPrefix::TEXT_JSON => {
                 let r = serde::Deserialize::deserialize(&mut serde_json::Deserializer::from_slice(
                     &v.payload.contiguous(),
                 ));
@@ -675,7 +675,7 @@ impl From<Properties> for Value {
     fn from(p: Properties) -> Self {
         Value {
             payload: ZBuf::from(Vec::<u8>::from(p.to_string())),
-            encoding: KnownEncoding::AppProperties.into(),
+            encoding: Encoding::APP_PROPERTIES,
         }
     }
 }
@@ -684,8 +684,8 @@ impl TryFrom<&Value> for Properties {
     type Error = ZError;
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
-        match *v.encoding.prefix() {
-            KnownEncoding::AppProperties => Ok(Properties::from(
+        match v.encoding.prefix() {
+            EncodingPrefix::APP_PROPERTIES => Ok(Properties::from(
                 std::str::from_utf8(&v.payload.contiguous()).map_err(|e| zerror!("{}", e))?,
             )),
             unexpected => Err(zerror!(
