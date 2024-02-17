@@ -76,12 +76,14 @@ impl<const N: usize> ZSliceBuffer for [u8; N] {
 #[cfg(feature = "shared-memory")]
 #[derive(Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
+// tags{rust.z_slice_kind}
 pub enum ZSliceKind {
     Raw = 0,
     ShmPtr = 1,
 }
 
 /// A clonable wrapper to a contiguous slice of bytes.
+// tags{rust.z_slice}
 #[derive(Clone)]
 pub struct ZSlice {
     pub(crate) buf: Arc<dyn ZSliceBuffer>,
@@ -92,6 +94,7 @@ pub struct ZSlice {
 }
 
 impl ZSlice {
+    // tags{rust.z_slice.make, api.buffer.create}
     pub fn make(
         buf: Arc<dyn ZSliceBuffer>,
         start: usize,

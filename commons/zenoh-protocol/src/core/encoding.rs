@@ -49,6 +49,7 @@ mod consts {
 
 #[repr(u8)]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+// tags{rust.encoding, api.options.encoding}
 pub enum KnownEncoding {
     Empty = 0,
     AppOctetStream = 1,
@@ -106,6 +107,7 @@ impl AsRef<str> for KnownEncoding {
 ///
 /// A zenoh encoding is a HTTP Mime type represented, for wire efficiency,
 /// as an integer prefix (that maps to a string) and a string suffix.
+// tags{rust.encoding, api.encoding}
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Encoding {
     Exact(KnownEncoding),
@@ -113,6 +115,7 @@ pub enum Encoding {
 }
 
 impl Encoding {
+    // tags{rust.encoding.new, api.encoding.create}
     pub fn new<IntoCowStr>(prefix: u8, suffix: IntoCowStr) -> ZResult<Self>
     where
         IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
@@ -130,6 +133,7 @@ impl Encoding {
     }
 
     /// Sets the suffix of this encoding.
+    // tags{rust.encoding.with_suffix, api.encoding.suffix.set}
     pub fn with_suffix<IntoCowStr>(self, suffix: IntoCowStr) -> ZResult<Self>
     where
         IntoCowStr: Into<Cow<'static, str>> + AsRef<str>,
@@ -149,6 +153,7 @@ impl Encoding {
 
     /// Returns `true`if the string representation of this encoding starts with
     /// the string representation of ther given encoding.
+    // tags{rust.encoding.starts_with, api.encoding.starts_with}
     pub fn starts_with<T>(&self, with: T) -> bool
     where
         T: Into<Encoding>,
@@ -157,12 +162,14 @@ impl Encoding {
         self.prefix() == with.prefix() && self.suffix().starts_with(with.suffix())
     }
 
+    // tags{rust.encoding.prefix, api.encoding.prefix.get}
     pub const fn prefix(&self) -> &KnownEncoding {
         match self {
             Encoding::Exact(e) | Encoding::WithSuffix(e, _) => e,
         }
     }
 
+    // tags{rust.encoding.suffix, api.encoding.suffix.get}
     pub fn suffix(&self) -> &str {
         match self {
             Encoding::Exact(_) => "",
