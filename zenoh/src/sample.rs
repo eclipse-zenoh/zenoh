@@ -522,15 +522,12 @@ impl TryFrom<Reply> for Sample {
 /// Structure containing quality of service data
 #[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
 pub struct QoS {
-    pub priority: Priority,
-    pub congestion_control: CongestionControl,
-    pub express: bool,
+    inner: QoSType,
 }
 
 impl QoS {
-    /// Helper function to fallback to QoS with default priority value, in case we fail to extract it
-    pub(crate) fn from_or_default(ext: QoSType) -> QoS {
-        let priority = match Priority::try_from(ext.get_priority()) {
+    pub fn priority(&self) -> Priority {
+        let priority = match Priority::try_from(self.inner.get_priority()) {
             Ok(p) => p,
             Err(e) => {
                 log::trace!(
@@ -540,21 +537,24 @@ impl QoS {
                 Priority::default()
             }
         };
-        QoS {
-            priority,
-            congestion_control: ext.get_congestion_control(),
-            express: ext.is_express(),
-        }
+        priority
+    }
+
+    pub fn congestion_control(&self) -> CongestionControl {
+        self.inner.get_congestion_control()
+    }
+
+    pub fn express(&self) -> bool {
+        self.inner.is_express()
+    }
+
+    pub(crate) fn inner(&self) -> QoSType {
+        self.inner
     }
 }
 
-impl TryFrom<QoSType> for QoS {
-    type Error = zenoh_result::Error;
-    fn try_from(ext: QoSType) -> Result<Self, Self::Error> {
-        Ok(QoS {
-            priority: ext.get_priority().try_into()?,
-            congestion_control: ext.get_congestion_control(),
-            express: ext.is_express(),
-        })
+impl From<QoSType> for QoS {
+    fn from(qos: QoSType) -> Self {
+        QoS { inner: qos }
     }
 }

@@ -2193,7 +2193,7 @@ impl Primitives for Session {
                     kind: SampleKind::Put,
                     encoding: Some(m.encoding),
                     timestamp: m.timestamp,
-                    qos: QoS::from_or_default(msg.ext_qos),
+                    qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
@@ -2211,7 +2211,7 @@ impl Primitives for Session {
                     kind: SampleKind::Delete,
                     encoding: None,
                     timestamp: m.timestamp,
-                    qos: QoS::from_or_default(msg.ext_qos),
+                    qos: QoS::from(msg.ext_qos),
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                 };
@@ -2348,7 +2348,7 @@ impl Primitives for Session {
                             kind: SampleKind::Put,
                             encoding: Some(m.encoding),
                             timestamp: m.timestamp,
-                            qos: QoS::from_or_default(msg.ext_qos),
+                            qos: QoS::from(msg.ext_qos),
                             source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                             source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
                         };

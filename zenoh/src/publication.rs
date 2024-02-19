@@ -860,7 +860,7 @@ fn resolve_put(
             timestamp,
             source_id: None,
             source_sn: None,
-            qos: QoS::from_or_default(ext::QoSType::new(
+            qos: QoS::from(ext::QoSType::new(
                 publisher.priority.into(),
                 publisher.congestion_control,
                 false,
