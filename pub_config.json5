@@ -106,6 +106,13 @@
   // //      ],
   // //  },
   // /// Configure internal transport parameters
+  transport: {
+    acl: {
+      enabled: false,
+      default_deny: false,
+      policy_file: null,
+    },
+  }
   // transport: {
   //   unicast: {
   //     /// Timeout in milliseconds when opening a link

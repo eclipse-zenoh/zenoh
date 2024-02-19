@@ -108,24 +108,6 @@
   //        // key_expression
   //      ],
   //  },
-<<<<<<< HEAD
-=======
-
-  //  /// The downsampling declaration.
-  //  downsampling: [
-  //    {
-  //      /// A list of network interfaces messages will be processed on, the rest will be passed as is.
-  //      interfaces: [ "wlan0" ],
-  //      /// Data flow messages will be processed on. ("egress" or "ingress")
-  //      flow: "egress",
-  //      /// A list of downsampling rules: key_expression and the rate (maximum frequency in Hertz)
-  //      rules: [
-  //        { key_expr: "demo/example/zenoh-rs-pub", rate: 0.1 }, 
-  //      ],
-  //    },
-  //  ],
-
->>>>>>> origin/main
   /// Configure internal transport parameters
   transport: {
     unicast: {
@@ -214,10 +196,10 @@
           /// The initial exponential backoff time in nanoseconds to allow the batching to eventually progress.
           /// Higher values lead to a more aggressive batching but it will introduce additional latency.
           backoff: 100,
+          // Number of threads dedicated to transmission
+          // By default, the number of threads is calculated as follows: 1 + ((#cores - 1) / 4)
+          // threads: 4,
         },
-        // Number of threads dedicated to transmission
-        // By default, the number of threads is calculated as follows: 1 + ((#cores - 1) / 4)
-        // threads: 4,
       },
       /// Configure the zenoh RX parameters of a link
       rx: {
@@ -277,6 +259,11 @@
         key_size: null,
         known_keys_file: null,
       },
+    },
+     acl: {
+      enabled: true,
+      default_deny: true,
+      policy_file: "rules_test.json5",
     },
   },
   /// Configure the Admin Space

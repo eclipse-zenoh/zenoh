@@ -29,6 +29,13 @@
       // "<proto>/<address>"
     ],
   },
+  transport: {
+    acl: {
+      enabled: false,
+      default_deny: false,
+      policy_file: null,
+    },
+  }
   // /// Configure the scouting mechanisms and their behaviours
   // scouting: {
   //   /// In client mode, the period dedicated to scouting for a router before failing
