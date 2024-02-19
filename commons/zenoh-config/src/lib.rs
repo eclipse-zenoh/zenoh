@@ -13,6 +13,7 @@
 //
 
 //! Configuration to pass to `zenoh::open()` and `zenoh::scout()` functions and associated constants.
+// ignore_tagging
 pub mod defaults;
 mod include;
 use include::recursive_include;
@@ -48,6 +49,7 @@ use zenoh_result::{bail, zerror, ZResult};
 use zenoh_util::LibLoader;
 
 // Wrappers for secrecy of values
+// tags{}
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone)]
 pub struct SecretString(String);
 
@@ -70,6 +72,7 @@ impl Zeroize for SecretString {
 
 pub type SecretValue = Secret<SecretString>;
 
+// tags{}
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,
@@ -87,16 +90,19 @@ pub trait ConfigValidator: Send + Sync {
 impl ConfigValidator for () {}
 
 /// Creates an empty zenoh net Session configuration.
+// tags{rust.config.empty, api.config.create.empty}
 pub fn empty() -> Config {
     Config::default()
 }
 
 /// Creates a default zenoh net Session configuration (equivalent to `peer`).
+// tags{rust.config.default, api.config.create.default}
 pub fn default() -> Config {
     peer()
 }
 
 /// Creates a default `'peer'` mode zenoh net Session configuration.
+// tags{rust.config.peer, api.config.create.peer}
 pub fn peer() -> Config {
     let mut config = Config::default();
     config.set_mode(Some(WhatAmI::Peer)).unwrap();
@@ -104,6 +110,7 @@ pub fn peer() -> Config {
 }
 
 /// Creates a default `'client'` mode zenoh net Session configuration.
+// tags{rust.config.client, api.config.create.client}
 pub fn client<I: IntoIterator<Item = T>, T: Into<EndPoint>>(peers: I) -> Config {
     let mut config = Config::default();
     config.set_mode(Some(WhatAmI::Client)).unwrap();
@@ -141,6 +148,7 @@ validated_struct::validator! {
     #[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
     #[serde(default)]
     #[serde(deny_unknown_fields)]
+    // tags{rust.config. api.config}
     Config {
         /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random u128 will be generated.
         id: ZenohId,
@@ -149,15 +157,18 @@ validated_struct::validator! {
         /// The node's mode ("router" (default value in `zenohd`), "peer" or "client").
         mode: Option<whatami::WhatAmI>,
         /// Which zenoh nodes to connect to.
+        // tags{rust.config.connect, api.config.connect}
         pub connect: #[derive(Default)]
         ConnectConfig {
             pub endpoints: Vec<EndPoint>,
         },
         /// Which endpoints to listen on. `zenohd` will add `tcp/[::]:7447` to these locators if left empty.
+        // tags{rust.config.listen, api.config.listen}
         pub listen: #[derive(Default)]
         ListenConfig {
             pub endpoints: Vec<EndPoint>,
         },
+        // tags{rust.config.scouting, api.config.scouting}
         pub scouting: #[derive(Default)]
         ScoutingConf {
             /// In client mode, the period dedicated to scouting for a router before failing. In milliseconds.
@@ -165,6 +176,7 @@ validated_struct::validator! {
             /// In peer mode, the period dedicated to scouting remote peers before attempting other operations. In milliseconds.
             delay: Option<u64>,
             /// The multicast scouting configuration.
+            // tags{rust.config.scouting.multicast, api.config.scouting.multicast}
             pub multicast: #[derive(Default)]
             ScoutingMulticastConf {
                 /// Whether multicast scouting is enabled or not. If left empty, `zenohd` will set it according to the presence of the `--no-multicast-scouting` argument.
@@ -180,6 +192,7 @@ validated_struct::validator! {
                 listen: Option<ModeDependentValue<bool>>,
             },
             /// The gossip scouting configuration.
+            // tags{rust.config.scouting.gossip, api.config.scouting.gossip}
             pub gossip: #[derive(Default)]
             GossipConf {
                 /// Whether gossip scouting is enabled or not.
@@ -197,6 +210,7 @@ validated_struct::validator! {
         },
 
         /// Configuration of data messages timestamps management.
+        // tags{rust.config.timestamping, api.config.timestamping}
         pub timestamping: #[derive(Default)]
         TimestampingConf {
             /// Whether data messages should be timestamped if not already.
@@ -211,9 +225,11 @@ validated_struct::validator! {
         queries_default_timeout: Option<u64>,
 
         /// The routing strategy to use and it's configuration.
+        // tags{rust.config.routing, api.config.routing}
         pub routing: #[derive(Default)]
         RoutingConf {
             /// The routing strategy to use in routers and it's configuration.
+            // tags{rust.config.routing.router, api.config.routing.router}
             pub router: #[derive(Default)]
             RouterRoutingConf {
                 /// When set to true a router will forward data between two peers
@@ -223,6 +239,7 @@ validated_struct::validator! {
                 peers_failover_brokering: Option<bool>,
             },
             /// The routing strategy to use in peers and it's configuration.
+            // tags{rust.config.routing.peer, api.config.routing.peer}
             pub peer: #[derive(Default)]
             PeerRoutingConf {
                 /// The routing strategy to use in peers. ("peer_to_peer" or "linkstate").
@@ -231,6 +248,7 @@ validated_struct::validator! {
         },
 
         /// The declarations aggregation strategy.
+        // tags{rust.config.aggregation, api.config.aggregation}
         pub aggregation: #[derive(Default)]
         AggregationConf {
             /// A list of key-expressions for which all included subscribers will be aggregated into.
@@ -238,8 +256,10 @@ validated_struct::validator! {
             /// A list of key-expressions for which all included publishers will be aggregated into.
             publishers: Vec<OwnedKeyExpr>,
         },
+        // tags{rust.config.transport, api.config.transport}
         pub transport: #[derive(Default)]
         TransportConf {
+            // tags{rust.config.transport.unicast, api.config.transport.unicast}
             pub unicast: TransportUnicastConf {
                 /// Timeout in milliseconds when opening a link (default: 10000).
                 accept_timeout: u64,
@@ -253,38 +273,46 @@ validated_struct::validator! {
                 /// This option does not make LowLatency transport mandatory, the actual implementation of transport
                 /// used will depend on Establish procedure and other party's settings
                 lowlatency: bool,
+                // tags{rust.config.transport.unicast.qos, api.config.transport.unicast.qos}
                 pub qos: QoSUnicastConf {
                     /// Whether QoS is enabled or not.
                     /// If set to `false`, the QoS will be disabled. (default `true`).
                     enabled: bool
                 },
+                // tags{rust.config.transport.unicast.compression, api.config.transport.unicast.compression}
                 pub compression: CompressionUnicastConf {
                     /// You must compile zenoh with "transport_compression" feature to be able to enable compression.
                     /// When enabled is true, batches will be sent compressed. (default `false`).
                     enabled: bool,
                 },
             },
+            // tags{rust.config.transport.multicast, api.config.transport.multicast}
             pub multicast: TransportMulticastConf {
                 /// Link join interval duration in milliseconds (default: 2500)
                 join_interval: Option<u64>,
                 /// Maximum number of multicast sessions (default: 1000)
                 max_sessions: Option<usize>,
+                // tags{rust.config.transport.multicast.qos, api.config.transport.multicast.qos}
                 pub qos: QoSMulticastConf {
                     /// Whether QoS is enabled or not.
                     /// If set to `false`, the QoS will be disabled. (default `false`).
                     enabled: bool
                 },
+                // tags{rust.config.transport.multicast.compression, api.config.transport.multicast.compression}
                 pub compression: CompressionMulticastConf {
                     /// You must compile zenoh with "transport_compression" feature to be able to enable compression.
                     /// When enabled is true, batches will be sent compressed. (default `false`).
                     enabled: bool,
                 },
             },
+            // tags{rust.config.transport.link, api.config.transport.link}
             pub link: #[derive(Default)]
             TransportLinkConf {
                 // An optional whitelist of protocols to be used for accepting and opening sessions.
                 // If not configured, all the supported protocols are automatically whitelisted.
+                // tags{rust.config.transport.link.protocols, api.config.transport.link.protocols}
                 pub protocols: Option<Vec<String>>,
+                // tags{rust.config.transport.link.tx, api.config.transport.link.tx}
                 pub tx: LinkTxConf {
                     /// The resolution in bits to be used for the message sequence numbers.
                     /// When establishing a session with another Zenoh instance, the lowest value of the two instances will be used.
@@ -296,12 +324,14 @@ validated_struct::validator! {
                     keep_alive: usize,
                     /// Zenoh's MTU equivalent (default: 2^16-1)
                     batch_size: BatchSize,
+                    // tags{rust.config.transport.link.tx.queue, api.config.transport.link.tx.queue}
                     pub queue: QueueConf {
                         /// The size of each priority queue indicates the number of batches a given queue can contain.
                         /// The amount of memory being allocated for each queue is then SIZE_XXX * BATCH_SIZE.
                         /// In the case of the transport link MTU being smaller than the ZN_BATCH_SIZE,
                         /// then amount of memory being allocated for each queue is SIZE_XXX * LINK_MTU.
                         /// If qos is false, then only the DATA priority will be allocated.
+                        // tags{rust.config.transport.link.tx.queue.size, api.config.transport.link.tx.queue.size}
                         pub size: QueueSizeConf {
                             control: usize,
                             real_time: usize,
@@ -319,6 +349,7 @@ validated_struct::validator! {
                     // Number of threads used for TX
                     threads: usize,
                 },
+                // tags{rust.config.transport.link.rx, api.config.transport.link.rx}
                 pub rx: LinkRxConf {
                     /// Receiving buffer size in bytes for each link
                     /// The default the rx_buffer_size value is the same as the default batch size: 65335.
@@ -330,6 +361,7 @@ validated_struct::validator! {
                     /// Fragmented messages that are larger than the configured size will be dropped.
                     max_message_size: usize,
                 },
+                // tags{rust.config.transport.link.tls, api.config.transport.link.tls}
                 pub tls: #[derive(Default)]
                 TLSConf {
                     root_ca_certificate: Option<String>,
@@ -351,11 +383,13 @@ validated_struct::validator! {
                     #[serde(skip_serializing)]
                     client_certificate_base64 :  Option<SecretValue>,
                 },
+                // tags{rust.config.transport.link.unixpipe, api.config.transport.link.unixpipe}
                 pub unixpipe: #[derive(Default)]
                 UnixPipeConf {
                     file_access_mask: Option<u32>
                 },
             },
+            // tags{rust.config.transport.shared_memory, api.config.transport.shared_memory}
             pub shared_memory:
             SharedMemoryConf {
                 /// Whether shared memory is enabled or not.
@@ -363,10 +397,12 @@ validated_struct::validator! {
                 /// This option doesn't make SHM buffer optimization mandatory, the real support depends on other party setting
                 enabled: bool,
             },
+            // tags{rust.config.transport.auth, api.config.transport.auth}
             pub auth: #[derive(Default)]
             AuthConf {
                 /// The configuration of authentification.
                 /// A password implies a username is required.
+                // tags{rust.config.transport.auth.usrpwd, api.config.transport.auth.usrpwd}
                 pub usrpwd: #[derive(Default)]
                 UsrPwdConf {
                     user: Option<String>,
@@ -374,6 +410,7 @@ validated_struct::validator! {
                     /// The path to a file containing the user password dictionary, a file containing `<user>:<password>`
                     dictionary_file: Option<String>,
                 } where (user_conf_validator),
+                // tags{rust.config.transport.auth.pubkey, api.config.transport.auth.pubkey}
                 pub pubkey: #[derive(Default)]
                 PubKeyConf {
                     public_key_pem: Option<String>,
@@ -386,6 +423,7 @@ validated_struct::validator! {
             },
         },
         /// Configuration of the admin space.
+        // tags{rust.config.adminspace, api.config.adminspace}
         pub adminspace: #[derive(Default)]
         /// <div class="stab unstable">
         ///   <span class="emoji">🔬</span>
@@ -394,12 +432,15 @@ validated_struct::validator! {
         /// </div>
         AdminSpaceConf {
             /// Permissions on the admin space
+            // tags{rust.config.adminspace.permissions, api.config.adminspace.permissions}
             pub permissions:
             PermissionsConf {
                 /// Whether the admin space replies to queries (true by default).
+                // tags{rust.config.adminspace.permissions.read, api.config.adminspace.permissions.read}
                 #[serde(default = "set_true")]
                 pub read: bool,
                 /// Whether the admin space accepts config changes at runtime (false by default).
+                // tags{rust.config.adminspace.permissions.write, api.config.adminspace.permissions.write}
                 #[serde(default = "set_false")]
                 pub write: bool,
             },
@@ -432,6 +473,7 @@ fn set_false() -> bool {
     false
 }
 
+// tags{}
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PluginSearchDirs(Vec<String>);
 impl Default for PluginSearchDirs {

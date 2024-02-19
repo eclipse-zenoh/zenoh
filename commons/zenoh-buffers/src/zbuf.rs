@@ -396,7 +396,7 @@ impl<'a> SiphonableReader for ZBufReader<'a> {
 
 #[cfg(feature = "std")]
 impl<'a> std::io::Read for ZBufReader<'a> {
-    // tags{rust.zbuf_reader.read api.buffer.read}
+    // tags{rust.zbuf_reader.read, api.buffer.read}
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         match <Self as Reader>::read(self, buf) {
             Ok(n) => Ok(n.get()),

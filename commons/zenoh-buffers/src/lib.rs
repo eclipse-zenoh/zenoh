@@ -22,10 +22,15 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 extern crate alloc;
 
+// ignore_tagging
 mod bbuf;
+// ignore_tagging
 mod slice;
+// ignore_tagging
 pub mod vec;
+// ignore_tagging
 mod zbuf;
+// ignore_tagging
 mod zslice;
 
 pub use bbuf::*;
@@ -72,6 +77,7 @@ macro_rules! unsafe_slice_mut {
     };
 }
 
+// tags{}
 pub mod buffer {
     use alloc::{borrow::Cow, vec::Vec};
 
@@ -86,6 +92,7 @@ pub mod buffer {
     }
 
     /// A trait for buffers that can be composed of multiple non contiguous slices.
+    // tags{}
     pub trait SplitBuffer: Buffer {
         type Slices<'a>: Iterator<Item = &'a [u8]> + ExactSizeIterator
         where
@@ -116,6 +123,7 @@ pub mod writer {
     use core::num::NonZeroUsize;
 
     #[derive(Debug, Clone, Copy)]
+    // tags{}
     pub struct DidntWrite;
 
     pub trait Writer {
@@ -134,11 +142,13 @@ pub mod writer {
         }
         /// Provides a buffer of exactly `len` uninitialized bytes to `f` to allow in-place writing.
         /// `f` must return the number of bytes it actually wrote.
+        // tags{}
         fn with_slot<F>(&mut self, len: usize, f: F) -> Result<NonZeroUsize, DidntWrite>
         where
             F: FnOnce(&mut [u8]) -> usize;
     }
 
+    // tags{}
     pub trait BacktrackableWriter: Writer {
         type Mark;
 
@@ -146,6 +156,7 @@ pub mod writer {
         fn rewind(&mut self, mark: Self::Mark) -> bool;
     }
 
+    // tags{}
     pub trait HasWriter {
         type Writer: Writer;
 
@@ -159,6 +170,7 @@ pub mod reader {
     use core::num::NonZeroUsize;
 
     #[derive(Debug, Clone, Copy)]
+    // tags{}
     pub struct DidntRead;
 
     pub trait Reader {
@@ -191,6 +203,7 @@ pub mod reader {
         }
     }
 
+    // tags{}
     pub trait BacktrackableReader: Reader {
         type Mark;
 
@@ -199,14 +212,17 @@ pub mod reader {
     }
 
     #[derive(Debug, Clone, Copy)]
+    // tags{}
     pub struct DidntSiphon;
 
+    // tags{}
     pub trait SiphonableReader: Reader {
         fn siphon<W>(&mut self, writer: &mut W) -> Result<NonZeroUsize, DidntSiphon>
         where
             W: crate::writer::Writer;
     }
 
+    // tags{}
     pub trait HasReader {
         type Reader: Reader;
 

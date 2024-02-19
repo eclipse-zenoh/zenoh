@@ -18,6 +18,7 @@ use zenoh_result::{bail, ZError};
 
 #[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+// tags{rust.what_am_i, api.options.what_am_i}
 pub enum WhatAmI {
     Router = 0b001,
     Peer = 0b010,
@@ -67,7 +68,7 @@ impl TryFrom<u8> for WhatAmI {
 
 impl FromStr for WhatAmI {
     type Err = ZError;
-
+    // tags{rust.what_am_i.from_str api.options.what_am_i.create.from_str}
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             Self::STR_R => Ok(Self::Router),
@@ -84,6 +85,7 @@ impl FromStr for WhatAmI {
 }
 
 impl fmt::Display for WhatAmI {
+    // tags{rust.what_am_i.display api.options.what_am_i.to_string}
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.to_str())
     }

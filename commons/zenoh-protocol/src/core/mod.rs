@@ -34,7 +34,6 @@ use zenoh_result::{bail, zerror};
 pub type TimestampId = uhlc::ID;
 
 /// Constants and helpers for zenoh `whatami` flags.
-// ignore_tagging
 pub mod whatami;
 pub use whatami::*;
 
@@ -47,7 +46,6 @@ pub use wire_expr::*;
 // ignore_tagging
 mod cowstr;
 pub use cowstr::CowStr;
-// ignore_tagging
 mod encoding;
 pub use encoding::{Encoding, KnownEncoding};
 

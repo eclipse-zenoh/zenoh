@@ -182,7 +182,7 @@ impl SessionInfo<'_> {
     /// let zid = session.info().zid().res().await;
     /// # })
     /// ```
-    // tags{rust.session_info.zid api.session.zid.get}
+    // tags{rust.session_info.zid, api.session.zid.get}
     pub fn zid(&self) -> ZidBuilder<'_> {
         ZidBuilder {
             session: self.session.clone(),
@@ -202,7 +202,7 @@ impl SessionInfo<'_> {
     /// while let Some(router_zid) = routers_zid.next() {}
     /// # })
     /// ```
-    // tags{rust.session_info.routers_zid api.session.routers_zid.get}
+    // tags{rust.session_info.routers_zid, api.session.routers_zid.get}
     pub fn routers_zid(&self) -> RoutersZidBuilder<'_> {
         RoutersZidBuilder {
             session: self.session.clone(),
@@ -221,7 +221,7 @@ impl SessionInfo<'_> {
     /// while let Some(peer_zid) = peers_zid.next() {}
     /// # })
     /// ```
-    // tags{rust.session_info.peers_zid api.session.peers_zid.get}
+    // tags{rust.session_info.peers_zid, api.session.peers_zid.get}
     pub fn peers_zid(&self) -> PeersZidBuilder<'_> {
         PeersZidBuilder {
             session: self.session.clone(),
