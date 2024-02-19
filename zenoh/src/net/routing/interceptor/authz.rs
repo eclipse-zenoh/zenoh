@@ -6,19 +6,15 @@ use std::net::Ipv4Addr;
 use std::str::FromStr;
 
 use fr_trie::glob::GlobMatcher;
-//use serde::ser::SerializeStruct;
-//use super::RoutingContext;
+
 use serde::{Deserialize, Serialize};
 use zenoh_config::ZenohId;
-//use zenoh_protocol::network::NetworkMessage;
 
 use fr_trie::glob::acl::Acl;
 use rustc_hash::FxHashMap;
 use zenoh_result::ZResult;
-//use fr_trie::glob::GlobMatcher;
-use fr_trie::trie::Trie;
 
-//use std::collections::HashMap;
+use fr_trie::trie::Trie;
 
 use bitflags::bitflags;
 
