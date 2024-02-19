@@ -70,6 +70,33 @@ impl Zeroize for SecretString {
 
 pub type SecretValue = Secret<SecretString>;
 
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(rename_all = "lowercase")]
+pub enum DownsamplingFlow {
+    Egress,
+    Ingress,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct DownsamplingRuleConf {
+    /// A list of key-expressions to which the downsampling will be applied.
+    /// Downsampling will be applied for all key extensions if the parameter is None
+    pub key_expr: OwnedKeyExpr,
+    /// The maximum frequency in Hertz;
+    pub rate: f64,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+pub struct DownsamplingItemConf {
+    /// A list of interfaces to which the downsampling will be applied
+    /// Downsampling will be applied for all interfaces if the parameter is None
+    pub interfaces: Option<Vec<String>>,
+    /// A list of interfaces to which the downsampling will be applied.
+    pub rules: Vec<DownsamplingRuleConf>,
+    /// Downsampling flow direction: egress, ingress
+    pub flow: DownsamplingFlow,
+}
+
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,
@@ -405,6 +432,10 @@ validated_struct::validator! {
             },
 
         },
+
+        /// Configuration of the downsampling.
+        downsampling: Vec<DownsamplingItemConf>,
+
         /// A list of directories where plugins may be searched for if no `__path__` was specified for them.
         /// The executable's current directory will be added to the search paths.
         plugins_search_dirs: Vec<String>, // TODO (low-prio): Switch this String to a PathBuf? (applies to other paths in the config as well)

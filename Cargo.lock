@@ -4707,6 +4707,7 @@ dependencies = [
  "zenoh-config",
  "zenoh-core",
  "zenoh-crypto",
+ "zenoh-keyexpr",
  "zenoh-link",
  "zenoh-macros",
  "zenoh-plugin-trait",
