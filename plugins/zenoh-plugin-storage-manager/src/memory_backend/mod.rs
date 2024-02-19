@@ -19,14 +19,28 @@ use zenoh::prelude::r#async::*;
 use zenoh::time::Timestamp;
 use zenoh_backend_traits::config::{StorageConfig, VolumeConfig};
 use zenoh_backend_traits::*;
+use zenoh_plugin_trait::{plugin_long_version, plugin_version, Plugin};
 use zenoh_result::ZResult;
 
-pub fn create_memory_backend(config: VolumeConfig) -> ZResult<Box<dyn Volume>> {
-    Ok(Box::new(MemoryBackend { config }))
-}
+use crate::MEMORY_BACKEND_NAME;
 
 pub struct MemoryBackend {
     config: VolumeConfig,
+}
+
+impl Plugin for MemoryBackend {
+    type StartArgs = VolumeConfig;
+    type Instance = VolumeInstance;
+
+    const DEFAULT_NAME: &'static str = MEMORY_BACKEND_NAME;
+    const PLUGIN_VERSION: &'static str = plugin_version!();
+    const PLUGIN_LONG_VERSION: &'static str = plugin_long_version!();
+
+    fn start(_: &str, args: &VolumeConfig) -> ZResult<VolumeInstance> {
+        Ok(Box::new(MemoryBackend {
+            config: args.clone(),
+        }))
+    }
 }
 
 #[async_trait]
@@ -43,7 +57,7 @@ impl Volume for MemoryBackend {
         }
     }
 
-    async fn create_storage(&mut self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
+    async fn create_storage(&self, properties: StorageConfig) -> ZResult<Box<dyn Storage>> {
         log::debug!("Create Memory Storage with configuration: {:?}", properties);
         Ok(Box::new(MemoryStorage::new(properties).await?))
     }

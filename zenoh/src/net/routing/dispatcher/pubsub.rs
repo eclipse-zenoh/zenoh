@@ -17,8 +17,8 @@ use super::tables::{NodeId, Route, RoutingExpr, Tables, TablesLock};
 use crate::net::routing::hat::HatTrait;
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::RwLock;
-use std::sync::{Arc, MutexGuard};
 use zenoh_core::zread;
 use zenoh_protocol::core::key_expr::{keyexpr, OwnedKeyExpr};
 use zenoh_protocol::network::declare::subscriber::ext::SubscriberInfo;
@@ -31,7 +31,7 @@ use zenoh_protocol::{
 use zenoh_sync::get_mut_unchecked;
 
 pub(crate) fn declare_subscription(
-    hat_code: &MutexGuard<'_, Box<dyn HatTrait + Send + Sync>>,
+    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
@@ -91,7 +91,7 @@ pub(crate) fn declare_subscription(
 }
 
 pub(crate) fn undeclare_subscription(
-    hat_code: &MutexGuard<'_, Box<dyn HatTrait + Send + Sync>>,
+    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
@@ -424,7 +424,6 @@ macro_rules! inc_stats {
     };
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn full_reentrant_route_data(
     tables_ref: &Arc<TablesLock>,
     face: &FaceState,

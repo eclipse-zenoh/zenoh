@@ -63,7 +63,7 @@ fn send_sourced_subscription_to_net_childs(
                                     node_id: routing_context,
                                 },
                                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                    id: 0, // TODO
+                                    id: 0, // @TODO use proper SubscriberId (#703)
                                     wire_expr: key_expr,
                                     ext_info: *sub_info,
                                 }),
@@ -106,7 +106,7 @@ fn propagate_simple_subscription_to(
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                    id: 0, // TODO
+                    id: 0, // @TODO use proper SubscriberId (#703)
                     wire_expr: key_expr,
                     ext_info: *sub_info,
                 }),
@@ -363,7 +363,7 @@ fn send_forget_sourced_subscription_to_net_childs(
                                     node_id: routing_context.unwrap_or(0),
                                 },
                                 body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                                    id: 0, // TODO
+                                    id: 0, // @TODO use proper SubscriberId (#703)
                                     ext_wire_expr: WireExprType { wire_expr },
                                 }),
                             },
@@ -387,7 +387,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper SubscriberId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
                     }),
                 },
@@ -426,7 +426,7 @@ fn propagate_forget_simple_subscription_to_peers(tables: &mut Tables, res: &Arc<
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::default(),
                         body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                            id: 0, // TODO
+                            id: 0, // @TODO use proper SubscriberId (#703)
                             ext_wire_expr: WireExprType { wire_expr },
                         }),
                     },
@@ -591,7 +591,7 @@ pub(super) fn undeclare_client_subscription(
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper SubscriberId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
                     }),
                 },
@@ -613,7 +613,7 @@ fn forget_client_subscription(
 
 pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     let sub_info = SubscriberInfo {
-        reliability: Reliability::Reliable, // @TODO
+        reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
         mode: Mode::Push,
     };
 
@@ -627,7 +627,7 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper SubscriberId (#703)
                         wire_expr: key_expr,
                         ext_info: sub_info,
                     }),
@@ -654,7 +654,7 @@ pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
                         ext_tstamp: None,
                         ext_nodeid: ext::NodeIdType::default(),
                         body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                            id: 0, // TODO
+                            id: 0, // @TODO use proper SubscriberId (#703)
                             wire_expr: key_expr,
                             ext_info: sub_info,
                         }),
@@ -731,7 +731,7 @@ pub(super) fn pubsub_tree_change(
                     for sub in subs {
                         if *sub == tree_id {
                             let sub_info = SubscriberInfo {
-                                reliability: Reliability::Reliable, // @TODO
+                                reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
                                 mode: Mode::Push,
                             };
                             send_sourced_subscription_to_net_childs(
@@ -795,7 +795,7 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                             ext_nodeid: ext::NodeIdType::default(),
                                             body: DeclareBody::UndeclareSubscriber(
                                                 UndeclareSubscriber {
-                                                    id: 0, // TODO
+                                                    id: 0, // @TODO use proper SubscriberId (#703)
                                                     ext_wire_expr: WireExprType { wire_expr },
                                                 },
                                             ),
@@ -810,7 +810,7 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                 face_hat_mut!(dst_face).local_subs.insert(res.clone());
                                 let key_expr = Resource::decl_key(res, dst_face);
                                 let sub_info = SubscriberInfo {
-                                    reliability: Reliability::Reliable, // TODO
+                                    reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
                                     mode: Mode::Push,
                                 };
                                 dst_face.primitives.send_declare(RoutingContext::with_expr(
@@ -819,7 +819,7 @@ pub(super) fn pubsub_linkstate_change(tables: &mut Tables, zid: &ZenohId, links:
                                         ext_tstamp: None,
                                         ext_nodeid: ext::NodeIdType::default(),
                                         body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                                            id: 0, // TODO
+                                            id: 0, // @TODO use proper SubscriberId (#703)
                                             wire_expr: key_expr,
                                             ext_info: sub_info,
                                         }),
@@ -920,6 +920,10 @@ impl HatPubSubTrait for HatCode {
             }
             _ => forget_client_subscription(tables, face, res),
         }
+    }
+
+    fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>> {
+        hat!(tables).router_subs.iter().cloned().collect()
     }
 
     fn compute_data_route(

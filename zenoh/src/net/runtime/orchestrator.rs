@@ -47,7 +47,7 @@ pub enum Loop {
 
 impl Runtime {
     pub(crate) async fn start(&mut self) -> ZResult<()> {
-        match self.whatami {
+        match self.whatami() {
             WhatAmI::Client => self.start_client().await,
             WhatAmI::Peer => self.start_peer().await,
             WhatAmI::Router => self.start_router().await,
@@ -56,7 +56,7 @@ impl Runtime {
 
     async fn start_client(&self) -> ZResult<()> {
         let (peers, scouting, addr, ifaces, timeout) = {
-            let guard = self.config.lock();
+            let guard = self.state.config.lock();
             (
                 guard.connect().endpoints().clone(),
                 unwrap_or_default!(guard.scouting().multicast().enabled()),
@@ -110,12 +110,13 @@ impl Runtime {
 
     async fn start_peer(&self) -> ZResult<()> {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces, delay) = {
-            let guard = &self.config.lock();
+            let guard = &self.state.config.lock();
             let listeners = if guard.listen().endpoints().is_empty() {
                 let endpoint: EndPoint = PEER_DEFAULT_LISTENER.parse().unwrap();
                 let protocol = endpoint.protocol();
                 let mut listeners = vec![];
                 if self
+                    .state
                     .manager
                     .config
                     .protocols
@@ -155,12 +156,13 @@ impl Runtime {
 
     async fn start_router(&self) -> ZResult<()> {
         let (listeners, peers, scouting, listen, autoconnect, addr, ifaces) = {
-            let guard = self.config.lock();
+            let guard = self.state.config.lock();
             let listeners = if guard.listen().endpoints().is_empty() {
                 let endpoint: EndPoint = ROUTER_DEFAULT_LISTENER.parse().unwrap();
                 let protocol = endpoint.protocol();
                 let mut listeners = vec![];
                 if self
+                    .state
                     .manager
                     .config
                     .protocols
@@ -241,10 +243,10 @@ impl Runtime {
     }
 
     pub(crate) async fn update_peers(&self) -> ZResult<()> {
-        let peers = { self.config.lock().connect().endpoints().clone() };
+        let peers = { self.state.config.lock().connect().endpoints().clone() };
         let tranports = self.manager().get_transports_unicast().await;
 
-        if self.whatami == WhatAmI::Client {
+        if self.state.whatami == WhatAmI::Client {
             for transport in tranports {
                 let should_close = if let Ok(Some(orch_transport)) = transport.get_callback() {
                     if let Some(orch_transport) = orch_transport
@@ -301,7 +303,7 @@ impl Runtime {
             }
         }
 
-        let mut locators = self.locators.write().unwrap();
+        let mut locators = self.state.locators.write().unwrap();
         *locators = self.manager().get_locators();
         for locator in &*locators {
             log::info!("Zenoh can be reached at: {}", locator);
@@ -771,7 +773,7 @@ impl Runtime {
             if let Ok(msg) = res {
                 log::trace!("Received {:?} from {}", msg.body, peer);
                 if let ScoutingBody::Scout(Scout { what, .. }) = &msg.body {
-                    if what.matches(self.whatami) {
+                    if what.matches(self.whatami()) {
                         let mut wbuf = vec![];
                         let mut writer = wbuf.writer();
                         let codec = Zenoh080::new();
@@ -779,7 +781,7 @@ impl Runtime {
                         let zid = self.manager().zid();
                         let hello: ScoutingMessage = Hello {
                             version: zenoh_protocol::VERSION,
-                            whatami: self.whatami,
+                            whatami: self.whatami(),
                             zid,
                             locators: self.get_locators(),
                         }
@@ -811,7 +813,7 @@ impl Runtime {
     }
 
     pub(super) fn closing_session(session: &RuntimeSession) {
-        match session.runtime.whatami {
+        match session.runtime.whatami() {
             WhatAmI::Client => {
                 let runtime = session.runtime.clone();
                 session.runtime.spawn(async move {
@@ -827,7 +829,16 @@ impl Runtime {
             }
             _ => {
                 if let Some(endpoint) = &*zread!(session.endpoint) {
-                    let peers = { session.runtime.config.lock().connect().endpoints().clone() };
+                    let peers = {
+                        session
+                            .runtime
+                            .state
+                            .config
+                            .lock()
+                            .connect()
+                            .endpoints()
+                            .clone()
+                    };
                     if peers.contains(endpoint) {
                         let endpoint = endpoint.clone();
                         let runtime = session.runtime.clone();

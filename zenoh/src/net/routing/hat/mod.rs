@@ -44,7 +44,7 @@ mod p2p_peer;
 mod router;
 
 zconfigurable! {
-    static ref TREES_COMPUTATION_DELAY: u64 = 100;
+    pub static ref TREES_COMPUTATION_DELAY_MS: u64 = 100;
 }
 
 pub(crate) trait HatTrait: HatBaseTrait + HatPubSubTrait + HatQueriesTrait {}
@@ -52,7 +52,6 @@ pub(crate) trait HatTrait: HatBaseTrait + HatPubSubTrait + HatQueriesTrait {}
 pub(crate) trait HatBaseTrait {
     fn as_any(&self) -> &dyn Any;
 
-    #[allow(clippy::too_many_arguments)]
     fn init(&self, tables: &mut Tables, runtime: Runtime);
 
     fn new_tables(&self, router_peers_failover_brokering: bool) -> Box<dyn Any + Send + Sync>;
@@ -101,6 +100,8 @@ pub(crate) trait HatBaseTrait {
         expr: &mut RoutingExpr,
     ) -> bool;
 
+    fn info(&self, tables: &Tables, kind: WhatAmI) -> String;
+
     fn closing(
         &self,
         tables: &mut Tables,
@@ -127,6 +128,8 @@ pub(crate) trait HatPubSubTrait {
         res: &mut Arc<Resource>,
         node_id: NodeId,
     );
+
+    fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>>;
 
     fn compute_data_route(
         &self,
@@ -155,6 +158,9 @@ pub(crate) trait HatQueriesTrait {
         res: &mut Arc<Resource>,
         node_id: NodeId,
     );
+
+    fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>>;
+
     fn compute_query_route(
         &self,
         tables: &Tables,

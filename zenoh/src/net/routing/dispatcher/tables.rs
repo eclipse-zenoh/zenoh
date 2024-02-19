@@ -72,7 +72,7 @@ pub struct Tables {
     pub(crate) interceptors: Vec<InterceptorFactory>,
     pub(crate) pull_caches_lock: Mutex<()>,
     pub(crate) hat: Box<dyn Any + Send + Sync>,
-    pub(crate) hat_code: Arc<dyn HatTrait + Send + Sync>, // TODO make this a Box
+    pub(crate) hat_code: Arc<dyn HatTrait + Send + Sync>, // @TODO make this a Box
 }
 
 impl Tables {
@@ -108,12 +108,12 @@ impl Tables {
         &self.root_res
     }
 
+    #[cfg(test)]
     pub fn print(&self) -> String {
         Resource::print_tree(&self.root_res)
     }
 
     #[inline]
-    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub(crate) fn get_mapping<'a>(
         &'a self,
         face: &'a FaceState,
@@ -127,7 +127,6 @@ impl Tables {
     }
 
     #[inline]
-    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub(crate) fn get_sent_mapping<'a>(
         &'a self,
         face: &'a FaceState,

@@ -98,7 +98,6 @@ pub(super) struct Network {
 }
 
 impl Network {
-    #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
         name: String,
         zid: ZenohId,
@@ -112,7 +111,7 @@ impl Network {
         log::debug!("{} Add node (self) {}", name, zid);
         let idx = graph.add_node(Node {
             zid,
-            whatami: Some(runtime.whatami),
+            whatami: Some(runtime.whatami()),
             locators: None,
             sn: 1,
             links: vec![],
@@ -285,7 +284,6 @@ impl Network {
         };
 
         // register psid<->zid mappings & apply mapping to nodes
-        #[allow(clippy::needless_collect)] // need to release borrow on self
         let link_states = link_states
             .into_iter()
             .filter_map(|link_state| {

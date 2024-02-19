@@ -39,6 +39,7 @@ use crate::{
         protocol::linkstate::LinkStateList,
         routing::{
             dispatcher::face::Face,
+            hat::TREES_COMPUTATION_DELAY_MS,
             router::{
                 compute_data_routes, compute_matching_pulls, compute_query_routes, RoutesIndexes,
             },
@@ -65,10 +66,6 @@ use zenoh_transport::unicast::TransportUnicast;
 mod network;
 mod pubsub;
 mod queries;
-
-zconfigurable! {
-    static ref TREES_COMPUTATION_DELAY: u64 = 100;
-}
 
 macro_rules! hat {
     ($t:expr) => {
@@ -247,8 +244,10 @@ impl HatTables {
             || (net_type == WhatAmI::Peer && self.peers_trees_task.is_none())
         {
             let task = Some(async_std::task::spawn(async move {
-                async_std::task::sleep(std::time::Duration::from_millis(*TREES_COMPUTATION_DELAY))
-                    .await;
+                async_std::task::sleep(std::time::Duration::from_millis(
+                    *TREES_COMPUTATION_DELAY_MS,
+                ))
+                .await;
                 let mut tables = zwrite!(tables_ref.tables);
 
                 log::trace!("Compute trees");
@@ -283,7 +282,7 @@ pub(crate) struct HatCode {}
 
 impl HatBaseTrait for HatCode {
     fn init(&self, tables: &mut Tables, runtime: Runtime) {
-        let config = runtime.config.lock();
+        let config = runtime.config().lock();
         let whatami = tables.whatami;
         let gossip = unwrap_or_default!(config.scouting().gossip().enabled());
         let gossip_multihop = unwrap_or_default!(config.scouting().gossip().multihop());
@@ -735,6 +734,22 @@ impl HatBaseTrait for HatCode {
                     || hat!(tables).failover_brokering(src_face.zid, out_face.zid));
         }
         false
+    }
+
+    fn info(&self, tables: &Tables, kind: WhatAmI) -> String {
+        match kind {
+            WhatAmI::Router => hat!(tables)
+                .routers_net
+                .as_ref()
+                .map(|net| net.dot())
+                .unwrap_or_else(|| "graph {}".to_string()),
+            WhatAmI::Peer => hat!(tables)
+                .peers_net
+                .as_ref()
+                .map(|net| net.dot())
+                .unwrap_or_else(|| "graph {}".to_string()),
+            _ => "graph {}".to_string(),
+        }
     }
 }
 

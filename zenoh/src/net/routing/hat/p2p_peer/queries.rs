@@ -22,7 +22,7 @@ use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use ordered_float::OrderedFloat;
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use zenoh_buffers::ZBuf;
 use zenoh_protocol::core::key_expr::include::{Includer, DEFAULT_INCLUDER};
@@ -100,7 +100,7 @@ fn propagate_simple_queryable(
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::DeclareQueryable(DeclareQueryable {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper QueryableId (#703)
                         wire_expr: key_expr,
                         ext_info: info,
                     }),
@@ -170,7 +170,7 @@ fn propagate_forget_simple_queryable(tables: &mut Tables, res: &mut Arc<Resource
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper QueryableId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
                     }),
                 },
@@ -211,7 +211,7 @@ pub(super) fn undeclare_client_queryable(
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareQueryable(UndeclareQueryable {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper QueryableId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
                     }),
                 },
@@ -270,6 +270,16 @@ impl HatQueriesTrait for HatCode {
         forget_client_queryable(tables, face, res);
     }
 
+    fn get_queryables(&self, tables: &Tables) -> Vec<Arc<Resource>> {
+        let mut qabls = HashSet::new();
+        for src_face in tables.faces.values() {
+            for qabl in &face_hat!(src_face).remote_qabls {
+                qabls.insert(qabl.clone());
+            }
+        }
+        Vec::from_iter(qabls)
+    }
+
     fn compute_query_route(
         &self,
         tables: &Tables,
@@ -306,17 +316,26 @@ impl HatQueriesTrait for HatCode {
             let mres = mres.upgrade().unwrap();
             let complete = DEFAULT_INCLUDER.includes(mres.expr().as_bytes(), key_expr.as_bytes());
             for (sid, context) in &mres.session_ctxs {
-                let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
-                if let Some(qabl_info) = context.qabl.as_ref() {
-                    route.push(QueryTargetQabl {
-                        direction: (context.face.clone(), key_expr.to_owned(), NodeId::default()),
-                        complete: if complete {
-                            qabl_info.complete as u64
-                        } else {
-                            0
-                        },
-                        distance: 0.5,
-                    });
+                if match tables.whatami {
+                    WhatAmI::Router => context.face.whatami != WhatAmI::Router,
+                    _ => source_type == WhatAmI::Client || context.face.whatami == WhatAmI::Client,
+                } {
+                    let key_expr = Resource::get_best_key(expr.prefix, expr.suffix, *sid);
+                    if let Some(qabl_info) = context.qabl.as_ref() {
+                        route.push(QueryTargetQabl {
+                            direction: (
+                                context.face.clone(),
+                                key_expr.to_owned(),
+                                NodeId::default(),
+                            ),
+                            complete: if complete {
+                                qabl_info.complete as u64
+                            } else {
+                                0
+                            },
+                            distance: 0.5,
+                        });
+                    }
                 }
             }
         }

@@ -115,15 +115,16 @@ dependencies = [
 
 [[package]]
 name = "ahash"
-version = "0.8.3"
+version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c99f64d1e06488f620f932677e24bc6e2897582980441ae90a671415bd7ec2f"
+checksum = "77c3a9648d43b9cd48db467b3f87fdd6e146bcc88ab0180006cef2179fe11d01"
 dependencies = [
  "cfg-if 1.0.0",
  "getrandom 0.2.10",
  "once_cell",
  "serde",
  "version_check",
+ "zerocopy",
 ]
 
 [[package]]
@@ -4051,9 +4052,9 @@ dependencies = [
 
 [[package]]
 name = "unsafe-libyaml"
-version = "0.2.9"
+version = "0.2.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f28467d3e1d3c6586d8f25fa243f544f5800fec42d97032474e17222c2b75cfa"
+checksum = "ab4c90930b95a82d00dc9e9ac071b4991924390d46cbd0dfe566148667605e4b"
 
 [[package]]
 name = "untrusted"
@@ -4609,6 +4610,7 @@ dependencies = [
  "zenoh-config",
  "zenoh-core",
  "zenoh-crypto",
+ "zenoh-keyexpr",
  "zenoh-link",
  "zenoh-macros",
  "zenoh-plugin-trait",
@@ -4618,6 +4620,27 @@ dependencies = [
  "zenoh-sync",
  "zenoh-transport",
  "zenoh-util",
+]
+
+[[package]]
+name = "zenoh-backend-example"
+version = "0.11.0-dev"
+dependencies = [
+ "async-std",
+ "async-trait",
+ "clap",
+ "const_format",
+ "env_logger",
+ "futures",
+ "git-version",
+ "log",
+ "serde_json",
+ "zenoh",
+ "zenoh-core",
+ "zenoh-plugin-trait",
+ "zenoh-result",
+ "zenoh-util",
+ "zenoh_backend_traits",
 ]
 
 [[package]]
@@ -4729,6 +4752,7 @@ dependencies = [
 name = "zenoh-keyexpr"
 version = "0.11.0-dev"
 dependencies = [
+ "ahash",
  "criterion",
  "hashbrown 0.14.0",
  "keyed-set",
@@ -4955,8 +4979,10 @@ version = "0.11.0-dev"
 dependencies = [
  "async-std",
  "clap",
+ "const_format",
  "env_logger",
  "futures",
+ "git-version",
  "log",
  "serde_json",
  "zenoh",
@@ -4974,6 +5000,7 @@ dependencies = [
  "async-std",
  "base64 0.21.4",
  "clap",
+ "const_format",
  "env_logger",
  "flume",
  "futures",
@@ -5001,6 +5028,7 @@ dependencies = [
  "async-std",
  "async-trait",
  "clap",
+ "const_format",
  "crc",
  "derive-new",
  "env_logger",
@@ -5008,7 +5036,6 @@ dependencies = [
  "futures",
  "git-version",
  "jsonschema",
- "lazy_static",
  "libloading",
  "log",
  "rustc_version 0.4.0",
@@ -5030,9 +5057,12 @@ dependencies = [
 name = "zenoh-plugin-trait"
 version = "0.11.0-dev"
 dependencies = [
+ "const_format",
  "libloading",
  "log",
+ "serde",
  "serde_json",
+ "zenoh-keyexpr",
  "zenoh-macros",
  "zenoh-result",
  "zenoh-util",
@@ -5152,10 +5182,12 @@ version = "0.11.0-dev"
 dependencies = [
  "async-std",
  "async-trait",
+ "const_format",
  "derive_more",
  "schemars",
  "serde_json",
  "zenoh",
+ "zenoh-plugin-trait",
  "zenoh-result",
  "zenoh-util",
 ]
@@ -5175,6 +5207,27 @@ dependencies = [
  "rand 0.8.5",
  "rustc_version 0.4.0",
  "zenoh",
+ "zenoh_backend_traits",
+]
+
+[[package]]
+name = "zerocopy"
+version = "0.7.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "74d4d3961e53fa4c9a25a8637fc2bfaf2595b3d3ae34875568a5cf64787716be"
+dependencies = [
+ "zerocopy-derive",
+]
+
+[[package]]
+name = "zerocopy-derive"
+version = "0.7.32"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9ce1b18ccd8e73a9321186f97e46f9f04b778851177567b1975109d26a08d2a6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.33",
 ]
 
 [[package]]

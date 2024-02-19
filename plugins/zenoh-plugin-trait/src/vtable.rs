@@ -11,106 +11,76 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use crate::*;
-pub use no_mangle::*;
 use zenoh_result::ZResult;
 
-pub type PluginVTableVersion = u16;
-type LoadPluginResultInner = Result<PluginVTableInner<(), ()>, PluginVTableVersion>;
-pub type LoadPluginResult<A, B> = Result<PluginVTable<A, B>, PluginVTableVersion>;
+use crate::{Plugin, StructVersion, FEATURES};
 
-/// This number should change any time the internal structure of [`PluginVTable`] changes
-pub const PLUGIN_VTABLE_VERSION: PluginVTableVersion = 1;
+pub type PluginLoaderVersion = u64;
+pub const PLUGIN_LOADER_VERSION: PluginLoaderVersion = 1;
 
-type StartFn<StartArgs, RunningPlugin> = fn(&str, &StartArgs) -> ZResult<RunningPlugin>;
+type StartFn<StartArgs, Instance> = fn(&str, &StartArgs) -> ZResult<Instance>;
 
 #[repr(C)]
-struct PluginVTableInner<StartArgs, RunningPlugin> {
-    start: StartFn<StartArgs, RunningPlugin>,
-    compatibility: fn() -> ZResult<crate::Compatibility>,
+pub struct PluginVTable<StartArgs, Instance> {
+    pub plugin_version: &'static str,
+    pub plugin_long_version: &'static str,
+    pub start: StartFn<StartArgs, Instance>,
 }
-
-/// Automagical padding such that [PluginVTable::init]'s result is the size of a cache line
-#[repr(C)]
-struct PluginVTablePadding {
-    __padding: [u8; PluginVTablePadding::padding_length()],
-}
-impl PluginVTablePadding {
-    const fn padding_length() -> usize {
-        64 - std::mem::size_of::<LoadPluginResultInner>()
+impl<StartArgs, Instance> StructVersion for PluginVTable<StartArgs, Instance> {
+    fn struct_version() -> u64 {
+        1
     }
-    fn new() -> Self {
-        PluginVTablePadding {
-            __padding: [0; Self::padding_length()],
+    fn struct_features() -> &'static str {
+        FEATURES
+    }
+}
+
+impl<StartArgs, Instance> PluginVTable<StartArgs, Instance> {
+    pub fn new<ConcretePlugin: Plugin<StartArgs = StartArgs, Instance = Instance>>() -> Self {
+        Self {
+            plugin_version: ConcretePlugin::PLUGIN_VERSION,
+            plugin_long_version: ConcretePlugin::PLUGIN_LONG_VERSION,
+            start: ConcretePlugin::start,
         }
     }
 }
 
-/// For use with dynamically loaded plugins. Its size will not change accross versions, but its internal structure might.
+/// This macro adds non-mangled functions which provides plugin version and loads it into the host.
+/// If plugin library should work also as static, consider calling this macro under feature condition
 ///
-/// To ensure compatibility, its size and alignment must allow `size_of::<Result<PluginVTable, PluginVTableVersion>>() == 64` (one cache line).
-#[repr(C)]
-pub struct PluginVTable<StartArgs, RunningPlugin> {
-    inner: PluginVTableInner<StartArgs, RunningPlugin>,
-    padding: PluginVTablePadding,
-}
-
-impl<StartArgs, RunningPlugin> PluginVTable<StartArgs, RunningPlugin> {
-    pub fn new<ConcretePlugin: Plugin<StartArgs = StartArgs, RunningPlugin = RunningPlugin>>(
-    ) -> Self {
-        PluginVTable {
-            inner: PluginVTableInner {
-                start: ConcretePlugin::start,
-                compatibility: ConcretePlugin::compatibility,
-            },
-            padding: PluginVTablePadding::new(),
+/// The funcitons declared by this macro are:
+///
+/// - `get_plugin_loader_version` - returns `PLUGIN_LOADER_VERSION` const of the crate. The [`PluginsManager`](crate::manager::PluginsManager)
+///    will check if this version is compatible with the host.
+/// - `get_compatibility` - returns [`Compatibility`](crate::Compatibility) struct which contains all version information (Rust compiler version, features used, version of plugin's structures).
+///    The layout  of this structure is guaranteed to be stable until the [`PLUGIN_LOADER_VERSION`](crate::PLUGIN_LOADER_VERSION) is changed,
+///    so it's safe to use it in the host after call to `get_plugin_loader_version` returns compatible version.
+///    Then the [`PluginsManager`](crate::manager::PluginsManager) compares the returned [`Compatibility`](crate::Compatibility) with it's own and decides if it can continue loading the plugin.
+/// - `load_plugin` - returns [`PluginVTable`](crate::PluginVTable) which is able to create plugin's instance.
+///
+#[macro_export]
+macro_rules! declare_plugin {
+    ($ty: path) => {
+        #[no_mangle]
+        fn get_plugin_loader_version() -> $crate::PluginLoaderVersion {
+            $crate::PLUGIN_LOADER_VERSION
         }
-    }
 
-    /// Ensures [PluginVTable]'s size stays the same between versions
-    fn __size_check() {
-        unsafe {
-            std::mem::transmute::<_, [u8; 64]>(std::mem::MaybeUninit::<
-                Result<Self, PluginVTableVersion>,
-            >::uninit())
-        };
-    }
+        #[no_mangle]
+        fn get_compatibility() -> $crate::Compatibility {
+            $crate::Compatibility::with_plugin_version::<
+                <$ty as $crate::Plugin>::StartArgs,
+                <$ty as $crate::Plugin>::Instance,
+                $ty,
+            >()
+        }
 
-    pub fn start(&self, name: &str, start_args: &StartArgs) -> ZResult<RunningPlugin> {
-        (self.inner.start)(name, start_args)
-    }
-    pub fn compatibility(&self) -> ZResult<Compatibility> {
-        (self.inner.compatibility)()
-    }
-}
-
-pub use no_mangle::*;
-#[cfg(feature = "no_mangle")]
-pub mod no_mangle {
-    /// This macro will add a non-mangled `load_plugin` function to the library if feature `no_mangle` is enabled (which it is by default).
-    #[macro_export]
-    macro_rules! declare_plugin {
-        ($ty: path) => {
-            #[no_mangle]
-            fn load_plugin(
-                version: $crate::prelude::PluginVTableVersion,
-            ) -> $crate::prelude::LoadPluginResult<
-                <$ty as $crate::prelude::Plugin>::StartArgs,
-                <$ty as $crate::prelude::Plugin>::RunningPlugin,
-            > {
-                if version == $crate::prelude::PLUGIN_VTABLE_VERSION {
-                    Ok($crate::prelude::PluginVTable::new::<$ty>())
-                } else {
-                    Err($crate::prelude::PLUGIN_VTABLE_VERSION)
-                }
-            }
-        };
-    }
-}
-#[cfg(not(feature = "no_mangle"))]
-pub mod no_mangle {
-    #[macro_export]
-    macro_rules! declare_plugin {
-        ($ty: path) => {};
-    }
+        #[no_mangle]
+        fn load_plugin() -> $crate::PluginVTable<
+            <$ty as $crate::Plugin>::StartArgs,
+            <$ty as $crate::Plugin>::Instance,
+        > {
+            $crate::PluginVTable::new::<$ty>()
+        }
+    };
 }

@@ -1,5 +1,3 @@
-use crate::net::routing::RoutingContext;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -15,6 +13,7 @@ use crate::net::routing::RoutingContext;
 //
 use super::face::FaceState;
 use super::tables::{Tables, TablesLock};
+use crate::net::routing::RoutingContext;
 use std::any::Any;
 use std::collections::HashMap;
 use std::convert::TryInto;
@@ -214,12 +213,7 @@ impl Resource {
 
     pub fn expr(&self) -> String {
         match &self.parent {
-            // Some(parent) => parent.expr() + &self.suffix,
-            Some(parent) => {
-                let mut string = parent.expr();
-                string.push_str(&self.suffix);
-                string
-            }
+            Some(parent) => parent.expr() + &self.suffix,
             None => String::from(""),
         }
     }
@@ -317,6 +311,7 @@ impl Resource {
         }
     }
 
+    #[cfg(test)]
     pub fn print_tree(from: &Arc<Resource>) -> String {
         let mut result = from.expr();
         result.push('\n');

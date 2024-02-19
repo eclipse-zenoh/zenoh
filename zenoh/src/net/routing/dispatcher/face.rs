@@ -32,7 +32,6 @@ pub struct FaceState {
     pub(crate) id: usize,
     pub(crate) zid: ZenohId,
     pub(crate) whatami: WhatAmI,
-    pub(super) local: bool,
     #[cfg(feature = "stats")]
     pub(crate) stats: Option<Arc<TransportStats>>,
     pub(crate) primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
@@ -45,12 +44,10 @@ pub struct FaceState {
 }
 
 impl FaceState {
-    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         id: usize,
         zid: ZenohId,
         whatami: WhatAmI,
-        local: bool,
         #[cfg(feature = "stats")] stats: Option<Arc<TransportStats>>,
         primitives: Arc<dyn crate::net::primitives::EPrimitives + Send + Sync>,
         mcast_group: Option<TransportMulticast>,
@@ -60,7 +57,6 @@ impl FaceState {
             id,
             zid,
             whatami,
-            local,
             #[cfg(feature = "stats")]
             stats,
             primitives,
@@ -74,12 +70,6 @@ impl FaceState {
     }
 
     #[inline]
-    pub fn is_local(&self) -> bool {
-        self.local
-    }
-
-    #[inline]
-    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub(crate) fn get_mapping(
         &self,
         prefixid: &ExprId,
@@ -92,7 +82,6 @@ impl FaceState {
     }
 
     #[inline]
-    #[allow(clippy::trivially_copy_pass_by_ref)]
     pub(crate) fn get_sent_mapping(
         &self,
         prefixid: &ExprId,
@@ -137,7 +126,7 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::DeclareSubscriber(m) => {
                 declare_subscription(
-                    &ctrl_lock,
+                    ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     &m.wire_expr,
@@ -147,7 +136,7 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::UndeclareSubscriber(m) => {
                 undeclare_subscription(
-                    &ctrl_lock,
+                    ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     &m.ext_wire_expr.wire_expr,
@@ -156,7 +145,7 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::DeclareQueryable(m) => {
                 declare_queryable(
-                    &ctrl_lock,
+                    ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     &m.wire_expr,
@@ -166,7 +155,7 @@ impl Primitives for Face {
             }
             zenoh_protocol::network::DeclareBody::UndeclareQueryable(m) => {
                 undeclare_queryable(
-                    &ctrl_lock,
+                    ctrl_lock.as_ref(),
                     &self.tables,
                     &mut self.state.clone(),
                     &m.ext_wire_expr.wire_expr,

@@ -1,0 +1,88 @@
+name: Update release project
+
+on:
+  issues:
+    types: [opened, edited, labeled]
+  pull_request_target:
+    types: [closed]
+    branches:
+      - main
+  workflow_call:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  main:
+    name: Add relevant issue to the release project
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the latest release project
+        id: get-project-url
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.BOT_TOKEN_WORKFLOW }}
+          result-encoding: string
+          script: |
+            const query = `query ($login: String!) {
+              organization(login: $login) {
+                projectsV2(first: 100, orderBy: {direction: DESC, field: NUMBER}) {
+                  nodes {
+                    title
+                    url
+                  }
+                }
+              }
+            }`;
+
+            const projects = await github.graphql(query, {
+              login: context.repo.owner
+            });
+
+            const result = projects
+              .organization
+              .projectsV2
+              .nodes
+              .find(p => /zenoh [\w\.\-\+]+ release/i.test(p.title))
+              .url;
+
+            core.info(`Using release project ${result}`)
+            return result;
+
+      - if: ${{ github.event_name == 'issues' }}
+        name: Is the issue author a contributor?
+        id: author-is-contributor
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const contributors = await github.rest.repos.listContributors({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+
+            const login = "${{ github.event.issue.user.login }}";
+
+            const result = contributors
+              .data
+              .map(c => c.login)
+              .includes(login);
+
+            core.info(`Is the issue author ${login} a contributor? ${result}`);
+            return result;
+
+      - if: ${{ github.event_name == 'issues' && steps.author-is-contributor.outputs.result == 'true' }}
+        name: Add issue to the release project if it has a release label
+        uses: actions/add-to-project@v0.5.0
+        with:
+          github-token: ${{ secrets.BOT_TOKEN_WORKFLOW }}
+          project-url: ${{ steps.get-project-url.outputs.result }}
+          labeled: release
+
+      - if: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.merged == 'true' }}
+        name: Add pull request to the release project
+        uses: actions/add-to-project@v0.5.0
+        with:
+          github-token: ${{ secrets.BOT_TOKEN_WORKFLOW }}
+          project-url: ${{ steps.get-project-url.outputs.result }}

@@ -25,7 +25,7 @@ description = "The zenoh storages plugin."
 
 [features]
 default = ["no_mangle"]
-no_mangle = ["zenoh-plugin-trait/no_mangle"]
+no_mangle = []
 
 [lib]
 name = "zenoh_plugin_storage_manager"
@@ -36,18 +36,18 @@ async-std = { workspace = true, features = ["default"] }
 async-trait = { workspace = true }
 clap = { workspace = true }
 crc = { workspace = true }
+const_format = { workspace = true }
 derive-new = { workspace = true }
 env_logger = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
 git-version = { workspace = true }
-lazy_static = { workspace = true }
 libloading = { workspace = true }
 log = { workspace = true }
 serde = { workspace = true, features = ["default"] }
 serde_json = { workspace = true }
 urlencoding = { workspace = true }
-zenoh = { workspace = true, features = [ "unstable" ] }
+zenoh = { workspace = true, features = ["unstable"] }
 zenoh-collections = { workspace = true }
 zenoh-core = { workspace = true }
 zenoh-keyexpr = { workspace = true }
@@ -70,7 +70,7 @@ async-global-executor = { workspace = true }
 [package.metadata.deb]
 name = "zenoh-plugin-storage-manager"
 maintainer = "zenoh-dev@eclipse.org"
-copyright = "2022 ZettaScale Technology"
+copyright = "2024 ZettaScale Technology"
 section = "net"
 license-file = ["../../LICENSE", "0"]
-depends = "zenohd (=0.11.0-dev)"
+depends = "zenohd (=0.11.0-dev-1)"

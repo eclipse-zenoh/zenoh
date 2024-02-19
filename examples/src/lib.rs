@@ -20,9 +20,9 @@ pub struct CommonArgs {
     #[arg(short, long)]
     /// A configuration file.
     config: Option<String>,
-    #[arg(short, long, default_value = "peer")]
-    /// The Zenoh session mode.
-    mode: Wai,
+    #[arg(short, long)]
+    /// The Zenoh session mode [default: peer].
+    mode: Option<Wai>,
     #[arg(short = 'e', long)]
     /// Endpoints to connect to.
     connect: Vec<String>,
@@ -49,9 +49,10 @@ impl From<&CommonArgs> for Config {
             None => Config::default(),
         };
         match value.mode {
-            Wai::Peer => config.set_mode(Some(zenoh::scouting::WhatAmI::Peer)),
-            Wai::Client => config.set_mode(Some(zenoh::scouting::WhatAmI::Client)),
-            Wai::Router => config.set_mode(Some(zenoh::scouting::WhatAmI::Router)),
+            Some(Wai::Peer) => config.set_mode(Some(zenoh::scouting::WhatAmI::Peer)),
+            Some(Wai::Client) => config.set_mode(Some(zenoh::scouting::WhatAmI::Client)),
+            Some(Wai::Router) => config.set_mode(Some(zenoh::scouting::WhatAmI::Router)),
+            None => Ok(None),
         }
         .unwrap();
         if !value.connect.is_empty() {

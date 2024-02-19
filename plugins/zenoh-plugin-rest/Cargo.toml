@@ -25,7 +25,7 @@ description = "The zenoh REST plugin"
 
 [features]
 default = ["no_mangle"]
-no_mangle = ["zenoh-plugin-trait/no_mangle"]
+no_mangle = []
 
 [lib]
 name = "zenoh_plugin_rest"
@@ -36,6 +36,7 @@ anyhow = { workspace = true, features = ["default"] }
 async-std = { workspace = true, features = ["default"] }
 base64 = { workspace = true }
 clap = { workspace = true }
+const_format = { workspace = true }
 env_logger = { workspace = true }
 flume = { workspace = true }
 futures = { workspace = true }
@@ -66,7 +67,7 @@ path = "examples/z_serve_sse.rs"
 [package.metadata.deb]
 name = "zenoh-plugin-rest"
 maintainer = "zenoh-dev@eclipse.org"
-copyright = "2022 ZettaScale Technology"
+copyright = "2024 ZettaScale Technology"
 section = "net"
 license-file = ["../../LICENSE", "0"]
-depends = "zenohd (=0.11.0-dev)"
+depends = "zenohd (=0.11.0-dev-1)"

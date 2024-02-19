@@ -1,6 +1,3 @@
-use crate::net::routing::hat::HatTrait;
-use crate::net::routing::RoutingContext;
-
 //
 // Copyright (c) 2023 ZettaScale Technology
 //
@@ -18,9 +15,11 @@ use super::face::FaceState;
 use super::resource::{QueryRoute, QueryRoutes, QueryTargetQablSet, Resource};
 use super::tables::NodeId;
 use super::tables::{RoutingExpr, Tables, TablesLock};
+use crate::net::routing::hat::HatTrait;
+use crate::net::routing::RoutingContext;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use std::sync::{Arc, MutexGuard, Weak};
+use std::sync::{Arc, Weak};
 use zenoh_config::WhatAmI;
 use zenoh_protocol::core::key_expr::keyexpr;
 use zenoh_protocol::network::declare::queryable::ext::QueryableInfo;
@@ -42,7 +41,7 @@ pub(crate) struct Query {
 }
 
 pub(crate) fn declare_queryable(
-    hat_code: &MutexGuard<'_, Box<dyn HatTrait + Send + Sync>>,
+    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
@@ -99,7 +98,7 @@ pub(crate) fn declare_queryable(
 }
 
 pub(crate) fn undeclare_queryable(
-    hat_code: &MutexGuard<'_, Box<dyn HatTrait + Send + Sync>>,
+    hat_code: &(dyn HatTrait + Send + Sync),
     tables: &TablesLock,
     face: &mut Arc<FaceState>,
     expr: &WireExpr,
@@ -484,7 +483,6 @@ macro_rules! inc_res_stats {
     };
 }
 
-#[allow(clippy::too_many_arguments)]
 pub fn route_query(
     tables_ref: &Arc<TablesLock>,
     face: &Arc<FaceState>,
@@ -567,7 +565,7 @@ pub fn route_query(
                                 ext_tstamp: None,
                                 ext_respid: Some(response::ext::ResponderIdType {
                                     zid,
-                                    eid: 0, // TODO
+                                    eid: 0, // @TODO use proper ResponderId (#703)
                                 }),
                             },
                             expr.full_expr().to_string(),
@@ -616,7 +614,7 @@ pub fn route_query(
                                 Request {
                                     id: *qid,
                                     wire_expr: key_expr.into(),
-                                    ext_qos: ext::QoSType::request_default(), // TODO
+                                    ext_qos: ext::QoSType::request_default(),
                                     ext_tstamp: None,
                                     ext_nodeid: ext::NodeIdType { node_id: *context },
                                     ext_target: *t,
@@ -695,12 +693,11 @@ pub fn route_query(
                         ext_tstamp: None,
                     },
                     "".to_string(),
-                )); // TODO
+                ));
         }
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn route_send_response(
     tables_ref: &Arc<TablesLock>,
     face: &mut Arc<FaceState>,
@@ -743,8 +740,8 @@ pub(crate) fn route_send_response(
                         ext_tstamp: None,
                         ext_respid,
                     },
-                    "".to_string(),
-                )); // TODO
+                    "".to_string(), // @TODO provide the proper key expression of the response for interceptors
+                ));
         }
         None => log::warn!(
             "Route reply {}:{} from {}: Query nof found!",
@@ -803,6 +800,6 @@ pub(crate) fn finalize_pending_query(query: Arc<Query>) {
                     ext_tstamp: None,
                 },
                 "".to_string(),
-            )); // TODO
+            ));
     }
 }

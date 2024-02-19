@@ -21,7 +21,7 @@ use crate::net::routing::hat::HatPubSubTrait;
 use crate::net::routing::router::RoutesIndexes;
 use crate::net::routing::{RoutingContext, PREFIX_LIVELINESS};
 use std::borrow::Cow;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use zenoh_protocol::core::key_expr::OwnedKeyExpr;
 use zenoh_protocol::{
@@ -43,8 +43,7 @@ fn propagate_simple_subscription_to(
 ) {
     if (src_face.id != dst_face.id || res.expr().starts_with(PREFIX_LIVELINESS))
         && !face_hat!(dst_face).local_subs.contains(res)
-        && src_face.whatami == WhatAmI::Client
-        || dst_face.whatami == WhatAmI::Client
+        && (src_face.whatami == WhatAmI::Client || dst_face.whatami == WhatAmI::Client)
     {
         face_hat_mut!(dst_face).local_subs.insert(res.clone());
         let key_expr = Resource::decl_key(res, dst_face);
@@ -54,7 +53,7 @@ fn propagate_simple_subscription_to(
                 ext_tstamp: None,
                 ext_nodeid: ext::NodeIdType::default(),
                 body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                    id: 0, // TODO
+                    id: 0, // @TODO use proper SubscriberId (#703)
                     wire_expr: key_expr,
                     ext_info: *sub_info,
                 }),
@@ -142,7 +141,7 @@ fn declare_client_subscription(
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::DeclareSubscriber(DeclareSubscriber {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper SubscriberId (#703)
                         wire_expr: res.expr().into(),
                         ext_info: *sub_info,
                     }),
@@ -176,7 +175,7 @@ fn propagate_forget_simple_subscription(tables: &mut Tables, res: &Arc<Resource>
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper SubscriberId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
                     }),
                 },
@@ -214,7 +213,7 @@ pub(super) fn undeclare_client_subscription(
                     ext_tstamp: None,
                     ext_nodeid: ext::NodeIdType::default(),
                     body: DeclareBody::UndeclareSubscriber(UndeclareSubscriber {
-                        id: 0, // TODO
+                        id: 0, // @TODO use proper SubscriberId (#703)
                         ext_wire_expr: WireExprType { wire_expr },
                     }),
                 },
@@ -236,7 +235,7 @@ fn forget_client_subscription(
 
 pub(super) fn pubsub_new_face(tables: &mut Tables, face: &mut Arc<FaceState>) {
     let sub_info = SubscriberInfo {
-        reliability: Reliability::Reliable, // @TODO
+        reliability: Reliability::Reliable, // @TODO compute proper reliability to propagate from reliability of known subscribers
         mode: Mode::Push,
     };
     for src_face in tables
@@ -271,6 +270,16 @@ impl HatPubSubTrait for HatCode {
         _node_id: NodeId,
     ) {
         forget_client_subscription(tables, face, res);
+    }
+
+    fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>> {
+        let mut subs = HashSet::new();
+        for src_face in tables.faces.values() {
+            for sub in &face_hat!(src_face).remote_subs {
+                subs.insert(sub.clone());
+            }
+        }
+        Vec::from_iter(subs)
     }
 
     fn compute_data_route(

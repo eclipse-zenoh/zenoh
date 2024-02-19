@@ -56,7 +56,8 @@ fn ketree_borrow_mut<'a, T, Token: TokenTrait>(
 /// A shared KeTree.
 ///
 /// The tree and its nodes have shared ownership, while their mutability is managed through the `Token`.
-/// The `(node, &token)` tuple implements [`core::ops::Deref`], while `(node, &mut token)` implements [`core::ops::DerefMut`].
+///
+/// Most of its methods are declared in the [`ITokenKeyExprTree`] trait.
 pub struct KeArcTree<
     Weight,
     Token: TokenTrait = DefaultToken,
@@ -82,6 +83,14 @@ impl<
     > KeArcTree<Weight, DefaultToken, Wildness, Children>
 {
     /// Constructs the KeArcTree, returning it and its token, unless constructing the Token failed.
+    ///
+    /// # Type inference papercut
+    /// Despite some of `KeArcTree`'s generic parameters having default values, those are only taken into
+    /// account by the compiler when a type is named with some parameters omitted, and not when a type is
+    /// infered with the same parameters unconstrained.
+    ///
+    /// The simplest way to resolve this is to eventually assign to tree part of the return value
+    /// to a variable or field whose type is named `KeArcTree<_>` (the `Weight` parameter can generally be infered).
     pub fn new() -> Result<(Self, DefaultToken), <DefaultToken as TokenTrait>::ConstructionError> {
         let token = DefaultToken::new()?;
         Ok((Self::with_token(&token), token))
@@ -322,6 +331,57 @@ where
             unsafe {
                 IterOrOption::Iter(TokenPacker {
                     iter: Inclusion::new(core::mem::transmute(&inner.children), key),
+                    token,
+                })
+            }
+        } else {
+            IterOrOption::Opt(self.node_mut(token, key).map(Into::into))
+        }
+    }
+
+    type IncluderItem = Self::Node;
+    type Includer = IterOrOption<
+        TokenPacker<
+            Includer<
+                'a,
+                Children,
+                Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+                Weight,
+            >,
+            &'a Token,
+        >,
+        Self::IncluderItem,
+    >;
+    fn nodes_including(&'a self, token: &'a Token, key: &'a keyexpr) -> Self::Includer {
+        let inner = ketree_borrow(&self.inner, token);
+        if inner.wildness.get() || key.is_wild() {
+            IterOrOption::Iter(TokenPacker {
+                iter: Includer::new(&inner.children, key),
+                token,
+            })
+        } else {
+            IterOrOption::Opt(self.node(token, key))
+        }
+    }
+    type IncluderItemMut = Self::TreeIterItemMut;
+    type IncluderMut = IterOrOption<
+        TokenPacker<
+            Includer<
+                'a,
+                Children,
+                Arc<TokenCell<KeArcTreeNode<Weight, Weak<()>, Wildness, Children, Token>, Token>>,
+                Weight,
+            >,
+            &'a mut Token,
+        >,
+        Self::IncluderItemMut,
+    >;
+    fn nodes_including_mut(&'a self, token: &'a mut Token, key: &'a keyexpr) -> Self::IncluderMut {
+        let inner = ketree_borrow(&self.inner, token);
+        if inner.wildness.get() || key.is_wild() {
+            unsafe {
+                IterOrOption::Iter(TokenPacker {
+                    iter: Includer::new(core::mem::transmute(&inner.children), key),
                     token,
                 })
             }

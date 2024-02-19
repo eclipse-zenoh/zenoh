@@ -39,6 +39,7 @@ json5 = { workspace = true }
 lazy_static = { workspace = true }
 log = { workspace = true }
 zenoh = { workspace = true, features = ["unstable"] }
+zenoh_backend_traits = { workspace = true }
 
 [dev-dependencies]
 rand = { workspace = true, features = ["default"] }
@@ -49,7 +50,7 @@ rustc_version = { workspace = true }
 [package.metadata.deb]
 name = "zenohd"
 maintainer = "zenoh-dev@eclipse.org"
-copyright = "2022 ZettaScale Technology"
+copyright = "2024 ZettaScale Technology"
 section = "net"
 license-file = ["../LICENSE", "0"]
 depends = "$auto"

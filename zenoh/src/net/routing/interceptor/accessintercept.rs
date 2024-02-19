@@ -10,11 +10,11 @@ use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
 use crate::net::routing::RoutingContext;
 
 use super::{
-    authz::{ActionFlag, NewCtx, NewPolicyEnforcer},
+    authz::{Action, Attribute, PolicyEnforcer, RequestInfo},
     EgressInterceptor, IngressInterceptor, InterceptorFactoryTrait, InterceptorTrait,
 };
 pub(crate) struct AclEnforcer {
-    pub(crate) e: Arc<NewPolicyEnforcer>,
+    pub(crate) e: Arc<PolicyEnforcer>,
 }
 
 impl InterceptorFactoryTrait for AclEnforcer {
@@ -56,7 +56,7 @@ impl InterceptorFactoryTrait for AclEnforcer {
 }
 
 struct IngressAclEnforcer {
-    e: Arc<NewPolicyEnforcer>,
+    e: Arc<PolicyEnforcer>,
     zid: ZenohId,
 }
 
@@ -73,14 +73,33 @@ impl InterceptorTrait for IngressAclEnforcer {
         {
             let e = &self.e;
 
-            let ke: String = ctx.full_expr().unwrap().to_owned();
-            // let ke: String = "test/thr".to_owned(); //for testing
-            let new_ctx = NewCtx {
-                ke: &ke,
-                zid: self.zid,
-                attributes: None,
+            let ke = ctx.full_expr().unwrap();
+            let network_type = "wifi";
+
+            // let ke = "test/thr"; //for testing
+
+            //create the subject list from given values
+            //get attribute list
+            //iterate and get all values from the attribute list for the request
+
+            let mut sub_info: Vec<Attribute> = Vec::new();
+            let attribute_list = e.get_attribute_list().unwrap();
+            for i in attribute_list {
+                //  println!("list runs once");
+                match i.as_str() {
+                    "UserID" => sub_info.push(Attribute::UserID(self.zid)),
+                    "NetworkType" => sub_info.push(Attribute::NetworkType(network_type.to_owned())),
+                    _ => { //other metadata values},
+                    }
+                }
+            }
+
+            let request_info = RequestInfo {
+                sub: sub_info,
+                ke: ke.to_string(),
+                action: Action::Write,
             };
-            match e.policy_enforcement_point(new_ctx, ActionFlag::Write) {
+            match e.policy_enforcement_point(request_info) {
                 Ok(decision) => {
                     if !decision {
                         return None;
@@ -95,7 +114,7 @@ impl InterceptorTrait for IngressAclEnforcer {
 }
 
 struct EgressAclEnforcer {
-    e: Arc<NewPolicyEnforcer>,
+    e: Arc<PolicyEnforcer>,
     zid: ZenohId,
 }
 
@@ -111,15 +130,29 @@ impl InterceptorTrait for EgressAclEnforcer {
         }) = &ctx.msg.body
         {
             let e = &self.e;
-            let ke: String = ctx.full_expr().unwrap().to_owned();
+            let ke = ctx.full_expr().unwrap();
+            let network_type = "wifi"; //for testing
 
-            // let ke: String = "test/thr".to_owned(); //for testing
-            let new_ctx = NewCtx {
-                ke: &ke,
-                zid: self.zid,
-                attributes: None,
+            // let ke = "test/thr"; //for testing
+
+            let mut sub_info: Vec<Attribute> = Vec::new();
+            let attribute_list = e.get_attribute_list().unwrap();
+            for i in attribute_list {
+                match i.as_str() {
+                    "UserID" => sub_info.push(Attribute::UserID(self.zid)),
+                    "NetworkType" => sub_info.push(Attribute::NetworkType(network_type.to_owned())),
+                    _ => { //other metadata values,
+                    }
+                }
+            }
+
+            let request_info = RequestInfo {
+                sub: sub_info,
+                ke: ke.to_string(),
+                action: Action::Read,
             };
-            match e.policy_enforcement_point(new_ctx, ActionFlag::Read) {
+
+            match e.policy_enforcement_point(request_info) {
                 Ok(decision) => {
                     if !decision {
                         return None;

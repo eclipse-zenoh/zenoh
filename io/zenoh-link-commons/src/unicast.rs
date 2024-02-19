@@ -11,7 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
-use alloc::{boxed::Box, sync::Arc, vec::Vec};
+use alloc::{boxed::Box, string::String, sync::Arc, vec::Vec};
 use async_trait::async_trait;
 use core::{
     fmt,
@@ -45,6 +45,7 @@ pub trait LinkUnicastTrait: Send + Sync {
     fn get_dst(&self) -> &Locator;
     fn is_reliable(&self) -> bool;
     fn is_streamed(&self) -> bool;
+    fn get_interface_names(&self) -> Vec<String>;
     async fn write(&self, buffer: &[u8]) -> ZResult<usize>;
     async fn write_all(&self, buffer: &[u8]) -> ZResult<()>;
     async fn read(&self, buffer: &mut [u8]) -> ZResult<usize>;

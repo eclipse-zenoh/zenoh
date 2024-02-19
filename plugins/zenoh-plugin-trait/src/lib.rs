@@ -18,62 +18,34 @@
 //!
 //! If building a plugin for [`zenohd`](https://crates.io/crates/zenoh), you should use the types exported in [`zenoh::plugins`](https://docs.rs/zenoh/latest/zenoh/plugins) to fill [`Plugin`]'s associated types.  
 //! To check your plugin typing for `zenohd`, have your plugin implement [`zenoh::plugins::ZenohPlugin`](https://docs.rs/zenoh/latest/zenoh/plugins/struct.ZenohPlugin)
-pub mod loading;
-pub mod vtable;
+//!
+//! Plugin is a struct which implements the [`Plugin`] trait. This trait has two associated types:
+//! - `StartArgs`: the type of the arguments passed to the plugin's [`start`](Plugin::start) function.
+//! - `Instance`: the type of the plugin's instance.
+//!
+//! The actual work of the plugin is performed by the instance, which is created by the [`start`](Plugin::start) function.
+//!
+//! Plugins are loaded, started and stopped by [`PluginsManager`](crate::manager::PluginsManager). Stopping pluign is just dropping it's instance.
+//!
+//! Plugins can be static and dynamic.
+//!
+//! Static plugin is just a type which implements [`Plugin`] trait. It can be added to [`PluginsManager`](crate::manager::PluginsManager) by [`PluginsManager::add_static_plugin`](crate::manager::PluginsManager::add_static_plugin) method.
+//!
+//! Dynamic pluign is a shared library which exports set of C-repr (unmangled) functions which allows to check plugin compatibility and create plugin instance. These functiuons are defined automatically by [`declare_plugin`](crate::declare_plugin) macro.
+//!
+mod compatibility;
+mod manager;
+mod plugin;
+mod vtable;
 
-use zenoh_result::ZResult;
+pub use compatibility::{Compatibility, PluginStructVersion, StructVersion};
+pub use manager::{DeclaredPlugin, LoadedPlugin, PluginsManager, StartedPlugin};
+pub use plugin::{
+    Plugin, PluginConditionSetter, PluginControl, PluginInstance, PluginReport, PluginStartArgs,
+    PluginState, PluginStatus, PluginStatusRec,
+};
+pub use vtable::{PluginLoaderVersion, PluginVTable, PLUGIN_LOADER_VERSION};
+use zenoh_util::concat_enabled_features;
 
-#[repr(C)]
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Compatibility {
-    major: u64,
-    minor: u64,
-    patch: u64,
-    stable: bool,
-    commit: &'static str,
-}
-const RELEASE_AND_COMMIT: (&str, &str) = zenoh_macros::rustc_version_release!();
-impl Compatibility {
-    pub fn new() -> ZResult<Self> {
-        let (release, commit) = RELEASE_AND_COMMIT;
-        let (release, stable) = if let Some(p) = release.chars().position(|c| c == '-') {
-            (&release[..p], false)
-        } else {
-            (release, true)
-        };
-        let mut split = release.split('.').map(|s| s.trim());
-        Ok(Compatibility {
-            major: split.next().unwrap().parse().unwrap(),
-            minor: split.next().unwrap().parse().unwrap(),
-            patch: split.next().unwrap().parse().unwrap(),
-            stable,
-            commit,
-        })
-    }
-    pub fn are_compatible(a: &Self, b: &Self) -> bool {
-        if a.stable && b.stable {
-            a.major == b.major && a.minor == b.minor && a.patch == b.patch
-        } else {
-            a == b
-        }
-    }
-}
-
-pub mod prelude {
-    pub use crate::{loading::*, vtable::*, Plugin};
-}
-
-pub trait Plugin: Sized + 'static {
-    type StartArgs;
-    type RunningPlugin;
-    /// Your plugins' default name when statically linked.
-    const STATIC_NAME: &'static str;
-    /// You probabky don't need to override this function.
-    ///
-    /// Returns some build information on your plugin, allowing the host to detect potential ABI changes that would break it.
-    fn compatibility() -> ZResult<Compatibility> {
-        Compatibility::new()
-    }
-    /// Starts your plugin. Use `Ok` to return your plugin's control structure
-    fn start(name: &str, args: &Self::StartArgs) -> ZResult<Self::RunningPlugin>;
-}
+pub const FEATURES: &str =
+    concat_enabled_features!(prefix = "zenoh-plugin-trait", features = ["default"]);

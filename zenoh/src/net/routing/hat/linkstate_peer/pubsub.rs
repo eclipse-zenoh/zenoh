@@ -603,6 +603,10 @@ impl HatPubSubTrait for HatCode {
         }
     }
 
+    fn get_subscriptions(&self, tables: &Tables) -> Vec<Arc<Resource>> {
+        hat!(tables).peer_subs.iter().cloned().collect()
+    }
+
     fn compute_data_route(
         &self,
         tables: &Tables,
