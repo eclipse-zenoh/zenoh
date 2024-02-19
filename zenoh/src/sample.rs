@@ -526,6 +526,7 @@ pub struct QoS {
 }
 
 impl QoS {
+    /// Get priority of the message.
     pub fn priority(&self) -> Priority {
         let priority = match Priority::try_from(self.inner.get_priority()) {
             Ok(p) => p,
@@ -540,16 +541,14 @@ impl QoS {
         priority
     }
 
+    /// Get congestion control of the message.
     pub fn congestion_control(&self) -> CongestionControl {
         self.inner.get_congestion_control()
     }
 
+    /// Get express flag value. If true, the message is not batched during transmission, in order to reduce latency.
     pub fn express(&self) -> bool {
         self.inner.is_express()
-    }
-
-    pub(crate) fn inner(&self) -> QoSType {
-        self.inner
     }
 }
 
