@@ -4784,8 +4784,11 @@ dependencies = [
  "typenum",
  "zenoh-buffers",
  "zenoh-codec",
+ "zenoh-core",
  "zenoh-protocol",
  "zenoh-result",
+ "zenoh-sync",
+ "zenoh-util",
 ]
 
 [[package]]

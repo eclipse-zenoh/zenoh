@@ -25,7 +25,8 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use zenoh_core::{zread, zwrite};
 use zenoh_link_commons::{
-    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender,
+    LinkManagerUnicastTrait, LinkUnicast, LinkUnicastTrait, NewLinkChannelSender, UnicastListener,
+    UnicastListeners,
 };
 use zenoh_protocol::core::{EndPoint, Locator};
 use zenoh_result::{bail, zerror, Error as ZError, ZResult};
