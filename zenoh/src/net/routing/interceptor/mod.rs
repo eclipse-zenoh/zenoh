@@ -163,12 +163,12 @@
 //!
 //! [Click here for Zenoh's documentation](../zenoh/index.html)
 //!
-mod accessintercept;
+mod accesscontrol;
 mod authz;
 use std::sync::Arc;
 
 use super::RoutingContext;
-use crate::net::routing::interceptor::{accessintercept::AclEnforcer, authz::PolicyEnforcer};
+use crate::net::routing::interceptor::{accesscontrol::AclEnforcer, authz::PolicyEnforcer};
 use zenoh_config::Config;
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_transport::{multicast::TransportMulticast, unicast::TransportUnicast};
