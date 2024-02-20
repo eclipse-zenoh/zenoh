@@ -18,6 +18,7 @@ use async_trait::async_trait;
 use std::convert::TryInto;
 use std::fmt;
 use std::net::Shutdown;
+use std::os::fd::AsRawFd;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -220,6 +221,18 @@ impl LinkManagerUnicastTcp {
         let socket = TcpListener::bind(addr)
             .await
             .map_err(|e| zerror!("{}: {}", addr, e))?;
+
+        //let iface = "wg0";
+        let iface = "lo";
+        unsafe {
+            libc::setsockopt(
+                socket.as_raw_fd(),
+                libc::SOL_SOCKET,
+                libc::SO_BINDTODEVICE,
+                iface.as_ptr() as *const std::os::raw::c_void,
+                iface.len() as libc::socklen_t,
+            );
+        }
 
         let local_addr = socket
             .local_addr()
