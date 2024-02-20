@@ -14,14 +14,12 @@
 
 //! Sample primitives
 use crate::buffers::ZBuf;
-use crate::prelude::ZenohId;
-use crate::prelude::{KeyExpr, SampleKind, Value};
+use crate::prelude::{Encoding, KeyExpr, SampleKind, Value, ZenohId};
 use crate::query::Reply;
 use crate::time::{new_reception_timestamp, Timestamp};
 #[zenoh_macros::unstable]
 use serde::Serialize;
 use std::convert::{TryFrom, TryInto};
-use zenoh_protocol::core::Encoding;
 
 pub type SourceSn = u64;
 
@@ -395,12 +393,12 @@ impl Sample {
     pub(crate) fn with_info(
         key_expr: KeyExpr<'static>,
         payload: ZBuf,
-        data_info: Option<DataInfo>,
+        mut data_info: Option<DataInfo>,
     ) -> Self {
         let mut value: Value = payload.into();
-        if let Some(data_info) = data_info {
-            if let Some(encoding) = &data_info.encoding {
-                value.encoding = encoding.clone();
+        if let Some(mut data_info) = data_info.take() {
+            if let Some(encoding) = data_info.encoding.take() {
+                value.encoding = encoding;
             }
             Sample {
                 key_expr,

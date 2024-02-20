@@ -11,6 +11,7 @@
 // Contributors:
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
+use crate::prelude::Encoding;
 use crate::{
     keyexpr,
     prelude::sync::{KeyExpr, Locality, SampleKind},
@@ -25,10 +26,7 @@ use std::{
     sync::Arc,
 };
 use zenoh_core::SyncResolve;
-use zenoh_protocol::{
-    core::{Encoding, WireExpr},
-    network::NetworkMessage,
-};
+use zenoh_protocol::{core::WireExpr, network::NetworkMessage};
 use zenoh_transport::{
     TransportEventHandler, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };

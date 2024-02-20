@@ -44,7 +44,6 @@ complete_n = []
 const_format = { workspace = true }
 hex = { workspace = true, features = ["alloc"] }
 rand = { workspace = true, features = ["alloc", "getrandom"], optional = true }
-phf = { workspace = true }
 serde = { workspace = true, features = ["alloc"] }
 uhlc = { workspace = true, default-features = false }
 uuid = { workspace = true }                                                     # Needs a getrandom::getrandom() custom implementation on embedded (in root crate)

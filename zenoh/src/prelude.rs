@@ -41,9 +41,9 @@ pub(crate) mod common {
 
     pub use crate::query::{QueryConsolidation, QueryTarget};
 
-    pub use crate::value::Value;
     /// The encoding of a zenoh `Value`.
-    pub use zenoh_protocol::core::{prefix as EncodingPrefix, Encoding};
+    pub use crate::encoding::Encoding;
+    pub use crate::value::Value;
 
     pub use crate::query::ConsolidationMode;
     #[zenoh_macros::unstable]

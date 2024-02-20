@@ -15,7 +15,10 @@ use super::Runtime;
 use crate::key_expr::KeyExpr;
 use crate::net::primitives::Primitives;
 use crate::plugins::sealed::{self as plugins};
-use crate::prelude::sync::{Sample, SyncResolve};
+use crate::prelude::{
+    sync::{Sample, SyncResolve},
+    Encoding,
+};
 use crate::queryable::Query;
 use crate::queryable::QueryInner;
 use crate::value::Value;
@@ -33,7 +36,7 @@ use zenoh_plugin_trait::{PluginControl, PluginStatus};
 use zenoh_protocol::{
     core::{
         key_expr::{keyexpr, OwnedKeyExpr},
-        Encoding, ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
+        ExprId, WireExpr, ZenohId, EMPTY_EXPR_ID,
     },
     network::{
         declare::{queryable::ext::QueryableInfo, subscriber::ext::SubscriberInfo},
@@ -422,7 +425,7 @@ impl Primitives for AdminSpace {
                     parameters,
                     value: query
                         .ext_body
-                        .map(|b| Value::from(b.payload).encoding(b.encoding)),
+                        .map(|b| Value::from(b.payload).encoding(b.encoding.into())),
                     qid: msg.id,
                     zid,
                     primitives,

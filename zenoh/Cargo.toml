@@ -80,6 +80,7 @@ log = { workspace = true }
 ordered-float = { workspace = true }
 paste = { workspace = true }
 petgraph = { workspace = true }
+phf = { workspace = true }
 rand = { workspace = true, features = ["default"] }
 regex = { workspace = true }
 serde = { workspace = true, features = ["default"] }

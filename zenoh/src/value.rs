@@ -13,7 +13,6 @@
 //
 
 //! Value primitives.
-
 use base64::{engine::general_purpose::STANDARD as b64_std_engine, Engine};
 use std::borrow::Cow;
 use std::convert::TryFrom;
@@ -24,7 +23,8 @@ use zenoh_collections::Properties;
 use zenoh_result::ZError;
 
 use crate::buffers::ZBuf;
-use crate::prelude::{Encoding, EncodingPrefix, Sample, SplitBuffer};
+use crate::encoding::DefaultEncodingMapping;
+use crate::prelude::{Encoding, Sample, SplitBuffer};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::SharedMemoryBuf;
 
@@ -131,7 +131,7 @@ impl TryFrom<&Value> for ZBuf {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_OCTET_STREAM => Ok(v.payload.clone()),
+            DefaultEncodingMapping::APP_OCTET_STREAM => Ok(v.payload.clone()),
             unexpected => Err(zerror!(
                 "{:?} can not be converted into Cow<'a, [u8]>",
                 unexpected
@@ -159,7 +159,7 @@ impl<'a> TryFrom<&'a Value> for Cow<'a, [u8]> {
 
     fn try_from(v: &'a Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_OCTET_STREAM => Ok(v.payload.contiguous()),
+            DefaultEncodingMapping::APP_OCTET_STREAM => Ok(v.payload.contiguous()),
             unexpected => Err(zerror!(
                 "{:?} can not be converted into Cow<'a, [u8]>",
                 unexpected
@@ -179,7 +179,7 @@ impl TryFrom<&Value> for Vec<u8> {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_OCTET_STREAM => Ok(v.payload.contiguous().to_vec()),
+            DefaultEncodingMapping::APP_OCTET_STREAM => Ok(v.payload.contiguous().to_vec()),
             unexpected => Err(zerror!(
                 "{:?} can not be converted into Vec<u8>",
                 unexpected
@@ -220,7 +220,7 @@ impl TryFrom<&Value> for String {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::TEXT_PLAIN => {
+            DefaultEncodingMapping::TEXT_PLAIN => {
                 String::from_utf8(v.payload.contiguous().to_vec()).map_err(|e| zerror!("{}", e))
             }
             unexpected => Err(zerror!("{:?} can not be converted into String", unexpected)),
@@ -258,7 +258,7 @@ impl TryFrom<&Value> for i64 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
+            DefaultEncodingMapping::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -290,7 +290,7 @@ impl TryFrom<&Value> for i32 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
+            DefaultEncodingMapping::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -322,7 +322,7 @@ impl TryFrom<&Value> for i16 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
+            DefaultEncodingMapping::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -354,7 +354,7 @@ impl TryFrom<&Value> for i8 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
+            DefaultEncodingMapping::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -386,7 +386,7 @@ impl TryFrom<&Value> for isize {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
+            DefaultEncodingMapping::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -418,7 +418,7 @@ impl TryFrom<&Value> for u64 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
+            DefaultEncodingMapping::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -450,7 +450,7 @@ impl TryFrom<&Value> for u32 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
+            DefaultEncodingMapping::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -482,7 +482,7 @@ impl TryFrom<&Value> for u16 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
+            DefaultEncodingMapping::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -514,7 +514,7 @@ impl TryFrom<&Value> for u8 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
+            DefaultEncodingMapping::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -546,7 +546,7 @@ impl TryFrom<&Value> for usize {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
+            DefaultEncodingMapping::APP_INTEGER => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -578,7 +578,7 @@ impl TryFrom<&Value> for f64 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_FLOAT => std::str::from_utf8(&v.payload.contiguous())
+            DefaultEncodingMapping::APP_FLOAT => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -610,7 +610,7 @@ impl TryFrom<&Value> for f32 {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_FLOAT => std::str::from_utf8(&v.payload.contiguous())
+            DefaultEncodingMapping::APP_FLOAT => std::str::from_utf8(&v.payload.contiguous())
                 .map_err(|e| zerror!("{}", e))?
                 .parse()
                 .map_err(|e| zerror!("{}", e)),
@@ -648,7 +648,7 @@ impl TryFrom<&Value> for serde_json::Value {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_JSON | EncodingPrefix::TEXT_JSON => {
+            DefaultEncodingMapping::APP_JSON | DefaultEncodingMapping::TEXT_JSON => {
                 let r = serde::Deserialize::deserialize(&mut serde_json::Deserializer::from_slice(
                     &v.payload.contiguous(),
                 ));
@@ -685,7 +685,7 @@ impl TryFrom<&Value> for Properties {
 
     fn try_from(v: &Value) -> Result<Self, Self::Error> {
         match v.encoding.prefix() {
-            EncodingPrefix::APP_PROPERTIES => Ok(Properties::from(
+            DefaultEncodingMapping::APP_PROPERTIES => Ok(Properties::from(
                 std::str::from_utf8(&v.payload.contiguous()).map_err(|e| zerror!("{}", e))?,
             )),
             unexpected => Err(zerror!(

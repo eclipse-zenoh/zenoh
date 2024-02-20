@@ -33,6 +33,7 @@ use crate::sample::Attachment;
 use crate::sample::DataInfo;
 use crate::selector::TIME_RANGE_KEY;
 use crate::subscriber::*;
+use crate::Encoding;
 use crate::Id;
 use crate::Priority;
 use crate::Sample;
@@ -1814,7 +1815,7 @@ impl Session {
                     ext_body: value.as_ref().map(|v| query::ext::QueryBodyType {
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
-                        encoding: v.encoding.clone(),
+                        encoding: v.encoding.clone().into(),
                         payload: v.payload.clone(),
                     }),
                     ext_attachment,
@@ -1833,7 +1834,7 @@ impl Session {
                 value.as_ref().map(|v| query::ext::QueryBodyType {
                     #[cfg(feature = "shared-memory")]
                     ext_shm: None,
-                    encoding: v.encoding.clone(),
+                    encoding: v.encoding.clone().into(),
                     payload: v.payload.clone(),
                 }),
                 #[cfg(feature = "unstable")]
@@ -1905,7 +1906,7 @@ impl Session {
                 parameters,
                 value: body.map(|b| Value {
                     payload: b.payload,
-                    encoding: b.encoding,
+                    encoding: b.encoding.into(),
                 }),
                 qid,
                 zid,
@@ -2190,7 +2191,7 @@ impl Primitives for Session {
             PushBody::Put(m) => {
                 let info = DataInfo {
                     kind: SampleKind::Put,
-                    encoding: Some(m.encoding),
+                    encoding: Some(m.encoding.into()),
                     timestamp: m.timestamp,
                     source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                     source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),
@@ -2266,11 +2267,11 @@ impl Primitives for Session {
                         let value = match e.ext_body {
                             Some(body) => Value {
                                 payload: body.payload,
-                                encoding: body.encoding,
+                                encoding: body.encoding.into(),
                             },
                             None => Value {
                                 payload: ZBuf::empty(),
-                                encoding: zenoh_protocol::core::Encoding::EMPTY,
+                                encoding: Encoding::EMPTY,
                             },
                         };
                         let replier_id = match e.ext_sinfo {
@@ -2343,7 +2344,7 @@ impl Primitives for Session {
                         };
                         let info = DataInfo {
                             kind: SampleKind::Put,
-                            encoding: Some(m.encoding),
+                            encoding: Some(m.encoding.into()),
                             timestamp: m.timestamp,
                             source_id: m.ext_sinfo.as_ref().map(|i| i.zid),
                             source_sn: m.ext_sinfo.as_ref().map(|i| i.sn as u64),

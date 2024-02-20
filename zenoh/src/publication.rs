@@ -824,7 +824,7 @@ fn resolve_put(
                     }
                     PushBody::Put(Put {
                         timestamp,
-                        encoding: value.encoding.clone(),
+                        encoding: value.encoding.clone().into(),
                         ext_sinfo: None,
                         #[cfg(feature = "shared-memory")]
                         ext_shm: None,
@@ -855,7 +855,7 @@ fn resolve_put(
     if publisher.destination != Locality::Remote {
         let data_info = DataInfo {
             kind,
-            encoding: Some(value.encoding),
+            encoding: Some(value.encoding.clone()),
             timestamp,
             ..Default::default()
         };

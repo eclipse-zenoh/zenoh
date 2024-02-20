@@ -49,7 +49,12 @@ where
         let zodec = Zenoh080Bounded::<EncodingPrefix>::new();
         let prefix: EncodingPrefix = zodec.read(&mut *reader)?;
         let suffix: String = zodec.read(&mut *reader)?;
-        let encoding = Encoding::new(prefix, suffix).map_err(|_| DidntRead)?;
+
+        let mut encoding: Encoding = Encoding::new(prefix);
+        if !suffix.is_empty() {
+            encoding = encoding.with_suffix(suffix).map_err(|_| DidntRead)?;
+        }
+
         Ok(encoding)
     }
 }
