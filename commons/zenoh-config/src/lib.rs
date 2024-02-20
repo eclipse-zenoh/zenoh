@@ -145,10 +145,11 @@ validated_struct::validator! {
     /// To construct a configuration, we advise that you use a configuration file (JSON, JSON5 and YAML are currently supported, please use the proper extension for your format as the deserializer will be picked according to it).
     #[derive(Default)]
     #[recursive_attrs]
+    // tags{rust.config.deserialize, api.config.create.from_str}
     #[derive(serde::Deserialize, serde::Serialize, Clone, Debug)]
     #[serde(default)]
     #[serde(deny_unknown_fields)]
-    // tags{rust.config. api.config}
+    // tags{rust.config, api.config}
     Config {
         /// The Zenoh ID of the instance. This ID MUST be unique throughout your Zenoh infrastructure and cannot exceed 16 bytes of length. If left unset, a random u128 will be generated.
         id: ZenohId,
@@ -168,27 +169,33 @@ validated_struct::validator! {
         ListenConfig {
             pub endpoints: Vec<EndPoint>,
         },
-        // tags{rust.config.scouting, api.config.scouting}
         pub scouting: #[derive(Default)]
         ScoutingConf {
             /// In client mode, the period dedicated to scouting for a router before failing. In milliseconds.
+            // tags{rust.config.scouting.timeout, api.config.scouting.timeout}
             timeout: Option<u64>,
             /// In peer mode, the period dedicated to scouting remote peers before attempting other operations. In milliseconds.
+            // tags{rust.config.scouting.delay, api.config.scouting.delay}
             delay: Option<u64>,
             /// The multicast scouting configuration.
-            // tags{rust.config.scouting.multicast, api.config.scouting.multicast}
             pub multicast: #[derive(Default)]
             ScoutingMulticastConf {
                 /// Whether multicast scouting is enabled or not. If left empty, `zenohd` will set it according to the presence of the `--no-multicast-scouting` argument.
+                // tags{rust.config.scouting.multicast.enabled, api.config.scouting.multicast.enabled}
                 enabled: Option<bool>,
                 /// The socket which should be used for multicast scouting. `zenohd` will use `224.0.0.224:7446` by default if none is provided.
+                // tags{rust.config.scouting.multicast.address, api.config.scouting.multicast.address}
+                // tags{api.config.scouting.multicast.port}
                 address: Option<SocketAddr>,
                 /// The network interface which should be used for multicast scouting. `zenohd` will automatically select an interface if none is provided.
+                // tags{rust.config.scouting.multicast.interface, api.config.scouting.multicast.interface}
                 interface: Option<String>,
                 /// Which type of Zenoh instances to automatically establish sessions with upon discovery through UDP multicast.
+                // tags{rust.config.scouting.multicast.autoconnect, api.config.scouting.multicast.autoconnect}
                 #[serde(deserialize_with = "treat_error_as_none")]
                 autoconnect: Option<ModeDependentValue<WhatAmIMatcher>>,
                 /// Whether or not to listen for scout messages on UDP multicast and reply to them.
+                // tags{rust.config.scouting.multicast.listen, api.config.scouting.multicast.listen}
                 listen: Option<ModeDependentValue<bool>>,
             },
             /// The gossip scouting configuration.
@@ -402,12 +409,14 @@ validated_struct::validator! {
             AuthConf {
                 /// The configuration of authentification.
                 /// A password implies a username is required.
-                // tags{rust.config.transport.auth.usrpwd, api.config.transport.auth.usrpwd}
                 pub usrpwd: #[derive(Default)]
                 UsrPwdConf {
+                    // tags{rust.config.transport.auth.usrpwd.user, api.config.transport.auth.usrpwd.user}
                     user: Option<String>,
+                    // tags{rust.config.transport.auth.usrpwd.password, api.config.transport.auth.usrpwd.password}
                     password: Option<String>,
                     /// The path to a file containing the user password dictionary, a file containing `<user>:<password>`
+                    // tags{rust.config.transport.auth.usrpwd.dictionary_file, api.config.transport.auth.usrpwd.dictionary_file}
                     dictionary_file: Option<String>,
                 } where (user_conf_validator),
                 // tags{rust.config.transport.auth.pubkey, api.config.transport.auth.pubkey}
@@ -619,12 +628,14 @@ impl std::fmt::Display for ConfigOpenErr {
 }
 impl std::error::Error for ConfigOpenErr {}
 impl Config {
+    // tags{rust.config.from_env, api.config.create.from_env}
     pub fn from_env() -> ZResult<Self> {
         let path = std::env::var(defaults::ENV)
             .map_err(|e| zerror!("Invalid ENV variable ({}): {}", defaults::ENV, e))?;
         Self::from_file(path.as_str())
     }
 
+    // tags{rust.config.from_file, api.config.create.from_file}
     pub fn from_file<P: AsRef<Path>>(path: P) -> ZResult<Self> {
         let path = path.as_ref();
         let mut config = Self::_from_file(path)?;
@@ -671,6 +682,7 @@ impl Config {
     }
 }
 
+// tags{rust.config.display.fmt, api.config.to_string}
 impl std::fmt::Display for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         serde_json::to_value(self)
