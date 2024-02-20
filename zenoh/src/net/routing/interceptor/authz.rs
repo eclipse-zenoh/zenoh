@@ -91,7 +91,7 @@ pub struct AttributeRules {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct AttributeRule {
-    sub: Attribute, //changed from string
+    sub: Attribute,
     ke: String,
     action: Action,
     permission: bool,
@@ -99,7 +99,6 @@ pub struct AttributeRule {
 use zenoh_config::ZenohId;
 
 #[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
-//#[serde(tag = "sub")]
 #[serde(untagged)]
 pub enum Attribute {
     UserID(ZenohId),
@@ -107,7 +106,7 @@ pub enum Attribute {
     MetadataType(String), //clarify
 }
 #[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
-pub struct SubAct(Attribute, Action); //changed from String to Attribute
+pub struct SubAct(Attribute, Action);
 
 #[derive(Debug)]
 pub struct RequestInfo {
@@ -117,13 +116,13 @@ pub struct RequestInfo {
 }
 
 impl PolicyEnforcer {
-    pub fn new() -> ZResult<PolicyEnforcer> {
-        Ok(PolicyEnforcer {
+    pub fn new() -> PolicyEnforcer {
+        PolicyEnforcer {
             acl_enabled: true,
             default_deny: true,
             attribute_list: None,
             policy_list: None,
-        })
+        }
     }
     pub fn init(&mut self, acl_config: AclConfig) -> ZResult<()> {
         /*
@@ -132,21 +131,29 @@ impl PolicyEnforcer {
            creates the policy hashmap with the ke-tries for ke matching
            can have policy-type in the mix here...need to verify
         */
-        self.acl_enabled = acl_config.enabled.unwrap();
-        self.default_deny = acl_config.default_deny.unwrap();
-        let file_path = acl_config.policy_file.unwrap();
-        let policy_information = self.policy_resource_point(&file_path)?;
-        self.attribute_list = Some(policy_information.attribute_list);
-        let _policy_definition = policy_information.policy_definition;
-
-        //create policy_list for sub|act:ke from the info we have
-
-        self.build_policy_map(
-            self.attribute_list.clone().unwrap(),
-            policy_information.policy_rules,
-        )
-        .expect("policy not established");
-        //logger should start here
+        match acl_config.enabled {
+            Some(val) => self.acl_enabled = val,
+            None => log::error!("acl config not setup"),
+        }
+        match acl_config.default_deny {
+            Some(val) => self.default_deny = val,
+            None => log::error!("error default_deny not setup"),
+        }
+        if self.acl_enabled {
+            match acl_config.policy_file {
+                Some(file_path) => {
+                    let policy_information = self.policy_resource_point(&file_path)?;
+                    self.attribute_list = Some(policy_information.attribute_list);
+                    let _policy_definition = policy_information.policy_definition;
+                    self.build_policy_map(
+                        self.attribute_list.clone().unwrap(),
+                        policy_information.policy_rules,
+                    )?;
+                    log::info!("policy map was created successfully");
+                }
+                None => log::error!("no policy file path was specified"),
+            }
+        }
         Ok(())
     }
     pub fn build_policy_map(
@@ -156,7 +163,7 @@ impl PolicyEnforcer {
     ) -> ZResult<()> {
         /*
             representaiton of policy list as a vector of hashmap of trees
-            each hashmap maps a subject (ID/atttribute) to a trie of allowed values
+            each hashmap maps a subact (ID/Atttribute + Action) to a trie of allowed values
         */
         //for each attrribute in the list, get rules, create map and push into rules_vector
         let mut pm: Vec<SubActPolicy> = Vec::new();
@@ -179,16 +186,15 @@ impl PolicyEnforcer {
             let sub = v.sub;
             let ke = v.ke;
             let subact = SubAct(sub, v.action);
-            //match subject to the policy hashmap
-            #[allow(clippy::map_entry)]
-            if !policy.contains_key(&subact) {
+            let subact_value_exists = policy.contains_key(&subact);
+            if subact_value_exists {
+                let ketree = policy.get_mut(&subact).unwrap();
+                ketree.insert(keyexpr::new(&ke)?, true);
+            } else {
                 //create new entry for subject + ke-tree
                 let mut ketree = KeTreeRule::new();
                 ketree.insert(keyexpr::new(&ke)?, true);
                 policy.insert(subact, ketree);
-            } else {
-                let ketree = policy.get_mut(&subact).unwrap();
-                ketree.insert(keyexpr::new(&ke)?, true);
             }
         }
         Ok(policy)
@@ -234,39 +240,25 @@ impl PolicyEnforcer {
 
     pub fn policy_enforcement_point(&self, request_info: RequestInfo) -> ZResult<bool> {
         /*
-           input: new_context and action (sub,act for now but will need attribute values later)
-           output: allow/denyca q
-           function: depending on the msg, builds the subject, builds the request, passes the request to policy_decision_point()
-                    collects result from PDP and then uses that allow/deny output to block or pass the msg to routing table
+           input: request_info from interceptor
+           output: decision = allow/deny permission [true/false]
+           function: builds the request and passes it to policy_decision_point()
+                    collects results (for each attribute in subject list) from PDP
+                     and then uses that to drop or pass the msg to routing table
         */
 
-        /*
-        for example, if policy_defintiion = "userid and nettype"
-        our request will be 2 different calls to pdp with different rewuest values
-        so we will get val1= matcher_function(sub=userid...), val2=matcher_function(sub=nettype...)
-        and our policy function will be val1 and val2 (from "userid and nettype" given in the policy_defintiion)
-        and matcher function be mathcer_function(request)
-        in our pdp, we will call matcher("subval")
-         */
-        //return Ok(true);
-        //  println!("request info: {:?}", request_info);
         let obj = request_info.ke;
         let mut decisions: Vec<bool> = Vec::new(); //to store all decisions for each subject in list
-                                                   // let subject_list = request_info.sub.0;
-
-        //    loop through the attributes and store decision for each
         for (attribute_index, val) in request_info.sub.into_iter().enumerate() {
-            // val.0 is attribute name, val.1 is attribute value
             //build request
             let request = RequestBuilder::new()
                 .sub(val)
                 .obj(obj.clone())
                 .action(request_info.action.clone())
                 .build()?;
-
             decisions.push(self.policy_decision_point(attribute_index, request));
         }
-        let decision: bool = decisions[0]; //should run a function over the decisons vector
+        let decision: bool = decisions[0]; //only checks for single attribute right now
         Ok(decision)
     }
 

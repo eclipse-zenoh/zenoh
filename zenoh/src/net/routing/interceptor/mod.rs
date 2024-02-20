@@ -212,19 +212,23 @@ pub(crate) fn interceptor_factories(config: &Config) -> Vec<InterceptorFactory> 
 
     //get acl config
     let acl_config = config.transport().acl().clone(); //get this gracefully
-    if acl_config.enabled.unwrap() {
-        let mut policy_enforcer = PolicyEnforcer::new().unwrap();
+    let mut acl_enabled = false;
+    match acl_config.enabled {
+        Some(val) => acl_enabled = val,
+        None => {
+            log::warn!("acl config not setup");
+        }
+    }
+    if acl_enabled {
+        let mut policy_enforcer = PolicyEnforcer::new();
         match policy_enforcer.init(acl_config) {
-            Ok(_) => {
-                println!(
-                    "setup acl intercept with {:?}",
-                    policy_enforcer.get_attribute_list().unwrap()
-                );
-                res.push(Box::new(AclEnforcer {
-                    e: Arc::new(policy_enforcer),
-                }))
-            }
-            Err(e) => log::error!("access control not initialized with error {}!", e),
+            Ok(_) => res.push(Box::new(AclEnforcer {
+                e: Arc::new(policy_enforcer),
+            })),
+            Err(e) => log::error!(
+                "access control enabled but not initialized with error {}!",
+                e
+            ),
         }
     }
     res

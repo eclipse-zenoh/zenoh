@@ -70,12 +70,6 @@ impl Zeroize for SecretString {
 
 pub type SecretValue = Secret<SecretString>;
 
-// #[derive(Debug, Deserialize, Serialize, Clone)]
-// pub struct AclConfig {
-//     pub enabled: Option<bool>,
-//     pub default_deny: Option<bool>,
-//     pub policy_file: Option<String>,
-// }
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,

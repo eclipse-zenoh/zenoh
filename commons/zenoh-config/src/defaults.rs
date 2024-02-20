@@ -215,8 +215,8 @@ impl Default for SharedMemoryConf {
 impl Default for AclConfig {
     fn default() -> Self {
         Self {
-            enabled: Some(true),
-            default_deny: Some(true),
+            enabled: Some(false),
+            default_deny: Some(false),
             policy_file: None,
         }
     }
