@@ -526,7 +526,7 @@ pub struct QoS {
 }
 
 impl QoS {
-    /// Get priority of the message.
+    /// Gets priority of the message.
     pub fn priority(&self) -> Priority {
         let priority = match Priority::try_from(self.inner.get_priority()) {
             Ok(p) => p,
@@ -541,14 +541,32 @@ impl QoS {
         priority
     }
 
-    /// Get congestion control of the message.
+    /// Gets congestion control of the message.
     pub fn congestion_control(&self) -> CongestionControl {
         self.inner.get_congestion_control()
     }
 
-    /// Get express flag value. If true, the message is not batched during transmission, in order to reduce latency.
+    /// Gets express flag value. If true, the message is not batched during transmission, in order to reduce latency.
     pub fn express(&self) -> bool {
         self.inner.is_express()
+    }
+
+    /// Sets priority value.
+    pub fn with_priority(mut self, priority: Priority) -> Self {
+        self.inner.set_priority(priority.into());
+        self
+    }
+
+    /// Sets congestion control value.
+    pub fn with_congestion_control(mut self, congestion_control: CongestionControl) -> Self {
+        self.inner.set_congestion_control(congestion_control);
+        self
+    }
+
+    /// Sets express flag vlaue.
+    pub fn with_express(mut self, is_express: bool) -> Self {
+        self.inner.set_is_express(is_express);
+        self
     }
 }
 
