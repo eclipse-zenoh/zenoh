@@ -1248,7 +1248,7 @@ impl<'a> Undeclarable<(), MatchingListenerUndeclaration<'a>> for MatchingListene
 /// # })
 /// ```
 #[zenoh_macros::unstable]
-// tags{rust.matching_listener}
+// tags{rust.matching_listener, api.matching_listener}
 pub struct MatchingListener<'a, Receiver> {
     pub(crate) listener: MatchingListenerInner<'a>,
     pub receiver: Receiver,
