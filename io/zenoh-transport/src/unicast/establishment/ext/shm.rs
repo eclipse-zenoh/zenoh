@@ -12,7 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 use crate::unicast::{
-    auth_segment::{AuthChallenge, AuthSegment, AuthSegmentID},
+    auth_segment::{AuthSegment, AuthSegmentID},
     auth_unicast::AuthUnicast,
     establishment::{AcceptFsm, OpenFsm},
 };
@@ -22,6 +22,7 @@ use zenoh_buffers::{
     writer::{DidntWrite, HasWriter, Writer},
 };
 use zenoh_codec::{RCodec, WCodec, Zenoh080};
+use zenoh_core::bail;
 use zenoh_protocol::transport::{init, open};
 use zenoh_result::{zerror, Error as ZError};
 
@@ -30,10 +31,10 @@ use zenoh_result::{zerror, Error as ZError};
 /*************************************/
 ///  7 6 5 4 3 2 1 0
 /// +-+-+-+-+-+-+-+-+
-/// ~ ShmMemBufInfo ~
+/// ~  Segment id   ~
 /// +---------------+
 pub(crate) struct InitSyn {
-    pub(crate) alice_info: AuthSegmentID,
+    pub(crate) alice_segment: AuthSegmentID,
 }
 
 // Codec
@@ -44,7 +45,7 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &InitSyn) -> Self::Output {
-        self.write(&mut *writer, &x.alice_info)?;
+        self.write(&mut *writer, &x.alice_segment)?;
         Ok(())
     }
 }
@@ -56,8 +57,8 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<InitSyn, Self::Error> {
-        let alice_info = self.read(&mut *reader)?;
-        Ok(InitSyn { alice_info })
+        let alice_segment = self.read(&mut *reader)?;
+        Ok(InitSyn { alice_segment })
     }
 }
 
@@ -68,11 +69,11 @@ where
 /// +-+-+-+-+-+-+-+-+
 /// ~   challenge   ~
 /// +---------------+
-/// ~ ShmMemBufInfo ~
+/// ~  Segment id   ~
 /// +---------------+
 struct InitAck {
     alice_challenge: u64,
-    bob_info: AuthSegmentID,
+    bob_segment: AuthSegmentID,
 }
 
 impl<W> WCodec<&InitAck, &mut W> for Zenoh080
@@ -83,7 +84,7 @@ where
 
     fn write(self, writer: &mut W, x: &InitAck) -> Self::Output {
         self.write(&mut *writer, x.alice_challenge)?;
-        self.write(&mut *writer, &x.bob_info)?;
+        self.write(&mut *writer, &x.bob_segment)?;
         Ok(())
     }
 }
@@ -96,10 +97,10 @@ where
 
     fn read(self, reader: &mut R) -> Result<InitAck, Self::Error> {
         let alice_challenge: u64 = self.read(&mut *reader)?;
-        let bob_info = self.read(&mut *reader)?;
+        let bob_segment = self.read(&mut *reader)?;
         Ok(InitAck {
             alice_challenge,
-            bob_info,
+            bob_segment,
         })
     }
 }
@@ -134,18 +135,30 @@ impl<'a> ShmFsm<'a> {
 /*************************************/
 /*              OPEN                 */
 /*************************************/
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct StateOpen {
-    is_shm: bool,
+    // false by default, will be switched to true in the end of open_ack
+    negotiated_to_use_shm: bool,
 }
 
 impl StateOpen {
-    pub(crate) const fn new(is_shm: bool) -> Self {
-        Self { is_shm }
+    pub(crate) const fn new() -> Self {
+        Self {
+            negotiated_to_use_shm: false,
+        }
     }
 
-    pub(crate) const fn is_shm(&self) -> bool {
-        self.is_shm
+    pub(crate) const fn negotiated_to_use_shm(&self) -> bool {
+        self.negotiated_to_use_shm
+    }
+
+    #[cfg(test)]
+    pub(crate) fn rand() -> Self {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        Self {
+            negotiated_to_use_shm: rng.gen_bool(0.5),
+        }
     }
 }
 
@@ -157,16 +170,12 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
     type SendInitSynOut = Option<init::ext::Shm>;
     async fn send_init_syn(
         self,
-        state: Self::SendInitSynIn,
+        _state: Self::SendInitSynIn,
     ) -> Result<Self::SendInitSynOut, Self::Error> {
         const S: &str = "Shm extension - Send InitSyn.";
 
-        if !state.is_shm() {
-            return Ok(None);
-        }
-
         let init_syn = InitSyn {
-            alice_info: self.inner.id(),
+            alice_segment: self.inner.id(),
         };
 
         let codec = Zenoh080::new();
@@ -179,22 +188,16 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         Ok(Some(init::ext::Shm::new(buff.into())))
     }
 
-    type RecvInitAckIn = (&'a mut StateOpen, Option<init::ext::Shm>);
-    type RecvInitAckOut = AuthChallenge;
+    type RecvInitAckIn = Option<init::ext::Shm>;
+    type RecvInitAckOut = Option<AuthSegment>;
     async fn recv_init_ack(
         self,
-        input: Self::RecvInitAckIn,
+        mut input: Self::RecvInitAckIn,
     ) -> Result<Self::RecvInitAckOut, Self::Error> {
         const S: &str = "Shm extension - Recv InitAck.";
 
-        let (state, mut ext) = input;
-        if !state.is_shm() {
-            return Ok(0);
-        }
-
-        let Some(ext) = ext.take() else {
-            state.is_shm = false;
-            return Ok(0);
+        let Some(ext) = input.take() else {
+            return Ok(None);
         };
 
         // Decode the extension
@@ -202,8 +205,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         let mut reader = ext.value.reader();
         let Ok(init_ack): Result<InitAck, _> = codec.read(&mut reader) else {
             log::trace!("{} Decoding error.", S);
-            state.is_shm = false;
-            return Ok(0);
+            return Ok(None);
         };
 
         // Alice challenge as seen by Alice
@@ -217,27 +219,22 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
                 init_ack.alice_challenge,
                 challenge
             );
-            state.is_shm = false;
-            return Ok(0);
+            return Ok(None);
         }
 
-        // Read Bob's SharedMemoryBuf
-        let bob_segment = match AuthSegment::open(init_ack.bob_info) {
+        // Read Bob's SHM Segment
+        let bob_segment = match AuthSegment::open(init_ack.bob_segment) {
             Ok(buff) => buff,
             Err(e) => {
                 log::trace!("{} {}", S, e);
-                state.is_shm = false;
-                return Ok(0);
+                return Ok(None);
             }
         };
 
-        // Bob challenge as seen by Alice
-        let bob_challenge = bob_segment.challenge();
-
-        Ok(bob_challenge)
+        Ok(Some(bob_segment))
     }
 
-    type SendOpenSynIn = (&'a StateOpen, Self::RecvInitAckOut);
+    type SendOpenSynIn = &'a Self::RecvInitAckOut;
     type SendOpenSynOut = Option<open::ext::Shm>;
     async fn send_open_syn(
         self,
@@ -245,12 +242,9 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
     ) -> Result<Self::SendOpenSynOut, Self::Error> {
         // const S: &str = "Shm extension - Send OpenSyn.";
 
-        let (state, bob_challenge) = input;
-        if !state.is_shm() {
-            return Ok(None);
-        }
-
-        Ok(Some(open::ext::Shm::new(bob_challenge)))
+        Ok(input
+            .as_ref()
+            .map(|val| open::ext::Shm::new(val.challenge())))
     }
 
     type RecvOpenAckIn = (&'a mut StateOpen, Option<open::ext::Shm>);
@@ -262,22 +256,17 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
         const S: &str = "Shm extension - Recv OpenAck.";
 
         let (state, mut ext) = input;
-        if !state.is_shm() {
-            return Ok(());
-        }
 
         let Some(ext) = ext.take() else {
-            state.is_shm = false;
             return Ok(());
         };
 
         if ext.value != 1 {
             log::trace!("{} Invalid value.", S);
-            state.is_shm = false;
             return Ok(());
         }
 
-        state.is_shm = true;
+        state.negotiated_to_use_shm = true;
         Ok(())
     }
 }
@@ -286,27 +275,7 @@ impl<'a> OpenFsm for &'a ShmFsm<'a> {
 /*            ACCEPT                 */
 /*************************************/
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct StateAccept {
-    is_shm: bool,
-}
-
-impl StateAccept {
-    pub(crate) const fn new(is_shm: bool) -> Self {
-        Self { is_shm }
-    }
-
-    pub(crate) const fn is_shm(&self) -> bool {
-        self.is_shm
-    }
-
-    #[cfg(test)]
-    pub(crate) fn rand() -> Self {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        Self::new(rng.gen_bool(0.5))
-    }
-}
+pub(crate) type StateAccept = StateOpen;
 
 // Codec
 impl<W> WCodec<&StateAccept, &mut W> for Zenoh080
@@ -316,8 +285,8 @@ where
     type Output = Result<(), DidntWrite>;
 
     fn write(self, writer: &mut W, x: &StateAccept) -> Self::Output {
-        let is_shm = u8::from(x.is_shm);
-        self.write(&mut *writer, is_shm)?;
+        let negotiated_to_use_shm = u8::from(x.negotiated_to_use_shm);
+        self.write(&mut *writer, negotiated_to_use_shm)?;
         Ok(())
     }
 }
@@ -329,9 +298,11 @@ where
     type Error = DidntRead;
 
     fn read(self, reader: &mut R) -> Result<StateAccept, Self::Error> {
-        let is_shm: u8 = self.read(&mut *reader)?;
-        let is_shm = is_shm == 1;
-        Ok(StateAccept { is_shm })
+        let negotiated_to_use_shm: u8 = self.read(&mut *reader)?;
+        let negotiated_to_use_shm: bool = negotiated_to_use_shm == 1;
+        Ok(StateAccept {
+            negotiated_to_use_shm,
+        })
     }
 }
 
@@ -339,58 +310,39 @@ where
 impl<'a> AcceptFsm for &'a ShmFsm<'a> {
     type Error = ZError;
 
-    type RecvInitSynIn = (&'a mut StateAccept, Option<init::ext::Shm>);
-    type RecvInitSynOut = AuthChallenge;
+    type RecvInitSynIn = init::ext::Shm;
+    type RecvInitSynOut = AuthSegment;
     async fn recv_init_syn(
         self,
         input: Self::RecvInitSynIn,
     ) -> Result<Self::RecvInitSynOut, Self::Error> {
         const S: &str = "Shm extension - Recv InitSyn.";
 
-        let (state, mut ext) = input;
-        if !state.is_shm() {
-            return Ok(0);
-        }
-
-        let Some(ext) = ext.take() else {
-            state.is_shm = false;
-            return Ok(0);
-        };
-
         // Decode the extension
         let codec = Zenoh080::new();
-        let mut reader = ext.value.reader();
+        let mut reader = input.value.reader();
         let Ok(init_syn): Result<InitSyn, _> = codec.read(&mut reader) else {
             log::trace!("{} Decoding error.", S);
-            state.is_shm = false;
-            return Ok(0);
+            bail!("");
         };
 
-        // Read Alice's SharedMemoryBuf
-        let alice_segment = AuthSegment::open(init_syn.alice_info)?;
+        // Read Alice's SHM Segment
+        let alice_segment = AuthSegment::open(init_syn.alice_segment)?;
 
-        // Alice challenge as seen by Bob
-        let alice_challenge = alice_segment.challenge();
-
-        Ok(alice_challenge)
+        Ok(alice_segment)
     }
 
-    type SendInitAckIn = (&'a StateAccept, Self::RecvInitSynOut);
+    type SendInitAckIn = &'a Self::RecvInitSynOut;
     type SendInitAckOut = Option<init::ext::Shm>;
     async fn send_init_ack(
         self,
-        input: Self::SendInitAckIn,
+        alice_segment: Self::SendInitAckIn,
     ) -> Result<Self::SendInitAckOut, Self::Error> {
         const S: &str = "Shm extension - Send InitAck.";
 
-        let (state, alice_challenge) = input;
-        if !state.is_shm() {
-            return Ok(None);
-        }
-
         let init_syn = InitAck {
-            alice_challenge,
-            bob_info: self.inner.id(),
+            alice_challenge: alice_segment.challenge(),
+            bob_segment: self.inner.id(),
         };
 
         let codec = Zenoh080::new();
@@ -412,12 +364,8 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
         const S: &str = "Shm extension - Recv OpenSyn.";
 
         let (state, mut ext) = input;
-        if !state.is_shm() {
-            return Ok(());
-        }
 
         let Some(ext) = ext.take() else {
-            state.is_shm = false;
             return Ok(());
         };
 
@@ -433,26 +381,22 @@ impl<'a> AcceptFsm for &'a ShmFsm<'a> {
                 bob_challnge,
                 challenge
             );
-            state.is_shm = false;
             return Ok(());
         }
+
+        state.negotiated_to_use_shm = true;
 
         Ok(())
     }
 
-    type SendOpenAckIn = &'a mut StateAccept;
+    type SendOpenAckIn = ();
     type SendOpenAckOut = Option<open::ext::Shm>;
     async fn send_open_ack(
         self,
-        state: Self::SendOpenAckIn,
+        _input: Self::SendOpenAckIn,
     ) -> Result<Self::SendOpenAckOut, Self::Error> {
         // const S: &str = "Shm extension - Send OpenAck.";
 
-        if !state.is_shm() {
-            return Ok(None);
-        }
-
-        state.is_shm = true;
         Ok(Some(open::ext::Shm::new(1)))
     }
 }

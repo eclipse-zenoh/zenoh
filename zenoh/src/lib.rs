@@ -85,7 +85,11 @@ use handlers::DefaultHandler;
 use net::runtime::Runtime;
 use prelude::*;
 use scouting::ScoutBuilder;
+#[cfg(feature = "shared-memory")]
+use shm::reader::SharedMemoryReader;
 use std::future::Ready;
+#[cfg(feature = "shared-memory")]
+use std::sync::Arc;
 use zenoh_core::{AsyncResolve, Resolvable, SyncResolve};
 pub use zenoh_macros::{kedefine, keformat, kewrite};
 use zenoh_protocol::core::WhatAmIMatcher;
@@ -262,7 +266,11 @@ where
     TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
-    OpenBuilder { config }
+    OpenBuilder {
+        config,
+        #[cfg(feature = "shared-memory")]
+        shm_reader: None,
+    }
 }
 
 /// A builder returned by [`open`] used to open a zenoh [`Session`].
@@ -282,6 +290,20 @@ where
     <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
 {
     config: TryIntoConfig,
+    #[cfg(feature = "shared-memory")]
+    shm_reader: Option<Arc<SharedMemoryReader>>,
+}
+
+#[cfg(feature = "shared-memory")]
+impl<TryIntoConfig> OpenBuilder<TryIntoConfig>
+where
+    TryIntoConfig: std::convert::TryInto<crate::config::Config> + Send + 'static,
+    <TryIntoConfig as std::convert::TryInto<crate::config::Config>>::Error: std::fmt::Debug,
+{
+    pub fn with_shm_reader(mut self, shm_reader: Arc<SharedMemoryReader>) -> Self {
+        self.shm_reader = Some(shm_reader);
+        self
+    }
 }
 
 impl<TryIntoConfig> Resolvable for OpenBuilder<TryIntoConfig>
@@ -302,7 +324,12 @@ where
             .config
             .try_into()
             .map_err(|e| zerror!("Invalid Zenoh configuration {:?}", &e))?;
-        Session::new(config).res_sync()
+        Session::new(
+            config,
+            #[cfg(feature = "shared-memory")]
+            self.shm_reader,
+        )
+        .res_sync()
     }
 }
 

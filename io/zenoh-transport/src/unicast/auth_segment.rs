@@ -12,28 +12,31 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
-use std::sync::atomic::{AtomicU64, Ordering};
-
 use zenoh_result::ZResult;
-use zenoh_shm::posix_shm::array::ArrayInSHM;
+use zenoh_shm::{api::common::types::ProtocolID, posix_shm::array::ArrayInSHM};
 
 const AUTH_SEGMENT_PREFIX: &str = "auth";
 
 pub(crate) type AuthSegmentID = u32;
 pub(crate) type AuthChallenge = u64;
 
-type InnerChallenge = AtomicU64;
-
 #[derive(Debug)]
 pub struct AuthSegment {
-    array: ArrayInSHM<AuthSegmentID, InnerChallenge, usize>,
+    array: ArrayInSHM<AuthSegmentID, AuthChallenge, usize>,
 }
 
 impl AuthSegment {
-    pub fn create(challenge: AuthChallenge) -> ZResult<Self> {
-        let array =
-            ArrayInSHM::<AuthSegmentID, InnerChallenge, usize>::create(1, AUTH_SEGMENT_PREFIX)?;
-        unsafe { (*array.elem(0)).store(challenge, Ordering::Relaxed) };
+    pub fn create(challenge: AuthChallenge, shm_protocols: &[ProtocolID]) -> ZResult<Self> {
+        let array = ArrayInSHM::<AuthSegmentID, AuthChallenge, usize>::create(
+            1 + shm_protocols.len(),
+            AUTH_SEGMENT_PREFIX,
+        )?;
+        unsafe {
+            (*array.elem_mut(0)) = challenge;
+            for elem in 1..array.elem_count() {
+                (*array.elem_mut(elem)) = shm_protocols[elem - 1] as u64;
+            }
+        };
         Ok(Self { array })
     }
 
@@ -43,7 +46,15 @@ impl AuthSegment {
     }
 
     pub fn challenge(&self) -> AuthChallenge {
-        unsafe { (*self.array.elem(0)).load(Ordering::Relaxed) }
+        unsafe { *self.array.elem(0) }
+    }
+
+    pub fn protocols(&self) -> Vec<ProtocolID> {
+        let mut result = vec![];
+        for elem in 1..self.array.elem_count() {
+            result.push(unsafe { *self.array.elem(elem) as u32 });
+        }
+        result
     }
 
     pub fn id(&self) -> AuthSegmentID {

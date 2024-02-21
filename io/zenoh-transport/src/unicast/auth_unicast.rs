@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 //
 // Copyright (c) 2022 ZettaScale Technology
 //
@@ -14,8 +16,9 @@
 use rand::{Rng, SeedableRng};
 use zenoh_crypto::PseudoRng;
 use zenoh_result::ZResult;
+use zenoh_shm::api::common::types::ProtocolID;
 
-use super::auth_segment::{AuthChallenge, AuthSegment, AuthSegmentID};
+use super::auth_segment::AuthSegment;
 
 /*************************************/
 /*          Authenticator            */
@@ -24,23 +27,23 @@ pub(crate) struct AuthUnicast {
     segment: AuthSegment,
 }
 
+impl Deref for AuthUnicast {
+    type Target = AuthSegment;
+
+    fn deref(&self) -> &Self::Target {
+        &self.segment
+    }
+}
+
 impl AuthUnicast {
-    pub fn new() -> ZResult<Self> {
+    pub fn new(shm_protocols: &[ProtocolID]) -> ZResult<Self> {
         // Create a challenge for session establishment
         let mut prng = PseudoRng::from_entropy();
         let nonce = prng.gen();
 
         // allocate SHM segment with challenge
-        let segment = AuthSegment::create(nonce)?;
+        let segment = AuthSegment::create(nonce, shm_protocols)?;
 
         Ok(Self { segment })
-    }
-
-    pub fn challenge(&self) -> AuthChallenge {
-        self.segment.challenge()
-    }
-
-    pub fn id(&self) -> AuthSegmentID {
-        self.segment.id()
     }
 }

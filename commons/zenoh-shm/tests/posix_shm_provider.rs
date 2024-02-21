@@ -75,7 +75,7 @@ fn posix_shm_provider_open() {
 #[test]
 fn posix_shm_provider_allocator() {
     let mut backend = PosixSharedMemoryProviderBackend::builder()
-        .with_size(BUFFER_SIZE*BUFFER_NUM)
+        .with_size(BUFFER_SIZE * BUFFER_NUM)
         .expect("Error creating Layout!")
         .res()
         .expect("Error creating PosixSharedMemoryProviderBackend!");

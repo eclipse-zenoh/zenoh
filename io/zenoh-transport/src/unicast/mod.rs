@@ -26,6 +26,9 @@ pub(crate) mod auth_segment;
 #[cfg(feature = "shared-memory")]
 pub(crate) mod auth_unicast;
 
+#[cfg(feature = "shared-memory")]
+use crate::shm::TransportShmConfig;
+
 use self::transport_unicast_inner::TransportUnicastTrait;
 
 use super::{TransportPeer, TransportPeerEventHandler};
@@ -56,7 +59,7 @@ pub(crate) struct TransportConfigUnicast {
     #[cfg(feature = "transport_multilink")]
     pub(crate) multilink: Option<ZPublicKey>,
     #[cfg(feature = "shared-memory")]
-    pub(crate) is_shm: bool,
+    pub(crate) shm: Option<TransportShmConfig>,
     pub(crate) is_lowlatency: bool,
 }
 

@@ -35,6 +35,8 @@ use zenoh_protocol::{
 use zenoh_result::{bail, ZResult};
 #[cfg(feature = "shared-memory")]
 use zenoh_shm::reader::SharedMemoryReader;
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::reader::GLOBAL_READER;
 
 /// # Examples
 /// ```
@@ -137,6 +139,12 @@ pub struct TransportManagerBuilder {
 }
 
 impl TransportManagerBuilder {
+    #[cfg(feature = "shared-memory")]
+    pub fn shm_reader(mut self, shm_reader: Option<Arc<SharedMemoryReader>>) -> Self {
+        self.shm_reader = shm_reader;
+        self
+    }
+
     pub fn zid(mut self, zid: ZenohId) -> Self {
         self.zid = zid;
         self
@@ -249,7 +257,14 @@ impl TransportManagerBuilder {
         // Initialize the PRNG and the Cipher
         let mut prng = PseudoRng::from_entropy();
 
-        let unicast = self.unicast.build(&mut prng)?;
+        #[cfg(feature = "shared-memory")]
+        let shm_reader = self.shm_reader.unwrap_or_else(|| GLOBAL_READER.clone());
+
+        let unicast = self.unicast.build(
+            &mut prng,
+            #[cfg(feature = "shared-memory")]
+            &shm_reader,
+        )?;
         let multicast = self.multicast.build()?;
 
         let mut queue_size = [0; Priority::NUM];
@@ -296,8 +311,7 @@ impl TransportManagerBuilder {
             params,
             prng,
             #[cfg(feature = "shared-memory")]
-            self.shm_reader
-                .unwrap_or_else(|| Arc::new(SharedMemoryReader::default())),
+            shm_reader,
         ))
     }
 }

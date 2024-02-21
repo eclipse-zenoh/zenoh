@@ -12,6 +12,7 @@
 //   ZettaScale Zenoh Team, <zenoh@zettascale.tech>
 //
 
+use lazy_static::lazy_static;
 use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
@@ -34,6 +35,14 @@ use crate::{
     SharedMemoryBuf, SharedMemoryBufInfo,
 };
 
+lazy_static! {
+    pub static ref GLOBAL_READER: Arc<SharedMemoryReader> = Arc::new(
+        SharedMemoryReader::builder()
+            .with_default_client_set()
+            .build()
+    );
+}
+
 #[derive(Debug, PartialEq, Eq, Hash)]
 struct GlobalDataSegmentID {
     protocol: ProtocolID,
@@ -46,9 +55,9 @@ impl GlobalDataSegmentID {
     }
 }
 
-pub struct SharedMemoryReaderBuilderBuilder;
+pub struct SharedMemoryReaderClientSetBuilder;
 
-impl SharedMemoryReaderBuilderBuilder {
+impl SharedMemoryReaderClientSetBuilder {
     pub fn empty(self) -> SharedMemoryReaderBuilder {
         let clients = HashMap::default();
         SharedMemoryReaderBuilder::new(clients)
@@ -132,15 +141,13 @@ impl PartialEq for SharedMemoryReader {
     }
 }
 
-impl Default for SharedMemoryReader {
-    fn default() -> Self {
-        Self::builder().with_default_client_set().build()
-    }
-}
-
 impl SharedMemoryReader {
-    pub fn builder() -> SharedMemoryReaderBuilderBuilder {
-        SharedMemoryReaderBuilderBuilder
+    pub fn builder() -> SharedMemoryReaderClientSetBuilder {
+        SharedMemoryReaderClientSetBuilder
+    }
+
+    pub fn supported_protocols(&self) -> Vec<ProtocolID> {
+        self.clients.get_clients().keys().copied().collect()
     }
 
     pub fn read_shmbuf(&self, info: &SharedMemoryBufInfo) -> ZResult<SharedMemoryBuf> {

@@ -78,6 +78,7 @@ pub struct OpenSyn {
     pub initial_sn: TransportSn,
     pub cookie: ZSlice,
     pub ext_qos: Option<ext::QoS>,
+    #[cfg(feature = "shared-memory")]
     pub ext_shm: Option<ext::Shm>,
     pub ext_auth: Option<ext::Auth>,
     pub ext_mlink: Option<ext::MultiLinkSyn>,
@@ -88,9 +89,14 @@ pub struct OpenSyn {
 // Extensions
 pub mod ext {
     use crate::{
-        common::{ZExtUnit, ZExtZ64, ZExtZBuf},
-        zextunit, zextz64, zextzbuf,
+        common::{ZExtUnit, ZExtZBuf},
+        zextunit, zextzbuf,
     };
+
+    #[cfg(feature = "shared-memory")]
+    use crate::common::ZExtZ64;
+    #[cfg(feature = "shared-memory")]
+    use crate::zextz64;
 
     /// # QoS extension
     /// Used to negotiate the use of QoS
@@ -98,6 +104,7 @@ pub mod ext {
 
     /// # Shm extension
     /// Used as challenge for probing shared memory capabilities
+    #[cfg(feature = "shared-memory")]
     pub type Shm = zextz64!(0x2, false);
 
     /// # Auth extension
@@ -121,8 +128,11 @@ pub mod ext {
 impl OpenSyn {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::{ZExtUnit, ZExtZ64, ZExtZBuf};
+        use crate::common::{ZExtUnit, ZExtZBuf};
         use rand::Rng;
+
+        #[cfg(feature = "shared-memory")]
+        use crate::common::ZExtZ64;
 
         const MIN: usize = 32;
         const MAX: usize = 1_024;
@@ -138,6 +148,7 @@ impl OpenSyn {
         let initial_sn: TransportSn = rng.gen();
         let cookie = ZSlice::rand(rng.gen_range(MIN..=MAX));
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        #[cfg(feature = "shared-memory")]
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZ64::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
@@ -149,6 +160,7 @@ impl OpenSyn {
             initial_sn,
             cookie,
             ext_qos,
+            #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
             ext_mlink,
@@ -163,6 +175,7 @@ pub struct OpenAck {
     pub lease: Duration,
     pub initial_sn: TransportSn,
     pub ext_qos: Option<ext::QoS>,
+    #[cfg(feature = "shared-memory")]
     pub ext_shm: Option<ext::Shm>,
     pub ext_auth: Option<ext::Auth>,
     pub ext_mlink: Option<ext::MultiLinkAck>,
@@ -173,8 +186,11 @@ pub struct OpenAck {
 impl OpenAck {
     #[cfg(feature = "test")]
     pub fn rand() -> Self {
-        use crate::common::{ZExtUnit, ZExtZ64, ZExtZBuf};
+        use crate::common::{ZExtUnit, ZExtZBuf};
         use rand::Rng;
+
+        #[cfg(feature = "shared-memory")]
+        use crate::common::ZExtZ64;
 
         let mut rng = rand::thread_rng();
 
@@ -186,6 +202,7 @@ impl OpenAck {
 
         let initial_sn: TransportSn = rng.gen();
         let ext_qos = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
+        #[cfg(feature = "shared-memory")]
         let ext_shm = rng.gen_bool(0.5).then_some(ZExtZ64::rand());
         let ext_auth = rng.gen_bool(0.5).then_some(ZExtZBuf::rand());
         let ext_mlink = rng.gen_bool(0.5).then_some(ZExtUnit::rand());
@@ -196,6 +213,7 @@ impl OpenAck {
             lease,
             initial_sn,
             ext_qos,
+            #[cfg(feature = "shared-memory")]
             ext_shm,
             ext_auth,
             ext_mlink,

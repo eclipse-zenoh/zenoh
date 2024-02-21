@@ -39,11 +39,40 @@ use zenoh_plugin_trait::{PluginStartArgs, StructVersion};
 use zenoh_protocol::core::{Locator, WhatAmI, ZenohId};
 use zenoh_protocol::network::NetworkMessage;
 use zenoh_result::{bail, ZResult};
+#[cfg(feature = "shared-memory")]
+use zenoh_shm::reader::SharedMemoryReader;
 use zenoh_sync::get_mut_unchecked;
 use zenoh_transport::{
     multicast::TransportMulticast, unicast::TransportUnicast, TransportEventHandler,
     TransportManager, TransportMulticastEventHandler, TransportPeer, TransportPeerEventHandler,
 };
+
+#[derive(Default)]
+pub struct RuntimeBuilder {
+    #[cfg(feature = "shared-memory")]
+    shm_reader: Option<Arc<SharedMemoryReader>>,
+}
+
+impl RuntimeBuilder {
+    #[cfg(feature = "shared-memory")]
+    pub fn shm_reader(mut self, shm_reader: Arc<SharedMemoryReader>) -> Self {
+        self.shm_reader = Some(shm_reader);
+        self
+    }
+
+    pub async fn build(self, config: Config) -> ZResult<Runtime> {
+        let mut runtime = Runtime::init(
+            config,
+            #[cfg(feature = "shared-memory")]
+            self.shm_reader,
+        )
+        .await?;
+        match runtime.start().await {
+            Ok(()) => Ok(runtime),
+            Err(err) => Err(err),
+        }
+    }
+}
 
 struct RuntimeState {
     zid: ZenohId,
@@ -76,14 +105,17 @@ impl PluginStartArgs for Runtime {}
 
 impl Runtime {
     pub async fn new(config: Config) -> ZResult<Runtime> {
-        let mut runtime = Runtime::init(config).await?;
-        match runtime.start().await {
-            Ok(()) => Ok(runtime),
-            Err(err) => Err(err),
-        }
+        Self::builder().build(config).await
     }
 
-    pub(crate) async fn init(config: Config) -> ZResult<Runtime> {
+    pub fn builder() -> RuntimeBuilder {
+        RuntimeBuilder::default()
+    }
+
+    pub(crate) async fn init(
+        config: Config,
+        #[cfg(feature = "shared-memory")] shm_reader: Option<Arc<SharedMemoryReader>>,
+    ) -> ZResult<Runtime> {
         log::debug!("Zenoh Rust API {}", GIT_VERSION);
 
         let zid = *config.id();
@@ -105,8 +137,14 @@ impl Runtime {
             .from_config(&config)
             .await?
             .whatami(whatami)
-            .zid(zid)
-            .build(handler.clone())?;
+            .zid(zid);
+
+        let transport_manager = zcondfeat!(
+            "shared-memory",
+            transport_manager.shm_reader(shm_reader),
+            transport_manager
+        )
+        .build(handler.clone())?;
 
         let config = Notifier::new(config);
 
