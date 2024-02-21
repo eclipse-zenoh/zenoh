@@ -1,6 +1,5 @@
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
-//use std::fs;
 use std::hash::Hash;
 use zenoh_config::AclConfig;
 use zenoh_keyexpr::keyexpr;
@@ -31,15 +30,8 @@ pub struct RequestBuilder {
 #[derive(Deserialize,Debug)]
 pub struct GetPolicy {
     policy_definition: String,
-    rules: Vec<AttributeRules>,
+    ruleset: Vec<AttributeRules>,
 }
-
-// #[derive(Deserialize)]
-// pub struct PolicyList {
-//     policy_definition: String,
-//     rules: Vec<AttributeRules>,
-// }
-
 type KeTreeRule = KeBoxTree<bool>;
 
 impl RequestBuilder {
@@ -55,7 +47,6 @@ impl RequestBuilder {
     }
 
     pub fn sub(&mut self, sub: impl Into<Attribute>) -> &mut Self {
-        //adds subject
         let _ = self.sub.insert(sub.into());
         self
     }
@@ -96,8 +87,8 @@ pub struct PolicyInformation {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AttributeRules {
-    attribute_name: String,
-    attribute_rules: Vec<AttributeRule>,
+    attribute: String,
+    rules: Vec<AttributeRule>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -112,7 +103,7 @@ use zenoh_config::ZenohId;
 #[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
 #[serde(untagged)]
 pub enum Attribute {
-    UserID(ZenohId),
+    UserId(ZenohId),
     NetworkType(String),  //clarify
     MetadataType(String), //clarify
 }
@@ -179,7 +170,7 @@ impl PolicyEnforcer {
         //for each attrribute in the list, get rules, create map and push into rules_vector
         let mut pm: Vec<SubActPolicy> = Vec::new();
         for (i, _) in attribute_list.iter().enumerate() {
-            let rm = self.get_rules_list(policy_rules_vector[i].attribute_rules.clone())?;
+            let rm = self.get_rules_list(policy_rules_vector[i].rules.clone())?;
             pm.push(rm);
         }
         self.policy_list = Some(pm);
@@ -224,12 +215,12 @@ impl PolicyEnforcer {
             .split(' ')
             .collect::<Vec<&str>>();
 
-        let complete_ruleset = policy_list_info.rules;
+        let complete_ruleset = policy_list_info.ruleset;
         let mut attribute_list: Vec<String> = Vec::new();
         let mut policy_rules: Vec<AttributeRules> = Vec::new();
         for rule in complete_ruleset.iter() {
-            if enforced_attributes.contains(&rule.attribute_name.as_str()) {
-                attribute_list.push(rule.attribute_name.clone());
+            if enforced_attributes.contains(&rule.attribute.as_str()) {
+                attribute_list.push(rule.attribute.clone());
                 policy_rules.push(rule.clone())
             }
         }

@@ -264,15 +264,21 @@
       enabled: true,
       default_deny: true,
       policy_list: {
-        "policy_definition": "UserID",
-        "rules": [
+        "policy_definition": "UserId",
+        "ruleset": [
           {
-            "attribute_name": "UserID",
-            "attribute_rules": [
+            "attribute": "UserId",
+            "rules": [
               {
                 "sub": "aaa3b411006ad57868988f9fec672a31",
                 "ke": "test/thr",
                 "action": "Write",
+                "permission": true
+              },
+              {
+                "sub": "bbb3b411006ad57868988f9fec672a31",
+                "ke": "test/thr",
+                "action": "Read",
                 "permission": true
               },
               {
@@ -296,16 +302,16 @@
             ]
           },
           {
-            "attribute_name": "NetworkType",
-            "attribute_rules": [
+            "attribute": "NetworkType",
+            "rules": [
               {
-                "sub": "wifi",
+                "sub": "wlan0",
                 "ke": "test/thr",
                 "action": "Write",
                 "permission": true
               },
               {
-                "sub": "wifi",
+                "sub": "wlan0",
                 "ke": "test/thr",
                 "action": "Read",
                 "permission": true
@@ -313,16 +319,16 @@
             ]
           },
           {
-            "attribute_name": "location",
-            "attribute_rules": [
+            "attribute": "user_defined_attribute",
+            "rules": [
               {
-                "sub": "location_1",
+                "sub": "value_1",
                 "ke": "test/thr",
                 "action": "Write",
                 "permission": true
               },
               {
-                "sub": "location_2",
+                "sub": "value_2",
                 "ke": "test/thr",
                 "action": "Read",
                 "permission": true

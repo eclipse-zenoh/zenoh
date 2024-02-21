@@ -65,35 +65,24 @@ impl InterceptorTrait for IngressAclEnforcer {
         &self,
         ctx: RoutingContext<NetworkMessage>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        //intercept msg and send it to PEP
         if let NetworkBody::Push(Push {
             payload: PushBody::Put(_),
             ..
         }) = &ctx.msg.body
         {
             let e = &self.e;
-
             let ke = ctx.full_expr().unwrap();
-            let network_type = "wifi";
-
-            // let ke = "test/thr"; //for testing
-
-            //create the subject list from given values
-            //get attribute list
-            //iterate and get all values from the attribute list for the request
-
+            let network_type = "wlan0";  //for testing
             let mut sub_info: Vec<Attribute> = Vec::new();
             let attribute_list = e.get_attribute_list().unwrap();
             for i in attribute_list {
-                //  println!("list runs once");
                 match i.as_str() {
-                    "UserID" => sub_info.push(Attribute::UserID(self.zid)),
+                    "UserId" => sub_info.push(Attribute::UserId(self.zid)),
                     "NetworkType" => sub_info.push(Attribute::NetworkType(network_type.to_owned())),
-                    _ => { //other metadata values},
+                    _ => { //other metadata values
                     }
                 }
             }
-
             let request_info = RequestInfo {
                 sub: sub_info,
                 ke: ke.to_string(),
@@ -123,7 +112,6 @@ impl InterceptorTrait for EgressAclEnforcer {
         &self,
         ctx: RoutingContext<NetworkMessage>,
     ) -> Option<RoutingContext<NetworkMessage>> {
-        //  intercept msg and send it to PEP
         if let NetworkBody::Push(Push {
             payload: PushBody::Put(_),
             ..
@@ -131,27 +119,22 @@ impl InterceptorTrait for EgressAclEnforcer {
         {
             let e = &self.e;
             let ke = ctx.full_expr().unwrap();
-            let network_type = "wifi"; //for testing
-
-            // let ke = "test/thr"; //for testing
-
+            let network_type = "wlan0"; //for testing
             let mut sub_info: Vec<Attribute> = Vec::new();
             let attribute_list = e.get_attribute_list().unwrap();
             for i in attribute_list {
                 match i.as_str() {
-                    "UserID" => sub_info.push(Attribute::UserID(self.zid)),
+                    "UserId" => sub_info.push(Attribute::UserId(self.zid)),
                     "NetworkType" => sub_info.push(Attribute::NetworkType(network_type.to_owned())),
                     _ => { //other metadata values,
                     }
                 }
             }
-
             let request_info = RequestInfo {
                 sub: sub_info,
                 ke: ke.to_string(),
                 action: Action::Read,
             };
-
             match e.policy_enforcement_point(request_info) {
                 Ok(decision) => {
                     if !decision {
