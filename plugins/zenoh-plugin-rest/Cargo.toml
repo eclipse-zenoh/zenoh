@@ -24,7 +24,7 @@ categories = ["network-programming", "web-programming::http-server"]
 description = "The zenoh REST plugin"
 
 [features]
-default = ["no_mangle"]
+default = ["no_mangle", "zenoh/default"]
 no_mangle = []
 
 [lib]
