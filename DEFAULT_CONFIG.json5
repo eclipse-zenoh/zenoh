@@ -108,21 +108,6 @@
   //        // key_expression
   //      ],
   //  },
-
-  //  /// The downsampling declaration.
-  //  downsampling: [
-  //    {
-  //      /// A list of network interfaces messages will be processed on, the rest will be passed as is.
-  //      interfaces: [ "wlan0" ],
-  //      /// Data flow messages will be processed on. ("egress" or "ingress")
-  //      flow: "egress",
-  //      /// A list of downsampling rules: key_expression and the rate (maximum frequency in Hertz)
-  //      rules: [
-  //        { key_expr: "demo/example/zenoh-rs-pub", rate: 0.1 }, 
-  //      ],
-  //    },
-  //  ],
-
   /// Configure internal transport parameters
   transport: {
     unicast: {

@@ -38,8 +38,7 @@ fn base_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
-    )
-    .unwrap();
+    );
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -134,8 +133,7 @@ fn match_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
-    )
-    .unwrap();
+    );
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -174,8 +172,7 @@ fn clean_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
-    )
-    .unwrap();
+    );
     let tables = router.tables.clone();
 
     let primitives = Arc::new(DummyPrimitives {});
@@ -481,8 +478,7 @@ fn client_test() {
         WhatAmI::Client,
         Some(Arc::new(HLC::default())),
         &config,
-    )
-    .unwrap();
+    );
     let tables = router.tables.clone();
 
     let sub_info = SubscriberInfo {

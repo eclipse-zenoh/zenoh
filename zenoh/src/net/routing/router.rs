@@ -45,20 +45,15 @@ pub struct Router {
 }
 
 impl Router {
-    pub fn new(
-        zid: ZenohId,
-        whatami: WhatAmI,
-        hlc: Option<Arc<HLC>>,
-        config: &Config,
-    ) -> ZResult<Self> {
-        Ok(Router {
+    pub fn new(zid: ZenohId, whatami: WhatAmI, hlc: Option<Arc<HLC>>, config: &Config) -> Self {
+        Router {
             // whatami,
             tables: Arc::new(TablesLock {
-                tables: RwLock::new(Tables::new(zid, whatami, hlc, config)?),
+                tables: RwLock::new(Tables::new(zid, whatami, hlc, config)),
                 ctrl_lock: Mutex::new(hat::new_hat(whatami, config)),
                 queries_lock: RwLock::new(()),
             }),
-        })
+        }
     }
 
     #[allow(clippy::too_many_arguments)]
