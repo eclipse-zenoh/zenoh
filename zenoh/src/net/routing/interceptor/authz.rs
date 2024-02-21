@@ -1,6 +1,6 @@
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
-use std::fs;
+//use std::fs;
 use std::hash::Hash;
 use zenoh_config::AclConfig;
 use zenoh_keyexpr::keyexpr;
@@ -8,7 +8,6 @@ use zenoh_keyexpr::keyexpr_tree::{IKeyExprTree, IKeyExprTreeMut, KeBoxTree};
 use zenoh_result::ZResult;
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
 pub enum Action {
-    None,
     Read,
     Write,
     DeclareSub,
@@ -28,6 +27,18 @@ pub struct RequestBuilder {
     obj: Option<String>,
     action: Option<Action>,
 }
+
+#[derive(Deserialize,Debug)]
+pub struct GetPolicy {
+    policy_definition: String,
+    rules: Vec<AttributeRules>,
+}
+
+// #[derive(Deserialize)]
+// pub struct PolicyList {
+//     policy_definition: String,
+//     rules: Vec<AttributeRules>,
+// }
 
 type KeTreeRule = KeBoxTree<bool>;
 
@@ -140,18 +151,18 @@ impl PolicyEnforcer {
             None => log::error!("error default_deny not setup"),
         }
         if self.acl_enabled {
-            match acl_config.policy_file {
-                Some(file_path) => {
-                    let policy_information = self.policy_resource_point(&file_path)?;
+            match acl_config.policy_list {
+                Some(policy_list) => {
+                    let policy_information = self.policy_information_point(policy_list)?;
                     self.attribute_list = Some(policy_information.attribute_list);
                     let _policy_definition = policy_information.policy_definition;
                     self.build_policy_map(
                         self.attribute_list.clone().unwrap(),
                         policy_information.policy_rules,
                     )?;
-                    log::info!("policy map was created successfully");
+                    log::info!("policy enforcer was initialised successfully");
                 }
-                None => log::error!("no policy file path was specified"),
+                None => log::error!("no policy list was specified"),
             }
         }
         Ok(())
@@ -175,6 +186,7 @@ impl PolicyEnforcer {
 
         Ok(())
     }
+
     pub fn get_rules_list(&self, rule_set: Vec<AttributeRule>) -> ZResult<SubActPolicy> {
         let mut policy: SubActPolicy = FxHashMap::default();
         for v in rule_set {
@@ -200,26 +212,19 @@ impl PolicyEnforcer {
         Ok(policy)
     }
 
-    pub fn policy_resource_point(&self, file_path: &str) -> ZResult<PolicyInformation> {
-        //read file
-        #[derive(Deserialize)]
-        struct GetPolicyFile {
-            policy_definition: String,
-            rules: Vec<AttributeRules>,
-        }
+    //if policy_list exists, get that value directly and use it for get policy
 
-        let policy_file_info: GetPolicyFile = {
-            let data = fs::read_to_string(file_path).expect("error reading file");
-            serde_json::from_str(&data).expect("error parsing from json to struct")
-        };
+    pub fn policy_information_point(&self, policy_list : zenoh_config::PolicyList)->ZResult<PolicyInformation>{
 
-        //get the rules mentioned in the policy definition
-        let enforced_attributes = policy_file_info
+        //let policy_list_info: GetPolicy;// = GetPolicy{
+                let value = serde_json::to_value(&policy_list).unwrap();
+                let policy_list_info: GetPolicy = serde_json::from_value(value)?;
+                let enforced_attributes = policy_list_info
             .policy_definition
             .split(' ')
             .collect::<Vec<&str>>();
 
-        let complete_ruleset = policy_file_info.rules;
+        let complete_ruleset = policy_list_info.rules;
         let mut attribute_list: Vec<String> = Vec::new();
         let mut policy_rules: Vec<AttributeRules> = Vec::new();
         for rule in complete_ruleset.iter() {
@@ -229,14 +234,47 @@ impl PolicyEnforcer {
             }
         }
 
-        let policy_definition = policy_file_info.policy_definition;
+        let policy_definition = policy_list_info.policy_definition;
 
         Ok(PolicyInformation {
             policy_definition,
             attribute_list,
             policy_rules,
-        })
+        })    
+
     }
+    // pub fn policy_resource_point(&self, file_path: &str) -> ZResult<PolicyInformation> {
+    //     //read file
+
+    //     let policy_file_info: GetPolicy = {
+    //         let data = fs::read_to_string(file_path).expect("error reading file");
+    //         serde_json::from_str(&data).expect("error parsing from json to struct")
+    //     };
+
+    //     //get the rules mentioned in the policy definition
+    //     let enforced_attributes = policy_file_info
+    //         .policy_definition
+    //         .split(' ')
+    //         .collect::<Vec<&str>>();
+
+    //     let complete_ruleset = policy_file_info.rules;
+    //     let mut attribute_list: Vec<String> = Vec::new();
+    //     let mut policy_rules: Vec<AttributeRules> = Vec::new();
+    //     for rule in complete_ruleset.iter() {
+    //         if enforced_attributes.contains(&rule.attribute_name.as_str()) {
+    //             attribute_list.push(rule.attribute_name.clone());
+    //             policy_rules.push(rule.clone())
+    //         }
+    //     }
+
+    //     let policy_definition = policy_file_info.policy_definition;
+
+    //     Ok(PolicyInformation {
+    //         policy_definition,
+    //         attribute_list,
+    //         policy_rules,
+    //     })
+    // }
 
     pub fn policy_enforcement_point(&self, request_info: RequestInfo) -> ZResult<bool> {
         /*
@@ -248,6 +286,7 @@ impl PolicyEnforcer {
         */
 
         let obj = request_info.ke;
+        let mut decision = true;
         let mut decisions: Vec<bool> = Vec::new(); //to store all decisions for each subject in list
         for (attribute_index, val) in request_info.sub.into_iter().enumerate() {
             //build request
@@ -256,9 +295,12 @@ impl PolicyEnforcer {
                 .obj(obj.clone())
                 .action(request_info.action.clone())
                 .build()?;
-            decisions.push(self.policy_decision_point(attribute_index, request));
+                let d = self.policy_decision_point(attribute_index, request);
+            decisions.push(d);
+            decision = decision & d;
         }
-        let decision: bool = decisions[0]; //only checks for single attribute right now
+         
+        //let decision: bool = decisions.iter().map(|d,x=true|x=d&x);// decisions[0]; //only checks for single attribute right now
         Ok(decision)
     }
 

@@ -97,6 +97,48 @@ pub struct DownsamplingItemConf {
     pub flow: DownsamplingFlow,
 }
 
+//adding for authz structs
+
+#[derive(Serialize, Deserialize,Clone,Debug)]
+pub struct PolicyList {
+    policy_definition: String,
+    rules: Vec<AttributeRules>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AttributeRules {
+    attribute_name: String,
+    attribute_rules: Vec<AttributeRule>,
+}
+
+#[derive(Clone, Serialize,Debug, Deserialize)]
+pub struct AttributeRule {
+    sub: Attribute,
+    ke: String,
+    action: Action,
+    permission: bool,
+}
+
+#[derive(Serialize, Debug, Deserialize, Eq, PartialEq, Hash, Clone)]
+#[serde(untagged)]
+pub enum Attribute {
+    UserID(ZenohId),
+    NetworkType(String),  //clarify
+    MetadataType(String), //clarify
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, Hash, PartialEq)]
+pub enum Action {
+    None,
+    Read,
+    Write,
+    DeclareSub,
+    Delete,
+    DeclareQuery,
+}
+
+
+
 pub trait ConfigValidator: Send + Sync {
     fn check_config(
         &self,
@@ -414,7 +456,7 @@ validated_struct::validator! {
             pub acl: AclConfig {
                 pub enabled: Option<bool>,
                 pub default_deny: Option<bool>,
-                pub policy_file: Option<String>,
+                pub policy_list: Option<PolicyList>
             }
         },
         /// Configuration of the admin space.

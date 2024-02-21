@@ -217,7 +217,8 @@ impl Default for AclConfig {
         Self {
             enabled: Some(false),
             default_deny: Some(false),
-            policy_file: None,
+            policy_list: None,
         }
     }
 }
+

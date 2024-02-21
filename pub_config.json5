@@ -110,7 +110,7 @@
     acl: {
       enabled: false,
       default_deny: false,
-      policy_file: null,
+      policy_list: null,
     },
   }
   // transport: {
